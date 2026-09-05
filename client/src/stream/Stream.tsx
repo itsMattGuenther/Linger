@@ -14,7 +14,7 @@
  * what you are reading. Both are the virtualizer's `anchorTo: "end"`.
  *
  * **Nothing renders as HTML.** Message bodies are parsed into a tree of known
- * node kinds and drawn as React elements (`markdown.ts`, `Markdown.tsx`), so a
+ * node kinds and drawn as React elements (`markdown.ts`, `MarkdownBody.tsx`), so a
  * body that looks like markup is text that looks like markup.
  *
  * **Reactions are weight, never numbers** (SPEC §4.8). The count comes down the
@@ -77,7 +77,7 @@ import { occupancyLine, occupantsOf } from "../lib/occupancy";
 import { peopleList } from "../notify/rules";
 import PersonName from "../status/PersonName";
 import VoiceBar from "../voice/VoiceBar";
-import Markdown, { type MentionLookup } from "./Markdown";
+import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
 import { uploadFile } from "../lib/upload";
 import { linkTargets, mentionHandles, plainText } from "./markdown";
 import { REACTIONS, reactionOf, reactionTitle, reactionWeight } from "./reactions";
@@ -812,7 +812,7 @@ function MessageRow({
   ) : editing ? (
     <EditBox api={api} message={message} onDone={onEditDone} />
   ) : (
-    <Markdown
+    <MarkdownBody
       source={message.body}
       mentions={mentions}
       trailing={

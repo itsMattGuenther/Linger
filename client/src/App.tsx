@@ -78,7 +78,7 @@ import { dropPresence, setPresenceLive, setPresenceRoom, startPresence } from ".
 import { forgetPreviews } from "./lib/previews";
 import { checkForUpdate } from "./lib/updates";
 import { forgetNotifications, resetNotifications, setViewing } from "./notify/notify";
-import Roster from "./roster/Roster";
+import RosterPanel from "./roster/RosterPanel";
 import SearchPanel from "./search/SearchPanel";
 import Stream from "./stream/Stream";
 import "./app.css";
@@ -425,7 +425,7 @@ function Console({
   );
 
   const roster = (
-    <Roster
+    <RosterPanel
       api={api}
       rooms={rooms}
       layout={narrow ? "strip" : "column"}

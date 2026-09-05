@@ -39,7 +39,7 @@ const Mentions = createContext<MentionLookup | null>(null);
  * a new line, and "edited" on a line of its own reads like a message somebody
  * sent.
  */
-export default function Markdown({
+export default function MarkdownBody({
   source,
   trailing,
   mentions = null,

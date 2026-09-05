@@ -16,10 +16,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import Markdown, { type MentionLookup } from "./Markdown";
+import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
 
 function render(source: string): string {
-  return renderToStaticMarkup(<Markdown source={source} />);
+  return renderToStaticMarkup(<MarkdownBody source={source} />);
 }
 
 /** A server with two people on it: `matt` is you, `callie` is not. */
@@ -30,7 +30,7 @@ const lookup: MentionLookup = (handle) => {
 };
 
 function renderWithPeople(source: string): string {
-  return renderToStaticMarkup(<Markdown source={source} mentions={lookup} />);
+  return renderToStaticMarkup(<MarkdownBody source={source} mentions={lookup} />);
 }
 
 /** Every element in the markup. Escaped text has no `<` in it, so it is skipped
@@ -49,7 +49,7 @@ function attributesIn(markup: string): Set<string> {
   );
 }
 
-/** What `Markdown.tsx` is allowed to draw, and nothing else. */
+/** What `MarkdownBody.tsx` is allowed to draw, and nothing else. */
 const ELEMENTS = [
   "p",
   "blockquote",
@@ -187,7 +187,7 @@ describe("mentions", () => {
     // lands. React escapes it into the value it was given rather than letting it
     // close the quote and start a second attribute — this is that, spelled out.
     const evil: MentionLookup = () => ({ name: '" onmouseover="alert(1)', me: false });
-    const markup = renderToStaticMarkup(<Markdown source="@callie" mentions={evil} />);
+    const markup = renderToStaticMarkup(<MarkdownBody source="@callie" mentions={evil} />);
     expect(markup).toContain(
       '<span class="mention" title="&quot; onmouseover=&quot;alert(1)">@callie</span>',
     );
