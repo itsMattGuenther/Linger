@@ -13,11 +13,22 @@ If you are the one running the server, you want the
 Go to the [Releases page](https://github.com/matthewguenther/Linger/releases)
 and download the file for your computer.
 
-- **Windows** — the `.exe` installer.
-- **Linux** — the `.AppImage` (works on any distribution; make it executable and
-  run it) or the `.deb` if you are on Debian or Ubuntu.
+Everything on that page is the app. The server is a separate thing that
+whoever hosts your Linger sets up — you do not need it.
+
+- **Windows** — the `.exe`. You will also see an `.msi`; that one is for
+  companies installing it on a lot of machines at once. If you are not sure, you
+  want the `.exe`.
+- **Debian, Ubuntu or Mint** — the `.deb`.
+- **Fedora, RHEL or openSUSE** — the `.rpm`.
+- **Any other Linux** — the `.AppImage`. It runs on any distribution: download
+  it, make it executable, and open it.
 - **macOS** — not built yet. You can build it from the source if you are
   comfortable doing that; otherwise, sorry, not yet.
+
+You will also see files ending in `.sig` and one called `latest.json`. Those are
+how Linger checks that an update really came from the people who make it. You do
+not need to download them.
 
 **Windows will show you a warning.** It says *"Windows protected your PC"*, and
 the *Run anyway* button is hidden behind the small *More info* link. That is

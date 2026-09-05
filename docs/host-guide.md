@@ -18,6 +18,12 @@ Everything the server owns lives in one folder: a database file with all the
 messages, and a folder of uploaded files next to it. Copy that folder and you
 have copied the whole server.
 
+**You do not download the server.** There is nothing on the Releases page for
+you — everything there is the app people install on their own computers. The
+server arrives on its own when you run `docker compose up` in step 4, and
+updates the same way. The only file you fetch by hand is the setup file in
+step 2.
+
 ## What you need first
 
 - **A computer that stays on and is reachable from the internet.** A cheap

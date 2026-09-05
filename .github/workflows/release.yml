@@ -145,11 +145,40 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Linger ${{ github.ref_name }}
           releaseBody: |
-            Installers for Linux and Windows are attached. macOS is not built
-            yet — see docs/decisions.md.
+            **This is the Linger app** — the thing you install on your own
+            computer to join a server somebody else runs.
 
-            Installed copies find this release through `latest.json` once it is
-            published — settings, `updates`, `check again`.
+            **It is not the server.** If you want to *host* a Linger, nothing on
+            this page is for you: the server is a container image, and the
+            [host guide](https://github.com/matthewguenther/Linger/blob/main/docs/host-guide.md)
+            walks through setting one up.
+
+            ### Which file do I want?
+
+            | Your computer | Download the file ending in |
+            |---|---|
+            | Windows | `-setup.exe` |
+            | Debian, Ubuntu or Mint | `.deb` |
+            | Fedora, RHEL or openSUSE | `.rpm` |
+            | Any other Linux | `.AppImage` — make it executable and run it |
+            | macOS | Not built yet — see [decisions.md](https://github.com/matthewguenther/Linger/blob/main/docs/decisions.md) |
+
+            The `.msi` is for companies rolling it out to many machines at once.
+            If you are not sure, you want the `.exe`.
+
+            The `.sig` files and `latest.json` are how an installed copy checks
+            that an update is genuine. You do not need to download them.
+
+            **Windows will warn you.** You get *"Windows protected your PC"*, and
+            *Run anyway* is behind the small *More info* link. That is Windows
+            saying the installer has not been through a paid signing process. It
+            has not — that is a
+            [known decision](https://github.com/matthewguenther/Linger/blob/main/docs/decisions.md),
+            not a broken download.
+
+            New here? The
+            [user guide](https://github.com/matthewguenther/Linger/blob/main/docs/user-guide.md)
+            covers installing and using Linger in plain language.
           # Draft on purpose: publishing is what ships the update to everyone,
           # and that is a decision, not a side effect of pushing a tag.
           releaseDraft: true
