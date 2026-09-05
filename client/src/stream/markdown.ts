@@ -3,7 +3,7 @@
  *
  * This parser produces a *tree*, never a string of HTML, and that is the whole
  * security design (ARCHITECTURE §7: "allowlist-based sanitizer, no raw HTML
- * passthrough, ever"). The node kinds below are a closed union; `Markdown.tsx`
+ * passthrough, ever"). The node kinds below are a closed union; `MarkdownBody.tsx`
  * switches over them and hands text to React as text. There is no
  * `dangerouslySetInnerHTML` anywhere in the client and no code path that turns
  * a message body into markup, so a body containing `<img onerror=…>` is a body
@@ -37,7 +37,7 @@ export type Inline =
   | { kind: "link"; href: string; text: string; children: Inline[] }
   /**
    * `@someone`. The parser does not know who is on this server, so it records
-   * the handle and stops there — `Markdown.tsx` is where a handle either
+   * the handle and stops there — `MarkdownBody.tsx` is where a handle either
    * resolves to a person or falls back to the characters that were typed.
    */
   | { kind: "mention"; handle: string };

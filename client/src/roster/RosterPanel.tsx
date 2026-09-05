@@ -48,7 +48,7 @@ import "./roster.css";
 /** Down the right-hand side, or along the top of the composer. */
 export type RosterLayout = "column" | "strip";
 
-export default function Roster({
+export default function RosterPanel({
   api,
   rooms,
   layout,
