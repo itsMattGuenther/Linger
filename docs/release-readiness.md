@@ -34,8 +34,9 @@ four networks for an hour. Earlier milestones also have outstanding manual
 checks. Passing unit and integration tests does not close those checks.
 
 Use [HC-1 through HC-9](../TASKS.md#human-checks--things-only-you-can-do) as the
-release gate, and record the version, operating systems, date, outcome and
-failures for each. Start with installing and updating on a machine that did not
+release checklist, and record the version, operating systems, date, outcome and
+failures for each. For the Windows/Linux pilot, leave HC-2's macOS portion
+explicitly deferred, not passed. Start with installing and updating on a machine that did not
 build the app. Then verify voice on one network before testing the relay using
 a phone hotspot. Listen for echo, quiet microphones, clipping and increasing
 delay, as well as whether a connection exists. Do not start M13 before M12
@@ -161,4 +162,6 @@ formatting, clippy, generated-type drift, and all 408 frontend tests. The eight
 new sign-in tests include three that failed against the original code.
 `pnpm build` also passes. Hardware/keyring tests remain ignored by the automated
 gate, and the local gate does not exercise S3 against a real object store.
+All five [CI jobs](https://github.com/itsMattGuenther/Linger/actions/runs/34282614359)
+passed for the implementation, including S3 against MinIO.
 None of these results closes a human release check.

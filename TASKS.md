@@ -204,7 +204,7 @@ Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
 with its note written here rather than in an archive.
 
-**Next, alongside the human checks:** T-906 → T-907 → T-908 → T-909.
+**Next, alongside the human checks:** T-907 → T-908 → T-909.
 Measure T-910 before describing a release as lightweight. These close existing
 flows and do not start a new milestone. Evidence and rationale are in the
 [release readiness review](docs/release-readiness.md).
@@ -245,7 +245,7 @@ flows and do not start a new milestone. Evidence and rationale are in the
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
 
-- ⏳ **T-906 · Keep a sign-in through a temporary server failure** — effort:
+- ✅ **T-906 · Keep a sign-in through a temporary server failure** — effort:
   **medium** — Matt, 2026-09-08
   During normal use, `AuthedApi` treats every error response from token renewal
   as an expired sign-in. A temporary `INTERNAL` or `RATE_LIMITED` response then
@@ -257,11 +257,15 @@ flows and do not start a new milestone. Evidence and rationale are in the
   actual token rejection still signs out; requests renewing together share one
   renewal. Exercise the real HTTP client with controlled responses.
 
-  **Implemented 2026-09-08; CI pending.** Renewal now uses the same rejection
+  **Completed 2026-09-08** ([PR #61](https://github.com/itsMattGuenther/Linger/pull/61)).
+  Renewal now uses the same rejection
   distinction as startup. Eight new HTTP-client regression tests cover temporary
   failures, later recovery, actual rejection, shared renewal and the retry
   bound. Three failed against the original code. `scripts/check.sh` and
-  `pnpm build` pass locally; no dependencies or wire shapes changed.
+  `pnpm build` pass locally, and all five CI jobs passed, including the real
+  S3 backend check. No dependencies or wire shapes changed. Human release
+  checks remain open; this fix does not restore an unavailable server during
+  startup (T-907).
 
 - ✅ **T-904 · Density belongs in settings, not over every conversation** —
   effort: **low** — Matt, 2026-08-31
