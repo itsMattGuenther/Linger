@@ -11,6 +11,15 @@ or a usability study. No new test across separate computers was performed.
 Windows and Linux are the working release scope, following the existing
 [distribution decision](decisions.md); macOS and mobile remain deferred.
 
+**Desktop follow-up, 2026-09-08:** real native clients reproduced a local-server
+failure that the earlier tests missed: images requested the WebView's origin,
+and a root-relative export link was silently refused by the native opener.
+T-920 resolves those paths against the server that supplied them, including
+posters, media tiles and status images, while preserving absolute media URLs.
+Four new regressions failed before the fix. Export then downloaded through a
+real browser; its public and private contents were checked independently.
+See the [desktop evidence](desktop-check-results.md) for outcomes and limits.
+
 ## Keep the architecture and the product's identity
 
 The current structure fits a small group: one Rust server, SQLite with a single
@@ -155,7 +164,7 @@ servers and media URLs.
    or automatic reporting. Release when the promised flows work without the
    developer guiding each step.
 
-## Validation of this contribution
+## Validation of the initial review and sign-in fix
 
 `scripts/check.sh` passes locally, including workspace and desktop-shell tests,
 formatting, clippy, generated-type drift, and all 408 frontend tests. The eight

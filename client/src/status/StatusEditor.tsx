@@ -29,6 +29,7 @@ import type { User } from "../generated/User";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { saveStatus } from "../lib/gateway";
 import { uploadFile } from "../lib/upload";
+import { absoluteUrl } from "../lib/url";
 import { setAway } from "../lib/watchPresence";
 import {
   draftOf,
@@ -216,7 +217,7 @@ export default function StatusEditor({
       <div className="editor-field">
         <span className="panel-label">image</span>
         {draft.image === null ? null : (
-          <img className="editor-image" src={draft.image.url} alt="the image on your status" />
+          <img className="editor-image" src={absoluteUrl(api.baseUrl, draft.image.url)} alt="the image on your status" />
         )}
         <div className="editor-image-row">
           <button

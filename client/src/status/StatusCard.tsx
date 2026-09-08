@@ -12,6 +12,7 @@
  */
 import type { User } from "../generated/User";
 import { nameProps } from "../lib/names";
+import { absoluteUrl } from "../lib/url";
 import "./status.css";
 
 /**
@@ -31,6 +32,7 @@ function fieldsOf(user: User): [string, string][] {
 }
 
 export default function StatusCard({
+  baseUrl,
   user,
   /**
    * The away message this surface has already drawn above the card, if any.
@@ -41,6 +43,7 @@ export default function StatusCard({
    */
   awayShown,
 }: {
+  baseUrl: string;
   user: User;
   awayShown: boolean;
 }) {
@@ -82,7 +85,7 @@ export default function StatusCard({
       {image === null ? null : (
         <img
           className="status-image"
-          src={image}
+          src={absoluteUrl(baseUrl, image)}
           alt={`${user.display_name}'s status image`}
           loading="lazy"
         />

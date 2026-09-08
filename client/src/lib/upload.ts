@@ -15,6 +15,7 @@ import type { Attachment } from "../generated/Attachment";
 import type { CompletedPart } from "../generated/CompletedPart";
 import type { UploadSlot } from "../generated/UploadSlot";
 import { ApiError, type AuthedApi } from "./api";
+import { absoluteUrl } from "./url";
 
 /** How many goes one part gets before the upload is declared lost. */
 const PART_ATTEMPTS = 3;
@@ -40,15 +41,6 @@ export function partRanges(size: number, partSize: number): PartRange[] {
     ranges.push({ number, start, end: Math.min(start + partSize, size) });
   }
   return ranges;
-}
-
-/**
- * A slot's URLs are root-relative on a server with no configured domain — the
- * shape a box on a LAN has — and absolute when uploads live somewhere else
- * entirely, like S3. Both have to work, and only the server knows which it is.
- */
-export function absoluteUrl(baseUrl: string, url: string): string {
-  return /^https?:\/\//i.test(url) ? url : `${baseUrl}${url}`;
 }
 
 /** A browser hands us an empty type for anything it does not recognise. */

@@ -6,9 +6,9 @@
  * everything else gets one line and a way to save it. No cards, no thumbnails
  * in boxes, no drop shadows — a picture in a conversation is a picture.
  *
- * Two rules from the architecture show up here as code. The URLs are opaque and
- * absolute already: they point at the media origin, which is a different host
- * from the API on purpose (ARCHITECTURE §7), so nothing here builds one. And a
+ * Two rules from the architecture show up here as code. Absolute URLs retain
+ * their media origin (ARCHITECTURE §7); local paths resolve against the server
+ * that supplied the message (PROTOCOL §6), never the WebView. And a
  * file that is not an image, a video or a sound is never rendered — it is
  * handed to the system browser to save, which is where a download belongs.
  */
@@ -16,23 +16,25 @@ import { useEffect, useState } from "react";
 
 import type { Attachment } from "../generated/Attachment";
 import { openExternal } from "../lib/external";
+import { absoluteUrl } from "../lib/url";
 import { durationText, fileSize, inlineBox, renderAs } from "./media";
 import "./media.css";
 
-export default function Attachments({ files }: { files: Attachment[] }) {
+export default function Attachments({ files, baseUrl }: { files: Attachment[]; baseUrl: string }) {
   const [expanded, setExpanded] = useState<Attachment | null>(null);
   if (files.length === 0) return null;
   return (
     <div className="atts">
       {files.map((file) => (
-        <One key={file.id} file={file} onExpand={() => setExpanded(file)} />
+        <One key={file.id} file={file} baseUrl={baseUrl} onExpand={() => setExpanded(file)} />
       ))}
-      {expanded ? <Expanded file={expanded} onClose={() => setExpanded(null)} /> : null}
+      {expanded ? <Expanded file={expanded} baseUrl={baseUrl} onClose={() => setExpanded(null)} /> : null}
     </div>
   );
 }
 
-function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
+function One({ file, baseUrl, onExpand }: { file: Attachment; baseUrl: string; onExpand: () => void }) {
+  const url = absoluteUrl(baseUrl, file.url);
   switch (renderAs(file.mime)) {
     case "image": {
       // The box is set before the bytes arrive so the row is measured at its
@@ -42,7 +44,7 @@ function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
       return (
         <button type="button" className="att-image" onClick={onExpand} title="expand">
           <img
-            src={file.url}
+            src={url}
             alt={file.filename}
             width={box?.width}
             height={box?.height}
@@ -56,8 +58,8 @@ function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
       return (
         <video
           className="att-video"
-          src={file.url}
-          poster={file.poster_url ?? undefined}
+          src={url}
+          poster={file.poster_url === null ? undefined : absoluteUrl(baseUrl, file.poster_url)}
           controls
           preload="metadata"
           aria-label={file.filename}
@@ -72,7 +74,7 @@ function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
               <span className="att-size">{durationText(Number(file.duration_ms))}</span>
             )}
           </p>
-          <audio src={file.url} controls preload="metadata" aria-label={file.filename} />
+          <audio src={url} controls preload="metadata" aria-label={file.filename} />
         </div>
       );
     default:
@@ -84,7 +86,7 @@ function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
               server sends it as an attachment with `nosniff`, and a webview
               that navigates itself to somebody's upload has replaced the app
               with it (ARCHITECTURE §7, `lib/external.ts`). */}
-          <button type="button" className="att-get" onClick={() => openExternal(file.url)}>
+          <button type="button" className="att-get" onClick={() => openExternal(url)}>
             save
           </button>
         </p>
@@ -96,7 +98,7 @@ function One({ file, onExpand }: { file: Attachment; onExpand: () => void }) {
  * The expanded picture. Escape closes it, so does clicking anywhere — there is
  * nothing else on this layer and nothing to aim at.
  */
-function Expanded({ file, onClose }: { file: Attachment; onClose: () => void }) {
+function Expanded({ file, baseUrl, onClose }: { file: Attachment; baseUrl: string; onClose: () => void }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") onClose();
@@ -113,7 +115,7 @@ function Expanded({ file, onClose }: { file: Attachment; onClose: () => void }) 
       aria-label={file.filename}
       onClick={onClose}
     >
-      <img src={file.url} alt={file.filename} />
+      <img src={absoluteUrl(baseUrl, file.url)} alt={file.filename} />
       <p className="att-expanded-name meta">{file.filename}</p>
     </div>
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ExportJob } from "../generated/ExportJob";
-import { ApiError, TransportError, type AuthedApi } from "../lib/api";
+import { ApiError, TransportError, AuthedApi } from "../lib/api";
 import {
   comeBackIn,
   exportLine,
@@ -103,6 +103,27 @@ describe("exportLine", () => {
 });
 
 describe("runExport", () => {
+  it("hands a local archive's absolute address to the download control", async () => {
+    const api = new AuthedApi(
+      "http://127.0.0.1:8420",
+      { accessToken: "access", refreshToken: "refresh", expiresAt: Date.now() + 900_000 },
+      { onTokens: vi.fn(), onSignedOut: vi.fn() },
+    );
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ job_id: JOB_ID }))
+      .mockResolvedValueOnce(Response.json(job({
+        state: "complete", progress: 1, url: "/objects/exports/porch.zip",
+      }))));
+    try {
+      const seen: ExportPhase[] = [];
+      await runExport(api, (phase) => seen.push(phase), new AbortController().signal, nowait);
+      expect(seen.at(-1)).toEqual({
+        kind: "ready", url: "http://127.0.0.1:8420/objects/exports/porch.zip",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   const nowait = (): Promise<void> => Promise.resolve();
 
   it("polls until the archive is there, then stops", async () => {
