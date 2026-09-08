@@ -643,8 +643,11 @@ passes its check.
 device recovery are implemented; its real-network acceptance check is open.**
 M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
-project. V1's remaining work is still five things a person has to do by hand
-(`TASKS.md`, *Human checks*). M9, M11 and M12 bring the total to nine checks.
+project. V1 has four release checks still open; HC-5 export passed in real
+desktop clients on 2026-09-08 (`TASKS.md`, *Release checks*). M9, M11 and M12
+bring the total to nine checks, eight open. Native desktop automation can
+validate technical flows; separate-machine and real-network evidence remains
+required where the checklist calls for it.
 
 | # | Milestone | Done when | Estimate |
 |---|---|---|---|

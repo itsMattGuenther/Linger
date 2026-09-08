@@ -1,0 +1,46 @@
+{
+  "styled_name": {
+    "paint": "linear-gradient(92deg, rgba(0, 0, 0, 0) 46%, rgba(0, 0, 0, 0.34) 50%, rgba(0, 0, 0, 0) 54%), linear-gradient(92deg, oklch(0.5 0.14 68), oklch(0.5 0.14 295))",
+    "animation": "name-shimmer",
+    "font": "Newsreader, Georgia, serif"
+  },
+  "reading": {
+    "normalized": true,
+    "compact": true,
+    "irc": true,
+    "controlled_evening": true
+  },
+  "outsider_presence": "Alice\nin a room\nin a room",
+  "dm": {
+    "live_exchange": true,
+    "private_image": true,
+    "outsider_room_list": "absent",
+    "outsider_media": "absent",
+    "outsider_search": "absent"
+  },
+  "bob_export": {
+    "downloaded": true,
+    "entries": [
+      "linger-porch-check-2026-09-08/rooms/porch.md",
+      "linger-porch-check-2026-09-08/direct/alice.md",
+      "linger-porch-check-2026-09-08/media.md",
+      "linger-porch-check-2026-09-08/README.md",
+      "linger-porch-check-2026-09-08/media/porch-lamp.png",
+      "linger-porch-check-2026-09-08/media/lanternsecret.png"
+    ],
+    "private_conversation": true,
+    "cooldown": true
+  },
+  "carol_export": {
+    "downloaded": true,
+    "entries": [
+      "linger-porch-check-2026-09-08/rooms/porch.md",
+      "linger-porch-check-2026-09-08/media.md",
+      "linger-porch-check-2026-09-08/README.md",
+      "linger-porch-check-2026-09-08/media/porch-lamp.png"
+    ],
+    "private_conversation": false,
+    "cooldown": true
+  },
+  "completed": true
+}

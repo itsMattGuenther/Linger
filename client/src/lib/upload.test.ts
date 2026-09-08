@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { absoluteUrl, mimeOf, partRanges } from "./upload";
+import { mimeOf, partRanges } from "./upload";
+import { absoluteUrl } from "./url";
 
 const MB = 1024 * 1024;
 const PART = 8 * MB;

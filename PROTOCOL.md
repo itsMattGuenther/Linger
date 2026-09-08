@@ -636,6 +636,10 @@ and points at the **media origin**, the host uploads are served from, because
 an archive of the whole server has no more business being same-origin with the
 app than an upload does.
 
+As with attachment URLs (§6), a server without `LINGER_DOMAIN` returns a
+root-relative export URL. The client resolves it against that server's origin
+before handing it to the system browser, never against the WebView's origin.
+
 Asking about somebody else's job is `NOT_FOUND`, not `FORBIDDEN` — which of the
 two it was is not the asker's business. A member has one archive at a time:
 starting a new export deletes the previous one's bytes, so an old `url` stops

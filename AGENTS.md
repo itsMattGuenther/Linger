@@ -276,12 +276,15 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
 ```
 
-V1 is built. What is left of it is five things a person has to do by hand — see
-`TASKS.md`, *Human checks*. **M9 (knock), M10 (search), and M11 (DMs) are built** — M10's
+V1 is built. Four of its release checks remain open; HC-5 export passed in
+real desktop clients on 2026-09-08 — see `TASKS.md`, *Release checks*.
+Desktop automation can own technical checks; separate machines, networks,
+physical devices and listening still need their stated evidence.
+**M9 (knock), M10 (search), and M11 (DMs) are built** — M10's
 notes are in `docs/tasks/m10.md`, and its second half changed how the client
 holds history, so read it before touching message loading. **M12 is the current
 milestone:** voice implementation is present, but its checks on separate
-computers and networks are open. There are nine human checks in total. M13 is
+computers and networks are open. There are nine release checks, eight open. M13 is
 planned and not started. See `docs/release-readiness.md` for the release review;
 close the existing checks before starting another milestone.
 

@@ -255,6 +255,13 @@ cd client && pnpm tauri dev                   # the desktop app
 The desktop app is the only part that needs system libraries: a webview, ALSA
 headers for the microphone, and cmake to build the bundled Opus codec.
 
+The desktop icon comes from the friend group's selected
+[porch artwork](<assets/logo/Linger Pixel Porch Icon Set FINAL.png>).
+To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
+source, run `python3 scripts/app-icons.py` from the repository root after
+`pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
+padding to make the source square, without cropping or stretching the artwork.
+
 ```bash
 # Debian/Ubuntu
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
@@ -269,6 +276,13 @@ drift, frontend, and the desktop shell. Green there should mean green in CI. The
 one thing it leaves out is `scripts/minio-test.sh`, which tests the S3 storage
 backend against a throwaway MinIO; `cargo test --workspace` skips that code
 entirely, so it proves nothing about S3 on its own.
+
+For real desktop interaction, `python3 scripts/desktop-check.py` runs three
+isolated Linux clients through live styling, private messages, uploads and a
+browser-downloaded export. It needs additional test tools and built debug
+binaries; see [desktop checks](docs/desktop-checks.md) for setup and the
+[dated results](docs/desktop-check-results.md). It does not replace checks on
+separate computers and networks.
 
 Six things that catch people out. How the rest fits together is
 [ARCHITECTURE.md](ARCHITECTURE.md).

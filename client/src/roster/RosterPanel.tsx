@@ -244,7 +244,7 @@ function PersonCard({
         <>
           {/* The away message is already on the lines above, so the card
               leaves the status line out rather than saying it twice. */}
-          <StatusCard user={user} awayShown={entry.awayMessage !== null && entry.awayMessage !== ""} />
+          <StatusCard user={user} awayShown={entry.awayMessage !== null && entry.awayMessage !== ""} baseUrl={api.baseUrl} />
           {entry.isMe ? (
             <p className="person-mine">
               {hasStatus(entry) ? null : <span className="meta">nothing set</span>}

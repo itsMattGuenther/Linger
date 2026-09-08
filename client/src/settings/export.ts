@@ -17,6 +17,7 @@
  */
 import type { ExportJob } from "../generated/ExportJob";
 import { ApiError, type AuthedApi, TransportError } from "../lib/api";
+import { absoluteUrl } from "../lib/url";
 
 /** How often to ask. Slow enough to be polite, fast enough to feel alive. */
 export const POLL_MS = 1500;
@@ -127,7 +128,7 @@ export async function runExport(
       return;
     }
     const phase = phaseOf(job);
-    onPhase(phase);
+    onPhase(phase.kind === "ready" ? { ...phase, url: absoluteUrl(api.baseUrl, phase.url) } : phase);
     if (phase.kind !== "working") return;
   }
 }

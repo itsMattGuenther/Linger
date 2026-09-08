@@ -833,7 +833,7 @@ function MessageRow({
   const extras =
     deleted || editing ? null : (
       <>
-        <Attachments files={message.attachments} />
+        <Attachments files={message.attachments} baseUrl={api.baseUrl} />
         <LinkCards api={api} urls={links} />
       </>
     );
@@ -858,14 +858,14 @@ function MessageRow({
       {irc ? (
         <div className="msg-body">
           {time}
-          <PersonName user={author} name={name} state={authorState} className="irc-name" />
+          <PersonName user={author} name={name} state={authorState} className="irc-name" baseUrl={api.baseUrl} />
           <span className="irc-text">{body}</span>
         </div>
       ) : (
         <>
           {head ? (
             <p className="msg-head">
-              <PersonName user={author} name={name} state={authorState} className="msg-author" />
+              <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
               {time}
             </p>
           ) : null}
@@ -1563,5 +1563,4 @@ function listOf(names: readonly string[]): string {
   const last = names[names.length - 1] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${last}`;
 }
-
 

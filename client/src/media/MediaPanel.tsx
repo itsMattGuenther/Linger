@@ -27,6 +27,7 @@ import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { openExternal } from "../lib/external";
+import { absoluteUrl } from "../lib/url";
 import { conversationLabel } from "../dm/dm";
 import { personStyle } from "../lib/names";
 import { fullTime } from "../stream/time";
@@ -257,6 +258,7 @@ export default function MediaPanel({
             {shown.map((item) => (
               <li key={item.cursor}>
                 <Tile
+                  baseUrl={api.baseUrl}
                   item={item}
                   who={people.get(item.author_id)}
                   room={
@@ -302,12 +304,14 @@ export default function MediaPanel({
  * footer says which room and when rather than only what the file is called.
  */
 function Tile({
+  baseUrl,
   item,
   who,
   room,
   onOpen,
   onStar,
 }: {
+  baseUrl: string;
   item: MediaItem;
   who: User | undefined;
   room: string | undefined;
@@ -328,7 +332,7 @@ function Tile({
       >
         <span className="media-face">
           {item.kind === "image" && file ? (
-            <img src={file.url} alt="" loading="lazy" decoding="async" />
+            <img src={absoluteUrl(baseUrl, file.url)} alt="" loading="lazy" decoding="async" />
           ) : item.kind === "video" && file ? (
             <>
               {file.poster_url === null ? (
@@ -336,7 +340,7 @@ function Tile({
                   video
                 </span>
               ) : (
-                <img src={file.poster_url} alt="" loading="lazy" decoding="async" />
+                <img src={absoluteUrl(baseUrl, file.poster_url)} alt="" loading="lazy" decoding="async" />
               )}
               {file.duration_ms === null ? null : (
                 <span className="media-duration meta">{durationText(Number(file.duration_ms))}</span>
@@ -396,7 +400,7 @@ function Tile({
           </button>
         ) : null}
         {file && item.kind !== "image" ? (
-          <button type="button" className="att-get" onClick={() => openExternal(file.url)}>
+          <button type="button" className="att-get" onClick={() => openExternal(absoluteUrl(baseUrl, file.url))}>
             save
           </button>
         ) : null}
