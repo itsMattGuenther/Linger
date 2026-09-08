@@ -255,6 +255,13 @@ cd client && pnpm tauri dev                   # the desktop app
 The desktop app is the only part that needs system libraries: a webview, ALSA
 headers for the microphone, and cmake to build the bundled Opus codec.
 
+The desktop icon comes from the friend group's selected
+[porch artwork](<assets/logo/Linger Pixel Porch Icon Set FINAL.png>).
+To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
+source, run `python3 scripts/app-icons.py` from the repository root after
+`pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
+padding to make the source square, without cropping or stretching the artwork.
+
 ```bash
 # Debian/Ubuntu
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
