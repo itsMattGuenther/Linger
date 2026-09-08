@@ -245,6 +245,22 @@ flows and do not start a new milestone. Evidence and rationale are in the
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
 
+- ⏳ **T-918 · Exercise the desktop release checks** — effort: **high** — Matt,
+  2026-09-08
+  Drive real, isolated desktop clients through export, live name styling and
+  DM visibility. Record reproducible steps and observed results, including the
+  limits of several clients on one machine. Update the human-check wording:
+  desktop automation can own technical checks; separate computers, networks,
+  physical audio devices and listening still need their stated evidence.
+  *Accept:* a reusable native desktop harness, a dated evidence record, and
+  truthful check statuses. Report any defect as a focused follow-up.
+
+- ⏳ **T-919 · Package the selected porch icon** — effort: **low** — Matt,
+  2026-09-08
+  Use `assets/logo/Linger Pixel Porch Icon Set FINAL.png`, selected by the
+  friend group, for the existing desktop icon formats. Preserve the artwork
+  and its proportions; document regeneration and verify the packaged result.
+
 - ✅ **T-906 · Keep a sign-in through a temporary server failure** — effort:
   **medium** — Matt, 2026-09-08
   During normal use, `AuthedApi` treats every error response from token renewal
