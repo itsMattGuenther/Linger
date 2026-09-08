@@ -113,18 +113,18 @@ environment variables) are in [`docs/decisions.md`](docs/decisions.md).
 | M5 — uploads, media, the grid | 2026-08-26 | Resumable uploads on local or S3, files served from their own origin, the media grid with stars and link cards, expiry + a storage ceiling, the status image | [m5.md](docs/tasks/m5.md) |
 | M6 — styling, themes, fonts | 2026-08-27 | Names drawn from custom properties, the two-click style picker, dark/light/system + evening warmth, twelve faces vendored — contrast ≥4.5:1 guarded in CI against four backgrounds | [m6.md](docs/tasks/m6.md) |
 | M7 — packaging and updates | tasks 2026-08-27 | Signed updater behind two Rust commands, tag → draft release with Linux and Windows installers, the shipped CSP permits HTTPS/WSS and blocks remote scripts and fonts, the server image publishes to ghcr for x86-64 and ARM64. **Its check is still open** — see *Human checks* | [m7.md](docs/tasks/m7.md) |
-| M8 — export | tasks 2026-08-28 | Any member can take a zip of the whole server — a file per room, every upload, an index — built in the background and downloaded from the media origin. **One human check is still open** — see *Human checks* | [m8.md](docs/tasks/m8.md) |
+| M8 — export | tasks 2026-08-28; HC-5 passed 2026-09-08 | Real desktop controls handed the archive to a browser; the downloaded room, image and DM filtering were verified independently | [m8.md](docs/tasks/m8.md) |
 | M9 — knock | tasks 2026-08-29 | `POST /knock` addressed to one person's sessions, a card that fades on its own, the sound player the entrance sounds will extend. **Its check is half-open** — see *Human checks*, HC-6 | [m9.md](docs/tasks/m9.md) |
 | M10 — search | 2026-08-31 | An FTS5 index kept by triggers, `GET /search` with no query language to trip over, and a destination in the rail that lands you on a hit six months back — `around=` on the messages endpoint, and a room that knows when it is behind its own newest message | [m10.md](docs/tasks/m10.md) |
 | M11 — DMs and group DMs | 2026-08-31 | A DM is a room with members: create-or-find on a canonical member key, a gateway fan-out that filters every frame naming a room, and a membership condition folded into every query that lists messages, files or search results. **Its two-machine half is a human check** — see *Human checks*, HC-7 | [m11.md](docs/tasks/m11.md) |
 
-**Everything a person still has to do by hand lives in one place now:
-[Human checks](#human-checks--things-only-you-can-do), at the bottom of this
-file.** Nine of them: five left over from closed V1 milestones, one from M9
-(hearing a knock on a second computer), one from M11 (holding a DM across
-two, with a third person looking for it) and two from M12 (hearing somebody
-talk from a second computer, then from a different network). They are not optional and they are not tasks an
-agent can take — each one needs somebody sitting in front of a real computer.
+**Release evidence lives in one place:
+[Release checks](#human-checks--things-only-you-can-do), at the bottom of this
+file.** Nine checks, eight open. HC-5 passed through real native desktops and a
+browser download on 2026-09-08. HC-4 and HC-7 now have local desktop evidence;
+their separate-machine portions remain open. Automation can own technical
+checks. Physical devices, independent networks and listening still require
+the evidence named in each check. See [the dated results](docs/desktop-check-results.md).
 
 **The one thing that bit us in T-301:** a webview page is a cross-origin caller,
 so the server had to start sending CORS headers before the client could read a
@@ -157,7 +157,7 @@ literal into the frontend, and never add a remote font URL.**
 M8 adds the export (see [m8.md](docs/tasks/m8.md)): `POST /export` and `GET /export/:job_id`,
 the archive written on a blocking thread and served from the media origin like
 any other object, and `repo::messages::batch_ascending` for walking a room
-forwards. The settings surface is implemented too; its remaining check is HC-5.
+forwards. The settings surface's HC-5 passed on 2026-09-08.
 M7 adds the release path (see [m7.md](docs/tasks/m7.md)): the signed updater
 behind two narrow Rust commands, `release.yml`, `image.yml` publishing the
 server to ghcr on a tag, the four-file version check and `signing-preflight`,
@@ -271,6 +271,17 @@ flows and do not start a new milestone. Evidence and rationale are in the
   *Accept:* a local upload renders in another client and its media collection;
   export downloads through the native browser handoff. Regression checks
   cover both relative and absolute URLs without changing the wire contract.
+
+- ⬜ **T-921 · Show a private room's occupants as around to outsiders** — effort:
+  **medium**
+  T-918's third native client receives the documented `in_room` presence with
+  `room_id: null`, but renders “in a room” instead of HC-7's “around”. The
+  conversation's contents and identity remain hidden. Review the M11 notes
+  and PROTOCOL §8 before changing this; keep initial presence and live updates
+  consistent, including accessible labels and name popovers. Any protocol
+  clarification must preserve compatibility with existing clients.
+  *Accept:* an outsider sees the same ordinary around presentation while two
+  people use a DM; its members still see their conversation normally.
 
 - ✅ **T-906 · Keep a sign-in through a temporary server failure** — effort:
   **medium** — Matt, 2026-09-08
@@ -1092,17 +1103,21 @@ them.** They are repeated in the *Parking lot*.
 
 ---
 
-## Human checks — things only you can do
+<a id="human-checks--things-only-you-can-do"></a>
 
-Nine things are built, tested, and **never once used by a person** — or, in
-HC-6 through HC-9's case, never used across two of them. Automated tests
-prove the code does what it says. They cannot prove that a window opens, that a
-400 MB upload survives a real network, or that a sound is one you would want to
-hear. That is this list.
+## Release checks — desktop and real-world evidence
 
-None of these are agent tasks. Each one needs you, a real computer, and a few
-minutes. The first five are ordered so that **doing the first one knocks out
-most of the second and third at the same time.**
+Nine checks cover the promises that unit and server integration tests alone
+do not establish. Desktop automation can open real windows, operate controls,
+exchange messages and inspect browser downloads. Those parts can be taken on
+as implementation tasks. HC-5 passed that way; eight checks remain open.
+
+Separate computers, production domains, independent networks, physical audio
+devices and listening still need the evidence each check names. Several
+clients on one machine must be reported as such. The first five are ordered
+so that doing the first one also covers parts of the second and third.
+The [2026-09-08 evidence record](docs/desktop-check-results.md) distinguishes
+completed checks from useful partial results.
 
 ---
 
@@ -1211,10 +1226,11 @@ name is the first thing to check — see the host guide's troubleshooting.
 
 *Left over from M6 (`docs/tasks/m6.md`).*
 
-The style picker, the themes and the evening warmth were all driven live in a
-browser — but a browser session has no rooms and no messages, because the live
-connection only exists inside the desktop app. So the names in the message
-stream have only ever been checked as computed values, never seen.
+**Local desktop portion passed 2026-09-08.** Two isolated native clients
+exchanged messages showing the selected gradient, font and shimmer. Screenshots
+cover both themes, normalization, compact, IRC and a controlled evening hour.
+The separate-machine/VM step below remains open; the names have now been seen
+in a real room. [Evidence](docs/desktop-check-results.md).
 
 1. Two computers (or one computer and a virtual machine), signed in as two
    different people.
@@ -1236,6 +1252,13 @@ stream have only ever been checked as computed values, never seen.
 ### HC-5 · Press the export button
 
 *Closes T-802 (`docs/tasks/m8.md`). The smallest one on this list.*
+
+**✅ Passed 2026-09-08, Linux desktop development build, 0.1.0.** Real controls
+built the archive and handed it to an isolated Chromium profile through the
+native opener. An independent ZIP reader opened the room Markdown and image;
+the recipient's DM was present and the outsider's archive omitted it. A second
+click displayed the hour's cooldown. T-920 fixed the local URL failure found
+on the first attempt. [Evidence and repeatable command](docs/desktop-check-results.md).
 
 1. In the app: **settings → take everything with you**.
 2. Press **export everything**. Watch the line underneath — it should count up.
@@ -1284,10 +1307,11 @@ network, and that the sound is a sound you would want to hear.
 the same reason: everything was verified with one real client and two scripted
 sockets on one machine.*
 
-The frames a scripted socket receives are the frames a client receives, so what
-this is really checking is the part a script cannot: that three real windows
-behave, and that a DM feels like a private conversation rather than a room with
-a filter on it.
+**Local desktop content isolation passed 2026-09-08.** Three native windows
+exercised the conversation, media, search and browser-downloaded exports.
+The outsider found no private message or file. Its presence wording says
+“in a room” rather than “around”; T-921 tracks that mismatch. The separate
+computers and usability assessment below remain open.
 
 1. **Three computers**, or two plus a phone browser you can sign in on — all on
    the same server, as three different people. Call them A, B and C.

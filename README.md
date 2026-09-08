@@ -277,6 +277,13 @@ one thing it leaves out is `scripts/minio-test.sh`, which tests the S3 storage
 backend against a throwaway MinIO; `cargo test --workspace` skips that code
 entirely, so it proves nothing about S3 on its own.
 
+For real desktop interaction, `python3 scripts/desktop-check.py` runs three
+isolated Linux clients through live styling, private messages, uploads and a
+browser-downloaded export. It needs additional test tools and built debug
+binaries; see [desktop checks](docs/desktop-checks.md) for setup and the
+[dated results](docs/desktop-check-results.md). It does not replace checks on
+separate computers and networks.
+
 Six things that catch people out. How the rest fits together is
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
