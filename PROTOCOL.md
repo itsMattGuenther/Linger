@@ -77,6 +77,12 @@ Refresh-token reuse (presenting an already-rotated token) revokes the token's wh
 family — every token descended from the same login — and forces re-login on that
 device chain. Logout likewise revokes the presented token's family.
 
+When renewal fails, a client ends its saved sign-in only if refresh is rejected with
+`UNAUTHENTICATED` or `FORBIDDEN`. A temporary server error, rate limit, or transport
+failure leaves the saved token in place and reports the failure to the caller. A
+later request can try again; clients must not loop on refresh or infer token
+revocation from `INTERNAL`. This applies both at startup and during normal use.
+
 ### 2.1 First-run setup
 
 On boot with zero users, the server generates a one-time setup token and prints a
