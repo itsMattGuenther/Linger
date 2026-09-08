@@ -100,3 +100,7 @@ icon appearance has not been checked on those systems.
 tests, clippy, formatting, binding drift, and **413 frontend tests**. The package
 build also ran `pnpm build` successfully. Hardware/keyring tests remain ignored
 by the automated gate; real S3 validation is a separate CI job.
+
+All five [CI jobs](https://github.com/itsMattGuenther/Linger/actions/runs/34287834499)
+passed for the implementation, including the real S3/MinIO job. A second clean
+desktop run passed the same assertions. Review: [PR #62](https://github.com/itsMattGuenther/Linger/pull/62).

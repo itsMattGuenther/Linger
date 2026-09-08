@@ -245,7 +245,7 @@ flows and do not start a new milestone. Evidence and rationale are in the
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
 
-- ⏳ **T-918 · Exercise the desktop release checks** — effort: **high** — Matt,
+- ✅ **T-918 · Exercise the desktop release checks** — effort: **high** — Matt,
   2026-09-08
   Drive real, isolated desktop clients through export, live name styling and
   DM visibility. Record reproducible steps and observed results, including the
@@ -255,13 +255,29 @@ flows and do not start a new milestone. Evidence and rationale are in the
   *Accept:* a reusable native desktop harness, a dated evidence record, and
   truthful check statuses. Report any defect as a focused follow-up.
 
-- ⏳ **T-919 · Package the selected porch icon** — effort: **low** — Matt,
+  **Completed 2026-09-08** ([PR #62](https://github.com/itsMattGuenther/Linger/pull/62)).
+  `scripts/desktop-check.py` passed twice from fresh server data and empty
+  profiles with three native clients. HC-5 is closed; HC-4 and HC-7 have local
+  desktop evidence, with separate-machine checks still open. T-920 fixed the
+  broken local media URLs it exposed; T-921 records the remaining presence
+  wording. Screenshots, outcomes and setup are in
+  [desktop-check-results.md](docs/desktop-check-results.md).
+  The full local gate (413 frontend tests), package build and all five
+  [CI jobs](https://github.com/itsMattGuenther/Linger/actions/runs/34287834499) passed.
+
+- ✅ **T-919 · Package the selected porch icon** — effort: **low** — Matt,
   2026-09-08
   Use `assets/logo/Linger Pixel Porch Icon Set FINAL.png`, selected by the
   friend group, for the existing desktop icon formats. Preserve the artwork
   and its proportions; document regeneration and verify the packaged result.
 
-- ⏳ **T-920 · Resolve local media addresses against their server** — effort:
+  **Completed 2026-09-08** (PR #62). Six desktop icon files now come from the
+  selected PNG via `scripts/app-icons.py`. Transparent padding preserves the
+  slightly rectangular artwork. A built Debian package's three installed
+  PNGs match the generated assets byte for byte. README documents regeneration.
+  No new release was published; native Windows/macOS appearance remains untested.
+
+- ✅ **T-920 · Resolve local media addresses against their server** — effort:
   **medium** — Matt, 2026-09-08
   T-918 reproduced a silent export-download failure and broken inline images
   in real desktop clients against a server without `LINGER_DOMAIN`. Upload
@@ -271,6 +287,13 @@ flows and do not start a new milestone. Evidence and rationale are in the
   *Accept:* a local upload renders in another client and its media collection;
   export downloads through the native browser handoff. Regression checks
   cover both relative and absolute URLs without changing the wire contract.
+
+  **Completed 2026-09-08** (PR #62). Rendering and export use the same URL
+  resolution as upload parts, with the owning server passed explicitly through
+  the relevant components. Five new regressions cover two server origins,
+  posters, absolute URLs and export polling; four fail before the fix.
+  Two native desktop runs confirm image display, media visibility and browser
+  downloads. The local gate and CI validation are recorded under T-918.
 
 - ⬜ **T-921 · Show a private room's occupants as around to outsiders** — effort:
   **medium**
