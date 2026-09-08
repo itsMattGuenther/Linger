@@ -261,6 +261,17 @@ flows and do not start a new milestone. Evidence and rationale are in the
   friend group, for the existing desktop icon formats. Preserve the artwork
   and its proportions; document regeneration and verify the packaged result.
 
+- ⏳ **T-920 · Resolve local media addresses against their server** — effort:
+  **medium** — Matt, 2026-09-08
+  T-918 reproduced a silent export-download failure and broken inline images
+  in real desktop clients against a server without `LINGER_DOMAIN`. Upload
+  parts already resolve root-relative URLs; rendering and export do not.
+  Apply the same resolution to attachments, posters, media tiles, status
+  images and export links. Preserve absolute media-domain URLs.
+  *Accept:* a local upload renders in another client and its media collection;
+  export downloads through the native browser handoff. Regression checks
+  cover both relative and absolute URLs without changing the wire contract.
+
 - ✅ **T-906 · Keep a sign-in through a temporary server failure** — effort:
   **medium** — Matt, 2026-09-08
   During normal use, `AuthedApi` treats every error response from token renewal
