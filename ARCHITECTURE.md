@@ -18,7 +18,7 @@ Companion to `SPEC.md`. Wire protocol is in `PROTOCOL.md`. Agent working rules a
 │  Core — Rust                               │
 │    gateway client (WS, resume, backoff)    │
 │    token storage (OS keyring)              │
-│    local cache (SQLite)                    │
+│    voice (WebRTC, microphone, speakers)    │
 └────────────────────────────────────────────┘
                     │ WSS + HTTPS
                     ▼
@@ -43,7 +43,7 @@ Deployment is one binary plus one data directory, or one Docker image.
 |---|---|---|
 | **Rust server (axum + tokio)** | A single static binary is a dramatically better self-host story than "install Node, install pnpm, run migrations." Also lets client and server share types. | Never for V1. |
 | **SQLite (WAL), not Postgres** | 20 friends, a few hundred messages a day. Postgres is ceremony at this scale. One file to back up. | Only if a server exceeds ~2k users or needs multi-node. A `Repository` trait keeps the swap cheap. |
-| **Tauri 2, not Electron** | ~5–15 MB bundle vs ~150 MB; ~100 MB idle RAM vs ~400 MB; first-class Rust, which is where the gateway, the keyring and (in V2) audio live. | Only if WebKitGTK rendering on Linux becomes untenable. |
+| **Tauri 2, not Electron** | Uses the OS WebView rather than bundling a browser; the gateway, keyring and audio live in Rust. Installed size, startup time and memory use need release measurements ([review](docs/release-readiness.md)). | Only if WebKitGTK rendering on Linux becomes untenable. |
 | **TypeScript + React frontend** | Largest ecosystem for virtualized lists and rich text; fastest to iterate. | — |
 | **Object store adapter, not blobs in DB** | 500 MB files must never traverse the app server. | — |
 
@@ -338,7 +338,9 @@ broken it, and it stays a hard rule now that there is not.
 
 ### Threat model, stated plainly — publish this verbatim in the README
 
-> Messages and files are encrypted in transit (TLS) and at rest on the host's disk.
+> Messages and files travel over TLS in a deployed server. Linger does not encrypt
+> its database or stored files; encryption at rest depends on the host's disk or
+> storage provider configuration.
 > **The person running the server can read everything on it.** There is no
 > end-to-end encryption. Run your own server, or trust the person who runs the one
 > you're on. If you need cryptographic guarantees against your host, use Signal.
@@ -390,8 +392,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
   anything not on the image/video/audio allowlist.
 - Re-encode images server-side. This strips EXIF (spec §4.10) and neutralizes polyglot
   files in one step.
-- Strict CSP on the app origin: no remote script, no remote fonts, and nothing
-  reachable except the server the app is signed in to. `unsafe-inline` survives on
+- CSP on the app origin: no remote scripts or remote fonts. The shipped policy
+  permits HTTPS and WSS origins generally, so members can connect to multiple
+  self-hosted servers and fetch their media. It is not an allowlist of the
+  signed-in servers. `unsafe-inline` survives on
   `style-src` alone and cannot be removed: the message list is virtualized, so a row's
   position is a style attribute, and a person's name is painted from `--person-*`
   properties set the same way. `script-src` is `'self'` and nothing else.
@@ -631,15 +635,16 @@ passes its check.
 | **M4.5** | Host controls (rooms, invites, server settings), member settings, the server list | A host who has only seen the app can create a server, add a room, invite a friend, and rename the server — no curl, no docs | 2–3 days |
 | **M5** | Uploads, media pipeline, the media collection, status images | 400 MB video uploads, resumes after a killed connection, appears in the media grid | 3 days |
 | **M6** | Styling: names, statuses, 16-color palette, themes, fonts | A user sets a gradient name from two palette keys; contrast is verifiably ≥4.5:1 in both themes | 2–3 days |
-| **M7** | Packaging: installers, signing, notarization, auto-update | A signed installer for each OS, and an update ships end-to-end | 3–5 days |
+| **M7** | Packaging: installers and signed auto-updates | Linux and Windows installers, and an update ships end-to-end. Installer signing and macOS notarization are deferred by decision (T-705). | 3–5 days |
 | **M8** | Export | One archive contains every message and file, and it opens | 1 day |
 
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
-(2026-08-29 and 2026-08-31), and **M12's signalling landed 2026-09-01**; the
-audio path and ambient voice are not started. The order below is not SPEC §6's listing order: knock and search
+(2026-08-29 and 2026-08-31). **M12's signalling, audio path, controls, relay and
+device recovery are implemented; its real-network acceptance check is open.**
+M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. V1's remaining work is still five things a person has to do by hand
-(`TASKS.md`, *Human checks*), and M9's check is a sixth.
+(`TASKS.md`, *Human checks*). M9, M11 and M12 bring the total to nine checks.
 
 | # | Milestone | Done when | Estimate |
 |---|---|---|---|
@@ -696,5 +701,6 @@ a room, invite anybody, or edit the server — every endpoint for all three has 
 since M1 with nobody calling it. It also carries the server list from §3 of the spec
 (V1 item 17), which had never been given a task at all.
 
-M7 is not interesting and cannot be skipped. macOS notarization in particular is a
-tedious, version-sensitive slog. Budget the full estimate.
+M7's install-and-update check cannot be skipped. Installer signing and macOS
+notarization remain on the backburner under T-705; they are not prerequisites
+for the agreed Linux and Windows release.

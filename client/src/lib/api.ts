@@ -597,9 +597,13 @@ export class AuthedApi {
       } catch (error) {
         // A refused refresh is the end of this sign-in: the token expired, or
         // it was already spent and the family got revoked. Either way the only
-        // way back is signing in again. A network failure is not that, so it
-        // propagates without ending the session.
-        if (error instanceof ApiError) {
+        // way back is signing in again. A temporary server error or rate limit
+        // says nothing about the token, just like a network failure. Keep the
+        // sign-in so a later request can try again (also used by restoreOne).
+        if (
+          error instanceof ApiError &&
+          (error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN")
+        ) {
           this.#onSignedOut("Your sign-in expired. Please sign in again.");
         }
         throw error;
