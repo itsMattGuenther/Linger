@@ -199,6 +199,18 @@ Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
 with its note written here rather than in an archive.
 
+- ⏳ **T-906 · Keep a sign-in through a temporary server failure** — effort:
+  **medium** — Matt, 2026-09-08
+  During normal use, `AuthedApi` treats every error response from token renewal
+  as an expired sign-in. A temporary `INTERNAL` or `RATE_LIMITED` response then
+  removes the server from the rail and deletes its saved token. Startup already
+  distinguishes those failures from `UNAUTHENTICATED` / `FORBIDDEN`.
+  Apply the same distinction during normal use, without retrying forever or
+  weakening rejection of an expired or revoked token.
+  *Accept:* temporary errors preserve the sign-in and a later request succeeds;
+  actual token rejection still signs out; requests renewing together share one
+  renewal. Exercise the real HTTP client with controlled responses.
+
 - ✅ **T-904 · Density belongs in settings, not over every conversation** —
   effort: **low** — Matt, 2026-08-31
   `comfortable` / `compact` / `irc` sat in the room header *and* in settings.
