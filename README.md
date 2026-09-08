@@ -13,8 +13,10 @@ middle.
 > To linger is to stay somewhere with no agenda and no obligation to be doing
 > anything. That is the product thesis in one word.
 
-**Status: pre-alpha, under active construction.** See [SPEC.md](SPEC.md) for the full
-product specification.
+**Status: pre-alpha, under active construction.** The core features are implemented;
+installation, updates and voice still have outstanding checks on real computers.
+See the [release readiness review](docs/release-readiness.md) for the priorities
+and [SPEC.md](SPEC.md) for the full product specification.
 
 ---
 
@@ -69,14 +71,14 @@ These terms are used everywhere — UI, code, docs, error messages:
 | Media/link archive | **media** |
 | A user's status card | **their status** |
 
-## ✨ What it does (V1)
+## ✨ What is implemented
 
 - 🪑 **Rooms you're in** — focusing a room means you're in it; others see
-  occupancy, and each person has a personal **entrance sound** that plays on arrival
+  occupancy. Personal entrance sounds are planned and deferred
 - 👥 **A roster-forward layout** — people are the primary surface, not a gutter; each
   friend is a card showing presence, the room they are in, and their status
 - 🔕 **No unread counts** — a "you left off here" line and a subtle label-weight change,
-  never a badge; direct person-to-person mentions are the only real notification
+  never a badge; notifications are for direct mentions and people you choose to follow
 - ✍️ **Styled names** (the AIM feature) — curated fonts, a named 16-color palette,
   gradients, shimmer/glow; and **statuses** with away messages
 - 🗄️ **Media** — everything ever shared, browsable and filterable; star things to
@@ -88,12 +90,18 @@ These terms are used everywhere — UI, code, docs, error messages:
   denser and larger, not "👍 6"
 - 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a
   poster frame and a blurhash generated for you
-- 🖥️ **Desktop client** for Linux, Windows, and macOS (Tauri 2, not Electron)
+- 🖥️ **Desktop client** for Linux and Windows (Tauri 2, not Electron).
+  macOS builds from source; published Mac installers are deferred
 - 🏘️ **Several servers at once** — a list in the rail with a live dot each, and
   `+ add` to join another. Each one is its own sign-in, its own people and its own
   rooms; signing out of one leaves the rest alone
-- 📦 **Full export** — any member can export all messages and media, any time, no
-  gatekeeping
+- 📦 **Full export** — any member can export public rooms and their own DMs,
+  including shared files, without host approval
+- 💬 **DMs and group DMs** — private to their participants within the server;
+  people outside a DM cannot find it through messages, media, search or export
+- 🎙️ **Voice rooms** — join, mute, push-to-talk, per-person volume and device
+  selection. A host can run a relay for different networks. **Experimental:
+  the tests across separate computers and networks are still open**
 - 🚪 **Knock** *(the first piece of V2, built)* — nudge one person from their card in
   the roster. They get a soft knock and a card that fades on its own: no message, no
   thread, nothing to dismiss, and nothing written down at either end. Three an hour
@@ -123,7 +131,9 @@ The scope discipline is the product.
 
 Stated plainly:
 
-> Messages and files are encrypted in transit (TLS) and at rest on the host's disk.
+> Messages and files travel over TLS in a deployed server. Linger does not encrypt
+> its database or stored files; encryption at rest depends on the host's disk or
+> storage provider configuration.
 > **The person running the server can read everything on it.** There is no
 > end-to-end encryption. Run your own server, or trust the person who runs the one
 > you're on. If you need cryptographic guarantees against your host, use Signal.
@@ -135,7 +145,8 @@ Other privacy properties that *are* guaranteed:
   want people to know what you are playing or listening to, you type it into your
   status — see [the decision](docs/decisions.md), 2026-08-28
 - EXIF (including GPS) is stripped from every uploaded image, no toggle
-- Zero telemetry, zero crash reporting, zero phone-home — not even opt-in
+- Zero telemetry and zero crash reporting — not even opt-in. The client does
+  contact GitHub to check for application updates
 
 ## 📦 Installing the client
 

@@ -91,6 +91,11 @@ a task fails its acceptance criteria twice.
 
 ## Status
 
+**Current milestone: M12.** Its implementation is present; HC-8 and HC-9 are
+open. The [release readiness review](docs/release-readiness.md) records the
+2026-09-08 audit and the order for the next sessions. Existing release checks
+come before M13.
+
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue
 (the password floor, no host transfer, removal not banning, storage knobs as
@@ -107,7 +112,7 @@ environment variables) are in [`docs/decisions.md`](docs/decisions.md).
 | M4.5 — the shell's missing surfaces | 2026-08-25 | Host controls, invites, member settings, server list, remove + re-admit, password reset, live member announce | [m4-5.md](docs/tasks/m4-5.md) |
 | M5 — uploads, media, the grid | 2026-08-26 | Resumable uploads on local or S3, files served from their own origin, the media grid with stars and link cards, expiry + a storage ceiling, the status image | [m5.md](docs/tasks/m5.md) |
 | M6 — styling, themes, fonts | 2026-08-27 | Names drawn from custom properties, the two-click style picker, dark/light/system + evening warmth, twelve faces vendored — contrast ≥4.5:1 guarded in CI against four backgrounds | [m6.md](docs/tasks/m6.md) |
-| M7 — packaging and updates | tasks 2026-08-27 | Signed updater behind two Rust commands, tag → draft release with Linux and Windows installers, the shipped CSP stops at the app's own server, the server image publishes to ghcr for x86-64 and ARM64. **Its check is still open** — see *Human checks* | [m7.md](docs/tasks/m7.md) |
+| M7 — packaging and updates | tasks 2026-08-27 | Signed updater behind two Rust commands, tag → draft release with Linux and Windows installers, the shipped CSP permits HTTPS/WSS and blocks remote scripts and fonts, the server image publishes to ghcr for x86-64 and ARM64. **Its check is still open** — see *Human checks* | [m7.md](docs/tasks/m7.md) |
 | M8 — export | tasks 2026-08-28 | Any member can take a zip of the whole server — a file per room, every upload, an index — built in the background and downloaded from the media origin. **One human check is still open** — see *Human checks* | [m8.md](docs/tasks/m8.md) |
 | M9 — knock | tasks 2026-08-29 | `POST /knock` addressed to one person's sessions, a card that fades on its own, the sound player the entrance sounds will extend. **Its check is half-open** — see *Human checks*, HC-6 | [m9.md](docs/tasks/m9.md) |
 | M10 — search | 2026-08-31 | An FTS5 index kept by triggers, `GET /search` with no query language to trip over, and a destination in the rail that lands you on a hit six months back — `around=` on the messages endpoint, and a room that knows when it is behind its own newest message | [m10.md](docs/tasks/m10.md) |
@@ -149,14 +154,14 @@ names painted from `--person-*` custom properties in `styles/names.css`, the
 style picker, theme + evening warmth as attributes on `<html>`, and the twelve
 faces vendored under `client/src/fonts/` — **never write a hex or `oklch()`
 literal into the frontend, and never add a remote font URL.**
-M8 adds the export (T-801 below): `POST /export` and `GET /export/:job_id`,
+M8 adds the export (see [m8.md](docs/tasks/m8.md)): `POST /export` and `GET /export/:job_id`,
 the archive written on a blocking thread and served from the media origin like
 any other object, and `repo::messages::batch_ascending` for walking a room
-forwards. **Do not rebuild it** — what is missing is only the button, T-802.
+forwards. The settings surface is implemented too; its remaining check is HC-5.
 M7 adds the release path (see [m7.md](docs/tasks/m7.md)): the signed updater
 behind two narrow Rust commands, `release.yml`, `image.yml` publishing the
 server to ghcr on a tag, the four-file version check and `signing-preflight`,
-and a shipped CSP that reaches the app's own server and nothing else — which is
+and a shipped CSP that requires HTTPS/WSS for remote connections — which is
 why **a server needs a name; a bare `IP:port` is unreachable from anything
 anybody installed**, and says so at startup. **Updates are signed; installers
 are not** — that is a decision, not a gap
@@ -199,6 +204,47 @@ Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
 with its note written here rather than in an archive.
 
+**Next, alongside the human checks:** T-906 → T-907 → T-908 → T-909.
+Measure T-910 before describing a release as lightweight. These close existing
+flows and do not start a new milestone. Evidence and rationale are in the
+[release readiness review](docs/release-readiness.md).
+
+- ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
+  **high**
+  `useSessions` waits for all saved servers, and the HTTP client has no request
+  deadline. Failed servers disappear for that launch. Restore each server
+  independently, retain an unavailable entry with a retry action, and keep its
+  saved sign-in unless explicitly rejected. Do not add an offline database.
+  *Accept:* with two saved servers and one stalled response, the healthy one
+  becomes usable within a bounded time. The other can recover without restart
+  or re-entering credentials. Test token rotation and React StrictMode so no
+  saved token is spent twice.
+
+- ⬜ **T-908 · Pin a message from the conversation** — effort: **medium**
+  Use the existing pin/unpin endpoints and message action strip; indicate the
+  saved state and report failures without losing it. No new wire fields.
+  *Accept:* pinning in one client appears in another and in media's pinned
+  filter; unpin removes it. A DM's pin remains invisible to non-members, and
+  pinned attachments retain the existing expiry protection. Read M10 and M11
+  notes before touching history or visibility.
+
+- ⬜ **T-909 · Make Console controls readable and reachable** — effort: **medium**
+  Review remaining muted/faint interactive text, focus states, empty/error
+  states and the minimum desktop window. Use the existing tokens and layout.
+  *Accept:* current screenshots in both themes at 1100×720 and 760×480; all
+  three densities checked; keyboard-only use, larger text and reduced motion
+  checked; a friend finds settings, sends a file and joins voice unaided.
+  Record contrast for enabled control labels, not just styled names.
+
+- ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
+  Record installer size, cold launch time, total process memory and idle CPU
+  on Windows and Linux; include WebView processes. Repeat after an extended
+  session with several rooms and during four-person voice. Check how retained
+  message history grows; virtualization alone does not bound it.
+  *Accept:* versioned measurements with hardware and method, explicit future
+  regression budgets, and any observed growth recorded as a focused follow-up.
+  Do not change history storage without first reading M10's notes.
+
 - ⏳ **T-906 · Keep a sign-in through a temporary server failure** — effort:
   **medium** — Matt, 2026-09-08
   During normal use, `AuthedApi` treats every error response from token renewal
@@ -210,6 +256,12 @@ with its note written here rather than in an archive.
   *Accept:* temporary errors preserve the sign-in and a later request succeeds;
   actual token rejection still signs out; requests renewing together share one
   renewal. Exercise the real HTTP client with controlled responses.
+
+  **Implemented 2026-09-08; CI pending.** Renewal now uses the same rejection
+  distinction as startup. Eight new HTTP-client regression tests cover temporary
+  failures, later recovery, actual rejection, shared renewal and the retry
+  bound. Three failed against the original code. `scripts/check.sh` and
+  `pnpm build` pass locally; no dependencies or wire shapes changed.
 
 - ✅ **T-904 · Density belongs in settings, not over every conversation** —
   effort: **low** — Matt, 2026-08-31
@@ -373,9 +425,9 @@ Recorded in the *Parking lot* too.
 **Three of the five are built and archived** — knock on 2026-08-29
 ([`m9.md`](docs/tasks/m9.md)), search and DMs on 2026-08-31
 ([`m10.md`](docs/tasks/m10.md), [`m11.md`](docs/tasks/m11.md)). Everything
-below is still planned and not started. **Nothing below M11 is next.** V1 is
+in M12 is implemented but awaits its human checks. M13 remains unstarted. V1 is
 done except the things in *Human checks*, and those come first — a release
-nobody has installed is not a finished V1, and three of the seven checks now
+nobody has installed is not a finished V1, and four of the nine checks now
 belong to V2 features that have only ever run on one computer.
 
 **Read `m11.md` before touching the gateway fan-out, or anything that lists
@@ -1331,13 +1383,8 @@ relay, and the four-person hour has happened once. Write down what dropped.
   `media`, opening in place of the stream, with `Ctrl`/`Cmd`+`K` as a shortcut
   into it rather than a second surface; and it covers what people typed plus the
   names of files, not link titles. Raised 2026-08-28.
-- **Nothing in the client can pin a message.** The server has
-  `POST /messages/{id}/pin`, the media grid has a `pinned` filter, and file
-  expiry spares "starred or pinned" files — but there is no pin control
-  anywhere in the app and no `pinMessage` in `client/src/lib/api.ts`. So the
-  filter is always empty and half of the expiry promise is unreachable. Add a
-  control, or drop the filter and the half-promise. Found while writing the
-  guides, 2026-08-27.
+- **Pinning from the client** moved to T-908 on 2026-09-08. It closes an
+  existing V1 flow using the existing endpoints; it needs no new scope decision.
 - Link-preview fetching is host-side (privacy: the host's IP fetches, not each
   member's). **Built that way in T-504** — the favicon is inlined as a `data:`
   URI so a reader's machine never touches the linked site either. Matt has not

@@ -270,15 +270,20 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M5 uploads/media → M6 styling/themes → M7 packaging → M8 export   ← V1, built
   → M9 knock                                                          ← V2, built
   → M10 search                                                        ← V2, built
-  → M11 DMs → M12 voice → M13 ambient voice                         ← V2, planned
+  → M11 DMs                                                          ← V2, built
+  → M12 voice                                                        ← implemented; HC-8/HC-9 open
+  → M13 ambient voice                                                ← V2, planned
   → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
 ```
 
 V1 is built. What is left of it is five things a person has to do by hand — see
-`TASKS.md`, *Human checks*. **M9 (knock) and M10 (search) are built** — M10's
+`TASKS.md`, *Human checks*. **M9 (knock), M10 (search), and M11 (DMs) are built** — M10's
 notes are in `docs/tasks/m10.md`, and its second half changed how the client
-holds history, so read it before touching message loading. The rest of V2 is
-planned and not started.
+holds history, so read it before touching message loading. **M12 is the current
+milestone:** voice implementation is present, but its checks on separate
+computers and networks are open. There are nine human checks in total. M13 is
+planned and not started. See `docs/release-readiness.md` for the release review;
+close the existing checks before starting another milestone.
 
 ---
 
