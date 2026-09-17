@@ -106,7 +106,8 @@ These terms are used everywhere — UI, code, docs, error messages:
 - 💬 **DMs and group DMs** — private to their participants within the server;
   people outside a DM cannot find it through messages, media, search or export
 - 🎙️ **Voice rooms** — join, mute, deafen, shared mic/deafen state, push-to-talk, per-person volume and device
-  selection. A host can run a relay for different networks. **Experimental:
+  selection. Controls remain reachable while browsing Settings or another room.
+  A host can run a relay for different networks. **Experimental:
   the tests across separate computers and networks are still open**
 - 🚪 **Knock** *(the first piece of V2, built)* — nudge one person from their card in
   the roster. They get a soft knock and a card that fades on its own: no message, no

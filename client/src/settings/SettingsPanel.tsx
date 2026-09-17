@@ -173,8 +173,7 @@ export default function SettingsPanel({
               ) : (
                 <>
                   <p className="settings-lead">
-                    {user.status?.line ||
-                      "Let people know what you’re up to. Only what you choose to share."}
+                    {user.status?.line || "Let people know what you’re up to."}
                   </p>
                   <button
                     type="button"
@@ -257,10 +256,8 @@ export default function SettingsPanel({
             <section className="settings-section">
               <h3 className="panel-label">other people's names</h3>
               <p className="settings-lead">
-                Everyone picks how their own name is drawn — a face, a color or
-                two, sometimes a shimmer. If you would rather read a quiet room,
-                turn this on and every name, including the fonts people set for
-                their messages, comes out in your default style.
+                Hide custom name colors, fonts and effects. Message text uses
+                the default font too. Only your view changes.
               </p>
               <button
                 type="button"
@@ -268,7 +265,7 @@ export default function SettingsPanel({
                 aria-pressed={normalize}
                 onClick={() => onNormalizeChange(!normalize)}
               >
-                {normalize ? "names normalized" : "normalize everyone"}
+                Use plain names and message fonts
               </button>
             </section>
           </>
@@ -348,9 +345,7 @@ export function SoundSection() {
     <section className="settings-section">
       <h3 className="panel-label">sound</h3>
       <p className="settings-lead">
-        Choose which chimes you hear. These switches do not silence voice chat;
-        use deafen in your voice session for that. Desktop notification rules
-        are further down this page.
+        Choose your notification chimes. To silence people in voice, use deafen.
       </p>
       <button
         type="button"
@@ -472,10 +467,8 @@ function ExportSection({ api }: { api: AuthedApi }) {
     <section className="settings-section">
       <h3 className="panel-label">take everything with you</h3>
       <p className="settings-lead">
-        A copy of this whole server: every message, every file, in one zip. One
-        plain text file per room, a folder of the files, and an index. It opens
-        in any text editor and needs nothing from Linger — that is the point.
-        You can ask for one an hour.
+        Download public rooms and your own DMs, including shared files, as a
+        zip. Messages open in any text editor. Available once an hour.
       </p>
       <p
         className={phase.kind === "failed" ? "settings-problem" : "settings-ok"}

@@ -19,9 +19,18 @@ T-909, M12 polish. No milestone or release check is closed by this review.
 - Profile, Appearance, Sound & voice, Account & app. Desktop notification rules
   moved out of the roster into Sound & voice, separate from chime preferences.
 - Prominent voice names, optional participant hiding, local volume on demand
-  by click, right-click or keyboard. No avatars. Audio/protocol behavior is
+  by click, right-click or keyboard. No avatars. Wire and audio-engine behavior is
   unchanged. Short windows initially collapse participants, not call controls,
   unless the reader explicitly chose otherwise.
+- Ongoing voice controls remain visible when browsing another room/server,
+  Settings, Media or Search. Return to the room without leaving voice. The
+  same controls handle push-to-talk in both views; changing away from the
+  room releases a held key, and losing window focus always releases it.
+- Shorter Settings copy, “Use plain names and message fonts” instead of
+  “normalize everyone,” and an accurate export description (public rooms and
+  your DMs, not every private conversation on the server).
+- Message bodies stop at 80ch on wide screens. Voice actions sit near the
+  participant heading instead of at the distant right edge of a 4K window.
 - Capitalized Linger in the welcome screen, browser/window titles, notification
   sender and installer metadata. Kept the app identifier and original MSI
   upgrade code stable.
@@ -63,15 +72,15 @@ Current screen review, in priority order:
 
 1. **Connection:** remove Interface size here. Keep it in Settings → Appearance.
    Keep readable initial typography and respect a previously saved scale. Done.
-2. **Call continuity:** the room owns VoiceBar. Opening Settings or Media
-   removes its visible controls even if the call continues. Review a compact,
-   persistent call-control area outside the room view before final acceptance.
-3. **Settings language:** descriptions are too long for routine choices, and
-   “normalize everyone” does not explain its effect. Shorten copy and make
-   labels describe the visible result, with secondary explanations on demand.
-4. **Visual hierarchy at large sizes:** review message line length and the
-   contrast between primary actions and metadata at actual 4K size, not only
-   scaled-down screenshots. Passing overflow checks does not settle this.
+2. **Call continuity:** a compact bottom strip names the ongoing room and
+   preserves mute, deafen, leave and return when its stream is not visible.
+   Automated navigation and control-failure checks pass; real audio acceptance remains.
+3. **Settings language:** shortened routine descriptions and changed the plain
+   styling label to describe its effect. A friend still needs to try these labels.
+4. **Visual hierarchy at large sizes:** bounded message line length and brought
+   voice actions beside the participant heading. Reviewed the 4K captures;
+   physical-display comfort still needs Matt's judgment. Overflow checks alone
+   do not settle this.
 
 No analytics or instrumentation are added. Evaluate these flows through direct
 observation and a friend attempting ordinary tasks without coaching.
@@ -98,9 +107,10 @@ The script owns its local preview process and closes it afterward.
   desktop-shell Rust checks, generated bindings, frontend typecheck and tests.
 - 439 frontend unit tests passed. Removed three tests specific to the deleted
   IRC mode and added four interface-preference/layout tests.
-- Chromium and WebKit browser suites: 71 tests each. Coverage includes pointer/keyboard panel
+- Chromium and WebKit browser suites: 76 tests each. Coverage includes pointer/keyboard panel
   resizing, persistence, modal focus/Escape, all six scale choices at 1100×720
   and 760×480 in both themes, enabled label contrast, old density preferences,
+  ongoing voice while navigating, push-to-talk release and control failures,
   paged history remaining virtualized during resizing, attachment fitting through 200%
   scale, downloads, composer input, knock feedback, voice controls and sounds.
 - 4K coverage uses 3840×2160 at desktop 100%, 3072×1728 at device pixel ratio

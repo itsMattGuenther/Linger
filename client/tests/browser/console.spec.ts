@@ -133,6 +133,139 @@ async function openSettings(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
 }
 
+test("ongoing voice stays controllable outside its room and returns without rejoining", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await openSettings(page);
+  const ongoing = page.getByRole("region", { name: "Ongoing voice" });
+  await expect(ongoing).toBeVisible();
+  await ongoing.getByRole("button", { name: "mute", exact: true }).click();
+  await ongoing.getByRole("button", { name: "deafen", exact: true }).click();
+  await expect(
+    ongoing.getByRole("button", { name: "muted", exact: true }),
+  ).toBeDisabled();
+  await ongoing.getByRole("button", { name: "undeafen", exact: true }).click();
+  await expect(
+    ongoing.getByRole("button", { name: "muted", exact: true }),
+  ).toBeEnabled();
+  await ongoing
+    .getByRole("button", { name: "Return to #general", exact: true })
+    .click();
+  await expect(ongoing).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "muted", exact: true }),
+  ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "#weekend-plans", exact: true })
+    .click();
+  await expect(ongoing).toBeVisible();
+  await page.getByRole("button", { name: "media", exact: true }).click();
+  await expect(ongoing).toBeVisible();
+  await ongoing
+    .getByRole("button", { name: "leave voice", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("data-left", "yes");
+  await expect(ongoing).toHaveCount(0);
+});
+
+test("push-to-talk releases on navigation and works in Settings without duplicate listeners", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("linger.voice.pushToTalk", "true"),
+  );
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.keyboard.down("Control");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-controls",
+    '{"muted":false,"deafened":false}',
+  );
+  await openSettings(page);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-controls",
+    '{"muted":true,"deafened":false}',
+  );
+  await page.keyboard.up("Control");
+  await page.keyboard.down("Control");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-controls",
+    '{"muted":false,"deafened":false}',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-controls",
+    '{"muted":true,"deafened":false}',
+  );
+  await page.keyboard.up("Control");
+});
+
+test("an away-view control failure remains visible after voice disconnects", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await openSettings(page);
+  await page.evaluate(() => {
+    document.documentElement.dataset.refuse = "yes";
+  });
+  await page.getByRole("button", { name: "deafen", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Couldn't change voice controls",
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-left", "yes");
+});
+
+test("voice and Appearance controls fit a short window at 200%", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 760, height: 480 });
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await openSettings(page);
+  await page
+    .getByRole("combobox", { name: "Scale", exact: true })
+    .selectOption("200");
+  await expect(
+    page.getByRole("combobox", { name: "Scale", exact: true }),
+  ).toBeInViewport();
+  for (const label of ["mute", "deafen", "leave voice"]) {
+    const control = page.getByRole("button", { name: label, exact: true });
+    await expect(control).toBeInViewport();
+    const box = await control.boundingBox();
+    expect(box && box.y + box.height).toBeLessThanOrEqual(480);
+  }
+  await page.getByRole("button", { name: "leave voice", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Ongoing voice" })).toHaveCount(
+    0,
+  );
+});
+
+test("plain styling has a clear label and long messages have a readable line length", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 3072, height: 1728 });
+  await page.goto("/tests/fixtures/console.html?history");
+  await expect(page.locator(".msg-body").last()).toBeVisible();
+  expect(
+    await page
+      .locator(".msg-body")
+      .last()
+      .evaluate((node) => node.getBoundingClientRect().width),
+  ).toBeLessThan(1000);
+  await openSettings(page);
+  const plain = page.getByRole("button", {
+    name: "Use plain names and message fonts",
+    exact: true,
+  });
+  expect(await plain.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14);
+  await plain.click();
+  await expect(plain).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-normalize", "true");
+});
+
 for (const theme of ["dark", "light"] as const) {
   for (const width of [1100, 760]) {
     test(`${theme}, ${width}px: readable layout and large text fit without tuning`, async ({

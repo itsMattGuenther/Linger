@@ -444,6 +444,10 @@ flows and do not start a new milestone. Evidence and rationale are in the
   [screenshots](screenshots/README.md). The full local gate passes. Packaged
   Windows/Omarchy and the unaided-friend acceptance remain open; keep T-909
   in progress until those checks have evidence.
+  **Review follow-through:** scale is only in Appearance, visible branding is
+  Linger, ongoing voice controls remain reachable in other destinations, and
+  Settings copy is shorter. Wide message lines are bounded; actions use label
+  sizing instead of metadata sizing. See the review for research and evidence.
 
 - ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU

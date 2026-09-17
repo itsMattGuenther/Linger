@@ -32,8 +32,16 @@
   overflow-y: auto;
 }
 
-.stream {
+.workspace {
   grid-area: stream;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stream {
+  flex: 1;
   display: flex;
   flex-direction: column;
   /* Both minimums are load-bearing. A grid item's default `min-height: auto`
@@ -737,22 +745,22 @@
   font-size: 0.8125rem;
   cursor: pointer;
 }
-.frame[data-narrow="true"] > .stream > .stream-header {
+.frame[data-narrow="true"] > .workspace > .stream > .stream-header {
   padding-right: 6.25rem;
 }
 .frame[data-stacked="true"] {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "stream" "status";
 }
-.frame[data-stacked="true"] > .stream > .stream-header {
+.frame[data-stacked="true"] > .workspace > .stream > .stream-header {
   padding-top: 0.5rem;
   padding-left: 7.5rem;
   padding-right: 6.25rem;
 }
-.frame[data-stacked="true"] > .settings > .stream-header,
-.frame[data-stacked="true"] > .host > .stream-header,
-.frame[data-stacked="true"] > .search > .stream-header,
-.frame[data-stacked="true"] > .media > .stream-header {
+.frame[data-stacked="true"] > .workspace > .settings > .stream-header,
+.frame[data-stacked="true"] > .workspace > .host > .stream-header,
+.frame[data-stacked="true"] > .workspace > .search > .stream-header,
+.frame[data-stacked="true"] > .workspace > .media > .stream-header {
   padding-top: 3.25rem;
   padding-left: var(--gutter);
   padding-right: var(--gutter);
@@ -838,7 +846,7 @@
   .voice-bar {
     padding-block: min(0.375rem, 8px);
   }
-  .frame > .stream > .stream-header {
+  .frame > .workspace > .stream > .stream-header {
     padding-bottom: 8px;
   }
 }

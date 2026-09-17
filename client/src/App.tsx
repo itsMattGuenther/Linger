@@ -94,6 +94,7 @@ import {
 import RosterPanel from "./roster/RosterPanel";
 import SearchPanel from "./search/SearchPanel";
 import Stream from "./stream/Stream";
+import VoiceAway from "./voice/VoiceAway";
 import "./app.css";
 
 /**
@@ -753,120 +754,132 @@ export function Console({
         />
       )}
 
-      {addingServer ? (
-        <main className="stream">
-          <header className="stream-header">
-            <span className="room-name">add a server</span>
-            <button
-              type="button"
-              className="rail-action meta"
-              onClick={() => setAddingServer(false)}
-            >
-              close
-            </button>
-          </header>
-          <AuthScreens
-            inline
-            notice={null}
-            keyringNotice={keyringNotice}
-            onAuthenticated={async (baseUrl, auth) => {
-              await onAddServer(baseUrl, auth);
-              setActiveUrl(baseUrl);
-              setAddingServer(false);
-            }}
+      <div className="workspace">
+        {addingServer ? (
+          <main className="stream">
+            <header className="stream-header">
+              <span className="room-name">add a server</span>
+              <button
+                type="button"
+                className="rail-action meta"
+                onClick={() => setAddingServer(false)}
+              >
+                close
+              </button>
+            </header>
+            <AuthScreens
+              inline
+              notice={null}
+              keyringNotice={keyringNotice}
+              onAuthenticated={async (baseUrl, auth) => {
+                await onAddServer(baseUrl, auth);
+                setActiveUrl(baseUrl);
+                setAddingServer(false);
+              }}
+            />
+          </main>
+        ) : settingsOpen ? (
+          <SettingsPanel
+            api={api}
+            user={you}
+            normalize={normalize}
+            onNormalizeChange={setNormalize}
+            theme={theme}
+            onThemeChange={setTheme}
+            warmth={warmth}
+            onWarmthChange={setWarmth}
+            onSignOut={() => onSignOut(active.baseUrl)}
+            onReauthenticated={(auth) => onAddServer(api.baseUrl, auth)}
+            onClose={closeSettings}
+            initialSection={updateWaiting ? "computer" : "you"}
           />
-        </main>
-      ) : settingsOpen ? (
-        <SettingsPanel
-          api={api}
-          user={you}
-          normalize={normalize}
-          onNormalizeChange={setNormalize}
-          theme={theme}
-          onThemeChange={setTheme}
-          warmth={warmth}
-          onWarmthChange={setWarmth}
-          onSignOut={() => onSignOut(active.baseUrl)}
-          onReauthenticated={(auth) => onAddServer(api.baseUrl, auth)}
-          onClose={closeSettings}
-          initialSection={updateWaiting ? "computer" : "you"}
-        />
-      ) : mediaOpen ? (
-        <MediaPanel
-          api={api}
-          users={gateway.users}
-          me={gateway.me?.id ?? null}
-          rooms={[...rooms, ...dms]}
-          onOpen={(roomId, messageId) => {
-            setOpenRoomIds((held) => ({ ...held, [active.baseUrl]: roomId }));
-            setJumpTo(messageId);
-            closePanels();
-          }}
-          onClose={() => setMediaOpen(false)}
-          expiryDays={server?.file_expiry_days}
-        />
-      ) : searchOpen ? (
-        <SearchPanel
-          api={api}
-          users={gateway.users}
-          me={gateway.me?.id ?? null}
-          // Rooms *and* your DMs: since T-1303 a member's own DMs are in their
-          // results, and a hit the panel cannot name reads as one from a room
-          // that is gone.
-          rooms={[...rooms, ...dms]}
-          focusNonce={searchFocus}
-          onOpen={(roomId, messageId) => {
-            setOpenRoomIds((held) => ({ ...held, [active.baseUrl]: roomId }));
-            setJumpTo(messageId);
-            closePanels();
-          }}
-          onClose={() => setSearchOpen(false)}
-        />
-      ) : host !== null ? (
-        <HostPanel
-          api={api}
-          rooms={rooms}
-          server={server}
-          section={host}
-          onSection={setHostSection}
-          onServerChange={(next) => noteInfo(active.baseUrl, next)}
-          onClose={() => setHostSection(null)}
-        />
-      ) : open === null ? (
-        <main className="stream">
-          <header className="stream-header">
-            <span className="room-name">
-              {gateway.status.kind === "ready" ? "no rooms yet" : "welcome"}
-            </span>
-          </header>
-          <div className="stream-body">
-            <p className="placeholder">
-              {noRoomsBody(gateway.status.kind === "ready", isHost)}
-            </p>
-            {/* The host is the one person who can fix this, so they get the
-                way out rather than a sentence about it. */}
-            {isHost && gateway.status.kind === "ready" ? (
+        ) : mediaOpen ? (
+          <MediaPanel
+            api={api}
+            users={gateway.users}
+            me={gateway.me?.id ?? null}
+            rooms={[...rooms, ...dms]}
+            onOpen={(roomId, messageId) => {
+              setOpenRoomIds((held) => ({ ...held, [active.baseUrl]: roomId }));
+              setJumpTo(messageId);
+              closePanels();
+            }}
+            onClose={() => setMediaOpen(false)}
+            expiryDays={server?.file_expiry_days}
+          />
+        ) : searchOpen ? (
+          <SearchPanel
+            api={api}
+            users={gateway.users}
+            me={gateway.me?.id ?? null}
+            // Rooms *and* your DMs: since T-1303 a member's own DMs are in their
+            // results, and a hit the panel cannot name reads as one from a room
+            // that is gone.
+            rooms={[...rooms, ...dms]}
+            focusNonce={searchFocus}
+            onOpen={(roomId, messageId) => {
+              setOpenRoomIds((held) => ({ ...held, [active.baseUrl]: roomId }));
+              setJumpTo(messageId);
+              closePanels();
+            }}
+            onClose={() => setSearchOpen(false)}
+          />
+        ) : host !== null ? (
+          <HostPanel
+            api={api}
+            rooms={rooms}
+            server={server}
+            section={host}
+            onSection={setHostSection}
+            onServerChange={(next) => noteInfo(active.baseUrl, next)}
+            onClose={() => setHostSection(null)}
+          />
+        ) : open === null ? (
+          <main className="stream">
+            <header className="stream-header">
+              <span className="room-name">
+                {gateway.status.kind === "ready" ? "no rooms yet" : "welcome"}
+              </span>
+            </header>
+            <div className="stream-body">
               <p className="placeholder">
-                <button
-                  type="button"
-                  className="rail-action meta"
-                  onClick={() => openHost("rooms")}
-                >
-                  make the first room
-                </button>
+                {noRoomsBody(gateway.status.kind === "ready", isHost)}
               </p>
-            ) : null}
-          </div>
-        </main>
-      ) : (
-        <Stream
-          api={api}
-          room={open}
-          users={gateway.users}
-          focus={jumpTo}
-          onFocused={forgetJump}
+              {/* The host is the one person who can fix this, so they get the
+                way out rather than a sentence about it. */}
+              {isHost && gateway.status.kind === "ready" ? (
+                <p className="placeholder">
+                  <button
+                    type="button"
+                    className="rail-action meta"
+                    onClick={() => openHost("rooms")}
+                  >
+                    make the first room
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          </main>
+        ) : (
+          <Stream
+            api={api}
+            room={open}
+            users={gateway.users}
+            focus={jumpTo}
+            onFocused={forgetJump}
+          />
+        )}
+        <VoiceAway
+          servers={servers}
+          visibleServer={active.baseUrl}
+          visibleRoom={conversationVisible ? (open?.id ?? null) : null}
+          onReturn={(baseUrl, roomId) => {
+            setActiveUrl(baseUrl);
+            setOpenRoomIds((held) => ({ ...held, [baseUrl]: roomId }));
+            closePanels();
+          }}
         />
-      )}
+      </div>
 
       <AdaptivePanel
         side="roster"

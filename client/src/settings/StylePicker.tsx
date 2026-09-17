@@ -100,9 +100,7 @@ export default function StylePicker({
     <section className="settings-section">
       <h3 className="panel-label">how your name looks</h3>
       <p className="settings-lead">
-        This is what everybody else sees next to what you write. Colors are the
-        same sixteen for everyone, so there is no way to pick one nobody can
-        read.
+        Preview your name as others will see it.
       </p>
 
       {/* `name-raw` is the one exception in the app: this draws as itself even
@@ -116,14 +114,13 @@ export default function StylePicker({
       </p>
       {normalized ? (
         <p className="settings-hint meta">
-          You have other people's names normalized, so you won't see this —
-          everybody else will.
+          Plain names are on in Appearance. This preview still shows your style.
         </p>
       ) : null}
 
       <Fills draft={draft} onChange={change} />
 
-      <Choices label="face">
+      <Choices label="font">
         {FONT_KEYS.map((key) => (
           <button
             key={key}

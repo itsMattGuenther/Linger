@@ -285,12 +285,17 @@ While you are in:
 - **Hide people** gives more space to chat without hiding your voice controls.
 - **leave voice** turns the microphone off. Closing the app does too.
 
+Opening Settings, Media or another room does not end voice. A small strip keeps
+your voice controls visible and names the room; click its name to return.
+
 Moving voice to another room keeps your mute/deafen choices. Leaving and
 joining starts a fresh session. Your per-person volume settings are unaffected
 by deafen, and missed speech is discarded rather than played when you return.
 
 **Push to talk** is in Settings → Sound & voice. With it on, every call starts muted and
-the microphone is open only while you hold `ctrl`. It is off by default because
+the microphone is open only while you hold `ctrl`, including in Settings.
+Leaving the room view or switching away from the app releases a held key;
+press it again to speak. It is off by default because
 a room you leave running is the point, and a key you have to hold is the
 opposite of that.
 

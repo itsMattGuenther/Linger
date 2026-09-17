@@ -88,6 +88,15 @@ try {
         await page.screenshot({
           path: resolve(output, `${theme}-voice-options.png`),
         });
+        await page
+          .getByRole("button", { name: "Settings", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "Appearance", exact: true })
+          .click();
+        await page.screenshot({
+          path: resolve(output, `${theme}-voice-settings.png`),
+        });
       }
       if (width === 760) {
         await page.getByRole("button", { name: "People", exact: true }).click();

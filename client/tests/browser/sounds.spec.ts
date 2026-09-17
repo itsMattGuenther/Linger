@@ -26,5 +26,5 @@ test("quiet hours gate previews without silencing the voice session", async ({ p
   await page.getByRole("button", { name: "quiet hours on" }).click();
   await expect(page.getByRole("button", { name: "preview DM messages", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "preview room messages", exact: true })).toBeDisabled();
-  await expect(page.getByText(/These switches do not silence voice chat/)).toBeVisible();
+  await expect(page.getByText(/To silence people in voice, use deafen/)).toBeVisible();
 });

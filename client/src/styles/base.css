@@ -77,6 +77,9 @@ button[class]:not(.name):not(.style-font),
 summary {
   font-family: var(--font-ui);
 }
+button.meta {
+  font-size: var(--text-label-size);
+}
 button:not(.style-swatch):not(.reaction),
 select,
 summary {

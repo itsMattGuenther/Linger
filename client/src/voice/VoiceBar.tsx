@@ -11,32 +11,23 @@
  * Somebody talking is their name drawn a little brighter, the way a live
  * status is drawn anywhere else in the app.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
 import type { AuthedApi } from "../lib/api";
 import {
   joinVoice,
-  leaveVoice,
-  setVoiceMuted,
-  setVoiceDeafened,
   setVoiceVolume,
   useGateway,
   voicePeersIn,
 } from "../lib/gateway";
 import { nameProps } from "../lib/names";
-import {
-  clampVolume,
-  loadVoicePrefs,
-  microphoneLine,
-  PUSH_TO_TALK_KEY,
-  seatsOf,
-  volumeLabel,
-} from "./voice";
+import { clampVolume, loadVoicePrefs, seatsOf, volumeLabel } from "./voice";
 import "./voice.css";
 import { useWindowHeight } from "../lib/layout";
 import { useInterfaceScale } from "../lib/interface";
+import VoiceControls from "./VoiceControls";
 
 export default function VoiceBar({
   api,
@@ -84,13 +75,13 @@ export default function VoiceBar({
   useEffect(() => {
     setSelected(null);
   }, [room.id, api.baseUrl]);
-  const controlProblem = (error: unknown): void => {
+  const controlProblem = useCallback((error: unknown): void => {
     setProblem(
       error instanceof Error
         ? error.message
         : "Couldn't change voice controls.",
     );
-  };
+  }, []);
 
   // Read once per join rather than subscribed: a device changed in settings
   // applies to the next join, which is the honest promise and the simple one.
@@ -108,37 +99,6 @@ export default function VoiceBar({
       setJoining(false);
     }
   };
-
-  // Push-to-talk: hold the key, the microphone opens; let go, it closes.
-  // Attached only while seated with push-to-talk on, so an idle window has
-  // no key listener at all.
-  const pushToTalk = seatedHere && loadVoicePrefs().pushToTalk;
-  useEffect(() => {
-    if (!pushToTalk) return;
-    const server = api.baseUrl;
-    const down = (event: KeyboardEvent): void => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat)
-        void setVoiceMuted(server, false).catch(controlProblem);
-    };
-    const up = (event: KeyboardEvent): void => {
-      if (event.key === PUSH_TO_TALK_KEY)
-        void setVoiceMuted(server, true).catch(controlProblem);
-    };
-    // Losing the window mid-word must not leave the microphone open.
-    const blur = (): void => {
-      void setVoiceMuted(server, true).catch(controlProblem);
-    };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    window.addEventListener("blur", blur);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", blur);
-      // Leaving this room view releases PTT too; a missing keyup cannot leave it open.
-      void setVoiceMuted(server, true).catch(controlProblem);
-    };
-  }, [pushToTalk, api.baseUrl]);
 
   // Nothing to say: nobody here is in voice and neither are you.
   if (peers.length === 0 && !seatedHere && problem === null) {
@@ -162,10 +122,6 @@ export default function VoiceBar({
 
   const seats = seatsOf(peers, users, gateway.sessionId);
   const selectedSeat = seats.find((seat) => seat.sessionId === selected);
-  const line =
-    seatedHere && !mine.deafened
-      ? microphoneLine(mine.audio, pushToTalk, mine.muted)
-      : null;
 
   return (
     <div
@@ -281,49 +237,14 @@ export default function VoiceBar({
           </button>
         </section>
       ) : null}
-      <div className="voice-controls">
-        {seatedHere ? (
-          <>
-            {line === null ? null : (
-              <span className="voice-line meta">{line}</span>
-            )}
-            {pushToTalk ? null : (
-              <button
-                type="button"
-                className="voice-action meta"
-                aria-pressed={mine.muted}
-                disabled={mine.deafened}
-                onClick={() =>
-                  void setVoiceMuted(api.baseUrl, !mine.muted).catch(
-                    controlProblem,
-                  )
-                }
-              >
-                {mine.muted ? "muted" : "mute"}
-              </button>
-            )}
-            <button
-              type="button"
-              className="voice-action meta"
-              aria-pressed={mine.deafened}
-              title="Silence incoming voice and mute your microphone"
-              onClick={() =>
-                void setVoiceDeafened(api.baseUrl, !mine.deafened).catch(
-                  controlProblem,
-                )
-              }
-            >
-              {mine.deafened ? "undeafen" : "deafen"}
-            </button>
-            <button
-              type="button"
-              className="voice-action meta"
-              onClick={() => void leaveVoice(api.baseUrl)}
-            >
-              leave voice
-            </button>
-          </>
-        ) : (
+      {seatedHere ? (
+        <VoiceControls
+          server={api.baseUrl}
+          mine={mine}
+          onProblem={controlProblem}
+        />
+      ) : (
+        <div className="voice-controls">
           <button
             type="button"
             className="voice-action meta"
@@ -336,8 +257,8 @@ export default function VoiceBar({
                 ? "move voice here"
                 : "join voice"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {problem === null ? null : (
         <span className="voice-problem meta">{problem}</span>
       )}

@@ -63,6 +63,7 @@
 }
 
 .msg-body {
+  max-width: 80ch;
   border-left: 3px solid var(--person-rule);
   padding-left: 11px;
   /* The author's optional message-font override (SPEC §4.5) — the only message

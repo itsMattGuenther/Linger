@@ -146,7 +146,15 @@ const frame = (value: ServerFrame) =>
   emit("gateway:frame", { server: baseUrl, frame: value });
 Object.defineProperty(globalThis, "isTauri", { value: true });
 mockIPC(
-  async (cmd) => {
+  async (cmd, args) => {
+    if (cmd === "voice_controls") {
+      if (document.documentElement.dataset.refuse === "yes")
+        throw new Error("fixture refusal");
+      if (!args || !("controls" in args))
+        throw new Error("missing fixture controls");
+      document.documentElement.dataset.controls = JSON.stringify(args.controls);
+    }
+    if (cmd === "voice_leave") document.documentElement.dataset.left = "yes";
     if (cmd === "voice_join") {
       window.setTimeout(() => {
         void emit("voice:audio", { server: baseUrl, state: "sending" });

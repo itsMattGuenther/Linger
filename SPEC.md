@@ -277,7 +277,7 @@ Each user controls the rendering of their own display name:
    fingerprinting vector and a remote-load dependency.
 3. **Gradient angle is fixed at 92°**, not user-configurable.
 4. **Shimmer and glow respect `prefers-reduced-motion`.**
-5. **A global "normalize everyone" toggle** renders all names in the reader's default
+5. **A global "Use plain names and message fonts" toggle** renders all names in the reader's default
    style. Some people will want this. Give it to them without friction.
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
@@ -668,6 +668,11 @@ or keyboard-activate a participant to open their local volume controls. Hiding
 the participants leaves join/leave, mute and deafen available. No avatars.
 In a short window, participants start collapsed unless the reader chose otherwise;
 **Show people** reveals them. This never changes the voice connection or audio.
+When reading another room/server or opening a destination such as Settings,
+a compact strip names the ongoing voice room and keeps mute, deafen, leave
+and a return-to-room action available. Only one set of active controls is drawn.
+Push-to-talk works while these controls are visible, including in Settings;
+leaving the room view releases a held key, as does losing window focus.
 
 - **Message aging** applies to the message *body only* — never the name or timestamp.
   Steps: <1h 100%, <1d 88%, older 78%. Floor at 78%; do not go lower.
@@ -680,7 +685,8 @@ In a short window, participants start collapsed unless the reader chose otherwis
 - **Motion:** 120–160ms, ease-out. No spring, no bounce. The only slow animation in the
   app is name shimmer (4s linear).
 - **Message presentation:** 16px/1.6 sans body, consecutive messages grouped.
-  One comfortable default, with no density modes.
+  One comfortable default, with no density modes. Message bodies are limited
+  to 80ch on wide windows; extra window width must not produce page-wide prose.
 
 ### 5.7 Bundled fonts
 

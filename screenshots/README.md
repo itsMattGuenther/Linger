@@ -6,6 +6,7 @@ Start with these:
 - [Main window — light](light-1280.png)
 - [Appearance settings](dark-appearance.png)
 - [Voice controls](dark-voice.png)
+- [Voice controls while in Settings](dark-voice-settings.png)
 - [Participant volume](dark-voice-options.png)
 - [Small window](dark-760.png)
 - [People panel in a small window](dark-people.png)
