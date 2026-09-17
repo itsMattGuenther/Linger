@@ -323,35 +323,94 @@ test("enabled labels meet normal-text contrast in both themes, including evening
     }
 });
 
-test("long history stays virtualized and rows remeasure after resizing", async ({
+test("an unsaved status survives moving the people panel between layouts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.goto("/tests/fixtures/console.html");
+  await page.locator(".roster").getByRole("button", { name: /Matt/ }).click();
+  await page
+    .locator(".roster")
+    .getByRole("button", { name: "edit", exact: true })
+    .click();
+  const draft = page.locator(".roster textarea").first();
+  await draft.fill("A status I have not saved yet.");
+  await page.setViewportSize({ width: 760, height: 480 });
+  await page.getByRole("button", { name: "People", exact: true }).click();
+  await expect(draft).toHaveValue("A status I have not saved yet.");
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await expect(draft).toHaveValue("A status I have not saved yet.");
+  await expect(draft).toBeVisible();
+});
+
+for (const timing of ["during landing", "after landing"]) {
+  test(`long history stays virtualized when resizing ${timing}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/tests/fixtures/console.html?history");
+    await expect(page.getByText(/^History sample 9999\./)).toBeVisible();
+    if (timing === "after landing") {
+      await expect(page.getByText(/^History sample 9999\./)).toBeInViewport();
+      // Exercise a settled room separately from immediate first-load resizing.
+      await page.waitForTimeout(300);
+    }
+    expect(await page.locator(".stream-row").count()).toBeLessThan(80);
+    await page.getByRole("separator", { name: "Resize navigation" }).focus();
+    await page.keyboard.press("End");
+    await page.getByRole("separator", { name: "Resize people panel" }).focus();
+    await page.keyboard.press("End");
+    await expect(page.getByText(/^History sample 9999\./)).toBeInViewport();
+    const log = page.getByRole("log");
+    await log.evaluate((node) => {
+      node.scrollTop -= 1000;
+    });
+    await page.waitForTimeout(200);
+    const overlap = () =>
+      page.locator(".stream-row").evaluateAll((nodes) => {
+        const rects = nodes
+          .map((node) => node.getBoundingClientRect())
+          .sort((a, b) => a.top - b.top);
+        return rects.some(
+          (rect, index) =>
+            index > 0 && rect.top < (rects[index - 1]?.bottom ?? 0) - 1,
+        );
+      });
+    await expect.poll(overlap).toBe(false);
+    expect(await page.locator(".stream-row").count()).toBeLessThan(80);
+  });
+}
+
+test("resizing while reading older messages does not jump to the newest", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/tests/fixtures/console.html?history");
-  await expect(page.getByText(/^History sample 9999\./)).toBeVisible();
-  expect(await page.locator(".stream-row").count()).toBeLessThan(80);
+  await expect(page.getByText(/^History sample 9999\./)).toBeInViewport();
+  await page.waitForTimeout(300);
+  const log = page.getByRole("log");
+  await log.evaluate((node) => {
+    // Stay within the loaded page: this check isolates resizing from paging.
+    node.scrollTop -= 900;
+  });
+  await expect(page.getByText(/^History sample 9999\./)).toHaveCount(0);
+  const reading = await page.locator(".stream-row").evaluateAll((nodes) => {
+    const top = document
+      .querySelector(".stream-body")!
+      .getBoundingClientRect().top;
+    return nodes
+      .find((node) => node.getBoundingClientRect().top >= top)
+      ?.getAttribute("data-index");
+  });
+  expect(reading).toBeTruthy();
   await page.getByRole("separator", { name: "Resize navigation" }).focus();
   await page.keyboard.press("End");
   await page.getByRole("separator", { name: "Resize people panel" }).focus();
   await page.keyboard.press("End");
-  await expect(page.getByText(/^History sample 9999\./)).toBeInViewport();
-  const log = page.getByRole("log");
-  await log.evaluate((node) => {
-    node.scrollTop -= 1000;
-  });
-  await page.waitForTimeout(200);
-  const overlap = () =>
-    page.locator(".stream-row").evaluateAll((nodes) => {
-      const rects = nodes
-        .map((node) => node.getBoundingClientRect())
-        .sort((a, b) => a.top - b.top);
-      return rects.some(
-        (rect, index) =>
-          index > 0 && rect.top < (rects[index - 1]?.bottom ?? 0) - 1,
-      );
-    });
-  await expect.poll(overlap).toBe(false);
-  expect(await page.locator(".stream-row").count()).toBeLessThan(80);
+  await expect(
+    page.locator(`.stream-row[data-index="${reading}"]`),
+  ).toBeInViewport();
+  await expect(page.getByText(/^History sample 9999\./)).toHaveCount(0);
 });
 
 test("first-run text can be enlarged before joining a server", async ({
@@ -359,6 +418,10 @@ test("first-run text can be enlarged before joining a server", async ({
 }) => {
   await page.setViewportSize({ width: 760, height: 480 });
   await page.goto("/");
+  await expect(page).toHaveTitle("Linger");
+  await expect(
+    page.getByRole("heading", { name: "Linger", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText(/New here\? Paste the full invite link/),
   ).toBeVisible();
@@ -391,6 +454,12 @@ for (const display of [
     width: 3840,
     height: 2160,
     deviceScaleFactor: 1,
+  },
+  {
+    name: "4K at desktop 125%",
+    width: 3072,
+    height: 1728,
+    deviceScaleFactor: 1.25,
   },
   {
     name: "4K at desktop 200%",

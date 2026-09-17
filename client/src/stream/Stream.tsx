@@ -286,12 +286,13 @@ export default function Stream({
   // of guesses and lands somewhere in the middle of the real one. Drawing the
   // rows it lands on corrects their heights, which moves the bottom again.
   //
-  // So jump once per frame until the last row is genuinely on screen. A frame
+  // So jump once per frame until the bottom has settled on screen. A frame
   // is the right beat because the browser reports a scroll asynchronously: jump
   // twice inside one frame and the second jump is aiming with the first one's
-  // stale numbers. And the test is "the last row is drawn", not "the total
-  // stopped growing" — the total holds still for a frame all the time while
-  // measurements are still arriving.
+  // stale numbers. A drawn row can still be outside the viewport (overscan),
+  // and one unchanged frame does not mean its measurements have arrived.
+  // Require both the actual bottom and several stable frames. Otherwise an
+  // early panel resize can leave WebKit a screenful above the last message.
   const landing = useRef({ room: "", done: false });
   useEffect(() => {
     if (rows.length === 0) return;
@@ -302,6 +303,8 @@ export default function Stream({
     if (!atEnd) return;
 
     let frames = 0;
+    let stable = 0;
+    let previousTotal = -1;
     let pending = 0;
     const step = (): void => {
       // A jump marks the landing done the moment it starts (`jumpTo`). Two
@@ -310,10 +313,20 @@ export default function Stream({
       if (landing.current.done) return;
       virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
       const drawn = virtualizer.getVirtualItems();
+      const total = virtualizer.getTotalSize();
+      const element = scroller.current;
+      const atBottom =
+        element !== null &&
+        element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
+      stable = atBottom && total === previousTotal ? stable + 1 : 0;
+      previousTotal = total;
       frames += 1;
       // The frame cap is a seatbelt, not a mechanism: a room that never settles
       // has to give the scrollbar back rather than fight for it forever.
-      if (drawn[drawn.length - 1]?.index === rows.length - 1 || frames >= 60) {
+      if (
+        (drawn[drawn.length - 1]?.index === rows.length - 1 && stable >= 5) ||
+        frames >= 60
+      ) {
         landing.current.done = true;
         return;
       }

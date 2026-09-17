@@ -243,6 +243,10 @@ mockIPC(
 );
 // Fetch remains the real API's boundary: no casts replacing its generic wire methods.
 globalThis.fetch = async (input) => {
+  // A network response arrives on a later task, not between scroll event
+  // listeners. An already-resolved mock can re-render before the virtualizer
+  // even observes the scroll that requested this page.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   const url = new URL(String(input));
   let answer: unknown = [];
   if (url.pathname.endsWith("/server")) answer = server;

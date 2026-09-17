@@ -21,6 +21,11 @@ T-909, M12 polish. No milestone or release check is closed by this review.
   by click, right-click or keyboard. No avatars. Audio/protocol behavior is
   unchanged. Short windows initially collapse participants, not call controls,
   unless the reader explicitly chose otherwise.
+- Capitalized Linger in the welcome screen, browser/window titles and installer
+  metadata. Kept the app identifier and original MSI upgrade code stable.
+- Preserve unsaved status drafts as the People panel changes between a column
+  and a drawer. Initial chat landing waits for measured rows to settle before
+  giving up its bottom anchor during an early panel resize.
 
 The responsive roster change and removal of density modes were approved during
 review. SPEC and the current guides describe the new behavior. Historical
@@ -48,21 +53,26 @@ The script owns its local preview process and closes it afterward.
   desktop-shell Rust checks, generated bindings, frontend typecheck and tests.
 - 439 frontend unit tests passed. Removed three tests specific to the deleted
   IRC mode and added four interface-preference/layout tests.
-- Chromium browser suite: 65 tests. Coverage includes pointer/keyboard panel
+- Chromium and WebKit browser suites: 71 tests each. Coverage includes pointer/keyboard panel
   resizing, persistence, modal focus/Escape, all six scale choices at 1100×720
   and 760×480 in both themes, enabled label contrast, old density preferences,
-  10,000-message history remaining virtualized, attachment fitting through 200%
+  paged history remaining virtualized during resizing, attachment fitting through 200%
   scale, downloads, composer input, knock feedback, voice controls and sounds.
-- 4K coverage uses 3840×2160 at desktop 100%, plus 1920×1080 at device pixel
-  ratio 2 (3840×2160 physical pixels). Both exercise app scale at 100%, 150%
+- 4K coverage uses 3840×2160 at desktop 100%, 3072×1728 at device pixel ratio
+  1.25 (Matt's desktop setting), and 1920×1080 at device pixel ratio 2. All
+  represent 3840×2160 physical pixels and exercise app scale at 100%, 150%
   and 200%. This is browser high-DPI emulation, not a physical-monitor test.
+- The history fixture has 10,000 available messages but serves 100 per page,
+  like the API. The checks do not claim 10,000 simultaneously loaded messages.
+  They cover early resizing, settled resizing and keeping an older message
+  visible. Fixture responses arrive on a later task, like network responses.
 - Normal enabled labels are checked against 4.5:1 contrast in dark, light and
   both evening-warm variants. This is not a claim of full WCAG conformance.
 - No new runtime dependencies or changes to server authorization, voice state,
   notifications on the wire, or message fetching. The generated search binding
   changes only because its comment no longer refers to density modes.
 
-CI must also pass Chromium and WebKit. Native acceptance remains separate:
+CI must pass before merge. Native acceptance remains separate:
 
 1. Use the packaged Windows and Omarchy clients at ordinary and high-DPI sizes.
    Resize during chat, try 150–200% text, and use both side-panel boundaries.

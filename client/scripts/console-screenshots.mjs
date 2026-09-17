@@ -111,22 +111,36 @@ try {
       await page.close();
     }
   }
-  for (const scale of [100, 150, 200]) {
-    const page = await browser.newPage({
-      viewport: { width: 3840, height: 2160 },
-      colorScheme: "dark",
-      reducedMotion: "reduce",
-    });
-    await page.addInitScript(
-      (value) => localStorage.setItem("linger.interface.scale", String(value)),
-      scale,
-    );
-    await page.goto(`${origin}/tests/fixtures/console.html`);
-    await page.locator(".msg-body").first().waitFor();
-    await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(350);
-    await page.screenshot({ path: resolve(output, `dark-4k-${scale}.png`) });
-    await page.close();
+  for (const desktop of [100, 125]) {
+    for (const scale of [100, 150, 200]) {
+      const page = await browser.newPage({
+        viewport: {
+          width: 3840 / (desktop / 100),
+          height: 2160 / (desktop / 100),
+        },
+        deviceScaleFactor: desktop / 100,
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+      });
+      await page.addInitScript(
+        (value) =>
+          localStorage.setItem("linger.interface.scale", String(value)),
+        scale,
+      );
+      await page.goto(`${origin}/tests/fixtures/console.html`);
+      await page.locator(".msg-body").first().waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(350);
+      await page.screenshot({
+        path: resolve(
+          output,
+          desktop === 100
+            ? `dark-4k-${scale}.png`
+            : `dark-4k-desktop125-app${scale}.png`,
+        ),
+      });
+      await page.close();
+    }
   }
   const welcome = await browser.newPage({
     viewport: { width: 1100, height: 720 },

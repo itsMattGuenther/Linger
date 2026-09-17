@@ -784,6 +784,10 @@
   background: var(--surface-1);
   color: var(--text-primary);
 }
+.panel-inline[open] {
+  display: contents;
+  color: inherit;
+}
 .panel-drawer[open] {
   display: flex;
   flex-direction: column;
