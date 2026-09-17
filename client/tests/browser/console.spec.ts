@@ -413,11 +413,12 @@ test("resizing while reading older messages does not jump to the newest", async 
   await expect(page.getByText(/^History sample 9999\./)).toHaveCount(0);
 });
 
-test("first-run text can be enlarged before joining a server", async ({
+test("interface size belongs in Settings and saved scale also applies to sign-in", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 760, height: 480 });
   await page.goto("/");
+  await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page).toHaveTitle("Linger");
   await expect(
     page.getByRole("heading", { name: "Linger", exact: true }),
@@ -425,9 +426,14 @@ test("first-run text can be enlarged before joining a server", async ({
   await expect(
     page.getByText(/New here\? Paste the full invite link/),
   ).toBeVisible();
+  await page.goto("/tests/fixtures/console.html");
+  await openSettings(page);
   await page
-    .getByRole("combobox", { name: "Interface size" })
+    .getByRole("combobox", { name: "Scale", exact: true })
     .selectOption("200");
+  await page.goto("/");
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveCSS("font-size", "32px");
   await page
     .getByRole("textbox", { name: "server or link" })
     .fill("https://example.com");
@@ -443,9 +449,8 @@ test("first-run text can be enlarged before joining a server", async ({
     ),
   ).toBe(true);
   await page.reload();
-  await expect(
-    page.getByRole("combobox", { name: "Interface size" }),
-  ).toHaveValue("200");
+  await expect(page.locator("html")).toHaveCSS("font-size", "32px");
+  await expect(page.getByRole("combobox")).toHaveCount(0);
 });
 
 for (const display of [

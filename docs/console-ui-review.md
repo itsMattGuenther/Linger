@@ -7,7 +7,8 @@ T-909, M12 polish. No milestone or release check is closed by this review.
 - One comfortable presentation. Removed Density, Compact and IRC, including
   their rendering branches and style overrides. Old preferences are ignored.
 - Readable 16px body text, stronger label contrast, 100–200% interface scale
-  before sign-in and in Appearance. Dark, light and system themes remain.
+  in Settings → Appearance. The sign-in screen uses the saved scale but has no
+  size control. Dark, light and system themes remain.
 - Adjustable navigation and people columns with pointer and keyboard controls.
   Saved widths survive resizing. Below 960 effective pixels, People opens the
   roster on demand; below 640, Navigation opens the rail. Effective width
@@ -25,12 +26,55 @@ T-909, M12 polish. No milestone or release check is closed by this review.
   sender and installer metadata. Kept the app identifier and original MSI
   upgrade code stable.
 - Preserve unsaved status drafts as the People panel changes between a column
-  and a drawer. Initial chat landing waits for measured rows to settle before
-  giving up its bottom anchor during an early panel resize.
+  and a drawer. Chat keeps the live edge pinned through resize measurements,
+  but does not pull someone reading older messages back to the bottom.
 
 The responsive roster change and removal of density modes were approved during
 review. SPEC and the current guides describe the new behavior. Historical
 screenshots and earlier test records are not rewritten.
+
+## Design review after feedback
+
+The first implementation emphasized readable sizing and mechanical layout
+checks. That was not a substitute for a task-focused design review. Removing
+the first-run size control is a correction, not another customization feature.
+
+The following primary guidance informs this review. The applications to Linger
+are design judgments, not claims that a checklist proves usability:
+
+- [NN/g: progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/):
+  keep the initial task focused and secondary choices predictably reachable.
+  For Linger, connecting should ask for a link, not an appearance preference.
+- [Discord: Appearance settings](https://support.discord.com/hc/en-us/articles/207260127-How-to-Change-Discord-Color-Themes-and-Customize-Appearance-Settings):
+  desktop zoom lives in Appearance. Adopt that familiar location, not Discord's
+  unrelated density modes, avatars, paid themes or other product features.
+- [Fluent: layout](https://fluent2.microsoft.design/layout) and
+  [typography](https://fluent2.microsoft.design/typography): use spacing,
+  alignment and text hierarchy to establish relationships. Reflow or collapse
+  secondary regions when space is limited; shrinking all text is not a layout.
+- [NN/g: usability heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
+  expose current state and familiar actions, provide escape routes, and avoid
+  making people remember hidden controls. Host actions belong in Host tools.
+- [W3C: resize text](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html):
+  enlarged text must not remove content or functionality. Continue testing 200%
+  app scale, including saved scale on sign-in; this is not a conformance claim.
+
+Current screen review, in priority order:
+
+1. **Connection:** remove Interface size here. Keep it in Settings → Appearance.
+   Keep readable initial typography and respect a previously saved scale. Done.
+2. **Call continuity:** the room owns VoiceBar. Opening Settings or Media
+   removes its visible controls even if the call continues. Review a compact,
+   persistent call-control area outside the room view before final acceptance.
+3. **Settings language:** descriptions are too long for routine choices, and
+   “normalize everyone” does not explain its effect. Shorten copy and make
+   labels describe the visible result, with secondary explanations on demand.
+4. **Visual hierarchy at large sizes:** review message line length and the
+   contrast between primary actions and metadata at actual 4K size, not only
+   scaled-down screenshots. Passing overflow checks does not settle this.
+
+No analytics or instrumentation are added. Evaluate these flows through direct
+observation and a friend attempting ordinary tasks without coaching.
 
 ## Screenshots
 

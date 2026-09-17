@@ -642,8 +642,10 @@ radius                     4px controls / 6px media / 0 panels
 
 ### 5.6 Behavior
 
-**Reader controls.** Interface scale is 100–200%, available before sign-in and
-in Settings → Appearance. Text and controls grow together. Scale and panel
+**Reader controls.** Interface scale is 100–200%, available in Settings →
+Appearance, not on the server/link screen. Saved scale also applies to sign-in
+screens; first-run typography must be readable without configuration.
+Text and controls grow together. Scale and panel
 widths stay on this computer, never on the wire. Resize either panel by dragging
 its boundary or focusing it and using arrow keys; Home/End choose the limits,
 double-click resets. Navigation ranges 200–360px, people 232–400px before scale.

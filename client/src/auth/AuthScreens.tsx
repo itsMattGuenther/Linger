@@ -21,11 +21,6 @@ import type { AuthResponse } from "../generated/AuthResponse";
 import { ApiError, PublicApi } from "../lib/api";
 import { hostOf, parsePastedLink } from "../lib/link";
 import "./auth.css";
-import {
-  SCALE_OPTIONS,
-  setInterfaceScale,
-  useInterfaceScale,
-} from "../lib/interface";
 
 /**
  * `linger-core::limits::MIN_PASSWORD_CHARS`. The server is the authority and
@@ -69,7 +64,6 @@ export default function AuthScreens({
   inline = false,
 }: Props) {
   const [step, setStep] = useState<Step>({ name: "connect" });
-  const scale = useInterfaceScale();
 
   return (
     <div className={inline ? "auth auth-inline" : "auth"}>
@@ -117,23 +111,6 @@ export default function AuthScreens({
             {keyringNotice} You'll have to sign in again next time.
           </p>
         ) : null}
-        {inline ? null : (
-          <label className="auth-scale">
-            Interface size
-            <select
-              value={scale}
-              onChange={(event) =>
-                setInterfaceScale(Number(event.target.value))
-              }
-            >
-              {SCALE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}%
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
       </div>
     </div>
   );

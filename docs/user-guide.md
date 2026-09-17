@@ -209,7 +209,7 @@ Everything this guide calls *settings → something* is on one of those. **Close
 at the top right puts the room back.
 
 **Too small?** Open **Appearance → Interface size** and choose a larger scale,
-up to 200%. The first sign-in screen also has an **Interface size** control.
+up to 200%. Your saved choice applies throughout the app, including sign-in.
 Drag a side panel's inner edge to change its width. Double-click the edge to
 reset it. With a keyboard, Tab to the edge and use Left/Right; Home/End choose
 the smallest/largest width. These choices are saved only on this computer.
