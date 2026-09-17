@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "linger",
+  "productName": "Linger",
   "version": "0.1.0",
   "identifier": "com.linger.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "linger",
+        "title": "Linger",
         "width": 1100,
         "height": 720,
         "minWidth": 760,
@@ -40,6 +40,9 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "windows": {
+      "wix": {
+        "upgradeCode": "465ad9d4-963e-58d4-ac8c-2730a192a3e0"
+      },
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico"

@@ -74,12 +74,13 @@ def check_pe(path, icon):
 
 
 def check_linux(root):
-    desktop = root / "usr/share/applications/linger.desktop"
+    desktop = root / "usr/share/applications/Linger.desktop"
     if not desktop.exists():
         desktop = root / "usr/share/applications/linger-client.desktop"
     parser = configparser.ConfigParser(interpolation=None)
     parser.read(desktop)
     entry = parser["Desktop Entry"]
+    assert entry["Name"] == "Linger", "Launcher product name must be capitalized"
     assert entry["Exec"] == "linger-client", "Launcher does not start the packaged binary"
     assert entry["Icon"] == "linger-client", "Launcher icon identity changed"
     assert entry["StartupWMClass"] == "linger-client", "X11 launcher identity changed"

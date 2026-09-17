@@ -494,5 +494,5 @@ pub fn run() {
             updates::update_install
         ])
         .run(tauri::generate_context!())
-        .expect("failed to start linger");
+        .expect("failed to start Linger");
 }

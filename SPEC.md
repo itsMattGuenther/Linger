@@ -23,6 +23,10 @@ generate revenue.
 **The name.** To linger is to stay somewhere with no agenda and no obligation to be
 doing anything. That is the product thesis in one word.
 
+The product name is **Linger**, capitalized in UI text, window titles and
+installer metadata. Technical identifiers, commands and filenames may remain
+lowercase; they are not the displayed brand.
+
 An instance is **a server**. Earlier drafts coined a private vocabulary for these
 concepts; it was dropped before any UI was built. Plain words travel further than
 clever ones, and everyone joining a Linger server already knows what a server, a

@@ -76,7 +76,7 @@ export default function AuthScreens({
       <div className="auth-panel">
         {inline ? null : (
           <header className="auth-head">
-            <h1 className="auth-wordmark">linger</h1>
+            <h1 className="auth-wordmark">Linger</h1>
             <p className="auth-tagline meta">
               a small server for people who like each other
             </p>

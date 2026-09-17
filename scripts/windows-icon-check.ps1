@@ -17,7 +17,7 @@ $msi = (Get-ChildItem "$Bundle/msi/*.msi" | Select-Object -First 1).FullName
 $msiRoot = Join-Path $Output 'msi'
 $extract = Start-Process msiexec.exe -ArgumentList @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$msiRoot`"") -Wait -PassThru
 if ($extract.ExitCode -ne 0) { throw "MSI extraction failed: $($extract.ExitCode)" }
-# WiX names its installed executable after productName (linger.exe), while
+# WiX names its installed executable after productName (Linger.exe), while
 # NSIS retains the Cargo binary name (linger-client.exe).
 $msiExe = Get-ChildItem $msiRoot -Recurse -Filter 'linger*.exe' | Select-Object -First 1
 if (!$msiExe) { throw 'MSI application executable missing' }

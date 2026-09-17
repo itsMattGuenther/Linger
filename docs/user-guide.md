@@ -42,6 +42,8 @@ There are no macOS or ARM desktop installers yet.
 An AppImage is the app itself, not an installer. Open a terminal on **your own
 computer**, paste these two lines, and press Enter. This example uses version
 `0.1.0` saved in `Downloads`; substitute your actual filename if it differs.
+Filenames are case-sensitive on Linux. Older downloads start with `linger`;
+newer builds may start with `Linger`. Match the name in Downloads exactly.
 
 ```bash
 chmod +x ~/Downloads/linger_0.1.0_amd64.AppImage

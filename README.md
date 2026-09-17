@@ -171,6 +171,12 @@ Grab the installer for your platform from
 Windows are built; **macOS is not built yet**, so on a Mac you build from a
 checkout (see Development below).
 
+The app and installer display name is **Linger**. Linux download filenames are
+case-sensitive; use the exact downloaded name, including its capital `L` on
+newer builds. Technical commands and app identifiers remain unchanged.
+The MSI upgrade code is pinned to its original value so this capitalization
+change does not create a separate Windows application.
+
 **Windows will warn you.** You get *"Windows protected your PC"*, and *Run
 anyway* is hidden behind the *More info* link. That is SmartScreen saying the
 installer is not code-signed, which is true — see
