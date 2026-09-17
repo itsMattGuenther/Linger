@@ -80,6 +80,7 @@ import { uploadFile } from "../lib/upload";
 import { linkTargets, mentionHandles, plainText } from "./markdown";
 import { REACTIONS, reactionOf, reactionTitle, reactionWeight } from "./reactions";
 import { buildRows, type StreamRow } from "./rows";
+import { useResizeAnchor } from "./resize";
 import { ageOpacity, clockTime, fullTime, sessionLabel } from "./time";
 import "./stream.css";
 
@@ -276,6 +277,7 @@ export default function Stream({
     anchorTo: "end",
     followOnAppend: true,
   });
+  useResizeAnchor(scroller, virtualizer, room.id, rows.length, atEnd);
 
   // Walking into a room puts you at the newest message, not where you last
   // were.
