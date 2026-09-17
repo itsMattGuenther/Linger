@@ -39,7 +39,7 @@
   background: none;
   color: var(--text-primary);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .search-box:focus {
@@ -150,7 +150,7 @@
 
 /*
  * The words. Sans, at body size: this is a message, and a message body is
- * never mono outside IRC density (SPEC §5.2).
+ * never mono (SPEC §5.2).
  */
 .search-hit-body {
   display: block;

@@ -109,7 +109,7 @@ inverts the priority. **People are the primary surface, not a gutter.**
 │  #garage │  Matt     9:31                     │ │ Blender     │ │
 │  #shop   │  │ yeah, mounting it now           │ │ ♪ Bill Evans│ │
 │          │  │ [img]                           │ └─────────────┘ │
-│ DIRECT   │                                    │ ┌─────────────┐ │
+│ DMs      │                                    │ ┌─────────────┐ │
 │  Callie  │                                    │ │○ Jen        │ │
 │  Dave,   │  ┌──────────────────────────────┐  │ │ 2h · "back  │ │
 │   Jen    │  │ say something                │  │ │ after work" │ │
@@ -123,7 +123,7 @@ inverts the priority. **People are the primary surface, not a gutter.**
 and open in place of the message stream. Anything that is a place but is not a room
 goes there; nothing floats over the stream.
 
-**`DIRECT` is your DMs** (§4.13), between the rooms and the destinations. It is a
+**`DMs` is your DMs** (§4.13), between the rooms and the destinations. It is a
 different list for every person on the server, and each one is named by who is in it
 rather than by a slug — a DM has no name of its own. A DM holding something new gets
 the same weight change a room gets and nothing else (§4.2).
@@ -133,8 +133,11 @@ user's own styling, presence dot, which room they are in, and their status. Offl
 users show last-seen and their away message.
 This panel is what makes an empty server feel like a house with the lights on.
 
-On narrow windows the roster collapses to a horizontal strip above the composer, not
-into a hamburger menu. It is never fully hidden by default.
+On wide windows the roster stays visible. When three readable columns will not
+fit, a labelled **People** button opens the same cards in an edge panel. At still
+narrower effective widths, **Navigation** opens the server and room list the same
+way. These panels close with Escape or their labelled close button and return
+keyboard focus. The conversation stays usable without reducing text size.
 
 ---
 
@@ -169,8 +172,8 @@ Delete the badge. It is a slot machine that converts friends into obligations.
 Replace with:
 - A **"you left off here"** divider at the last-read message. It persists until scrolled
   past and stays visible for the rest of the session.
-- Rooms with new activity get a **weight change only** — label opacity goes from 60% to
-  100%. No number, no dot, no color.
+- Rooms with new activity get a **weight change only** — label weight goes from normal to
+  bold. No number, no dot, no color. Read rooms must remain readable too.
 - A **"since you were gone"** view the user *pulls* from the room header. Never pushed.
 
 **One exception:** direct mentions produce a real notification and a marker. Mentions
@@ -269,8 +272,7 @@ Each user controls the rendering of their own display name:
 2. **No arbitrary fonts.** Curated bundled set only. Arbitrary font URLs are a
    fingerprinting vector and a remote-load dependency.
 3. **Gradient angle is fixed at 92°**, not user-configurable.
-4. **Shimmer and glow respect `prefers-reduced-motion`** and are disabled entirely in
-   compact and IRC density modes.
+4. **Shimmer and glow respect `prefers-reduced-motion`.**
 5. **A global "normalize everyone" toggle** renders all names in the reader's default
    style. Some people will want this. Give it to them without friction.
 
@@ -315,9 +317,10 @@ Density up, noise down.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
 height, click to expand.
 
-**Density modes.** `Comfortable` / `Compact` / `IRC`. IRC mode is genuinely tight: one
-line per message, timestamps in a fixed-width gutter, no grouping, no aging, no effects.
-A real first-class option, not a joke.
+**One comfortable layout.** Readable text and grouped messages are the default,
+not a mode to discover. The layout adapts to the available window space. Interface
+scale is an optional reading preference, not a requirement for a usable layout.
+There is no Density setting or Compact/IRC presentation.
 
 **Time-of-day warmth.** Background and text colors shift ~200K warmer after local
 sunset. Subtle enough that most people never consciously notice. User-disableable.
@@ -558,10 +561,10 @@ Discord reskin.
 
 | Role | Face | Size | Notes |
 |---|---|---|---|
-| Message body | Geist Sans (or IBM Plex Sans) | 13.5px / 1.6 | **Sans, not mono** |
-| UI labels, room names | same | 12–14px / 500 | |
-| Timestamps, status bar, all numerals, file sizes, code | Geist Mono (or JetBrains Mono) | 11–12px | **Mono is metadata-only** |
-| Section dividers | mono, uppercase, `0.1em` tracking | 11px | `SATURDAY MORNING` |
+| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.6 | **Sans, not mono** |
+| UI labels, room names | same | 14–18px / 500 | Actions use sans too |
+| Timestamps, status bar, all numerals, file sizes, code | Geist Mono (or JetBrains Mono) | 12px | **Mono is metadata-only** |
+| Time dividers | mono, uppercase, `0.1em` tracking | 12px | `SATURDAY MORNING` |
 
 Mono appearing in a message body is a defect. That was the failure mode of the earlier
 direction.
@@ -578,9 +581,9 @@ surface-2  raised   #21252B             #FFFFFF
 hairline            #2A2E35             #E3E5E9
 hairline-strong     #363B44             #CFD3DA
 text-primary        #E4E7EC             #16181C
-text-secondary      #8B929E             #5C636F
-text-muted          #5C636F             #8B929E
-text-faint          #4A515C             #A8AEB8
+text-secondary      #ADB4C0             #505967
+text-muted          #969DAA             #626C7A
+text-faint          same as muted      same as muted
 accent              #6E9BFF             #2563C9
 ```
 
@@ -624,29 +627,54 @@ Why this is better than a color wheel:
 ### 5.5 Layout metrics
 
 ```
-rail (servers + rooms)     200px
-roster (who's around)      240px
+rail (servers + rooms)     232px default, adjustable
+roster (who's around)      264px default, adjustable
 message stream             flex, min 420px
-panel gutters              14–16px
-gap between message groups 14px
+panel gutters              20px
+gap between message groups 20px
 hairlines                  1px
 radius                     4px controls / 6px media / 0 panels
 ```
 
 ### 5.6 Behavior
 
+**Reader controls.** Interface scale is 100–200%, available before sign-in and
+in Settings → Appearance. Text and controls grow together. Scale and panel
+widths stay on this computer, never on the wire. Resize either panel by dragging
+its boundary or focusing it and using arrow keys; Home/End choose the limits,
+double-click resets. Navigation ranges 200–360px, people 232–400px before scale.
+Narrow windows fit the panels without replacing the saved widths. Below 960px
+of effective width People becomes an on-demand panel; below 640px Navigation
+does too. Effective width accounts for the reader's interface scale. Widening
+the window restores the side panels automatically.
+
+**Navigation.** Show the selected server once in the server list, not again
+under a `SERVER` label. `DMs` has the empty state `empty`. Personal Settings lives
+beside your name in the navigation footer. Host tools is a separate destination;
+member removal lives in its People section with confirmation, never in a normal
+member card. No roles or permission matrix are introduced.
+Desktop notification rules and notification chimes both live in Settings →
+Sound & voice, in separately labelled sections. The people panel stays about people.
+
+**Voice.** A typographic participant strip stays under the room header. Names
+remain legible when not speaking; a simple rule marks speech. Click, right-click
+or keyboard-activate a participant to open their local volume controls. Hiding
+the participants leaves join/leave, mute and deafen available. No avatars.
+In a short window, participants start collapsed unless the reader chose otherwise;
+**Show people** reveals them. This never changes the voice connection or audio.
+
 - **Message aging** applies to the message *body only* — never the name or timestamp.
   Steps: <1h 100%, <1d 88%, older 78%. Floor at 78%; do not go lower.
 - **System messages** (joins, leaves, pins, "dave stood up") are hairline rules with
   centered mono small-caps text. Never chat lines.
-- **Status bar** is permanent, mono, 11px: connection state, latency in ms, storage
+- **Status bar** is permanent, mono, 12px: connection state, latency in ms, storage
   used. This is the cheapest "real tool" signal available and no competitor has it.
 - **Connection states show protocol text, not spinners:**
   `connecting… tls ok… identify… ready (28ms)`
 - **Motion:** 120–160ms, ease-out. No spring, no bounce. The only slow animation in the
   app is name shimmer (4s linear).
-- **Density modes:** Comfortable (13.5px/1.6) · Compact (13px/1.45) · IRC (12.5px mono
-  body, one line per message, no grouping, no aging, no effects).
+- **Message presentation:** 16px/1.6 sans body, consecutive messages grouped.
+  One comfortable default, with no density modes.
 
 ### 5.7 Bundled fonts
 
@@ -677,7 +705,7 @@ first two are the system defaults.
 | 11 | Reactions by weight | §4.8 |
 | 12 | File upload 500 MB, EXIF stripped | §4.10 |
 | 13 | Media collection | §4.4 |
-| 14 | Density modes incl. IRC | §4.7 |
+| 14 | Readable, responsive message layout | §4.7 |
 | 15 | Full export | §4.11 |
 | 16 | Desktop client: Linux, Windows, macOS | ARCHITECTURE |
 | 17 | Multi-server list in the client | §3 |

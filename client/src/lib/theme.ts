@@ -2,7 +2,7 @@
  * Dark, light, and the warmth that arrives after sunset (SPEC §4.7, §5.3).
  *
  * Two preferences, both the reader's own and neither of them anybody else's
- * business, so they live here and in local storage the way density does. Both
+ * business, so they live here and in local storage like the other display preferences. Both
  * are one attribute on `<html>` and a block of custom properties in
  * `styles/tokens.css` — no second stylesheet, and nothing that draws anything
  * knows which theme it is in.

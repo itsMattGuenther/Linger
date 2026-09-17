@@ -432,9 +432,18 @@ flows and do not start a new milestone. Evidence and rationale are in the
   destructive actions in the initial popover. No new roles or permission
   matrix; implement with the deferred Console UI/UX review, not this batch.
   *Accept:* current screenshots in both themes at 1100×720 and 760×480; all
-  three densities checked; keyboard-only use, larger text and reduced motion
+  supported interface scales checked; keyboard-only use and reduced motion
   checked; a friend finds settings, sends a file and joins voice unaided.
   Record contrast for enabled control labels, not just styled names.
+  **Design revision, 2026-09-17:** remove Density and the Compact/IRC modes.
+  Keep one comfortable presentation and make the frame adapt automatically.
+  On narrow windows, People may collapse behind a labelled button (approved
+  2026-09-17). Restore the column automatically when space allows.
+  **Implementation ready for review, 2026-09-17:** see
+  [Console review and checks](docs/console-ui-review.md) and the root
+  [screenshots](screenshots/README.md). The full local gate passes. Packaged
+  Windows/Omarchy and the unaided-friend acceptance remain open; keep T-909
+  in progress until those checks have evidence.
 
 - ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU
@@ -1514,7 +1523,8 @@ in a real room. [Evidence](docs/desktop-check-results.md).
    it was set, in colour, in that face.
 5. Turn on **normalize everyone** on the second machine. Every name should go
    plain immediately, including in the stream.
-6. Switch **density** to compact, then to IRC. Effects should switch off.
+6. Enable the desktop's reduced-motion preference. Shimmer should stop and
+   glow should disappear. Density modes were removed on 2026-09-17.
 7. Wait until after 7pm local time (or change the clock) and check the
    background goes slightly warmer, and that names are still readable.
 

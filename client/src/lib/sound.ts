@@ -12,7 +12,7 @@
  *   somebody knocking from another timezone does not get to decide that.
  *
  * Both are the reader's preference about their own machine, so they live in
- * local storage beside density and theme rather than in the gateway store.
+ * local storage beside appearance preferences rather than in the gateway store.
  *
  * The knock itself is synthesized rather than played from a file. Two soft
  * taps out of an oscillator is about twenty lines and no bytes, and it means

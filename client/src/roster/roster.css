@@ -1,8 +1,5 @@
 /*
- * The roster panel: a card stack down the right-hand side, or a horizontal
- * strip above the composer when the window is too narrow for a column
- * (SPEC §3, §5.5). One set of cards; the layout attribute decides which way
- * they run.
+ * The roster card stack, in a column or an on-demand edge panel.
  *
  * Cards are separated by full-bleed hairlines, not drawn as boxes: panels butt
  * against each other and nothing floats (SPEC §5.1). The 2px rule down the left
@@ -16,16 +13,18 @@
   border-left: 1px solid var(--hairline);
   padding: var(--gutter);
   overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
-/* The switch between the two things this column is: who is around, and who you
-   have asked to hear from. It sits on the panel label's own line rather than
-   taking a row of its own. */
+/* The heading and the way back from editing your status. */
 .roster-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
 }
 
 .roster-switch {
@@ -51,7 +50,7 @@
    stack reads as structure rather than as a column of floating tiles. */
 .person {
   margin: 0 calc(var(--gutter) * -1);
-  padding: 7px var(--gutter) 8px calc(var(--gutter) - 2px);
+  padding: 1rem var(--gutter) 1rem calc(var(--gutter) - 2px);
   border-top: 1px solid var(--hairline);
   border-left: 2px solid var(--person-rule);
 }
@@ -71,7 +70,7 @@
 }
 
 .person[data-state="offline"] .person-name {
-  opacity: 0.75;
+  opacity: 1;
 }
 
 .person-head {
@@ -85,6 +84,7 @@
   font: inherit;
   color: inherit;
   text-align: left;
+  font-size: 1rem;
 }
 
 button.person-head {
@@ -154,92 +154,3 @@ button.person-head[aria-expanded="true"]::after {
 
 /* The status card itself lives in `status/status.css`, next to the component,
    because the popover draws the same one (SPEC §4.6). */
-
-/* ---------------------------------------------------------------------------
-   Narrow windows: the same cards, along instead of down (SPEC §3).
-   Never a hamburger, never hidden — it is the panel the product is about.
-   --------------------------------------------------------------------------- */
-
-.roster[data-layout="strip"] {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-  border-left: 0;
-  border-top: 1px solid var(--hairline);
-  padding: 4px var(--gutter) 5px;
-  /* The card row scrolls; the strip itself does not. */
-  overflow: hidden;
-}
-
-/* No panel label in a strip: the cards say what they are, and a label row
-   would cost a line of the stream to say it again. */
-.roster[data-layout="strip"] .panel-label {
-  display: none;
-}
-
-.roster[data-layout="strip"] .roster-head {
-  order: 2;
-  flex: none;
-  margin-left: auto;
-  align-self: center;
-}
-
-.roster[data-layout="strip"] .placeholder {
-  order: 1;
-  margin: 0;
-  align-self: center;
-}
-
-.roster[data-layout="strip"] .roster-list {
-  order: 1;
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  display: flex;
-  align-items: flex-start;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-}
-
-.roster[data-layout="strip"] .person {
-  flex: none;
-  max-width: 180px;
-  margin: 0;
-  padding: 2px 12px 2px 7px;
-  border-top: 0;
-}
-
-/* A chip shows its name and one line under it, whichever line came first —
-   where they are, else what they are doing, else how long they have been gone.
-   Opening one gives it the whole card. */
-.roster[data-layout="strip"] .person:not([data-open="true"]) .person-lines > * ~ * {
-  display: none;
-}
-
-.roster[data-layout="strip"] .person-lines > *,
-.roster[data-layout="strip"] .person-status {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.roster[data-layout="strip"] .person[data-open="true"] {
-  max-width: 300px;
-}
-
-.roster[data-layout="strip"] .person[data-open="true"] .person-lines > *,
-.roster[data-layout="strip"] .person[data-open="true"] .person-status {
-  white-space: normal;
-}
-
-/* The notify rules are a list, and a list cannot be a strip. It gets the width
-   and a ceiling instead. */
-.roster[data-layout="strip"] .roster-notify,
-.roster[data-layout="strip"] .roster-editor {
-  order: 3;
-  flex-basis: 100%;
-  max-height: 38vh;
-  overflow-y: auto;
-}

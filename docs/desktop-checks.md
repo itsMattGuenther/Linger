@@ -53,8 +53,7 @@ and results, not the whole raw directory.
 
 - A message and an uploaded image cross real native gateway connections.
 - A second client renders a gradient name in Newsreader with shimmer. Both
-  themes render; normalization removes the styling; compact and IRC stop
-  animation. A controlled hour in the test WebView exercises evening warmth
+  themes render; normalization removes the styling. A controlled hour in the test WebView exercises evening warmth
   without changing the machine's clock.
 - A DM appears in its recipient's rail and supports a reply and a private
   image. An outsider cannot find the conversation in the rail, media or search.

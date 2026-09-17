@@ -50,12 +50,10 @@ export default function StylePicker({
   user,
   /** The reader's own settings, which can hide what this is previewing. */
   normalized,
-  dense,
 }: {
   api: AuthedApi;
   user: User;
   normalized: boolean;
-  dense: boolean;
 }) {
   const [draft, setDraft] = useState<StyleDraft>(() => draftOf(user.style));
   const [busy, setBusy] = useState(false);
@@ -87,7 +85,9 @@ export default function StylePicker({
       setSaved(true);
     } catch (error) {
       setProblem(
-        error instanceof ApiError ? error.message : "Couldn't save how your name looks.",
+        error instanceof ApiError
+          ? error.message
+          : "Couldn't save how your name looks.",
       );
     } finally {
       setBusy(false);
@@ -106,7 +106,7 @@ export default function StylePicker({
       </p>
 
       {/* `name-raw` is the one exception in the app: this draws as itself even
-          when the reader has normalized everyone or is in a dense mode, because
+          when the reader has normalized everyone, because
           a preview that obeys your own reading settings is showing you the
           wrong thing. The note below says so out loud. */}
       <p className="style-preview">
@@ -114,11 +114,10 @@ export default function StylePicker({
           {user.display_name}
         </span>
       </p>
-      {normalized || dense ? (
+      {normalized ? (
         <p className="settings-hint meta">
-          {normalized
-            ? "You have other people's names normalized, so you won't see this — everybody else will."
-            : "Effects are off in compact and IRC, so you won't see those — everybody in comfortable will."}
+          You have other people's names normalized, so you won't see this —
+          everybody else will.
         </p>
       ) : null}
 

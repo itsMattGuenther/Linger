@@ -8,8 +8,7 @@
  *   - the 92° gradient angle, which is fixed and not a setting;
  *   - the reader's "normalize everyone" switch, which has to flatten every name
  *     in the app at once and so cannot be something each component opts into;
- *   - the density rules, because compact and IRC turn effects off and that is
- *     the same kind of switch.
+ *   - reduced motion, so every name respects the reader's system preference.
  *
  * Specificity is load-bearing here and the order is: a name's own style, then
  * its fill, then its effect, and `[data-normalize]` over all of it. The effect
@@ -53,8 +52,7 @@
  */
 @supports (background-clip: text) or (-webkit-background-clip: text) {
   .name[data-name-fill="gradient"],
-  :root:not([data-normalize="true"]):not([data-density="compact"]):not([data-density="irc"])
-    .name[data-name-effect="shimmer"] {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
     background-image: var(--person-paint);
     background-repeat: no-repeat;
     -webkit-background-clip: text;
@@ -77,10 +75,14 @@
    * than the name in the dark theme, darker in the light one, so a shimmering
    * name is never less readable than a still one.
    */
-  :root:not([data-normalize="true"]):not([data-density="compact"]):not([data-density="irc"])
-    .name[data-name-effect="shimmer"] {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
     background-image:
-      linear-gradient(92deg, transparent 46%, var(--name-shimmer) 50%, transparent 54%),
+      linear-gradient(
+        92deg,
+        transparent 46%,
+        var(--name-shimmer) 50%,
+        transparent 54%
+      ),
       var(--person-paint);
     background-size:
       300% 100%,
@@ -103,11 +105,9 @@
 
   /* Reduced motion: the band stops existing rather than freezing mid-sweep,
      which would leave a bright stripe parked across somebody's name forever.
-     Glow has nothing to honor here — it does not move (SPEC §5.6) — and the
-     place it does get switched off is compact and IRC, with shimmer. */
+     The static fill remains, so the person's chosen color is preserved. */
   @media (prefers-reduced-motion: reduce) {
-    :root:not([data-normalize="true"]):not([data-density="compact"]):not([data-density="irc"])
-      .name[data-name-effect="shimmer"] {
+    :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
       background-image: var(--person-paint);
       background-size: 100% 100%;
       animation: none;
@@ -121,8 +121,7 @@
  * on a panel. AGENTS rule 11's "no shadows" is about surfaces that would look
  * like they float, and a name does not float.
  */
-:root:not([data-normalize="true"]):not([data-density="compact"]):not([data-density="irc"])
-  .name[data-name-effect="glow"] {
+:root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
   text-shadow: 0 0 7px var(--person-name, var(--text-primary));
 }
 
@@ -169,8 +168,7 @@
 
 /*
  * One name in the app draws as itself no matter what: the preview in the style
- * picker. The reader's own settings — normalized names, a dense mode with
- * effects off — would otherwise hide the very thing being chosen, and a picker
+ * picker. Normalized names would otherwise hide the very thing being chosen, and a picker
  * that shows you the wrong answer is worse than no preview.
  *
  * These carry `:root` only to outrank the normalize block above them, which is
@@ -196,7 +194,12 @@
 
   :root .name.name-raw[data-name-effect="shimmer"] {
     background-image:
-      linear-gradient(92deg, transparent 46%, var(--name-shimmer) 50%, transparent 54%),
+      linear-gradient(
+        92deg,
+        transparent 46%,
+        var(--name-shimmer) 50%,
+        transparent 54%
+      ),
       var(--person-paint);
     background-size:
       300% 100%,
@@ -217,4 +220,10 @@
 
 :root .name.name-raw[data-name-effect="glow"] {
   text-shadow: 0 0 7px var(--person-name, var(--text-primary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .name[data-name-effect="glow"] {
+    text-shadow: none;
+  }
 }

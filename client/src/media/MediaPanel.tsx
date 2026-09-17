@@ -16,7 +16,7 @@
  * The panel takes over the stream column the way the host panel does. There is
  * no modal stack in this product, and the roster stays where it is.
  */
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
@@ -64,7 +64,6 @@ export default function MediaPanel({
   rooms,
   onOpen,
   onClose,
-  roster,
   expiryDays,
 }: {
   api: AuthedApi;
@@ -76,8 +75,6 @@ export default function MediaPanel({
   /** Go to the moment an item came from. */
   onOpen: (roomId: RoomId, messageId: MessageId) => void;
   onClose: () => void;
-  /** On a narrow window the roster lives in this column (SPEC §3). */
-  roster?: ReactNode;
   /**
    * How long this server keeps a file, or `null` when it keeps them for good.
    * Undefined until `GET /server` has answered.
@@ -292,7 +289,6 @@ export default function MediaPanel({
         ) : null}
       </div>
 
-      {roster}
     </main>
   );
 }

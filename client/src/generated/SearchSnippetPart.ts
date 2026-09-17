@@ -6,7 +6,7 @@
  * The snippet arrives already cut into pieces rather than as a string with
  * markers in it, because a marker is a character a message could contain. A
  * client draws the pieces in order and gives the matched ones whatever
- * emphasis the density mode allows — there is nothing to parse and nothing
+ * emphasis the reader's presentation allows — there is nothing to parse and nothing
  * to escape.
  */
 export type SearchSnippetPart = { text: string, matched: boolean, };

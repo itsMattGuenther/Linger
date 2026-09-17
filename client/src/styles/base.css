@@ -29,8 +29,8 @@ body {
 }
 
 :focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Mono is metadata-only: timestamps, status bar, numerals, file sizes, code. */
@@ -58,9 +58,54 @@ body {
 }
 
 .panel-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-meta-size);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+/* Actions are interface text, not metadata. Timestamp/numeric spans stay mono. */
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+button.meta,
+button[class]:not(.name):not(.style-font),
+summary {
+  font-family: var(--font-ui);
+}
+button:not(.style-swatch):not(.reaction),
+select,
+summary {
+  min-height: 2rem;
+}
+button {
+  touch-action: manipulation;
+}
+button.name {
+  min-height: 1.5rem;
+}
+button:disabled {
+  cursor: default;
+}
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+button:hover:not(:disabled) {
+  text-decoration-skip-ink: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

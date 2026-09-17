@@ -1,23 +1,20 @@
 /**
  * The member's settings (T-411).
  *
- * Display name, password, density, whether other people's name styling is drawn
+ * Display name, password, interface size, whether other people's name styling is drawn
  * at all, sign out. One panel over the stream, the same way the host's controls
- * sit over it: no modal stack, and the roster stays visible so you can see your
- * name change on the card that is yours.
+ * sit over it. On a wide window your name changes live in the roster alongside.
  *
  * Username is on this screen because people look for it next to the display
  * name, but it is not a field you can edit — PROTOCOL §2, usernames are
  * immutable. The server is the lock; this is just honest.
  */
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { AuthResponse } from "../generated/AuthResponse";
 import type { User } from "../generated/User";
 import { ApiError, PublicApi, type AuthedApi } from "../lib/api";
-import DensityPicker from "../lib/DensityPicker";
 import { openExternal } from "../lib/external";
-import type { Density } from "../lib/density";
 import {
   loadSoundPrefs,
   QUIET_FROM_HOUR,
@@ -40,7 +37,7 @@ import {
 } from "../lib/updates";
 import { exportLine, type ExportPhase, runExport } from "./export";
 import StylePicker from "./StylePicker";
-import { saveDisplayName } from "../lib/gateway";
+import { saveDisplayName, useGateway } from "../lib/gateway";
 import {
   displayNameReady,
   displayNameRequest,
@@ -50,8 +47,20 @@ import {
   passwordRequest,
 } from "./settings";
 import { type VoiceDeviceList, voiceDevices } from "../lib/ipc";
-import { loadVoicePrefs, PUSH_TO_TALK_KEY, saveVoicePrefs, type VoicePrefs } from "../voice/voice";
+import {
+  loadVoicePrefs,
+  PUSH_TO_TALK_KEY,
+  saveVoicePrefs,
+  type VoicePrefs,
+} from "../voice/voice";
 import "./settings.css";
+import {
+  SCALE_OPTIONS,
+  setInterfaceScale,
+  useInterfaceScale,
+} from "../lib/interface";
+import StatusEditor from "../status/StatusEditor";
+import NotifyRules from "../notify/NotifyRules";
 
 /**
  * The panel's four tabs (T-1404 follow-up, 2026-09-04). One long column of
@@ -63,10 +72,10 @@ import "./settings.css";
 export type SettingsSection = "you" | "reading" | "sound" | "computer";
 
 const SECTIONS: Array<{ key: SettingsSection; label: string }> = [
-  { key: "you", label: "you" },
-  { key: "reading", label: "reading" },
-  { key: "sound", label: "sound & voice" },
-  { key: "computer", label: "this computer" },
+  { key: "you", label: "Profile" },
+  { key: "reading", label: "Appearance" },
+  { key: "sound", label: "Sound & voice" },
+  { key: "computer", label: "Account & app" },
 ];
 
 function problemText(error: unknown, fallback: string): string {
@@ -76,8 +85,6 @@ function problemText(error: unknown, fallback: string): string {
 export default function SettingsPanel({
   api,
   user,
-  density,
-  onDensityChange,
   normalize,
   onNormalizeChange,
   theme,
@@ -87,7 +94,6 @@ export default function SettingsPanel({
   onSignOut,
   onReauthenticated,
   onClose,
-  roster,
   initialSection = "you",
 }: {
   api: AuthedApi;
@@ -96,8 +102,6 @@ export default function SettingsPanel({
   /** Which tab to open on. The status bar's "update ready" lands on the one
    *  with updates in it; everything else starts at the top. */
   initialSection?: SettingsSection;
-  density: Density;
-  onDensityChange: (density: Density) => void;
   normalize: boolean;
   onNormalizeChange: (normalize: boolean) => void;
   theme: ThemePref;
@@ -107,10 +111,18 @@ export default function SettingsPanel({
   onSignOut: () => Promise<void>;
   onReauthenticated: (auth: AuthResponse) => Promise<void>;
   onClose: () => void;
-  roster?: ReactNode;
 }) {
   const panel = useRef<HTMLElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const scale = useInterfaceScale();
+  const gateway = useGateway(api.baseUrl);
+  const [editingStatus, setEditingStatus] = useState(false);
+
+  useEffect(() => {
+    panel.current
+      ?.querySelector<HTMLButtonElement>(".settings-tab[aria-pressed='true']")
+      ?.focus();
+  }, []);
 
   useEffect(() => {
     const node = panel.current;
@@ -150,113 +162,163 @@ export default function SettingsPanel({
         {section === "you" ? (
           <>
             <NameSection api={api} user={user} />
-            <StylePicker
-              api={api}
-              user={user}
-              normalized={normalize}
-              dense={density !== "comfortable"}
-            />
-            <PasswordSection
-              api={api}
-              username={user.username}
-              onReauthenticated={onReauthenticated}
-            />
+            <section className="settings-section">
+              <h3 className="panel-label">Your status</h3>
+              {editingStatus ? (
+                <StatusEditor
+                  api={api}
+                  me={user}
+                  onDone={() => setEditingStatus(false)}
+                />
+              ) : (
+                <>
+                  <p className="settings-lead">
+                    {user.status?.line ||
+                      "Let people know what you’re up to. Only what you choose to share."}
+                  </p>
+                  <button
+                    type="button"
+                    className="settings-mini settings-toggle"
+                    onClick={() => setEditingStatus(true)}
+                  >
+                    Edit status
+                  </button>
+                </>
+              )}
+            </section>
+            <StylePicker api={api} user={user} normalized={normalize} />
           </>
         ) : null}
         {section === "reading" ? (
           <>
-        <section className="settings-section">
-          <h3 className="panel-label">density</h3>
-          <p className="settings-lead">
-            How the stream is laid out. Comfortable is the default. IRC is one
-            line per message, no grouping.
-          </p>
-          <div className="settings-density">
-            <DensityPicker density={density} onChange={onDensityChange} />
-          </div>
-        </section>
-        <section className="settings-section">
-          <h3 className="panel-label">theme</h3>
-          <p className="settings-lead">
-            Dark is the one this was designed in. <em>System</em> follows
-            whatever your desktop is set to and changes with it.
-          </p>
-          <div className="settings-density">
-            <div className="density" role="group" aria-label="theme">
-              {THEME_PREFS.map((pref) => (
-                <button
-                  key={pref}
-                  type="button"
-                  className="density-option meta"
-                  aria-pressed={pref === theme}
-                  onClick={() => onThemeChange(pref)}
+            <section className="settings-section">
+              <h3 className="panel-label">Interface size</h3>
+              <p className="settings-lead">
+                Make text and controls comfortable to read. Saved on this
+                computer.
+              </p>
+              <label className="settings-row">
+                Scale
+                <select
+                  className="settings-select"
+                  value={scale}
+                  onChange={(event) => {
+                    const control = event.currentTarget;
+                    setInterfaceScale(Number(control.value));
+                    requestAnimationFrame(() =>
+                      control.scrollIntoView({ block: "nearest" }),
+                    );
+                  }}
                 >
-                  {pref}
-                </button>
-              ))}
-            </div>
-          </div>
-          <p className="settings-lead settings-warmth-lead">
-            In the evening the background and the text go slightly warmer, the
-            way a room does when the lamps come on. It is a small shift and most
-            people never notice it on purpose.
-          </p>
-          <button
-            type="button"
-            className="settings-mini settings-toggle"
-            aria-pressed={warmth}
-            onClick={() => onWarmthChange(!warmth)}
-          >
-            {warmth ? "evening warmth on" : "evening warmth off"}
-          </button>
-        </section>
-        <section className="settings-section">
-          <h3 className="panel-label">other people's names</h3>
-          <p className="settings-lead">
-            Everyone picks how their own name is drawn — a face, a color or two,
-            sometimes a shimmer. If you would rather read a quiet room, turn this
-            on and every name, including the fonts people set for their messages,
-            comes out in your default style.
-          </p>
-          <button
-            type="button"
-            className="settings-mini settings-toggle"
-            aria-pressed={normalize}
-            onClick={() => onNormalizeChange(!normalize)}
-          >
-            {normalize ? "names normalized" : "normalize everyone"}
-          </button>
-        </section>
+                  {SCALE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}%{size === 100 ? " — default" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="settings-hint">
+                Drag either panel edge to resize it. Use arrow keys on the edge,
+                or double-click to reset.
+              </p>
+            </section>
+            <section className="settings-section">
+              <h3 className="panel-label">theme</h3>
+              <p className="settings-lead">
+                Choose a look, or follow your computer’s light and dark setting.
+              </p>
+              <div className="settings-choices">
+                <div className="segmented" role="group" aria-label="theme">
+                  {THEME_PREFS.map((pref) => (
+                    <button
+                      key={pref}
+                      type="button"
+                      className="segmented-option meta"
+                      aria-pressed={pref === theme}
+                      onClick={() => onThemeChange(pref)}
+                    >
+                      {pref}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="settings-lead settings-warmth-lead">
+                Evening warmth softens the colors after sunset.
+              </p>
+              <button
+                type="button"
+                className="settings-mini settings-toggle"
+                aria-pressed={warmth}
+                onClick={() => onWarmthChange(!warmth)}
+              >
+                {warmth ? "evening warmth on" : "evening warmth off"}
+              </button>
+            </section>
+            <section className="settings-section">
+              <h3 className="panel-label">other people's names</h3>
+              <p className="settings-lead">
+                Everyone picks how their own name is drawn — a face, a color or
+                two, sometimes a shimmer. If you would rather read a quiet room,
+                turn this on and every name, including the fonts people set for
+                their messages, comes out in your default style.
+              </p>
+              <button
+                type="button"
+                className="settings-mini settings-toggle"
+                aria-pressed={normalize}
+                onClick={() => onNormalizeChange(!normalize)}
+              >
+                {normalize ? "names normalized" : "normalize everyone"}
+              </button>
+            </section>
           </>
         ) : null}
         {section === "sound" ? (
           <>
             <SoundSection />
             <VoiceSection />
+            <section className="settings-section">
+              <h3 className="panel-label">Desktop notifications</h3>
+              <p className="settings-lead">
+                Mentions can show a desktop banner. Choose people whose other
+                messages should also notify you, across this server or in
+                selected rooms. Banners are separate from chimes.
+              </p>
+              <NotifyRules
+                api={api}
+                rooms={gateway.rooms.filter(
+                  (room) => room.archived_at === null,
+                )}
+              />
+            </section>
           </>
         ) : null}
         {section === "computer" ? (
           <>
-        <ExportSection api={api} />
-        <UpdatesSection />
-        <section className="settings-section">
-          <h3 className="panel-label">this computer</h3>
-          <p className="settings-lead">
-            Signing out forgets this server on this computer. It does not delete
-            your account.
-          </p>
-          <button
-            type="button"
-            className="settings-mini settings-signout"
-            onClick={() => void onSignOut()}
-          >
-            sign out
-          </button>
-        </section>
+            <PasswordSection
+              api={api}
+              username={user.username}
+              onReauthenticated={onReauthenticated}
+            />
+            <ExportSection api={api} />
+            <UpdatesSection />
+            <section className="settings-section">
+              <h3 className="panel-label">this computer</h3>
+              <p className="settings-lead">
+                Signing out forgets this server on this computer. It does not
+                delete your account.
+              </p>
+              <button
+                type="button"
+                className="settings-mini settings-signout"
+                onClick={() => void onSignOut()}
+              >
+                sign out
+              </button>
+            </section>
           </>
         ) : null}
       </div>
-      {roster}
     </main>
   );
 }
@@ -265,7 +327,7 @@ export default function SettingsPanel({
  * Sound (SPEC §4.1, §4.9, T-1102).
  *
  * Two switches, and both are about your own machine rather than anything
- * anybody else can see, so they live here beside density and theme.
+ * anybody else can see, so they live here beside appearance preferences.
  *
  * Quiet hours is **on** by default and that is deliberate: the alternative is
  * an app that can wake somebody at 3am until they find the setting that stops
@@ -287,8 +349,8 @@ export function SoundSection() {
       <h3 className="panel-label">sound</h3>
       <p className="settings-lead">
         Choose which chimes you hear. These switches do not silence voice chat;
-        use deafen in your voice session for that. Desktop banner rules are
-        under notifications in the roster.
+        use deafen in your voice session for that. Desktop notification rules
+        are further down this page.
       </p>
       <button
         type="button"
@@ -313,27 +375,54 @@ export function SoundSection() {
       {SOUND_CATEGORIES.map((category) => (
         <div key={category} className="settings-field">
           <label>
-            <input type="checkbox" checked={prefs.categories[category]}
-              onChange={(event) => change({ ...prefs, categories: { ...prefs.categories, [category]: event.target.checked } })} />
+            <input
+              type="checkbox"
+              checked={prefs.categories[category]}
+              onChange={(event) =>
+                change({
+                  ...prefs,
+                  categories: {
+                    ...prefs.categories,
+                    [category]: event.target.checked,
+                  },
+                })
+              }
+            />
             {SOUND_LABELS[category]}
           </label>{" "}
-          <button type="button" className="settings-mini"
+          <button
+            type="button"
+            className="settings-mini"
             aria-label={`preview ${SOUND_LABELS[category]}`}
             disabled={!cueAllowed(SOUND_PREVIEWS[category], prefs, new Date())}
-            onClick={() => { void playSound(SOUND_PREVIEWS[category]); }}>preview</button>
+            onClick={() => {
+              void playSound(SOUND_PREVIEWS[category]);
+            }}
+          >
+            preview
+          </button>
         </div>
       ))}
-      <p className="settings-lead">Previews follow these switches and quiet hours too.</p>
+      <p className="settings-lead">
+        Previews follow these switches and quiet hours too.
+      </p>
     </section>
   );
 }
 
 const SOUND_LABELS: Record<SoundCategory, string> = {
-  voice: "voice joins, leaves and moves", controls: "mute and deafen controls",
-  dms: "DM messages", rooms: "room messages", knocks: "knocks",
+  voice: "voice joins, leaves and moves",
+  controls: "mute and deafen controls",
+  dms: "DM messages",
+  rooms: "room messages",
+  knocks: "knocks",
 };
 const SOUND_PREVIEWS: Record<SoundCategory, SoundCue> = {
-  voice: "peer-join", controls: "unmute", dms: "dm", rooms: "room", knocks: "knock",
+  voice: "peer-join",
+  controls: "unmute",
+  dms: "dm",
+  rooms: "room",
+  knocks: "knock",
 };
 
 /**
@@ -463,12 +552,14 @@ function VoiceSection() {
     <section className="settings-section">
       <h3 className="panel-label">voice</h3>
       <p className="settings-lead">
-        Talking happens in a room: <em>join voice</em> under a room's name turns your
-        microphone on there. Nothing is recorded, by anybody, ever.
+        Talking happens in a room: <em>join voice</em> under a room's name turns
+        your microphone on there. Nothing is recorded, by anybody, ever.
       </p>
       {devices === null ? (
         <p className="settings-lead settings-warmth-lead">
-          {asked ? "Devices are picked in the desktop app." : "Looking for devices…"}
+          {asked
+            ? "Devices are picked in the desktop app."
+            : "Looking for devices…"}
         </p>
       ) : (
         <>
@@ -477,14 +568,18 @@ function VoiceSection() {
             choices={devices.inputs}
             fallback={devices.default_input}
             value={prefs.devices.input}
-            onChange={(input) => change({ ...prefs, devices: { ...prefs.devices, input } })}
+            onChange={(input) =>
+              change({ ...prefs, devices: { ...prefs.devices, input } })
+            }
           />
           <DevicePicker
             label="speakers"
             choices={devices.outputs}
             fallback={devices.default_output}
             value={prefs.devices.output}
-            onChange={(output) => change({ ...prefs, devices: { ...prefs.devices, output } })}
+            onChange={(output) =>
+              change({ ...prefs, devices: { ...prefs.devices, output } })
+            }
           />
           <p className="settings-lead settings-warmth-lead">
             A change applies the next time you join voice.
@@ -492,8 +587,8 @@ function VoiceSection() {
         </>
       )}
       <p className="settings-lead settings-warmth-lead">
-        Push to talk starts every call muted and opens the microphone only while you hold{" "}
-        <span className="meta">{PUSH_TO_TALK_KEY.toLowerCase()}</span>.
+        Push to talk starts every call muted and opens the microphone only while
+        you hold <span className="meta">{PUSH_TO_TALK_KEY.toLowerCase()}</span>.
       </p>
       <button
         type="button"
@@ -531,7 +626,9 @@ function DevicePicker({
       <select
         className="settings-select"
         value={value ?? ""}
-        onChange={(event) => onChange(event.target.value === "" ? null : event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value === "" ? null : event.target.value)
+        }
       >
         <option value="">
           system default{fallback === null ? "" : ` (${fallback})`}
@@ -541,7 +638,9 @@ function DevicePicker({
             {name}
           </option>
         ))}
-        {missing ? <option value={value}>{value} (not plugged in)</option> : null}
+        {missing ? (
+          <option value={value}>{value} (not plugged in)</option>
+        ) : null}
       </select>
     </label>
   );
@@ -564,7 +663,10 @@ function UpdatesSection() {
   useEffect(() => {
     let open = true;
     void (async () => {
-      const [found, current] = await Promise.all([checkForUpdate(), appVersion()]);
+      const [found, current] = await Promise.all([
+        checkForUpdate(),
+        appVersion(),
+      ]);
       if (!open) return;
       setCheck(found);
       setVersion(current);
@@ -599,12 +701,19 @@ function UpdatesSection() {
         this project's signing key before it is installed.
       </p>
       <p className="settings-lead settings-warmth-lead">
-        {version === null ? "Running from a browser, so there is no version to update." : `You are on version ${version}.`}
+        {version === null
+          ? "Running from a browser, so there is no version to update."
+          : `You are on version ${version}.`}
       </p>
-      <p className={problem === null ? "settings-ok" : "settings-problem"} aria-live="polite">
+      <p
+        className={problem === null ? "settings-ok" : "settings-problem"}
+        aria-live="polite"
+      >
         {problem ?? updateLine(check, looking)}
       </p>
-      {ready && check.notes !== null ? <p className="settings-notes">{check.notes}</p> : null}
+      {ready && check.notes !== null ? (
+        <p className="settings-notes">{check.notes}</p>
+      ) : null}
       <div className="settings-update-actions">
         <button
           type="button"

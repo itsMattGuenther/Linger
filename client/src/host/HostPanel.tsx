@@ -7,7 +7,7 @@
  * screens nobody can find.
  *
  * The panel takes over the stream column rather than floating above it. There
- * is no modal stack in this product, and the roster stays visible while you
+ * is no modal stack in this product, and the roster stays reachable while you
  * work, which matters: an invite is something you make *for* somebody.
  *
  * **Host-only, and absent rather than greyed out.** Every endpoint under here
@@ -29,6 +29,7 @@ import { nameProps } from "../lib/names";
 import { colorVar, PALETTE_KEYS } from "../lib/palette";
 import { deadWords, expiryWords, inviteUrl, moveRoom, useWords } from "./host";
 import "./host.css";
+import Removal from "./Removal";
 
 export type HostSection = "rooms" | "invites" | "people" | "server";
 
@@ -52,7 +53,6 @@ export default function HostPanel({
   onSection,
   onServerChange,
   onClose,
-  roster,
 }: {
   api: AuthedApi;
   /** Live from the gateway, so anything saved here shows up here too. */
@@ -62,13 +62,11 @@ export default function HostPanel({
   onSection: (section: HostSection) => void;
   onServerChange: (server: ServerInfo) => void;
   onClose: () => void;
-  /** On a narrow window the roster lives in this column (SPEC §3). */
-  roster?: ReactNode;
 }) {
   return (
     <main className="stream host">
       <header className="stream-header host-head">
-        <h2 className="panel-label">host</h2>
+        <h2 className="panel-label">Host tools</h2>
         <nav className="host-tabs">
           {SECTIONS.map((tab) => (
             <button
@@ -94,7 +92,6 @@ export default function HostPanel({
           <ServerSection api={api} server={server} onSaved={onServerChange} />
         ) : null}
       </div>
-      {roster}
     </main>
   );
 }
@@ -117,7 +114,10 @@ function RoomsSection({ api, rooms }: { api: AuthedApi; rooms: Room[] }) {
   const [editing, setEditing] = useState<RoomId | null>(null);
   const [archiving, setArchiving] = useState<RoomId | null>(null);
 
-  const run = async (what: () => Promise<unknown>, fallback: string): Promise<boolean> => {
+  const run = async (
+    what: () => Promise<unknown>,
+    fallback: string,
+  ): Promise<boolean> => {
     setBusy(true);
     setProblem(null);
     try {
@@ -170,7 +170,9 @@ function RoomsSection({ api, rooms }: { api: AuthedApi; rooms: Room[] }) {
                 <div className="host-room-row">
                   <span className="host-room-slug">#{room.slug}</span>
                   <span className="host-room-name">{room.name}</span>
-                  <span className="host-room-topic meta">{room.topic ?? ""}</span>
+                  <span className="host-room-topic meta">
+                    {room.topic ?? ""}
+                  </span>
                   <span className="host-room-actions">
                     <button
                       type="button"
@@ -249,8 +251,9 @@ function RoomsSection({ api, rooms }: { api: AuthedApi; rooms: Room[] }) {
           one-way: there is no endpoint that brings a room back. Saying so
           before the click is cheaper than an apology after it. */}
       <p className="host-note meta">
-        Archiving takes a room off the rail for everybody. Everything written in it stays in the
-        database and in an export — but there is no way to put the room back.
+        Archiving takes a room off the rail for everybody. Everything written in
+        it stays in the database and in an export — but there is no way to put
+        the room back.
       </p>
 
       {problem === null ? null : <p className="host-problem">{problem}</p>}
@@ -330,7 +333,11 @@ function NewRoom({
         />
       </Field>
       <div className="host-actions">
-        <button type="submit" className="host-save" disabled={busy || slug.trim() === ""}>
+        <button
+          type="submit"
+          className="host-save"
+          disabled={busy || slug.trim() === ""}
+        >
           {busy ? "making…" : "make the room"}
         </button>
       </div>
@@ -401,10 +408,19 @@ function EditRoom({
         disabled={busy || saving}
         onChange={(event) => setTopic(event.target.value)}
       />
-      <button type="submit" className="host-mini meta" disabled={busy || saving}>
+      <button
+        type="submit"
+        className="host-mini meta"
+        disabled={busy || saving}
+      >
         {saving ? "saving…" : "save"}
       </button>
-      <button type="button" className="host-mini meta" disabled={saving} onClick={onDone}>
+      <button
+        type="button"
+        className="host-mini meta"
+        disabled={saving}
+        onClick={onDone}
+      >
         cancel
       </button>
     </form>
@@ -465,10 +481,14 @@ function InvitesSection({ api }: { api: AuthedApi }) {
     setBusy(true);
     setProblem(null);
     try {
-      const made = await api.createInvite({ expires_in_hours: expiry, max_uses: uses });
+      const made = await api.createInvite({
+        expires_in_hours: expiry,
+        max_uses: uses,
+      });
       setInvites((held) => [made, ...(held ?? [])]);
       // The link is what you came for, so it arrives already on the clipboard.
-      if (await copyText(inviteUrl(api.baseUrl, made.code))) setCopied(made.code);
+      if (await copyText(inviteUrl(api.baseUrl, made.code)))
+        setCopied(made.code);
     } catch (error) {
       setProblem(problemText(error, "Couldn't make an invite."));
     } finally {
@@ -492,7 +512,10 @@ function InvitesSection({ api }: { api: AuthedApi }) {
   const copy = (code: string): void => {
     void copyText(inviteUrl(api.baseUrl, code)).then((ok) => {
       setCopied(ok ? code : null);
-      if (!ok) setProblem("Couldn't reach the clipboard. Select the link and copy it yourself.");
+      if (!ok)
+        setProblem(
+          "Couldn't reach the clipboard. Select the link and copy it yourself.",
+        );
     });
   };
 
@@ -540,13 +563,19 @@ function InvitesSection({ api }: { api: AuthedApi }) {
       {invites === null ? (
         <p className="placeholder">reading…</p>
       ) : invites.length === 0 ? (
-        <p className="placeholder">No invites yet. The button above makes one.</p>
+        <p className="placeholder">
+          No invites yet. The button above makes one.
+        </p>
       ) : (
         <ul className="host-list">
           {invites.map((invite) => {
             const dead = deadWords(invite, now);
             return (
-              <li className="host-invite" key={invite.code} data-dead={dead ? "true" : undefined}>
+              <li
+                className="host-invite"
+                key={invite.code}
+                data-dead={dead ? "true" : undefined}
+              >
                 <div className="host-invite-link">
                   <input
                     className="host-input host-link"
@@ -613,13 +642,8 @@ async function copyText(text: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * The other half of removing somebody (T-413): the list of everyone you have.
- *
- * Removing happens on the person's own card in the roster, where you are
- * already looking at them. This section is only the way back — and it has to
- * exist, because a removed member is gone from every surface in the app by
- * design, so without a list here "let them back in" would be a feature with no
- * door.
+ * Membership changes belong in Host tools, away from everyday member cards.
+ * The live list and removed list share this surface so the way back is clear.
  */
 function PeopleSection({ api }: { api: AuthedApi }) {
   const gateway = useGateway(api.baseUrl);
@@ -640,8 +664,7 @@ function PeopleSection({ api }: { api: AuthedApi }) {
   );
 
   // Who is *here* is the one thing that tells us this list has gone stale:
-  // both removing and restoring somebody change it, and removing happens in
-  // the roster, which is on screen next to this panel. The ids rather than the
+  // both removing and restoring somebody change it. The ids rather than the
   // array, so a display-name save is not a refetch.
   const here = gateway.users
     .map((person) => person.id)
@@ -669,19 +692,41 @@ function PeopleSection({ api }: { api: AuthedApi }) {
 
   return (
     <div className="host-section">
+      <h3 className="panel-label host-label">Members</h3>
+      <p className="host-note">
+        Manage who can use this server. Removing someone requires confirmation.
+      </p>
+      <ul className="host-list">
+        {gateway.users
+          .filter((person) => !person.is_host)
+          .map((person) => (
+            <li className="host-member" key={person.id}>
+              <span {...nameProps(person, "host-person-name")}>
+                {person.display_name}
+              </span>
+              <span className="host-person-username meta">
+                {" "}
+                @{person.username}
+              </span>
+              <Removal api={api} user={person} />
+            </li>
+          ))}
+      </ul>
       <h3 className="panel-label host-label">removed</h3>
       {removed === null ? (
         <p className="placeholder">reading…</p>
       ) : removed.length === 0 ? (
-        <p className="placeholder">
-          Nobody has been removed. The way to remove somebody is on their card in who’s around.
-        </p>
+        <p className="placeholder">Nobody has been removed.</p>
       ) : (
         <ul className="host-list">
           {removed.map((person) => (
             <li className="host-person" key={person.id}>
-              <span {...nameProps(person, "host-person-name")}>{person.display_name}</span>
-              <span className="host-person-username meta">@{person.username}</span>
+              <span {...nameProps(person, "host-person-name")}>
+                {person.display_name}
+              </span>
+              <span className="host-person-username meta">
+                @{person.username}
+              </span>
               <button
                 type="button"
                 className="host-mini meta"
@@ -696,9 +741,10 @@ function PeopleSection({ api }: { api: AuthedApi }) {
       )}
 
       <p className="host-note meta">
-        Letting somebody back in is not an undo. Their old sign-ins stay dead and the invite links
-        they had made stay revoked, so they sign in again with their password — the username is the
-        one they always had, and everything they wrote is still where they left it.
+        Letting somebody back in is not an undo. Their old sign-ins stay dead
+        and the invite links they had made stay revoked, so they sign in again
+        with their password — the username is the one they always had, and
+        everything they wrote is still where they left it.
       </p>
 
       {problem === null ? null : <p className="host-problem">{problem}</p>}
@@ -733,7 +779,9 @@ function ServerSection({
     setAccent(server?.accent_key ?? null);
   }, [server]);
 
-  const dirty = name.trim() !== (server?.name ?? "") || accent !== (server?.accent_key ?? null);
+  const dirty =
+    name.trim() !== (server?.name ?? "") ||
+    accent !== (server?.accent_key ?? null);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -762,7 +810,10 @@ function ServerSection({
       }}
     >
       <h3 className="panel-label host-label">name</h3>
-      <Field label="" hint="What the rail says, and what an invite link tells a stranger.">
+      <Field
+        label=""
+        hint="What the rail says, and what an invite link tells a stranger."
+      >
         <input
           type="text"
           className="host-input"
@@ -810,14 +861,18 @@ function ServerSection({
           stored now, and M6's generated palette stylesheet is what paints it.
           Delete this line when T-601 lands. */}
       <p className="host-note meta">
-        The accent is saved as a palette name. It starts colouring the app when the theme work
-        lands; the four things it touches are listed in SPEC §5.3.
+        Used for selection markers, focus rings and primary actions. Everyone
+        keeps their own name colors.
       </p>
 
       {problem === null ? null : <p className="host-problem">{problem}</p>}
       <div className="host-actions">
         {saved && !dirty ? <span className="meta">saved</span> : null}
-        <button type="submit" className="host-save" disabled={busy || !dirty || name.trim() === ""}>
+        <button
+          type="submit"
+          className="host-save"
+          disabled={busy || !dirty || name.trim() === ""}
+        >
           {busy ? "saving…" : "save"}
         </button>
       </div>

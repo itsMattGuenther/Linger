@@ -17,13 +17,10 @@
  * The wire type has no field for one, so this file could not render one if it
  * wanted to — which is the point of putting the rule in the type.
  *
- * **On a narrow window it becomes a horizontal strip above the composer**, and
- * it is never hidden. Same component, same cards, laid out along instead of
- * down; `lib/layout.ts` owns the one number that decides which.
+ * Narrow windows open this same card stack from the People button.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
@@ -31,7 +28,6 @@ import { useNow } from "../lib/clock";
 import { useGateway } from "../lib/gateway";
 import { dmWhere } from "../dm/dm";
 import { nameProps, personStyle } from "../lib/names";
-import NotifyRules from "../notify/NotifyRules";
 import StatusCard from "../status/StatusCard";
 import StatusEditor from "../status/StatusEditor";
 import { emptyRoster } from "../settings/copy";
@@ -45,18 +41,11 @@ import {
 import { usersInVoice } from "../voice/voice";
 import "./roster.css";
 
-/** Down the right-hand side, or along the top of the composer. */
-export type RosterLayout = "column" | "strip";
-
 export default function RosterPanel({
   api,
-  rooms,
-  layout,
   onOpenDm,
 }: {
   api: AuthedApi;
-  rooms: Room[];
-  layout: RosterLayout;
   /**
    * Start (or find) a DM with this person and open it (SPEC §4.13, T-1302).
    *
@@ -68,12 +57,7 @@ export default function RosterPanel({
 }) {
   const gateway = useGateway(api.baseUrl);
   const now = useNow();
-  // The panel has two modes: who is around, and who you want to hear from.
-  // The rules are a list of people too, and a settings screen for one setting
-  // would be a screen too many.
-  const [notifying, setNotifying] = useState(false);
-  // Writing your own. A third mode rather than a form inside your card: in a
-  // narrow window the cards are chips in a strip, and a chip is not a form.
+  // Writing your own status replaces the card stack until you finish.
   const [editing, setEditing] = useState(false);
   // One card open at a time. Two open cards is a list of statuses, which is a
   // different panel and a worse one.
@@ -110,32 +94,29 @@ export default function RosterPanel({
   const showEditor = editing && me !== null;
 
   return (
-    <aside className="roster" data-layout={layout}>
+    <aside className="roster" id="people-panel" aria-label="People">
       <div className="roster-head">
-        <h2 className="panel-label">{headingFor(notifying, showEditor)}</h2>
-        <button
-          type="button"
-          className="roster-switch meta"
-          aria-expanded={notifying || editing}
-          title="Choose desktop banner rules. Chimes are in settings → sound & voice."
-          onClick={() => {
-            if (editing) setEditing(false);
-            else setNotifying((held) => !held);
-          }}
-        >
-          {editing || notifying ? "done" : "notifications"}
-        </button>
+        <h2 className="panel-label">
+          {showEditor ? "your status" : "who’s around"}
+        </h2>
+        {editing ? (
+          <button
+            type="button"
+            className="roster-switch meta"
+            onClick={() => setEditing(false)}
+          >
+            done
+          </button>
+        ) : null}
       </div>
       {showEditor && me !== null ? (
         <div className="roster-editor">
           <StatusEditor api={api} me={me} onDone={() => setEditing(false)} />
         </div>
-      ) : notifying ? (
-        <div className="roster-notify">
-          <NotifyRules api={api} rooms={rooms} />
-        </div>
       ) : entries.length === 0 ? (
-        <p className="placeholder">{emptyRoster(gateway.status.kind === "ready")}</p>
+        <p className="placeholder">
+          {emptyRoster(gateway.status.kind === "ready")}
+        </p>
       ) : (
         <ul className="roster-list">
           {entries.map((entry) => (
@@ -144,16 +125,14 @@ export default function RosterPanel({
               api={api}
               entry={entry}
               now={now}
-              // Host-only, and absent rather than greyed out for everybody
-              // else — the same rule the host panel follows (T-410). The lock
-              // is the endpoint, which answers FORBIDDEN either way.
-              canRemove={(me?.is_host ?? false) && !entry.isMe}
               onOpenDm={onOpenDm}
               users={users}
               meId={me?.id ?? null}
               open={open === entry.user.id}
               onToggle={() =>
-                setOpen((held) => (held === entry.user.id ? null : entry.user.id))
+                setOpen((held) =>
+                  held === entry.user.id ? null : entry.user.id,
+                )
               }
               onEdit={() => setEditing(true)}
             />
@@ -179,7 +158,6 @@ function PersonCard({
   api,
   entry,
   now,
-  canRemove,
   onOpenDm,
   users,
   meId,
@@ -190,7 +168,6 @@ function PersonCard({
   api: AuthedApi;
   entry: RosterEntry;
   now: number;
-  canRemove: boolean;
   /** For naming a DM somebody is standing in — it has no name of its own. */
   users: User[];
   meId: UserId | null;
@@ -208,19 +185,14 @@ function PersonCard({
   // and a message waits. That is the whole difference between the two controls
   // sitting next to each other.
   const canMessage = !entry.isMe;
-  // A host can open anybody, whether or not they wrote a status: the way to
-  // remove somebody is under here, and a card that will not open would hide it
-  // for exactly the quiet people it is most likely to be needed for. The same
-  // now goes for anybody you can knock at.
-  const openable = hasStatus(entry) || entry.isMe || canRemove || canKnock || canMessage;
+  // Every ordinary member can open a card to start a conversation.
+  const openable = hasStatus(entry) || entry.isMe || canKnock || canMessage;
   const head = (
     <>
       {/* The dot is decoration; the word beside it is what a screen reader
           reads, so presence is never carried by color alone. */}
       <span className="person-dot" data-state={state} aria-hidden="true" />
-      <span {...nameProps(user, "person-name")}>
-        {user.display_name}
-      </span>
+      <span {...nameProps(user, "person-name")}>{user.display_name}</span>
       <span className="sr-only">{stateWord(state)}</span>
       {entry.isMe ? <span className="person-you meta">you</span> : null}
     </>
@@ -234,7 +206,12 @@ function PersonCard({
       style={personStyle(user)}
     >
       {openable ? (
-        <button type="button" className="person-head" aria-expanded={open} onClick={onToggle}>
+        <button
+          type="button"
+          className="person-head"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
           {head}
         </button>
       ) : (
@@ -245,19 +222,30 @@ function PersonCard({
         <>
           {/* The away message is already on the lines above, so the card
               leaves the status line out rather than saying it twice. */}
-          <StatusCard user={user} awayShown={entry.awayMessage !== null && entry.awayMessage !== ""} baseUrl={api.baseUrl} />
+          <StatusCard
+            user={user}
+            awayShown={entry.awayMessage !== null && entry.awayMessage !== ""}
+            baseUrl={api.baseUrl}
+          />
           {entry.isMe ? (
             <p className="person-mine">
-              {hasStatus(entry) ? null : <span className="meta">nothing set</span>}
-              <button type="button" className="person-edit meta" onClick={onEdit}>
+              {hasStatus(entry) ? null : (
+                <span className="meta">nothing set</span>
+              )}
+              <button
+                type="button"
+                className="person-edit meta"
+                onClick={onEdit}
+              >
                 edit
               </button>
             </p>
           ) : (
             <>
-              {canMessage ? <MessageButton user={user} onOpenDm={onOpenDm} /> : null}
+              {canMessage ? (
+                <MessageButton user={user} onOpenDm={onOpenDm} />
+              ) : null}
               {canKnock ? <KnockButton api={api} user={user} /> : null}
-              {canRemove ? <Removal api={api} user={user} /> : null}
             </>
           )}
         </>
@@ -294,7 +282,9 @@ function MessageButton({
     try {
       await onOpenDm(user.id);
     } catch (error) {
-      setProblem(error instanceof ApiError ? error.message : "Couldn't open that.");
+      setProblem(
+        error instanceof ApiError ? error.message : "Couldn't open that.",
+      );
     } finally {
       setOpening(false);
     }
@@ -335,7 +325,9 @@ function MessageButton({
  */
 export function KnockButton({ api, user }: { api: AuthedApi; user: User }) {
   // A late answer belongs to the old card, never another server or person.
-  return <KnockAction key={`${api.baseUrl}:${user.id}`} api={api} user={user} />;
+  return (
+    <KnockAction key={`${api.baseUrl}:${user.id}`} api={api} user={user} />
+  );
 }
 
 function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
@@ -345,7 +337,9 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -383,86 +377,13 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
           disabled={phase !== "idle"}
           onClick={() => void knock()}
         >
-          {phase === "idle" ? "knock" : phase === "knocking" ? "knocking…" : "knocked"}
+          {phase === "idle"
+            ? "knock"
+            : phase === "knocking"
+              ? "knocking…"
+              : "knocked"}
         </button>
       </p>
-      {problem === null ? null : <p className="person-host-note">{problem}</p>}
-    </div>
-  );
-}
-
-/**
- * The host's one destructive control, on the card of the person it is about
- * (T-413).
- *
- * "Remove from the server", never kick and never ban — SPEC §1's vocabulary,
- * and there is no ban to offer: it would need something durable to ban by, and
- * Linger stores no addresses and no device ids. Two steps, because the card is
- * a thing you open to read and a single click here would be a person gone.
- *
- * Nothing is reset on success: the server fans out `user.remove`, the store
- * drops them from `users`, and this card is unmounted with them.
- */
-function Removal({ api, user }: { api: AuthedApi; user: User }) {
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  const remove = async (): Promise<void> => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      await api.removeUser(user.id);
-    } catch (error) {
-      setProblem(error instanceof ApiError ? error.message : "Couldn't remove them.");
-      setBusy(false);
-      setAsking(false);
-    }
-  };
-
-  return (
-    <div className="person-host">
-      {asking ? (
-        <>
-          {/* Said before the click rather than apologised for after it. The
-              part people get wrong is the reversibility, so lead with that. */}
-          <p className="person-host-note meta">
-            They lose their sign-in and any invite links they made. What they wrote stays. You can
-            let them back in from the host panel.
-          </p>
-          <p className="person-mine">
-            <button
-              type="button"
-              className="person-edit person-danger meta"
-              disabled={busy}
-              onClick={() => void remove()}
-            >
-              {busy ? "removing…" : "yes, remove"}
-            </button>
-            <button
-              type="button"
-              className="person-edit meta"
-              disabled={busy}
-              onClick={() => setAsking(false)}
-            >
-              keep them
-            </button>
-          </p>
-        </>
-      ) : (
-        <p className="person-mine">
-          <button
-            type="button"
-            className="person-edit meta"
-            onClick={() => {
-              setProblem(null);
-              setAsking(true);
-            }}
-          >
-            remove from the server
-          </button>
-        </p>
-      )}
       {problem === null ? null : <p className="person-host-note">{problem}</p>}
     </div>
   );
@@ -502,7 +423,8 @@ function PersonLines({
           ? dmWhere(room, users, entry.user.id, meId)
           : `in #${room.slug}`
       : null;
-  const stateLine = state === "idle" || state === "away" ? stateWord(state) : null;
+  const stateLine =
+    state === "idle" || state === "away" ? stateWord(state) : null;
 
   const since = sinceOf(entry, now);
   const away = awayMessage === null || awayMessage === "" ? null : awayMessage;
@@ -526,7 +448,9 @@ function PersonLines({
         since === null && away === null ? null : (
           <p className="person-gone">
             {since === null ? null : <span className="meta">{since}</span>}
-            {away === null ? null : <span className="person-away">“{away}”</span>}
+            {away === null ? null : (
+              <span className="person-away">“{away}”</span>
+            )}
           </p>
         )
       ) : (
@@ -551,13 +475,7 @@ function sinceOf(entry: RosterEntry, now: number): string | null {
     return entry.seenAt === null ? null : shortAgo(entry.seenAt, now);
   }
   const awaySince = entry.user.status?.away_since ?? null;
-  if (entry.state === "away" && awaySince !== null) return shortAgo(awaySince, now);
+  if (entry.state === "away" && awaySince !== null)
+    return shortAgo(awaySince, now);
   return null;
-}
-
-/** What the panel is currently for. Three modes, one label. */
-function headingFor(notifying: boolean, editing: boolean): string {
-  if (editing) return "your status";
-  if (notifying) return "notify me when";
-  return "who’s around";
 }

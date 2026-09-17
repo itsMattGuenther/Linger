@@ -101,11 +101,12 @@ name-palette contrast test does not prove controls are readable. Message
 actions do have a keyboard focus path; test its usability rather than adding
 a second action system.
 
-Review the current app in both themes and all densities at 1100×720 and its
+Review the current app in both themes and supported interface scales at 1100×720 and its
 760×480 minimum. Cover keyboard-only navigation, larger text, long names,
 reduced motion, empty rooms and failed requests. Improve control contrast,
 focus visibility, spacing and wording using the existing tokens. Keep the
-roster visible at narrow widths. Do not add more permanent controls above a
+roster reachable through **People** at narrow widths (2026-09-17 design revision).
+Do not add more permanent controls above a
 conversation to solve a discoverability problem elsewhere.
 
 The saved screenshots establish the design direction, but some predate T-905.

@@ -34,11 +34,11 @@ async function expectWindowFit(page: Page) {
 }
 
 for (const theme of ["dark", "light"]) {
-  for (const density of ["comfortable", "compact", "irc"]) {
+  for (const scale of ["100", "150", "200"]) {
     for (const image of images) {
-      test(`fits ${image.name.slice(0, 24)} in ${theme}/${density}`, async ({ page }) => {
+      test(`fits ${image.name.slice(0, 24)} in ${theme}/${scale}%`, async ({ page }) => {
         await page.setViewportSize({ width: 1100, height: 720 });
-        const query = new URLSearchParams({ image: image.name, theme, density });
+        const query = new URLSearchParams({ image: image.name, theme, scale });
         await page.goto(`/tests/fixtures/attachments.html?${query}`);
         await page.getByRole("button", { name: image.name }).click();
         const expanded = page.getByRole("dialog").locator("img");

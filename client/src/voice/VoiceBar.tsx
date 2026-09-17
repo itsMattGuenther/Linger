@@ -11,7 +11,7 @@
  * Somebody talking is their name drawn a little brighter, the way a live
  * status is drawn anywhere else in the app.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
@@ -35,6 +35,8 @@ import {
   volumeLabel,
 } from "./voice";
 import "./voice.css";
+import { useWindowHeight } from "../lib/layout";
+import { useInterfaceScale } from "../lib/interface";
 
 export default function VoiceBar({
   api,
@@ -52,8 +54,42 @@ export default function VoiceBar({
   const seatedElsewhere = mine !== null && mine.roomId !== room.id;
   const [joining, setJoining] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedTrigger = useRef<HTMLButtonElement | null>(null);
+  const closeOptions = (): void => {
+    setSelected(null);
+    selectedTrigger.current?.focus();
+  };
+  const shortWindow = useWindowHeight() / (useInterfaceScale() / 100) < 360;
+  const [collapsePreference, setCollapsePreference] = useState<boolean | null>(
+    () => {
+      try {
+        const saved = localStorage.getItem("linger.voice.collapsed");
+        return saved === null ? null : saved === "true";
+      } catch {
+        return null;
+      }
+    },
+  );
+  const collapsed = collapsePreference ?? shortWindow;
+  const togglePeople = (): void => {
+    setSelected(null);
+    setCollapsePreference(!collapsed);
+    try {
+      localStorage.setItem("linger.voice.collapsed", String(!collapsed));
+    } catch {
+      /* Session-only. */
+    }
+  };
+  useEffect(() => {
+    setSelected(null);
+  }, [room.id, api.baseUrl]);
   const controlProblem = (error: unknown): void => {
-    setProblem(error instanceof Error ? error.message : "Couldn't change voice controls.");
+    setProblem(
+      error instanceof Error
+        ? error.message
+        : "Couldn't change voice controls.",
+    );
   };
 
   // Read once per join rather than subscribed: a device changed in settings
@@ -65,7 +101,9 @@ export default function VoiceBar({
     try {
       await joinVoice(api, room.id, prefs.devices, prefs.pushToTalk);
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : "Couldn't join voice.");
+      setProblem(
+        error instanceof Error ? error.message : "Couldn't join voice.",
+      );
     } finally {
       setJoining(false);
     }
@@ -79,13 +117,17 @@ export default function VoiceBar({
     if (!pushToTalk) return;
     const server = api.baseUrl;
     const down = (event: KeyboardEvent): void => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(server, false).catch(controlProblem);
+      if (event.key === PUSH_TO_TALK_KEY && !event.repeat)
+        void setVoiceMuted(server, false).catch(controlProblem);
     };
     const up = (event: KeyboardEvent): void => {
-      if (event.key === PUSH_TO_TALK_KEY) void setVoiceMuted(server, true).catch(controlProblem);
+      if (event.key === PUSH_TO_TALK_KEY)
+        void setVoiceMuted(server, true).catch(controlProblem);
     };
     // Losing the window mid-word must not leave the microphone open.
-    const blur = (): void => { void setVoiceMuted(server, true).catch(controlProblem); };
+    const blur = (): void => {
+      void setVoiceMuted(server, true).catch(controlProblem);
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
@@ -108,24 +150,49 @@ export default function VoiceBar({
           disabled={joining}
           onClick={() => void join()}
         >
-          {joining ? "joining voice…" : seatedElsewhere ? "move voice here" : "join voice"}
+          {joining
+            ? "joining voice…"
+            : seatedElsewhere
+              ? "move voice here"
+              : "join voice"}
         </button>
       </div>
     );
   }
 
   const seats = seatsOf(peers, users, gateway.sessionId);
-  const line = seatedHere && !mine.deafened ? microphoneLine(mine.audio, pushToTalk, mine.muted) : null;
+  const selectedSeat = seats.find((seat) => seat.sessionId === selected);
+  const line =
+    seatedHere && !mine.deafened
+      ? microphoneLine(mine.audio, pushToTalk, mine.muted)
+      : null;
 
   return (
-    <div className="voice-bar" aria-label="voice">
-      <span className="voice-label meta">voice</span>
-      <ul className="voice-seats">
+    <div
+      className="voice-bar"
+      aria-label="voice"
+      data-collapsed={collapsed || undefined}
+    >
+      <div className="voice-heading">
+        <span className="voice-label panel-label">
+          {seatedHere ? "In voice" : "Voice"}
+        </span>
+        <button
+          type="button"
+          className="voice-action"
+          aria-expanded={!collapsed}
+          onClick={togglePeople}
+        >
+          {collapsed ? "Show people" : "Hide people"}
+        </button>
+      </div>
+      <ul className="voice-seats" hidden={collapsed}>
         {seats.map((seat) => {
           const talking = seat.isMe
-            ? (seatedHere && mine.talking)
-            : (seatedHere && (mine.speaking[seat.sessionId] ?? false));
-          const link = seatedHere && !seat.isMe ? mine.peers[seat.sessionId] : undefined;
+            ? seatedHere && mine.talking
+            : seatedHere && (mine.speaking[seat.sessionId] ?? false);
+          const link =
+            seatedHere && !seat.isMe ? mine.peers[seat.sessionId] : undefined;
           const controls = seat.isMe && seatedHere ? mine : seat.controls;
           return (
             <li
@@ -134,67 +201,146 @@ export default function VoiceBar({
               data-talking={talking ? "true" : undefined}
               data-link={link}
             >
-              <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
-              {seat.isMe ? <span className="meta">you</span> : null}
-              {controls === null ? <span className="meta" title="This client or server does not share voice controls.">mic state unknown</span>
-                : controls.deafened ? <span className="meta">deafened</span>
-                : controls.muted ? <span className="meta">muted</span> : null}
-              {/* A screen reader gets the word; sighted people get the weight. */}
-              {talking ? <span className="sr-only">talking</span> : null}
-              {link === "connecting" || link === "new" ? (
-                <span className="meta">connecting…</span>
-              ) : link === "failed" || link === "disconnected" ? (
-                <span className="meta">can't reach</span>
-              ) : null}
-              {seatedHere && !seat.isMe ? (
-                <Volume
-                  value={mine.volumes[seat.sessionId] ?? 1}
-                  name={seat.name}
-                  onChange={(volume) => setVoiceVolume(api.baseUrl, seat.sessionId, volume)}
-                />
-              ) : null}
+              <button
+                type="button"
+                className="voice-person"
+                aria-expanded={selected === seat.sessionId}
+                aria-label={`${seat.name}, voice options`}
+                onClick={(event) => {
+                  selectedTrigger.current = event.currentTarget;
+                  setSelected(
+                    selected === seat.sessionId ? null : seat.sessionId,
+                  );
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  selectedTrigger.current = event.currentTarget;
+                  setSelected(seat.sessionId);
+                }}
+              >
+                <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
+                <span className="voice-person-more" aria-hidden="true">
+                  ⌄
+                </span>
+              </button>
+              <div className="voice-seat-state">
+                {seat.isMe ? <span className="meta">you</span> : null}
+                {controls === null ? (
+                  <span
+                    className="meta"
+                    title="This client or server does not share voice controls."
+                  >
+                    mic state unknown
+                  </span>
+                ) : controls.deafened ? (
+                  <span className="meta">deafened</span>
+                ) : controls.muted ? (
+                  <span className="meta">muted</span>
+                ) : null}
+                {/* A screen reader gets the word; sighted people get the weight. */}
+                {talking ? <span className="sr-only">talking</span> : null}
+                {link === "connecting" || link === "new" ? (
+                  <span className="meta">connecting…</span>
+                ) : link === "failed" || link === "disconnected" ? (
+                  <span className="meta">can't reach</span>
+                ) : null}
+              </div>
             </li>
           );
         })}
       </ul>
-      {seatedHere ? (
-        <>
-          {line === null ? null : <span className="voice-line meta">{line}</span>}
-          {pushToTalk ? null : (
+      {selectedSeat && !collapsed ? (
+        <section
+          className="voice-options"
+          aria-label={`Voice options for ${selectedSeat.name}`}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              closeOptions();
+              event.stopPropagation();
+            }
+          }}
+        >
+          <span>{selectedSeat.name}</span>
+          {seatedHere && !selectedSeat.isMe ? (
+            <Volume
+              value={mine.volumes[selectedSeat.sessionId] ?? 1}
+              name={selectedSeat.name}
+              onChange={(volume) =>
+                setVoiceVolume(api.baseUrl, selectedSeat.sessionId, volume)
+              }
+            />
+          ) : (
+            <span className="meta">
+              {selectedSeat.isMe
+                ? "Use mute and deafen in the voice controls."
+                : "Join voice to adjust their volume for you."}
+            </span>
+          )}
+          <button type="button" className="voice-action" onClick={closeOptions}>
+            Close options
+          </button>
+        </section>
+      ) : null}
+      <div className="voice-controls">
+        {seatedHere ? (
+          <>
+            {line === null ? null : (
+              <span className="voice-line meta">{line}</span>
+            )}
+            {pushToTalk ? null : (
+              <button
+                type="button"
+                className="voice-action meta"
+                aria-pressed={mine.muted}
+                disabled={mine.deafened}
+                onClick={() =>
+                  void setVoiceMuted(api.baseUrl, !mine.muted).catch(
+                    controlProblem,
+                  )
+                }
+              >
+                {mine.muted ? "muted" : "mute"}
+              </button>
+            )}
             <button
               type="button"
               className="voice-action meta"
-              aria-pressed={mine.muted}
-              disabled={mine.deafened}
-              onClick={() => void setVoiceMuted(api.baseUrl, !mine.muted).catch(controlProblem)}
+              aria-pressed={mine.deafened}
+              title="Silence incoming voice and mute your microphone"
+              onClick={() =>
+                void setVoiceDeafened(api.baseUrl, !mine.deafened).catch(
+                  controlProblem,
+                )
+              }
             >
-              {mine.muted ? "muted" : "mute"}
+              {mine.deafened ? "undeafen" : "deafen"}
             </button>
-          )}
-          <button type="button" className="voice-action meta" aria-pressed={mine.deafened}
-            title="Silence incoming voice and mute your microphone"
-            onClick={() => void setVoiceDeafened(api.baseUrl, !mine.deafened).catch(controlProblem)}>
-            {mine.deafened ? "undeafen" : "deafen"}
-          </button>
+            <button
+              type="button"
+              className="voice-action meta"
+              onClick={() => void leaveVoice(api.baseUrl)}
+            >
+              leave voice
+            </button>
+          </>
+        ) : (
           <button
             type="button"
             className="voice-action meta"
-            onClick={() => void leaveVoice(api.baseUrl)}
+            disabled={joining}
+            onClick={() => void join()}
           >
-            leave voice
+            {joining
+              ? "joining voice…"
+              : seatedElsewhere
+                ? "move voice here"
+                : "join voice"}
           </button>
-        </>
-      ) : (
-        <button
-          type="button"
-          className="voice-action meta"
-          disabled={joining}
-          onClick={() => void join()}
-        >
-          {joining ? "joining voice…" : seatedElsewhere ? "move voice here" : "join voice"}
-        </button>
+        )}
+      </div>
+      {problem === null ? null : (
+        <span className="voice-problem meta">{problem}</span>
       )}
-      {problem === null ? null : <span className="voice-problem meta">{problem}</span>}
     </div>
   );
 }
@@ -214,7 +360,7 @@ function Volume({
 }) {
   return (
     <label className="voice-volume">
-      <span className="sr-only">volume for {name}</span>
+      <span className="voice-volume-label">Volume for {name}</span>
       <input
         type="range"
         min={0}

@@ -7,7 +7,7 @@
  *
  * This is the reader's preference about their own screen, not something anyone
  * else can see, so it lives here and in local storage rather than in the gateway
- * store — the same shape `density.ts` uses, and for the same reason. The whole
+ * store. The whole
  * of the effect is one attribute on `<html>`: `styles/names.css` has rules that
  * outrank every per-person value, so nothing that draws a name has to know this
  * switch exists.

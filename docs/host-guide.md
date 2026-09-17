@@ -145,8 +145,8 @@ open it again the same way you installed it.
 
 ## 7. Invite people
 
-In the left rail, press **manage** beside *SERVER*, then **invites → make a
-link**. Only the host sees **manage**. You choose how many people the invite
+In the left panel, press **Host tools**, then **invites → make a
+link**. Only the host sees **Host tools**. You choose how many people the invite
 is good for and when it expires; the link
 is copied for you the moment it is made. Send it however you normally talk to
 your friends.
@@ -197,14 +197,14 @@ blocks. Do not assume the provider lets you add `cdn.` in front of a free name.
 ## Running it day to day
 
 Almost everything is done inside the app, not in a config file. The host
-controls are behind **manage**, next to *SERVER* in the left rail.
+controls are behind **Host tools**, above your name in the left panel.
 
 - **Rooms** — host controls → *rooms*. Create, rename, set a topic, reorder,
   archive.
 - **The server's name and accent color** — host controls → *server*. The name is
   what the rail shows and what an invite link tells a stranger.
-- **Removing someone** — open their card in the roster and remove them. They
-  disappear from everywhere.
+- **Removing someone** — Host tools → *people*. Choose the member, then
+  confirm removal. They disappear from the roster and lose access; messages stay.
 - **Letting them back in** — host controls → *people*. Removals are reversible;
   that is the point.
 

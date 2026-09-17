@@ -22,11 +22,6 @@ export type StreamRow =
 
 export interface BuildOptions {
   /**
-   * Group consecutive messages by the same author. False in IRC mode, which is
-   * one self-contained line per message (SPEC §5.6).
-   */
-  group: boolean;
-  /**
    * True when the oldest message here is the oldest the server has. Only then
    * does a divider above it mean anything — otherwise it would be labelling the
    * top of a page, not the start of a session.
@@ -72,7 +67,6 @@ export function buildRows(messages: readonly Message[], options: BuildOptions): 
     if (leftOff !== null && message.id <= leftOff) boundaryLoaded = true;
 
     const head =
-      !options.group ||
       previous === null ||
       opensSession ||
       // The first message you have not seen says who said it, even when the

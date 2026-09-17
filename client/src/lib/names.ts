@@ -70,7 +70,7 @@ export interface NameProps {
 
 /**
  * The props for one drawn name. `extra` is whatever class the surface already
- * had — `msg-author`, `person-name`, `irc-name` — because each of those still
+ * had — `msg-author`, `person-name` — because each of those still
  * owns its own size and truncation; this owns the person.
  */
 export function nameProps(person: User | undefined, extra?: string): NameProps {

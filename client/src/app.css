@@ -3,26 +3,20 @@
 
 .frame {
   display: grid;
-  grid-template-columns: var(--rail-w) minmax(var(--stream-min-w), 1fr) var(--roster-w);
+  grid-template-columns: var(--rail-w) 4px minmax(0, 1fr) 4px var(--roster-w);
   grid-template-rows: 1fr auto;
   grid-template-areas:
-    "rail stream roster"
-    "status status status";
+    "rail rail-resize stream roster-resize roster"
+    "status status status status status";
   height: 100%;
 }
 
-/*
- * Too narrow for three columns. The roster is not hidden and does not become a
- * menu — it moves into the stream column as a horizontal strip above the
- * composer (SPEC §3). React decides that, because it is a question of where the
- * panel is rendered rather than how it is painted, and it says so here so the
- * stylesheet does not need a second copy of the breakpoint (`lib/layout.ts`).
- */
+/* The frame fits columns to readable widths; narrow panels open on demand. */
 .frame[data-narrow="true"] {
-  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-columns: var(--rail-w) 4px minmax(0, 1fr);
   grid-template-areas:
-    "rail stream"
-    "status status";
+    "rail rail-resize stream"
+    "status status status";
 }
 
 .rail {
@@ -33,6 +27,9 @@
   display: flex;
   flex-direction: column;
   gap: calc(var(--gutter) * 1.5);
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
 }
 
 .stream {
@@ -48,9 +45,12 @@
 
 .stream-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  padding: 10px var(--gutter);
+  padding: 0.875rem var(--gutter);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  min-height: 4rem;
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -64,7 +64,7 @@
 
 .room-name {
   flex: none;
-  font-size: 14px;
+  font-size: 1.125rem;
   font-weight: 500;
 }
 
@@ -83,17 +83,13 @@
   text-overflow: ellipsis;
 }
 
-/* A small segmented control: density and theme both use it, and both live in
-   settings and nowhere else (T-904). It sat in the room header until
-   2026-08-31, which is where the `margin-left: auto` that used to be here came
-   from — it pinned the control to the right of the room name. Nothing pins it
-   now. */
-.density {
+/* Theme choices are local reader preferences. */
+.segmented {
   display: flex;
   gap: 2px;
 }
 
-.density-option {
+.segmented-option {
   background: none;
   border: 0;
   padding: 2px 6px;
@@ -103,11 +99,11 @@
   cursor: pointer;
 }
 
-.density-option:hover {
+.segmented-option:hover {
   color: var(--text-secondary);
 }
 
-.density-option[aria-pressed="true"] {
+.segmented-option[aria-pressed="true"] {
   background: var(--surface-2);
   color: var(--text-secondary);
 }
@@ -118,6 +114,36 @@
   /* The virtualizer scrolls this element, so it owns the scrollbar and nothing
      inside it may scroll on its own. */
   padding: var(--gutter);
+  min-height: 0;
+}
+.rail-dms .panel-label {
+  text-transform: none;
+}
+.room-topic {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  flex-basis: 100%;
+}
+.room-name {
+  overflow-wrap: anywhere;
+}
+.room-title {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.composer-row {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.composer-input {
+  min-height: 2.75rem;
+  font-size: 1rem;
+}
+.composer-send {
+  min-height: 2.75rem;
+}
+.composer {
+  flex-shrink: 0;
 }
 
 .composer {
@@ -398,9 +424,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 3px 0;
+  padding: 0.5rem 0;
   color: var(--text-secondary);
-  opacity: 0.6;
+  opacity: 1;
   transition: opacity var(--motion-base);
   text-align: left;
   background: none;
@@ -464,9 +490,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 3px 0;
+  padding: 0.5rem 0;
   color: var(--text-secondary);
-  opacity: 0.6;
+  opacity: 1;
   transition: opacity var(--motion-base);
   text-align: left;
   background: none;
@@ -531,7 +557,7 @@
 
 /*
  * The whole of "there is something in this room you have not seen" (SPEC §4.2):
- * the label's weight goes from 60% to 100%. No number, no dot, no color change.
+ * the label becomes heavier. No number, no dot, no color change.
  * Those are all the badge wearing a different coat, and the badge is the thing
  * this app deleted on purpose.
  */
@@ -540,6 +566,104 @@
 .room-item[aria-pressed="true"],
 .room-item:hover {
   opacity: 1;
+}
+
+.room-item[data-new="true"] {
+  font-weight: 700;
+}
+.room-item[aria-current="true"],
+.room-item[aria-pressed="true"] {
+  background: var(--surface-2);
+  font-weight: 500;
+}
+.rail-places {
+  margin-top: auto;
+  padding-bottom: 0.5rem;
+}
+.rail-account {
+  border-top: 1px solid var(--hairline);
+  padding-top: 0.75rem;
+}
+.rail-self {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+.rail-self-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.rail-self-name .meta {
+  display: block;
+  font-weight: 400;
+}
+.rail-settings {
+  flex: none;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0.25rem 0.625rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.rail-action {
+  font-size: 0.8125rem;
+}
+.panel-resize {
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--surface-1);
+}
+.panel-resize::after {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
+}
+.panel-resize:hover,
+.panel-resize:focus-visible {
+  background: var(--hairline-strong);
+}
+.panel-resize-rail {
+  grid-area: rail-resize;
+}
+.panel-resize-roster {
+  grid-area: roster-resize;
+}
+.frame[data-narrow="true"] .stream-header {
+  padding-block: 0.5rem;
+  min-height: 3rem;
+}
+.frame[data-narrow="true"] .roster-head {
+  padding-bottom: 0;
+}
+.rail {
+  gap: 0;
+  overflow: hidden;
+}
+.rail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+}
+.rail-content .rail-section {
+  flex-shrink: 0;
+}
+.rail-content .rail-places {
+  flex-shrink: 0;
+}
+.rail-account {
+  flex-shrink: 0;
 }
 
 .status-left,
@@ -589,4 +713,128 @@
 
 .status-cog svg {
   display: block;
+}
+
+/* Edge panels use the browser's modal focus handling, never an unlabelled menu. */
+.frame {
+  position: relative;
+}
+.panel-access {
+  position: absolute;
+  top: 0.5rem;
+  right: var(--gutter);
+  z-index: 3;
+  display: flex;
+  gap: 0.5rem;
+}
+.panel-access button {
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.frame[data-narrow="true"] > .stream > .stream-header {
+  padding-right: 6.25rem;
+}
+.frame[data-stacked="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "stream" "status";
+}
+.frame[data-stacked="true"] > .stream > .stream-header {
+  padding-top: 0.5rem;
+  padding-left: 7.5rem;
+  padding-right: 6.25rem;
+}
+.frame[data-stacked="true"] > .settings > .stream-header,
+.frame[data-stacked="true"] > .host > .stream-header,
+.frame[data-stacked="true"] > .search > .stream-header,
+.frame[data-stacked="true"] > .media > .stream-header {
+  padding-top: 3.25rem;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+.frame[data-stacked="true"] .room-title {
+  flex-wrap: nowrap;
+}
+.frame[data-stacked="true"] .room-name {
+  flex: none;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.frame[data-stacked="true"] .panel-access {
+  left: var(--gutter);
+  justify-content: space-between;
+}
+.panel-drawer {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  width: min(22rem, calc(100vw - 2rem));
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+.panel-drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.panel-drawer::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.panel-drawer-rail {
+  right: auto;
+  border-right: 1px solid var(--hairline-strong);
+}
+.panel-drawer-roster {
+  left: auto;
+  border-left: 1px solid var(--hairline-strong);
+}
+.panel-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem var(--gutter);
+  border-bottom: 1px solid var(--hairline);
+}
+.panel-drawer-head h2 {
+  font-size: 1rem;
+  font-weight: 500;
+}
+.panel-drawer > .rail,
+.panel-drawer > .roster {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+}
+.panel-drawer .rail-content {
+  overflow: auto;
+}
+
+/* Short windows spend height on messages, not enlarged padding. Text size
+   and button targets stay unchanged. */
+@media (max-height: 600px) {
+  .stream-body {
+    padding-block: min(0.5rem, 12px);
+  }
+  .composer {
+    padding-block: min(0.625rem, 12px);
+  }
+  .voice-bar {
+    padding-block: min(0.375rem, 8px);
+  }
+  .frame > .stream > .stream-header {
+    padding-bottom: 8px;
+  }
 }

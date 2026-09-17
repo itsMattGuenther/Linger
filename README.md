@@ -77,6 +77,12 @@ These terms are used everywhere — UI, code, docs, error messages:
   occupancy. Personal entrance sounds are planned and deferred
 - 👥 **A roster-forward layout** — people are the primary surface, not a gutter; each
   friend is a card showing presence, the room they are in, and their status
+- 🔎 **Readable Console controls** — larger text, 100–200% interface scaling,
+  resizable side panels and personal Settings beside your name. Host tools stays
+  separate from everyday member actions. No avatars, badges or unread counts.
+  One comfortable layout; no density modes. Narrow windows put the right panel
+  behind **People** and, when needed, the left panel behind **Navigation**.
+  Dark, light and system themes remain.
 - 🔕 **No unread counts** — a "you left off here" line and a subtle label-weight change,
   never a badge; notifications are for direct mentions and people you choose to follow
 - ✍️ **Styled names** (the AIM feature) — curated fonts, a named 16-color palette,
@@ -172,7 +178,7 @@ installer is not code-signed, which is true — see
 for the difference between that and the signature on updates, which is in place.
 Nothing about the download is broken.
 
-The app offers updates under *settings → this computer → updates* and
+The app offers updates under *Settings → Account & app → updates* and
 downloads nothing until you choose *install and restart*. A code push is not
 a published desktop release. See the [update instructions](docs/user-guide.md#updates)
 for the manual fallback; the full real-machine updater check (HC-1) is still open.
@@ -214,7 +220,7 @@ shared secret and firewall ports, then start with
 `docker compose --profile voice ps -a`: `coturn` must stay **Up**, not
 `Restarting` or `Exited`. Starting text chat alone does not start the relay.
 
-Everything else is inside the app. As host you get `+ room` and `manage` on the
+Everything else is inside the app. As host you get `+ room` and `Host tools` on the
 rail, which open one panel for rooms, invites, people, and the server's own name
 and accent. Nobody else sees those controls. None of it needs `curl` and none of
 it is a config file.
@@ -250,6 +256,7 @@ client/                   Tauri 2 shell + React/TypeScript frontend
 deploy/                   Dockerfile, compose, Caddyfile
 docs/                     host-guide.md, user-guide.md, decisions.md and
                           screenshots; docs/tasks/ archives closed milestones
+screenshots/              current Console review images and their capture notes
 assets/fonts/             the twelve bundled faces, vendored rather than
                           fetched — no CDN and no remote font URL, ever, because
                           a remote face is a fingerprinting vector and somebody
@@ -311,8 +318,9 @@ in CI. Separate checks need additional services or browser engines:
   opening host ports or using your server data. CI runs this too; it does not
   replace the voice checks on separate networks.
 - In `client`, run `pnpm exec playwright install --with-deps chromium webkit`
-  once, then `pnpm test:browser` for image-preview layout, keyboard checks and
-  file-download and temporary knock feedback. Download tests simulate browser
+  once, then `pnpm test:browser` for Console layout, panel resizing, interface
+  scaling, keyboard use, voice controls, image previews, file downloads and
+  temporary knock feedback. Download tests simulate browser
   handoff success and refusal; installed-app downloads still need a real
   desktop check.
   Composer tests also cover ordinary typing and Unicode/multiline insertion;
@@ -327,6 +335,12 @@ in CI. Separate checks need additional services or browser engines:
   access for system libraries on supported Linux distributions. To use an
   existing Chromium without installing browsers, run
   `LINGER_CHROMIUM_PATH=/usr/bin/chromium pnpm test:browser --project=chromium`.
+- To refresh the [Console screenshots](screenshots/README.md), run
+  `node scripts/console-screenshots.mjs` from `client`. It starts and stops its
+  own local preview and writes to the root `screenshots/` directory. Set
+  `LINGER_CHROMIUM_PATH=/usr/bin/chromium` to use an existing browser. These
+  captures use the real UI with fictional people and local test responses,
+  not saved accounts or a live server. They do not validate a packaged app.
 
 For a **documentation-only** change, run `scripts/lint-rules.sh` and
 `scripts/version-check.sh`. CI still runs those quick checks, but skips the

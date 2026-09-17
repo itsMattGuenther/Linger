@@ -275,7 +275,7 @@ class Run:
         for i, value in enumerate(("Porch Check", "alice", "Alice", password), 1):
             self.alice.fill(f".auth-form label:nth-of-type({i}) input", value)
         self.alice.button("set up this server")
-        self.alice.wait_text("settings")
+        self.alice.wait_text("Settings")
         auth = http("POST", self.origin + "/api/v1/auth/login", {"username": "alice", "password": password})
         for name in ("bob", "carol"):
             invite = http("POST", self.origin + "/api/v1/invites", {}, auth["access_token"])
@@ -286,7 +286,7 @@ class Run:
             for i, value in enumerate((name, name.title(), password), 1):
                 desktop.fill(f".auth-form label:nth-of-type({i}) input", value)
             desktop.button("join")
-            desktop.wait_text("settings")
+            desktop.wait_text("Settings")
             setattr(self, name, desktop)
         self.alice.button("make the first room")
         self.alice.fill(".host-input", "porch")
@@ -296,8 +296,8 @@ class Run:
         print("Three real desktop clients registered and connected.", flush=True)
 
     def export(self, desktop, private):
-        desktop.button("settings")
-        desktop.button("this computer")
+        desktop.button("Settings")
+        desktop.button("Account & app")
         desktop.button("export everything")
         desktop.wait_text("Your archive is ready.")
         desktop.shot(desktop.area.name + "-export.png")
@@ -344,7 +344,7 @@ class Run:
         a.upload(public)
         a.button("send")
         b.image_loaded('.att-image img[alt="porch-lamp.png"]')
-        a.button("settings")
+        a.button("Settings")
         a.button("you")
         a.button("two, blended")
         a.click('[aria-label="from color"] [aria-label="amber"]')
@@ -364,20 +364,14 @@ class Run:
         assert "Newsreader" in drawn["font"] and drawn["animation"] == "name-shimmer"
         self.results["styled_name"] = drawn
         for theme in ("light", "dark"):
-            b.button("settings"); b.button("reading"); b.button(theme); b.button("close")
+            b.button("Settings"); b.button("Appearance"); b.button(theme); b.button("close")
             b.shot("styled-" + theme + ".png")
-        b.button("settings"); b.button("reading"); b.button("normalize everyone"); b.button("close")
+        b.button("Settings"); b.button("Appearance"); b.button("normalize everyone"); b.button("close")
         normalized = b.js(style, ".msg-author")
         assert normalized["animation"] == "none" and normalized["paint"] == "none"
         assert "Newsreader" not in normalized["font"]
         b.shot("normalized-dark.png")
-        b.button("settings"); b.button("reading"); b.button("names normalized")
-        for density, selector in (("compact", ".msg-author"), ("irc", ".irc-name")):
-            b.button(density); b.button("close")
-            assert b.js(style, selector)["animation"] == "none"
-            b.shot(density + "-dark.png")
-            b.button("settings"); b.button("reading")
-        b.button("comfortable")
+        b.button("Settings"); b.button("Appearance"); b.button("names normalized")
         # Only the test WebView's hour changes. No system clock or server time changes.
         b.js("window.checkHours=Date.prototype.getHours;Date.prototype.getHours=function(){return 20;}")
         try:
@@ -386,8 +380,8 @@ class Run:
             b.shot("evening-dark.png")
         finally:
             b.js("Date.prototype.getHours=window.checkHours;delete window.checkHours")
-        self.results["reading"] = {"normalized": True, "compact": True, "irc": True, "controlled_evening": True}
-        print("Live styling, themes, normalization, densities and evening warmth passed.", flush=True)
+        self.results["reading"] = {"normalized": True, "controlled_evening": True}
+        print("Live styling, themes, normalization and evening warmth passed.", flush=True)
 
         a.click('//button[contains(@class,"person-head")][.//span[normalize-space(.)="Bob"]]', "xpath")
         a.button("message")

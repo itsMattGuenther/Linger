@@ -81,19 +81,9 @@ describe("sessionLabel", () => {
 });
 
 describe("clockTime", () => {
-  it("pads the hour when asked, for IRC mode's fixed-width gutter", () => {
-    const plain = clockTime(at(2026, 8, 20, 9, 14));
-    const padded = clockTime(at(2026, 8, 20, 9, 14), true);
-    expect(padded.length).toBeGreaterThanOrEqual(plain.length);
-    expect(padded).toContain("14");
-  });
-
-  it("gives every hour of the day the same padded width", () => {
-    const widths = new Set<number>();
-    for (let hour = 0; hour < 24; hour++) {
-      widths.add(clockTime(at(2026, 8, 20, hour, 5), true).length);
-    }
-    expect(widths.size).toBe(1);
+  it("uses the reader's locale for message timestamps", () => {
+    const date = at(2026, 8, 20, 9, 14);
+    expect(clockTime(date)).toBe(new Date(date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }));
   });
 });
 

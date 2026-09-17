@@ -90,13 +90,10 @@ export function sessionLabel(at: number, now: number): string {
   return `${weekday} ${part}${suffix}`;
 }
 
-/**
- * The time on a group header. `padded` forces a two-digit hour, which is what
- * keeps IRC mode's timestamp gutter a fixed width.
- */
-export function clockTime(at: number, padded = false): string {
+/** The local time on a message group header. */
+export function clockTime(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, {
-    hour: padded ? "2-digit" : "numeric",
+    hour: "numeric",
     minute: "2-digit",
   });
 }

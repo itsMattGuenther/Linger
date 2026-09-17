@@ -8,12 +8,13 @@ import "../../src/styles/tokens.css";
 import "../../src/styles/base.css";
 import "../../src/stream/stream.css";
 import { images } from "./images";
+import { setInterfaceScale } from "../../src/lib/interface";
 
 const params = new URLSearchParams(location.search);
 const image = images.find((item) => item.name === params.get("image")) ?? images[0];
 if (!image) throw new Error("missing fixture image");
 document.documentElement.dataset.theme = params.get("theme") ?? "dark";
-document.documentElement.dataset.density = params.get("density") ?? "comfortable";
+setInterfaceScale(Number(params.get("scale") ?? "100"));
 
 // Known image dimensions without a server, external requests or user files.
 const canvas = document.createElement("canvas");

@@ -22,7 +22,7 @@
   width: 100%;
 }
 
-/* The gap between groups. Zero in IRC mode, which sets --group-gap to 0. */
+/* The breathing room between consecutive groups of messages. */
 .stream-row[data-head="true"] {
   padding-top: var(--group-gap);
 }
@@ -38,7 +38,7 @@
 
 .msg-author {
   color: var(--person-name);
-  font-size: var(--text-label-size);
+  font-size: 0.9375rem;
   line-height: 1.4;
 }
 
@@ -189,55 +189,6 @@
 .msg[data-names-me="true"] .msg-body {
   background: var(--surface-1);
   padding-right: 8px;
-}
-
-/* --- IRC mode ---------------------------------------------------------- */
-
-/*
- * One line per message: a fixed-width timestamp gutter, the aligned nick column
- * mIRC had, then the text. No grouping, no aging, no effects (SPEC §5.6).
- * The gutter is fixed-width for free — mono type and a padded hour.
- */
-/* IRC mode defines its own body face — 12.5px mono, one line per message
-   (SPEC §5.6) — so an author's font override does not apply here. The mode is
-   uniform on purpose; that is the whole of what it is for. */
-[data-density="irc"] .msg-body {
-  font-family: var(--font-body);
-  display: flex;
-  gap: 8px;
-  border-left: 0;
-  padding-left: 0;
-  opacity: 1;
-}
-
-[data-density="irc"] .msg-time {
-  flex: none;
-}
-
-/* The aligned nick column mIRC had. It is measured in `ch`, so it only lines
-   up if every name is in the same fixed-width face — which is why this is the
-   one surface that overrides the person's own font. Their color, weight and
-   slant still come through; only the metric is the room's. */
-[data-density="irc"] .irc-name {
-  flex: none;
-  font-family: var(--font-mono);
-  width: 12ch;
-  text-align: right;
-  color: var(--person-name);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-[data-density="irc"] .irc-text {
-  flex: 1;
-  min-width: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-[data-density="irc"] .stream-divider {
-  padding: 10px 0;
 }
 
 /* --- markdown ----------------------------------------------------------- */
@@ -451,7 +402,7 @@ button.msg-reply:hover {
 }
 
 .msg-action-glyph {
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 1px 3px;
 }
 
@@ -488,18 +439,4 @@ button.msg-reply:hover {
 
 .msg-edit-hint {
   color: var(--text-faint);
-}
-
-/* --- IRC mode ------------------------------------------------------------ */
-
-/* One line per message means the trimmings sit on that line's terms: the reply
-   line and the marks line up with the text column, not the timestamp. */
-[data-density="irc"] .msg-reply,
-[data-density="irc"] .reactions {
-  padding-left: 0;
-}
-
-[data-density="irc"] .md-code,
-[data-density="irc"] .md-inline-code {
-  font-size: inherit;
 }

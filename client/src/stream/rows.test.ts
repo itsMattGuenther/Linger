@@ -39,11 +39,11 @@ function shape(rows: StreamRow[]): string[] {
   });
 }
 
-const grouped = { group: true, atStart: false };
+const grouped = { atStart: false };
 
 describe("buildRows", () => {
   it("returns nothing for an empty room", () => {
-    expect(buildRows([], { group: true, atStart: true })).toEqual([]);
+    expect(buildRows([], { atStart: true })).toEqual([]);
   });
 
   it("groups consecutive messages from one author", () => {
@@ -82,7 +82,7 @@ describe("buildRows", () => {
   it("labels the start of history, but not the top of a page", () => {
     const start = Date.now();
     const messages = [message("matt", start)];
-    expect(shape(buildRows(messages, { group: true, atStart: true }))).toEqual([
+    expect(shape(buildRows(messages, { atStart: true }))).toEqual([
       "divider",
       "head:matt",
     ]);
@@ -100,24 +100,6 @@ describe("buildRows", () => {
     const keptKeys = after.map((row) => row.key);
     for (const row of before) expect(keptKeys).toContain(row.key);
     expect(new Set(keptKeys).size).toBe(keptKeys.length);
-  });
-
-  it("puts every message on its own head row in IRC mode", () => {
-    const start = Date.now();
-    const rows = buildRows(
-      [message("matt", start), message("matt", start + MINUTE), message("matt", start + 2 * MINUTE)],
-      { group: false, atStart: false },
-    );
-    expect(shape(rows)).toEqual(["head:matt", "head:matt", "head:matt"]);
-  });
-
-  it("still breaks sessions in IRC mode", () => {
-    const start = Date.now();
-    const rows = buildRows([message("matt", start), message("matt", start + 4 * HOUR)], {
-      group: false,
-      atStart: false,
-    });
-    expect(shape(rows)).toEqual(["head:matt", "divider", "head:matt"]);
   });
 });
 
@@ -151,7 +133,7 @@ describe("the you-left-off-here line", () => {
 
   it("is drawn at the very top once there is nothing older to load", () => {
     const messages = [message("a", 0), message("a", MINUTE)];
-    const rows = buildRows(messages, { group: true, atStart: true, leftOff: "m0000" });
+    const rows = buildRows(messages, { atStart: true, leftOff: "m0000" });
     expect(shape(rows)).toEqual(["divider", "left-off", "head:a", "cont"]);
   });
 

@@ -1,44 +1,47 @@
-/**
- * The one window-width decision the app makes.
- *
- * The three panels have real minimum widths (SPEC §5.5): a 200px rail, a
- * stream that stops shrinking at 420px, and a 240px roster. Under about 880px
- * they stop fitting side by side, and the roster becomes a horizontal strip
- * above the composer instead — **never a hamburger, never hidden** (SPEC §3).
- * It is the panel the product is about; it does not get folded away.
- *
- * The number lives here rather than in a stylesheet because the decision is
- * *where the roster is rendered*, not how it is painted, and only one of those
- * is something CSS can do. The frame carries the answer as `data-narrow` so the
- * stylesheet can follow along without a second copy of the breakpoint.
- */
+/** Responsive panels follow the space available at the reader's chosen scale. */
 import { useSyncExternalStore } from "react";
 
-/** 200 rail + 420 stream + 240 roster, with a little slack. */
-export const NARROW_MAX_PX = 880;
-
-const QUERY = `(max-width: ${NARROW_MAX_PX}px)`;
-
-let media: MediaQueryList | null = null;
-
-function query(): MediaQueryList | null {
-  if (typeof window === "undefined" || !window.matchMedia) return null;
-  media ??= window.matchMedia(QUERY);
-  return media;
+function subscribeWidth(changed: () => void): () => void {
+  window.addEventListener("resize", changed);
+  return () => window.removeEventListener("resize", changed);
 }
 
-function subscribe(changed: () => void): () => void {
-  const held = query();
-  if (!held) return () => undefined;
-  held.addEventListener("change", changed);
-  return () => held.removeEventListener("change", changed);
-}
-
-/** True when the window is too narrow for the roster to be a column. */
-export function useNarrow(): boolean {
+export function useWindowWidth(): number {
   return useSyncExternalStore(
-    subscribe,
-    () => query()?.matches ?? false,
-    () => false,
+    subscribeWidth,
+    () => window.innerWidth,
+    () => 1100,
   );
+}
+
+export function useWindowHeight(): number {
+  return useSyncExternalStore(
+    subscribeWidth,
+    () => window.innerHeight,
+    () => 720,
+  );
+}
+
+/** Fit saved panels without overwriting their preferred widths on small windows. */
+export function frameLayout(
+  width: number,
+  scale: number,
+  rail: number,
+  roster: number,
+) {
+  const available = width / (scale / 100);
+  const stacked = available < 640;
+  const narrow = available < 960;
+  const room = Math.max(0, available - 420 - 8);
+  const extra = Math.max(0, rail + roster - room);
+  const fittedRail = Math.max(200, rail - extra / 2);
+  const fittedRoster = Math.max(232, Math.min(roster, room - fittedRail));
+  return {
+    stacked,
+    narrow,
+    rail: narrow
+      ? Math.min(rail, Math.max(200, available - 420 - 4))
+      : Math.min(fittedRail, room - fittedRoster),
+    roster: fittedRoster,
+  };
 }

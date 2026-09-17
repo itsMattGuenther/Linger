@@ -30,7 +30,6 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
-  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -50,7 +49,6 @@ import type { User } from "../generated/User";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { useNow } from "../lib/clock";
 import { dmLabel } from "../dm/dm";
-import { type Density } from "../lib/density";
 import { emptyRoom } from "../settings/copy";
 import {
   deleteMessage,
@@ -162,11 +160,6 @@ interface StreamProps {
   /** Everyone the server has told us about, for author names and colors. */
   users: User[];
   /**
-   * How the stream is laid out. Read here, never changed here: the control
-   * lives in settings, because it is a preference somebody sets once (T-904).
-   */
-  density: Density;
-  /**
    * A message to go and find, from the media collection (SPEC §4.4: "each item
    * links back to the message and moment it was posted in"). It may be well
    * outside the loaded history, so finding it means loading backwards until it
@@ -175,22 +168,14 @@ interface StreamProps {
   focus?: MessageId | null;
   /** Called once the hunt is over, found or not, so the frame can let go. */
   onFocused?: () => void;
-  /**
-   * The roster, on a window too narrow to give it a column of its own. It
-   * belongs here rather than in the frame because SPEC §3 puts the strip
-   * *above the composer*, and the composer is in this file.
-   */
-  roster?: ReactNode;
 }
 
 export default function Stream({
   api,
   room,
   users,
-  density,
   focus,
   onFocused,
-  roster,
 }: StreamProps) {
   const gateway = useGateway(api.baseUrl);
   const stream = gateway.streams[room.id];
@@ -252,9 +237,8 @@ export default function Stream({
   // stays somewhere you can find your way back to (SPEC §4.2).
   const leftOff = gateway.leftOff[room.id] ?? null;
   const rows = useMemo(
-    // IRC mode is one self-contained line per message, so it does not group.
-    () => buildRows(messages ?? [], { group: density !== "irc", atStart, leftOff }),
-    [messages, atStart, density, leftOff],
+    () => buildRows(messages ?? [], { atStart, leftOff }),
+    [messages, atStart, leftOff],
   );
 
   // Replies point at a message by id, and a reply line has to show what it is
@@ -601,10 +585,10 @@ export default function Stream({
     <main className="stream">
       <header className="stream-header">
         <span className="room-title">
-          <span className="room-name">{title}</span>
+          <span className="room-name" title={title}>{title}</span>
           {who !== "" ? <span className="room-occupancy meta">· {who}</span> : null}
         </span>
-        {room.topic ? <span className="room-topic meta">{room.topic}</span> : null}
+        {room.topic ? <span className="room-topic meta" title={room.topic}>{room.topic}</span> : null}
         {/* The way out of a historical window (SPEC §4.12). A room opened on a
             search hit is showing February, and without this the only route back
             to today is scrolling through everything in between. Reading
@@ -705,7 +689,6 @@ export default function Stream({
                         row.message.reply_to === null ? undefined : byId.get(row.message.reply_to)
                       }
                       now={now}
-                      irc={density === "irc"}
                       editing={editing === row.message.id}
                       flashing={flash === row.message.id}
                       onEditDone={() => setEditing(null)}
@@ -718,8 +701,6 @@ export default function Stream({
           </div>
         )}
       </div>
-
-      {roster}
 
       <Typing api={api} roomId={room.id} people={people} />
 
@@ -752,7 +733,6 @@ function MessageRow({
   mentions,
   repliedTo,
   now,
-  irc,
   editing,
   flashing,
   onEditDone,
@@ -767,7 +747,6 @@ function MessageRow({
   mentions: MentionLookup;
   repliedTo: Message | undefined;
   now: number;
-  irc: boolean;
   editing: boolean;
   flashing: boolean;
   onEditDone: () => void;
@@ -803,7 +782,7 @@ function MessageRow({
       dateTime={new Date(message.created_at).toISOString()}
       title={fullTime(message.created_at)}
     >
-      {clockTime(message.created_at, irc)}
+      {clockTime(message.created_at)}
     </time>
   );
 
@@ -852,31 +831,14 @@ function MessageRow({
         <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
       )}
 
-      {/* One line per message, timestamps in a fixed-width gutter, the aligned
-          nick column mIRC had (SPEC §5, §5.6). No group header, because there
-          is no group. */}
-      {irc ? (
-        <div className="msg-body">
+      {head ? (
+        <p className="msg-head">
+          <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
           {time}
-          <PersonName user={author} name={name} state={authorState} className="irc-name" baseUrl={api.baseUrl} />
-          <span className="irc-text">{body}</span>
-        </div>
-      ) : (
-        <>
-          {head ? (
-            <p className="msg-head">
-              <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
-              {time}
-            </p>
-          ) : null}
-          {/* Aging is one custom property, computed from the timestamp and
-              applied to the body only — never the name, never the time
-              (SPEC §5.6). */}
-          <div className="msg-body" style={bodyStyle}>
-            {body}
-          </div>
-        </>
-      )}
+        </p>
+      ) : null}
+      {/* Age only the body, never the author or timestamp (SPEC §5.6). */}
+      <div className="msg-body" style={bodyStyle}>{body}</div>
 
       {extras}
 

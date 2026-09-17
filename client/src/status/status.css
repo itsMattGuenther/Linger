@@ -21,7 +21,7 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--person-name);
-  font-size: var(--text-label-size);
+  font-size: 0.9375rem;
   line-height: 1.4;
 }
 

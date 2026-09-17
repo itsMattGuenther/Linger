@@ -19,7 +19,7 @@
  * that message, which is where the real message gets fetched — a hit is
  * deliberately not a `Message` (PROTOCOL §6).
  */
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MessageId } from "../generated/MessageId";
 import type { Room } from "../generated/Room";
@@ -51,7 +51,6 @@ export default function SearchPanel({
   focusNonce,
   onOpen,
   onClose,
-  roster,
 }: {
   api: AuthedApi;
   /** Everyone the gateway has told us about, for the person filter and names. */
@@ -68,8 +67,6 @@ export default function SearchPanel({
   /** Go to the message a hit came from. */
   onOpen: (roomId: RoomId, messageId: MessageId) => void;
   onClose: () => void;
-  /** On a narrow window the roster lives in this column (SPEC §3). */
-  roster?: ReactNode;
 }) {
   const [typed, setTyped] = useState("");
   const [room, setRoom] = useState<RoomId | null>(null);
@@ -255,7 +252,6 @@ export default function SearchPanel({
         ) : null}
       </div>
 
-      {roster}
     </main>
   );
 }

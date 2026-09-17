@@ -1,6 +1,6 @@
 /*
  * Design tokens for "Console" (SPEC §5). All theming flows through these custom
- * properties — density modes and time-of-day warmth are one variable swap, never
+ * properties — themes and time-of-day warmth are one variable swap, never
  * a second stylesheet.
  *
  * The 16-color name palette is NOT defined here by hand: it is generated from
@@ -20,9 +20,9 @@
   --hairline: #2a2e35;
   --hairline-strong: #363b44;
   --text-primary: #e4e7ec;
-  --text-secondary: #8b929e;
-  --text-muted: #5c636f;
-  --text-faint: #4a515c;
+  --text-secondary: #adb4c0;
+  --text-muted: #969daa;
+  --text-faint: var(--text-muted);
   /* Accent is used for exactly four things: the "you left off here" line,
      focus rings, the active-room rule, and the send affordance. Nowhere else.
      The host can point it at a palette key (`PATCH /server`), so the frame
@@ -38,8 +38,7 @@
   /* --- typography (SPEC §5.2): sans for content, mono for metadata ONLY --- */
   --font-ui: "Geist Sans", "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  /* The message body's face. Its own property because IRC mode is the one
-     place a body is allowed to be monospace, and only the body. */
+  /* Body text stays sans; mono is reserved for metadata/code. */
   --font-body: var(--font-ui);
 
   /* The twelve curated faces (SPEC §5.7), one variable per `linger-core::FONTS`
@@ -60,17 +59,17 @@
   --font-instrument-serif: "Instrument Serif", Georgia, serif;
   --font-departure-mono: "Departure Mono", ui-monospace, monospace;
   --font-silkscreen: "Silkscreen", ui-monospace, monospace;
-  --text-body-size: 13.5px;
+  --text-body-size: 1rem;
   --text-body-leading: 1.6;
-  --text-label-size: 12px;
-  --text-meta-size: 11px;
+  --text-label-size: 0.875rem;
+  --text-meta-size: 0.75rem;
 
   /* --- layout metrics (SPEC §5.5) --- */
-  --rail-w: 200px;
-  --roster-w: 240px;
-  --stream-min-w: 420px;
-  --gutter: 14px;
-  --group-gap: 14px;
+  --rail-w: 14.5rem;
+  --roster-w: 16.5rem;
+  --stream-min-w: 26.25rem;
+  --gutter: min(1.25rem, 20px);
+  --group-gap: 1.25rem;
   --radius-control: 4px;
   --radius-media: 6px;
   /* panels have radius 0 — there is no --radius-panel on purpose */
@@ -93,9 +92,9 @@
   --hairline: #e3e5e9;
   --hairline-strong: #cfd3da;
   --text-primary: #16181c;
-  --text-secondary: #5c636f;
-  --text-muted: #8b929e;
-  --text-faint: #a8aeb8;
+  --text-secondary: #505967;
+  --text-muted: #626c7a;
+  --text-faint: var(--text-muted);
   --accent-default: #2563c9;
   --name-shimmer: rgb(0 0 0 / 0.34);
 }
@@ -126,9 +125,9 @@
   --hairline: #322d26;
   --hairline-strong: #413a31;
   --text-primary: #eae6e1;
-  --text-secondary: #999085;
-  --text-muted: #6a6156;
-  --text-faint: #584f45;
+  --text-secondary: #b9b0a4;
+  --text-muted: #a49b8f;
+  --text-faint: var(--text-muted);
 }
 
 [data-theme="light"][data-warmth="warm"] {
@@ -138,22 +137,7 @@
   --hairline: #e8e4df;
   --hairline-strong: #d7d2cb;
   --text-primary: #1a1714;
-  --text-secondary: #6a6156;
-  --text-muted: #999085;
-  --text-faint: #b4aca3;
-}
-
-/* Density modes (SPEC §5.6). IRC mode's mono body is the one sanctioned
-   exception to "mono is metadata-only", and it stops at the body: the rail,
-   the roster and the composer stay in the UI face. */
-[data-density="compact"] {
-  --text-body-size: 13px;
-  --text-body-leading: 1.45;
-  --group-gap: 10px;
-}
-[data-density="irc"] {
-  --text-body-size: 12.5px;
-  --text-body-leading: 1.4;
-  --group-gap: 0px;
-  --font-body: var(--font-mono);
+  --text-secondary: #62594e;
+  --text-muted: #74695d;
+  --text-faint: var(--text-muted);
 }

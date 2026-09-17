@@ -111,7 +111,7 @@ export function conversationLabel(
  * somewhere anybody would look for it.
  */
 export function noDms(): string {
-  return "Nobody yet. Open somebody's card in the roster to start one.";
+  return "empty";
 }
 
 /**

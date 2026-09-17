@@ -587,7 +587,7 @@ its attachments and reactions are worth sending.
 
 `snippet` arrives already cut into runs rather than as a string with markers in
 it, because any marker is a character a message could contain. Draw the runs in
-order and emphasise the matched ones however the density mode allows — there is
+order and emphasise the matched ones in the reader's presentation — there is
 nothing to parse and nothing to escape. It is empty when the message said
 nothing, which happens when a photo was posted with no caption and the match was
 its filename.
