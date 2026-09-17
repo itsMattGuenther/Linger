@@ -416,7 +416,13 @@ flows and do not start a new milestone. Evidence and rationale are in the
   pinned attachments retain the existing expiry protection. Read M10 and M11
   notes before touching history or visibility.
 
-- ⬜ **T-909 · Make Console controls readable and reachable** — effort: **medium**
+- ⏳ **T-909 · Make Console controls readable and reachable** — effort: **high** — Matt, 2026-09-17
+  **Console overhaul:** larger readable defaults, persistent interface scale,
+  draggable and keyboard-resizable side panels, a single server identity,
+  discoverable personal settings, `DMs` with an `empty` state, and a clearer
+  voice strip with participant controls on demand. Review the whole frame,
+  first-run forms, settings, contrast and responsive behavior together. Keep
+  styled names, no avatars, existing privacy boundaries and virtualized history.
   Review remaining muted/faint interactive text, focus states, empty/error
   states and the minimum desktop window. Use the existing tokens and layout.
   **Member-menu follow-up, 2026-09-17:** the first click on a member should
