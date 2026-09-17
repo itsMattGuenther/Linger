@@ -21,8 +21,9 @@ T-909, M12 polish. No milestone or release check is closed by this review.
   by click, right-click or keyboard. No avatars. Audio/protocol behavior is
   unchanged. Short windows initially collapse participants, not call controls,
   unless the reader explicitly chose otherwise.
-- Capitalized Linger in the welcome screen, browser/window titles and installer
-  metadata. Kept the app identifier and original MSI upgrade code stable.
+- Capitalized Linger in the welcome screen, browser/window titles, notification
+  sender and installer metadata. Kept the app identifier and original MSI
+  upgrade code stable.
 - Preserve unsaved status drafts as the People panel changes between a column
   and a drawer. Initial chat landing waits for measured rows to settle before
   giving up its bottom anchor during an early panel resize.
