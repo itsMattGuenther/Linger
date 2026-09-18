@@ -441,7 +441,7 @@ git tag v0.2.0 && git push origin main v0.2.0
 That builds Linux and Windows, signs the updater artifacts, and opens a **draft**
 release carrying `latest.json`. Read it, then publish it — publishing is what
 makes installed copies see the update, and it is a human's click on purpose. The
-same tag publishes the server image to `ghcr.io/matthewguenther/linger` as
+same tag publishes the server image to `ghcr.io/itsmattguenther/linger` as
 `0.2.0`, `0.2` and `latest`, for x86-64 and ARM64. Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.
 

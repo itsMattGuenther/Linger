@@ -1,7 +1,7 @@
 name: image
 
 # The server as a container image, on ghcr.io (T-703). `deploy/compose.yaml`
-# pulls `ghcr.io/matthewguenther/linger:latest`, so this is what a host
+# pulls `ghcr.io/itsmattguenther/linger:latest`, so this is what a host
 # actually runs — the desktop installers in release.yml are the other half of
 # a release, and this is this half.
 #
@@ -16,7 +16,7 @@ name: image
 # **One human step, once ever:** the first push creates the package as
 # *private*, and a private package means `docker compose up` fails with
 # "unauthorized" for everybody who is not Matt. Open
-# github.com/users/matthewguenther/packages/container/linger/settings and set
+# github.com/users/itsMattGuenther/packages/container/linger/settings and set
 # it public. There is no flag here that can do it.
 
 on:
@@ -33,11 +33,11 @@ on:
       - .github/workflows/image.yml
   workflow_dispatch:
 
-# The image name is written out rather than derived from `github.repository`,
-# which is `matthewguenther/Linger` — a capital letter is not a legal image
-# name. It has to match deploy/compose.yaml exactly.
-env:
-  IMAGE: ghcr.io/matthewguenther/linger
+# Image names cannot contain capital letters. github.repository is
+# itsMattGuenther/Linger; we lowercase it so the package name is legal and
+# always lives under the current GitHub owner. That name also has to be the
+# one in deploy/compose.yaml, or a host following the compose file pulls
+# something this job never pushed.
 
 permissions:
   contents: read
@@ -48,6 +48,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: image name
+        # Fail here, not after the ARM64 compile, if compose.yaml still
+        # points at a GitHub user that no longer exists.
+        run: |
+          expected="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          got=$(grep -o 'ghcr.io/[^:[:space:]]*' deploy/compose.yaml | head -1)
+          if [ "$got" != "$expected" ]; then
+            echo "deploy/compose.yaml has $got but this repo's image is $expected"
+            exit 1
+          fi
+          echo "IMAGE=$expected" >> "$GITHUB_ENV"
+          echo "publishing $expected"
 
       - name: arm64 emulation
         # arm64 is built under emulation, which is slow — a Rust release build

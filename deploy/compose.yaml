@@ -28,7 +28,7 @@
 
 services:
   linger:
-    image: ghcr.io/matthewguenther/linger:latest
+    image: ghcr.io/itsmattguenther/linger:latest
     restart: unless-stopped
     volumes:
       - ./data:/data

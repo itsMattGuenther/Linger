@@ -408,7 +408,7 @@ Do not share your `.env` or setup token when asking for help.
   block of the Caddyfile still says `linger.example.com`.
 - **`docker compose pull` says `unauthorized`.** The prebuilt image is not
   available to you. Clone the repository and build it yourself:
-  `docker build -f deploy/Dockerfile -t ghcr.io/matthewguenther/linger:latest .`
+  `docker build -f deploy/Dockerfile -t ghcr.io/itsmattguenther/linger:latest .`
 - **The setup link does not work.** It works once. If you already made an
   account, it is gone for good — that is deliberate. If no account was made
   but the link was exposed or lost, `docker compose restart linger` prints a

@@ -9,7 +9,7 @@
 # anything.
 #
 # The fourth file is the root `Cargo.toml`, which is the server's version: a
-# tag also publishes `ghcr.io/matthewguenther/linger:<tag>`, and that image's
+# tag also publishes `ghcr.io/itsmattguenther/linger:<tag>`, and that image's
 # `GET /health` reports whatever this number says. A host reading it to find
 # out what they are running deserves an answer that is true.
 #
