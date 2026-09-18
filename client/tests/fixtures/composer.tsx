@@ -21,8 +21,12 @@ const room: Room = {
 };
 function Fixture() {
   useEffect(() => { document.querySelector("textarea")?.focus(); }, []);
-  return <Composer api={api} room={room} title="#fixture" isDm={false} replyTo={null}
-    onClearReply={() => {}} onEditLast={() => {}} />;
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <Composer api={api} room={room} title="#fixture" isDm={false} replyTo={null}
+        onClearReply={() => {}} onEditLast={() => {}} />
+    </div>
+  );
 }
 const root = document.getElementById("root");
 if (!root) throw new Error("missing fixture root");
