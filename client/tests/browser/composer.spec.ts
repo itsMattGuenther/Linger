@@ -31,7 +31,7 @@ test("plus offers Add file and the smile inserts emoji at the caret", async ({
     const field = node as HTMLTextAreaElement;
     field.setSelectionRange(2, 2);
   });
-  await page.getByRole("button", { name: "Emoji", exact: true }).click();
+  await page.locator(".composer-emoji").click();
   const picker = page.getByRole("dialog", { name: "Emoji" });
   await expect(picker).toBeVisible();
   await picker.locator('[aria-label="wave"]').click();

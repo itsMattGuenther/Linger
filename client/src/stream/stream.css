@@ -442,9 +442,17 @@ button.msg-reply:hover {
   color: var(--text-faint);
 }
 
-dialog.composer-emoji-panel {
+.composer-emoji-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 4;
   width: 18.5rem;
-  padding: 2.5rem 0.75rem 0.75rem;
+  max-width: calc(100vw - 16px);
+  padding: 0.5rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
 }
 
 .composer-emoji-grid {

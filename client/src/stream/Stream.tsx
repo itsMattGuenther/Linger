@@ -1294,7 +1294,7 @@ export function Composer({
   const [files, setFiles] = useState<Pending[]>([]);
   const [dropping, setDropping] = useState(false);
   const [addMenu, setAddMenu] = useState<HTMLButtonElement | null>(null);
-  const [emojiMenu, setEmojiMenu] = useState<HTMLButtonElement | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const box = useRef<HTMLTextAreaElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
 
@@ -1401,6 +1401,11 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === "Escape" && emojiOpen) {
+      event.preventDefault();
+      setEmojiOpen(false);
+      return;
+    }
     if (event.key === "Escape" && replyTo) {
       event.preventDefault();
       onClearReply();
@@ -1432,7 +1437,7 @@ export function Composer({
       return;
     }
     setDraft(next.text);
-    setEmojiMenu(null);
+    setEmojiOpen(false);
     window.requestAnimationFrame(() => {
       const node = box.current;
       if (!node) return;
@@ -1503,7 +1508,7 @@ export function Composer({
           aria-expanded={addMenu !== null}
           aria-haspopup="menu"
           onClick={(event) => {
-            setEmojiMenu(null);
+            setEmojiOpen(false);
             setAddMenu((held) => (held ? null : event.currentTarget));
           }}
         >
@@ -1560,38 +1565,37 @@ export function Composer({
           <IconButton
             label="Emoji"
             className="composer-emoji"
-            aria-expanded={emojiMenu !== null}
+            aria-expanded={emojiOpen}
             aria-haspopup="dialog"
-            onClick={(event) => {
+            onClick={() => {
               setAddMenu(null);
-              setEmojiMenu((held) => (held ? null : event.currentTarget));
+              setEmojiOpen((open) => !open);
             }}
           >
             <ActionIcon name="smile" />
           </IconButton>
-        </div>
-        {emojiMenu ? (
-          <ContextPanel
-            anchor={emojiMenu}
-            label="Emoji"
-            className="composer-emoji-panel"
-            onClose={() => setEmojiMenu(null)}
-          >
-            <div className="composer-emoji-grid">
-              {COMPOSER_EMOJI.map((one) => (
-                <button
-                  key={`${one.label}:${one.glyph}`}
-                  type="button"
-                  className="composer-emoji-mark"
-                  aria-label={one.label}
-                  onClick={() => putEmoji(one.glyph)}
-                >
-                  {one.glyph}
-                </button>
-              ))}
+          {emojiOpen ? (
+            <div
+              className="composer-emoji-panel"
+              role="dialog"
+              aria-label="Emoji"
+            >
+              <div className="composer-emoji-grid">
+                {COMPOSER_EMOJI.map((one) => (
+                  <button
+                    key={`${one.label}:${one.glyph}`}
+                    type="button"
+                    className="composer-emoji-mark"
+                    aria-label={one.label}
+                    onClick={() => putEmoji(one.glyph)}
+                  >
+                    {one.glyph}
+                  </button>
+                ))}
+              </div>
             </div>
-          </ContextPanel>
-        ) : null}
+          ) : null}
+        </div>
         <input
           ref={picker}
           type="file"
