@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import type { Attachment } from "../generated/Attachment";
 import DownloadFile from "./DownloadFile";
 import { absoluteUrl } from "../lib/url";
+import { ActionIcon } from "../lib/icons";
 import { durationText, fileSize, inlineBox, renderAs } from "./media";
 import "./media.css";
 
@@ -130,7 +131,7 @@ function Expanded({ file, baseUrl, onClose }: { file: Attachment; baseUrl: strin
       }}
     >
       <button ref={closeButton} type="button" className="att-expanded-close" aria-label="close image">
-        close
+        <ActionIcon name="close" />
       </button>
       <img src={absoluteUrl(baseUrl, file.url)} alt={file.filename} />
       <p className="att-expanded-name meta" title={file.filename}>{file.filename}</p>

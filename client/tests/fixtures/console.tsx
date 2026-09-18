@@ -7,6 +7,8 @@ import type { User } from "../../src/generated/User";
 import type { Room } from "../../src/generated/Room";
 import type { Message } from "../../src/generated/Message";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
+import type { UpdateMeRequest } from "../../src/generated/UpdateMeRequest";
+import { sharedFiles, sharedMedia } from "./delight-data";
 import { AuthedApi } from "../../src/lib/api";
 import "../../src/fonts/fonts.css";
 import "../../src/styles/tokens.css";
@@ -122,7 +124,8 @@ const messages: Message[] = (
   author_id: author ?? "matt",
   body: body ?? "",
   reply_to: null,
-  attachments: [],
+  attachments:
+    query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
   reactions:
     index === 5
       ? [{ key: "heart", count: 2, user_ids: ["jules", "matt"] }]
@@ -250,14 +253,61 @@ mockIPC(
   { shouldMockEvents: true },
 );
 // Fetch remains the real API's boundary: no casts replacing its generic wire methods.
-globalThis.fetch = async (input) => {
+globalThis.fetch = async (input, init) => {
   // A network response arrives on a later task, not between scroll event
   // listeners. An already-resolved mock can re-render before the virtualizer
   // even observes the scroll that requested this page.
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   const url = new URL(String(input));
   let answer: unknown = [];
+  if (
+    init?.method &&
+    ["PUT", "DELETE", "PATCH"].includes(init.method) &&
+    !url.pathname.endsWith("/read")
+  ) {
+    document.documentElement.dataset.writeRequests = String(
+      Number(document.documentElement.dataset.writeRequests ?? "0") + 1,
+    );
+    if (document.documentElement.dataset.holdWrites === "yes") {
+      await new Promise<void>((resolve) => {
+        document.addEventListener("finish-write", () => resolve(), {
+          once: true,
+        });
+        document.documentElement.dataset.writePending = "yes";
+      });
+      delete document.documentElement.dataset.writePending;
+    }
+    if (document.documentElement.dataset.refuseWrites === "yes") {
+      return new Response(
+        JSON.stringify({
+          error: { code: "FORBIDDEN", message: "This change was refused." },
+        }),
+        { status: 403 },
+      );
+    }
+    if (url.pathname.endsWith("/me")) {
+      const patch: UpdateMeRequest = JSON.parse(String(init.body));
+      const next: User = {
+        ...me,
+        style: patch.style ?? me.style,
+        status: patch.status ?? me.status,
+        display_name: patch.display_name ?? me.display_name,
+      };
+      Object.assign(me, next);
+      return new Response(JSON.stringify(next));
+    }
+    return new Response(null, { status: 204 });
+  }
   if (url.pathname.endsWith("/server")) answer = server;
+  else if (url.pathname.endsWith("/media"))
+    answer =
+      query.has("delight") && !url.searchParams.has("before")
+        ? sharedMedia.filter(
+            (item) =>
+              !url.searchParams.has("kind") ||
+              item.kind === url.searchParams.get("kind"),
+          )
+        : [];
   else if (url.pathname.endsWith("/read")) answer = {};
   else if (url.pathname.includes("/messages")) {
     const before = url.searchParams.get("before");
@@ -274,6 +324,20 @@ globalThis.fetch = async (input) => {
     headers: { "Content-Type": "application/json" },
   });
 };
+document.addEventListener(
+  "fixture-reaction",
+  () =>
+    void frame({
+      op: "reaction.update",
+      s: 50,
+      d: {
+        message_id: "message-00005",
+        key: "heart",
+        count: 3,
+        user_ids: ["jules", "matt", "eli"],
+      },
+    }),
+);
 const api = new AuthedApi(
   baseUrl,
   {

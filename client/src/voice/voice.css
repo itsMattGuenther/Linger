@@ -7,7 +7,7 @@
  */
 .voice-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.5rem;
   padding: 0.5rem var(--gutter) 0.75rem;
   background: var(--surface-1);
@@ -27,9 +27,9 @@
 }
 
 .voice-label {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 550;
+  color: var(--text-primary);
 }
 
 .voice-seats {
@@ -82,7 +82,7 @@
 .voice-controls {
   grid-column: 2;
   grid-row: 1;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 .voice-seats,
 .voice-options,
@@ -124,14 +124,14 @@
   flex-wrap: wrap;
   gap: 0.375rem;
 }
-.voice-options {
+.voice-options.context-panel {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--hairline);
+  flex-direction: column;
+  gap: 1rem;
 }
+.voice-options .voice-volume { flex-wrap: wrap; }
+.voice-options .voice-volume-label { flex-basis: 100%; }
+.voice-options .voice-volume input { flex: 1; min-width: 0; }
 .voice-options > span:first-child {
   font-weight: 500;
 }

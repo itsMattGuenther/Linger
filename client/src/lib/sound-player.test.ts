@@ -72,7 +72,7 @@ describe("notification sound policy", () => {
     resume = async () => {};
     const results = await Promise.all([sound.playSound("dm"), sound.playSound("dm")]);
     expect(results.filter(Boolean)).toHaveLength(1);
-    expect(starts).toHaveLength(2);
+    expect(starts).toHaveLength(4);
     vi.advanceTimersByTime(1200);
     await expect(sound.playSound("dm")).resolves.toBe(true);
   });

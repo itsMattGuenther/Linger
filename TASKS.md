@@ -448,6 +448,23 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Linger, ongoing voice controls remain reachable in other destinations, and
   Settings copy is shorter. Wide message lines are bounded; actions use label
   sizing instead of metadata sizing. See the review for research and evidence.
+  **Local interaction review, 2026-09-17:** [review 03](screenshots/review-03/README.md)
+  proposes plain voice names with a collapse chevron, compact toolbar icons,
+  bottom-anchored Media/Search, selected-server management and member popouts.
+  That iteration used the README banner on welcome. See the
+  [control style guide](docs/style-guide.md). Review 04 supersedes this
+  checkpoint; its visual direction was approved on 2026-09-17.
+  **Quiet-delight pass, local, 2026-09-17:** [review 04](screenshots/review-04/README.md)
+  restores the final porch icon on welcome; adds accepted-reaction feedback,
+  short control feedback, local name/status previews, full-image media tiles
+  and honest Star confirmations. Existing chimes share a soft sound family;
+  listener preferences and quiet defaults are unchanged. Offline listening
+  samples accompany the screenshots. Frontend typecheck/build, 439 unit tests,
+  97 Chromium browser cases, rules/version/whitespace checks pass. Matt approved
+  the direction for v0.2.0 on 2026-09-17. The full local gate was rerun during
+  release preparation and passes. No protocol change or new dependency.
+  Native acceptance, listening
+  and the existing multi-network voice checks remain open.
 
 - ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU

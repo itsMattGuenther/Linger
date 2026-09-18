@@ -47,6 +47,7 @@ import type { Room } from "../generated/Room";
 import type { RoomId } from "../generated/RoomId";
 import type { User } from "../generated/User";
 import { ApiError, type AuthedApi } from "../lib/api";
+import { ActionIcon } from "../lib/icons";
 import { useNow } from "../lib/clock";
 import { dmLabel } from "../dm/dm";
 import { emptyRoom } from "../settings/copy";
@@ -781,6 +782,47 @@ function MessageRow({
   const [confirming, setConfirming] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
+  // Only a successful local gesture earns feedback. History and gateway
+  // replays render the same marks, but must never replay the little motion.
+  const reacting = useRef(false);
+  const live = useRef(true);
+  const [reactionPending, setReactionPending] = useState(false);
+  const [confirmedReaction, setConfirmedReaction] = useState<string | null>(null);
+  const [reactionNotice, setReactionNotice] = useState("");
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
+  useEffect(() => {
+    if (confirmedReaction === null) return;
+    const timer = setTimeout(() => setConfirmedReaction(null), 200);
+    return () => clearTimeout(timer);
+  }, [confirmedReaction]);
+
+  const react = async (target: Message, key: string): Promise<void> => {
+    if (reacting.current) return;
+    reacting.current = true;
+    setReactionPending(true);
+    setConfirmedReaction(null);
+    setReactionNotice("");
+    setProblem(null);
+    const removing = me !== null && target.reactions.some(
+      (group) => group.key === key && group.user_ids.includes(me.id),
+    );
+    try {
+      await actions.react(target, key);
+      if (live.current) {
+        setConfirmedReaction(removing ? null : key);
+        setReactionNotice(removing ? "Reaction removed." : "Reaction added.");
+      }
+    } catch (error) {
+      if (live.current) setProblem(error instanceof ApiError ? error.message : "Couldn't reach the server.");
+    } finally {
+      reacting.current = false;
+      if (live.current) setReactionPending(false);
+    }
+  };
+
   // A delete the server refuses, or a reaction that didn't land, has to say so
   // next to the message it was aimed at. Anywhere else and it reads as being
   // about something you are not looking at.
@@ -857,14 +899,17 @@ function MessageRow({
 
       {extras}
 
-      {problem ? <p className="msg-problem meta">{problem}</p> : null}
+      {problem ? <p className="msg-problem meta" role="alert">{problem}</p> : null}
+      <span className="sr-only" role="status">{reactionNotice}</span>
 
       {message.reactions.length === 0 ? null : (
         <Reactions
           message={message}
           me={me}
           people={people}
-          onReact={(target, key) => run(actions.react(target, key))}
+          confirmedKey={confirmedReaction}
+          pending={reactionPending}
+          onReact={(target, key) => void react(target, key)}
         />
       )}
 
@@ -878,8 +923,9 @@ function MessageRow({
                 className="msg-action msg-action-glyph"
                 title={reaction.label}
                 aria-label={`react with ${reaction.label}`}
+                disabled={reactionPending}
                 onClick={() => {
-                  run(actions.react(message, reaction.key));
+                  void react(message, reaction.key);
                   setPicking(false);
                 }}
               >
@@ -1079,11 +1125,15 @@ function Reactions({
   me,
   people,
   onReact,
+  confirmedKey,
+  pending,
 }: {
   message: Message;
   me: User | null;
   people: Map<string, User>;
   onReact: (message: Message, key: string) => void;
+  confirmedKey: string | null;
+  pending: boolean;
 }) {
   return (
     <div className="reactions">
@@ -1101,13 +1151,17 @@ function Reactions({
             type="button"
             className="reaction"
             data-mine={mine ? "true" : undefined}
+            data-confirmed={mine && confirmedKey === group.key ? "true" : undefined}
+            disabled={pending}
+            aria-busy={pending}
             style={{ "--weight": reactionWeight(group.count) }}
             title={reactionTitle(names, reaction.label)}
             aria-pressed={mine}
             aria-label={`${reaction.label}, ${counted}`}
             onClick={() => onReact(message, group.key)}
           >
-            <span aria-hidden="true">{reaction.glyph}</span>
+            <span className="reaction-glyph" aria-hidden="true">{reaction.glyph}</span>
+            {mine ? <span className="reaction-own" aria-hidden="true">✓</span> : null}
           </button>
         );
       })}
@@ -1454,7 +1508,7 @@ export function Composer({
           onClick={() => picker.current?.click()}
           aria-label="attach a file"
         >
-          + file
+          <ActionIcon name="plus" /> File
         </button>
         <input
           ref={picker}
@@ -1471,7 +1525,7 @@ export function Composer({
           type="submit"
           disabled={(draft.trim().length === 0 && ready.length === 0) || working}
         >
-          send
+          <ActionIcon name="send" /> Send
         </button>
       </div>
       {/* Only near the ceiling. A counter that is always on is a scold. */}

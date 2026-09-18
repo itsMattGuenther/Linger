@@ -31,6 +31,8 @@ import { saveStatus } from "../lib/gateway";
 import { uploadFile } from "../lib/upload";
 import { absoluteUrl } from "../lib/url";
 import { setAway } from "../lib/watchPresence";
+import { nameProps } from "../lib/names";
+import StatusCard from "./StatusCard";
 import {
   draftOf,
   FIELDS,
@@ -109,7 +111,9 @@ export default function StatusEditor({
       })
       .catch((problem: unknown) =>
         setError(
-          problem instanceof ApiError ? problem.message : "That image didn't go up.",
+          problem instanceof ApiError
+            ? problem.message
+            : "That image didn't go up.",
         ),
       )
       .finally(() => setUploading(false));
@@ -124,6 +128,8 @@ export default function StatusEditor({
   const tooLong = overLimit(draft);
   const dirty = isDirty(draft, saved);
   const away = (saved?.away_message ?? "") !== "";
+  const preview: User = { ...me, status: statusOf(draft, saved) };
+  const previewAway = draft.awayMessage.trim() !== "";
 
   const commit = async (next: StatusDraft): Promise<void> => {
     setBusy(true);
@@ -217,7 +223,11 @@ export default function StatusEditor({
       <div className="editor-field">
         <span className="panel-label">image</span>
         {draft.image === null ? null : (
-          <img className="editor-image" src={absoluteUrl(api.baseUrl, draft.image.url)} alt="the image on your status" />
+          <img
+            className="editor-image"
+            src={absoluteUrl(api.baseUrl, draft.image.url)}
+            alt="the image on your status"
+          />
         )}
         <div className="editor-image-row">
           <button
@@ -238,7 +248,9 @@ export default function StatusEditor({
               remove
             </button>
           )}
-          {uploading ? <span className="editor-count meta">uploading…</span> : null}
+          {uploading ? (
+            <span className="editor-count meta">uploading…</span>
+          ) : null}
         </div>
         <span className="editor-hint meta">
           One image, up to {MAX_IMAGE_BYTES / 1024} KB, shown at 400×200.
@@ -255,11 +267,32 @@ export default function StatusEditor({
         />
       </div>
 
+      <details className="status-draft-preview">
+        <summary>Preview your status</summary>
+        <div className="status-draft-card">
+          <p className="meta">Only you can see this until you save.</p>
+          <strong {...nameProps(me)}>{me.display_name}</strong>
+          {previewAway ? (
+            <p {...nameProps(me, "status-line")}>{draft.awayMessage}</p>
+          ) : null}
+          <StatusCard
+            baseUrl={api.baseUrl}
+            user={preview}
+            awayShown={previewAway}
+          />
+        </div>
+      </details>
+
       {tooLong === null ? null : <p className="editor-problem">{tooLong}</p>}
       {error === null ? null : <p className="editor-problem">{error}</p>}
 
       <div className="editor-actions">
-        <button type="button" className="editor-cancel meta" disabled={busy} onClick={abandon}>
+        <button
+          type="button"
+          className="editor-cancel meta"
+          disabled={busy}
+          onClick={abandon}
+        >
           cancel
         </button>
         <button

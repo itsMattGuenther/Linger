@@ -23,8 +23,8 @@
   --text-secondary: #adb4c0;
   --text-muted: #969daa;
   --text-faint: var(--text-muted);
-  /* Accent is used for exactly four things: the "you left off here" line,
-     focus rings, the active-room rule, and the send affordance. Nowhere else.
+  /* Accent marks primary actions, focus, selected preferences, the active-room
+     rule and the "you left off here" line (SPEC §5.3).
      The host can point it at a palette key (`PATCH /server`), so the frame
      overrides `--accent` for its subtree and this is what it falls back to. */
   --accent-default: #6e9bff;

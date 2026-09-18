@@ -1,5 +1,9 @@
 # Console UI review
 
+The newest **approved visual direction** is in [review-04](review-04/README.md),
+including the porch icon, personal previews, media and playable sound samples.
+The images below are the previous iteration, retained for comparison.
+
 Start with these:
 
 - [Main window — dark](dark-1280.png)

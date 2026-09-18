@@ -39,6 +39,8 @@ import {
   stateWord,
 } from "./roster";
 import { usersInVoice } from "../voice/voice";
+import ContextPanel from "../lib/ContextPanel";
+import Button from "../lib/Button";
 import "./roster.css";
 
 export default function RosterPanel({
@@ -134,6 +136,9 @@ export default function RosterPanel({
                   held === entry.user.id ? null : entry.user.id,
                 )
               }
+              onClose={() =>
+                setOpen((held) => (held === entry.user.id ? null : held))
+              }
               onEdit={() => setEditing(true)}
             />
           ))}
@@ -163,6 +168,7 @@ function PersonCard({
   meId,
   open,
   onToggle,
+  onClose,
   onEdit,
 }: {
   api: AuthedApi;
@@ -174,9 +180,11 @@ function PersonCard({
   onOpenDm: (userId: UserId) => Promise<void>;
   open: boolean;
   onToggle: () => void;
+  onClose: () => void;
   onEdit: () => void;
 }) {
   const { user, state } = entry;
+  const trigger = useRef<HTMLButtonElement | null>(null);
   // Knocking at somebody who has nothing open lands nowhere — the server holds
   // no knocks and there is nothing to deliver it to — so the control is absent
   // rather than present and useless (SPEC §4.9, T-1102).
@@ -207,10 +215,16 @@ function PersonCard({
     >
       {openable ? (
         <button
+          ref={trigger}
           type="button"
           className="person-head"
           aria-expanded={open}
+          aria-haspopup="dialog"
           onClick={onToggle}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (!open) onToggle();
+          }}
         >
           {head}
         </button>
@@ -218,8 +232,22 @@ function PersonCard({
         <p className="person-head">{head}</p>
       )}
       <PersonLines entry={entry} users={users} meId={meId} now={now} />
-      {open ? (
-        <>
+      {entry.awayMessage === null && user.status?.line ? (
+        <p className="person-preview">{user.status.line}</p>
+      ) : null}
+      {open && trigger.current ? (
+        <ContextPanel
+          anchor={trigger.current}
+          label={`${user.display_name}'s profile`}
+          side="left"
+          className="member-panel"
+          onClose={onClose}
+        >
+          <div className="member-identity">
+            <h3 {...nameProps(user, "context-name")}>{user.display_name}</h3>
+            <p className="context-hint">@{user.username}</p>
+          </div>
+          <PersonLines entry={entry} users={users} meId={meId} now={now} />
           {/* The away message is already on the lines above, so the card
               leaves the status line out rather than saying it twice. */}
           <StatusCard
@@ -232,23 +260,28 @@ function PersonCard({
               {hasStatus(entry) ? null : (
                 <span className="meta">nothing set</span>
               )}
-              <button
-                type="button"
-                className="person-edit meta"
-                onClick={onEdit}
+              <Button
+                onClick={() => {
+                  onClose();
+                  onEdit();
+                }}
               >
-                edit
-              </button>
+                Edit status
+              </Button>
             </p>
           ) : (
-            <>
+            <div className="member-actions">
               {canMessage ? (
-                <MessageButton user={user} onOpenDm={onOpenDm} />
+                <MessageButton
+                  user={user}
+                  onOpenDm={onOpenDm}
+                  onDone={onClose}
+                />
               ) : null}
               {canKnock ? <KnockButton api={api} user={user} /> : null}
-            </>
+            </div>
           )}
-        </>
+        </ContextPanel>
       ) : null}
     </li>
   );
@@ -269,9 +302,11 @@ function PersonCard({
 function MessageButton({
   user,
   onOpenDm,
+  onDone,
 }: {
   user: User;
   onOpenDm: (userId: UserId) => Promise<void>;
+  onDone: () => void;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
@@ -281,6 +316,7 @@ function MessageButton({
     setProblem(null);
     try {
       await onOpenDm(user.id);
+      onDone();
     } catch (error) {
       setProblem(
         error instanceof ApiError ? error.message : "Couldn't open that.",
@@ -299,7 +335,7 @@ function MessageButton({
           disabled={opening}
           onClick={() => void start()}
         >
-          {opening ? "opening…" : "message"}
+          {opening ? "Opening…" : "Message"}
         </button>
       </p>
       {problem === null ? null : <p className="person-host-note">{problem}</p>}
@@ -378,10 +414,10 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
           onClick={() => void knock()}
         >
           {phase === "idle"
-            ? "knock"
+            ? "Knock"
             : phase === "knocking"
-              ? "knocking…"
-              : "knocked"}
+              ? "Knocking…"
+              : "Knocked"}
         </button>
       </p>
       {problem === null ? null : <p className="person-host-note">{problem}</p>}

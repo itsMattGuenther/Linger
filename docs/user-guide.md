@@ -41,13 +41,13 @@ There are no macOS or ARM desktop installers yet.
 
 An AppImage is the app itself, not an installer. Open a terminal on **your own
 computer**, paste these two lines, and press Enter. This example uses version
-`0.1.0` saved in `Downloads`; substitute your actual filename if it differs.
+`0.2.0` saved in `Downloads`; substitute your actual filename if it differs.
 Filenames are case-sensitive on Linux. Older downloads start with `linger`;
 newer builds may start with `Linger`. Match the name in Downloads exactly.
 
 ```bash
-chmod +x ~/Downloads/linger_0.1.0_amd64.AppImage
-~/Downloads/linger_0.1.0_amd64.AppImage
+chmod +x ~/Downloads/Linger_0.2.0_amd64.AppImage
+~/Downloads/Linger_0.2.0_amd64.AppImage
 ```
 
 The first line allows it to run; the second opens the window. **Keep the
@@ -66,19 +66,19 @@ Replace the example filename with the one you downloaded.
 Ubuntu / Debian / Mint:
 
 ```bash
-sudo apt install ~/Downloads/linger_0.1.0_amd64.deb
+sudo apt install ~/Downloads/Linger_0.2.0_amd64.deb
 ```
 
 Fedora:
 
 ```bash
-sudo dnf install ~/Downloads/linger-0.1.0-1.x86_64.rpm
+sudo dnf install ~/Downloads/Linger-0.2.0-1.x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ~/Downloads/linger-0.1.0-1.x86_64.rpm
+sudo zypper install ~/Downloads/Linger-0.2.0-1.x86_64.rpm
 ```
 
 Open **Linger** from your application launcher, now and whenever you want to
@@ -134,7 +134,7 @@ see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubles
 command, with your downloaded filename:
 
 ```bash
-WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ~/Downloads/linger_0.1.0_amd64.AppImage
+WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ~/Downloads/Linger_0.2.0_amd64.AppImage
 ```
 
 This opened Linger on the tested Omarchy/Wayland computer. It changes only
@@ -173,9 +173,9 @@ Do not edit the extracted AppImage or change global graphics settings to fix
 this. The packaging limitation and developer reproduction are tracked in
 [Linux input checks](linux-input-checks.md).
 
-**Testing a newer build on Wayland:** builds containing the T-929 fix accept
-`LINGER_LINUX_BACKEND=wayland` before the AppImage command. The currently
-published **v0.1.0 does not support this option**; use the clipboard workaround
+**Testing v0.2.0 on Wayland:** this version accepts
+`LINGER_LINUX_BACKEND=wayland` before the AppImage command. The older
+**v0.1.0 does not support this option**; use the clipboard workaround
 above with that version. The developer check page records the test commands
 and graphics limits. Native Wayland is opt-in; no desktop-wide setting needs
 to change.
@@ -196,7 +196,7 @@ Three parts.
 
 ## Settings, and where they are
 
-Click **Settings** beside your name at the bottom of the left panel. The panel
+Click the **Settings gear** beside your name at the bottom of the left panel. The panel
 has four sections:
 
 - **Profile** — your display name, name styling and status
@@ -214,7 +214,7 @@ Drag a side panel's inner edge to change its width. Double-click the edge to
 reset it. With a keyboard, Tab to the edge and use Left/Right; Home/End choose
 the smallest/largest width. These choices are saved only on this computer.
 
-Hosts have a separate **Host tools** entry. Use **Host tools → people** for
+Hosts have a **⋯** menu beside the selected server. Use **⋯ → Manage members** for
 member removal and re-admission; ordinary member cards are for chatting and
 knocking, not managing access.
 
@@ -282,7 +282,8 @@ While you are in:
   An unmuted microphone is not a guarantee somebody is listening.
 - Click a voice participant's name to adjust **how loud they are for you**.
   Right-click or keyboard activation works too. This never leaves your computer.
-- **Hide people** gives more space to chat without hiding your voice controls.
+- The **chevron beside Voice** collapses the participant strip without hiding
+  your voice controls. It does not hide the People sidebar.
 - **leave voice** turns the microphone off. Closing the app does too.
 
 Opening Settings, Media or another room does not end voice. A small strip keeps
@@ -338,12 +339,14 @@ first, and you can narrow to a room or a person. Pressing a result takes you to
 that message in its room, however far back it is, with a **back to the newest**
 link in the header to come home again.
 
-Open **media** from the rail. It is everything ever shared on the server —
-pictures, video, audio, files and links — newest first, filterable by type and
+Open **Media** from the rail. It collects things shared in conversations you
+can access — pictures, video, audio, files and links — newest first, filterable by type and
 by person. Every item links back to the moment it was posted.
 
 The star does two jobs: it sorts things to the top, and it stops a file from
-ever being cleaned up. Star the good ones.
+expiring automatically. Choose **Star** to keep a file; Linger confirms when
+the server accepts it. Images keep their full shape in the collection. Click
+an item to return to its conversation.
 
 ## What the roster is telling you
 
@@ -355,20 +358,25 @@ Next to each person:
 - **away** — they set an away message on purpose
 - **offline** — the app is closed
 
-Click anybody's name to see their status card.
+Click or right-click a name in the People sidebar to open their profile and
+status. Message and Knock sit together at the bottom of that panel. Press
+Escape or click outside it to close it.
 
 ## Your status
 
-Click your own name in the roster, then *edit*. There is a line in your own
+Click your own name in the roster, then **Edit status**. There is a line in your own
 words, plus three optional fields: *reading*, *listening to*, *working on*. You
 can put one image on it.
+
+Open **Preview your status** to check the draft. Other people see the change
+only when you press **save**.
 
 There is also an **away message**. Setting one is what makes you away, and it
 shows instead of your status. Clearing it brings you back.
 
 ## Making your name yours
 
-**Settings → Profile → how your name looks.** This is the fun part, and it is what everyone
+**Settings → Profile → Make yourself at home.** This is the fun part, and it is what everyone
 else sees next to everything you write.
 
 - a **face** (one of twelve fonts) and a **weight**, plus italic
@@ -378,6 +386,9 @@ else sees next to everything you write.
 
 The sixteen colors are the same for everybody, and every one of them is readable
 on every background. You cannot pick something nobody can read.
+
+The sample message previews your choices without posting anything. **Reset
+changes** returns to your saved look; **Save your look** publishes it.
 
 ## Making it comfortable to read
 
@@ -400,8 +411,8 @@ in selected rooms.
 
 For chimes, open **settings → sound & voice**. Voice-session joins, leaves and
 moves, mute/deafen changes, DMs and knocks have sounds by default. Ordinary
-room-message sounds start off. Turn each category on or off, preview its
-sound, or use **mute all notification sounds**. Quiet hours silence chimes
+room-message sounds start off. Turn each category on or off, choose **Listen**
+to preview its sound, or use **Mute all notification sounds**. Quiet hours silence chimes
 between 22:00 and 08:00 on your computer's clock by default.
 
 Messages you are already reading, your own messages, reconnect replay and

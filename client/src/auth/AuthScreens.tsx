@@ -20,6 +20,8 @@ import { useState } from "react";
 import type { AuthResponse } from "../generated/AuthResponse";
 import { ApiError, PublicApi } from "../lib/api";
 import { hostOf, parsePastedLink } from "../lib/link";
+import Button from "../lib/Button";
+import PorchMark from "../lib/PorchMark";
 import "./auth.css";
 
 /**
@@ -70,10 +72,8 @@ export default function AuthScreens({
       <div className="auth-panel">
         {inline ? null : (
           <header className="auth-head">
-            <h1 className="auth-wordmark">Linger</h1>
-            <p className="auth-tagline meta">
-              a small server for people who like each other
-            </p>
+            <h1 className="sr-only">Linger</h1>
+            <PorchMark className="auth-logo" />
           </header>
         )}
 
@@ -168,22 +168,34 @@ function Connect({ onStep }: { onStep: (step: Step) => void }) {
 
   return (
     <form className="auth-form" onSubmit={submit}>
+      <div className="auth-intro">
+        <h2>Join your people.</h2>
+        <p>Your invite is the way in.</p>
+      </div>
       <Field
         label="server or link"
-        hint="New here? Paste the full invite link from your host. Already have an account? Use the server address. Hosts can paste their setup link."
+        hint="Paste an invite to join, or a server address to sign in."
         value={pasted}
         onChange={setPasted}
         placeholder="linger.example"
         autoFocus
       />
       <Problem message={error} />
-      <button
+      <Button
+        variant="primary"
+        icon="arrow"
         className="auth-go"
         type="submit"
         disabled={busy || pasted.trim() === ""}
       >
-        {busy ? "checking…" : "continue"}
-      </button>
+        {busy ? "Checking…" : "Continue"}
+      </Button>
+      <details className="auth-help">
+        <summary>Setting up a new server?</summary>
+        <p>
+          Paste the full setup link from your server logs, including its token.
+        </p>
+      </details>
     </form>
   );
 }

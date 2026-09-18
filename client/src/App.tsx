@@ -12,7 +12,7 @@
  * the roster and your presence with it — you are only ever standing in one room.
  *
  * Below that, the rail is where the host's own controls hang: `+ room` beside
- * the room list and `Host tools` above your account. They are *absent* for
+ * the room list and server options beside the selected server. They are *absent* for
  * everybody else rather than greyed out — a disabled control is a permission
  * matrix drawn in CSS, and this product refuses to have one. Host or member is
  * decided per server: you can host one and be a guest on the next.
@@ -95,6 +95,11 @@ import RosterPanel from "./roster/RosterPanel";
 import SearchPanel from "./search/SearchPanel";
 import Stream from "./stream/Stream";
 import VoiceAway from "./voice/VoiceAway";
+import { ActionIcon, CogIcon } from "./lib/icons";
+import IconButton from "./lib/IconButton";
+import ContextPanel from "./lib/ContextPanel";
+import EmptyState from "./lib/EmptyState";
+import Button from "./lib/Button";
 import "./app.css";
 
 /**
@@ -539,16 +544,16 @@ export function Console({
             <section className="rail-section">
               <div className="rail-head">
                 <h2 className="panel-label">servers</h2>
-                <button
-                  type="button"
-                  className="rail-action meta"
+                <IconButton
+                  label="Add a server"
+                  tooltipSide="below"
                   aria-pressed={addingServer}
                   onClick={() =>
                     addingServer ? setAddingServer(false) : openAdd()
                   }
                 >
-                  + add server
-                </button>
+                  <ActionIcon name="plus" />
+                </IconButton>
               </div>
               <ul className="server-list">
                 {servers.map((session) => (
@@ -559,6 +564,11 @@ export function Console({
                       }
                       state={all[session.baseUrl]}
                       current={session.baseUrl === active.baseUrl}
+                      onManage={
+                        session.baseUrl === active.baseUrl && isHost
+                          ? openHost
+                          : undefined
+                      }
                       onOpen={() => {
                         setActiveUrl(session.baseUrl);
                         closePanels();
@@ -572,13 +582,13 @@ export function Console({
               <div className="rail-head">
                 <h2 className="panel-label">rooms</h2>
                 {isHost ? (
-                  <button
-                    type="button"
-                    className="rail-action meta"
+                  <IconButton
+                    label="Create a room"
+                    tooltipSide="below"
                     onClick={() => openHost("rooms")}
                   >
-                    + room
-                  </button>
+                    <ActionIcon name="plus" />
+                  </IconButton>
                 ) : null}
               </div>
               {rooms.length === 0 ? (
@@ -690,7 +700,8 @@ export function Console({
                 aria-pressed={mediaOpen}
                 onClick={() => (mediaOpen ? setMediaOpen(false) : openMedia())}
               >
-                <span className="room-slug">media</span>
+                <ActionIcon name="media" />
+                <span className="room-slug">Media</span>
               </button>
               <button
                 type="button"
@@ -700,38 +711,27 @@ export function Console({
                   searchOpen ? setSearchOpen(false) : openSearch()
                 }
               >
-                <span className="room-slug">search</span>
+                <ActionIcon name="search" />
+                <span className="room-slug">Search</span>
               </button>
             </section>
           </div>
           <section className="rail-account" aria-label="Your account">
-            {isHost ? (
-              <button
-                type="button"
-                className="rail-action"
-                aria-pressed={host !== null}
-                onClick={() =>
-                  host === null ? openHost("server") : setHostSection(null)
-                }
-              >
-                Host tools
-              </button>
-            ) : null}
             <div className="rail-self">
               <span className="rail-self-name">
                 {you.display_name}
                 <span className="meta">you</span>
               </span>
-              <button
-                type="button"
+              <IconButton
+                label="Settings"
                 className="rail-settings"
                 aria-pressed={settingsOpen}
                 onClick={() =>
                   settingsOpen ? closeSettings() : openSettings()
                 }
               >
-                Settings
-              </button>
+                <CogIcon size={20} />
+              </IconButton>
             </div>
           </section>
         </aside>
@@ -842,22 +842,13 @@ export function Console({
               </span>
             </header>
             <div className="stream-body">
-              <p className="placeholder">
-                {noRoomsBody(gateway.status.kind === "ready", isHost)}
-              </p>
-              {/* The host is the one person who can fix this, so they get the
-                way out rather than a sentence about it. */}
-              {isHost && gateway.status.kind === "ready" ? (
-                <p className="placeholder">
-                  <button
-                    type="button"
-                    className="rail-action meta"
-                    onClick={() => openHost("rooms")}
-                  >
-                    make the first room
-                  </button>
-                </p>
-              ) : null}
+              {gateway.status.kind === "ready" ? (
+                <EmptyState title="A place for your people." action={isHost ? (
+                  <Button variant="primary" onClick={() => openHost("rooms")}>Make the first room</Button>
+                ) : undefined}>
+                  {noRoomsBody(true, isHost)}
+                </EmptyState>
+              ) : <p className="placeholder">{noRoomsBody(false, isHost)}</p>}
             </div>
           </main>
         ) : (
@@ -955,12 +946,15 @@ function ServerRow({
   state,
   current,
   onOpen,
+  onManage,
 }: {
   name: string;
   state: GatewayState | undefined;
   current: boolean;
   onOpen: () => void;
+  onManage?: (section: HostSection) => void;
 }) {
+  const [menuAnchor, setMenuAnchor] = useState<HTMLButtonElement | null>(null);
   const live = state?.status.kind === "ready";
   const waiting = state !== undefined && anyNewActivity(state);
   const label = [
@@ -971,18 +965,85 @@ function ServerRow({
     .filter((part) => part !== null)
     .join(", ");
   return (
-    <button
-      type="button"
-      className="server-item"
-      aria-current={current ? "true" : undefined}
-      aria-label={label}
-      data-live={live ? "true" : undefined}
-      data-new={waiting ? "true" : undefined}
-      onClick={onOpen}
-    >
-      <span className="server-dot" aria-hidden="true" />
-      <span className="server-name">{name}</span>
-    </button>
+    <div className="server-row" data-current={current || undefined}>
+      <button
+        type="button"
+        className="server-item"
+        aria-current={current ? "true" : undefined}
+        aria-label={label}
+        data-live={live ? "true" : undefined}
+        data-new={waiting ? "true" : undefined}
+        onClick={onOpen}
+      >
+        <span className="server-dot" aria-hidden="true" />
+        <span className="server-name" title={name}>
+          {name}
+        </span>
+      </button>
+      {onManage ? (
+        <>
+          <IconButton
+            label="Server options"
+            className="server-options-trigger"
+            tooltipSide="below"
+            aria-haspopup="dialog"
+            aria-expanded={menuAnchor !== null}
+            onClick={(event) => setMenuAnchor(event.currentTarget)}
+          >
+            <ActionIcon name="more" />
+          </IconButton>
+          {menuAnchor ? (
+            <ContextPanel
+              anchor={menuAnchor}
+              label="Server options"
+              className="server-options"
+              onClose={() => setMenuAnchor(null)}
+            >
+              <h3>Manage server</h3>
+              <p className="context-hint">Only the host sees these controls.</p>
+              <div className="context-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    onManage("server");
+                  }}
+                >
+                  Server settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    onManage("invites");
+                  }}
+                >
+                  Invite people
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    onManage("rooms");
+                  }}
+                >
+                  Manage rooms
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    onManage("people");
+                  }}
+                >
+                  Manage members
+                </button>
+              </div>
+            </ContextPanel>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   );
 }
 

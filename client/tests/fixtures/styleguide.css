@@ -1,0 +1,104 @@
+.guide {
+  height: 100%;
+  overflow: auto;
+  padding: 2.5rem;
+  max-width: 90rem;
+  margin: auto;
+}
+.guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--hairline-strong);
+}
+.guide-head .panel-label {
+  color: var(--accent);
+}
+.guide h1 {
+  font-size: 2rem;
+  font-weight: 550;
+  letter-spacing: -0.035em;
+  margin: 0.5rem 0;
+}
+.guide h2 {
+  font-size: 1.125rem;
+  font-weight: 550;
+  margin-bottom: 0.5rem;
+}
+.guide p,
+.guide-note,
+.guide footer {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+.guide-theme {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.875rem;
+}
+.guide-theme select {
+  padding: 0.5rem;
+  background: var(--control-fill);
+  color: var(--text-primary);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 2.5rem;
+}
+.guide-grid > section {
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--hairline-strong);
+  min-width: 0;
+}
+.guide-examples {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.guide .preference-row {
+  margin-top: 1.25rem;
+}
+.guide-type {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 1rem;
+}
+.guide-type strong {
+  font-size: 1.375rem;
+  font-weight: 500;
+}
+.guide-palette {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.guide-palette > span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.guide-palette i {
+  display: block;
+  height: 1.25rem;
+  border: 1px solid var(--control-border);
+  margin-bottom: 0.25rem;
+}
+.guide footer {
+  padding-top: 1.5rem;
+}
+@media (max-width: 900px) {
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .guide-head {
+    flex-wrap: wrap;
+  }
+}

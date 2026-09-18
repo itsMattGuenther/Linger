@@ -299,7 +299,8 @@ A user's **status** is a small card, not a bio field:
 - Optional: one image, max 512 KB, displayed at 400×200
 - Optional: an away message that supersedes the status when set
 
-Statuses appear in the roster card when expanded, and in the user popover.
+The roster previews the status line. The full status appears in the member
+popout opened from their name; expanding it does not rearrange the roster.
 
 ### 4.7 Text presentation
 
@@ -338,6 +339,12 @@ reaction produces a denser, larger mark, not `👍 6`. Hover reveals who.
 
 Rationale: numbers invite comparison. Weight carries the same information without
 inviting anyone to count.
+
+Local reaction feedback is brief and silent: a pressed treatment acknowledges
+input, and a one-shot emphasis confirms a successful request. Initial history,
+remote reactions and replay never trigger that emphasis. A refusal restores
+the mark and shows an error; it must not claim success. A check distinguishes
+your reactions without relying on color. No counters or confetti.
 
 ### 4.9 Knock
 
@@ -557,7 +564,7 @@ Discord reskin.
 | **No avatars.** Identity is carried by styled names and color. | The whole personalization thesis |
 | **No shadows** except 1px focus rings. | Shadows imply floating cards; panels don't float |
 | **No gradients on surfaces.** Gradients exist only in user name fills. | Keeps the one expressive element expressive |
-| **No rounded panels.** Radius: 4px controls, 6px inline media, **0 on panels.** | Panels butt against each other via hairlines |
+| **No rounded panels.** Radius: 4px buttons/inputs, pill switches, 6px inline media, **0 on panels.** | Panels butt against each other via hairlines |
 | **No colored icon squares in the rail.** | Discord's signature; instant clone read |
 | Panel separation is **1px hairlines, full-bleed.** | The mIRC structural inheritance |
 
@@ -591,8 +598,10 @@ text-faint          same as muted      same as muted
 accent              #6E9BFF             #2563C9
 ```
 
-Accent is used for exactly four things: the "you left off here" line, focus rings, the
-active-room rule, and the send affordance. Nowhere else.
+Accent marks the "you left off here" line, focus rings, the active-room rule,
+and primary actions such as joining voice, continuing setup and sending. Selected
+preferences may use it with a separate shape or state label. It never decorates
+entire panels, ordinary body text or arbitrary rail icons.
 
 ### 5.4 The 16-color name palette
 
@@ -637,10 +646,34 @@ message stream             flex, min 420px
 panel gutters              20px
 gap between message groups 20px
 hairlines                  1px
-radius                     4px controls / 6px media / 0 panels
+radius                     4px buttons + inputs / pill switches / 6px media / 0 panels
 ```
 
 ### 5.6 Behavior
+
+**Control hierarchy.** Actions have visible control
+boundaries at rest, not only on hover. A primary action uses a solid accent
+fill; secondary actions use a contrasting border and surface. Navigation uses
+full-row targets with a distinct selected state. Immediate on/off preferences
+use labelled switches, not ambiguous text buttons. Familiar toolbar actions
+(add, settings, close, collapse) may be icon-only, with accessible names and
+hover/focus tooltips. Less familiar actions keep visible labels. A person's
+name is not drawn as a selector. Buttons and inputs keep Console's 4px radius;
+switches use a pill track and circular thumb. Panels stay square and shadow-free.
+The shared control language covers chat, settings and welcome; see
+`docs/style-guide.md` for the reference and verification limits.
+
+**Quiet delight (2026-09-17).** Use the final pixel-porch icon on welcome, centered
+and sized to fit, without a duplicate wordmark. Small static porch illustrations
+may accompany genuinely empty conversations/collections; never animate idle
+surfaces. Control presses and contextual panels use short, consistent feedback.
+Reduced motion removes movement without removing state or confirmation.
+Name styling previews include a sample message; status drafts preview locally
+before Save, without publishing keystrokes. Media thumbnails preserve the image,
+expanded previews remain fitted, and starring confirms only after acceptance.
+Existing notification cues share a soft musical family, with distinct rising/
+falling patterns and a quieter peer/message register. Keep all current sound
+gates and defaults; no sound for reactions, typing, saves or browsing.
 
 **Reader controls.** Interface scale is 100–200%, available in Settings →
 Appearance, not on the server/link screen. Saved scale also applies to sign-in
@@ -656,18 +689,25 @@ the window restores the side panels automatically.
 
 **Navigation.** Show the selected server once in the server list, not again
 under a `SERVER` label. `DMs` has the empty state `empty`. Personal Settings lives
-beside your name in the navigation footer. Host tools is a separate destination;
-member removal lives in its People section with confirmation, never in a normal
-member card. No roles or permission matrix are introduced.
+beside your name in the navigation footer as a gear. Media and Search are
+anchored immediately above that footer. Host controls open from the selected
+server's options, under Server settings; member removal lives in its People
+section with confirmation, never in an ordinary member's action panel.
+Clicking or right-clicking a roster name opens a compact, dismissible person
+panel with their status and a spaced row of Message / Knock actions. Escape
+and outside click close it and return focus. No roles or permission matrix
+are introduced.
 Desktop notification rules and notification chimes both live in Settings →
 Sound & voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
 remain legible when not speaking; a simple rule marks speech. Click, right-click
-or keyboard-activate a participant to open their local volume controls. Hiding
+or keyboard-activate a participant to open their local volume controls. Names
+have no selector borders or dropdown arrows. A chevron on the bar collapses
+only the participants; joining and session controls align to the right. Hiding
 the participants leaves join/leave, mute and deafen available. No avatars.
 In a short window, participants start collapsed unless the reader chose otherwise;
-**Show people** reveals them. This never changes the voice connection or audio.
+the bar's expand control reveals them. This never changes the voice connection or audio.
 When reading another room/server or opening a destination such as Settings,
 a compact strip names the ongoing voice room and keeps mute, deafen, leave
 and a return-to-room action available. Only one set of active controls is drawn.

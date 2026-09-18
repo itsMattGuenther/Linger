@@ -30,6 +30,10 @@ import { openExternal } from "../lib/external";
 import { absoluteUrl } from "../lib/url";
 import { conversationLabel } from "../dm/dm";
 import { personStyle } from "../lib/names";
+import EmptyState from "../lib/EmptyState";
+import { ActionIcon } from "../lib/icons";
+import IconButton from "../lib/IconButton";
+import Button from "../lib/Button";
 import { fullTime } from "../stream/time";
 import {
   dayEnd,
@@ -46,6 +50,11 @@ import DownloadFile from "./DownloadFile";
 
 /** A page. Big enough that scrolling is rare, small enough to arrive fast. */
 const PAGE = 60;
+const sharedDate = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
 
 interface Filters {
   kind: MediaKind | null;
@@ -106,10 +115,16 @@ export default function MediaPanel({
         if (mine !== generation.current) return;
         setProblem(null);
         setAtEnd(page.length === 0);
-        setItems((held) => (before === null ? page : [...(held ?? []), ...page]));
+        setItems((held) =>
+          before === null ? page : [...(held ?? []), ...page],
+        );
       } catch (error) {
         if (mine !== generation.current) return;
-        setProblem(error instanceof ApiError ? error.message : "Couldn't reach the server.");
+        setProblem(
+          error instanceof ApiError
+            ? error.message
+            : "Couldn't reach the server.",
+        );
       } finally {
         if (mine === generation.current) setLoading(false);
       }
@@ -129,14 +144,22 @@ export default function MediaPanel({
   const byId = new Map(rooms.map((room) => [room.id, room]));
   const shown = items ?? [];
   const last = shown.at(-1);
+  const unfiltered =
+    filters.kind === null &&
+    filters.author === null &&
+    filters.from === "" &&
+    filters.to === "";
 
   const setStar = async (item: MediaItem, starred: boolean): Promise<void> => {
     const file = item.attachment;
     if (!file) return;
+    const mine = generation.current;
+    setProblem(null);
     // Moved locally first: a star is a toggle, and waiting a round trip to
     // redraw one makes it feel broken. A refusal puts it back.
     const at = starred ? Date.now() : null;
-    const apply = (value: number | null): void =>
+    const apply = (value: number | null): void => {
+      if (mine !== generation.current) return;
       setItems((held) =>
         (held ?? []).map((candidate) =>
           candidate.cursor === item.cursor
@@ -150,21 +173,28 @@ export default function MediaPanel({
             : candidate,
         ),
       );
+    };
     apply(at);
     try {
       await (starred ? api.starMedia(file.id) : api.unstarMedia(file.id));
     } catch (error) {
       apply(item.starred_at);
-      setProblem(error instanceof ApiError ? error.message : "Couldn't reach the server.");
+      if (mine === generation.current)
+        setProblem(
+          error instanceof ApiError
+            ? error.message
+            : "Couldn't reach the server.",
+        );
+      throw error;
     }
   };
 
   return (
     <main className="stream media">
       <header className="stream-header media-head">
-        <h2 className="panel-label">media</h2>
+        <h2>Media</h2>
         <p className="media-blurb meta">
-          everything anyone has shared here
+          The things you shared. The moments they came from.
           {/* A star is the only thing that stops a file ageing out, so what a
               star is *for* belongs next to the control, not in a settings
               screen nobody opens. */}
@@ -172,9 +202,9 @@ export default function MediaPanel({
             ? null
             : ` · files go after ${expiryText(expiryDays)}; starred ones stay`}
         </p>
-        <button type="button" className="host-close meta" onClick={onClose}>
-          close
-        </button>
+        <IconButton label="Close media" onClick={onClose}>
+          <ActionIcon name="close" />
+        </IconButton>
       </header>
 
       <div className="media-filters">
@@ -185,7 +215,9 @@ export default function MediaPanel({
               type="button"
               className="host-tab meta"
               aria-pressed={filters.kind === filter.key}
-              onClick={() => setFilters((held) => ({ ...held, kind: filter.key }))}
+              onClick={() =>
+                setFilters((held) => ({ ...held, kind: filter.key }))
+              }
             >
               {filter.label}
             </button>
@@ -217,7 +249,9 @@ export default function MediaPanel({
               type="date"
               value={filters.from}
               max={filters.to === "" ? undefined : filters.to}
-              onChange={(event) => setFilters((held) => ({ ...held, from: event.target.value }))}
+              onChange={(event) =>
+                setFilters((held) => ({ ...held, from: event.target.value }))
+              }
             />
           </label>
           <label className="media-field meta">
@@ -226,31 +260,39 @@ export default function MediaPanel({
               type="date"
               value={filters.to}
               min={filters.from === "" ? undefined : filters.from}
-              onChange={(event) => setFilters((held) => ({ ...held, to: event.target.value }))}
+              onChange={(event) =>
+                setFilters((held) => ({ ...held, to: event.target.value }))
+              }
             />
           </label>
-          {filters.kind === null && filters.author === null && filters.from === "" && filters.to === "" ? null : (
-            <button
-              type="button"
-              className="host-close meta"
-              onClick={() => setFilters(NO_FILTERS)}
-            >
-              clear
-            </button>
+          {filters.kind === null &&
+          filters.author === null &&
+          filters.from === "" &&
+          filters.to === "" ? null : (
+            <Button onClick={() => setFilters(NO_FILTERS)}>
+              Clear filters
+            </Button>
           )}
         </div>
       </div>
 
       <div className="media-body">
-        {problem ? <p className="media-problem meta">{problem}</p> : null}
-        {items === null ? (
-          <p className="placeholder">…</p>
-        ) : shown.length === 0 ? (
-          <p className="placeholder">
-            {filters.kind === null && filters.author === null && filters.from === ""
-              ? "Nothing has been shared here yet. Everything anybody posts lands here."
-              : "Nothing here matches that."}
+        {problem ? (
+          <p className="media-problem" role="alert">
+            {problem}
           </p>
+        ) : null}
+        {items === null ? (
+          <p className="placeholder">Loading media…</p>
+        ) : shown.length === 0 ? (
+          unfiltered ? (
+            <EmptyState title="Good things collect here.">
+              Photos, files and links from your conversations will appear here.
+              Share something to get started.
+            </EmptyState>
+          ) : (
+            <p className="placeholder">Nothing here matches those filters.</p>
+          )
         ) : (
           <ul className="media-grid">
             {shown.map((item) => (
@@ -269,7 +311,7 @@ export default function MediaPanel({
                       onOpen(item.room_id, item.message_id);
                     }
                   }}
-                  onStar={(starred) => void setStar(item, starred)}
+                  onStar={(starred) => setStar(item, starred)}
                 />
               </li>
             ))}
@@ -277,18 +319,15 @@ export default function MediaPanel({
         )}
         {shown.length > 0 && !atEnd ? (
           <p className="media-more">
-            <button
-              type="button"
-              className="host-close meta"
+            <Button
               disabled={loading}
               onClick={() => void load(last?.cursor ?? null)}
             >
-              {loading ? "…" : "older"}
-            </button>
+              {loading ? "Loading…" : "Show older"}
+            </Button>
           </p>
         ) : null}
       </div>
-
     </main>
   );
 }
@@ -313,11 +352,31 @@ function Tile({
   who: User | undefined;
   room: string | undefined;
   onOpen: () => void;
-  onStar: (starred: boolean) => void;
+  onStar: (starred: boolean) => Promise<void>;
 }) {
   const starred = item.starred_at !== null;
   const file = item.attachment;
   const name = who?.display_name ?? "someone";
+  const working = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const star = async (): Promise<void> => {
+    if (working.current) return;
+    working.current = true;
+    setBusy(true);
+    setNotice("");
+    try {
+      await onStar(!starred);
+      setNotice(
+        starred ? "Star removed." : "Kept. Starred files don’t expire.",
+      );
+    } catch {
+      // The collection shows the server's refusal; never claim a failed save.
+    } finally {
+      working.current = false;
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="media-tile" data-starred={starred ? "true" : undefined}>
@@ -329,7 +388,12 @@ function Tile({
       >
         <span className="media-face">
           {item.kind === "image" && file ? (
-            <img src={absoluteUrl(baseUrl, file.url)} alt="" loading="lazy" decoding="async" />
+            <img
+              src={absoluteUrl(baseUrl, file.url)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
           ) : item.kind === "video" && file ? (
             <>
               {file.poster_url === null ? (
@@ -337,18 +401,33 @@ function Tile({
                   video
                 </span>
               ) : (
-                <img src={absoluteUrl(baseUrl, file.poster_url)} alt="" loading="lazy" decoding="async" />
+                <img
+                  src={absoluteUrl(baseUrl, file.poster_url)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
               )}
               {file.duration_ms === null ? null : (
-                <span className="media-duration meta">{durationText(Number(file.duration_ms))}</span>
+                <span className="media-duration meta">
+                  {durationText(Number(file.duration_ms))}
+                </span>
               )}
             </>
           ) : item.kind === "link" && item.link ? (
             <span className="media-linkface">
               {item.link.icon === null ? null : (
-                <img className="card-icon" src={item.link.icon} alt="" width={14} height={14} />
+                <img
+                  className="card-icon"
+                  src={item.link.icon}
+                  alt=""
+                  width={14}
+                  height={14}
+                />
               )}
-              <span className="media-linktitle">{item.link.title ?? item.link.domain}</span>
+              <span className="media-linktitle">
+                {item.link.title ?? item.link.domain}
+              </span>
               <span className="meta">{item.link.domain}</span>
             </span>
           ) : (
@@ -363,8 +442,11 @@ function Tile({
             {name}
           </span>
           {room === undefined ? null : <span>{room}</span>}
-          <time dateTime={new Date(item.created_at).toISOString()}>
-            {fullTime(item.created_at)}
+          <time
+            dateTime={new Date(item.created_at).toISOString()}
+            title={fullTime(item.created_at)}
+          >
+            {sharedDate.format(item.created_at)}
           </time>
           {file === null || file === undefined ? null : (
             <span>{fileSize(Number(file.size_bytes))}</span>
@@ -381,10 +463,14 @@ function Tile({
             type="button"
             className="media-star"
             aria-pressed={starred}
-            aria-label={starred ? "not starred any more" : "star this"}
-            onClick={() => onStar(!starred)}
+            aria-label={`${starred ? "Unstar" : "Star"} ${itemLabel(item)}`}
+            disabled={busy}
+            aria-busy={busy}
+            title="Starred files don’t expire"
+            onClick={() => void star()}
           >
-            {starred ? "★" : "☆"}
+            <span aria-hidden="true">{starred ? "★" : "☆"}</span>
+            {busy ? "Saving…" : starred ? "Starred" : "Star"}
           </button>
         ) : null}
         {item.link ? (
@@ -400,6 +486,9 @@ function Tile({
           <DownloadFile key={file.url} url={absoluteUrl(baseUrl, file.url)} />
         ) : null}
       </div>
+      <p className="media-confirmation" role="status">
+        {notice}
+      </p>
     </div>
   );
 }

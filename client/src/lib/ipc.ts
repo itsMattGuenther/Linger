@@ -34,7 +34,7 @@ export type SessionsLoad =
 
 export type SessionWrite = { kind: "done" } | { kind: "unavailable"; reason: string };
 
-const NO_TAURI = "Running in a browser, so nothing is saved between reloads.";
+const NO_TAURI = "Browser preview: sign-ins aren't saved here.";
 
 /** Every server we have a sign-in for, in the order they were added. */
 export async function loadSessions(): Promise<SessionsLoad> {

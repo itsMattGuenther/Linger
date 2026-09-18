@@ -15,9 +15,10 @@
  * local storage beside appearance preferences rather than in the gateway store.
  *
  * The knock itself is synthesized rather than played from a file. Two soft
- * taps out of an oscillator is about twenty lines and no bytes, and it means
- * this task does not have to reach into T-903's curation to ship a sound.
+ * taps from an oscillator need no audio asset. The shared score in chimes.ts
+ * does not reach into T-903's separate entrance-sound curation.
  */
+import { scheduleChime } from "./chimes";
 
 /** Quiet hours run from 22:00 to 08:00, listener-local (SPEC §4.1). */
 export const QUIET_FROM_HOUR = 22;
@@ -119,32 +120,6 @@ function audio(): AudioContext | null {
 }
 
 /**
- * One knuckle on a door: a low sine struck hard and damped fast, through a
- * lowpass so it reads as wood rather than as a beep.
- */
-function tap(ctx: AudioContext, at: number, gain: number): void {
-  const osc = ctx.createOscillator();
-  const level = ctx.createGain();
-  const wood = ctx.createBiquadFilter();
-
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(180, at);
-  // The pitch drop is most of what makes it sound struck rather than played.
-  osc.frequency.exponentialRampToValueAtTime(90, at + 0.08);
-
-  wood.type = "lowpass";
-  wood.frequency.setValueAtTime(700, at);
-
-  level.gain.setValueAtTime(gain, at);
-  level.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
-
-  osc.connect(wood).connect(level).connect(ctx.destination);
-  osc.onended = () => { osc.disconnect(); wood.disconnect(); level.disconnect(); };
-  osc.start(at);
-  osc.stop(at + 0.1);
-}
-
-/**
  * Somebody knocked. Two taps, quietly, if the listener is letting sounds
  * through right now.
  *
@@ -168,13 +143,6 @@ export function cueAllowed(cue: SoundCue, prefs: SoundPrefs, at: Date): boolean 
   return soundAllowed(prefs, at) && prefs.categories[categoryOf(cue)];
 }
 
-// Short sine pairs: soft attack/release, low gain, no assets or network fetches.
-const NOTES: Record<Exclude<SoundCue, "knock">, readonly number[]> = {
-  "voice-join": [440, 660], "voice-leave": [660, 440], "voice-move": [440, 550, 660],
-  "peer-join": [660, 880], "peer-leave": [880, 660],
-  mute: [330], unmute: [440, 550], deafen: [440, 330], undeafen: [330, 440],
-  dm: [660, 825], room: [550],
-};
 const lastPlayed = new Map<SoundCategory, number>();
 
 /** Never queues an old cue for later or throws when the audio device refuses. */
@@ -201,26 +169,7 @@ export async function playSound(cue: SoundCue, now: Date = new Date()): Promise<
     if (Date.now() - started > 1000 || !cueAllowed(cue, loadSoundPrefs(), new Date(now.getTime() + Date.now() - started))) return false;
     if (Date.now() - (lastPlayed.get(category) ?? -Infinity) < cooldown) return false;
     lastPlayed.set(category, Date.now());
-    const at = ctx.currentTime + 0.01;
-    if (cue === "knock") {
-      tap(ctx, at, 0.16);
-      tap(ctx, at + 0.14, 0.12);
-    } else {
-      for (const [index, frequency] of NOTES[cue].entries()) {
-        const start = at + index * 0.11;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(frequency, start);
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(0.055, start + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
-        osc.connect(gain).connect(ctx.destination);
-        osc.onended = () => { osc.disconnect(); gain.disconnect(); };
-        osc.start(start);
-        osc.stop(start + 0.17);
-      }
-    }
+    scheduleChime(ctx, cue, ctx.currentTime + 0.01);
     return true;
   } catch {
     return false;

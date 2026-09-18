@@ -13,12 +13,14 @@ test("one server identity, simple DMs, personal settings and deliberate host too
   await expect(page.locator(".rail-dms")).toContainText("empty");
   await page.locator(".roster").getByRole("button", { name: /Jules/ }).click();
   await expect(
-    page.getByRole("button", { name: "message", exact: true }),
+    page.getByRole("button", { name: "Message", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "remove from the server", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Host tools", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Server options", exact: true }).click();
+  await page.getByRole("button", { name: "Server settings", exact: true }).click();
   await page.getByRole("button", { name: "people", exact: true }).click();
   const jules = page.locator(".host-member").filter({ hasText: "Jules" });
   await jules
@@ -37,10 +39,10 @@ test("members have the same ordinary card without a host tools entry", async ({
   await page.goto("/tests/fixtures/console.html?member");
   await page.locator(".roster").getByRole("button", { name: /Jules/ }).click();
   await expect(
-    page.getByRole("button", { name: "message", exact: true }),
+    page.getByRole("button", { name: "Message", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Host tools", exact: true }),
+    page.getByRole("button", { name: "Server options", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: /remove from/ })).toHaveCount(
     0,
@@ -97,7 +99,7 @@ test("voice volume is on demand and hiding people keeps call controls", async ({
 }) => {
   await page.goto("/tests/fixtures/console.html");
   await expect(page.getByRole("slider")).toHaveCount(0);
-  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join voice", exact: true }).click();
   await page
     .getByRole("button", { name: "Jules, voice options", exact: true })
     .click({ button: "right" });
@@ -112,15 +114,15 @@ test("voice volume is on demand and hiding people keeps call controls", async ({
   await expect(
     page.getByRole("button", { name: "Jules, voice options" }),
   ).toBeFocused();
-  await page.getByRole("button", { name: "Hide people" }).click();
+  await page.getByRole("button", { name: "Collapse voice participants" }).click();
   await expect(
-    page.getByRole("button", { name: "deafen", exact: true }),
+    page.getByRole("button", { name: "Deafen", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "leave voice", exact: true }),
+    page.getByRole("button", { name: "Leave voice", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Show people" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand voice participants" })).toBeVisible();
 });
 
 async function openSettings(page: import("@playwright/test").Page) {
@@ -137,34 +139,34 @@ test("ongoing voice stays controllable outside its room and returns without rejo
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join voice", exact: true }).click();
   await openSettings(page);
   const ongoing = page.getByRole("region", { name: "Ongoing voice" });
   await expect(ongoing).toBeVisible();
-  await ongoing.getByRole("button", { name: "mute", exact: true }).click();
-  await ongoing.getByRole("button", { name: "deafen", exact: true }).click();
+  await ongoing.getByRole("button", { name: "Mute", exact: true }).click();
+  await ongoing.getByRole("button", { name: "Deafen", exact: true }).click();
   await expect(
-    ongoing.getByRole("button", { name: "muted", exact: true }),
+    ongoing.getByRole("button", { name: "Muted", exact: true }),
   ).toBeDisabled();
-  await ongoing.getByRole("button", { name: "undeafen", exact: true }).click();
+  await ongoing.getByRole("button", { name: "Undeafen", exact: true }).click();
   await expect(
-    ongoing.getByRole("button", { name: "muted", exact: true }),
+    ongoing.getByRole("button", { name: "Muted", exact: true }),
   ).toBeEnabled();
   await ongoing
     .getByRole("button", { name: "Return to #general", exact: true })
     .click();
   await expect(ongoing).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "muted", exact: true }),
+    page.getByRole("button", { name: "Muted", exact: true }),
   ).toHaveCount(1);
   await page
     .getByRole("button", { name: "#weekend-plans", exact: true })
     .click();
   await expect(ongoing).toBeVisible();
-  await page.getByRole("button", { name: "media", exact: true }).click();
+  await page.getByRole("button", { name: "Media", exact: true }).click();
   await expect(ongoing).toBeVisible();
   await ongoing
-    .getByRole("button", { name: "leave voice", exact: true })
+    .getByRole("button", { name: "Leave voice", exact: true })
     .click();
   await expect(page.locator("html")).toHaveAttribute("data-left", "yes");
   await expect(ongoing).toHaveCount(0);
@@ -177,7 +179,7 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
     localStorage.setItem("linger.voice.pushToTalk", "true"),
   );
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join voice", exact: true }).click();
   await page.keyboard.down("Control");
   await expect(page.locator("html")).toHaveAttribute(
     "data-controls",
@@ -206,12 +208,12 @@ test("an away-view control failure remains visible after voice disconnects", asy
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join voice", exact: true }).click();
   await openSettings(page);
   await page.evaluate(() => {
     document.documentElement.dataset.refuse = "yes";
   });
-  await page.getByRole("button", { name: "deafen", exact: true }).click();
+  await page.getByRole("button", { name: "Deafen", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText(
     "Couldn't change voice controls",
   );
@@ -223,7 +225,7 @@ test("voice and Appearance controls fit a short window at 200%", async ({
 }) => {
   await page.setViewportSize({ width: 760, height: 480 });
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join voice", exact: true }).click();
   await openSettings(page);
   await page
     .getByRole("combobox", { name: "Scale", exact: true })
@@ -231,13 +233,13 @@ test("voice and Appearance controls fit a short window at 200%", async ({
   await expect(
     page.getByRole("combobox", { name: "Scale", exact: true }),
   ).toBeInViewport();
-  for (const label of ["mute", "deafen", "leave voice"]) {
+  for (const label of ["Mute", "Deafen", "Leave voice"]) {
     const control = page.getByRole("button", { name: label, exact: true });
     await expect(control).toBeInViewport();
     const box = await control.boundingBox();
     expect(box && box.y + box.height).toBeLessThanOrEqual(480);
   }
-  await page.getByRole("button", { name: "leave voice", exact: true }).click();
+  await page.getByRole("button", { name: "Leave voice", exact: true }).click();
   await expect(page.getByRole("region", { name: "Ongoing voice" })).toHaveCount(
     0,
   );
@@ -256,13 +258,13 @@ test("plain styling has a clear label and long messages have a readable line len
       .evaluate((node) => node.getBoundingClientRect().width),
   ).toBeLessThan(1000);
   await openSettings(page);
-  const plain = page.getByRole("button", {
+  const plain = page.getByRole("switch", {
     name: "Use plain names and message fonts",
     exact: true,
   });
-  expect(await plain.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14);
+  expect(await page.locator('.preference-copy label').last().evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14);
   await plain.click();
-  await expect(plain).toHaveAttribute("aria-pressed", "true");
+  await expect(plain).toBeChecked();
   await expect(page.locator("html")).toHaveAttribute("data-normalize", "true");
 });
 
@@ -286,7 +288,7 @@ for (const theme of ["dark", "light"] as const) {
         await expect(
           page.getByRole("combobox", { name: "Scale", exact: true }),
         ).toBeInViewport();
-        await page.getByRole("button", { name: "close", exact: true }).click();
+        await page.getByRole("button", { name: "Close", exact: true }).click();
         await expect(page.locator(".composer-input")).toBeInViewport();
         const statusTop = await page
           .locator(".status-bar")
@@ -392,6 +394,8 @@ test("enabled labels meet normal-text contrast in both themes, including evening
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
+  // Measure settled colors, not a frame partway through a theme transition.
+  await page.addStyleTag({ content: "* { transition: none !important; }" });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
   for (const theme of ["dark", "light"])
@@ -400,12 +404,15 @@ test("enabled labels meet normal-text contrast in both themes, including evening
         ({ theme, warmth }) => {
           document.documentElement.dataset.theme = theme;
           document.documentElement.dataset.warmth = warmth;
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Missing contrast canvas");
           const luminance = (color: string) => {
-            const channels =
-              color
-                .match(/[\d.]+/g)
-                ?.slice(0, 3)
-                .map(Number) ?? [];
+            context.clearRect(0, 0, 1, 1);
+            context.fillStyle = color;
+            context.fillRect(0, 0, 1, 1);
+            const channels = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
             return channels
               .map((value) => {
                 const n = value / 255;
@@ -419,7 +426,7 @@ test("enabled labels meet normal-text contrast in both themes, including evening
           };
           return [
             ...document.querySelectorAll<HTMLElement>(
-              ".panel-label, .rail-action, .room-item, .roster-switch, .settings-tab, .segmented-option, .settings-lead, .settings-hint",
+              ".panel-label, .rail-action, .room-item, .roster-switch, .settings-tab, .theme-card-label, .preference-copy label, .preference-copy p, .settings-lead, .settings-hint",
             ),
           ]
             .filter(
@@ -445,6 +452,8 @@ test("enabled labels meet normal-text contrast in both themes, including evening
                 b = luminance(background);
               return {
                 text: node.textContent,
+                foreground: style.color,
+                background,
                 contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
               };
             })
@@ -464,7 +473,7 @@ test("an unsaved status survives moving the people panel between layouts", async
   await page.locator(".roster").getByRole("button", { name: /Matt/ }).click();
   await page
     .locator(".roster")
-    .getByRole("button", { name: "edit", exact: true })
+    .getByRole("button", { name: "Edit status", exact: true })
     .click();
   const draft = page.locator(".roster textarea").first();
   await draft.fill("A status I have not saved yet.");
@@ -557,7 +566,7 @@ test("interface size belongs in Settings and saved scale also applies to sign-in
     page.getByRole("heading", { name: "Linger", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText(/New here\? Paste the full invite link/),
+    page.getByText(/Paste an invite to join/),
   ).toBeVisible();
   await page.goto("/tests/fixtures/console.html");
   await openSettings(page);
@@ -571,10 +580,10 @@ test("interface size belongs in Settings and saved scale also applies to sign-in
     .getByRole("textbox", { name: "server or link" })
     .fill("https://example.com");
   await page
-    .getByRole("button", { name: "continue", exact: true })
+    .getByRole("button", { name: "Continue", exact: true })
     .scrollIntoViewIfNeeded();
   await expect(
-    page.getByRole("button", { name: "continue", exact: true }),
+    page.getByRole("button", { name: "Continue", exact: true }),
   ).toBeInViewport();
   expect(
     await page.evaluate(

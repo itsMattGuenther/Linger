@@ -11,7 +11,7 @@
  * Somebody talking is their name drawn a little brighter, the way a live
  * status is drawn anywhere else in the app.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
@@ -28,6 +28,10 @@ import "./voice.css";
 import { useWindowHeight } from "../lib/layout";
 import { useInterfaceScale } from "../lib/interface";
 import VoiceControls from "./VoiceControls";
+import Button from "../lib/Button";
+import IconButton from "../lib/IconButton";
+import ContextPanel from "../lib/ContextPanel";
+import { ActionIcon } from "../lib/icons";
 
 export default function VoiceBar({
   api,
@@ -46,6 +50,7 @@ export default function VoiceBar({
   const [joining, setJoining] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const seatsId = useId();
   const selectedTrigger = useRef<HTMLButtonElement | null>(null);
   const closeOptions = (): void => {
     setSelected(null);
@@ -100,26 +105,6 @@ export default function VoiceBar({
     }
   };
 
-  // Nothing to say: nobody here is in voice and neither are you.
-  if (peers.length === 0 && !seatedHere && problem === null) {
-    return (
-      <div className="voice-bar" data-empty="true">
-        <button
-          type="button"
-          className="voice-action meta"
-          disabled={joining}
-          onClick={() => void join()}
-        >
-          {joining
-            ? "joining voice…"
-            : seatedElsewhere
-              ? "move voice here"
-              : "join voice"}
-        </button>
-      </div>
-    );
-  }
-
   const seats = seatsOf(peers, users, gateway.sessionId);
   const selectedSeat = seats.find((seat) => seat.sessionId === selected);
 
@@ -130,19 +115,31 @@ export default function VoiceBar({
       data-collapsed={collapsed || undefined}
     >
       <div className="voice-heading">
-        <span className="voice-label panel-label">
-          {seatedHere ? "In voice" : "Voice"}
-        </span>
-        <button
-          type="button"
-          className="voice-action"
-          aria-expanded={!collapsed}
-          onClick={togglePeople}
-        >
-          {collapsed ? "Show people" : "Hide people"}
-        </button>
+        {seats.length > 0 ? (
+          <IconButton
+            label={
+              collapsed
+                ? "Expand voice participants"
+                : "Collapse voice participants"
+            }
+            className="voice-collapse"
+            tooltipSide="below"
+            aria-expanded={!collapsed}
+            aria-controls={seatsId}
+            onClick={togglePeople}
+          >
+            <ActionIcon name={collapsed ? "chevronDown" : "chevronUp"} />
+          </IconButton>
+        ) : (
+          <ActionIcon name="mic" />
+        )}
+        <span className="voice-label">{seatedHere ? "In voice" : "Voice"}</span>
       </div>
-      <ul className="voice-seats" hidden={collapsed}>
+      <ul
+        id={seatsId}
+        className="voice-seats"
+        hidden={collapsed || seats.length === 0}
+      >
         {seats.map((seat) => {
           const talking = seat.isMe
             ? seatedHere && mine.talking
@@ -161,6 +158,7 @@ export default function VoiceBar({
                 type="button"
                 className="voice-person"
                 aria-expanded={selected === seat.sessionId}
+                aria-haspopup="dialog"
                 aria-label={`${seat.name}, voice options`}
                 onClick={(event) => {
                   selectedTrigger.current = event.currentTarget;
@@ -175,9 +173,6 @@ export default function VoiceBar({
                 }}
               >
                 <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
-                <span className="voice-person-more" aria-hidden="true">
-                  ⌄
-                </span>
               </button>
               <div className="voice-seat-state">
                 {seat.isMe ? <span className="meta">you</span> : null}
@@ -205,18 +200,16 @@ export default function VoiceBar({
           );
         })}
       </ul>
-      {selectedSeat && !collapsed ? (
-        <section
+      {selectedSeat && !collapsed && selectedTrigger.current ? (
+        <ContextPanel
+          anchor={selectedTrigger.current}
           className="voice-options"
-          aria-label={`Voice options for ${selectedSeat.name}`}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              closeOptions();
-              event.stopPropagation();
-            }
-          }}
+          label={`Voice options for ${selectedSeat.name}`}
+          onClose={closeOptions}
         >
-          <span>{selectedSeat.name}</span>
+          <h3 {...nameProps(selectedSeat.user, "context-name")}>
+            {selectedSeat.name}
+          </h3>
           {seatedHere && !selectedSeat.isMe ? (
             <Volume
               value={mine.volumes[selectedSeat.sessionId] ?? 1}
@@ -232,10 +225,7 @@ export default function VoiceBar({
                 : "Join voice to adjust their volume for you."}
             </span>
           )}
-          <button type="button" className="voice-action" onClick={closeOptions}>
-            Close options
-          </button>
-        </section>
+        </ContextPanel>
       ) : null}
       {seatedHere ? (
         <VoiceControls
@@ -245,18 +235,19 @@ export default function VoiceBar({
         />
       ) : (
         <div className="voice-controls">
-          <button
+          <Button
+            variant="primary"
             type="button"
-            className="voice-action meta"
+            className="voice-action voice-join"
             disabled={joining}
             onClick={() => void join()}
           >
             {joining
-              ? "joining voice…"
+              ? "Joining voice…"
               : seatedElsewhere
-                ? "move voice here"
-                : "join voice"}
-          </button>
+                ? "Move voice here"
+                : "Join voice"}
+          </Button>
         </div>
       )}
       {problem === null ? null : (

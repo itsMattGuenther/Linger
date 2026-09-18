@@ -7,6 +7,48 @@
  * weight is the most an icon gets to be here.
  */
 
+const ACTION_PATHS = {
+  plus: "M12 5v14M5 12h14",
+  mic: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5Zm-3 6v1a6 6 0 0 0 12 0v-1M12 18v4M9 22h6",
+  micOff:
+    "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5Zm-3 6v1a6 6 0 0 0 12 0v-1M12 18v4M9 22h6M3 3l18 18",
+  headphonesOff:
+    "M4 14v-3a8 8 0 0 1 16 0v3M4 13h3v8H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm16 0h-3v8h3a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2ZM3 3l18 18",
+  headphones:
+    "M4 14v-3a8 8 0 0 1 16 0v3M4 13h3v8H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm16 0h-3v8h3a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Z",
+  leave: "M10 4H4v16h6M9 12h12m-5-5 5 5-5 5",
+  media: "M3 4h18v16H3V4Zm0 12 5-5 5 5 3-3 5 5M16 8h.01",
+  search: "M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
+  close: "m6 6 12 12M18 6 6 18",
+  arrow: "M4 12h16m-6-6 6 6-6 6",
+  check: "m5 12 4 4L19 6",
+  chevronDown: "m6 9 6 6 6-6",
+  chevronUp: "m6 15 6-6 6 6",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  message: "M4 4h16v12H9l-5 4V4Z",
+  settings: "M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6",
+  send: "m3 3 18 9-18 9 4-9-4-9Zm4 9h14",
+} as const;
+
+/** Familiar action glyphs share one stroke and inherit the label color. */
+export function ActionIcon({ name }: { name: keyof typeof ACTION_PATHS }) {
+  return (
+    <svg
+      className="action-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={ACTION_PATHS[name]} />
+    </svg>
+  );
+}
+
 /** The settings cog: the one icon every application agrees on. */
 export function CogIcon({ size = 14 }: { size?: number }) {
   return (

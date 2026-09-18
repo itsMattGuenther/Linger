@@ -2,6 +2,14 @@
 
 T-909, M12 polish. No milestone or release check is closed by this review.
 
+This records the earlier implementation checkpoint and its checks. The newer,
+approved [control style guide](style-guide.md) and
+[review 04 screenshots](../screenshots/review-04/README.md) supersede its visual
+placement choices, including Host tools and voice-control alignment. The gate
+results below describe the earlier checkpoint; the style guide records the
+later iteration's verification. Matt approved that direction for the v0.2.0
+testing release on 2026-09-17. Native acceptance remains open.
+
 ## Changes
 
 - One comfortable presentation. Removed Density, Compact and IRC, including

@@ -1,3 +1,6 @@
+@import "./controls.css";
+@import "./delight.css";
+
 /*
  * Base surface rules for "Console" (SPEC §5.1). The hard visual rules live here
  * as structure so they're hard to violate by accident:
@@ -80,7 +83,7 @@ summary {
 button.meta {
   font-size: var(--text-label-size);
 }
-button:not(.style-swatch):not(.reaction),
+button:where(:not(.style-swatch):not(.reaction)),
 select,
 summary {
   min-height: 2rem;

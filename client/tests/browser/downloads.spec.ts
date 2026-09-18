@@ -13,7 +13,7 @@ for (const surface of ["chat", "media"]) {
       await page.evaluate(() => { document.documentElement.dataset.refuseOpen = "no"; });
       await download.click();
       await expect(page.getByRole("alert")).toHaveCount(0);
-      await expect(page.getByRole("status")).toContainText("Check your browser's downloads");
+      await expect(page.locator(".att-download").getByRole("status")).toContainText("Check your browser's downloads");
       expect(await page.evaluate(() => document.documentElement.dataset.requestedUrl)).toBe(address);
       await expect(page.getByRole("textbox", { name: "download link" })).toHaveValue(address);
       await expect(page.getByText(/^saved$/)).toHaveCount(0);

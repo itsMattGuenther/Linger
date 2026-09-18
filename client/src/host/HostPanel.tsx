@@ -66,7 +66,7 @@ export default function HostPanel({
   return (
     <main className="stream host">
       <header className="stream-header host-head">
-        <h2 className="panel-label">Host tools</h2>
+        <h2 className="panel-label">Server settings</h2>
         <nav className="host-tabs">
           {SECTIONS.map((tab) => (
             <button

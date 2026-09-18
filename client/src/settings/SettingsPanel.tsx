@@ -9,7 +9,7 @@
  * name, but it is not a field you can edit — PROTOCOL §2, usernames are
  * immutable. The server is the lock; this is just honest.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { AuthResponse } from "../generated/AuthResponse";
 import type { User } from "../generated/User";
@@ -27,7 +27,7 @@ import {
   type SoundCue,
   type SoundPrefs,
 } from "../lib/sound";
-import { THEME_PREFS, type ThemePref } from "../lib/theme";
+import { type ThemePref } from "../lib/theme";
 import {
   appVersion,
   checkForUpdate,
@@ -54,11 +54,10 @@ import {
   type VoicePrefs,
 } from "../voice/voice";
 import "./settings.css";
-import {
-  SCALE_OPTIONS,
-  setInterfaceScale,
-  useInterfaceScale,
-} from "../lib/interface";
+import AppearanceSettings from "./AppearanceSettings";
+import PreferenceSwitch from "./PreferenceSwitch";
+import Button from "../lib/Button";
+import { ActionIcon } from "../lib/icons";
 import StatusEditor from "../status/StatusEditor";
 import NotifyRules from "../notify/NotifyRules";
 
@@ -114,9 +113,15 @@ export default function SettingsPanel({
 }) {
   const panel = useRef<HTMLElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
-  const scale = useInterfaceScale();
   const gateway = useGateway(api.baseUrl);
   const [editingStatus, setEditingStatus] = useState(false);
+
+  // A different category begins at its heading, not halfway down where the
+  // previous category happened to be scrolled.
+  useLayoutEffect(() => {
+    const body = panel.current?.querySelector(".settings-body");
+    if (body) body.scrollTop = 0;
+  }, [section]);
 
   useEffect(() => {
     panel.current
@@ -140,7 +145,7 @@ export default function SettingsPanel({
   return (
     <main className="stream settings" ref={panel}>
       <header className="stream-header settings-head">
-        <h2 className="panel-label">settings</h2>
+        <h2 className="panel-label">Settings</h2>
         <nav className="settings-tabs" aria-label="settings sections">
           {SECTIONS.map((tab) => (
             <button
@@ -155,7 +160,7 @@ export default function SettingsPanel({
           ))}
         </nav>
         <button type="button" className="settings-close meta" onClick={onClose}>
-          close
+          <ActionIcon name="close" /> Close
         </button>
       </header>
       <div className="settings-body">
@@ -189,86 +194,14 @@ export default function SettingsPanel({
           </>
         ) : null}
         {section === "reading" ? (
-          <>
-            <section className="settings-section">
-              <h3 className="panel-label">Interface size</h3>
-              <p className="settings-lead">
-                Make text and controls comfortable to read. Saved on this
-                computer.
-              </p>
-              <label className="settings-row">
-                Scale
-                <select
-                  className="settings-select"
-                  value={scale}
-                  onChange={(event) => {
-                    const control = event.currentTarget;
-                    setInterfaceScale(Number(control.value));
-                    requestAnimationFrame(() =>
-                      control.scrollIntoView({ block: "nearest" }),
-                    );
-                  }}
-                >
-                  {SCALE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size}%{size === 100 ? " — default" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="settings-hint">
-                Drag either panel edge to resize it. Use arrow keys on the edge,
-                or double-click to reset.
-              </p>
-            </section>
-            <section className="settings-section">
-              <h3 className="panel-label">theme</h3>
-              <p className="settings-lead">
-                Choose a look, or follow your computer’s light and dark setting.
-              </p>
-              <div className="settings-choices">
-                <div className="segmented" role="group" aria-label="theme">
-                  {THEME_PREFS.map((pref) => (
-                    <button
-                      key={pref}
-                      type="button"
-                      className="segmented-option meta"
-                      aria-pressed={pref === theme}
-                      onClick={() => onThemeChange(pref)}
-                    >
-                      {pref}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="settings-lead settings-warmth-lead">
-                Evening warmth softens the colors after sunset.
-              </p>
-              <button
-                type="button"
-                className="settings-mini settings-toggle"
-                aria-pressed={warmth}
-                onClick={() => onWarmthChange(!warmth)}
-              >
-                {warmth ? "evening warmth on" : "evening warmth off"}
-              </button>
-            </section>
-            <section className="settings-section">
-              <h3 className="panel-label">other people's names</h3>
-              <p className="settings-lead">
-                Hide custom name colors, fonts and effects. Message text uses
-                the default font too. Only your view changes.
-              </p>
-              <button
-                type="button"
-                className="settings-mini settings-toggle"
-                aria-pressed={normalize}
-                onClick={() => onNormalizeChange(!normalize)}
-              >
-                Use plain names and message fonts
-              </button>
-            </section>
-          </>
+          <AppearanceSettings
+            theme={theme}
+            onThemeChange={onThemeChange}
+            warmth={warmth}
+            onWarmthChange={onWarmthChange}
+            normalize={normalize}
+            onNormalizeChange={onNormalizeChange}
+          />
         ) : null}
         {section === "sound" ? (
           <>
@@ -343,59 +276,44 @@ export function SoundSection() {
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">sound</h3>
+      <h3 className="panel-label">A familiar little sound</h3>
       <p className="settings-lead">
         Choose your notification chimes. To silence people in voice, use deafen.
       </p>
-      <button
-        type="button"
-        className="settings-mini settings-toggle"
-        aria-pressed={prefs.muted}
-        onClick={() => change({ ...prefs, muted: !prefs.muted })}
-      >
-        mute all notification sounds
-      </button>
-      <p className="settings-lead settings-warmth-lead">
-        Quiet hours run from {QUIET_FROM_HOUR}:00 to 0{QUIET_UNTIL_HOUR}:00 on
-        this computer's clock. Notification chimes stay silent during them.
-      </p>
-      <button
-        type="button"
-        className="settings-mini settings-toggle"
-        aria-pressed={prefs.quietHours}
-        onClick={() => change({ ...prefs, quietHours: !prefs.quietHours })}
-      >
-        {prefs.quietHours ? "quiet hours on" : "quiet hours off"}
-      </button>
+      <PreferenceSwitch
+        label="Mute all notification sounds"
+        hint="A little quiet, whenever you need it."
+        checked={prefs.muted}
+        onChange={(muted) => change({ ...prefs, muted })}
+      />
+      <PreferenceSwitch
+        label="Quiet hours"
+        hint={`No chimes from ${QUIET_FROM_HOUR}:00 to 0${QUIET_UNTIL_HOUR}:00, on this computer’s clock.`}
+        checked={prefs.quietHours}
+        onChange={(quietHours) => change({ ...prefs, quietHours })}
+      />
       {SOUND_CATEGORIES.map((category) => (
-        <div key={category} className="settings-field">
-          <label>
-            <input
-              type="checkbox"
-              checked={prefs.categories[category]}
-              onChange={(event) =>
-                change({
-                  ...prefs,
-                  categories: {
-                    ...prefs.categories,
-                    [category]: event.target.checked,
-                  },
-                })
-              }
-            />
-            {SOUND_LABELS[category]}
-          </label>{" "}
-          <button
-            type="button"
-            className="settings-mini"
+        <div key={category} className="sound-preference">
+          <PreferenceSwitch
+            label={SOUND_LABELS[category]}
+            hint={SOUND_HINTS[category]}
+            checked={prefs.categories[category]}
+            onChange={(checked) =>
+              change({
+                ...prefs,
+                categories: { ...prefs.categories, [category]: checked },
+              })
+            }
+          />
+          <Button
             aria-label={`preview ${SOUND_LABELS[category]}`}
             disabled={!cueAllowed(SOUND_PREVIEWS[category], prefs, new Date())}
             onClick={() => {
               void playSound(SOUND_PREVIEWS[category]);
             }}
           >
-            preview
-          </button>
+            <ActionIcon name="headphones" /> Listen
+          </Button>
         </div>
       ))}
       <p className="settings-lead">
@@ -411,6 +329,14 @@ const SOUND_LABELS: Record<SoundCategory, string> = {
   dms: "DM messages",
   rooms: "room messages",
   knocks: "knocks",
+};
+const SOUND_HINTS: Record<SoundCategory, string> = {
+  voice: "Your voice session, and the people joining or leaving it.",
+  controls: "A quiet confirmation when you mute, unmute or deafen.",
+  dms: "A soft note for a new personal message.",
+  rooms:
+    "Off by default. Your conversations don’t need to compete for attention.",
+  knocks: "Two gentle taps when someone wants your attention.",
 };
 const SOUND_PREVIEWS: Record<SoundCategory, SoundCue> = {
   voice: "peer-join",

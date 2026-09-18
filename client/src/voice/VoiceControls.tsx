@@ -6,6 +6,8 @@ import {
   type MyVoice,
 } from "../lib/gateway";
 import { microphoneLine, PUSH_TO_TALK_KEY } from "./voice";
+import IconButton from "../lib/IconButton";
+import { ActionIcon } from "../lib/icons";
 
 /** One set of controls, whether the room or a destination is being read. */
 export default function VoiceControls({
@@ -49,36 +51,42 @@ export default function VoiceControls({
     <div className="voice-controls">
       {line === null ? null : <span className="voice-line meta">{line}</span>}
       {pushToTalk ? null : (
-        <button
+        <IconButton
+          label={mine.muted ? "Muted" : "Mute"}
           type="button"
           className="voice-action"
+          tooltipSide="below"
           aria-pressed={mine.muted}
           disabled={mine.deafened}
           onClick={() =>
             void setVoiceMuted(server, !mine.muted).catch(onProblem)
           }
         >
-          {mine.muted ? "muted" : "mute"}
-        </button>
+          <ActionIcon name={mine.muted ? "micOff" : "mic"} />
+        </IconButton>
       )}
-      <button
+      <IconButton
+        label={mine.deafened ? "Undeafen" : "Deafen"}
         type="button"
         className="voice-action"
+        tooltipSide="below"
         aria-pressed={mine.deafened}
         title="Silence incoming voice and mute your microphone"
         onClick={() =>
           void setVoiceDeafened(server, !mine.deafened).catch(onProblem)
         }
       >
-        {mine.deafened ? "undeafen" : "deafen"}
-      </button>
-      <button
+        <ActionIcon name={mine.deafened ? "headphonesOff" : "headphones"} />
+      </IconButton>
+      <IconButton
+        label="Leave voice"
         type="button"
         className="voice-action"
+        tooltipSide="below"
         onClick={() => void leaveVoice(server).catch(onProblem)}
       >
-        leave voice
-      </button>
+        <ActionIcon name="leave" />
+      </IconButton>
     </div>
   );
 }
