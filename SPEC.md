@@ -669,7 +669,7 @@ switches use a pill track and circular thumb. Panels stay square and shadow-free
 The single-line composer input and Send button share an outer height; Send
 keeps that height when the input grows. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger.
+click or its trigger. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 
@@ -701,14 +701,14 @@ the window restores the side panels automatically.
 under a `SERVER` label. `DMs` has the empty state `empty`. Personal Settings lives
 beside your name in the navigation footer as a gear. Media and Search are
 anchored immediately above that footer. Host controls open from the selected
-server's options, under Server settings; member removal lives in its People
+server's options, under Server Settings; member removal lives in its People
 section with confirmation, never in an ordinary member's action panel.
 Clicking or right-clicking a roster name opens a compact, dismissible person
 panel with their status and a spaced row of Message / Knock actions. Escape
 and outside click close it and return focus. No roles or permission matrix
 are introduced.
 Desktop notification rules and notification chimes both live in Settings →
-Sound & voice, in separately labelled sections. The people panel stays about people.
+Sound & Voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
 remain legible when not speaking; a simple rule marks speech. Click, right-click

@@ -1009,7 +1009,7 @@ function ServerRow({
                     onManage("server");
                   }}
                 >
-                  Server settings
+                  Server Settings
                 </button>
                 <button
                   type="button"

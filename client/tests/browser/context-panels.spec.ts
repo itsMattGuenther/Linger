@@ -170,7 +170,7 @@ test("server management stays in the selected server menu", async ({
     .click();
   await expect(panel).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Server settings", exact: true }),
+    page.getByRole("heading", { name: "Server Settings", exact: true }),
   ).toBeVisible();
   await expect(
     page.locator(".host-member").filter({ hasText: "Jules" }),

@@ -124,7 +124,7 @@ for (const scale of [100, 200]) {
     await page.setViewportSize({ width: 1100, height: 720 });
     await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
     await page.goto("/tests/fixtures/console.html");
-    await openSettings(page, "Sound & voice");
+    await openSettings(page, "Sound & Voice");
     const tracks = page.locator(".sound-settings .switch-track");
     await expect(tracks).toHaveCount(7);
     const columns = await tracks.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().x));
@@ -134,7 +134,7 @@ for (const scale of [100, 200]) {
     await quiet.check();
     await expect(quiet).toBeChecked();
     await page.reload();
-    await openSettings(page, "Sound & voice");
+    await openSettings(page, "Sound & Voice");
     await expect(quiet).toBeChecked();
   });
 }

@@ -75,8 +75,8 @@ export type SettingsSection = "you" | "reading" | "sound" | "computer";
 const SECTIONS: Array<{ key: SettingsSection; label: string }> = [
   { key: "you", label: "Profile" },
   { key: "reading", label: "Appearance" },
-  { key: "sound", label: "Sound & voice" },
-  { key: "computer", label: "Account & app" },
+  { key: "sound", label: "Sound & Voice" },
+  { key: "computer", label: "Account & App" },
 ];
 
 function problemText(error: unknown, fallback: string): string {
@@ -166,7 +166,7 @@ export default function SettingsPanel({
           <>
             <NameSection api={api} user={user} />
             <section className="settings-section">
-              <h3 className="panel-label">Your status</h3>
+              <h3 className="panel-label">Your Status</h3>
               {editingStatus ? (
                 <StatusEditor
                   api={api}
@@ -206,7 +206,7 @@ export default function SettingsPanel({
             <SoundSection />
             <VoiceSection />
             <section className="settings-section">
-              <h3 className="panel-label">Desktop notifications</h3>
+              <h3 className="panel-label">Desktop Notifications</h3>
               <p className="settings-lead">
                 Mentions can show a desktop banner. Choose people whose other
                 messages should also notify you, across this server or in
@@ -231,7 +231,7 @@ export default function SettingsPanel({
             <ExportSection api={api} />
             <UpdatesSection />
             <section className="settings-section">
-              <h3 className="panel-label">this computer</h3>
+              <h3 className="panel-label">This Computer</h3>
               <p className="settings-lead">
                 Signing out forgets this server on this computer. It does not
                 delete your account.
@@ -280,7 +280,7 @@ export function SoundSection() {
 
   return (
     <section className="settings-section sound-settings">
-      <h3 className="panel-label">A familiar little sound</h3>
+      <h3 className="panel-label">A Familiar Little Sound</h3>
       <p className="settings-lead">
         Choose your notification chimes. To silence people in voice, use deafen.
       </p>
@@ -397,7 +397,7 @@ function ExportSection({ api }: { api: AuthedApi }) {
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">take everything with you</h3>
+      <h3 className="panel-label">Take Everything With You</h3>
       <p className="settings-lead">
         Download public rooms and your own DMs, including shared files, as a
         zip. Messages open in any text editor. Available once an hour.
@@ -475,7 +475,7 @@ function VoiceSection() {
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">voice</h3>
+      <h3 className="panel-label">Voice</h3>
       <p className="settings-lead">
         Talking happens in a room: <em>join voice</em> under a room's name turns
         your microphone on there.
@@ -619,7 +619,7 @@ function UpdatesSection() {
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">updates</h3>
+      <h3 className="panel-label">Updates</h3>
       <p className="settings-lead">
         Linger checks for a new version when you open this panel. Nothing is
         downloaded until you ask for it, and every update is checked against
@@ -701,7 +701,7 @@ function NameSection({ api, user }: { api: AuthedApi; user: User }) {
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">who you are</h3>
+      <h3 className="panel-label">Who You Are</h3>
       <p className="settings-lead">
         Your display name is what people see in the roster and next to your
         messages. It can change. Your username cannot.
@@ -820,7 +820,7 @@ function PasswordSection({
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">password</h3>
+      <h3 className="panel-label">Password</h3>
       <form
         className="settings-form"
         onSubmit={(event) => {

@@ -191,7 +191,7 @@ installer is not code-signed, which is true — see
 for the difference between that and the signature on updates, which is in place.
 Nothing about the download is broken.
 
-The app offers updates under *Settings → Account & app → updates* and
+The app offers updates under *Settings → Account & App → Updates* and
 downloads nothing until you choose *install and restart*. A code push is not
 a published desktop release. See the [update instructions](docs/user-guide.md#updates)
 for the manual fallback; the full real-machine updater check (HC-1) is still open.

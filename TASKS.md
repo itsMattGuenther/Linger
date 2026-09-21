@@ -397,8 +397,8 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Windows listening, sound-device behavior and banner silence still need an
   installed-client check; these are not HC-8/HC-9 evidence.
 
-- ⏳ **T-931 · Fix reported composer and settings inconsistencies** — effort:
-  **medium** — claimed Matt, 2026-09-21. GitHub #88, #89 and #90: match the
+- ✅ **T-931 · Fix reported composer and settings inconsistencies** — effort:
+  **medium** — Matt, 2026-09-21. GitHub #88, #89 and #90: match the
   Send button to the single-line input height, anchor the attachment menu to
   Add with predictable focus/dismissal, and use title case for headings and
   navigation across settings. Preserve Console styling and existing behavior.
@@ -406,6 +406,17 @@ flows and do not start a new milestone. Evidence and rationale are in the
   and pointer flows, file-picker/draft preservation, and settings headings.
   Intended for the 0.3.1 patch alongside the separate audio fix in PR #87.
   GitHub #81 remains deferred.
+
+  **Implemented 2026-09-21.** The composer shares one control height, and its
+  attachment menu opens above Add without a close button or tooltip. Capturing
+  the trigger before scheduling the state update also fixes failed openings
+  after typing a draft. Menu keyboard navigation, Escape/outside/trigger
+  dismissal and file-picker draft preservation pass browser checks. Headings
+  and tabs use title case in every personal and server settings view; the
+  README and user guide follow the visible labels. Full local gate and all
+  133 Chromium checks pass, including all six supported interface scales.
+  Rendered production components were inspected with synthetic fixture data.
+  No release or real-device check is closed by this work.
 
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**

@@ -91,7 +91,7 @@ test("style preview is private, resettable and only reports success after saving
   await page.goto("/tests/fixtures/console.html");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const picker = page.locator(".settings-section").filter({
-    has: page.getByRole("heading", { name: "Make yourself at home" }),
+    has: page.getByRole("heading", { name: "Make Yourself At Home" }),
   });
   await picker.getByRole("button", { name: "mint", exact: true }).click();
   await expect(picker.locator(".style-preview-name")).toHaveAttribute(
@@ -252,7 +252,7 @@ test("switching settings categories returns to the heading at 200% scale", async
       .evaluate((node) => node.scrollWidth <= node.clientWidth),
   ).toBe(true);
   await page
-    .getByRole("button", { name: "Sound & voice", exact: true })
+    .getByRole("button", { name: "Sound & Voice", exact: true })
     .click();
   expect(
     await page.locator(".settings-body").evaluate((node) => node.scrollTop),
