@@ -86,6 +86,14 @@ static gboolean start(gpointer unused) {
 G_MODULE_EXPORT void gtk_module_init(gint *argc, gchar ***argv) {
     (void)argc; (void)argv;
     if (!g_getenv("LINGER_AUDIO_RESULT") || !g_getenv("LINGER_AUDIO_SCRIPT")) return;
+    /* AppRun may activate GTK desktop helpers which inherit GTK3_MODULES.
+     * Only probe the packaged Linger process, never those helpers. */
+    gchar *exe = g_file_read_link("/proc/self/exe", NULL);
+    gchar *name = exe ? g_path_get_basename(exe) : NULL;
+    gboolean ours = g_strcmp0(name, "linger-client") == 0;
+    g_free(name);
+    g_free(exe);
+    if (!ours) return;
     gst_init(NULL, NULL);
     const char *elements[] = {"appsrc", "audioconvert", "audioresample", "queue",
         "interleave", "autoaudiosink", "pulsesink"};

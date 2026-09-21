@@ -42,7 +42,7 @@ def check(program, output, appimage):
         path = output / kind
         path.mkdir(mode=0o700)
         env[f"XDG_{kind.upper()}_HOME" if kind != "runtime" else "XDG_RUNTIME_DIR"] = str(path)
-    env.update(GDK_BACKEND="x11", LINGER_LINUX_BACKEND="x11", NO_AT_BRIDGE="1",
+    env.update(GDK_BACKEND="x11", LINGER_LINUX_BACKEND="x11", NO_AT_BRIDGE="1", XDG_CURRENT_DESKTOP="GNOME",
                WEBKIT_DISABLE_DMABUF_RENDERER="1", WEBKIT_DISABLE_COMPOSITING_MODE="1")
     module = output / "probe.so"
     flags = shlex.split(subprocess.check_output(
