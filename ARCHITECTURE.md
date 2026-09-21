@@ -67,6 +67,11 @@ Consequences:
    on the wire. State still catches up without chimes; existing mention-banner
    batching is unchanged. The existing sound player owns all notification audio;
    native desktop banners explicitly request silent presentation.
+   Notification chimes use Web Audio in the WebView. Linux AppImages must
+   bundle GStreamer and its playback plugins; DEB/RPM packages must require
+   those plugins through the system package manager. Windows installers ensure
+   WebView2 is installed. Package checks exercise the real WebView audio graph;
+   a browser unit test alone cannot establish that these runtime files shipped.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.

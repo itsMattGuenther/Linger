@@ -397,6 +397,19 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Windows listening, sound-device behavior and banner silence still need an
   installed-client check; these are not HC-8/HC-9 evidence.
 
+  **Packaging follow-up implemented 2026-09-21 (Matt, PR #87):** v0.3.0's AppImage ships
+  GStreamer libraries without any playback plugins and points its plugin
+  search path at an absent directory. The fix bundles the media runtime,
+  requires the corresponding DEB/RPM plugins, and makes Windows WebView2
+  installation explicit. Matt approved the additional runtime size. The
+  published AppImage fails the new runtime check; rebuilt AppImage, DEB and
+  RPM executables produce nonzero virtual-speaker recordings locally. Both
+  Windows EXE/MSI runtime checks pass in CI. The Linux test now keeps audio
+  open until its recording is checked; a controlled delayed-output comparison
+  reproduced the previous test's premature-close failure. Package and release
+  workflows run these checks; see [method and limits](docs/packaged-audio-checks.md).
+  No release or real-listener check is closed by this work alone.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
