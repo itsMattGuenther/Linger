@@ -397,6 +397,13 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Windows listening, sound-device behavior and banner silence still need an
   installed-client check; these are not HC-8/HC-9 evidence.
 
+  **Packaging follow-up claimed 2026-09-21 (Matt):** v0.3.0's AppImage ships
+  GStreamer libraries without any playback plugins and points its plugin
+  search path at an absent directory. Bundle the media runtime, require the
+  corresponding DEB/RPM plugins, and check real packaged Web Audio on Linux
+  and Windows. Matt approved the additional runtime size. No release or
+  real-listener check is closed by this work alone.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request

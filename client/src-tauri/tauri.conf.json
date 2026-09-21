@@ -39,7 +39,34 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "deb": {
+        "depends": [
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-pulseaudio"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "/usr/lib64/gstreamer-1.0/libgstapp.so",
+          "/usr/lib64/gstreamer-1.0/libgstaudioconvert.so",
+          "/usr/lib64/gstreamer-1.0/libgstaudioresample.so",
+          "/usr/lib64/gstreamer-1.0/libgstcoreelements.so",
+          "/usr/lib64/gstreamer-1.0/libgstinterleave.so",
+          "/usr/lib64/gstreamer-1.0/libgstautodetect.so",
+          "/usr/lib64/gstreamer-1.0/libgstpulseaudio.so"
+        ]
+      }
+    },
     "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "wix": {
         "upgradeCode": "465ad9d4-963e-58d4-ac8c-2730a192a3e0"
       },

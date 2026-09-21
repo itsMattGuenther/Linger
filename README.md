@@ -314,10 +314,19 @@ using it for dictation; the default backend and updater trust are unchanged.
 ```bash
 # Debian/Ubuntu
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
-                 libayatana-appindicator3-dev librsvg2-dev libasound2-dev cmake
+                 libayatana-appindicator3-dev librsvg2-dev libasound2-dev cmake \
+                 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio
 # Arch
-sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake
+sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-plugins-good
 ```
+
+Notification chimes need the WebView's audio runtime as well as the native
+voice engine. AppImages bundle GStreamer playback plugins; DEB/RPM packages
+require them through the package manager. Both Windows installers install
+WebView2 if it is missing (an internet connection is required for that step).
+Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
+the media runtime. See [packaged audio checks](docs/packaged-audio-checks.md)
+for runtime tests and the v0.3.0 packaging defect these checks prevent.
 
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
 order CI runs it — rules lint, version check, fmt, clippy, workspace tests,
