@@ -1477,6 +1477,16 @@ completed checks from useful partial results.
 *Closes M7's milestone check, and most of HC-2. The biggest one, and everything
 it needs is already built.*
 
+**0.3.1 preparation, 2026-09-21:** the four version sources and Rust lockfiles
+move together to 0.3.1. [Release notes](docs/releases/0.3.1.md) collect the
+packaged audio fix (PR #87) and composer, settings and message spacing fixes
+(PR #91; issues #88, #89, #90 and #92). Issue #81 remains deferred. Matt
+reported successfully updating the server and using the in-app updater to
+reach 0.3.0; separate-computer and retained-sign-in details were not recorded,
+so this does not close HC-1. The signed 0.3.1 packages must pass the runtime
+audio checks before publication. Physical listening and network checks remain
+open.
+
 **0.3.0 preparation, 2026-09-21:** the four version sources and Rust lockfiles
 move together to 0.3.0. [Release notes](docs/releases/0.3.0.md) cover the changes
 since the published 0.2.0 tag and keep the open release checks explicit. A
