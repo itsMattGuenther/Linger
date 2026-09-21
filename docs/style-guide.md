@@ -45,7 +45,8 @@ name on hover and keyboard focus. Keep control states visible at rest; hover
 reinforces them. Keyboard focus has a separate ring, never just a color shift.
 Disabled controls remain recognizable but do not compete with available actions.
 
-Use sentence-case for any remaining visible labels.
+Settings headings and navigation labels use title case. Use sentence case for
+other visible labels.
 
 Search, Media and Settings share `DestinationHeader`: the same sans heading
 and bordered Close control, with descriptions and category tabs as needed.
@@ -56,6 +57,9 @@ continuation), including while invisible. Hover and keyboard focus must never
 cover message text or change a row's height. Reaction choices wrap inside that
 reserved row. Message bodies offer the four bundled sans faces; saved non-sans
 keys fall back to the default body face without restricting name styling.
+Rooms and DMs use 1.3 message line height, 2px between prose blocks and 8px
+before a sender group at default scale. Sender headings separate speakers;
+typed line breaks remain intact. Session dividers keep their larger spacing.
 
 Navigation text wraps to the rail's width; it is never truncated with an
 ellipsis or a line clamp, no matter how long or unbreakable a server, room or

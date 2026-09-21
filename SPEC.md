@@ -330,6 +330,9 @@ height, click to expand.
 not a mode to discover. The layout adapts to the available window space. Interface
 scale is an optional reading preference, not a requirement for a usable layout.
 There is no Density setting or Compact/IRC presentation.
+Rooms and DMs share tight text spacing: 1.3 line height, 2px between prose
+blocks and 8px before a sender group at default scale. Sender names provide
+the main visual break. Session dividers retain their larger spacing.
 
 **Time-of-day warmth.** Background and text colors shift ~200K warmer after local
 sunset. Subtle enough that most people never consciously notice. User-disableable.
@@ -578,7 +581,7 @@ Discord reskin.
 
 | Role | Face | Size | Notes |
 |---|---|---|---|
-| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.6 | **Sans, not mono** |
+| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.3 | **Sans, not mono** |
 | UI labels, room names | same | 14–18px / 500 | Actions use sans too |
 | Timestamps, status bar, all numerals, file sizes, code | Geist Mono (or JetBrains Mono) | 12px | **Mono is metadata-only** |
 | Time dividers | mono, uppercase, `0.1em` tracking | 12px | `SATURDAY MORNING` |
@@ -650,7 +653,7 @@ rail (servers + rooms)     232px default, adjustable
 roster (who's around)      264px default, adjustable
 message stream             flex, min 420px
 panel gutters              20px
-gap between message groups 20px
+gap between message groups 8px
 hairlines                  1px
 radius                     4px buttons + inputs / pill switches / 6px media / 0 panels
 ```
@@ -734,7 +737,7 @@ leaving the room view releases a held key, as does losing window focus.
   `connecting… tls ok… identify… ready (28ms)`
 - **Motion:** 120–160ms, ease-out. No spring, no bounce. The only slow animation in the
   app is name shimmer (4s linear).
-- **Message presentation:** 16px/1.6 sans body, consecutive messages grouped.
+- **Message presentation:** 16px/1.3 sans body, consecutive messages grouped.
   One comfortable default, with no density modes. Message bodies are limited
   to 80ch on wide windows; extra window width must not produce page-wide prose.
 

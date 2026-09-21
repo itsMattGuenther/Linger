@@ -397,11 +397,12 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Windows listening, sound-device behavior and banner silence still need an
   installed-client check; these are not HC-8/HC-9 evidence.
 
-- ✅ **T-931 · Fix reported composer and settings inconsistencies** — effort:
-  **medium** — Matt, 2026-09-21. GitHub #88, #89 and #90: match the
+- ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:
+  **medium** — Matt, 2026-09-21. GitHub #88, #89, #90 and #92: match the
   Send button to the single-line input height, anchor the attachment menu to
   Add with predictable focus/dismissal, and use title case for headings and
-  navigation across settings. Preserve Console styling and existing behavior.
+  navigation across settings, and tighten text spacing in rooms and DMs.
+  Preserve Console styling and existing behavior.
   *Accept:* verify composer geometry at supported scales, attachment keyboard
   and pointer flows, file-picker/draft preservation, and settings headings.
   Intended for the 0.3.1 patch alongside the separate audio fix in PR #87.
@@ -414,8 +415,12 @@ flows and do not start a new milestone. Evidence and rationale are in the
   dismissal and file-picker draft preservation pass browser checks. Headings
   and tabs use title case in every personal and server settings view; the
   README and user guide follow the visible labels. Full local gate and all
-  133 Chromium checks pass, including all six supported interface scales.
+  135 Chromium checks pass, including all six supported interface scales.
   Rendered production components were inspected with synthetic fixture data.
+  **#92 added at Matt's request:** message line height is 1.3, prose block
+  spacing is 2px and sender-group spacing is 8px at default scale. Session
+  dividers and action controls keep their clearance. Room/DM checks verify
+  equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
   No release or real-device check is closed by this work.
 
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:

@@ -80,7 +80,7 @@
      identity and the body stays legible. */
   font-family: var(--person-msg-font, var(--font-body));
   font-size: var(--text-body-size);
-  line-height: var(--text-body-leading);
+  line-height: var(--text-message-leading);
   overflow-wrap: anywhere;
   /* Aging, set per message from its timestamp. Body only — the name and the
      timestamp never fade (SPEC §5.6). */
@@ -94,7 +94,7 @@
    straight out through the parent's box, and the virtualizer measures the box. */
 .msg-body > * + *,
 .md-quote > * + * {
-  padding-top: 6px;
+  padding-top: 0.125rem;
 }
 
 .msg-edited {
@@ -113,7 +113,7 @@
   align-items: center;
   gap: 10px;
   /* Real whitespace: a session break should read as time having passed. */
-  padding: calc(var(--group-gap) * 2) 0 var(--group-gap);
+  padding: calc(var(--session-gap) * 2) 0 var(--session-gap);
 }
 
 .stream-divider::before,
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: calc(var(--group-gap) * 0.75) 0 calc(var(--group-gap) * 0.5);
+  padding: calc(var(--session-gap) * 0.75) 0 calc(var(--session-gap) * 0.5);
 }
 
 .left-off::after {
