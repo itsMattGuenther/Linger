@@ -1438,6 +1438,14 @@ completed checks from useful partial results.
 *Closes M7's milestone check, and most of HC-2. The biggest one, and everything
 it needs is already built.*
 
+**0.3.0 preparation, 2026-09-21:** the four version sources and Rust lockfiles
+move together to 0.3.0. [Release notes](docs/releases/0.3.0.md) cover the changes
+since the published 0.2.0 tag and keep the open release checks explicit. A
+WebKit persistence check now waits for saved panel widths before reloading;
+the visible width can update before its storage effect completes. This starts
+the next testing release; HC-1 still needs an installed copy on a separate
+computer to update successfully while preserving its sign-ins.
+
 This is the one thing no test can do: prove that a copy of Linger installed on
 somebody else's computer can replace itself with a newer one.
 

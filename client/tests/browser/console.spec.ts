@@ -66,6 +66,12 @@ test("panel boundaries support pointer, keyboard, reset and persistence", async 
   await page.mouse.move(box.x - 38, box.y + 100);
   await page.mouse.up();
   await expect(roster).toHaveAttribute("aria-valuenow", "304");
+  // Persistence runs in an effect after the visible resize. Wait for that
+  // write before reloading; the ARIA value alone does not prove it finished.
+  await expect.poll(() => page.evaluate(() => ({
+    rail: localStorage.getItem("linger.interface.rail"),
+    roster: localStorage.getItem("linger.interface.roster"),
+  }))).toEqual({ rail: "240", roster: "304" });
   await page.reload();
   await expect(rail).toHaveAttribute("aria-valuenow", "240");
   await expect(roster).toHaveAttribute("aria-valuenow", "304");

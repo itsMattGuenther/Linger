@@ -41,13 +41,13 @@ There are no macOS or ARM desktop installers yet.
 
 An AppImage is the app itself, not an installer. Open a terminal on **your own
 computer**, paste these two lines, and press Enter. This example uses version
-`0.2.0` saved in `Downloads`; substitute your actual filename if it differs.
+`0.3.0` saved in `Downloads`; substitute your actual filename if it differs.
 Filenames are case-sensitive on Linux. Older downloads start with `linger`;
 newer builds may start with `Linger`. Match the name in Downloads exactly.
 
 ```bash
-chmod +x ~/Downloads/Linger_0.2.0_amd64.AppImage
-~/Downloads/Linger_0.2.0_amd64.AppImage
+chmod +x ~/Downloads/Linger_0.3.0_amd64.AppImage
+~/Downloads/Linger_0.3.0_amd64.AppImage
 ```
 
 The first line allows it to run; the second opens the window. You can close
@@ -67,19 +67,19 @@ Replace the example filename with the one you downloaded.
 Ubuntu / Debian / Mint:
 
 ```bash
-sudo apt install ~/Downloads/Linger_0.2.0_amd64.deb
+sudo apt install ~/Downloads/Linger_0.3.0_amd64.deb
 ```
 
 Fedora:
 
 ```bash
-sudo dnf install ~/Downloads/Linger-0.2.0-1.x86_64.rpm
+sudo dnf install ~/Downloads/Linger-0.3.0-1.x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ~/Downloads/Linger-0.2.0-1.x86_64.rpm
+sudo zypper install ~/Downloads/Linger-0.3.0-1.x86_64.rpm
 ```
 
 Open **Linger** from your application launcher, now and whenever you want to
@@ -135,7 +135,7 @@ see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubles
 command, with your downloaded filename:
 
 ```bash
-WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ~/Downloads/Linger_0.2.0_amd64.AppImage
+WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ~/Downloads/Linger_0.3.0_amd64.AppImage
 ```
 
 This opened Linger on the tested Omarchy/Wayland computer. It changes only
@@ -175,7 +175,7 @@ Do not edit the extracted AppImage or change global graphics settings to fix
 this. The packaging limitation and developer reproduction are tracked in
 [Linux input checks](linux-input-checks.md).
 
-**Testing v0.2.0 on Wayland:** this version accepts
+**Testing v0.2.0 or newer on Wayland:** these versions accept
 `LINGER_LINUX_BACKEND=wayland` before the AppImage command. The older
 **v0.1.0 does not support this option**; use the clipboard workaround
 above with that version. The developer check page records the test commands
