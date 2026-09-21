@@ -330,6 +330,9 @@ height, click to expand.
 not a mode to discover. The layout adapts to the available window space. Interface
 scale is an optional reading preference, not a requirement for a usable layout.
 There is no Density setting or Compact/IRC presentation.
+Rooms and DMs share tight text spacing: 1.3 line height, 2px between prose
+blocks and 8px before a sender group at default scale. Sender names provide
+the main visual break. Session dividers retain their larger spacing.
 
 **Time-of-day warmth.** Background and text colors shift ~200K warmer after local
 sunset. Subtle enough that most people never consciously notice. User-disableable.
@@ -578,7 +581,7 @@ Discord reskin.
 
 | Role | Face | Size | Notes |
 |---|---|---|---|
-| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.6 | **Sans, not mono** |
+| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.3 | **Sans, not mono** |
 | UI labels, room names | same | 14–18px / 500 | Actions use sans too |
 | Timestamps, status bar, all numerals, file sizes, code | Geist Mono (or JetBrains Mono) | 12px | **Mono is metadata-only** |
 | Time dividers | mono, uppercase, `0.1em` tracking | 12px | `SATURDAY MORNING` |
@@ -650,7 +653,7 @@ rail (servers + rooms)     232px default, adjustable
 roster (who's around)      264px default, adjustable
 message stream             flex, min 420px
 panel gutters              20px
-gap between message groups 20px
+gap between message groups 8px
 hairlines                  1px
 radius                     4px buttons + inputs / pill switches / 6px media / 0 panels
 ```
@@ -666,6 +669,10 @@ use labelled switches, not ambiguous text buttons. Familiar toolbar actions
 hover/focus tooltips. Less familiar actions keep visible labels. A person's
 name is not drawn as a selector. Buttons and inputs keep Console's 4px radius;
 switches use a pill track and circular thumb. Panels stay square and shadow-free.
+The single-line composer input and Send button share an outer height; Send
+keeps that height when the input grows. The attachment action opens a compact
+menu above Add, focuses its first action and dismisses with Escape, outside
+click or its trigger. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 
@@ -697,14 +704,14 @@ the window restores the side panels automatically.
 under a `SERVER` label. `DMs` has the empty state `empty`. Personal Settings lives
 beside your name in the navigation footer as a gear. Media and Search are
 anchored immediately above that footer. Host controls open from the selected
-server's options, under Server settings; member removal lives in its People
+server's options, under Server Settings; member removal lives in its People
 section with confirmation, never in an ordinary member's action panel.
 Clicking or right-clicking a roster name opens a compact, dismissible person
 panel with their status and a spaced row of Message / Knock actions. Escape
 and outside click close it and return focus. No roles or permission matrix
 are introduced.
 Desktop notification rules and notification chimes both live in Settings →
-Sound & voice, in separately labelled sections. The people panel stays about people.
+Sound & Voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
 remain legible when not speaking; a simple rule marks speech. Click, right-click
@@ -730,7 +737,7 @@ leaving the room view releases a held key, as does losing window focus.
   `connecting… tls ok… identify… ready (28ms)`
 - **Motion:** 120–160ms, ease-out. No spring, no bounce. The only slow animation in the
   app is name shimmer (4s linear).
-- **Message presentation:** 16px/1.6 sans body, consecutive messages grouped.
+- **Message presentation:** 16px/1.3 sans body, consecutive messages grouped.
   One comfortable default, with no density modes. Message bodies are limited
   to 80ch on wide windows; extra window width must not produce page-wide prose.
 

@@ -76,6 +76,12 @@ silent recording with immediate closure and recorded the same tone with the
 context kept open. This changes only the test: Linger already keeps one audio
 context for the lifetime of the app.
 
+The Linux host also waits for the recorder's first samples before launching
+the app. Starting the recorder process does not prove its monitor stream is
+ready, and a short cue can finish before it attaches. A controlled comparison
+delaying recorder startup by four seconds missed the cue without this wait and
+captured it with the wait, using the same 0.3.1 DEB executable in both runs.
+
 On Linux, `web-audio.json` is the intermediate graph result; only `result.json`
 with a nonzero `speaker_peak` establishes that the virtual speaker received
 audio. They are separate files so the WebView poller cannot overwrite the

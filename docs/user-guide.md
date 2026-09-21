@@ -203,14 +203,14 @@ has four sections:
 
 - **Profile** — your display name, name styling and status
 - **Appearance** — interface size, theme, evening warmth and name styling preferences
-- **Sound & voice** — notification chimes and quiet hours; microphone, speakers,
+- **Sound & Voice** — notification chimes and quiet hours; microphone, speakers,
   push to talk
-- **Account & app** — password, export, updates and sign out
+- **Account & App** — password, export, updates and sign out
 
 Everything this guide calls *settings → something* is on one of those. **Close**
 at the top right puts the room back.
 
-**Too small?** Open **Appearance → Interface size** and choose a larger scale,
+**Too small?** Open **Appearance → Interface Size** and choose a larger scale,
 up to 200%. Your saved choice applies throughout the app, including sign-in.
 Drag a side panel's inner edge to change its width. Double-click the edge to
 reset it. With a keyboard, Tab to the edge and use Left/Right; Home/End choose
@@ -300,14 +300,14 @@ Moving voice to another room keeps your mute/deafen choices. Leaving and
 joining starts a fresh session. Your per-person volume settings are unaffected
 by deafen, and missed speech is discarded rather than played when you return.
 
-**Push to talk** is in Settings → Sound & voice. With it on, every call starts muted and
+**Push to talk** is in Settings → Sound & Voice. With it on, every call starts muted and
 the microphone is open only while you hold `ctrl`, including in Settings.
 Leaving the room view or switching away from the app releases a held key;
 press it again to speak. It is off by default because
 a room you leave running is the point, and a key you have to hold is the
 opposite of that.
 
-Which microphone and speakers to use is also in Settings → Sound & voice. A change
+Which microphone and speakers to use is also in Settings → Sound & Voice. A change
 applies the next time you join. If a device you picked is not plugged in, the
 system default is used and the picker says so.
 
@@ -384,7 +384,7 @@ shows instead of your status. Clearing it brings you back.
 
 ## Making your name yours
 
-**Settings → Profile → Make yourself at home.** This is the fun part, and it is what everyone
+**Settings → Profile → Make Yourself At Home.** This is the fun part, and it is what everyone
 else sees next to everything you write.
 
 - a **face** (one of twelve fonts) and a **weight**, plus italic
@@ -402,7 +402,7 @@ changes** returns to your saved look; **Save your look** publishes it.
 
 Also in settings:
 
-- **Interface size** — enlarge text and controls from 100% to 200%. The default
+- **Interface Size** — enlarge text and controls from 100% to 200%. The default
   layout is comfortable; there are no density modes to choose between.
 - **Theme** — dark, light, or follow your desktop.
 - **Evening warmth** — after about 7pm the colors go slightly warmer, the way a
@@ -414,7 +414,7 @@ Also in settings:
 
 Desktop banners appear for **somebody naming you** — or a
 person you have specifically asked to hear about. Open **Settings → Sound &
-voice → Desktop notifications** to choose those people, either everywhere or
+Voice → Desktop Notifications** to choose those people, either everywhere or
 in selected rooms.
 
 For chimes, open **settings → sound & voice**. Voice-session joins, leaves and
@@ -446,7 +446,7 @@ index listing who shared what and when. It opens with an ordinary text editor
 and an ordinary file browser. **You do not need Linger, or an account, or the
 server to still exist**, which is the entire point.
 
-**Settings → Account & app → take everything with you.** Press the button, wait — it takes a
+**Settings → Account & App → Take Everything With You.** Press the button, wait — it takes a
 moment on a busy server — then press *download it*. The file opens in your
 normal browser's downloads, like anything else you download.
 
@@ -455,7 +455,7 @@ you can come back.
 
 ## Updates
 
-1. Open **Settings → Account & app → updates**.
+1. Open **Settings → Account & App → Updates**.
 2. Press **check again**. The panel shows your version and whether a newer
    release is available.
 3. When you are ready to close the app, choose **install and restart** if
@@ -476,10 +476,10 @@ is still open ([HC-1](../TASKS.md#hc-1--cut-a-release-and-watch-a-machine-update
 
 ## Signing out
 
-**Settings → Account & app → sign out.** That forgets the server on this
+**Settings → Account & App → sign out.** That forgets the server on this
 computer. Your account and everything in it stays exactly where it is.
 
-To change your password, use **Settings → Account & app → password**. If you have forgotten it,
+To change your password, use **Settings → Account & App → Password**. If you have forgotten it,
 ask whoever runs the server — they can set you a new one.
 
 ---

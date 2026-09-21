@@ -33,7 +33,7 @@ export default function AppearanceSettings({
       <section className="settings-section">
         <div className="preference-row scale-row">
           <div className="preference-copy">
-            <h3>Interface size</h3>
+            <h3>Interface Size</h3>
             <p>Text, buttons and panels scale together.</p>
           </div>
           <label className="scale-choice">
@@ -69,10 +69,10 @@ export default function AppearanceSettings({
       </section>
       <section className="settings-section">
         <div className="preference-copy">
-          <h3>Color theme</h3>
+          <h3>Color Theme</h3>
           <p>Choose a look, or follow your desktop.</p>
         </div>
-        <div className="theme-cards" role="group" aria-label="Color theme">
+        <div className="theme-cards" role="group" aria-label="Color Theme">
           {THEME_PREFS.map((pref) => (
             <button
               type="button"

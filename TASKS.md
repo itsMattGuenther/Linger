@@ -410,6 +410,32 @@ flows and do not start a new milestone. Evidence and rationale are in the
   workflows run these checks; see [method and limits](docs/packaged-audio-checks.md).
   No release or real-listener check is closed by this work alone.
 
+- ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:
+  **medium** — Matt, 2026-09-21. GitHub #88, #89, #90 and #92: match the
+  Send button to the single-line input height, anchor the attachment menu to
+  Add with predictable focus/dismissal, and use title case for headings and
+  navigation across settings, and tighten text spacing in rooms and DMs.
+  Preserve Console styling and existing behavior.
+  *Accept:* verify composer geometry at supported scales, attachment keyboard
+  and pointer flows, file-picker/draft preservation, and settings headings.
+  Intended for the 0.3.1 patch alongside the separate audio fix in PR #87.
+  GitHub #81 remains deferred.
+
+  **Implemented 2026-09-21.** The composer shares one control height, and its
+  attachment menu opens above Add without a close button or tooltip. Capturing
+  the trigger before scheduling the state update also fixes failed openings
+  after typing a draft. Menu keyboard navigation, Escape/outside/trigger
+  dismissal and file-picker draft preservation pass browser checks. Headings
+  and tabs use title case in every personal and server settings view; the
+  README and user guide follow the visible labels. Full local gate and all
+  135 Chromium checks pass, including all six supported interface scales.
+  Rendered production components were inspected with synthetic fixture data.
+  **#92 added at Matt's request:** message line height is 1.3, prose block
+  spacing is 2px and sender-group spacing is 8px at default scale. Session
+  dividers and action controls keep their clearance. Room/DM checks verify
+  equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
+  No release or real-device check is closed by this work.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
@@ -1450,6 +1476,19 @@ completed checks from useful partial results.
 
 *Closes M7's milestone check, and most of HC-2. The biggest one, and everything
 it needs is already built.*
+
+**0.3.1 preparation, 2026-09-21:** the four version sources and Rust lockfiles
+move together to 0.3.1. [Release notes](docs/releases/0.3.1.md) collect the
+packaged audio fix (PR #87) and composer, settings and message spacing fixes
+(PR #91; issues #88, #89, #90 and #92). Issue #81 remains deferred. Matt
+reported successfully updating the server and using the in-app updater to
+reach 0.3.0; separate-computer and retained-sign-in details were not recorded,
+so this does not close HC-1. The signed 0.3.1 packages must pass the runtime
+audio checks before publication. Physical listening and network checks remain
+open.
+The combined package check exposed a recorder-start race: a short probe could
+finish before recording began. Waiting for the recorder's first samples fixes
+the controlled four-second-delay reproduction without changing app playback.
 
 **0.3.0 preparation, 2026-09-21:** the four version sources and Rust lockfiles
 move together to 0.3.0. [Release notes](docs/releases/0.3.0.md) cover the changes

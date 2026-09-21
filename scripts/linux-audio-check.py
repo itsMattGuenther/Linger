@@ -74,6 +74,14 @@ def check(program, output, appimage):
                                          "--format=float32le", "--rate=48000", "--channels=1", "--latency-msec=20"],
                                         env=env, stdout=samples, stderr=log, start_new_session=True)
         processes.append(recorder)
+        # The monitor needs to be recording before a short cue can be observed.
+        # A live process alone does not mean PulseAudio attached its stream.
+        for _ in range(100):
+            assert recorder.poll() is None, "Virtual-speaker recorder exited; see record.log"
+            if (output / "output.f32").stat().st_size >= 4:
+                break
+            time.sleep(0.1)
+        assert (output / "output.f32").stat().st_size >= 4, "Virtual-speaker recorder did not become ready"
         result_path = output / "web-audio.json"
         env.update(GTK3_MODULES=str(module), LINGER_AUDIO_RESULT=str(result_path),
                    LINGER_AUDIO_SCRIPT=str(ROOT / "scripts/audio-runtime-probe.js"),

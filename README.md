@@ -18,8 +18,8 @@ installation, updates and voice still have outstanding checks on real computers.
 See the [release readiness review](docs/release-readiness.md) for the priorities
 and [SPEC.md](SPEC.md) for the full product specification.
 
-The [0.3.0 release notes](docs/releases/0.3.0.md) cover the desktop and UI
-fixes since 0.2.0, upgrade steps, and the checks still open for this testing release.
+The [0.3.1 release notes](docs/releases/0.3.1.md) cover the packaged audio and UI
+fixes since 0.3.0, upgrade steps, and the checks still open for this testing release.
 
 ---
 
@@ -191,7 +191,7 @@ installer is not code-signed, which is true — see
 for the difference between that and the signature on updates, which is in place.
 Nothing about the download is broken.
 
-The app offers updates under *Settings → Account & app → updates* and
+The app offers updates under *Settings → Account & App → Updates* and
 downloads nothing until you choose *install and restart*. A code push is not
 a published desktop release. See the [update instructions](docs/user-guide.md#updates)
 for the manual fallback; the full real-machine updater check (HC-1) is still open.
@@ -449,15 +449,15 @@ produces a green release that no installed copy will accept.
 ```bash
 # bump the version in all four files, then:
 scripts/version-check.sh
-git commit -am "chore: 0.3.0"
-git tag v0.3.0 && git push origin main v0.3.0
+git commit -am "chore: 0.3.1"
+git tag v0.3.1 && git push origin main v0.3.1
 ```
 
 That builds Linux and Windows, signs the updater artifacts, and opens a **draft**
 release carrying `latest.json`. Read it, then publish it — publishing is what
 makes installed copies see the update, and it is a human's click on purpose. The
 same tag publishes the server image to `ghcr.io/itsmattguenther/linger` as
-`0.3.0`, `0.3` and `latest`, for x86-64 and ARM64. Nothing about the image is
+`0.3.1`, `0.3` and `latest`, for x86-64 and ARM64. Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.
 
 **One thing to do by hand, once ever:** the first image push creates the ghcr

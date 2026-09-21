@@ -20,8 +20,8 @@ test("one server identity, simple DMs, personal settings and deliberate host too
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Server options", exact: true }).click();
-  await page.getByRole("button", { name: "Server settings", exact: true }).click();
-  await page.getByRole("button", { name: "people", exact: true }).click();
+  await page.getByRole("button", { name: "Server Settings", exact: true }).click();
+  await page.locator(".host-tabs").getByRole("button", { name: "People", exact: true }).click();
   const jules = page.locator(".host-member").filter({ hasText: "Jules" });
   await jules
     .getByRole("button", { name: "remove from the server", exact: true })

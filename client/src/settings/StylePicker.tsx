@@ -99,7 +99,7 @@ export default function StylePicker({
 
   return (
     <section className="settings-section">
-      <h3 className="panel-label">Make yourself at home</h3>
+      <h3 className="panel-label">Make Yourself At Home</h3>
       <p className="settings-lead">
         Your name, your colors. Try a look before you save it.
       </p>

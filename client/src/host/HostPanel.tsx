@@ -34,10 +34,10 @@ import Removal from "./Removal";
 export type HostSection = "rooms" | "invites" | "people" | "server";
 
 const SECTIONS: Array<{ key: HostSection; label: string }> = [
-  { key: "rooms", label: "rooms" },
-  { key: "invites", label: "invites" },
-  { key: "people", label: "people" },
-  { key: "server", label: "server" },
+  { key: "rooms", label: "Rooms" },
+  { key: "invites", label: "Invites" },
+  { key: "people", label: "People" },
+  { key: "server", label: "Server" },
 ];
 
 /** The server's own words when it has any (PROTOCOL §1), ours when it doesn't. */
@@ -66,7 +66,7 @@ export default function HostPanel({
   return (
     <main className="stream host">
       <header className="stream-header host-head">
-        <h2 className="panel-label">Server settings</h2>
+        <h2 className="panel-label">Server Settings</h2>
         <nav className="host-tabs">
           {SECTIONS.map((tab) => (
             <button
@@ -151,7 +151,7 @@ function RoomsSection({ api, rooms }: { api: AuthedApi; rooms: Room[] }) {
     <div className="host-section">
       <NewRoom api={api} onProblem={setProblem} />
 
-      <h3 className="panel-label host-label">the rail</h3>
+      <h3 className="panel-label host-label">The Rail</h3>
       {rooms.length === 0 ? (
         <p className="placeholder">No rooms yet. The one above is the first.</p>
       ) : (
@@ -302,7 +302,7 @@ function NewRoom({
         if (!busy && slug.trim() !== "") void submit();
       }}
     >
-      <h3 className="panel-label host-label">new room</h3>
+      <h3 className="panel-label host-label">New Room</h3>
       <div className="host-fields">
         <Field label="slug" hint="What people type after the #.">
           <input
@@ -531,7 +531,7 @@ function InvitesSection({ api }: { api: AuthedApi }) {
           if (!busy) void create();
         }}
       >
-        <h3 className="panel-label host-label">new invite</h3>
+        <h3 className="panel-label host-label">New Invite</h3>
         <div className="host-fields">
           <Choice
             label="good for"
@@ -559,7 +559,7 @@ function InvitesSection({ api }: { api: AuthedApi }) {
         </div>
       </form>
 
-      <h3 className="panel-label host-label">links you have made</h3>
+      <h3 className="panel-label host-label">Links You Have Made</h3>
       {invites === null ? (
         <p className="placeholder">reading…</p>
       ) : invites.length === 0 ? (
@@ -712,7 +712,7 @@ function PeopleSection({ api }: { api: AuthedApi }) {
             </li>
           ))}
       </ul>
-      <h3 className="panel-label host-label">removed</h3>
+      <h3 className="panel-label host-label">Removed</h3>
       {removed === null ? (
         <p className="placeholder">reading…</p>
       ) : removed.length === 0 ? (
@@ -809,7 +809,7 @@ function ServerSection({
         if (!busy && name.trim() !== "") void submit();
       }}
     >
-      <h3 className="panel-label host-label">name</h3>
+      <h3 className="panel-label host-label">Name</h3>
       <Field
         label=""
         hint="What the rail says, and what an invite link tells a stranger."
@@ -827,7 +827,7 @@ function ServerSection({
         />
       </Field>
 
-      <h3 className="panel-label host-label">accent</h3>
+      <h3 className="panel-label host-label">Accent</h3>
       {/*
         Sixteen named keys, and the name is the label — the swatch beside it is
         decoration. That is not a placeholder: nothing in this app carries

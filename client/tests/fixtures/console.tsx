@@ -140,6 +140,17 @@ if (query.has("qa")) bodies.push([
   "matt",
   "A grouped continuation with enough text to wrap. Inline `code` keeps its own font.",
 ]);
+if (query.has("spacing")) bodies.splice(0, bodies.length,
+  ["jules", "First line\nSecond line\nThird line\n\nA separate paragraph."],
+  ["jules", "Another message from the same person."],
+  ["matt", "A different sender.\nStill easy to read."],
+  ["matt", "> A quoted line\n> Another quoted line\n\n- First item\n- Second item\n\n```\nfirst code line\nsecond code line\n```"],
+);
+const spacingDm: Room = {
+  id: "spacing-dm", slug: "spacing-dm", name: "spacing-dm", topic: null,
+  kind: "dm", member_ids: ["matt", "jules"], position: 0,
+  archived_at: null, last_message_id: null,
+};
 const messages: Message[] = (
   query.has("history")
     ? Array.from({ length: 10_000 }, (_, index) => [
@@ -232,7 +243,7 @@ mockIPC(
                 user: me,
                 users,
                 rooms,
-                dms: [],
+                dms: query.has("spacing") ? [spacingDm] : [],
                 presence: users.slice(0, 3).map((user) => ({
                   user_id: user.id,
                   state: "in_room",
@@ -340,11 +351,13 @@ globalThis.fetch = async (input, init) => {
   else if (url.pathname.endsWith("/read")) answer = {};
   else if (url.pathname.includes("/messages")) {
     const before = url.searchParams.get("before");
-    answer = url.pathname.includes("/general/")
+    const roomId = url.pathname.includes("/spacing-dm/") ? spacingDm.id : "general";
+    answer = url.pathname.includes("/general/") || (query.has("spacing") && roomId === spacingDm.id)
       ? messages
           .filter((message) => before === null || message.id < before)
           .slice(-100)
           .reverse()
+          .map((message) => ({ ...message, room_id: roomId }))
       : [];
   } else if (url.pathname.endsWith("/voice/ice"))
     answer = { servers: [], ttl_secs: 0 };
