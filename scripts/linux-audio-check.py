@@ -74,7 +74,7 @@ def check(program, output, appimage):
                                          "--format=float32le", "--rate=48000", "--channels=1", "--latency-msec=20"],
                                         env=env, stdout=samples, stderr=log, start_new_session=True)
         processes.append(recorder)
-        result_path = output / "result.json"
+        result_path = output / "web-audio.json"
         env.update(GTK3_MODULES=str(module), LINGER_AUDIO_RESULT=str(result_path),
                    LINGER_AUDIO_SCRIPT=str(ROOT / "scripts/audio-runtime-probe.js"),
                    GST_REGISTRY_1_0=str(output / "gst-registry.bin"))
@@ -113,7 +113,7 @@ def check(program, output, appimage):
         stop(recorder)
         assert peak > 0.005, f"Web Audio ran but no samples reached the virtual speaker: peak={peak}"
         result["speaker_peak"] = peak
-        result_path.write_text(json.dumps(result, indent=2) + "\n")
+        (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
         print(f"PASS {program.name}: packaged Web Audio reached the virtual speaker (peak={peak:.4f})")
     finally:
         for process in reversed(processes):

@@ -68,6 +68,19 @@ desktop, or physical speakers. With `--output`, logs, the JSON result and the
 virtual speaker's raw float32 audio remain for inspection. The Windows check
 belongs on an ephemeral runner; it installs the test package there.
 
+The probe leaves its audio context open after generating the short tone. The
+host ends the disposable process after checking the result. Closing the context
+as soon as its analyser sees samples can discard audio still queued for output.
+A controlled local comparison with one second of output delay reproduced a
+silent recording with immediate closure and recorded the same tone with the
+context kept open. This changes only the test: Linger already keeps one audio
+context for the lifetime of the app.
+
+On Linux, `web-audio.json` is the intermediate graph result; only `result.json`
+with a nonzero `speaker_peak` establishes that the virtual speaker received
+audio. They are separate files so the WebView poller cannot overwrite the
+completed recording result.
+
 ## Still requires listening
 
 Use Preview in Settings → sound & voice on actual Linux and Windows clients,

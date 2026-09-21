@@ -35,10 +35,12 @@
       if (elapsed < 0.2 || peak < 0.005) {
         throw new Error(`No realtime audio: elapsed=${elapsed}, peak=${peak}`);
       }
+      // Rendered samples can still be queued before the output device. Keep
+      // the context open until the host records them and ends this disposable
+      // process; closing here can discard the entire cue on a buffered sink.
       window.__lingerAudioResult = { status: "passed", elapsed, peak };
     } catch (error) {
       window.__lingerAudioResult = { status: "failed", error: String(error) };
-    } finally {
       if (context) await context.close().catch(() => {});
     }
   };
