@@ -78,28 +78,10 @@ try {
 }
 
 # Both installer formats must run Web Audio in their actual WebView2 engine.
-# Debugging is enabled only for these disposable, empty-profile test launches.
-$oldArguments = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
-$oldProfile = $env:WEBVIEW2_USER_DATA_FOLDER
-try {
-    foreach ($package in @(@{Name='nsis'; Exe=$exe}, @{Name='msi'; Exe=$msiExe.FullName})) {
-        $probeDir = Join-Path $Output "audio-$($package.Name)"
-        New-Item -ItemType Directory -Force $probeDir | Out-Null
-        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-        $listener.Start()
-        $port = $listener.LocalEndpoint.Port
-        $listener.Stop()
-        $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$port"
-        $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $probeDir 'profile'
-        $app = Start-Process $package.Exe -PassThru
-        try {
-            node client/scripts/windows-audio-check.mjs "http://127.0.0.1:$port" 2>&1 | Tee-Object -FilePath (Join-Path $probeDir 'result.log')
-            if ($LASTEXITCODE -ne 0) { throw "Packaged $($package.Name) WebView2 audio failed" }
-        } finally {
-            if (!$app.HasExited) { Stop-Process -Id $app.Id }
-        }
-    }
-} finally {
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $oldArguments
-    $env:WEBVIEW2_USER_DATA_FOLDER = $oldProfile
+# The Node harness launches each process directly with a private debug endpoint.
+foreach ($package in @(@{Name='nsis'; Exe=$exe}, @{Name='msi'; Exe=$msiExe.FullName})) {
+    $probeDir = Join-Path $Output "audio-$($package.Name)"
+    New-Item -ItemType Directory -Force $probeDir | Out-Null
+    node client/scripts/windows-audio-check.mjs $package.Exe $probeDir 2>&1 | Tee-Object -FilePath (Join-Path $probeDir 'result.log')
+    if ($LASTEXITCODE -ne 0) { throw "Packaged $($package.Name) WebView2 audio failed" }
 }
