@@ -47,6 +47,11 @@ The unsigned Linux/Windows package workflow runs these checks:
   button click starts the shared realtime audio probe. Its clock must advance
   and its analyser must receive nonzero samples. Debugging is enabled only
   for those disposable processes; it is not enabled in shipped app settings.
+  WebView2 150+ ignores environment overrides for elevated hosts. GitHub's
+  administrator runner therefore uses temporary, executable-specific HKLM
+  `AdditionalBrowserArguments` and `UserDataFolder` policies, removed in
+  `finally`. The script refuses to replace existing values or run outside
+  GitHub Actions. See Microsoft's [elevated-host override rules](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security#for-an-elevated-host-app-use-appropriate-override-flags).
 
 The Linux check needs `cc`, `pkg-config`, WebKitGTK/GStreamer development
 headers, `xvfb`, `xauth`, `dbus-x11`, `pulseaudio` and `pulseaudio-utils`.
