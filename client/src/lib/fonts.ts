@@ -31,6 +31,26 @@ export const FONT_KEYS = [
 
 export type FontKey = (typeof FONT_KEYS)[number];
 
+/** Keep message bodies sans-serif while names retain the full curated set. */
+export const MESSAGE_FONT_KEYS = [
+  "geist-sans",
+  "ibm-plex-sans",
+  "inter",
+  "space-grotesk",
+] as const satisfies readonly FontKey[];
+
+/** Old clients may still supply a name-only face for messages. */
+export function isMessageFontKey(value: string): boolean {
+  return MESSAGE_FONT_KEYS.some((key) => key === value);
+}
+
+/** Render saved name-only faces in the body default without changing the wire style. */
+export function messageFontVar(key: string | null | undefined): string {
+  return typeof key === "string" && isMessageFontKey(key)
+    ? fontVar(key, "var(--font-body)")
+    : "var(--font-body)";
+}
+
 /**
  * What each face is called when a person is choosing one.
  *

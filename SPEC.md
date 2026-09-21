@@ -284,7 +284,9 @@ Each user controls the rendering of their own display name:
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
 hot-pink-Comic-Sans-on-black was funny for a week and unreadable forever. Users get:
-- Optional font override from the same curated set
+- Optional font override from the sans-serif faces in the curated set: Geist
+  Sans, IBM Plex Sans, Inter and Space Grotesk. Other saved message-font choices
+  render in the default body face; all twelve faces remain available for names.
 - Nothing else. No message-text color, no per-message formatting, no size changes, no
   backgrounds. The name carries the identity; the body stays legible.
 

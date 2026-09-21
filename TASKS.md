@@ -465,6 +465,15 @@ flows and do not start a new milestone. Evidence and rationale are in the
   release preparation and passes. No protocol change or new dependency.
   Native acceptance, listening
   and the existing multi-network voice checks remain open.
+  **Approved QA corrections, 2026-09-21:** message actions reserve space clear
+  of text; message bodies use the bundled sans faces, with a fallback for older
+  non-sans choices; Search, Media and Settings share their heading and Close
+  control; sound switches share one column; the absolute recording claim is
+  removed. See [QA screenshots](screenshots/qa-2026-09-21/README.md).
+  Eight new browser cases cover layout, keyboard actions, legacy fonts and
+  switch persistence. The full local gate, 126 Chromium browser cases and
+  production build pass. This scoped repair does not close the remaining
+  T-909 acceptance checks.
 
 - ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU

@@ -31,7 +31,7 @@ import type { CSSProperties } from "react";
 
 import type { NameEffect } from "../generated/NameEffect";
 import type { User } from "../generated/User";
-import { fontVar } from "./fonts";
+import { fontVar, messageFontVar } from "./fonts";
 
 /**
  * Everything a container hands down: the rule colour, the name colour, the
@@ -56,7 +56,7 @@ export function personStyle(person: User | undefined): CSSProperties {
     // The *only* message styling that exists (SPEC §4.5): a face, nothing else.
     // No colour, no size, no background — the name carries the identity and the
     // body stays legible.
-    "--person-msg-font": fontVar(style?.msg_font_key, "var(--font-body)"),
+    "--person-msg-font": messageFontVar(style?.msg_font_key),
   };
 }
 

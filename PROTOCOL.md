@@ -358,6 +358,12 @@ type UserStatus = {
 }
 ```
 
+`msg_font_key` retains the existing `FONTS` validation for compatibility with
+older clients. The current client offers only the four sans-serif faces for
+message bodies and renders other saved keys with its default body face. This
+is a rendering fallback; it does not migrate stored styles or change the wire
+format.
+
 **The status image** (SPEC §4.6) is named by attachment id, not by URL and not by
 storage key. On the way in the server checks that the id names a finished upload of
 *this* member's, that it is an image, and that it is within

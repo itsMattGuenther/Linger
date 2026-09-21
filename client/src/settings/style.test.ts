@@ -57,8 +57,17 @@ describe("draftOf", () => {
 
   it("keeps a message font of null as null, not as a face", () => {
     expect(draftOf(style()).msgFontKey).toBeNull();
-    expect(draftOf(style({ msg_font_key: "silkscreen" })).msgFontKey).toBe("silkscreen");
+    expect(draftOf(style({ msg_font_key: "ibm-plex-sans" })).msgFontKey).toBe("ibm-plex-sans");
   });
+});
+
+it("opens a legacy message font on the reading face without a pending save", () => {
+  const saved = style({ font_key: "jetbrains-mono", msg_font_key: "jetbrains-mono" });
+  const draft = draftOf(saved);
+  expect(draft.msgFontKey).toBeNull();
+  expect(draft.fontKey).toBe("jetbrains-mono");
+  expect(isDirty(draft, saved)).toBe(false);
+  expect(saved.msg_font_key).toBe("jetbrains-mono");
 });
 
 describe("styleOf", () => {
@@ -76,7 +85,7 @@ describe("styleOf", () => {
     for (const saved of [
       style(),
       style({ fill: { kind: "gradient", from: "rose", to: "amber" }, effect: "shimmer" }),
-      style({ font_key: "silkscreen", weight: 700, italic: true, msg_font_key: "newsreader" }),
+      style({ font_key: "silkscreen", weight: 700, italic: true, msg_font_key: "inter" }),
     ]) {
       expect(styleOf(draftOf(saved))).toEqual(saved);
     }
@@ -106,7 +115,7 @@ describe("isDirty", () => {
     expect(isDirty({ ...base, effect: "shimmer" }, saved)).toBe(true);
     expect(isDirty({ ...base, from: "rose" }, saved)).toBe(true);
     expect(isDirty({ ...base, gradient: true, to: "rose" }, saved)).toBe(true);
-    expect(isDirty({ ...base, msgFontKey: "commit-mono" }, saved)).toBe(true);
+    expect(isDirty({ ...base, msgFontKey: "ibm-plex-sans" }, saved)).toBe(true);
   });
 });
 

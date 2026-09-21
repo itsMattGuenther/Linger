@@ -891,12 +891,95 @@ function MessageRow({
         <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
       )}
 
-      {head ? (
-        <p className="msg-head">
-          <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
-          {time}
-        </p>
-      ) : null}
+      <div className="msg-topline">
+        {head ? (
+          <p className="msg-head">
+            <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
+            {time}
+          </p>
+        ) : null}
+        {deleted || editing ? null : (
+          <div className="msg-actions">
+            {picking ? (
+              REACTIONS.map((reaction) => (
+                <button
+                  key={reaction.key}
+                  type="button"
+                  className="msg-action msg-action-glyph"
+                  title={reaction.label}
+                  aria-label={`react with ${reaction.label}`}
+                  disabled={reactionPending}
+                  onClick={() => {
+                    void react(message, reaction.key);
+                    setPicking(false);
+                  }}
+                >
+                  {reaction.glyph}
+                </button>
+              ))
+            ) : (
+              <>
+                {/* Twelve fixed marks, not an emoji picker (SPEC §4.8) — they
+                    take over this same strip rather than opening a layer, which
+                    keeps the controls beside their message. */}
+                <button
+                  type="button"
+                  className="msg-action meta"
+                  onClick={() => setPicking(true)}
+                  aria-label={`react to ${name}'s message`}
+                >
+                  react
+                </button>
+                <button
+                  type="button"
+                  className="msg-action meta"
+                  onClick={() => actions.reply(message)}
+                  aria-label={`reply to ${name}`}
+                >
+                  reply
+                </button>
+                {mine ? (
+                  <button
+                    type="button"
+                    className="msg-action meta"
+                    onClick={() => actions.edit(message)}
+                  >
+                    edit
+                  </button>
+                ) : null}
+                {mine || me?.is_host === true ? (
+                  confirming ? (
+                    <>
+                      <button
+                        type="button"
+                        className="msg-action msg-action-danger meta"
+                        onClick={() => run(actions.remove(message))}
+                      >
+                        delete for good
+                      </button>
+                      <button
+                        type="button"
+                        className="msg-action meta"
+                        onClick={() => setConfirming(false)}
+                      >
+                        keep
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="msg-action meta"
+                      onClick={() => setConfirming(true)}
+                    >
+                      delete
+                    </button>
+                  )
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
+      </div>
       {/* Age only the body, never the author or timestamp (SPEC §5.6). */}
       <div className="msg-body" style={bodyStyle}>{body}</div>
 
@@ -914,88 +997,6 @@ function MessageRow({
           pending={reactionPending}
           onReact={(target, key) => void react(target, key)}
         />
-      )}
-
-      {deleted || editing ? null : (
-        <div className="msg-actions">
-          {picking ? (
-            REACTIONS.map((reaction) => (
-              <button
-                key={reaction.key}
-                type="button"
-                className="msg-action msg-action-glyph"
-                title={reaction.label}
-                aria-label={`react with ${reaction.label}`}
-                disabled={reactionPending}
-                onClick={() => {
-                  void react(message, reaction.key);
-                  setPicking(false);
-                }}
-              >
-                {reaction.glyph}
-              </button>
-            ))
-          ) : (
-            <>
-              {/* Twelve fixed marks, not an emoji picker (SPEC §4.8) — they
-                  take over this same strip rather than opening a layer, which
-                  keeps the row the height it already was. */}
-              <button
-                type="button"
-                className="msg-action meta"
-                onClick={() => setPicking(true)}
-                aria-label={`react to ${name}'s message`}
-              >
-                react
-              </button>
-              <button
-                type="button"
-                className="msg-action meta"
-                onClick={() => actions.reply(message)}
-                aria-label={`reply to ${name}`}
-              >
-                reply
-              </button>
-              {mine ? (
-                <button
-                  type="button"
-                  className="msg-action meta"
-                  onClick={() => actions.edit(message)}
-                >
-                  edit
-                </button>
-              ) : null}
-              {mine || me?.is_host === true ? (
-                confirming ? (
-                  <>
-                    <button
-                      type="button"
-                      className="msg-action msg-action-danger meta"
-                      onClick={() => run(actions.remove(message))}
-                    >
-                      delete for good
-                    </button>
-                    <button
-                      type="button"
-                      className="msg-action meta"
-                      onClick={() => setConfirming(false)}
-                    >
-                      keep
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="msg-action meta"
-                    onClick={() => setConfirming(true)}
-                  >
-                    delete
-                  </button>
-                )
-              ) : null}
-            </>
-          )}
-        </div>
       )}
     </div>
   );

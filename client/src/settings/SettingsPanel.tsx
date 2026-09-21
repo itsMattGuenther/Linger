@@ -57,6 +57,7 @@ import {
 import "./settings.css";
 import AppearanceSettings from "./AppearanceSettings";
 import PreferenceSwitch from "./PreferenceSwitch";
+import DestinationHeader from "../lib/DestinationHeader";
 import IconButton from "../lib/IconButton";
 import { ActionIcon } from "../lib/icons";
 import StatusEditor from "../status/StatusEditor";
@@ -145,8 +146,7 @@ export default function SettingsPanel({
 
   return (
     <main className="stream settings" ref={panel}>
-      <header className="stream-header settings-head">
-        <h2 className="panel-label">Settings</h2>
+      <DestinationHeader title="Settings" onClose={onClose}>
         <nav className="settings-tabs" aria-label="settings sections">
           {SECTIONS.map((tab) => (
             <button
@@ -160,10 +160,7 @@ export default function SettingsPanel({
             </button>
           ))}
         </nav>
-        <button type="button" className="settings-close meta" onClick={onClose}>
-          <ActionIcon name="close" /> Close
-        </button>
-      </header>
+      </DestinationHeader>
       <div className="settings-body">
         {section === "you" ? (
           <>
@@ -282,7 +279,7 @@ export function SoundSection() {
       : null;
 
   return (
-    <section className="settings-section">
+    <section className="settings-section sound-settings">
       <h3 className="panel-label">A familiar little sound</h3>
       <p className="settings-lead">
         Choose your notification chimes. To silence people in voice, use deafen.
@@ -481,7 +478,7 @@ function VoiceSection() {
       <h3 className="panel-label">voice</h3>
       <p className="settings-lead">
         Talking happens in a room: <em>join voice</em> under a room's name turns
-        your microphone on there. Nothing is recorded, by anybody, ever.
+        your microphone on there.
       </p>
       {devices === null ? (
         <p className="settings-lead settings-warmth-lead">

@@ -62,6 +62,9 @@ test("a refused reaction rolls back without success; reduced motion stays still"
   const mark = page.getByRole("button", { name: /^heart,/ });
   const row = page.locator(".msg").filter({ has: mark });
   await mark.click();
+  // Wait for the accepted removal before refusing the next request. The
+  // pressed state changes optimistically, before the fixture responds.
+  await expect(row.getByRole("status")).toHaveText("Reaction removed.");
   await expect(mark).toHaveAttribute("aria-pressed", "false");
   await page.evaluate(() => {
     document.documentElement.dataset.refuseWrites = "yes";

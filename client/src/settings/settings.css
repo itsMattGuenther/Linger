@@ -7,10 +7,6 @@
  * the body scrolls independently of the heading.
  */
 
-.settings-head {
-  gap: 14px;
-}
-
 /* The section tabs, the same control the host panel uses (host.css): one thing
    to learn, drawn once per panel. */
 .settings-tabs {
@@ -41,20 +37,6 @@
 
 .settings-tab[aria-pressed="true"] {
   background: var(--surface-2);
-  color: var(--text-primary);
-}
-
-.settings-close {
-  margin-left: auto;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--text-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.settings-close:hover {
   color: var(--text-primary);
 }
 
@@ -267,12 +249,6 @@
   text-transform: none;
   letter-spacing: 0;
 }
-.settings-head > .panel-label {
-  font-size: 1.125rem;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-primary);
-}
 .settings-hint {
   font-size: 0.8125rem;
 }
@@ -285,7 +261,6 @@
 .settings-update-actions {
   flex-wrap: wrap;
 }
-.settings-head,
 .host-head {
   flex-wrap: wrap;
 }

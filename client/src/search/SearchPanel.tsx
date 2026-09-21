@@ -30,6 +30,7 @@ import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { conversationLabel } from "../dm/dm";
 import { personStyle } from "../lib/names";
+import DestinationHeader from "../lib/DestinationHeader";
 import { hitTime } from "../stream/time";
 import {
   emptyLine,
@@ -144,13 +145,12 @@ export default function SearchPanel({
 
   return (
     <main className="stream search">
-      <header className="stream-header search-head">
-        <h2 className="panel-label">search</h2>
-        <p className="search-blurb meta">what people said, and what their files were called</p>
-        <button type="button" className="host-close meta" onClick={onClose}>
-          close
-        </button>
-      </header>
+      <DestinationHeader
+        title="Search"
+        description="What people said, and what their files were called"
+        closeLabel="Close search"
+        onClose={onClose}
+      />
 
       {/* A form, so Enter searches now rather than waiting out the pause. */}
       <form

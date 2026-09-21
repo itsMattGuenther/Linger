@@ -8,16 +8,6 @@
  * separated everywhere else in the app.
  */
 
-.search-head {
-  gap: 10px;
-}
-
-.search-blurb {
-  flex: 1;
-  margin: 0;
-  color: var(--text-faint);
-}
-
 .search-controls {
   display: flex;
   flex-direction: column;

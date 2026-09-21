@@ -24,7 +24,6 @@ button:is(
   .rail-action,
   .rail-settings,
   .voice-action,
-  .settings-close,
   .settings-mini,
   .since-pull,
   .roster-switch,
@@ -54,7 +53,6 @@ button:is(
     .rail-action,
     .rail-settings,
     .voice-action,
-    .settings-close,
     .settings-mini,
     .since-pull,
     .roster-switch,
@@ -287,14 +285,6 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
 }
 
 /* Settings: explicit category tabs, short labelled rows, visible choices. */
-.settings .settings-head {
-  padding-block: 1rem 0;
-  gap: 0.75rem;
-}
-.settings .settings-head > .panel-label {
-  font-size: 1.25rem;
-  font-weight: 600;
-}
 .settings .settings-tabs {
   gap: 0.25rem;
   padding-top: 0.5rem;
