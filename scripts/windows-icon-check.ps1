@@ -76,3 +76,12 @@ try {
 } finally {
     if (!$app.HasExited) { Stop-Process -Id $app.Id }
 }
+
+# Both installer formats must run Web Audio in their actual WebView2 engine.
+# The Node harness launches each process directly with a private debug endpoint.
+foreach ($package in @(@{Name='nsis'; Exe=$exe}, @{Name='msi'; Exe=$msiExe.FullName})) {
+    $probeDir = Join-Path $Output "audio-$($package.Name)"
+    New-Item -ItemType Directory -Force $probeDir | Out-Null
+    node client/scripts/windows-audio-check.mjs $package.Exe $probeDir 2>&1 | Tee-Object -FilePath (Join-Path $probeDir 'result.log')
+    if ($LASTEXITCODE -ne 0) { throw "Packaged $($package.Name) WebView2 audio failed" }
+}
