@@ -81,7 +81,7 @@ test("attachment menu supports keyboard, dismissal and file picker without losin
   await page.keyboard.press("Space");
   await expect(file).toBeFocused();
   const choosing = page.waitForEvent("filechooser");
-  await page.keyboard.press("Enter");
+  await file.press("Enter");
   const chooser = await choosing;
   await chooser.setFiles([]);
   await expect(menu).toHaveCount(0);
