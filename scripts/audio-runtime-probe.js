@@ -22,10 +22,13 @@
       oscillator.start();
       const samples = new Float32Array(analyser.fftSize);
       let peak = 0;
-      for (let i = 0; i < 20; i++) {
+      // Opening the system output can take longer than one short chime on a
+      // busy runner. Measure rendered audio time, not 500 ms of wall time.
+      for (let i = 0; i < 200; i++) {
         await new Promise((resolve) => setTimeout(resolve, 25));
         analyser.getFloatTimeDomainData(samples);
         for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+        if (context.currentTime - started >= 0.5 && peak >= 0.005) break;
       }
       oscillator.stop();
       const elapsed = context.currentTime - started;
