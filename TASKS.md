@@ -1486,6 +1486,9 @@ reach 0.3.0; separate-computer and retained-sign-in details were not recorded,
 so this does not close HC-1. The signed 0.3.1 packages must pass the runtime
 audio checks before publication. Physical listening and network checks remain
 open.
+The combined package check exposed a recorder-start race: a short probe could
+finish before recording began. Waiting for the recorder's first samples fixes
+the controlled four-second-delay reproduction without changing app playback.
 
 **0.3.0 preparation, 2026-09-21:** the four version sources and Rust lockfiles
 move together to 0.3.0. [Release notes](docs/releases/0.3.0.md) cover the changes
