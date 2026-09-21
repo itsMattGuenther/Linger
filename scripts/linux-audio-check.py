@@ -52,9 +52,9 @@ def check(program, output, appimage):
     pulse_socket = output / "runtime/pulse.sock"
     pulse_config = output / "pulse.pa"
     pulse_config.write_text(
-        f"load-module module-native-protocol-unix socket={pulse_socket} auth-anonymous=1\n"
         "load-module module-null-sink sink_name=linger_audio_check rate=48000 channels=1\n"
-        "set-default-sink linger_audio_check\n")
+        "set-default-sink linger_audio_check\n"
+        f"load-module module-native-protocol-unix socket={pulse_socket} auth-anonymous=1\n")
     env["PULSE_SERVER"] = f"unix:{pulse_socket}"
     processes = []
     try:
@@ -71,7 +71,7 @@ def check(program, output, appimage):
         assert pulse_socket.exists(), "Private PulseAudio did not open its socket"
         with (output / "output.f32").open("wb") as samples, (output / "record.log").open("w") as log:
             recorder = subprocess.Popen(["parec", "--device=linger_audio_check.monitor", "--raw",
-                                         "--format=float32le", "--rate=48000", "--channels=1"],
+                                         "--format=float32le", "--rate=48000", "--channels=1", "--latency-msec=20"],
                                         env=env, stdout=samples, stderr=log, start_new_session=True)
         processes.append(recorder)
         result_path = output / "result.json"
@@ -96,14 +96,21 @@ def check(program, output, appimage):
             assert app.poll() is None, "Packaged client exited; see app.log"
             time.sleep(0.1)
         assert result and result.get("status") == "passed", f"Packaged audio failed: {result}; see {output}"
-        time.sleep(0.2)
+        # PulseAudio's recording transport may deliver after the Web Audio
+        # callback finishes. Wait for samples, not an arbitrary short sleep.
+        peak = 0
+        for _ in range(50):
+            assert recorder.poll() is None, "Virtual-speaker recorder exited; see record.log"
+            samples = array.array("f")
+            data = (output / "output.f32").read_bytes()
+            samples.frombytes(data[:len(data) // 4 * 4])
+            if sys.byteorder != "little":
+                samples.byteswap()
+            peak = max((abs(sample) for sample in samples), default=0)
+            if peak > 0.005:
+                break
+            time.sleep(0.1)
         stop(recorder)
-        samples = array.array("f")
-        data = (output / "output.f32").read_bytes()
-        samples.frombytes(data[:len(data) // 4 * 4])
-        if sys.byteorder != "little":
-            samples.byteswap()
-        peak = max((abs(sample) for sample in samples), default=0)
         assert peak > 0.005, f"Web Audio ran but no samples reached the virtual speaker: peak={peak}"
         result["speaker_peak"] = peak
         result_path.write_text(json.dumps(result, indent=2) + "\n")
