@@ -397,6 +397,16 @@ flows and do not start a new milestone. Evidence and rationale are in the
   Windows listening, sound-device behavior and banner silence still need an
   installed-client check; these are not HC-8/HC-9 evidence.
 
+- ⏳ **T-931 · Fix reported composer and settings inconsistencies** — effort:
+  **medium** — claimed Matt, 2026-09-21. GitHub #88, #89 and #90: match the
+  Send button to the single-line input height, anchor the attachment menu to
+  Add with predictable focus/dismissal, and use title case for headings and
+  navigation across settings. Preserve Console styling and existing behavior.
+  *Accept:* verify composer geometry at supported scales, attachment keyboard
+  and pointer flows, file-picker/draft preservation, and settings headings.
+  Intended for the 0.3.1 patch alongside the separate audio fix in PR #87.
+  GitHub #81 remains deferred.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
