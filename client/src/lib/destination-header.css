@@ -1,0 +1,22 @@
+.destination-title {
+  font-family: var(--font-ui);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.destination-close {
+  margin-left: auto;
+  flex: none;
+  order: 2;
+}
+
+.destination-description {
+  flex: 1 1 18rem;
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.destination-header:has(.settings-tabs) {
+  padding-bottom: 0;
+}

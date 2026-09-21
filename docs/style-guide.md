@@ -47,6 +47,16 @@ Disabled controls remain recognizable but do not compete with available actions.
 
 Use sentence-case for any remaining visible labels.
 
+Search, Media and Settings share `DestinationHeader`: the same sans heading
+and bordered Close control, with descriptions and category tabs as needed.
+Sound settings reserve the preview column even on rows without a Play button.
+
+Message actions reserve space beside the author heading (or above a grouped
+continuation), including while invisible. Hover and keyboard focus must never
+cover message text or change a row's height. Reaction choices wrap inside that
+reserved row. Message bodies offer the four bundled sans faces; saved non-sans
+keys fall back to the default body face without restricting name styling.
+
 Navigation text wraps to the rail's width; it is never truncated with an
 ellipsis or a line clamp, no matter how long or unbreakable a server, room or
 DM name is. The rail itself never scrolls sideways — rows grow taller

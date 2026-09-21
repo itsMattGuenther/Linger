@@ -16,7 +16,7 @@
 import type { Style } from "../generated/Style";
 import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
 import type { User } from "../generated/User";
-import { isFontKey } from "../lib/fonts";
+import { isFontKey, isMessageFontKey } from "../lib/fonts";
 import { isPaletteKey } from "../lib/palette";
 
 /** The three weights SPEC §4.5 offers. Not a range, not a slider. */
@@ -76,7 +76,9 @@ export function draftOf(style: Style): StyleDraft {
     // first click on `to` is a change and not a surprise.
     to: colorOf(style.fill.kind === "gradient" ? style.fill.to : first),
     effect: style.effect,
-    msgFontKey: typeof style.msg_font_key === "string" ? fontOf(style.msg_font_key) : null,
+    msgFontKey: typeof style.msg_font_key === "string" && isMessageFontKey(style.msg_font_key)
+      ? style.msg_font_key
+      : null,
   };
 }
 

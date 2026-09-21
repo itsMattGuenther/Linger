@@ -46,13 +46,25 @@ describe("personStyle", () => {
 
   it("carries weight, slant and both fonts", () => {
     const style = personStyle(
-      person({ font_key: "silkscreen", weight: 700, italic: true, msg_font_key: "newsreader" }),
+      person({ font_key: "silkscreen", weight: 700, italic: true, msg_font_key: "ibm-plex-sans" }),
     );
     expect(style["--person-font"]).toBe("var(--font-silkscreen, var(--font-ui))");
     expect(style["--person-weight"]).toBe(700);
     expect(style["--person-slant"]).toBe("italic");
-    expect(style["--person-msg-font"]).toBe("var(--font-newsreader, var(--font-body))");
+    expect(style["--person-msg-font"]).toBe("var(--font-ibm-plex-sans, var(--font-body))");
   });
+
+  it.each(["geist-mono", "ibm-plex-mono", "jetbrains-mono", "commit-mono",
+    "departure-mono", "silkscreen", "newsreader", "instrument-serif"])(
+    "renders legacy %s message fonts in sans without changing the name or saved style",
+    (key) => {
+      const user = person({ font_key: key, msg_font_key: key });
+      const result = personStyle(user);
+      expect(result["--person-msg-font"]).toBe("var(--font-body)");
+      expect(result["--person-font"]).toBe(`var(--font-${key}, var(--font-ui))`);
+      expect(user.style.msg_font_key).toBe(key);
+    },
+  );
 
   it("falls back for somebody the store has never heard of", () => {
     const style = personStyle(undefined);

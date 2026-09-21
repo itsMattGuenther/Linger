@@ -29,7 +29,18 @@
 
 /* --- one message ------------------------------------------------------- */
 
+.msg-topline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 8px;
+}
+
 .msg-head {
+  flex: 1 1 10rem;
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -42,9 +53,7 @@
   line-height: 1.4;
 }
 
-/* Everything one message owns: the reply line above it, the body, its marks,
-   and the actions that hover over it. Positioned, because the action strip
-   hangs off its top-right corner and must not change its height. */
+/* Keep every message and its controls in the same measured virtual row. */
 .msg {
   position: relative;
 }
@@ -355,20 +364,15 @@ button.msg-reply:hover {
 
 /* --- message actions ----------------------------------------------------- */
 
-/*
- * The strip that hovers over a message: react, reply, edit, delete.
- *
- * It is absolutely positioned inside the row and never changes the row's
- * height, which matters more than it looks — the virtualizer measures each row
- * and a strip that pushed one taller on hover would shift the whole list under
- * the cursor. It sits inside the row's own bounds rather than above them, so it
- * is never clipped by the top of the scrolling area.
- */
+/* Actions reserve their space beside the author even while invisible. Hover
+   and keyboard focus only change opacity, so neither covers text nor changes
+   the virtualizer's row measurements. Continuations reserve the same action
+   row; narrow windows and reaction choices can wrap inside its own bounds. */
 .msg-actions {
-  position: absolute;
-  top: 0;
-  right: 0;
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin-left: auto;
   gap: 1px;
   padding: 1px;
   background: var(--surface-1);

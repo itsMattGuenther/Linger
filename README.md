@@ -91,7 +91,9 @@ These terms are used everywhere — UI, code, docs, error messages:
   keep them forever
 - 📝 **Text that stays text** — a small markdown subset (bold, italic, strikethrough,
   code, quotes, lists, links), plus edit, delete and reply. Message bodies are parsed
-  into a tree and drawn as elements; **no raw HTML from a message, ever**
+  into a tree and drawn as elements; **no raw HTML from a message, ever**.
+  Message bodies use the four bundled sans-serif choices; older non-sans
+  choices fall back to the default reading face. Names retain all twelve fonts.
 - 🎚️ **Reactions by weight** — a fixed palette of 12; six identical reactions render
   denser and larger, not "👍 6"
 - 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a

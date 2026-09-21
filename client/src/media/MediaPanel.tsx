@@ -31,8 +31,7 @@ import { absoluteUrl } from "../lib/url";
 import { conversationLabel } from "../dm/dm";
 import { personStyle } from "../lib/names";
 import EmptyState from "../lib/EmptyState";
-import { ActionIcon } from "../lib/icons";
-import IconButton from "../lib/IconButton";
+import DestinationHeader from "../lib/DestinationHeader";
 import Button from "../lib/Button";
 import { fullTime } from "../stream/time";
 import {
@@ -191,21 +190,20 @@ export default function MediaPanel({
 
   return (
     <main className="stream media">
-      <header className="stream-header media-head">
-        <h2>Media</h2>
-        <p className="media-blurb meta">
-          The things you shared. The moments they came from.
-          {/* A star is the only thing that stops a file ageing out, so what a
-              star is *for* belongs next to the control, not in a settings
-              screen nobody opens. */}
-          {expiryDays === undefined || expiryDays === null
-            ? null
-            : ` · files go after ${expiryText(expiryDays)}; starred ones stay`}
-        </p>
-        <IconButton label="Close media" onClick={onClose}>
-          <ActionIcon name="close" />
-        </IconButton>
-      </header>
+      <DestinationHeader
+        title="Media"
+        closeLabel="Close media"
+        onClose={onClose}
+        description={
+          <>
+            The things you shared. The moments they came from.
+            {/* Explain stars beside the collection they keep. */}
+            {expiryDays === undefined || expiryDays === null
+              ? null
+              : ` · files go after ${expiryText(expiryDays)}; starred ones stay`}
+          </>
+        }
+      />
 
       <div className="media-filters">
         <div className="media-kinds">

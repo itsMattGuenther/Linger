@@ -198,6 +198,11 @@ button:is(
 .status-draft-card > .status-line {
   margin-top: 0.75rem;
 }
+/* Keep switches in one column even when a row has no preview control. */
+.sound-settings > .preference-row {
+  padding-right: calc(2.25rem + 0.75rem);
+}
+
 .sound-preference {
   display: flex;
   align-items: center;

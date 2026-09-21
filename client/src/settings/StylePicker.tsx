@@ -22,7 +22,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import type { User } from "../generated/User";
 import { ApiError, type AuthedApi } from "../lib/api";
-import { FONT_KEYS, FONT_LABELS } from "../lib/fonts";
+import { FONT_KEYS, FONT_LABELS, MESSAGE_FONT_KEYS } from "../lib/fonts";
 import { saveStyle } from "../lib/gateway";
 import { nameProps, personStyle } from "../lib/names";
 import Button from "../lib/Button";
@@ -195,7 +195,7 @@ export default function StylePicker({
           >
             the reading face
           </button>
-          {FONT_KEYS.map((key) => (
+          {MESSAGE_FONT_KEYS.map((key) => (
             <button
               key={key}
               type="button"

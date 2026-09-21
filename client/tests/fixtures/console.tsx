@@ -73,6 +73,14 @@ const users: User[] = [
     last_seen_at: Date.now() - 3_600_000,
   },
 ];
+if (query.has("qa")) {
+  me.display_name = "Matt with a longer display name";
+  me.style = { ...me.style, font_key: "geist-mono", msg_font_key: "jetbrains-mono" };
+  for (const user of users) {
+    if (user.id === "jules") user.style = { ...user.style, msg_font_key: "newsreader" };
+    if (user.id === "eli") user.style = { ...user.style, msg_font_key: "ibm-plex-sans" };
+  }
+}
 const rooms: Room[] = ["general", "listening-room", "weekend-plans"].map(
   (slug, position) => ({
     id: slug,
@@ -128,6 +136,10 @@ const bodies = [
     "Count me in. Let's put the details in **weekend-plans** when we know.",
   ],
 ];
+if (query.has("qa")) bodies.push([
+  "matt",
+  "A grouped continuation with enough text to wrap. Inline `code` keeps its own font.",
+]);
 const messages: Message[] = (
   query.has("history")
     ? Array.from({ length: 10_000 }, (_, index) => [
@@ -140,7 +152,7 @@ const messages: Message[] = (
   room_id: "general",
   author_id: author ?? "matt",
   body: body ?? "",
-  reply_to: null,
+  reply_to: query.has("qa") && index === all.length - 1 ? "message-00007" : null,
   attachments:
     query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
   reactions:
