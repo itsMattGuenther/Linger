@@ -112,7 +112,7 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev libasound2-dev \
             build-essential curl wget file libxdo-dev patchelf \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio \
-            libgstreamer1.0-dev xvfb xauth dbus-x11 pulseaudio pulseaudio-utils rpm libarchive-tools
+            libunwind-dev libgstreamer1.0-dev xvfb xauth dbus-x11 pulseaudio pulseaudio-utils rpm libarchive-tools
 
       - uses: actions/setup-node@v4
         with:

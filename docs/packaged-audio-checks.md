@@ -53,7 +53,7 @@ headers, `xvfb`, `xauth`, `dbus-x11`, `pulseaudio` and `pulseaudio-utils`.
 Dependency inspection also needs `dpkg-deb` and `rpm`. On Debian/Ubuntu:
 
 ```sh
-sudo apt install libgstreamer1.0-dev xvfb xauth dbus-x11 pulseaudio pulseaudio-utils rpm
+sudo apt install libunwind-dev libgstreamer1.0-dev xvfb xauth dbus-x11 pulseaudio pulseaudio-utils rpm
 python3 scripts/linux-audio-check.py /path/to/Linger.AppImage --appimage --output /tmp/linger-audio-check
 ```
 

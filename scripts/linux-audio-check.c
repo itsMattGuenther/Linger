@@ -97,6 +97,20 @@ G_MODULE_EXPORT void gtk_module_init(gint *argc, gchar ***argv) {
             g_free(message);
             return;
         }
+        const char *appdir = g_getenv("APPDIR");
+        if (appdir) {
+            GstPlugin *plugin = gst_plugin_feature_get_plugin(GST_PLUGIN_FEATURE(factory));
+            const char *file = plugin ? gst_plugin_get_filename(plugin) : NULL;
+            gchar *prefix = g_strconcat(appdir, "/", NULL);
+            gboolean bundled = file && g_str_has_prefix(file, prefix);
+            g_free(prefix);
+            if (plugin) gst_object_unref(plugin);
+            if (!bundled) {
+                save_result("{\"status\":\"failed\",\"error\":\"Audio plugin loaded from outside the AppImage\"}");
+                gst_object_unref(factory);
+                return;
+            }
+        }
         gst_object_unref(factory);
     }
     g_timeout_add(1000, start, NULL);
