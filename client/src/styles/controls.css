@@ -597,6 +597,14 @@ dialog.context-panel {
 dialog.context-panel::backdrop {
   background: transparent;
 }
+dialog.context-menu {
+  width: max-content;
+  min-width: min(12rem, calc(100vw - 16px));
+  padding: 0.25rem;
+}
+.context-menu .context-actions {
+  margin-top: 0;
+}
 .context-panel h3 {
   font-size: 1.125rem;
   font-weight: 550;

@@ -1509,8 +1509,9 @@ export function Composer({
           aria-expanded={addMenu !== null}
           aria-haspopup="menu"
           onClick={(event) => {
+            const anchor = event.currentTarget;
             setEmojiOpen(false);
-            setAddMenu((held) => (held ? null : event.currentTarget));
+            setAddMenu((held) => (held ? null : anchor));
           }}
         >
           <ActionIcon name="plus" />
@@ -1519,11 +1520,14 @@ export function Composer({
           <ContextPanel
             anchor={addMenu}
             label="Add to this message"
+            side="above"
+            variant="menu"
             onClose={() => setAddMenu(null)}
           >
             <div className="context-actions">
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   picker.current?.click();
                   setAddMenu(null);
