@@ -104,6 +104,20 @@ pass.
 - Branches are `feat/t-xxx-short-slug` (or `docs/…`, `fix/…`). Pushing the branch
   is how a task is claimed — see `TASKS.md` §"How to run a task".
 
+**Pull requests and issues**
+- Before starting an issue, check its linked pull requests so an existing proposed
+  fix is not duplicated.
+- Every issue-driven PR must formally link every issue it proposes to resolve.
+  Put `Fixes #<number>` or `Closes #<number>` in the PR description for each issue;
+  a bare issue mention or a commit-message reference is not sufficient.
+- Verify the links appear in GitHub's Development section, or through
+  `gh pr view <number> --json closingIssuesReferences`. Do this when opening the
+  PR and whenever another issue is added to its scope.
+- Link proposed fixes while the PR is open, even when validation is still pending.
+  Describe the remaining checks explicitly; missing acceptance evidence is not a
+  reason to leave an issue looking unclaimed. Linked issues close on merge when
+  repository auto-closing is enabled, so finish their acceptance checks before merging.
+
 **The README**
 
 `README.md` is the front door. It is not Matt's personal notes — other people are
