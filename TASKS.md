@@ -41,11 +41,15 @@ works in every tool:
 > Read AGENTS.md and TASKS.md, then do task T-xxx. State the current milestone
 > first.
 
-1. **Claim the task first**: push a branch named `feat/t-xxx-short-slug`, and in
+1. **Check for existing work, then claim the task**: for a GitHub issue, inspect
+   its linked PRs before starting another fix. Push a branch named
+   `feat/t-xxx-short-slug`, and in
    your first commit flip the task here from ⬜ to ⏳ with your name and the
    date. That is how two people avoid building the same thing. If a task has
    been ⏳ for over a week with no branch activity, ask in the PR or ping Matt
    before taking it over.
+   When opening a PR, formally link each issue it proposes to resolve and verify
+   the links, as required by `AGENTS.md` §"Pull requests and issues".
 2. Pick your model and effort from the task's label using the table below.
 3. Read `AGENTS.md` in full, then the spec sections the task references. State
    the current milestone before writing code.
