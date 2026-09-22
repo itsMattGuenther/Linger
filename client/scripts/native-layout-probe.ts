@@ -30,10 +30,15 @@ async function run() {
         rail.style.maxHeight = `${height}px`;
         await wait(40);
         const overflow = rail.scrollWidth - rail.clientWidth;
+        const gutter = rail.offsetWidth - rail.clientWidth;
+        if (gutter <= 0) throw new Error("Native check requires a reserved scrollbar gutter");
+        const railStyle = getComputedStyle(rail);
+        if (parseFloat(railStyle.marginInlineStart) < 0 || parseFloat(railStyle.marginInlineEnd) < 0)
+          throw new Error("Rail scroll box escapes its parent gutter with negative margins (#100)");
         const left = rail.getBoundingClientRect().left + rail.clientLeft;
         const right = left + rail.clientWidth;
         if (overflow > 1) throw new Error(`${theme} ${scale}% ${height}px: sideways rail overflow ${overflow}px`);
-        for (const node of rail.querySelectorAll<HTMLElement>(".server-name, .room-slug, .rail-places")) {
+        for (const node of rail.querySelectorAll<HTMLElement>(".rail-section, .server-row, .room-item, .server-name, .room-slug, .rail-places")) {
           const box = node.getBoundingClientRect();
           const style = getComputedStyle(node);
           if (box.left < left - 1 || box.right > right + 1 || node.scrollWidth > node.clientWidth + 1)
@@ -41,7 +46,7 @@ async function run() {
           if (style.textOverflow === "ellipsis" || !["none", ""].includes(style.webkitLineClamp))
             throw new Error(`${node.className} truncates navigation text`);
         }
-        checks.push({ theme, scale, height, overflow, gutter: rail.offsetWidth - rail.clientWidth });
+        checks.push({ theme, scale, height, overflow, gutter });
       }
       document.querySelector<HTMLButtonElement>('button[aria-label="Close navigation"]')?.click();
     }

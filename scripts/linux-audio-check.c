@@ -77,6 +77,7 @@ static gboolean start(gpointer unused) {
     const char *uri = webkit_web_view_get_uri(view);
     if (!uri || (!g_str_has_prefix(uri, "tauri://localhost") &&
                  !g_str_has_prefix(uri, "http://tauri.localhost"))) return G_SOURCE_CONTINUE;
+    g_object_set(gtk_settings_get_default(), "gtk-overlay-scrolling", FALSE, NULL);
     webkit_settings_set_media_playback_requires_user_gesture(webkit_web_view_get_settings(view), FALSE);
     gchar *script = NULL;
     if (!g_file_get_contents(g_getenv("LINGER_AUDIO_SCRIPT"), &script, NULL, NULL)) {

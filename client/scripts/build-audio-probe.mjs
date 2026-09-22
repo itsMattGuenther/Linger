@@ -9,6 +9,16 @@ export async function buildAudioProbe(output) {
     configFile: false,
     logLevel: "error",
     define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [{
+      name: "isolate-fixture-ipc",
+      transform(code, id) {
+        if (!id.includes("@tauri-apps")) return;
+        // The native bridge is read-only. Give this test-only component bundle
+        // its own mock bridge; never replace the installed app's IPC functions.
+        return code.replaceAll("__TAURI_INTERNALS__", "__LINGER_TEST_INTERNALS__")
+          .replaceAll("__TAURI_EVENT_PLUGIN_INTERNALS__", "__LINGER_TEST_EVENT_INTERNALS__");
+      },
+    }],
     build: {
       write: false,
       minify: false,

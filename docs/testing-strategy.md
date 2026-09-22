@@ -28,6 +28,10 @@ vertical scrollbar gutter, short scroll areas, both themes and all six interface
 sizes in WebView2 and WebKitGTK. The synthetic fixture replaces the empty test
 page only; it never loads personal accounts. Layout results are retained beside
 audio results. This is not a live-server or full-app startup test.
+The Linux harness disables overlay scrollbars only in its isolated test process
+using [GTK's scrollbar setting](https://docs.gtk.org/gtk3/property.Settings.gtk-overlay-scrolling.html).
+The test requires a measurable native gutter and rejects the negative-margin
+scroll box that caused #100, as well as checking actual text and row bounds.
 
 Run the existing `scripts/linux-audio-check.py` and Windows package scripts as
 documented in [packaged audio checks](packaged-audio-checks.md). They require a
