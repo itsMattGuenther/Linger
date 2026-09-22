@@ -58,13 +58,13 @@ test("the live guide uses working keyboard controls and shared action styles", a
     page.getByRole("button", { name: "Send message", exact: true }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "Join voice", exact: true }),
+    page.getByRole("button", { name: "Join Voice", exact: true }),
   ).toHaveClass(/ui-primary/);
   await expect(
     page.getByRole("button", { name: "Add a server", exact: true }),
   ).not.toHaveClass(/ui-primary/);
   const primary = await page
-    .getByRole("button", { name: "Join voice", exact: true })
+    .getByRole("button", { name: "Join Voice", exact: true })
     .boundingBox();
   const secondary = await page
     .getByRole("button", { name: "Add a server", exact: true })

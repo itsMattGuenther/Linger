@@ -97,6 +97,8 @@ These terms are used everywhere — UI, code, docs, error messages:
   into a tree and drawn as elements; **no raw HTML from a message, ever**.
   Message bodies use the four bundled sans-serif choices; older non-sans
   choices fall back to the default reading face. Names retain all twelve fonts.
+  Closely spaced messages group beneath sender names, without colored bars.
+  Hover or keyboard focus reveals a **⋯** button; activate it to open message actions.
 - 🎚️ **Reactions by weight** — a fixed palette of 12; six identical reactions render
   denser and larger, not "👍 6"
 - 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a
@@ -183,6 +185,8 @@ case-sensitive; use the exact downloaded name, including its capital `L` on
 newer builds. Technical commands and app identifiers remain unchanged.
 The MSI upgrade code is pinned to its original value so this capitalization
 change does not create a separate Windows application.
+Windows MSI upgrades preserve renamed, moved or deleted desktop shortcuts;
+they refresh the original desktop shortcut only when it is still present.
 
 **Windows will warn you.** You get *"Windows protected your PC"*, and *Run
 anyway* is hidden behind the *More info* link. That is SmartScreen saying the
@@ -305,6 +309,13 @@ package checks and remaining visual checks. Packaging changes run an unsigned
 Linux/Windows test build; these artifacts do not ship an update. Published
 v0.2.0 includes the porch icon; older v0.1.0 downloads have the previous icon.
 
+The MSI uses `client/src-tauri/windows/main.wxs`, based on the pinned Tauri
+CLI's template with a desktop-shortcut preservation condition. When updating
+Tauri, compare it with the upstream template named in its header. Windows
+package checks install the published 0.3.0 MSI, upgrade to the newly built
+package, and check original, renamed, moved and deleted desktop shortcuts,
+including uninstall cleanup. See [the update check](docs/windows-update-checks.md).
+
 Linux v0.2.0 builds also accept `LINGER_LINUX_BACKEND=wayland` (opt-in)
 or `x11` (fallback) before GTK starts. This survives the AppImage launcher's
 forced X11 setting without modifying the package. The published v0.1.0 does
@@ -326,7 +337,12 @@ require them through the package manager. Both Windows installers install
 WebView2 if it is missing (an internet connection is required for that step).
 Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
 the media runtime. See [packaged audio checks](docs/packaged-audio-checks.md)
-for runtime tests and the v0.3.0 packaging defect these checks prevent.
+for runtime and chime-onset tests. These checks also need Node and installed
+client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
+bundles the current sound player before running it inside each package. The same
+isolated run checks navigation overflow with real Console components and the
+package's shipped CSS, in both themes at all six interface sizes. No test code
+is shipped in the app. See [the testing strategy](docs/testing-strategy.md).
 
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
 order CI runs it — rules lint, version check, fmt, clippy, workspace tests,
@@ -375,8 +391,13 @@ in CI. Separate checks need additional services or browser engines:
 
 For a **documentation-only** change, run `scripts/lint-rules.sh` and
 `scripts/version-check.sh`. CI still runs those quick checks, but skips the
-Rust, S3, web, desktop, and relay jobs. Any change outside `docs/`, Markdown files,
-or `LICENSE` runs the full suite.
+Rust, S3, web, desktop, and relay jobs. `scripts/ci-scope.mjs` selects affected
+jobs from the full PR: frontend changes run browser and Linux/Windows package
+checks; server changes run Rust and real S3 tests; shell changes run its Rust
+tests and packages. Shared types, CI changes and unknown paths run everything.
+Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
+for seven days. Docs-only follow-up commits to a source PR still test its full
+scope; a green last commit must not conceal an untested earlier change.
 
 For real desktop interaction, `python3 scripts/desktop-check.py` runs three
 isolated Linux clients through live styling, private messages, uploads and a

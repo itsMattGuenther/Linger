@@ -319,8 +319,10 @@ group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts rea
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
 `Saturday morning`, `yesterday afternoon`.
 
-**No avatar column.** A 3px colored gutter rule per person, name in the group header.
-Density up, noise down.
+**No avatar column or per-message colored bars.** Styled sender names in group
+headers and indented text underneath establish grouping. Consecutive messages
+do not reserve a hidden action row. A compact action button beside the text opens
+the message menu by pointer or keyboard, without moving the conversation on hover.
 
 **Restrained embeds.** A link renders as a one-line inline card: favicon, title, domain.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
@@ -331,8 +333,10 @@ not a mode to discover. The layout adapts to the available window space. Interfa
 scale is an optional reading preference, not a requirement for a usable layout.
 There is no Density setting or Compact/IRC presentation.
 Rooms and DMs share tight text spacing: 1.3 line height, 2px between prose
-blocks and 8px before a sender group at default scale. Sender names provide
-the main visual break. Session dividers retain their larger spacing.
+blocks and 8px before a sender group at default scale. One-line continuations
+occupy 24px, including their action target; multiline messages grow with their
+content. Sender names provide the main visual break. Session dividers retain
+their larger spacing.
 
 **Time-of-day warmth.** Background and text colors shift ~200K warmer after local
 sunset. Subtle enough that most people never consciously notice. User-disableable.
@@ -607,10 +611,11 @@ text-faint          same as muted      same as muted
 accent              #6E9BFF             #2563C9
 ```
 
-Accent marks the "you left off here" line, focus rings, the active-room rule,
-and primary actions such as joining voice, continuing setup and sending. Selected
-preferences may use it with a separate shape or state label. It never decorates
-entire panels, ordinary body text or arbitrary rail icons.
+Accent marks the "you left off here" line, the active-room rule, and primary
+actions such as joining voice, continuing setup and sending. Selected preferences
+may use it with a separate shape or state label. It never decorates entire panels,
+ordinary body text or arbitrary rail icons. Keyboard location uses a restrained
+1px `text-secondary` ring, independent of the server accent.
 
 ### 5.4 The 16-color name palette
 
@@ -672,7 +677,9 @@ switches use a pill track and circular thumb. Panels stay square and shadow-free
 The single-line composer input and Send button share an outer height; Send
 keeps that height when the input grows. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger. Settings headings and navigation labels use title case.
+click or its trigger. Pointer-opened contextual panels keep that automatic focus
+visually quiet until keyboard navigation begins; keyboard-opened panels show the
+focus ring immediately. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 
@@ -765,7 +772,7 @@ first two are the system defaults.
 | 5 | Text: markdown, edit, delete, reply | §4.7 |
 | 6 | No unread counts; "left off here" line | §4.2 |
 | 7 | Roster-forward layout | §3 |
-| 9 | Name styling + message accent color | §4.5 |
+| 9 | Name styling + optional message font | §4.5 |
 | 10 | Statuses and away messages | §4.6 |
 | 11 | Reactions by weight | §4.8 |
 | 12 | File upload 500 MB, EXIF stripped | §4.10 |

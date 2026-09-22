@@ -3,24 +3,33 @@ name: package check
 # Unsigned test artifacts only: no release, signing secret or updater publication.
 on:
   pull_request:
-    paths:
-      - 'assets/logo/**'
-      - 'client/src-tauri/icons/**'
-      - 'client/src-tauri/tauri*.json'
-      - 'client/src-tauri/src/main.rs'
-      - 'client/src-tauri/src/linux_startup.rs'
-      - 'scripts/*icon*'
-      - 'scripts/*audio*'
-      - 'client/scripts/windows-audio-check.mjs'
-      - '.github/workflows/package-check.yml'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
+
+concurrency:
+  group: package-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.classify.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: classify changed files
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-scope.mjs
   packages:
+    needs: changes
+    if: ${{ needs.changes.outputs.packages == 'true' }}
     env:
       # These are inspectable test packages, not symbol archives. Full Rust
       # debug info makes the WebRTC/WebKit link and AppImage needlessly huge.
@@ -84,6 +93,10 @@ jobs:
           python scripts/linux-audio-check.py client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --output package-check/audio-appimage
           python scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
+      - name: Windows upgrades preserve desktop shortcuts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts/windows-update-check.ps1 -Bundle client/src-tauri/target/debug/bundle -Output package-check/updates
       - name: Installed Windows packages, audio and running icon
         if: runner.os == 'Windows'
         shell: pwsh
@@ -102,4 +115,5 @@ jobs:
             package-check/audio-*/*.log
             package-check/audio-*/*.json
             package-check/audio-*/*.f32
+            package-check/updates/*.log
           retention-days: 7

@@ -131,10 +131,6 @@
  * reader's own default — face, weight, slant, color, gradient, effect — and the
  * message-font override goes with it, because the AIM era's real lesson was that
  * the body has to stay legible.
- *
- * What it does *not* flatten is the 3px colored gutter rule beside a person's
- * messages. That is SPEC §4.7's replacement for the avatar column, not name
- * styling, and it is how you tell at a glance who is talking.
  */
 :root[data-normalize="true"] .name {
   color: var(--text-primary);

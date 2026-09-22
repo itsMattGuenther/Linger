@@ -23,12 +23,14 @@
   --text-secondary: #adb4c0;
   --text-muted: #969daa;
   --text-faint: var(--text-muted);
-  /* Accent marks primary actions, focus, selected preferences, the active-room
-     rule and the "you left off here" line (SPEC §5.3).
+  /* Accent marks primary actions, selected preferences, the active-room rule
+     and the "you left off here" line (SPEC §5.3).
      The host can point it at a palette key (`PATCH /server`), so the frame
      overrides `--accent` for its subtree and this is what it falls back to. */
   --accent-default: #6e9bff;
   --accent: var(--accent-default);
+  /* Keyboard location stays restrained and independent of the host's accent. */
+  --focus-ring: var(--text-secondary);
 
   /* The band that crosses a shimmering name (SPEC §4.5). Lighter than the name
      in the dark theme, darker in the light one, so the sweep reads as a sweep in

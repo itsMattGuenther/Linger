@@ -87,13 +87,15 @@ button:is(
   min-width: 2.5rem;
   min-height: 2rem;
   padding: 0.25rem 0.75rem;
-  border-color: var(--control-border);
+  background: var(--surface-1);
+  border-color: var(--hairline);
 }
 .reactions .reaction[data-mine="true"] {
-  border-color: var(--text-primary);
+  border-color: var(--hairline-strong);
 }
 .reactions .reaction:hover {
-  background: var(--control-hover);
+  background: var(--surface-2);
+  border-color: var(--hairline-strong);
 }
 .reactions .reaction:active .reaction-glyph {
   transform: scale(0.9);
@@ -152,7 +154,6 @@ button:is(
   margin-block: 1.25rem;
   padding: 1.25rem;
   border: 1px solid var(--hairline);
-  border-left: 3px solid var(--person-rule);
   background: var(--surface-1);
 }
 .style-preview-heading {

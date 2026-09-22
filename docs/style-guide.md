@@ -23,7 +23,7 @@ LINGER_CHROMIUM_PATH=/usr/bin/chromium node scripts/console-screenshots.mjs ../s
 
 | Element | Treatment | Use |
 |---|---|---|
-| Primary action | Filled accent, contrasting label, optional supporting icon | Continue, join voice, send |
+| Primary action | Filled accent, contrasting label, optional supporting icon | Continue, Join Voice, send |
 | Secondary action | Visible border and neutral fill at rest | Message, knock, attach |
 | Familiar toolbar action | Icon-only, named on hover and keyboard focus, 36px minimum target | Add, Settings, mute, deafen, play, collapse |
 | Navigation | Full-row target, distinct selected surface and active rule | Servers, rooms, destinations |
@@ -35,31 +35,41 @@ LINGER_CHROMIUM_PATH=/usr/bin/chromium node scripts/console-screenshots.mjs ../s
 
 Symbols are the shared language. Prefer a familiar icon with a hover/focus name
 over an icon sitting next to the same word. Visible text is for actions that
-have no well-known mark — Join voice, Send, Continue — or that would be
+have no well-known mark — Join Voice, Send, Continue — or that would be
 ambiguous as a glyph. Do not invent a new mark when a universal one exists:
 play to preview sound, plus to add (in the composer: Add file…), a smile for
 emoji, a gear for settings.
 
 Icon-only controls are 36px minimum, named for screen readers, and show that
 name on hover and keyboard focus. Keep control states visible at rest; hover
-reinforces them. Keyboard focus has a separate ring, never just a color shift.
-Disabled controls remain recognizable but do not compete with available actions.
+reinforces them. Keyboard focus has a separate, restrained 1px neutral ring,
+never just a color shift and never the server accent. Pointer-opened contextual
+panels keep their automatic initial focus without drawing that ring or exposing
+an icon tooltip; the first keyboard navigation reveals the ring. Keyboard-opened
+panels show it immediately. Disabled controls remain recognizable but do not
+compete with available actions.
 
 Settings headings and navigation labels use title case. Use sentence case for
-other visible labels.
+other visible labels. **Join Voice** is the requested title-case exception.
 
 Search, Media and Settings share `DestinationHeader`: the same sans heading
 and bordered Close control, with descriptions and category tabs as needed.
 Sound settings reserve the preview column even on rows without a Play button.
 
-Message actions reserve space beside the author heading (or above a grouped
-continuation), including while invisible. Hover and keyboard focus must never
-cover message text or change a row's height. Reaction choices wrap inside that
-reserved row. Message bodies offer the four bundled sans faces; saved non-sans
-keys fall back to the default body face without restricting name styling.
+Message actions use a compact ellipsis button in a reserved column beside the
+text, never a hidden row above it. This dense-list target is 24px square at
+default scale; other icon controls retain their 36px minimum. Hover and keyboard
+focus reveal the button without covering text or changing row height. Activating
+it opens a dismissible menu with full-size action targets and wrapping reaction
+choices. Escape and outside click dismiss it and return focus to the button.
+Message bodies offer the four bundled sans faces; saved non-sans keys fall back
+to the default body face without restricting name styling.
 Rooms and DMs use 1.3 message line height, 2px between prose blocks and 8px
 before a sender group at default scale. Sender headings separate speakers;
-typed line breaks remain intact. Session dividers keep their larger spacing.
+typed line breaks remain intact. One-line continuations occupy 24px including
+the action target, with no extra vertical padding. Text is indented beneath the
+sender name; per-message colored bars are removed. Session dividers keep their
+larger spacing.
 
 Navigation text wraps to the rail's width; it is never truncated with an
 ellipsis or a line clamp, no matter how long or unbreakable a server, room or
@@ -68,7 +78,7 @@ instead. Panel widths stay at the px values SPEC §5.5 sets; content inside a
 panel sizes to fit it, not the other way around.
 
 Voice participants are plain names, not pill-shaped selectors. A chevron beside
-the voice heading collapses the names; Join voice and call controls align right.
+the voice heading collapses the names; Join Voice and call controls align right.
 Click, right-click or keyboard activation opens a person's contextual panel.
 Member panels keep Message and Knock side by side, outside the roster's flow.
 Panels stay inside the viewport, support Escape and outside dismissal, trap

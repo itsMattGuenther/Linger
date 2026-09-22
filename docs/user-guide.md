@@ -235,7 +235,8 @@ A little formatting works, the kind you already type:
 Paste a link and it becomes a link. Type `@` and someone's username to mention
 them — that is the one thing that will interrupt them.
 
-Hover a message for its buttons:
+Hover over a message or use Tab to reveal its **⋯** button. Click it or press
+Enter to open the message actions; Escape closes the menu and returns focus.
 
 - **react** — twelve reactions, the same twelve for everybody. No custom emoji.
 - **reply** — quotes what you are answering. **Escape** cancels it.
@@ -273,7 +274,7 @@ successful save. Treat download links as private, especially for DM files.
 ## Talking
 
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
-invite: you are already in the room, and **join voice** under the room's name
+invite: you are already in the room, and **Join Voice** under the room's name
 turns your microphone on there. The line under the header then says who is in
 voice. Names stay readable; a small rule marks who is speaking.
 

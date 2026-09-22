@@ -4,7 +4,7 @@ test("reactions acknowledge accepted local actions, never loaded or remote ones"
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  const mark = page.getByRole("button", { name: /^heart,/ });
+  const mark = page.getByRole("button", { name: "heart reaction" });
   const row = page.locator(".msg").filter({ has: mark });
   await expect(mark).toHaveAttribute("aria-pressed", "true");
   await expect(mark.locator(".reaction-own")).toHaveText("✓");
@@ -12,7 +12,7 @@ test("reactions acknowledge accepted local actions, never loaded or remote ones"
   await page.evaluate(() =>
     document.dispatchEvent(new Event("fixture-reaction")),
   );
-  await expect(mark).toHaveAccessibleName("heart, 3 people");
+  await expect(mark).toHaveAccessibleName("heart reaction");
   await expect(mark).not.toHaveAttribute("data-confirmed", "true");
   await mark.click();
   await expect(row.getByRole("status")).toHaveText("Reaction removed.");
@@ -59,7 +59,7 @@ test("a refused reaction rolls back without success; reduced motion stays still"
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/tests/fixtures/console.html");
-  const mark = page.getByRole("button", { name: /^heart,/ });
+  const mark = page.getByRole("button", { name: "heart reaction" });
   const row = page.locator(".msg").filter({ has: mark });
   await mark.click();
   // Wait for the accepted removal before refusing the next request. The

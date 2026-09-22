@@ -72,6 +72,10 @@ Consequences:
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise the real WebView audio graph;
    a browser unit test alone cannot establish that these runtime files shipped.
+   The shared score is rendered once per cue into a cached, mono audio buffer
+   at the context's sample rate. Each buffer includes 50 ms of zero samples
+   before its attack so output startup cannot cut into the note. Preview and
+   live notifications use the same buffers and retain their existing policy.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.
@@ -586,6 +590,14 @@ used figure, the ceiling and the window, and the status bar draws the first two.
 ---
 
 ## 9. Deployment
+
+Windows MSI upgrades preserve the desktop shortcut choice: a fresh install
+creates one, while an upgrade only refreshes the canonical desktop shortcut
+if it still exists. Renaming, moving or deleting that shortcut must not create
+a second one on the next in-app update. Start-menu and uninstall shortcuts
+continue to refresh normally. The MSI template in `client/src-tauri/windows/`
+extends the pinned Tauri template for this rule; installation identifiers and
+the main executable name remain stable so retained shortcuts keep working.
 
 Target: a non-expert friend gets a working server in under 15 minutes.
 

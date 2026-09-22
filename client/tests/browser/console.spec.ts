@@ -105,7 +105,7 @@ test("voice volume is on demand and hiding people keeps call controls", async ({
 }) => {
   await page.goto("/tests/fixtures/console.html");
   await expect(page.getByRole("slider")).toHaveCount(0);
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await page
     .getByRole("button", { name: "Jules, voice options", exact: true })
     .click({ button: "right" });
@@ -145,7 +145,7 @@ test("ongoing voice stays controllable outside its room and returns without rejo
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   const ongoing = page.getByRole("region", { name: "Ongoing voice" });
   await expect(ongoing).toBeVisible();
@@ -185,7 +185,7 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
     localStorage.setItem("linger.voice.pushToTalk", "true"),
   );
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await page.keyboard.down("Control");
   await expect(page.locator("html")).toHaveAttribute(
     "data-controls",
@@ -214,7 +214,7 @@ test("an away-view control failure remains visible after voice disconnects", asy
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   await page.evaluate(() => {
     document.documentElement.dataset.refuse = "yes";
@@ -231,7 +231,7 @@ test("voice and Appearance controls fit a short window at 200%", async ({
 }) => {
   await page.setViewportSize({ width: 760, height: 480 });
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   await page
     .getByRole("combobox", { name: "Scale", exact: true })
@@ -675,18 +675,70 @@ for (const display of [
   }
 }
 
-// Shared across every #83 regression below. Design intent: the rail never
-// grows a horizontal scrollbar, at any width — long, unbreakable text wraps
-// or truncates in place instead. Only the vertical scrollbar is meant to come
-// and go, and only with the window's height.
+// Shared across the #83 and #100 regressions below. A scrollWidth check alone
+// missed #100 because overlay-scrollbar browsers did not reserve the width
+// that WebKitGTK's packaged-app scrollbar does. Check the scroll boxes, every
+// visible row, and the negative inline margins that can escape once a native
+// scrollbar takes part of the scrollport.
 async function railHasNoSidewaysOverflow(
   page: import("@playwright/test").Page,
 ) {
-  expect(
-    await page
-      .locator(".rail-content")
-      .evaluate((node) => node.scrollWidth <= node.clientWidth),
-  ).toBe(true);
+  const problems = await page.locator(".rail:visible").evaluate((rail) => {
+    const found: string[] = [];
+    const content = rail.querySelector<HTMLElement>(".rail-content");
+    if (!content) return ["missing .rail-content"];
+    const describe = (element: Element) =>
+      `${element.tagName.toLowerCase()}.${[...element.classList].join(".")}`;
+
+    for (const scroller of [
+      content,
+      ...content.querySelectorAll<HTMLElement>(".rail-rooms, .rail-dms"),
+    ]) {
+      if (scroller.scrollWidth > scroller.clientWidth + 1)
+        found.push(
+          `${describe(scroller)} scrolls ${scroller.scrollWidth - scroller.clientWidth}px sideways`,
+        );
+    }
+
+    const contentStyle = getComputedStyle(content);
+    if (contentStyle.overflowX !== "hidden")
+      found.push(
+        `.rail-content allows horizontal scrolling (${contentStyle.overflowX})`,
+      );
+
+    for (const element of [
+      content,
+      ...content.querySelectorAll<HTMLElement>(":scope > .rail-section"),
+    ]) {
+      const style = getComputedStyle(element);
+      const start = parseFloat(style.marginInlineStart);
+      const end = parseFloat(style.marginInlineEnd);
+      if (start < 0 || end < 0)
+        found.push(
+          `${describe(element)} escapes with inline margins ${start}px / ${end}px`,
+        );
+    }
+
+    const railBox = rail.getBoundingClientRect();
+    const contentBox = content.getBoundingClientRect();
+    for (const element of rail.querySelectorAll<HTMLElement>(
+      ".rail-section, .server-row, .server-item, .room-item, .rail-account, .rail-self, .rail-self-name, .rail-settings",
+    )) {
+      if (element.getClientRects().length === 0) continue;
+      const box = element.getBoundingClientRect();
+      const owner = content.contains(element) ? contentBox : railBox;
+      if (box.left < owner.left - 1 || box.right > owner.right + 1)
+        found.push(
+          `${describe(element)} crosses its container by ${Math.max(owner.left - box.left, box.right - owner.right).toFixed(1)}px`,
+        );
+    }
+
+    content.scrollLeft = 100;
+    if (content.scrollLeft !== 0)
+      found.push(`.rail-content moved sideways to ${content.scrollLeft}px`);
+    return found;
+  });
+  expect(problems).toEqual([]);
 }
 
 // The scrollWidth/clientWidth check above catches the scroll box itself
@@ -718,19 +770,18 @@ test("the rail's scroll box never grows a sideways scrollbar (#83)", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/tests/fixtures/console.html");
   const rail = page.locator(".rail");
-  const places = page.locator(".rail-places");
 
-  // The hairline above Media/Search bleeds out to the rail's own edges by
-  // design (it is drawn full-bleed, like every other hairline). Checking it
-  // still reaches those edges catches a future "fix" that clips it short
-  // with overflow-x: hidden instead of closing the gap it overflows.
-  const hairlineSpansRail = async () => {
+  // The scroll box itself reaches the rail edge so a vertical scrollbar stays
+  // there. Its children stay inside the scroll box's padding instead of using
+  // negative margins, which is what keeps a native scrollbar from creating a
+  // second, horizontal one (#100).
+  const scrollBoxSpansRail = async () => {
     const railBox = await rail.boundingBox();
-    const placesBox = await places.boundingBox();
-    if (!railBox || !placesBox) throw new Error("missing rail or places box");
-    expect(Math.abs(placesBox.x - railBox.x)).toBeLessThanOrEqual(1);
+    const contentBox = await page.locator(".rail-content").boundingBox();
+    if (!railBox || !contentBox) throw new Error("missing rail or scroll box");
+    expect(Math.abs(contentBox.x - railBox.x)).toBeLessThanOrEqual(1);
     expect(
-      Math.abs(placesBox.x + placesBox.width - (railBox.x + railBox.width)),
+      Math.abs(contentBox.x + contentBox.width - (railBox.x + railBox.width)),
     ).toBeLessThanOrEqual(1);
   };
 
@@ -738,7 +789,7 @@ test("the rail's scroll box never grows a sideways scrollbar (#83)", async ({
   // to need vertical scrolling, so there is nothing to check but that the box
   // is exactly as wide as its own content.
   await railHasNoSidewaysOverflow(page);
-  await hairlineSpansRail();
+  await scrollBoxSpansRail();
 
   // (b) Resizing the rail narrower and then wider must not reopen the gap:
   // the scroll box is full-bleed to whatever width the rail currently has.
@@ -749,11 +800,11 @@ test("the rail's scroll box never grows a sideways scrollbar (#83)", async ({
   await page.keyboard.press("Home");
   await expect(railSeparator).toHaveAttribute("aria-valuenow", "200");
   await railHasNoSidewaysOverflow(page);
-  await hairlineSpansRail();
+  await scrollBoxSpansRail();
   await page.keyboard.press("End");
   await expect(railSeparator).toHaveAttribute("aria-valuenow", "360");
   await railHasNoSidewaysOverflow(page);
-  await hairlineSpansRail();
+  await scrollBoxSpansRail();
 
   // (c) A short window is where the rail genuinely needs to scroll up and
   // down. That must not also turn on sideways scrolling.
@@ -916,6 +967,81 @@ test("the narrow navigation drawer holds to the same no-text-escapes rule (#83)"
   await railTextNeverEscapesTheScrollBox(page);
 });
 
+for (const scale of [100, 110, 125, 150, 175, 200]) {
+  test(`the whole rail stays inside its scrollport at ${scale}% interface scale (#100)`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 2400, height: 620 },
+    });
+    try {
+      await context.addInitScript(
+        (value) =>
+          localStorage.setItem("linger.interface.scale", String(value)),
+        scale,
+      );
+      const page = await context.newPage();
+
+      // Short names with an empty DM section, long unbroken server/room/DM
+      // names, and empty room + DM sections cover every rail content shape.
+      for (const fixture of [
+        "/tests/fixtures/console.html",
+        "/tests/fixtures/console.html?longnames",
+        "/tests/fixtures/console.html?emptyrail",
+      ]) {
+        await page.goto(fixture);
+        await expect(page.locator(".rail-account")).toBeVisible();
+        const separator = page.getByRole("separator", {
+          name: "Resize navigation",
+        });
+        for (const edge of ["Home", "End"]) {
+          await separator.focus();
+          await page.keyboard.press(edge);
+          await railHasNoSidewaysOverflow(page);
+          await railTextNeverEscapesTheScrollBox(page);
+        }
+      }
+
+      // The fix must leave the rail's actions and focus rings usable, not hide
+      // them behind overflow clipping. Focusing also scrolls each action into
+      // view, exercising the full height of the short, high-scale rail.
+      await page.goto("/tests/fixtures/console.html?longnames");
+      for (const name of [
+        "Add a server",
+        "Create a room",
+        "Media",
+        "Search",
+        "Settings",
+      ]) {
+        const control = page.getByRole("button", { name, exact: true });
+        await control.focus();
+        await expect(control).toBeFocused();
+        expect(
+          await control.evaluate((node) => {
+            const style = getComputedStyle(node);
+            return style.outlineStyle !== "none" &&
+              parseFloat(style.outlineWidth) >= 1;
+          }),
+        ).toBe(true);
+        await railHasNoSidewaysOverflow(page);
+      }
+
+      await page
+        .getByRole("button", { name: "Server options", exact: true })
+        .click();
+      await expect(
+        page.getByRole("dialog", { name: "Server options", exact: true }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("dialog", { name: "Server options", exact: true }),
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 // The rail must never scroll sideways AND never truncate text (owner's rule,
 // stated plainly): if a line is too long for the rail, the line wraps. A
 // room or DM name used to get a single-line ellipsis (app.css `.room-slug`);
@@ -968,7 +1094,10 @@ for (const rail of [200, 232, 360] as const) {
 
     await checkWraps(page.locator(".server-name"));
     await checkWraps(
-      page.locator(".room-item", { hasText: "reallyreally" }).locator(".room-slug"),
+      page.locator(".rail-rooms .room-item", { hasText: "reallyreally" }).locator(".room-slug"),
+    );
+    await checkWraps(
+      page.locator(".rail-dms .room-item").locator(".room-slug"),
     );
   });
 }

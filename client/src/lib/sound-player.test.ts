@@ -1,13 +1,73 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 17, 12)); });
+vi.mock("./chimes", () => ({ renderChime: vi.fn() }));
+import { renderChime } from "./chimes";
+const rendered = {} as AudioBuffer;
+
+beforeEach(() => { vi.resetModules(); vi.mocked(renderChime).mockReset().mockResolvedValue(rendered); vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 17, 12)); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function storage(held = new Map<string, string>()) {
   return { getItem: (key: string) => held.get(key) ?? null, setItem: (key: string, value: string) => { held.set(key, value); } };
 }
 
+function player() {
+  const sources: { buffer: AudioBuffer | null; onended: (() => void) | null; start: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  const device = { state: "running" as AudioContextState };
+  vi.stubGlobal("window", { localStorage: storage(), AudioContext: class {
+    sampleRate = 48000;
+    destination = {};
+    get state() { return device.state; }
+    createBufferSource() {
+      const source = { buffer: null, onended: null, connect: vi.fn(), start: vi.fn(), disconnect: vi.fn() };
+      sources.push(source);
+      return source;
+    }
+  } });
+  return { sources, device };
+}
+
 describe("notification sound policy", () => {
+  it("shares preparation across previews, reuses the waveform and disconnects completed sources", async () => {
+    const { sources } = player();
+    const sound = await import("./sound");
+    expect(await Promise.all([sound.playPreview("dm"), sound.playPreview("dm")])).toEqual([true, true]);
+    await expect(sound.playPreview("dm")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenCalledExactlyOnceWith("dm", 48000);
+    expect(sources).toHaveLength(3);
+    for (const source of sources) {
+      expect(source.buffer).toBe(rendered);
+      expect(source.start).toHaveBeenCalledOnce();
+      source.onended?.();
+      expect(source.disconnect).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each(["mute", "stale", "suspended"] as const)("drops a live cue when %s changes during preparation", async (change) => {
+    const { sources, device } = player();
+    let finish: (buffer: AudioBuffer) => void = () => {};
+    vi.mocked(renderChime).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const sound = await import("./sound");
+    sound.unlockAudio();
+    const playing = sound.playSound("dm");
+    if (change === "mute") sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, muted: true });
+    if (change === "stale") vi.advanceTimersByTime(1100);
+    if (change === "suspended") device.state = "suspended";
+    finish(rendered);
+    await expect(playing).resolves.toBe(false);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("a failed render is retried without consuming the live burst allowance", async () => {
+    player();
+    vi.mocked(renderChime).mockRejectedValueOnce(new Error("render refused"));
+    const sound = await import("./sound");
+    sound.unlockAudio();
+    await expect(sound.playSound("dm")).resolves.toBe(false);
+    await expect(sound.playSound("dm")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenCalledTimes(2);
+  });
+
   it("uses quiet defaults, preserves old master/quiet preferences and validates categories", async () => {
     const held = new Map([["linger.sound.muted", "true"], ["linger.sound.categories", '{"rooms":true,"voice":"no"}']]);
     vi.stubGlobal("window", { localStorage: storage(held) });
@@ -63,8 +123,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(), AudioContext: class {
       state = "suspended"; currentTime = 0; destination = {};
       async resume() { await resume(); this.state = "running"; }
-      createGain() { return node; }
-      createOscillator() { return { ...node }; }
+      createBufferSource() { return { ...node }; }
     } });
     const sound = await import("./sound");
     sound.unlockAudio();
@@ -75,7 +134,7 @@ describe("notification sound policy", () => {
     resume = async () => {};
     const results = await Promise.all([sound.playSound("dm"), sound.playSound("dm")]);
     expect(results.filter(Boolean)).toHaveLength(1);
-    expect(starts).toHaveLength(4);
+    expect(starts).toHaveLength(1);
     vi.advanceTimersByTime(1200);
     await expect(sound.playSound("dm")).resolves.toBe(true);
   });
@@ -87,8 +146,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(), AudioContext: class {
       state = "running"; currentTime = 0; destination = {};
       async resume() {}
-      createGain() { return node; }
-      createOscillator() { return { ...node }; }
+      createBufferSource() { return { ...node }; }
     } });
     vi.setSystemTime(new Date(2026, 8, 17, 3));
     const sound = await import("./sound");

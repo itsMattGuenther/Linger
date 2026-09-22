@@ -24,6 +24,11 @@ export default function ContextPanel({
   useLayoutEffect(() => {
     const node = dialog.current;
     if (!node) return;
+    // `showModal()` moves real focus into the panel. Keep that focus for
+    // screen readers and immediate keyboard use, but a pointer-opened panel
+    // should not pretend somebody already navigated to its first control.
+    // Capture the opener's focus-visible state before the dialog takes focus.
+    node.toggleAttribute("data-quiet-focus", !anchor.matches(":focus-visible"));
     node.showModal();
     const place = () => {
       const source = anchor.getBoundingClientRect();
@@ -68,6 +73,7 @@ export default function ContextPanel({
         const menuArrow = variant === "menu" &&
           ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key);
         if (event.key !== "Tab" && !menuArrow) return;
+        event.currentTarget.removeAttribute("data-quiet-focus");
         // A profile can be inside the narrow-window People dialog. Only the
         // top panel owns Tab; the parent's focus loop must not intercept it.
         event.stopPropagation();

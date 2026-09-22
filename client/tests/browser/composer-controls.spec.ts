@@ -1,6 +1,23 @@
 import { expect, test } from "@playwright/test";
 import { SCALE_OPTIONS } from "../../src/lib/interface";
 
+async function focusColors(control: import("@playwright/test").Locator) {
+  return control.evaluate((node) => {
+    const probe = document.createElement("span");
+    node.append(probe);
+    probe.style.color = "var(--focus-ring)";
+    const focus = getComputedStyle(probe).color;
+    probe.style.color = "var(--accent)";
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      accent,
+      focus,
+      outline: getComputedStyle(node).outlineColor,
+    };
+  });
+}
+
 for (const scale of SCALE_OPTIONS) {
   test(`composer control edges and attachment placement at ${scale}% (#88, #89)`, async ({ page }) => {
     await page.setViewportSize({ width: 760, height: 600 });
@@ -38,7 +55,10 @@ for (const scale of SCALE_OPTIONS) {
     if (!anchor) throw new Error("Attachment trigger missing");
     await trigger.click();
     const menu = page.getByRole("menu", { name: "Add to this message" });
-    await expect(menu.getByRole("menuitem", { name: "Add file…" })).toBeVisible();
+    const file = menu.getByRole("menuitem", { name: "Add file…" });
+    await expect(file).toBeVisible();
+    await expect(file).toBeFocused();
+    await expect(file).toHaveCSS("outline-style", "none");
     await expect(menu.locator("[data-tooltip]")).toHaveCount(0);
     const bounds = await menu.boundingBox();
     if (!bounds) throw new Error("Attachment menu missing");
@@ -63,10 +83,17 @@ test("attachment menu supports keyboard, dismissal and file picker without losin
   const trigger = page.getByRole("button", { name: "Add", exact: true });
   const menu = page.getByRole("menu", { name: "Add to this message" });
   const file = menu.getByRole("menuitem", { name: "Add file…" });
+  await page.locator(".frame").evaluate((node) => {
+    (node as HTMLElement).style.setProperty("--accent", "var(--name-lime)");
+  });
   await trigger.focus();
   await page.keyboard.press("Enter");
   await expect(file).toBeFocused();
   await expect(file).toHaveCSS("outline-style", "solid");
+  await expect(file).toHaveCSS("outline-width", "1px");
+  const colors = await focusColors(file);
+  expect(colors.outline).toBe(colors.focus);
+  expect(colors.outline).not.toBe(colors.accent);
   for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Tab", "Shift+Tab"]) {
     await page.keyboard.press(key);
     await expect(file).toBeFocused();

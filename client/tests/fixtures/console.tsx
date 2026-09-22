@@ -18,6 +18,11 @@ import "../../src/styles/names.css";
 
 const baseUrl = "https://console.example";
 const query = new URLSearchParams(location.search);
+// A single unbroken word with no spaces to break on, for the rail-overflow
+// regressions (#83, #100): real room, server and display names can be this
+// long, and the layout has to wrap them without help from whitespace.
+const longWord =
+  "reallyreallyreallyreallyreallyreallyreallyreallylongunbrokenname";
 const me: User = {
   id: "matt",
   username: "matt",
@@ -73,6 +78,22 @@ const users: User[] = [
     last_seen_at: Date.now() - 3_600_000,
   },
 ];
+if (query.has("tooltip")) {
+  users.push(
+    { ...me, id: "robin", username: "robin", display_name: "Robin Redwood", is_host: false },
+    { ...me, id: "casey", username: "casey", display_name: "Casey Thompson", is_host: false },
+    { ...me, id: "avery", username: "avery", display_name: "Avery Bennett", is_host: false },
+    { ...me, id: "morgan", username: "morgan", display_name: "Morgan Rivera", is_host: false },
+  );
+}
+if (query.has("longnames"))
+  users.push({
+    ...me,
+    id: "long-name",
+    username: "long_name",
+    display_name: longWord,
+    is_host: false,
+  });
 if (query.has("qa")) {
   me.display_name = "Matt with a longer display name";
   me.style = { ...me.style, font_key: "geist-mono", msg_font_key: "jetbrains-mono" };
@@ -81,24 +102,21 @@ if (query.has("qa")) {
     if (user.id === "eli") user.style = { ...user.style, msg_font_key: "ibm-plex-sans" };
   }
 }
-const rooms: Room[] = ["general", "listening-room", "weekend-plans"].map(
-  (slug, position) => ({
-    id: slug,
-    slug,
-    name: slug,
-    kind: "room",
-    topic: position === 0 ? "Good company. No hurry." : null,
-    position,
-    archived_at: null,
-    last_message_id: null,
-    member_ids: null,
-  }),
-);
-// A single unbroken word with no spaces to break on, for the rail-overflow
-// regression (#83): a real room slug or server name can be this long, and
-// nothing about it gives the layout anywhere to wrap or truncate for free.
-const longWord =
-  "reallyreallyreallyreallyreallyreallyreallyreallylongunbrokenname";
+const rooms: Room[] = query.has("emptyrail")
+  ? []
+  : ["general", "listening-room", "weekend-plans"].map(
+      (slug, position) => ({
+        id: slug,
+        slug,
+        name: slug,
+        kind: "room",
+        topic: position === 0 ? "Good company. No hurry." : null,
+        position,
+        archived_at: null,
+        last_message_id: null,
+        member_ids: null,
+      }),
+    );
 if (query.has("longnames"))
   rooms.push({
     id: "longroom",
@@ -145,10 +163,17 @@ if (query.has("spacing")) bodies.splice(0, bodies.length,
   ["jules", "Another message from the same person."],
   ["matt", "A different sender.\nStill easy to read."],
   ["matt", "> A quoted line\n> Another quoted line\n\n- First item\n- Second item\n\n```\nfirst code line\nsecond code line\n```"],
+  ["matt", "Short follow-up."],
+  ["matt", "Another short line."],
 );
 const spacingDm: Room = {
   id: "spacing-dm", slug: "spacing-dm", name: "spacing-dm", topic: null,
   kind: "dm", member_ids: ["matt", "jules"], position: 0,
+  archived_at: null, last_message_id: null,
+};
+const longNameDm: Room = {
+  id: "long-name-dm", slug: "long-name-dm", name: "long-name-dm", topic: null,
+  kind: "dm", member_ids: ["matt", "long-name"], position: 0,
   archived_at: null, last_message_id: null,
 };
 const messages: Message[] = (
@@ -167,8 +192,14 @@ const messages: Message[] = (
   attachments:
     query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
   reactions:
-    index === 5
-      ? [{ key: "heart", count: 2, user_ids: ["jules", "matt"] }]
+    index === 5 && !query.has("spacing")
+      ? [{
+          key: "heart",
+          count: query.has("tooltip") ? 8 : 2,
+          user_ids: query.has("tooltip")
+            ? ["jules", "matt", "eli", "sam", "robin", "casey", "avery", "morgan"]
+            : ["jules", "matt"],
+        }]
       : [],
   pinned_at: null,
   edited_at: null,
@@ -243,7 +274,11 @@ mockIPC(
                 user: me,
                 users,
                 rooms,
-                dms: query.has("spacing") ? [spacingDm] : [],
+                dms: query.has("spacing")
+                  ? [spacingDm]
+                  : query.has("longnames")
+                    ? [longNameDm]
+                    : [],
                 presence: users.slice(0, 3).map((user) => ({
                   user_id: user.id,
                   state: "in_room",

@@ -24,6 +24,13 @@ default.
 
 ## How to run a task
 
+**0.3.2 release hardening — ⏳ Matt, 2026-09-22.** Combine the issue-linked
+fixes in PRs #102, #103, #105, #106, #107, #109, #110 and #111; test the combined
+candidate, add native cross-platform navigation coverage and scoped CI, then
+build and publish 0.3.2. M12 remains current; no physical-device or real-network
+release check is closed by automation. See `docs/testing-strategy.md` and
+`docs/releases/0.3.2-testing.md`.
+
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
 agent's contract is `AGENTS.md`; tools that insist on their own filename get a
 pointer (`CLAUDE.md`, `QWEN.md`, `GEMINI.md`), and tools that read `AGENTS.md`
@@ -199,6 +206,22 @@ a different DM.
 
 
 ## V1 polish — small changes after the milestones closed
+
+- ✅ **Issue #108 · Preserve Windows shortcuts during in-app updates** — Matt,
+  2026-09-22. Reported after updating from 0.3.0 inside the client. Investigate
+  the published Windows packages and test updates on a disposable Windows
+  runner before changing installer behavior. Existing shortcut and installation
+  identity must survive the update without a second desktop entry.
+
+  **Completed 2026-09-22** ([PR #111](https://github.com/itsMattGuenther/Linger/pull/111)):
+  the published MSI's signed in-app 0.3.0 → 0.3.1
+  update recreates a renamed desktop shortcut; NSIS preserves it. The MSI
+  fix limits desktop creation on upgrades to an existing canonical shortcut.
+  All ten built-package Windows scenarios pass: original, renamed, moved,
+  deleted and fresh in both formats, including uninstall checks. Packaged
+  icons/audio, the full local gate and regular CI also pass. The reporter's
+  original installer and shortcut names are unconfirmed; no release was
+  published and HC-1 remains open. [Evidence and check](docs/windows-update-checks.md).
 
 Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
@@ -410,6 +433,27 @@ flows and do not start a new milestone. Evidence and rationale are in the
   workflows run these checks; see [method and limits](docs/packaged-audio-checks.md).
   No release or real-listener check is closed by this work alone.
 
+- ⏳ **T-933 · Clean notification onset and complete knock playback** — effort: **high** — Matt,
+  2026-09-22. GitHub #94 and #95: investigate the short crackle and clipped
+  two-tap knock reported in 0.3.1,
+  comparing Preview and live playback with the clean reference clips. Check
+  startup/resume, repeated playback and scheduling before changing the score.
+  *Accept:* capture the onset, add a regression check for the confirmed fault,
+  run the shared player on Linux and Windows, and confirm by listening on the
+  affected installation. Verify both knock taps, spacing and complete decay.
+  Matt requested one combined fix/build for both reports. Package output alone
+  does not prove listening quality.
+
+  **Correction implemented 2026-09-22.** The existing score renders into cached
+  buffers with 50 ms of silent leading samples. This preserves the attack when
+  the output starts; buffering alone did not fix the reproduced onset loss.
+  First/repeated Preview, delayed setup, received-event playback and Preview
+  after idle pass the Linux virtual-speaker checks for DMs and knocks. Both
+  knock taps retain their decay and 140 ms spacing. The full local gate passes; Chromium
+  checks preserve all twelve scores at 44.1/48 kHz. Linux/Windows package CI and
+  affected-installation listening remain required before closing #94/#95. See
+  [capture method and limits](docs/packaged-audio-checks.md).
+
 - ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:
   **medium** — Matt, 2026-09-21. GitHub #88, #89, #90 and #92: match the
   Send button to the single-line input height, anchor the attachment menu to
@@ -435,6 +479,53 @@ flows and do not start a new milestone. Evidence and rationale are in the
   dividers and action controls keep their clearance. Room/DM checks verify
   equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
   No release or real-device check is closed by this work.
+
+- ✅ **T-932 · Collapse message gaps and remove colored bars** — effort:
+  **medium** — Matt, 2026-09-22. GitHub #93 follows #92: remove the hidden
+  action rows between messages and the per-message colored gutter. Styled
+  sender headings and indented text define groups, with one layout for rooms
+  and DMs. Update SPEC §4.7 and the style guide with the implementation.
+  *Accept:* compare consecutive short messages, multiline text and sender
+  changes in a packaged client. Preserve typed line breaks and keyboard
+  access to actions without hover overlap or layout jumps.
+
+  **Implemented 2026-09-22.** Replaced each hidden toolbar row with a 24px
+  action target beside the text and an explicitly opened menu. Consecutive
+  one-line messages occupy 24px at default scale. Sender headings and a 14px
+  text indent replace the colored bars. Reply, edit, reactions and confirmed
+  deletion retain keyboard access; hovering and opening actions do not resize
+  messages. SPEC, style guide, README and user guide describe the new layout.
+  The full local gate and all 136 Chromium checks pass, with the focused
+  checks rerun after correcting the action target's inherited minimum height.
+  CI also passes the WebKit suite. Packaged Linux checks confirm 56px → 24px
+  one-line continuations, room/DM parity, preserved multiline content and
+  stable action geometry at 100%/200%. [Comparison and screenshots](docs/message-spacing-checks.md).
+  Windows packaged rendering was not exercised; no release check is closed.
+
+- ✅ **T-934 · Use restrained focus without pointer-open noise** — effort:
+  **medium** — Matt, 2026-09-22. GitHub #96 follows the attachment-menu
+  correction in T-931: the server accent currently paints every focus ring,
+  and native dialog autofocus makes pointer-opened menus look keyboard-selected.
+  Separate keyboard location from the host's accent and keep automatic panel
+  focus quiet until somebody navigates with the keyboard. Preserve real focus,
+  keyboard navigation, Escape/outside dismissal and focus return.
+  *Accept:* Add file, server options and shared controls have no bright accent
+  outline; keyboard focus remains clearly visible with the Console palette;
+  pointer-opened server options does not expose the Close tooltip; browser
+  regressions cover pointer and keyboard opening, navigation and dismissal;
+  SPEC §5.3 and the control guide describe the implemented treatment.
+
+  **Completed 2026-09-22 (PR #105).** Keyboard location now uses one neutral
+  1px ring instead of inheriting the server's accent, so a lime accent no
+  longer paints controls bright green. Context panels still move real focus
+  inside for accessibility. Pointer opening keeps the automatic first focus
+  visually quiet, including the Close tooltip, until Tab or arrow navigation;
+  keyboard opening shows the ring immediately. Add file, server options and
+  shared controls are covered with a lime accent, Escape, outside dismissal
+  and focus return. All 136 local Chromium cases, the production build, all
+  453 client tests and every local gate step pass. CI passes the full Chromium
+  and WebKit suites plus rules, Rust, S3, coturn and the desktop shell. No
+  release check was closed.
 
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
@@ -1141,7 +1232,7 @@ them, and cmake installs fine in user space.
 
   **One line under the room's header** (`client/src/voice/VoiceBar.tsx`),
   because voice happens in a room (SPEC §4.14) and a panel of its own would
-  say otherwise. Empty of everybody, it is one small control: `join voice`.
+  say otherwise. Empty of everybody, it is one small control: `Join Voice`.
   With anybody in, it is the word *voice*, the names, and — while you are in —
   `mute` and `leave voice`. Somebody talking is their name at full weight
   against everybody else at rest; no ring, no glow, no bar that bounces.
@@ -1211,11 +1302,11 @@ them, and cmake installs fine in user space.
     labels and clamping, preferences round-tripping.
   - The device listing test ran on real hardware and named the defaults.
   - **Pressed in a running app, on one machine** (2026-09-04): a local
-    server, the desktop app signed in as the host, one room. `join voice`
+    server, the desktop app signed in as the host, one room. `Join Voice`
     opened the real microphone and speakers through the core, the server
     answered, and the line read `VOICE  Matt you  mute  leave voice` with
     `in #garage · voice` on the roster card; `mute` flipped to `muted`;
-    `leave voice` put the line back to `join voice` and the roster word went.
+    `leave voice` put the line back to `Join Voice` and the roster word went.
     The picture is [`docs/t1404-voice-line.png`](docs/t1404-voice-line.png).
     Nothing crossed a network and nobody was on the other end — HC-8 is
     still the check that matters.
@@ -1263,7 +1354,7 @@ them, and cmake installs fine in user space.
   rate, your volume for that person kept. The microphone's framer is built
   fresh per open, so it always resamples from whatever the new device runs at.
 
-  **The first open is not retried.** Somebody pressing `join voice` on a
+  **The first open is not retried.** Somebody pressing `Join Voice` on a
   machine with no microphone gets the error in words, now, not twenty
   seconds of nothing.
 
@@ -1723,7 +1814,7 @@ who did not build it.
    here even if the relay is running: it takes the network out of the
    question. Both signed into the same server as different people, both in
    the same room.
-2. On each, press **join voice** under the room's name. Nothing else; if you
+2. On each, press **Join Voice** under the room's name. Nothing else; if you
    had to look anything up, T-1404 has not met its criterion — say what.
 3. Talk. The other machine should play it within a fraction of a second, and
    your name should come up to full weight on their screen while you do.
@@ -1774,7 +1865,7 @@ verified. HC-8 and HC-9 remain open.
 2. Two computers on **different networks**: one at home, one on a phone's
    hotspot is the honest test, because a phone network is carrier-grade NAT
    and is exactly what a direct connection cannot cross.
-3. Both press **join voice** in the same room. Within a few seconds the other
+3. Both press **Join Voice** in the same room. Within a few seconds the other
    person's name should be on your line without `connecting…` or `can't
    reach` beside it, and you should hear them.
 4. Talk for **ten minutes**. Listen for dropouts and for a delay that grows.

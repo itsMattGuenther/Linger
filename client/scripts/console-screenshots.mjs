@@ -78,7 +78,7 @@ try {
         });
         await page.getByRole("button", { name: "Close", exact: true }).click();
         await page
-          .getByRole("button", { name: "Join voice", exact: true })
+          .getByRole("button", { name: "Join Voice", exact: true })
           .click();
         await page.waitForTimeout(100);
         await page.mouse.move(700, 750);
