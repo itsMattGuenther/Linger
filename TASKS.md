@@ -24,6 +24,13 @@ default.
 
 ## How to run a task
 
+**0.3.2 release hardening — ⏳ Matt, 2026-09-22.** Combine the issue-linked
+fixes in PRs #102, #103, #105, #106, #107, #109, #110 and #111; test the combined
+candidate, add native cross-platform navigation coverage and scoped CI, then
+build and publish 0.3.2. M12 remains current; no physical-device or real-network
+release check is closed by automation. See `docs/testing-strategy.md` and
+`docs/releases/0.3.2-testing.md`.
+
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
 agent's contract is `AGENTS.md`; tools that insist on their own filename get a
 pointer (`CLAUDE.md`, `QWEN.md`, `GEMINI.md`), and tools that read `AGENTS.md`

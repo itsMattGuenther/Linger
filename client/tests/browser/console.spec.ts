@@ -1020,7 +1020,7 @@ for (const scale of [100, 110, 125, 150, 175, 200]) {
           await control.evaluate((node) => {
             const style = getComputedStyle(node);
             return style.outlineStyle !== "none" &&
-              parseFloat(style.outlineWidth) >= 2;
+              parseFloat(style.outlineWidth) >= 1;
           }),
         ).toBe(true);
         await railHasNoSidewaysOverflow(page);

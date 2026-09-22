@@ -10,6 +10,7 @@ scripts/lint-rules.sh "${1:-}"
 
 echo "== version check =="
 scripts/version-check.sh
+node --test scripts/ci-scope.test.mjs
 
 echo "== rust: fmt =="
 cargo fmt --all --check

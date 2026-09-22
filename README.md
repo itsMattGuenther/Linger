@@ -339,7 +339,10 @@ Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
 the media runtime. See [packaged audio checks](docs/packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
-bundles the current sound player before running it inside each package.
+bundles the current sound player before running it inside each package. The same
+isolated run checks navigation overflow with real Console components and the
+package's shipped CSS, in both themes at all six interface sizes. No test code
+is shipped in the app. See [the testing strategy](docs/testing-strategy.md).
 
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
 order CI runs it — rules lint, version check, fmt, clippy, workspace tests,
@@ -388,8 +391,13 @@ in CI. Separate checks need additional services or browser engines:
 
 For a **documentation-only** change, run `scripts/lint-rules.sh` and
 `scripts/version-check.sh`. CI still runs those quick checks, but skips the
-Rust, S3, web, desktop, and relay jobs. Any change outside `docs/`, Markdown files,
-or `LICENSE` runs the full suite.
+Rust, S3, web, desktop, and relay jobs. `scripts/ci-scope.mjs` selects affected
+jobs from the full PR: frontend changes run browser and Linux/Windows package
+checks; server changes run Rust and real S3 tests; shell changes run its Rust
+tests and packages. Shared types, CI changes and unknown paths run everything.
+Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
+for seven days. Docs-only follow-up commits to a source PR still test its full
+scope; a green last commit must not conceal an untested earlier change.
 
 For real desktop interaction, `python3 scripts/desktop-check.py` runs three
 isolated Linux clients through live styling, private messages, uploads and a

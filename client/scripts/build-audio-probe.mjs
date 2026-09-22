@@ -5,6 +5,24 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export async function buildAudioProbe(output) {
+  const layout = await build({
+    configFile: false,
+    logLevel: "error",
+    define: { "process.env.NODE_ENV": '"production"' },
+    build: {
+      write: false,
+      minify: false,
+      lib: {
+        entry: fileURLToPath(new URL("./native-layout-probe.ts", import.meta.url)),
+        formats: ["iife"],
+        name: "LingerLayoutProbe",
+        cssFileName: "native-layout-probe",
+      },
+    },
+  });
+  const layoutOutputs = Array.isArray(layout) ? layout : [layout];
+  const layoutScript = layoutOutputs.flatMap((entry) => entry.output).find((entry) => entry.type === "chunk");
+  if (!layoutScript) throw new Error("No native layout probe was built");
   const result = await build({
     configFile: false,
     logLevel: "error",
@@ -22,7 +40,20 @@ export async function buildAudioProbe(output) {
   const script = outputs.flatMap((entry) => entry.output).find((entry) => entry.type === "chunk");
   if (!script) throw new Error("No audio probe was built");
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, script.code);
+  // Discard the fixture's CSS: assertions must inspect the shipped stylesheet,
+  // not a test-only copy. Nothing from this bundle is included in the product.
+  await writeFile(output, `window.__runNativeLayout = async () => {
+    history.replaceState(null, "", "?longnames");
+    document.body.innerHTML = '<div id="root"></div>';
+    ${layoutScript.code}
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const result = window.__lingerLayoutResult;
+      if (result?.status === "failed") throw new Error(result.error);
+      if (result?.status === "passed") return result;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error("Native layout probe timed out");
+  };\n${script.code}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

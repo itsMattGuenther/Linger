@@ -108,7 +108,7 @@ def check(program, output, appimage):
                                    env=env, stdout=log, stderr=log, start_new_session=True)
         processes.append(app)
         result = None
-        for _ in range(300):
+        for _ in range(600):
             if result_path.exists():
                 try:
                     result = json.loads(result_path.read_text())

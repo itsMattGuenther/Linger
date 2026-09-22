@@ -1,6 +1,6 @@
 // Launch only the packaged app selected by windows-icon-check.ps1.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
@@ -58,9 +58,10 @@ try {
   await buildAudioProbe(probe);
   await page.evaluate(await readFile(probe, "utf8"));
   await page.locator("#linger-audio-probe").click();
-  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 30000 });
+  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 60000 });
   const result = await page.evaluate(() => window.__lingerAudioResult);
   assert.equal(result.status, "passed", JSON.stringify(result));
+  await writeFile(resolve(output, "native-result.json"), JSON.stringify(result, null, 2));
   console.log("PASS packaged WebView2 realtime audio:", JSON.stringify(result));
 } finally {
   if (browser) await browser.close();

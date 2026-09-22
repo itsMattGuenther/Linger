@@ -3,28 +3,33 @@ name: package check
 # Unsigned test artifacts only: no release, signing secret or updater publication.
 on:
   pull_request:
-    paths:
-      - 'assets/logo/**'
-      - 'client/src-tauri/icons/**'
-      - 'client/src-tauri/tauri*.json'
-      - 'client/src-tauri/windows/**'
-      - 'client/src-tauri/src/main.rs'
-      - 'client/src-tauri/src/linux_startup.rs'
-      - 'scripts/*icon*'
-      - 'scripts/*audio*'
-      - 'scripts/windows-update-check.ps1'
-      - 'client/scripts/*audio*'
-      - 'client/src/lib/sound.ts'
-      - 'client/src/lib/chimes.ts'
-      - '.github/workflows/package-check.yml'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
+
+concurrency:
+  group: package-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.classify.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: classify changed files
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-scope.mjs
   packages:
+    needs: changes
+    if: ${{ needs.changes.outputs.packages == 'true' }}
     env:
       # These are inspectable test packages, not symbol archives. Full Rust
       # debug info makes the WebRTC/WebKit link and AppImage needlessly huge.

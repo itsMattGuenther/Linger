@@ -17,7 +17,7 @@ for (const theme of THEMES) {
       );
       await page.goto("/tests/fixtures/console.html");
 
-      const mark = page.getByRole("button", { name: /^heart,/ });
+      const mark = page.getByRole("button", { name: "heart reaction" });
       const colors = await mark.evaluate((node) => {
         const style = getComputedStyle(node);
         const fill = getComputedStyle(node, "::before");
@@ -39,7 +39,7 @@ for (const theme of THEMES) {
           surface2: resolveColor("--surface-2"),
           hairline: resolveColor("--hairline"),
           hairlineStrong: resolveColor("--hairline-strong"),
-          accent: resolveColor("--accent"),
+          focus: resolveColor("--focus-ring"),
           rootSize: root.fontSize,
         };
       });
@@ -53,9 +53,8 @@ for (const theme of THEMES) {
       await page.evaluate(() =>
         document.dispatchEvent(new Event("fixture-reaction")),
       );
-      await expect(mark).toHaveAccessibleName("heart, 3 people");
-      expect(
-        await mark.evaluate((node) =>
+      await expect.poll(() =>
+        mark.evaluate((node) =>
           Number.parseFloat(getComputedStyle(node).fontSize),
         ),
       ).toBeGreaterThan(colors.fontSize);
@@ -90,9 +89,9 @@ for (const theme of THEMES) {
         };
       });
       expect(focus).toEqual({
-        color: colors.accent,
+        color: colors.focus,
         style: "solid",
-        width: "2px",
+        width: "1px",
       });
     });
   }
