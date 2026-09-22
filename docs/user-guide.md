@@ -235,7 +235,8 @@ A little formatting works, the kind you already type:
 Paste a link and it becomes a link. Type `@` and someone's username to mention
 them — that is the one thing that will interrupt them.
 
-Hover a message for its buttons:
+Hover over a message or use Tab to reveal its **⋯** button. Click it or press
+Enter to open the message actions; Escape closes the menu and returns focus.
 
 - **react** — twelve reactions, the same twelve for everybody. No custom emoji.
 - **reply** — quotes what you are answering. **Escape** cancels it.

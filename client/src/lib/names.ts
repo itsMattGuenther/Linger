@@ -14,9 +14,8 @@
  * The split is deliberate:
  *
  * - [`personStyle`] goes on a *container* — a stream row, a roster card, a
- *   popover. It sets the custom properties, so the 3px gutter rule beside
- *   somebody's messages and their message font come from the same place their
- *   name does and cannot drift apart.
+ *   popover. It sets the custom properties, so message fonts and the accents
+ *   on status cards come from the same place as names and cannot drift apart.
  * - [`nameProps`] goes on the *name itself*. It re-states the same properties
  *   (harmless, and it means a name works with no styled ancestor at all) and
  *   adds the class and the attributes `styles/names.css` paints from.

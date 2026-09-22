@@ -15,7 +15,7 @@ async function assertActionsClear(message: Locator) {
       const { x, y, width, height } = element.getBoundingClientRect();
       return { x, y, width, height };
     };
-    const actions = node.querySelector(".msg-actions");
+    const actions = node.querySelector(".msg-actions-trigger");
     const body = node.querySelector(".msg-body");
     const heading = node.querySelector(".msg-head");
     if (!actions || !body) throw new Error("Missing message geometry");
@@ -26,7 +26,9 @@ async function assertActionsClear(message: Locator) {
       heading: heading ? rect(heading) : null,
     };
   });
-  expect(actions.y + actions.height).toBeLessThanOrEqual(body.y + 1);
+  expect(actions.x).toBeGreaterThanOrEqual(body.x + body.width);
+  expect(actions.y).toBeGreaterThanOrEqual(bounds.y);
+  expect(actions.y + actions.height).toBeLessThanOrEqual(bounds.y + bounds.height + 1);
   expect(actions.x).toBeGreaterThanOrEqual(bounds.x - 1);
   expect(actions.x + actions.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
   if (heading) {
@@ -50,19 +52,36 @@ for (const [width, height, scale] of [[1100, 720, 100], [760, 480, 100], [760, 4
       await body.scrollIntoViewIfNeeded();
       const heightBefore = await message.evaluate((node) => node.getBoundingClientRect().height);
       await body.hover();
-      await expect(message.locator(".msg-actions")).toHaveCSS("opacity", "1");
+      const trigger = message.getByRole("button", { name: /^Actions for/ });
+      await expect(trigger).toHaveCSS("opacity", "1");
       await assertActionsClear(message);
       expect(await message.evaluate((node) => node.getBoundingClientRect().height)).toBe(heightBefore);
-      const react = message.getByRole("button", { name: /^react to/ });
-      await react.focus();
+      await trigger.focus();
       await page.mouse.move(0, 0);
-      await expect(message.locator(".msg-actions")).toHaveCSS("opacity", "1");
+      await expect(trigger).toHaveCSS("opacity", "1");
       await page.keyboard.press("Enter");
-      await expect(message.getByRole("button", { name: /^react with/ })).toHaveCount(12);
-      await assertActionsClear(message);
-      // Dismiss choices without sending a reaction to the fixture.
-      await body.hover();
-      await page.mouse.move(0, 0);
+      const menu = page.getByRole("menu", { name: /^Actions for/ });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole("menuitem", { name: /^react to/ })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(menu.getByRole("menuitem", { name: /^react with/ })).toHaveCount(12);
+      await expect(menu.getByRole("menuitem").first()).toBeFocused();
+      const box = await menu.boundingBox();
+      expect(box).not.toBeNull();
+      if (box) {
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+        expect(box.y + box.height).toBeLessThanOrEqual(height);
+      }
+      expect(await message.evaluate((node) => node.getBoundingClientRect().height)).toBe(heightBefore);
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await page.mouse.click(1, 1);
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
     }
   });
 }

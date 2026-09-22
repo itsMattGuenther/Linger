@@ -783,7 +783,13 @@ function MessageRow({
   );
   const [picking, setPicking] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLButtonElement | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const closeMenu = () => {
+    setMenuAnchor(null);
+    setPicking(false);
+    setConfirming(false);
+  };
 
   // Only a successful local gesture earns feedback. History and gateway
   // replays render the same marks, but must never replay the little motion.
@@ -882,36 +888,51 @@ function MessageRow({
       className="msg"
       data-flash={flashing ? "true" : undefined}
       data-names-me={namesMe ? "true" : undefined}
-      onMouseLeave={() => {
-        setPicking(false);
-        setConfirming(false);
-      }}
     >
       {repliedTo === undefined && message.reply_to === null ? null : (
         <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
       )}
 
-      <div className="msg-topline">
-        {head ? (
-          <p className="msg-head">
-            <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
-            {time}
-          </p>
-        ) : null}
-        {deleted || editing ? null : (
-          <div className="msg-actions">
+      {head ? (
+        <p className="msg-head">
+          <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
+          {time}
+        </p>
+      ) : null}
+      {deleted || editing ? null : (
+        <button
+          type="button"
+          className="msg-actions-trigger"
+          aria-label={`Actions for ${name}'s message`}
+          title="Message actions"
+          aria-haspopup="menu"
+          aria-expanded={menuAnchor !== null}
+          onClick={(event) => setMenuAnchor(event.currentTarget)}
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+      )}
+      {menuAnchor && !deleted && !editing ? (
+        <ContextPanel
+          anchor={menuAnchor}
+          label={`Actions for ${name}'s message`}
+          variant="menu"
+          onClose={closeMenu}
+        >
+          <div className={`context-actions${picking ? " msg-reaction-choices" : ""}`}>
             {picking ? (
               REACTIONS.map((reaction) => (
                 <button
                   key={reaction.key}
                   type="button"
-                  className="msg-action msg-action-glyph"
+                  role="menuitem"
+                  autoFocus={reaction === REACTIONS[0]}
                   title={reaction.label}
                   aria-label={`react with ${reaction.label}`}
                   disabled={reactionPending}
                   onClick={() => {
                     void react(message, reaction.key);
-                    setPicking(false);
+                    closeMenu();
                   }}
                 >
                   {reaction.glyph}
@@ -919,12 +940,10 @@ function MessageRow({
               ))
             ) : (
               <>
-                {/* Twelve fixed marks, not an emoji picker (SPEC §4.8) — they
-                    take over this same strip rather than opening a layer, which
-                    keeps the controls beside their message. */}
+                {/* Twelve fixed marks, not an arbitrary emoji picker (SPEC §4.8). */}
                 <button
                   type="button"
-                  className="msg-action meta"
+                  role="menuitem"
                   onClick={() => setPicking(true)}
                   aria-label={`react to ${name}'s message`}
                 >
@@ -932,8 +951,11 @@ function MessageRow({
                 </button>
                 <button
                   type="button"
-                  className="msg-action meta"
-                  onClick={() => actions.reply(message)}
+                  role="menuitem"
+                  onClick={() => {
+                    closeMenu();
+                    actions.reply(message);
+                  }}
                   aria-label={`reply to ${name}`}
                 >
                   reply
@@ -941,8 +963,11 @@ function MessageRow({
                 {mine ? (
                   <button
                     type="button"
-                    className="msg-action meta"
-                    onClick={() => actions.edit(message)}
+                    role="menuitem"
+                    onClick={() => {
+                      closeMenu();
+                      actions.edit(message);
+                    }}
                   >
                     edit
                   </button>
@@ -952,14 +977,18 @@ function MessageRow({
                     <>
                       <button
                         type="button"
-                        className="msg-action msg-action-danger meta"
-                        onClick={() => run(actions.remove(message))}
+                        role="menuitem"
+                        autoFocus
+                        onClick={() => {
+                          closeMenu();
+                          run(actions.remove(message));
+                        }}
                       >
                         delete for good
                       </button>
                       <button
                         type="button"
-                        className="msg-action meta"
+                        role="menuitem"
                         onClick={() => setConfirming(false)}
                       >
                         keep
@@ -968,7 +997,7 @@ function MessageRow({
                   ) : (
                     <button
                       type="button"
-                      className="msg-action meta"
+                      role="menuitem"
                       onClick={() => setConfirming(true)}
                     >
                       delete
@@ -978,8 +1007,8 @@ function MessageRow({
               </>
             )}
           </div>
-        )}
-      </div>
+        </ContextPanel>
+      ) : null}
       {/* Age only the body, never the author or timestamp (SPEC §5.6). */}
       <div className="msg-body" style={bodyStyle}>{body}</div>
 
