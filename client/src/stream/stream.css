@@ -305,8 +305,8 @@ button.msg-reply:hover {
 /*
  * Weight, not numbers (SPEC §4.8). `--weight` runs 0 to 1 and drives size and
  * how solidly the mark sits on the surface; six people make a bigger, denser
- * mark than one. No numeral is drawn anywhere — the tally is in the hover title
- * and the accessible label, and nowhere a reader can accidentally count it.
+ * mark than one. No numeral is drawn anywhere; hover or keyboard focus names
+ * the people who reacted instead of turning them into a count.
  */
 .reactions {
   display: flex;
