@@ -42,8 +42,12 @@ emoji, a gear for settings.
 
 Icon-only controls are 36px minimum, named for screen readers, and show that
 name on hover and keyboard focus. Keep control states visible at rest; hover
-reinforces them. Keyboard focus has a separate ring, never just a color shift.
-Disabled controls remain recognizable but do not compete with available actions.
+reinforces them. Keyboard focus has a separate, restrained 1px neutral ring,
+never just a color shift and never the server accent. Pointer-opened contextual
+panels keep their automatic initial focus without drawing that ring or exposing
+an icon tooltip; the first keyboard navigation reveals the ring. Keyboard-opened
+panels show it immediately. Disabled controls remain recognizable but do not
+compete with available actions.
 
 Settings headings and navigation labels use title case. Use sentence case for
 other visible labels.

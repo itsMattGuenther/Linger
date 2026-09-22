@@ -861,8 +861,8 @@ function ServerSection({
           stored now, and M6's generated palette stylesheet is what paints it.
           Delete this line when T-601 lands. */}
       <p className="host-note meta">
-        Used for selection markers, focus rings and primary actions. Everyone
-        keeps their own name colors.
+        Used for selection markers and primary actions. Everyone keeps their
+        own name colors.
       </p>
 
       {problem === null ? null : <p className="host-problem">{problem}</p>}

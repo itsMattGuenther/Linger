@@ -495,6 +495,31 @@ flows and do not start a new milestone. Evidence and rationale are in the
   stable action geometry at 100%/200%. [Comparison and screenshots](docs/message-spacing-checks.md).
   Windows packaged rendering was not exercised; no release check is closed.
 
+- ✅ **T-934 · Use restrained focus without pointer-open noise** — effort:
+  **medium** — Matt, 2026-09-22. GitHub #96 follows the attachment-menu
+  correction in T-931: the server accent currently paints every focus ring,
+  and native dialog autofocus makes pointer-opened menus look keyboard-selected.
+  Separate keyboard location from the host's accent and keep automatic panel
+  focus quiet until somebody navigates with the keyboard. Preserve real focus,
+  keyboard navigation, Escape/outside dismissal and focus return.
+  *Accept:* Add file, server options and shared controls have no bright accent
+  outline; keyboard focus remains clearly visible with the Console palette;
+  pointer-opened server options does not expose the Close tooltip; browser
+  regressions cover pointer and keyboard opening, navigation and dismissal;
+  SPEC §5.3 and the control guide describe the implemented treatment.
+
+  **Completed 2026-09-22 (PR #105).** Keyboard location now uses one neutral
+  1px ring instead of inheriting the server's accent, so a lime accent no
+  longer paints controls bright green. Context panels still move real focus
+  inside for accessibility. Pointer opening keeps the automatic first focus
+  visually quiet, including the Close tooltip, until Tab or arrow navigation;
+  keyboard opening shows the ring immediately. Add file, server options and
+  shared controls are covered with a lime accent, Escape, outside dismissal
+  and focus return. All 136 local Chromium cases, the production build, all
+  453 client tests and every local gate step pass. CI passes the full Chromium
+  and WebKit suites plus rules, Rust, S3, coturn and the desktop shell. No
+  release check was closed.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request

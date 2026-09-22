@@ -1,6 +1,23 @@
 import { expect, test } from "@playwright/test";
 import type { Room } from "../../src/generated/Room";
 
+async function focusColors(control: import("@playwright/test").Locator) {
+  return control.evaluate((node) => {
+    const probe = document.createElement("span");
+    node.append(probe);
+    probe.style.color = "var(--focus-ring)";
+    const focus = getComputedStyle(probe).color;
+    probe.style.color = "var(--accent)";
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      accent,
+      focus,
+      outline: getComputedStyle(node).outlineColor,
+    };
+  });
+}
+
 test("compact controls retain names and clear targets; destinations anchor above the footer", async ({
   page,
 }) => {
@@ -175,6 +192,66 @@ test("server management stays in the selected server menu", async ({
   await expect(
     page.locator(".host-member").filter({ hasText: "Jules" }),
   ).toBeVisible();
+});
+
+test("context panels keep pointer autofocus quiet and show restrained keyboard focus (#96)", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/console.html");
+  await page.locator(".frame").evaluate((node) => {
+    (node as HTMLElement).style.setProperty("--accent", "var(--name-lime)");
+  });
+  const trigger = page.getByRole("button", {
+    name: "Server options",
+    exact: true,
+  });
+  const panel = page.getByRole("dialog", {
+    name: "Server options",
+    exact: true,
+  });
+  const close = panel.getByRole("button", {
+    name: "Close Server options",
+    exact: true,
+  });
+
+  await trigger.click();
+  await expect(close).toBeFocused();
+  await expect(close).toHaveCSS("outline-style", "none");
+  await expect
+    .poll(() =>
+      close.evaluate((node) => getComputedStyle(node, "::after").visibility),
+    )
+    .toBe("hidden");
+
+  await page.keyboard.press("Tab");
+  const settings = panel.getByRole("button", {
+    name: "Server Settings",
+    exact: true,
+  });
+  await expect(settings).toBeFocused();
+  await expect(settings).toHaveCSS("outline-style", "solid");
+  await expect(settings).toHaveCSS("outline-width", "1px");
+  const colors = await focusColors(settings);
+  expect(colors.outline).toBe(colors.focus);
+  expect(colors.outline).not.toBe(colors.accent);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("Space");
+  await expect(close).toBeFocused();
+  await expect(close).toHaveCSS("outline-style", "solid");
+  await expect
+    .poll(() =>
+      close.evaluate((node) => getComputedStyle(node, "::after").visibility),
+    )
+    .toBe("visible");
+  const closeColors = await focusColors(close);
+  expect(closeColors.outline).toBe(closeColors.focus);
+  expect(closeColors.outline).not.toBe(closeColors.accent);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 for (const width of [1100, 760]) {

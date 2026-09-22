@@ -492,7 +492,7 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
   background: var(--surface-0);
 }
 .preference-switch input:focus-visible + .switch-track {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .switch-state {
@@ -596,6 +596,15 @@ dialog.context-panel {
 }
 dialog.context-panel::backdrop {
   background: transparent;
+}
+/* Native dialogs always move focus inside. Pointer opening keeps that real
+   focus quiet until keyboard navigation begins; keyboard opening shows it. */
+dialog.context-panel[data-quiet-focus] :focus-visible {
+  outline: none;
+}
+dialog.context-panel[data-quiet-focus]
+  button.ui-icon:focus-visible:not(:hover)::after {
+  visibility: hidden;
 }
 dialog.context-menu {
   width: max-content;

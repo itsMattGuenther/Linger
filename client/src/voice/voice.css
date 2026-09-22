@@ -225,7 +225,7 @@
 }
 
 .voice-volume input[type="range"]:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
