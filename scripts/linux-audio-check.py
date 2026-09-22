@@ -30,6 +30,19 @@ def stop(process):
             process.wait()
 
 
+def segments(samples):
+    """Find whole DM chimes, joining notes separated by less than 100 ms."""
+    spans = []
+    for index, sample in enumerate(samples):
+        if abs(sample) <= 0.00001:
+            continue
+        if not spans or index - spans[-1][1] > 4800:
+            spans.append([index, index])
+        else:
+            spans[-1][1] = index
+    return spans
+
+
 def check(program, output, appimage):
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
@@ -44,6 +57,8 @@ def check(program, output, appimage):
         env[f"XDG_{kind.upper()}_HOME" if kind != "runtime" else "XDG_RUNTIME_DIR"] = str(path)
     env.update(GDK_BACKEND="x11", LINGER_LINUX_BACKEND="x11", NO_AT_BRIDGE="1", XDG_CURRENT_DESKTOP="GNOME",
                WEBKIT_DISABLE_DMABUF_RENDERER="1", WEBKIT_DISABLE_COMPOSITING_MODE="1")
+    script = output / "probe.js"
+    subprocess.run(["node", str(ROOT / "client/scripts/build-audio-probe.mjs"), str(script)], check=True)
     module = output / "probe.so"
     flags = shlex.split(subprocess.check_output(
         ["pkg-config", "--cflags", "--libs", "webkit2gtk-4.1", "gstreamer-1.0"], text=True))
@@ -84,7 +99,7 @@ def check(program, output, appimage):
         assert (output / "output.f32").stat().st_size >= 4, "Virtual-speaker recorder did not become ready"
         result_path = output / "web-audio.json"
         env.update(GTK3_MODULES=str(module), LINGER_AUDIO_RESULT=str(result_path),
-                   LINGER_AUDIO_SCRIPT=str(ROOT / "scripts/audio-runtime-probe.js"),
+                   LINGER_AUDIO_SCRIPT=str(script),
                    GST_REGISTRY_1_0=str(output / "gst-registry.bin"))
         if appimage:
             env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
@@ -115,11 +130,23 @@ def check(program, output, appimage):
             if sys.byteorder != "little":
                 samples.byteswap()
             peak = max((abs(sample) for sample in samples), default=0)
-            if peak > 0.005:
+            if peak > 0.005 and len(segments(samples)) == len(result["cues"]):
                 break
             time.sleep(0.1)
         stop(recorder)
         assert peak > 0.005, f"Web Audio ran but no samples reached the virtual speaker: peak={peak}"
+        onsets = []
+        spans = segments(samples)
+        assert len(spans) == len(result["cues"]), f"Missing/extra chimes at speaker: {len(spans)}"
+        for cue, (start, end) in zip(result["cues"], spans):
+            clip = samples[max(0, start - 1):end + 2]
+            step = max(abs(b - a) for a, b in zip(clip, clip[1:]))
+            attack = max(abs(v) for v in samples[start:start + 240])
+            duration = (end - start) / 48000
+            onset = dict(label=cue["label"], max_step=step, first_5ms_peak=attack, duration=duration)
+            onsets.append(onset)
+            assert step < 0.01 and attack < 0.02 and 0.415 < duration < 0.44, f"Damaged chime onset: {onset}"
+        result["speaker_onsets"] = onsets
         result["speaker_peak"] = peak
         (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
         print(f"PASS {program.name}: packaged Web Audio reached the virtual speaker (peak={peak:.4f})")

@@ -72,6 +72,10 @@ Consequences:
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise the real WebView audio graph;
    a browser unit test alone cannot establish that these runtime files shipped.
+   The shared score is rendered once per cue into a cached, mono audio buffer
+   at the context's sample rate. Each buffer includes 50 ms of zero samples
+   before its attack so output startup cannot cut into the note. Preview and
+   live notifications use the same buffers and retain their existing policy.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.

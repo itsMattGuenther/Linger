@@ -418,6 +418,15 @@ flows and do not start a new milestone. Evidence and rationale are in the
   run the shared player on Linux and Windows, and confirm by listening on the
   affected installation. Package output alone does not prove listening quality.
 
+  **Correction implemented 2026-09-22.** The existing score renders into cached
+  buffers with 50 ms of silent leading samples. This preserves the attack when
+  the output starts; buffering alone did not fix the reproduced onset loss.
+  First/repeated Preview, delayed setup, a live DM and Preview after idle pass
+  the Linux virtual-speaker onset check. The full local gate passes; Chromium
+  checks preserve all twelve scores at 44.1/48 kHz. Linux/Windows package CI and
+  affected-installation listening remain required before closing #94. See
+  [capture method and limits](docs/packaged-audio-checks.md).
+
 - ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:
   **medium** — Matt, 2026-09-21. GitHub #88, #89, #90 and #92: match the
   Send button to the single-line input height, anchor the attachment menu to
