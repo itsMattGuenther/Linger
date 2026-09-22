@@ -23,7 +23,7 @@ LINGER_CHROMIUM_PATH=/usr/bin/chromium node scripts/console-screenshots.mjs ../s
 
 | Element | Treatment | Use |
 |---|---|---|
-| Primary action | Filled accent, contrasting label, optional supporting icon | Continue, join voice, send |
+| Primary action | Filled accent, contrasting label, optional supporting icon | Continue, Join Voice, send |
 | Secondary action | Visible border and neutral fill at rest | Message, knock, attach |
 | Familiar toolbar action | Icon-only, named on hover and keyboard focus, 36px minimum target | Add, Settings, mute, deafen, play, collapse |
 | Navigation | Full-row target, distinct selected surface and active rule | Servers, rooms, destinations |
@@ -35,7 +35,7 @@ LINGER_CHROMIUM_PATH=/usr/bin/chromium node scripts/console-screenshots.mjs ../s
 
 Symbols are the shared language. Prefer a familiar icon with a hover/focus name
 over an icon sitting next to the same word. Visible text is for actions that
-have no well-known mark — Join voice, Send, Continue — or that would be
+have no well-known mark — Join Voice, Send, Continue — or that would be
 ambiguous as a glyph. Do not invent a new mark when a universal one exists:
 play to preview sound, plus to add (in the composer: Add file…), a smile for
 emoji, a gear for settings.
@@ -46,7 +46,7 @@ reinforces them. Keyboard focus has a separate ring, never just a color shift.
 Disabled controls remain recognizable but do not compete with available actions.
 
 Settings headings and navigation labels use title case. Use sentence case for
-other visible labels.
+other visible labels. **Join Voice** is the requested title-case exception.
 
 Search, Media and Settings share `DestinationHeader`: the same sans heading
 and bordered Close control, with descriptions and category tabs as needed.
@@ -68,7 +68,7 @@ instead. Panel widths stay at the px values SPEC §5.5 sets; content inside a
 panel sizes to fit it, not the other way around.
 
 Voice participants are plain names, not pill-shaped selectors. A chevron beside
-the voice heading collapses the names; Join voice and call controls align right.
+the voice heading collapses the names; Join Voice and call controls align right.
 Click, right-click or keyboard activation opens a person's contextual panel.
 Member panels keep Message and Knock side by side, outside the roster's flow.
 Panels stay inside the viewport, support Escape and outside dismissal, trap

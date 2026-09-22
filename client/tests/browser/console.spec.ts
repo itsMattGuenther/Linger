@@ -105,7 +105,7 @@ test("voice volume is on demand and hiding people keeps call controls", async ({
 }) => {
   await page.goto("/tests/fixtures/console.html");
   await expect(page.getByRole("slider")).toHaveCount(0);
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await page
     .getByRole("button", { name: "Jules, voice options", exact: true })
     .click({ button: "right" });
@@ -145,7 +145,7 @@ test("ongoing voice stays controllable outside its room and returns without rejo
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   const ongoing = page.getByRole("region", { name: "Ongoing voice" });
   await expect(ongoing).toBeVisible();
@@ -185,7 +185,7 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
     localStorage.setItem("linger.voice.pushToTalk", "true"),
   );
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await page.keyboard.down("Control");
   await expect(page.locator("html")).toHaveAttribute(
     "data-controls",
@@ -214,7 +214,7 @@ test("an away-view control failure remains visible after voice disconnects", asy
   page,
 }) => {
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   await page.evaluate(() => {
     document.documentElement.dataset.refuse = "yes";
@@ -231,7 +231,7 @@ test("voice and Appearance controls fit a short window at 200%", async ({
 }) => {
   await page.setViewportSize({ width: 760, height: 480 });
   await page.goto("/tests/fixtures/console.html");
-  await page.getByRole("button", { name: "Join voice", exact: true }).click();
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
   await openSettings(page);
   await page
     .getByRole("combobox", { name: "Scale", exact: true })

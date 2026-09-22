@@ -1141,7 +1141,7 @@ them, and cmake installs fine in user space.
 
   **One line under the room's header** (`client/src/voice/VoiceBar.tsx`),
   because voice happens in a room (SPEC §4.14) and a panel of its own would
-  say otherwise. Empty of everybody, it is one small control: `join voice`.
+  say otherwise. Empty of everybody, it is one small control: `Join Voice`.
   With anybody in, it is the word *voice*, the names, and — while you are in —
   `mute` and `leave voice`. Somebody talking is their name at full weight
   against everybody else at rest; no ring, no glow, no bar that bounces.
@@ -1211,11 +1211,11 @@ them, and cmake installs fine in user space.
     labels and clamping, preferences round-tripping.
   - The device listing test ran on real hardware and named the defaults.
   - **Pressed in a running app, on one machine** (2026-09-04): a local
-    server, the desktop app signed in as the host, one room. `join voice`
+    server, the desktop app signed in as the host, one room. `Join Voice`
     opened the real microphone and speakers through the core, the server
     answered, and the line read `VOICE  Matt you  mute  leave voice` with
     `in #garage · voice` on the roster card; `mute` flipped to `muted`;
-    `leave voice` put the line back to `join voice` and the roster word went.
+    `leave voice` put the line back to `Join Voice` and the roster word went.
     The picture is [`docs/t1404-voice-line.png`](docs/t1404-voice-line.png).
     Nothing crossed a network and nobody was on the other end — HC-8 is
     still the check that matters.
@@ -1263,7 +1263,7 @@ them, and cmake installs fine in user space.
   rate, your volume for that person kept. The microphone's framer is built
   fresh per open, so it always resamples from whatever the new device runs at.
 
-  **The first open is not retried.** Somebody pressing `join voice` on a
+  **The first open is not retried.** Somebody pressing `Join Voice` on a
   machine with no microphone gets the error in words, now, not twenty
   seconds of nothing.
 
@@ -1723,7 +1723,7 @@ who did not build it.
    here even if the relay is running: it takes the network out of the
    question. Both signed into the same server as different people, both in
    the same room.
-2. On each, press **join voice** under the room's name. Nothing else; if you
+2. On each, press **Join Voice** under the room's name. Nothing else; if you
    had to look anything up, T-1404 has not met its criterion — say what.
 3. Talk. The other machine should play it within a fraction of a second, and
    your name should come up to full weight on their screen while you do.
@@ -1774,7 +1774,7 @@ verified. HC-8 and HC-9 remain open.
 2. Two computers on **different networks**: one at home, one on a phone's
    hotspot is the honest test, because a phone network is carrier-grade NAT
    and is exactly what a direct connection cannot cross.
-3. Both press **join voice** in the same room. Within a few seconds the other
+3. Both press **Join Voice** in the same room. Within a few seconds the other
    person's name should be on your line without `connecting…` or `can't
    reach` beside it, and you should hear them.
 4. Talk for **ten minutes**. Listen for dropouts and for a delay that grows.

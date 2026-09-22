@@ -37,7 +37,7 @@ test("the voice chevron only collapses participants and Join sits on the right",
   await page.goto("/tests/fixtures/console.html");
   const heading = await page.locator(".voice-heading").boundingBox();
   const join = await page
-    .getByRole("button", { name: "Join voice", exact: true })
+    .getByRole("button", { name: "Join Voice", exact: true })
     .boundingBox();
   const bar = await page.locator(".voice-bar").boundingBox();
   expect(heading && join && bar).toBeTruthy();
@@ -52,7 +52,7 @@ test("the voice chevron only collapses participants and Join sits on the right",
   await expect(page.locator(".voice-seats")).toBeHidden();
   await expect(page.locator(".roster")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Join voice", exact: true }),
+    page.getByRole("button", { name: "Join Voice", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Expand voice participants" }).click();
   await expect(page.locator(".voice-seats")).toBeVisible();

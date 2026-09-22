@@ -46,7 +46,7 @@ function Guide() {
           <h2>01 / Actions</h2>
           <p>Filled for the next step. Outlined for supporting actions.</p>
           <div className="guide-examples">
-            <Button variant="primary">Join voice</Button>
+            <Button variant="primary">Join Voice</Button>
             <Button>Message</Button>
             <IconButton label="Add a server">
               <ActionIcon name="plus" />

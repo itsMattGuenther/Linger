@@ -246,7 +246,7 @@ export default function VoiceBar({
               ? "Joining voice…"
               : seatedElsewhere
                 ? "Move voice here"
-                : "Join voice"}
+                : "Join Voice"}
           </Button>
         </div>
       )}
