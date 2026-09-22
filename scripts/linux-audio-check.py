@@ -130,7 +130,11 @@ def check(program, output, appimage):
             if sys.byteorder != "little":
                 samples.byteswap()
             peak = max((abs(sample) for sample in samples), default=0)
-            if peak > 0.005 and len(segments(samples)) == len(result["cues"]):
+            spans = segments(samples)
+            # A delayed backend may only have started the final cue. Require
+            # its trailing silence too before judging the recorded duration.
+            if (peak > 0.005 and len(spans) == len(result["cues"])
+                    and len(samples) - spans[-1][1] >= 4800):
                 break
             time.sleep(0.1)
         stop(recorder)
