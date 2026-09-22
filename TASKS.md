@@ -410,6 +410,14 @@ flows and do not start a new milestone. Evidence and rationale are in the
   workflows run these checks; see [method and limits](docs/packaged-audio-checks.md).
   No release or real-listener check is closed by this work alone.
 
+- ⏳ **T-933 · Clean notification sound onset** — effort: **high** — Matt,
+  2026-09-22. GitHub #94: investigate the short crackle reported in 0.3.1,
+  comparing Preview and live playback with the clean reference clips. Check
+  startup/resume, repeated playback and scheduling before changing the score.
+  *Accept:* capture the onset, add a regression check for the confirmed fault,
+  run the shared player on Linux and Windows, and confirm by listening on the
+  affected installation. Package output alone does not prove listening quality.
+
 - ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:
   **medium** — Matt, 2026-09-21. GitHub #88, #89, #90 and #92: match the
   Send button to the single-line input height, anchor the attachment menu to
