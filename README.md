@@ -337,7 +337,9 @@ require them through the package manager. Both Windows installers install
 WebView2 if it is missing (an internet connection is required for that step).
 Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
 the media runtime. See [packaged audio checks](docs/packaged-audio-checks.md)
-for runtime tests and the v0.3.0 packaging defect these checks prevent.
+for runtime and chime-onset tests. These checks also need Node and installed
+client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
+bundles the current sound player before running it inside each package.
 
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
 order CI runs it — rules lint, version check, fmt, clippy, workspace tests,

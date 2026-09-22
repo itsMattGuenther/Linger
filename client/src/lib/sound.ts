@@ -19,7 +19,7 @@
  * taps from an oscillator need no audio asset. The shared score in chimes.ts
  * does not reach into T-903's separate entrance-sound curation.
  */
-import { scheduleChime } from "./chimes";
+import { renderChime } from "./chimes";
 
 /** Quiet hours run from 22:00 to 08:00, listener-local (SPEC §4.1). */
 export const QUIET_FROM_HOUR = 22;
@@ -175,6 +175,20 @@ export function cueAllowed(cue: SoundCue, prefs: SoundPrefs, at: Date): boolean 
 }
 
 const lastPlayed = new Map<SoundCategory, number>();
+// The one context has a fixed sample rate. Keep each short synthesized cue in
+// memory, including an in-flight render shared by simultaneous notifications.
+const buffers = new Map<SoundCue, Promise<AudioBuffer>>();
+
+function chimeBuffer(ctx: AudioContext, cue: SoundCue): Promise<AudioBuffer> {
+  const cached = buffers.get(cue);
+  if (cached) return cached;
+  const pending = renderChime(cue, ctx.sampleRate).catch((error: unknown) => {
+    buffers.delete(cue);
+    throw error;
+  });
+  buffers.set(cue, pending);
+  return pending;
+}
 
 /** Never queues an old cue for later or throws when the audio device refuses. */
 export async function playSound(cue: SoundCue, now: Date = new Date()): Promise<boolean> {
@@ -208,6 +222,8 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
       } finally { clearTimeout(timeout); }
     }
     if (ctx.state !== "running") return false;
+    const buffer = await chimeBuffer(ctx, cue);
+    if (ctx.state !== "running") return false;
     // Recheck after the await: preferences may have changed, or another cue
     // won the same burst. Never play something saved by a suspended context.
     // A preview is the click itself, so it is not stale.
@@ -225,8 +241,15 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
     if (!preview && Date.now() - (lastPlayed.get(category) ?? -Infinity) < cooldown) {
       return false;
     }
+    // Starting a complete buffer always begins at sample zero, even if the
+    // main thread stalls. Scheduling oscillators/envelopes against a time
+    // captured before graph construction can miss the quiet attack (#94).
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.onended = () => source.disconnect();
+    source.start();
     if (!preview) lastPlayed.set(category, Date.now());
-    scheduleChime(ctx, cue, ctx.currentTime + 0.01);
     return true;
   } catch {
     return false;

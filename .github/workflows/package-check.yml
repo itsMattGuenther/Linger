@@ -13,7 +13,9 @@ on:
       - 'scripts/*icon*'
       - 'scripts/*audio*'
       - 'scripts/windows-update-check.ps1'
-      - 'client/scripts/windows-audio-check.mjs'
+      - 'client/scripts/*audio*'
+      - 'client/src/lib/sound.ts'
+      - 'client/src/lib/chimes.ts'
       - '.github/workflows/package-check.yml'
       - '.github/workflows/release.yml'
   workflow_dispatch:

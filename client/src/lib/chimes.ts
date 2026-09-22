@@ -103,3 +103,19 @@ export function scheduleChime(
     note(ctx, frequency, at + index * chime.spacing, chime.gain, chime.decay);
   }
 }
+
+/**
+ * Keep the attack intact through both graph setup and output startup. WebKitGTK
+ * can lose the beginning of a new audible run; actual zero samples at the head
+ * of one buffer give it time to settle. Scheduling a source later still leaves
+ * the backend idle until that source starts, so it is not equivalent padding.
+ */
+export async function renderChime(cue: SoundCue, sampleRate: number): Promise<AudioBuffer> {
+  const duration = cue === "knock"
+    ? 0.14 + 0.11
+    : (CHIMES[cue].notes.length - 1) * CHIMES[cue].spacing + CHIMES[cue].decay + 0.02;
+  const lead = 0.05;
+  const ctx = new OfflineAudioContext(1, Math.ceil((duration + lead) * sampleRate), sampleRate);
+  scheduleChime(ctx, cue, lead);
+  return ctx.startRendering();
+}

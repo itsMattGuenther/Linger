@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
+import { buildAudioProbe } from "./build-audio-probe.mjs";
 import { chromium } from "@playwright/test";
 
 assert.equal(process.platform, "win32", "Run this check on an ephemeral Windows runner");
@@ -53,9 +54,11 @@ try {
   }
   assert(page, "Packaged application page missing from WebView2");
   await page.waitForLoadState("domcontentloaded");
-  await page.evaluate(await readFile(new URL("../../scripts/audio-runtime-probe.js", import.meta.url), "utf8"));
+  const probe = resolve(output, "probe.js");
+  await buildAudioProbe(probe);
+  await page.evaluate(await readFile(probe, "utf8"));
   await page.locator("#linger-audio-probe").click();
-  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 10000 });
+  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 30000 });
   const result = await page.evaluate(() => window.__lingerAudioResult);
   assert.equal(result.status, "passed", JSON.stringify(result));
   console.log("PASS packaged WebView2 realtime audio:", JSON.stringify(result));
