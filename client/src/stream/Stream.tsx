@@ -18,8 +18,8 @@
  * body that looks like markup is text that looks like markup.
  *
  * **Reactions are weight, never numbers** (SPEC §4.8). The count comes down the
- * wire and goes into the hover text and the accessible label; it is never drawn
- * as a numeral.
+ * wire and determines the mark's weight. Hover or keyboard focus names the
+ * people who reacted without turning their reaction into a score.
  *
  * **Nothing here counts anything** (SPEC §4.2). Where you left off is a line in
  * the stream, not a number beside a room name, and "since you were gone" is
@@ -34,6 +34,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -50,6 +51,7 @@ import { ApiError, type AuthedApi } from "../lib/api";
 import { ActionIcon } from "../lib/icons";
 import IconButton from "../lib/IconButton";
 import ContextPanel from "../lib/ContextPanel";
+import Tooltip from "../lib/Tooltip";
 import { useNow } from "../lib/clock";
 import { dmLabel } from "../dm/dm";
 import { emptyRoom } from "../settings/copy";
@@ -1121,8 +1123,8 @@ function shorten(text: string, limit: number): string {
  * The marks on a message.
  *
  * Each one's `--weight` runs 0 to 1 and CSS turns it into size and density. No
- * numeral appears: the tally lives in the hover title and the accessible label,
- * which is where SPEC §4.8 puts it.
+ * numeral appears. Hover and keyboard focus name the people behind the mark,
+ * which is where SPEC §4.8 puts that detail.
  */
 function Reactions({
   message,
@@ -1148,28 +1150,77 @@ function Reactions({
         if (!reaction) return null;
         const names = group.user_ids.map((id) => people.get(id)?.display_name ?? "someone");
         const mine = me !== null && group.user_ids.includes(me.id);
-        const counted = `${group.count} ${group.count === 1 ? "person" : "people"}`;
         return (
-          <button
+          <ReactionMark
             key={group.key}
-            type="button"
-            className="reaction"
-            data-mine={mine ? "true" : undefined}
-            data-confirmed={mine && confirmedKey === group.key ? "true" : undefined}
-            disabled={pending}
-            aria-busy={pending}
-            style={{ "--weight": reactionWeight(group.count) }}
-            title={reactionTitle(names, reaction.label)}
-            aria-pressed={mine}
-            aria-label={`${reaction.label}, ${counted}`}
+            label={reaction.label}
+            glyph={reaction.glyph}
+            names={names}
+            mine={mine}
+            confirmed={mine && confirmedKey === group.key}
+            pending={pending}
+            weight={reactionWeight(group.count)}
             onClick={() => onReact(message, group.key)}
-          >
-            <span className="reaction-glyph" aria-hidden="true">{reaction.glyph}</span>
-            {mine ? <span className="reaction-own" aria-hidden="true">✓</span> : null}
-          </button>
+          />
         );
       })}
     </div>
+  );
+}
+
+function ReactionMark({
+  label,
+  glyph,
+  names,
+  mine,
+  confirmed,
+  pending,
+  weight,
+  onClick,
+}: {
+  label: string;
+  glyph: string;
+  names: string[];
+  mine: boolean;
+  confirmed: boolean;
+  pending: boolean;
+  weight: number;
+  onClick: () => void;
+}) {
+  const anchor = useRef<HTMLButtonElement | null>(null);
+  const tooltipId = useId();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const open = hovered || focused;
+  const title = reactionTitle(names, label);
+
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        className="reaction"
+        data-mine={mine ? "true" : undefined}
+        data-confirmed={confirmed ? "true" : undefined}
+        disabled={pending}
+        aria-busy={pending}
+        style={{ "--weight": weight }}
+        aria-pressed={mine}
+        aria-label={`${label} reaction`}
+        aria-describedby={open ? tooltipId : undefined}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onClick={onClick}
+      >
+        <span className="reaction-glyph" aria-hidden="true">{glyph}</span>
+        {mine ? <span className="reaction-own" aria-hidden="true">✓</span> : null}
+      </button>
+      {open && anchor.current ? (
+        <Tooltip anchor={anchor.current} id={tooltipId}>{title}</Tooltip>
+      ) : null}
+    </>
   );
 }
 

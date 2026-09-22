@@ -7,11 +7,9 @@
  * business, which is why they live here and not on the wire.
  *
  * **Reactions accumulate by weight, never by number.** Six people hitting the
- * same reaction make a bigger, denser mark, not `👍 6`. The count exists — it
- * comes down the wire and it goes into the hover text and the accessible label,
- * where a person who asks for it gets a straight answer — but it is never drawn
- * as a numeral. Numbers invite comparison; weight carries the same information
- * without asking anybody to count.
+ * same reaction make a bigger, denser mark, not `👍 6`. The count exists on the
+ * wire only to set that weight. Hover and keyboard focus name the people who
+ * reacted, without turning their reaction into a score.
  */
 
 export interface Reaction {
@@ -69,12 +67,10 @@ export function reactionWeight(count: number): number {
  * The hover text: who reacted. This is the "hover reveals who" half of SPEC
  * §4.8 and it is the only place the tally is spelled out.
  *
- * Names come in first-reacted order from the server. Past a handful the list
- * stops being readable, so it turns into "and 4 more" — which is a number, in
- * a tooltip, which is exactly where the spec puts it.
+ * Names come in first-reacted order from the server. A server is deliberately
+ * small, so the tooltip can name everybody and wrap without substituting a
+ * numeric count.
  */
-const NAMES_SHOWN = 6;
-
 export function reactionTitle(names: readonly string[], label: string): string {
   const who = whoReacted(names);
   return who === null ? label : `${who} — ${label}`;
@@ -82,11 +78,7 @@ export function reactionTitle(names: readonly string[], label: string): string {
 
 function whoReacted(names: readonly string[]): string | null {
   if (names.length === 0) return null;
-  if (names.length <= NAMES_SHOWN) return listOf(names);
-  const shown = names.slice(0, NAMES_SHOWN);
-  // Plain commas here, not "and": the sentence already ends with "and 4 more",
-  // and two of them in a row reads like a mistake.
-  return `${shown.join(", ")} and ${names.length - shown.length} more`;
+  return listOf(names);
 }
 
 function listOf(names: readonly string[]): string {

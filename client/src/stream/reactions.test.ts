@@ -62,9 +62,9 @@ describe("the hover text", () => {
     expect(reactionTitle(["Matt", "Callie", "Sam"], "fire")).toBe("Matt, Callie and Sam — fire");
   });
 
-  it("stops listing names once the list stops being readable", () => {
+  it("names everybody without substituting a numeric count", () => {
     const names = ["a", "b", "c", "d", "e", "f", "g", "h"];
-    expect(reactionTitle(names, "clap")).toBe("a, b, c, d, e, f and 2 more — clap");
+    expect(reactionTitle(names, "clap")).toBe("a, b, c, d, e, f, g and h — clap");
   });
 
   it("says only what the mark is when nobody is named", () => {
