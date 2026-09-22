@@ -477,7 +477,7 @@ function VoiceSection() {
     <section className="settings-section">
       <h3 className="panel-label">Voice</h3>
       <p className="settings-lead">
-        Talking happens in a room: <em>join voice</em> under a room's name turns
+        Talking happens in a room: <em>Join Voice</em> under a room's name turns
         your microphone on there.
       </p>
       {devices === null ? (

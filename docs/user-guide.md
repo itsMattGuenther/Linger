@@ -274,7 +274,7 @@ successful save. Treat download links as private, especially for DM files.
 ## Talking
 
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
-invite: you are already in the room, and **join voice** under the room's name
+invite: you are already in the room, and **Join Voice** under the room's name
 turns your microphone on there. The line under the header then says who is in
 voice. Names stay readable; a small rule marks who is speaking.
 
