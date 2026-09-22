@@ -436,6 +436,15 @@ flows and do not start a new milestone. Evidence and rationale are in the
   equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
   No release or real-device check is closed by this work.
 
+- ⏳ **T-932 · Collapse message gaps and remove colored bars** — effort:
+  **medium** — Matt, 2026-09-22. GitHub #93 follows #92: remove the hidden
+  action rows between messages and the per-message colored gutter. Styled
+  sender headings and indented text define groups, with one layout for rooms
+  and DMs. Update SPEC §4.7 and the style guide with the implementation.
+  *Accept:* compare consecutive short messages, multiline text and sender
+  changes in a packaged client. Preserve typed line breaks and keyboard
+  access to actions without hover overlap or layout jumps.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
