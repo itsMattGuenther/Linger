@@ -24,12 +24,24 @@ default.
 
 ## How to run a task
 
-**0.3.2 release hardening — ⏳ Matt, 2026-09-22.** Combine the issue-linked
+**0.3.2 release hardening — ✅ Matt, 2026-09-22.** Combine the issue-linked
 fixes in PRs #102, #103, #105, #106, #107, #109, #110 and #111; test the combined
 candidate, add native cross-platform navigation coverage and scoped CI, then
 build and publish 0.3.2. M12 remains current; no physical-device or real-network
 release check is closed by automation. See `docs/testing-strategy.md` and
 `docs/releases/0.3.2-testing.md`.
+
+**Completed 2026-09-22 (PR #112, v0.3.2).** All eight original fix PRs were
+merged with their ancestry preserved, closing nine linked bug issues. The full
+local gate, 458 frontend unit tests, 318 Chromium/WebKit cases, 13 CI-selection
+tests and all five package-format checks passed. Signed release packages passed
+the native layout/audio checks and all ten Windows shortcut scenarios again.
+All five downloaded package signatures were verified against the existing
+updater key; all seven manifest entries point to the correct 0.3.2 packages.
+The amd64/arm64 server image is published, and the public in-app updater endpoint
+serves 0.3.2. Branch protection was not changed; Matt authorized the one-time
+administrator merge. Evidence is linked in `docs/releases/0.3.2.md`. Physical
+listening and separate-machine/network checks remain open.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
 agent's contract is `AGENTS.md`; tools that insist on their own filename get a
