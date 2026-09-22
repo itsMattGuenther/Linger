@@ -30,13 +30,13 @@ def stop(process):
             process.wait()
 
 
-def segments(samples):
-    """Find whole DM chimes, joining notes separated by less than 100 ms."""
+def segments(samples, gap=4800):
+    """Join notes into cues, or split the two knock taps with a shorter gap."""
     spans = []
     for index, sample in enumerate(samples):
         if abs(sample) <= 0.00001:
             continue
-        if not spans or index - spans[-1][1] > 4800:
+        if not spans or index - spans[-1][1] > gap:
             spans.append([index, index])
         else:
             spans[-1][1] = index
@@ -149,7 +149,20 @@ def check(program, output, appimage):
             duration = (end - start) / 48000
             onset = dict(label=cue["label"], max_step=step, first_5ms_peak=attack, duration=duration)
             onsets.append(onset)
-            assert step < 0.01 and attack < 0.02 and 0.415 < duration < 0.44, f"Damaged chime onset: {onset}"
+            assert step < 0.01, f"Abrupt chime onset: {onset}"
+            if cue["cue"] == "dm":
+                assert attack < 0.02 and 0.415 < duration < 0.44, f"Damaged DM onset: {onset}"
+            else:
+                taps = segments(clip, gap=960)
+                assert len(taps) == 2, f"Expected two knock taps: {onset}"
+                spacing = (taps[1][0] - taps[0][0]) / 48000
+                assert abs(spacing - 0.14) < 0.005, f"Knock spacing changed: {spacing}"
+                for index, (tap_start, tap_end) in enumerate(taps):
+                    tap_duration = (tap_end - tap_start) / 48000
+                    tap_peak = max(abs(v) for v in clip[tap_start:tap_end + 1])
+                    assert 0.09 < tap_duration < 0.105 and tap_peak > 0.07, f"Clipped tap {index}: {tap_duration}, {tap_peak}"
+                onset["tap_spacing"] = spacing
+                onset["taps"] = len(taps)
         result["speaker_onsets"] = onsets
         result["speaker_peak"] = peak
         (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")

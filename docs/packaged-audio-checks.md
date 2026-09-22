@@ -38,17 +38,19 @@ The unsigned Linux/Windows package workflow runs these checks:
 - `scripts/linux-audio-check.py PROGRAM [--appimage] [--output NEW_DIR]`
   loads a test-only GTK module into an unchanged package. It checks GStreamer
   element availability, runs the current production sound player in the packaged
-  WebKitGTK, and records a private virtual PulseAudio speaker. Five DM chimes
-  cover cold Preview, repeated Preview, a 35 ms graph-setup delay, live playback
-  and Preview after a quiet gap. The recording must contain all five complete
-  attacks, without an abrupt sample jump or an already-loud beginning.
+  WebKitGTK, and records a private virtual PulseAudio speaker. Five knocks and
+  five DM chimes cover first Preview, repeated Preview, a 35 ms graph-setup
+  delay, received-event playback and Preview after a quiet gap. Knock runs
+  first on the cold context. The recording must contain all ten complete cues,
+  without abrupt sample jumps or clipped attacks. Each knock must retain both
+  taps, their 140 ms spacing and full decays.
   Each AppImage, extracted DEB executable and extracted RPM executable runs
   separately. This proves playback on the Ubuntu runner, not installation on
   every Linux distribution.
 - `scripts/windows-icon-check.ps1` also runs the installed NSIS executable
   and MSI-extracted executable with separate empty WebView2 profiles. A real
-  button click starts the same five-cue probe. Its analyser checks peak level
-  and sample continuity in the realtime graph. Debugging is enabled only
+  button click starts the same ten-cue probe. Its analyser checks peak level,
+  sample continuity and both complete knock taps in the realtime graph. Debugging is enabled only
   for those disposable processes; it is not enabled in shipped app settings.
   WebView2 150+ ignores environment overrides for elevated hosts. GitHub's
   administrator runner therefore uses temporary, executable-specific HKLM
@@ -98,7 +100,7 @@ with a nonzero `speaker_peak` establishes that the virtual speaker received
 audio. They are separate files so the WebView poller cannot overwrite the
 completed recording result.
 
-## Notification onset correction (#94, 2026-09-22)
+## Notification onset and knock correction (#94/#95, 2026-09-22)
 
 The 0.3.1 player reproduced truncated attacks in an unchanged 0.3.1 AppImage
 using an isolated virtual speaker on Linux. A repeated DM cue reached a
@@ -123,11 +125,21 @@ at 44.1 and 48 kHz, including silent leading/trailing samples. Policy tests
 cover preparation failures, simultaneous requests, and changes to mute,
 context state or cue age while preparation is pending.
 
+The related #95 capture showed the original knock's second tap peaking around
+0.046 instead of 0.104, shortened taps and abrupt onsets on repeated playback.
+With the same buffer correction, five knock captures each contain two taps of
+about 98 ms, separated by 140 ms, with maximum sample steps below 0.0041.
+The combined package check requires two separate spans per knock, each lasting
+90–105 ms and peaking above 0.07, with spacing within 5 ms of the score.
+The existing notes, two-tap pattern, preferences and server rate limits are
+unchanged. Neither a measured tap nor a scheduled oscillator substitutes for
+listening to Preview and an actual received knock on the affected installation.
+
 A separate diagnostic that explicitly called `AudioContext.suspend()` then
 `resume()` produced no resumed cue with either the original or corrected
 player in this Linux package. Linger does not explicitly suspend this context.
 That diagnostic is not a passed sleep/wake check; OS sleep/wake and device
-changes still require real-client verification. The five-cue check uses an
+changes still require real-client verification. The combined check uses an
 idle but open context, matching the player's normal lifetime.
 
 ## Still requires listening

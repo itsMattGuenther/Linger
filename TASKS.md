@@ -410,21 +410,25 @@ flows and do not start a new milestone. Evidence and rationale are in the
   workflows run these checks; see [method and limits](docs/packaged-audio-checks.md).
   No release or real-listener check is closed by this work alone.
 
-- ⏳ **T-933 · Clean notification sound onset** — effort: **high** — Matt,
-  2026-09-22. GitHub #94: investigate the short crackle reported in 0.3.1,
+- ⏳ **T-933 · Clean notification onset and complete knock playback** — effort: **high** — Matt,
+  2026-09-22. GitHub #94 and #95: investigate the short crackle and clipped
+  two-tap knock reported in 0.3.1,
   comparing Preview and live playback with the clean reference clips. Check
   startup/resume, repeated playback and scheduling before changing the score.
   *Accept:* capture the onset, add a regression check for the confirmed fault,
   run the shared player on Linux and Windows, and confirm by listening on the
-  affected installation. Package output alone does not prove listening quality.
+  affected installation. Verify both knock taps, spacing and complete decay.
+  Matt requested one combined fix/build for both reports. Package output alone
+  does not prove listening quality.
 
   **Correction implemented 2026-09-22.** The existing score renders into cached
   buffers with 50 ms of silent leading samples. This preserves the attack when
   the output starts; buffering alone did not fix the reproduced onset loss.
-  First/repeated Preview, delayed setup, a live DM and Preview after idle pass
-  the Linux virtual-speaker onset check. The full local gate passes; Chromium
+  First/repeated Preview, delayed setup, received-event playback and Preview
+  after idle pass the Linux virtual-speaker checks for DMs and knocks. Both
+  knock taps retain their decay and 140 ms spacing. The full local gate passes; Chromium
   checks preserve all twelve scores at 44.1/48 kHz. Linux/Windows package CI and
-  affected-installation listening remain required before closing #94. See
+  affected-installation listening remain required before closing #94/#95. See
   [capture method and limits](docs/packaged-audio-checks.md).
 
 - ✅ **T-931 · Fix reported conversation and settings inconsistencies** — effort:

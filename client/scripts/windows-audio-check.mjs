@@ -58,7 +58,7 @@ try {
   await buildAudioProbe(probe);
   await page.evaluate(await readFile(probe, "utf8"));
   await page.locator("#linger-audio-probe").click();
-  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 20000 });
+  await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 30000 });
   const result = await page.evaluate(() => window.__lingerAudioResult);
   assert.equal(result.status, "passed", JSON.stringify(result));
   console.log("PASS packaged WebView2 realtime audio:", JSON.stringify(result));
