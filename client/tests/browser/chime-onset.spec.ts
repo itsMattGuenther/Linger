@@ -16,7 +16,7 @@ for (const rate of [44100, 48000]) {
         const original = (await reference.startRendering()).getChannelData(0);
         result.push({
           cue,
-          error: samples.reduce((error, value, index) => Math.max(error, Math.abs(value - original[index])), 0),
+          error: samples.reduce((error, value, index) => Math.max(error, Math.abs(value - (original[index] ?? 0))), 0),
           leadSilent: samples.slice(0, Math.floor(sampleRate * 0.05)).every((value) => value === 0),
           endSilent: samples.slice(-Math.floor(sampleRate * 0.004)).every((value) => value === 0),
           peak: samples.reduce((peak, value) => Math.max(peak, Math.abs(value)), 0),
