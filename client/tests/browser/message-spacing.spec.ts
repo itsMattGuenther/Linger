@@ -47,7 +47,8 @@ for (const scale of [100, 200]) {
       await messages.last().scrollIntoViewIfNeeded();
       const rows = await messages.evaluateAll((nodes) => nodes.map((node) => {
         const body = node.querySelector(".msg-body");
-        if (!body) throw new Error("Message body missing");
+        const trigger = node.querySelector(".msg-actions-trigger");
+        if (!body || !trigger) throw new Error("Message body or action target missing");
         return {
           top: node.getBoundingClientRect().top,
           bottom: node.getBoundingClientRect().bottom,
@@ -55,11 +56,15 @@ for (const scale of [100, 200]) {
           bodyTop: body.getBoundingClientRect().top,
           indent: parseFloat(getComputedStyle(body).paddingLeft),
           border: parseFloat(getComputedStyle(body).borderLeftWidth),
+          actionHeight: trigger.getBoundingClientRect().height,
+          actionBottom: trigger.getBoundingClientRect().bottom,
         };
       }));
       for (const row of rows) {
         expect(row.border).toBe(0);
         expect(row.indent).toBe(14 * scale / 100);
+        expect(row.actionHeight).toBe(24 * scale / 100);
+        expect(row.actionBottom).toBeLessThanOrEqual(row.bottom);
       }
       // Measure complete virtual rows, not only paragraph line height. The old
       // invisible toolbar added a full line above every continuation.

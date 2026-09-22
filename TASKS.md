@@ -436,7 +436,7 @@ flows and do not start a new milestone. Evidence and rationale are in the
   equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
   No release or real-device check is closed by this work.
 
-- ⏳ **T-932 · Collapse message gaps and remove colored bars** — effort:
+- ✅ **T-932 · Collapse message gaps and remove colored bars** — effort:
   **medium** — Matt, 2026-09-22. GitHub #93 follows #92: remove the hidden
   action rows between messages and the per-message colored gutter. Styled
   sender headings and indented text define groups, with one layout for rooms
@@ -451,8 +451,12 @@ flows and do not start a new milestone. Evidence and rationale are in the
   text indent replace the colored bars. Reply, edit, reactions and confirmed
   deletion retain keyboard access; hovering and opening actions do not resize
   messages. SPEC, style guide, README and user guide describe the new layout.
-  The full local gate and all 136 Chromium checks pass. Packaged Linux and
-  WebKit CI verification are in progress; no release check is closed.
+  The full local gate and all 136 Chromium checks pass, with the focused
+  checks rerun after correcting the action target's inherited minimum height.
+  CI also passes the WebKit suite. Packaged Linux checks confirm 56px → 24px
+  one-line continuations, room/DM parity, preserved multiline content and
+  stable action geometry at 100%/200%. [Comparison and screenshots](docs/message-spacing-checks.md).
+  Windows packaged rendering was not exercised; no release check is closed.
 
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**

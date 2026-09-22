@@ -364,6 +364,7 @@ button.msg-reply:hover {
   right: 0;
   width: 1.5rem;
   height: 1.5rem;
+  min-height: 1.5rem;
   padding: 0;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
