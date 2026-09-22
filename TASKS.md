@@ -436,6 +436,19 @@ flows and do not start a new milestone. Evidence and rationale are in the
   equal spacing, preserved line breaks, quotes, lists and code at 100%/200%.
   No release or real-device check is closed by this work.
 
+- ⏳ **T-934 · Use restrained focus without pointer-open noise** — effort:
+  **medium** — Matt, 2026-09-22. GitHub #96 follows the attachment-menu
+  correction in T-931: the server accent currently paints every focus ring,
+  and native dialog autofocus makes pointer-opened menus look keyboard-selected.
+  Separate keyboard location from the host's accent and keep automatic panel
+  focus quiet until somebody navigates with the keyboard. Preserve real focus,
+  keyboard navigation, Escape/outside dismissal and focus return.
+  *Accept:* Add file, server options and shared controls have no bright accent
+  outline; keyboard focus remains clearly visible with the Console palette;
+  pointer-opened server options does not expose the Close tooltip; browser
+  regressions cover pointer and keyboard opening, navigation and dismissal;
+  SPEC §5.3 and the control guide describe the implemented treatment.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
