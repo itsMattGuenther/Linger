@@ -59,3 +59,17 @@ package. It verifies shortcut identity, the installed executable's version,
 MSI uninstall-link validity and uninstall cleanup. Installer logs are uploaded
 with the workflow evidence. This isolates installer behavior; it does not
 repeat signature download verification or a real user's update session.
+
+## Fixed-package results, 2026-09-22
+
+[Windows package check](https://github.com/itsMattGuenther/Linger/actions/runs/35766081266/job/106875831477)
+passed all ten scenarios against the new MSI and NSIS packages. Renamed and
+moved shortcuts remain byte-for-byte unchanged, deleted shortcuts remain
+absent, and default/fresh shortcuts are removed correctly on uninstall. MSI
+uninstall links still reference the current installed product. The same job's
+packaged icon and WebView2 audio checks passed.
+
+`scripts/check.sh origin/main` passed locally, including the separate desktop
+shell. [Regular CI](https://github.com/itsMattGuenther/Linger/actions/runs/35766080785)
+passed all seven jobs. These are disposable-runner results, not a retest on the
+reporter's computer, and do not close the existing release checks.

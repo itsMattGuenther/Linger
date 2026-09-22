@@ -200,16 +200,21 @@ a different DM.
 
 ## V1 polish — small changes after the milestones closed
 
-- ⏳ **Issue #108 · Preserve Windows shortcuts during in-app updates** — Matt,
+- ✅ **Issue #108 · Preserve Windows shortcuts during in-app updates** — Matt,
   2026-09-22. Reported after updating from 0.3.0 inside the client. Investigate
   the published Windows packages and test updates on a disposable Windows
   runner before changing installer behavior. Existing shortcut and installation
   identity must survive the update without a second desktop entry.
 
-  **Reproduced 2026-09-22:** the published MSI's signed in-app 0.3.0 → 0.3.1
+  **Completed 2026-09-22** ([PR #111](https://github.com/itsMattGuenther/Linger/pull/111)):
+  the published MSI's signed in-app 0.3.0 → 0.3.1
   update recreates a renamed desktop shortcut; NSIS preserves it. The MSI
   fix limits desktop creation on upgrades to an existing canonical shortcut.
-  Windows package validation is in progress. [Evidence and check](docs/windows-update-checks.md).
+  All ten built-package Windows scenarios pass: original, renamed, moved,
+  deleted and fresh in both formats, including uninstall checks. Packaged
+  icons/audio, the full local gate and regular CI also pass. The reporter's
+  original installer and shortcut names are unconfirmed; no release was
+  published and HC-1 remains open. [Evidence and check](docs/windows-update-checks.md).
 
 Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
