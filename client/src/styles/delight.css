@@ -152,7 +152,6 @@ button:is(
   margin-block: 1.25rem;
   padding: 1.25rem;
   border: 1px solid var(--hairline);
-  border-left: 3px solid var(--person-rule);
   background: var(--surface-1);
 }
 .style-preview-heading {

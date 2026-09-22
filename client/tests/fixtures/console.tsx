@@ -145,6 +145,8 @@ if (query.has("spacing")) bodies.splice(0, bodies.length,
   ["jules", "Another message from the same person."],
   ["matt", "A different sender.\nStill easy to read."],
   ["matt", "> A quoted line\n> Another quoted line\n\n- First item\n- Second item\n\n```\nfirst code line\nsecond code line\n```"],
+  ["matt", "Short follow-up."],
+  ["matt", "Another short line."],
 );
 const spacingDm: Room = {
   id: "spacing-dm", slug: "spacing-dm", name: "spacing-dm", topic: null,
@@ -167,7 +169,7 @@ const messages: Message[] = (
   attachments:
     query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
   reactions:
-    index === 5
+    index === 5 && !query.has("spacing")
       ? [{ key: "heart", count: 2, user_ids: ["jules", "matt"] }]
       : [],
   pinned_at: null,

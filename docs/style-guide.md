@@ -52,14 +52,20 @@ Search, Media and Settings share `DestinationHeader`: the same sans heading
 and bordered Close control, with descriptions and category tabs as needed.
 Sound settings reserve the preview column even on rows without a Play button.
 
-Message actions reserve space beside the author heading (or above a grouped
-continuation), including while invisible. Hover and keyboard focus must never
-cover message text or change a row's height. Reaction choices wrap inside that
-reserved row. Message bodies offer the four bundled sans faces; saved non-sans
-keys fall back to the default body face without restricting name styling.
+Message actions use a compact ellipsis button in a reserved column beside the
+text, never a hidden row above it. This dense-list target is 24px square at
+default scale; other icon controls retain their 36px minimum. Hover and keyboard
+focus reveal the button without covering text or changing row height. Activating
+it opens a dismissible menu with full-size action targets and wrapping reaction
+choices. Escape and outside click dismiss it and return focus to the button.
+Message bodies offer the four bundled sans faces; saved non-sans keys fall back
+to the default body face without restricting name styling.
 Rooms and DMs use 1.3 message line height, 2px between prose blocks and 8px
 before a sender group at default scale. Sender headings separate speakers;
-typed line breaks remain intact. Session dividers keep their larger spacing.
+typed line breaks remain intact. One-line continuations occupy 24px including
+the action target, with no extra vertical padding. Text is indented beneath the
+sender name; per-message colored bars are removed. Session dividers keep their
+larger spacing.
 
 Navigation text wraps to the rail's width; it is never truncated with an
 ellipsis or a line clamp, no matter how long or unbreakable a server, room or

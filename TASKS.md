@@ -445,6 +445,15 @@ flows and do not start a new milestone. Evidence and rationale are in the
   changes in a packaged client. Preserve typed line breaks and keyboard
   access to actions without hover overlap or layout jumps.
 
+  **Implemented 2026-09-22.** Replaced each hidden toolbar row with a 24px
+  action target beside the text and an explicitly opened menu. Consecutive
+  one-line messages occupy 24px at default scale. Sender headings and a 14px
+  text indent replace the colored bars. Reply, edit, reactions and confirmed
+  deletion retain keyboard access; hovering and opening actions do not resize
+  messages. SPEC, style guide, README and user guide describe the new layout.
+  The full local gate and all 136 Chromium checks pass. Packaged Linux and
+  WebKit CI verification are in progress; no release check is closed.
+
 - ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request

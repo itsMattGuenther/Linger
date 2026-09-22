@@ -1,9 +1,8 @@
 /*
  * The message stream (SPEC §4.7, §5.6).
  *
- * No bubbles and no avatar column. Identity is a 3px colored rule down the left
- * of a person's messages and their name in the group header — that is the whole
- * mechanism, and it is why the density here is possible at all.
+ * No bubbles, avatar column or colored bars. Styled sender headings and
+ * indented text group messages without repeating a separator on every line.
  *
  * Every gap is padding rather than margin. The virtualizer measures each row's
  * own box, and a margin — collapsing, outside the box — is spacing it cannot
@@ -29,16 +28,9 @@
 
 /* --- one message ------------------------------------------------------- */
 
-.msg-topline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 8px;
-}
-
 .msg-head {
-  flex: 1 1 10rem;
   min-width: 0;
+  min-height: 1.5rem;
   flex-wrap: wrap;
   overflow-wrap: anywhere;
   display: flex;
@@ -56,6 +48,8 @@
 /* Keep every message and its controls in the same measured virtual row. */
 .msg {
   position: relative;
+  min-height: 1.5rem;
+  padding-right: 2rem;
 }
 
 /* Where a jump lands. It fades on its own — there is nothing to dismiss, and
@@ -73,8 +67,7 @@
 
 .msg-body {
   max-width: 80ch;
-  border-left: 3px solid var(--person-rule);
-  padding-left: 11px;
+  padding-left: 0.875rem;
   /* The author's optional message-font override (SPEC §4.5) — the only message
      styling that exists. No color, no size, no background: the name carries the
      identity and the body stays legible. */
@@ -273,9 +266,8 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  /* Lines up under the 3px rule and its gutter, so a reply reads as belonging
-     to the message below it rather than floating between two. */
-  padding: 0 0 2px 14px;
+  /* Share the body's indentation so a reply belongs to the text below it. */
+  padding: 0 0 2px 0.875rem;
   max-width: 100%;
   background: none;
   border: 0;
@@ -320,7 +312,7 @@ button.msg-reply:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 4px 0 0 14px;
+  padding: 4px 0 0 0.875rem;
 }
 
 .reaction {
@@ -364,60 +356,57 @@ button.msg-reply:hover {
 
 /* --- message actions ----------------------------------------------------- */
 
-/* Actions reserve their space beside the author even while invisible. Hover
-   and keyboard focus only change opacity, so neither covers text nor changes
-   the virtualizer's row measurements. Continuations reserve the same action
-   row; narrow windows and reaction choices can wrap inside its own bounds. */
-.msg-actions {
-  display: flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  margin-left: auto;
-  gap: 1px;
-  padding: 1px;
+/* Reserve width, never an empty row. The 24px target fits a continuation;
+   full-size actions appear only after activation, in the native top layer. */
+.msg-actions-trigger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-control);
+  color: var(--text-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--motion-fast);
 }
 
-.msg:hover .msg-actions,
-.msg-actions:focus-within {
+.msg:hover .msg-actions-trigger,
+.msg-actions-trigger:focus,
+.msg-actions-trigger[aria-expanded="true"] {
   opacity: 1;
   pointer-events: auto;
 }
 
-.msg-action {
-  background: none;
-  border: 0;
-  border-radius: 3px;
-  padding: 2px 6px;
-  color: var(--text-muted);
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: var(--text-meta-size);
-  cursor: pointer;
+@media (hover: none) {
+  .msg-actions-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
-.msg-action:hover {
+.msg-actions-trigger:hover {
   background: var(--surface-2);
   color: var(--text-primary);
 }
 
-.msg-action-glyph {
-  font-size: 0.8125rem;
-  padding: 1px 3px;
+.msg-reaction-choices {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.msg-action-danger:hover {
-  color: var(--text-primary);
+.msg-reaction-choices button {
+  text-align: center;
 }
 
 /* A refusal, next to the message it was about. */
 .msg-problem {
-  padding: 2px 0 0 14px;
+  padding: 2px 0 0 0.875rem;
   color: var(--text-secondary);
 }
 

@@ -97,6 +97,8 @@ These terms are used everywhere — UI, code, docs, error messages:
   into a tree and drawn as elements; **no raw HTML from a message, ever**.
   Message bodies use the four bundled sans-serif choices; older non-sans
   choices fall back to the default reading face. Names retain all twelve fonts.
+  Closely spaced messages group beneath sender names, without colored bars.
+  Hover or keyboard focus reveals a **⋯** button; activate it to open message actions.
 - 🎚️ **Reactions by weight** — a fixed palette of 12; six identical reactions render
   denser and larger, not "👍 6"
 - 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a
