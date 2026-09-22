@@ -200,6 +200,12 @@ a different DM.
 
 ## V1 polish — small changes after the milestones closed
 
+- ⏳ **Issue #108 · Preserve Windows shortcuts during in-app updates** — Matt,
+  2026-09-22. Reported after updating from 0.3.0 inside the client. Investigate
+  the published Windows packages and test updates on a disposable Windows
+  runner before changing installer behavior. Existing shortcut and installation
+  identity must survive the update without a second desktop entry.
+
 Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
 with its note written here rather than in an archive.
