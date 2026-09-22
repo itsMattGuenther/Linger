@@ -206,6 +206,11 @@ a different DM.
   runner before changing installer behavior. Existing shortcut and installation
   identity must survive the update without a second desktop entry.
 
+  **Reproduced 2026-09-22:** the published MSI's signed in-app 0.3.0 → 0.3.1
+  update recreates a renamed desktop shortcut; NSIS preserves it. The MSI
+  fix limits desktop creation on upgrades to an existing canonical shortcut.
+  Windows package validation is in progress. [Evidence and check](docs/windows-update-checks.md).
+
 Not a milestone and not a backburner: one-off changes to V1 surfaces that came
 out of using the app. Each one is small enough that it lands in a single session
 with its note written here rather than in an archive.

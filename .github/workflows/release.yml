@@ -203,6 +203,10 @@ jobs:
           python3 scripts/linux-audio-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/audio-appimage
           python3 scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python3 scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
+      - name: Windows upgrades preserve desktop shortcuts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts/windows-update-check.ps1 -Bundle client/src-tauri/target/release/bundle -Output package-check/updates
       - name: Windows package audio and icons
         if: runner.os == 'Windows'
         shell: pwsh
@@ -215,4 +219,5 @@ jobs:
             package-check/audio-*/*.log
             package-check/audio-*/*.json
             package-check/audio-*/*.f32
+            package-check/updates/*.log
           retention-days: 7

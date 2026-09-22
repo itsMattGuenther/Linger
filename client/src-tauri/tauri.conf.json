@@ -68,6 +68,7 @@
         "silent": true
       },
       "wix": {
+        "template": "windows/main.wxs",
         "upgradeCode": "465ad9d4-963e-58d4-ac8c-2730a192a3e0"
       },
       "nsis": {

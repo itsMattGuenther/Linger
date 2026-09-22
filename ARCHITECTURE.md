@@ -587,6 +587,14 @@ used figure, the ceiling and the window, and the status bar draws the first two.
 
 ## 9. Deployment
 
+Windows MSI upgrades preserve the desktop shortcut choice: a fresh install
+creates one, while an upgrade only refreshes the canonical desktop shortcut
+if it still exists. Renaming, moving or deleting that shortcut must not create
+a second one on the next in-app update. Start-menu and uninstall shortcuts
+continue to refresh normally. The MSI template in `client/src-tauri/windows/`
+extends the pinned Tauri template for this rule; installation identifiers and
+the main executable name remain stable so retained shortcuts keep working.
+
 Target: a non-expert friend gets a working server in under 15 minutes.
 
 ```yaml

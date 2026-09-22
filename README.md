@@ -183,6 +183,8 @@ case-sensitive; use the exact downloaded name, including its capital `L` on
 newer builds. Technical commands and app identifiers remain unchanged.
 The MSI upgrade code is pinned to its original value so this capitalization
 change does not create a separate Windows application.
+Windows MSI upgrades preserve renamed, moved or deleted desktop shortcuts;
+they refresh the original desktop shortcut only when it is still present.
 
 **Windows will warn you.** You get *"Windows protected your PC"*, and *Run
 anyway* is hidden behind the *More info* link. That is SmartScreen saying the
@@ -304,6 +306,13 @@ changing them. The [desktop icon audit](docs/app-icon-checks.md) explains the
 package checks and remaining visual checks. Packaging changes run an unsigned
 Linux/Windows test build; these artifacts do not ship an update. Published
 v0.2.0 includes the porch icon; older v0.1.0 downloads have the previous icon.
+
+The MSI uses `client/src-tauri/windows/main.wxs`, based on the pinned Tauri
+CLI's template with a desktop-shortcut preservation condition. When updating
+Tauri, compare it with the upstream template named in its header. Windows
+package checks install the published 0.3.0 MSI, upgrade to the newly built
+package, and check original, renamed, moved and deleted desktop shortcuts,
+including uninstall cleanup. See [the update check](docs/windows-update-checks.md).
 
 Linux v0.2.0 builds also accept `LINGER_LINUX_BACKEND=wayland` (opt-in)
 or `x11` (fallback) before GTK starts. This survives the AppImage launcher's
