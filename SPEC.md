@@ -607,10 +607,11 @@ text-faint          same as muted      same as muted
 accent              #6E9BFF             #2563C9
 ```
 
-Accent marks the "you left off here" line, focus rings, the active-room rule,
-and primary actions such as joining voice, continuing setup and sending. Selected
-preferences may use it with a separate shape or state label. It never decorates
-entire panels, ordinary body text or arbitrary rail icons.
+Accent marks the "you left off here" line, the active-room rule, and primary
+actions such as joining voice, continuing setup and sending. Selected preferences
+may use it with a separate shape or state label. It never decorates entire panels,
+ordinary body text or arbitrary rail icons. Keyboard location uses a restrained
+1px `text-secondary` ring, independent of the server accent.
 
 ### 5.4 The 16-color name palette
 
@@ -672,7 +673,9 @@ switches use a pill track and circular thumb. Panels stay square and shadow-free
 The single-line composer input and Send button share an outer height; Send
 keeps that height when the input grows. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger. Settings headings and navigation labels use title case.
+click or its trigger. Pointer-opened contextual panels keep that automatic focus
+visually quiet until keyboard navigation begins; keyboard-opened panels show the
+focus ring immediately. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 
