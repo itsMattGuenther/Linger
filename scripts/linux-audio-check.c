@@ -72,6 +72,11 @@ static gboolean start(gpointer unused) {
     }
     g_list_free(windows);
     if (!view || webkit_web_view_is_loading(view)) return G_SOURCE_CONTINUE;
+    // The mapped WebView initially holds about:blank. Wait for the packaged
+    // page, otherwise audio can pass without exercising the shipped UI at all.
+    const char *uri = webkit_web_view_get_uri(view);
+    if (!uri || (!g_str_has_prefix(uri, "tauri://localhost") &&
+                 !g_str_has_prefix(uri, "http://tauri.localhost"))) return G_SOURCE_CONTINUE;
     webkit_settings_set_media_playback_requires_user_gesture(webkit_web_view_get_settings(view), FALSE);
     gchar *script = NULL;
     if (!g_file_get_contents(g_getenv("LINGER_AUDIO_SCRIPT"), &script, NULL, NULL)) {
