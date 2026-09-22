@@ -19,6 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         installer: [nsis, msi]
+        shortcut: [renamed]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,4 +30,4 @@ jobs:
         working-directory: client
       - name: Update published 0.3.0 through the client
         shell: pwsh
-        run: scripts/windows-update-check.ps1 -Installer ${{ matrix.installer }}
+        run: scripts/windows-update-check.ps1 -Installer ${{ matrix.installer }} -Shortcut ${{ matrix.shortcut }}

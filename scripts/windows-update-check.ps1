@@ -1,4 +1,7 @@
-param([ValidateSet('nsis', 'msi')][string]$Installer = 'nsis')
+param(
+    [ValidateSet('nsis', 'msi')][string]$Installer = 'nsis',
+    [ValidateSet('original', 'renamed')][string]$Shortcut = 'original'
+)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run only on a disposable Windows Actions runner' }
 $output = Join-Path $env:RUNNER_TEMP 'linger-update-check'
@@ -27,6 +30,10 @@ if ($setup.ExitCode -notin @(0, 3010)) { throw "Initial installation failed: $($
 $before = @(Get-LingerShortcuts)
 $before | ConvertTo-Json | Write-Output
 if ($before.Count -ne 1) { throw "Expected one initial desktop shortcut, got $($before.Count)" }
+if ($Shortcut -eq 'renamed') {
+    Rename-Item -LiteralPath $before[0].Path -NewName 'Linger custom.lnk'
+    $before = @(Get-LingerShortcuts)
+}
 $exe = $before[0].Target
 node client/scripts/windows-update-check.mjs $exe $output
 if ($LASTEXITCODE -ne 0) { throw 'In-app update failed' }
