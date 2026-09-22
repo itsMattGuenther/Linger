@@ -401,10 +401,8 @@
 .rail-places {
   display: flex;
   flex-direction: column;
-  /* Full-bleed, like every other hairline in the app: the rule crosses the
-     rail rather than floating inside its gutter. */
-  margin: 0 calc(var(--gutter) * -1);
-  padding: calc(var(--gutter) * 0.75) var(--gutter) 0;
+  margin: 0;
+  padding: calc(var(--gutter) * 0.75) 0 0;
   border-top: 1px solid var(--hairline);
 }
 
@@ -690,6 +688,10 @@
 .rail {
   gap: 0;
   overflow: hidden;
+  /* The scroll box owns the inline gutter. That keeps its native vertical
+     scrollbar at the panel edge without asking a child to escape with
+     negative margins (#100). */
+  padding-inline: 0;
 }
 .rail-content {
   display: flex;
@@ -698,13 +700,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 1rem;
-  /* Full-bleed like .rail-places itself: a box that scrolls vertically also
-     scrolls horizontally the moment anything inside it pokes past the right
-     edge, and .rail-places' hairline does exactly that by design. Pulling
-     this box out to the same edges it sits inside of means the hairline
-     reaches the edge without ever overflowing the scroll box (#83). */
-  margin-inline: calc(var(--gutter) * -1);
+  /* Padding keeps every row and focus ring inside the scrollport. The old
+     negative-margin full-bleed arrangement reopened horizontal scrolling
+     when WebKitGTK reserved space for its vertical scrollbar (#100). */
+  margin-inline: 0;
   padding-inline: var(--gutter);
 }
 .rail-content .rail-section {
@@ -715,6 +716,7 @@
 }
 .rail-account {
   flex-shrink: 0;
+  margin-inline: var(--gutter);
 }
 
 .status-left,
