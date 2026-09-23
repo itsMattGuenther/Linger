@@ -62,6 +62,11 @@ async fn drain(ws: &mut Ws, window: Duration) -> Vec<Value> {
 /// Handshake, and the session id the server gave us — which is this client's
 /// identity for the whole of voice.
 async fn connect(server: &common::TestServer, token: &str) -> (Ws, String) {
+    let (ws, ready) = connect_ready(server, token).await;
+    (ws, ready["d"]["session_id"].as_str().unwrap().to_string())
+}
+
+async fn connect_ready(server: &common::TestServer, token: &str) -> (Ws, Value) {
     let (mut ws, _) = connect_async(server.gateway_url())
         .await
         .expect("ws connect");
@@ -75,8 +80,7 @@ async fn connect(server: &common::TestServer, token: &str) -> (Ws, String) {
     loop {
         let frame = recv_json(&mut ws).await;
         if frame["op"] == "ready" {
-            let id = frame["d"]["session_id"].as_str().unwrap().to_string();
-            return (ws, id);
+            return (ws, frame);
         }
     }
 }
@@ -672,4 +676,53 @@ async fn you_cannot_join_voice_in_a_dm_you_are_not_in() {
     let frames = drain(&mut a, SETTLE).await;
     let seats = voice_state(&frames, &dm_id).map_or_else(|| vec![a_id.clone()], peer_sessions);
     assert_eq!(seats, vec![a_id], "an outsider joined voice in a DM");
+}
+
+#[tokio::test]
+async fn fresh_connections_see_existing_voice_without_joining_and_cannot_see_private_voice() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "member").await;
+    let outsider = common::join_member(&server, &host.access_token, "outsider").await;
+    let (mut speaker, speaker_id) = connect(&server, &host.access_token).await;
+    controls(&mut speaker, &room.id.to_string(), true, false).await;
+    assert!(voice_state(&drain(&mut speaker, SETTLE).await, &room.id.to_string()).is_some());
+    let (mut observer, snapshot) = connect_ready(&server, &member.access_token).await;
+    assert_eq!(snapshot["d"]["voice"][0]["room_id"], room.id.to_string());
+    assert_eq!(
+        snapshot["d"]["voice"][0]["peers"][0]["session_id"],
+        speaker_id
+    );
+    assert_eq!(
+        snapshot["d"]["voice"][0]["peers"][0]["controls"]["muted"],
+        true
+    );
+    assert_eq!(
+        snapshot["d"]["voice"][0]["peers"].as_array().unwrap().len(),
+        1
+    );
+    let dm: linger_core::wire::Room = reqwest::Client::new()
+        .post(server.url("/dms"))
+        .bearer_auth(&host.access_token)
+        .json(&json!({"user_ids": [member.user.id]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    join_voice(&mut speaker, &dm.id.to_string()).await;
+    let changes = drain(&mut observer, SETTLE).await;
+    assert!(peer_sessions(voice_state(&changes, &room.id.to_string()).unwrap()).is_empty());
+    let (_private_observer, snapshot) = connect_ready(&server, &member.access_token).await;
+    assert_eq!(snapshot["d"]["voice"].as_array().unwrap().len(), 1);
+    assert_eq!(snapshot["d"]["voice"][0]["room_id"], dm.id.to_string());
+    let (mut stranger, snapshot) = connect_ready(&server, &outsider.access_token).await;
+    assert_eq!(snapshot["d"]["voice"], json!([]));
+    assert!(!snapshot.to_string().contains(&dm.id.to_string()));
+    send_json(&mut speaker, json!({"op":"voice.leave","d":null})).await;
+    assert!(!serde_json::to_string(&drain(&mut stranger, SETTLE).await)
+        .unwrap()
+        .contains(&dm.id.to_string()));
+    let (_empty_observer, snapshot) = connect_ready(&server, &member.access_token).await;
+    assert_eq!(snapshot["d"]["voice"], json!([]));
 }

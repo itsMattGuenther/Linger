@@ -59,10 +59,11 @@ printf -v input_session 'bash %q --inside' "$input_repo/scripts/appimage-input-c
 input_result=0
 env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
   -u DBUS_SESSION_BUS_ADDRESS -u GDK_BACKEND -u LINGER_LINUX_BACKEND -u GTK3_MODULES \
+  -u WEBKIT_DMABUF_RENDERER_DISABLE_GBM \
   XDG_RUNTIME_DIR="$input_area/runtime" XDG_CONFIG_HOME="$input_area/config" XDG_CONFIG_DIRS="$input_area/config" \
   XDG_DATA_HOME="$input_area/data" XDG_STATE_HOME="$input_area/state" XDG_CACHE_HOME="$input_area/cache" \
   XDG_CURRENT_DESKTOP=labwc WLR_BACKENDS=headless WLR_RENDERER=pixman NO_AT_BRIDGE=1 \
-  WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 \
+  WEBKIT_DISABLE_DMABUF_RENDERER=1 \
   LINGER_PRIVATE_INPUT_DISPLAY=1 LINGER_CHECK_AREA="$input_area" \
   LINGER_CHECK_PACKAGE="$input_package" LINGER_CHECK_BACKEND="$input_backend" \
   dbus-run-session -- labwc -C "$input_area/config" -S "$input_session" \
@@ -72,7 +73,8 @@ env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY -u HYPRLAND_INSTANCE_SIGNATU
 rg '^packaged (typing|clipboard): (MATCH|DIFFERENT)$' "$input_area/probe.log"
 [[ $(wc -l < "$input_area/probe.log") == 2 ]] || exit 1
 rg -qx 'packaged clipboard: MATCH' "$input_area/probe.log"
-if [[ $input_backend == wayland ]]; then
+[[ $(<"$input_area/gbm") == 1 ]]
+if [[ $input_backend == wayland || $input_backend == default ]]; then
   [[ $(<"$input_area/backend") == GdkWaylandDisplay ]]
   rg -qx 'packaged typing: MATCH' "$input_area/probe.log"
 else

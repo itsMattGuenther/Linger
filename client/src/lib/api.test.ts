@@ -32,7 +32,7 @@ function client() {
   return { api, fetcher, onTokens, onSignedOut };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("sign-in renewal", () => {
   it.each([
@@ -150,5 +150,37 @@ describe("sign-in renewal", () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(onTokens).toHaveBeenCalledOnce();
     expect(onSignedOut).not.toHaveBeenCalled();
+  });
+});
+
+describe("request deadlines (#118)", () => {
+  it("releases a stalled shared token refresh so knock and sending can recover", async () => {
+    vi.useFakeTimers();
+    const { api, fetcher, onSignedOut } = client();
+    fetcher.mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const pending = Promise.allSettled([api.accessToken(), api.accessToken()]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await pending).toEqual([
+      { status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("did not confirm") }) },
+      { status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("did not confirm") }) },
+    ]);
+    expect(onSignedOut).not.toHaveBeenCalled();
+    fetcher.mockResolvedValueOnce(Response.json(FRESH));
+    await expect(api.accessToken()).resolves.toMatchObject({ token: "new-access" });
+  });
+
+  it("also bounds a response body that stops after headers", async () => {
+    vi.useFakeTimers();
+    const { api, fetcher } = client();
+    fetcher.mockImplementationOnce(async (_url, options) => new Response(new ReadableStream({
+      start(controller) {
+        options?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+      },
+    })));
+    const result = Promise.allSettled([api.get("/rooms")]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await result).toEqual([{ status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("did not confirm") }) }]);
   });
 });

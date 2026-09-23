@@ -25,7 +25,7 @@ button:is(
   .rail-settings,
   .voice-action,
   .settings-mini,
-  .since-pull,
+  .newest-action,
   .roster-switch,
   .person-edit
 ) {
@@ -54,7 +54,7 @@ button:is(
     .rail-settings,
     .voice-action,
     .settings-mini,
-    .since-pull,
+    .newest-action,
     .roster-switch,
     .person-edit
   ):hover:not(:disabled) {

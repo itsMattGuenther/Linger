@@ -303,6 +303,7 @@ export default function Stream({
   // Require both the actual bottom and several stable frames. Otherwise an
   // early panel resize can leave WebKit a screenful above the last message.
   const landing = useRef({ room: "", done: false });
+  const [landingRevision, setLandingRevision] = useState(0);
   const rowsNow = useRef(rows);
   rowsNow.current = rows;
   useEffect(() => {
@@ -340,10 +341,12 @@ export default function Stream({
       // The frame cap is a seatbelt, not a mechanism: a room that never settles
       // has to give the scrollbar back rather than fight for it forever.
       if (
-        (atTarget && stable >= 5 && frames >= JUMP_MIN_FRAMES) ||
+        (atTarget && stable >= 5 && (!boundary || frames >= JUMP_MIN_FRAMES)) ||
         frames >= 60
       ) {
         landing.current.done = true;
+        // Recheck read markers and short windows after the last positioning frame.
+        setLandingRevision((revision) => revision + 1);
         return;
       }
       pending = requestAnimationFrame(step);
@@ -415,7 +418,7 @@ export default function Stream({
     if (!element || newest === undefined || !isLooking()) return;
     if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
     markRead(api, room.id, newest.id);
-  }, [api, room.id, messages, atEnd, entryReady]);
+  }, [api, room.id, messages, atEnd, entryReady, landingRevision]);
 
   useEffect(() => {
     noteRead();
@@ -442,7 +445,7 @@ export default function Stream({
     if (element.scrollHeight - element.clientHeight > BACKFILL_MARGIN_PX) return;
     if (!stream.atStart) void loadOlder(api, room.id);
     else if (!stream.atEnd) void loadNewer(api, room.id);
-  }, [api, room.id, stream]);
+  }, [api, room.id, stream, landingRevision]);
 
   const actions: Actions = useMemo(
     () => ({
@@ -528,8 +531,7 @@ export default function Stream({
    * Two ways to get there, and which one is right depends on how far away it
    * is. If the message is already loaded, or within a page or two of the
    * newest, walking backwards is cheap and keeps the scrollback that is
-   * already on screen — that is `loadUntil`, the same reach "since you were
-   * gone" uses, and it stops at a thousand messages.
+   * already on screen — that is `loadUntil`, capped at a thousand messages.
    *
    * Past that, walking is the wrong tool: a search hit six months back in a
    * busy room is thousands of messages behind the newest, which is dozens of
@@ -1276,6 +1278,8 @@ export function Composer({
   const currentRoom = useRef(room.id);
   currentRoom.current = room.id;
   const [files, setFiles] = useState<Pending[]>([]);
+  const nextContext = useRef({ files, replyTo });
+  nextContext.current = { files, replyTo };
   const [dropping, setDropping] = useState(false);
   const [addMenu, setAddMenu] = useState<HTMLButtonElement | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -1371,7 +1375,7 @@ export function Composer({
       setProblem(error instanceof Error ? error.message : "Couldn't send the message.");
       // A response belongs to its original room and submitted text. Never
       // clear or replace the next draft while finishing this request.
-      if (currentRoom.current === submission.room.id && currentDraft.current === "") {
+      if (currentRoom.current === submission.room.id && currentDraft.current === "" && nextContext.current.files.length === 0 && nextContext.current.replyTo === null) {
         setDraft(submission.body);
         setFiles((held) => [...submission.files, ...held]);
         onRestoreReply?.(submission.reply);

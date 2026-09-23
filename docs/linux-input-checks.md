@@ -124,8 +124,10 @@ scripts/appimage-input-check.sh /path/to/new-linger.AppImage x11 /tmp/linger-x11
 
 It refuses a standalone development executable. Every run gets private
 configuration, clipboard, D-Bus and a headless compositor with no physical
-input backend. No window names are read. Both graphics workarounds are set for
-software-rendered checks; this does **not** prove hardware acceleration works.
+input backend. No window names are read. The broad rendering workaround is set
+for software-rendered checks. The narrow GBM variable is unset before launch,
+and the probe verifies the package sets it to `1`; this does **not** prove
+hardware acceleration works. The `default` route must now select Wayland.
 Wayland must select `GdkWaylandDisplay` and preserve both samples exactly.
 X11 must select `GdkX11Display` and preserve paste; a typing `DIFFERENT` result
 is explicitly the known failure, not a passing dictation check. The helper

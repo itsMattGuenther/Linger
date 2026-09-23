@@ -1139,7 +1139,7 @@ export async function leaveWindow(api: AuthedApi, roomId: RoomId): Promise<void>
 }
 
 /**
- * How far back "since you were gone" is willing to reach. Ten pages is a
+ * How far an explicit message jump walks before fetching a centered window. Ten pages is a
  * thousand messages; past that the line is somewhere you are not going to
  * scroll to anyway, and the alternative is a loop that pulls a year of history
  * because somebody was on holiday.
@@ -1149,10 +1149,8 @@ const MAX_CATCHUP_PAGES = 10;
 /**
  * Load older pages until `id` is inside the loaded range.
  *
- * This is what makes "since you were gone" work when you have been away longer
- * than one page: the "you left off here" line can only be drawn once the client
- * holds the message on *both* sides of it, or it would be marking the top of a
- * page rather than the place you stopped.
+ * Nearby reply and search targets reuse the loaded history. Distant targets
+ * use `openAround`; room-entry bookmarks go directly through that path.
  *
  * Answers whether the room now actually holds that message. A caller that has
  * somewhere else to go when walking does not reach — a search hit thousands of

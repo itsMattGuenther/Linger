@@ -138,6 +138,48 @@ describe("voice in the store", () => {
     invoked.length = 0;
     failing.clear();
     played.length = 0;
+    const saved = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => saved.set(key, value),
+    });
+  });
+
+  it("seeds voice from ready without joining or making a sound", async () => {
+    await connect(fakeApi(HOME));
+    invoked.length = 0;
+    arrive(HOME, ready({ voice: [{ room_id: "r-garage", peers: [{ session_id: "friend", user_id: "amy" }] }] }));
+    expect(voicePeersIn(serverState(HOME), "r-garage")).toHaveLength(1);
+    expect(serverState(HOME).myVoice).toBeNull();
+    expect(invoked.filter((call) => call.cmd.startsWith("voice_"))).toEqual([]);
+    expect(played).toEqual([]);
+  });
+
+  it("restores volume across visits, reconnects, a fresh store and two sessions of one person", async () => {
+    await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["a", "amy"], ["b", "amy"], ["c", "cal"]]));
+    await vi.waitFor(() => expect(serverState(HOME).myVoice?.volumes.c).toBe(1));
+    setVoiceVolume(HOME, "a", 1.75);
+    expect(serverState(HOME).myVoice?.volumes).toMatchObject({ a: 1.75, b: 1.75, c: 1 });
+    expect(localStorage.getItem(`linger.voice.volumes:${HOME}`)).toBe('{"amy":1.75}');
+    await setVoiceDeafened(HOME, true);
+    await setVoiceDeafened(HOME, false);
+    await leaveVoice(HOME);
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    expect(serverState(HOME).myVoice?.volumes).toMatchObject({ a: 1.75, b: 1.75 });
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["new-session", "amy"]]));
+    await vi.waitFor(() => expect(serverState(HOME).myVoice?.volumes["new-session"]).toBe(1.75));
+    expect(serverState(HOME).myVoice?.volumes["new-session"]).toBe(1.75);
+    await disconnect(HOME);
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ voice: [{ room_id: "r-garage", peers: [{ session_id: "after-restart", user_id: "amy" }] }] }));
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    expect(serverState(HOME).myVoice?.volumes["after-restart"]).toBe(1.75);
+    expect(invoked).toContainEqual({ cmd: "voice_volume", args: { baseUrl: HOME, peer: "after-restart", volume: 1.75 } });
+    await connect(fakeApi(WORK));
+    arrive(WORK, ready({ voice: [{ room_id: "r-garage", peers: [{ session_id: "other-server", user_id: "amy" }] }] }));
+    await joinVoice(fakeApi(WORK), "r-garage", DEFAULTS, false);
+    expect(serverState(WORK).myVoice?.volumes["other-server"]).toBe(1);
   });
 
   it("remembers the session id from ready, and who is in voice per room", async () => {
@@ -289,6 +331,9 @@ describe("voice in the store", () => {
     await seated(HOME);
     invoked.length = 0;
 
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"]]));
+    await vi.waitFor(() => expect(serverState(HOME).myVoice?.volumes["s-1"]).toBe(1));
+    invoked.length = 0;
     await setVoiceMuted(HOME, true);
     setVoiceVolume(HOME, "s-1", 1.5);
 
@@ -301,6 +346,8 @@ describe("voice in the store", () => {
 
   it.each([false, true])("deafen restores prior mute=%s and preserves volume", async (muted) => {
     await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["friend", "u-amy"]]));
+    await Promise.resolve();
     await setVoiceMuted(HOME, muted);
     setVoiceVolume(HOME, "friend", 0.4);
     await setVoiceDeafened(HOME, true);
