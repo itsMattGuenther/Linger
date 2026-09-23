@@ -24,12 +24,17 @@ default.
 
 ## How to run a task
 
-**0.3.3 issue fixes — ⏳ Matt, 2026-09-23.** Fix bugs #114–#119,
-#121, #122 and #124; complete enhancements #120 and #123. Keep #81 and
-#101 deferred. M12 remains current. Validate the combined candidate before
-merge and release; retain the separate-device/network evidence limits.
-Implementation and regression coverage are in PR #125. The release candidate
-is 0.3.3; CI, signed packages and publication are the remaining steps.
+**0.3.3 issue fixes — ✅ Matt, 2026-09-23.** PR #125 fixed bugs #114–#119,
+#121, #122 and #124 and completed enhancements #120 and #123, with all eleven
+issues linked and closed. #81 and #101 remain deferred. The full local gate,
+462 frontend unit tests, 340 browser cases, CI, and all five unsigned and signed
+package checks passed. Signed packages and all seven updater entries were
+verified against the existing key. The amd64/arm64 server image and desktop
+release are published; the public updater endpoint serves 0.3.3. Matt authorized
+the existing PR-only administrator override; protection settings were unchanged.
+Merged branches were cleaned up. PR #126 records the audit in
+`docs/releases/0.3.3.md`. M12 remains current; physical-device, spoken-dictation
+and separate-machine/network evidence limits remain open.
 
 **0.3.2 release hardening — ✅ Matt, 2026-09-22.** Combine the issue-linked
 fixes in PRs #102, #103, #105, #106, #107, #109, #110 and #111; test the combined
