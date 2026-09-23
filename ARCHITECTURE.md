@@ -82,9 +82,11 @@ Consequences:
 
 Linux startup accepts an explicit `LINGER_LINUX_BACKEND=wayland` or `x11`
 before initializing GTK. This app-specific choice overrides an AppImage
-launcher's `GDK_BACKEND` assignment; an unset variable leaves the packaging
-fallback unchanged. Invalid values fail clearly. It is a per-launch option,
-not a global desktop change or an automatic graphics fallback. See
+launcher's `GDK_BACKEND` assignment. Without an explicit choice, a nonempty
+`WAYLAND_DISPLAY` selects native Wayland; other desktops keep the packaging
+fallback. Startup also defaults `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` to `1`,
+preserving an explicit value, including `0`. Invalid values fail clearly. It is a per-launch option,
+not a global desktop change. See
 `docs/linux-input-checks.md` for packaged evidence and hardware limits.
 
 The same startup path ignores `SIGHUP` so closing the launching terminal does

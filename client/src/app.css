@@ -306,12 +306,7 @@
 
 /* The roster panel styles itself, both ways round: `roster/roster.css`. */
 
-/*
- * "Since you were gone", pulled from the room header (SPEC §4.2). It is a
- * control, not a notice: nothing opens it but a click, and it says who and
- * when, never how many.
- */
-.since-pull {
+.newest-action {
   background: none;
   border: 0;
   padding: 2px 6px;
@@ -320,38 +315,12 @@
   cursor: pointer;
 }
 
-.since-pull:hover,
-.since-pull[aria-expanded="true"] {
+.newest-action:hover,
+.newest-action[aria-expanded="true"] {
   background: var(--surface-2);
   color: var(--text-primary);
 }
 
-.since {
-  padding: 8px var(--gutter);
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.since-who {
-  font-size: var(--text-label-size);
-  color: var(--text-primary);
-}
-
-.since-when {
-  margin-left: 8px;
-}
-
-.since-go {
-  background: none;
-  border: 0;
-  padding: 4px 0 0;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.since-go:hover {
-  color: var(--text-primary);
-}
 
 .status-bar {
   grid-area: status;

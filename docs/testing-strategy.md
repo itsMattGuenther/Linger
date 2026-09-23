@@ -18,7 +18,7 @@ Test the combined release candidate: separately green PRs can disagree.
 | --- | --- | --- |
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
-| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, native navigation layout | Every distro, physical speakers, real-network voice |
+| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, native navigation layout, knock and sending | Every distro, physical speakers, real-network voice |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
 The existing package audio harness also injects a test-only bundle of the real
@@ -27,7 +27,9 @@ the package's shipped stylesheet. It tests long server/room/DM names, a reserved
 vertical scrollbar gutter, short scroll areas, both themes and all six interface
 sizes in WebView2 and WebKitGTK. The synthetic fixture replaces the empty test
 page only; it never loads personal accounts. Layout results are retained beside
-audio results. This is not a live-server or full-app startup test.
+audio results. The same native fixture tests a second knock and immediate
+composer clearing in rooms and DMs while a send is held, preserving the next draft.
+This is not a live-server or full-app startup test.
 The Linux harness disables overlay scrollbars only in its isolated test process
 using [GTK's scrollbar setting](https://docs.gtk.org/gtk3/property.Settings.gtk-overlay-scrolling.html).
 The test requires a measurable native gutter and rejects the negative-margin
@@ -61,7 +63,7 @@ and both Rust lockfiles together. Tag once, wait for signed packages and the
 server image, inspect the draft and updater manifest, then publish. Never move a
 published version tag to fix a failed release; use the next patch version.
 
-Use [the 0.3.2 checklist](releases/0.3.2-testing.md) for this patch. Record OS,
+Use [the 0.3.3 checklist](releases/0.3.3.md#checks-on-installed-clients) for this patch. Record OS,
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
 

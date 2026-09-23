@@ -131,6 +131,14 @@ impl VoiceControls {
 // Server → client
 // ---------------------------------------------------------------------------
 
+/// An occupied room's voice roster at sign-in, filtered by room membership.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct VoiceRoomState {
+    pub room_id: RoomId,
+    pub peers: Vec<VoicePeer>,
+}
+
 /// Payload of `ready`: everything a client needs to render without further fetches.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -146,6 +154,10 @@ pub struct ReadyData {
     /// forgetting a filter — it never had one to forget.
     pub dms: Vec<Room>,
     pub presence: Vec<PresenceEntry>,
+    /// Older servers omit this; no microphone is opened by a snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub voice: Option<Vec<VoiceRoomState>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

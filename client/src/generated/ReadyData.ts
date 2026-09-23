@@ -2,6 +2,7 @@
 import type { PresenceEntry } from "./PresenceEntry";
 import type { Room } from "./Room";
 import type { User } from "./User";
+import type { VoiceRoomState } from "./VoiceRoomState";
 
 /**
  * Payload of `ready`: everything a client needs to render without further fetches.
@@ -17,4 +18,8 @@ rooms: Array<Room>,
  * surface that draws the server's rooms cannot draw somebody's DM by
  * forgetting a filter — it never had one to forget.
  */
-dms: Array<Room>, presence: Array<PresenceEntry>, };
+dms: Array<Room>, presence: Array<PresenceEntry>, 
+/**
+ * Older servers omit this; no microphone is opened by a snapshot.
+ */
+voice?: Array<VoiceRoomState>, };

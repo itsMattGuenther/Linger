@@ -18,8 +18,8 @@ installation, updates and voice still have outstanding checks on real computers.
 See the [release readiness review](docs/release-readiness.md) for the priorities
 and [SPEC.md](SPEC.md) for the full product specification.
 
-The [0.3.1 release notes](docs/releases/0.3.1.md) cover the packaged audio and UI
-fixes since 0.3.0, upgrade steps, and the checks still open for this testing release.
+The [0.3.3 release notes](docs/releases/0.3.3.md) cover Linux startup, messaging, voice and reading-position
+fixes since 0.3.2, upgrade steps, and the checks still open for this testing release.
 
 ---
 
@@ -86,7 +86,8 @@ These terms are used everywhere — UI, code, docs, error messages:
   One comfortable layout; no density modes. Narrow windows put the right panel
   behind **People** and, when needed, the left panel behind **Navigation**.
   Dark, light and system themes remain.
-- 🔕 **No unread counts** — a "you left off here" line and a subtle label-weight change,
+- 🔕 **No unread counts** — rooms and DMs open at "you left off here" when new
+  messages await, with a subtle label-weight change,
   never a badge; notifications are for direct mentions and people you choose to follow
 - ✍️ **Styled names** (the AIM feature) — curated fonts, a named 16-color palette,
   gradients, shimmer/glow; and **statuses** with away messages
@@ -112,7 +113,7 @@ These terms are used everywhere — UI, code, docs, error messages:
   including shared files, without host approval
 - 💬 **DMs and group DMs** — private to their participants within the server;
   people outside a DM cannot find it through messages, media, search or export
-- 🎙️ **Voice rooms** — join, mute, deafen, shared mic/deafen state, push-to-talk, per-person volume and device
+- 🎙️ **Voice rooms** — join, mute, deafen, shared mic/deafen state, push-to-talk, locally remembered per-person volume and device
   selection. Controls remain reachable while browsing Settings or another room.
   A host can run a relay for different networks. **Experimental:
   the tests across separate computers and networks are still open**
@@ -316,11 +317,13 @@ package checks install the published 0.3.0 MSI, upgrade to the newly built
 package, and check original, renamed, moved and deleted desktop shortcuts,
 including uninstall cleanup. See [the update check](docs/windows-update-checks.md).
 
-Linux v0.2.0 builds also accept `LINGER_LINUX_BACKEND=wayland` (opt-in)
-or `x11` (fallback) before GTK starts. This survives the AppImage launcher's
-forced X11 setting without modifying the package. The published v0.1.0 does
-not support it. See [Linux input checks](docs/linux-input-checks.md) before
-using it for dictation; the default backend and updater trust are unchanged.
+Linux v0.3.3 selects native Wayland when a Wayland display is available, so
+simulated dictation typing avoids the AppImage launcher's X11 path. Other
+desktops keep their existing backend. `LINGER_LINUX_BACKEND=x11` or `wayland`
+remains an explicit per-launch override. Linux startup also sets
+`WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1` unless already set; explicit `0` is
+preserved. These choices happen before GTK and change no desktop settings.
+See [Linux input checks](docs/linux-input-checks.md) for evidence and limits.
 
 ```bash
 # Debian/Ubuntu

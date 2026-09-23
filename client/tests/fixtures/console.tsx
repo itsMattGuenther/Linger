@@ -5,7 +5,9 @@ import { emit } from "@tauri-apps/api/event";
 import { Console } from "../../src/App";
 import type { User } from "../../src/generated/User";
 import type { Room } from "../../src/generated/Room";
+import type { CreateMessageRequest } from "../../src/generated/CreateMessageRequest";
 import type { Message } from "../../src/generated/Message";
+import type { SearchHit } from "../../src/generated/SearchHit";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
 import type { UpdateMeRequest } from "../../src/generated/UpdateMeRequest";
 import { sharedFiles, sharedMedia } from "./delight-data";
@@ -177,8 +179,8 @@ const longNameDm: Room = {
   archived_at: null, last_message_id: null,
 };
 const messages: Message[] = (
-  query.has("history")
-    ? Array.from({ length: 10_000 }, (_, index) => [
+  (query.has("history") || query.has("catchup"))
+    ? Array.from({ length: query.has("catchup") ? 300 : 10_000 }, (_, index) => [
         "jules",
         `History sample ${index}. A conversation with enough words to wrap when the side panels get wider.`,
       ])
@@ -206,6 +208,16 @@ const messages: Message[] = (
   deleted_at: null,
   created_at: Date.now() - (all.length - index) * 180_000,
 }));
+if (query.has("catchup")) {
+  rooms[0]!.last_message_id = messages.at(-1)!.id;
+  spacingDm.last_message_id = messages.at(-1)!.id;
+}
+if (query.has("replies")) {
+  messages[2]!.reply_to = messages[0]!.id;
+  messages[3]!.author_id = messages[2]!.author_id;
+  messages[3]!.reply_to = messages[0]!.id;
+  messages[4]!.reply_to = messages[2]!.id;
+}
 const server = {
   name: query.has("longnames") ? longWord : "The Good Company",
   accent_key: null,
@@ -274,7 +286,7 @@ mockIPC(
                 user: me,
                 users,
                 rooms,
-                dms: query.has("spacing")
+                dms: (query.has("spacing") || query.has("catchup") || query.has("sending"))
                   ? [spacingDm]
                   : query.has("longnames")
                     ? [longNameDm]
@@ -374,6 +386,12 @@ globalThis.fetch = async (input, init) => {
     return new Response(null, { status: 204 });
   }
   if (url.pathname.endsWith("/server")) answer = server;
+  else if (url.pathname.endsWith("/search") && query.has("catchup")) {
+    const target = messages[180]!;
+    const hits: SearchHit[] = [{ message_id: target.id, room_id: "general", author_id: target.author_id,
+      created_at: target.created_at, cursor: target.id, snippet: [{ text: "History sample 180", matched: true }], matched_filenames: [] }];
+    answer = hits;
+  }
   else if (url.pathname.endsWith("/media"))
     answer =
       query.has("delight") && !url.searchParams.has("before")
@@ -383,17 +401,44 @@ globalThis.fetch = async (input, init) => {
               item.kind === url.searchParams.get("kind"),
           )
         : [];
-  else if (url.pathname.endsWith("/read")) answer = {};
+  else if (url.pathname.endsWith("/read")) {
+    if (init?.method === "PUT") {
+      document.documentElement.dataset.readMarker = String(init.body);
+      return new Response(null, { status: 204 });
+    }
+    if (query.has("catchup")) await new Promise((resolve) => setTimeout(resolve, 150));
+    answer = query.has("catchup") ? { general: "message-00040", "spacing-dm": "message-00080" } : {};
+  }
   else if (url.pathname.includes("/messages")) {
-    const before = url.searchParams.get("before");
     const roomId = url.pathname.includes("/spacing-dm/") ? spacingDm.id : "general";
-    answer = url.pathname.includes("/general/") || (query.has("spacing") && roomId === spacingDm.id)
-      ? messages
-          .filter((message) => before === null || message.id < before)
-          .slice(-100)
-          .reverse()
-          .map((message) => ({ ...message, room_id: roomId }))
+    if (init?.method === "POST") {
+      const posted: CreateMessageRequest = JSON.parse(String(init.body));
+      document.documentElement.dataset.lastSent = JSON.stringify(posted);
+      if (document.documentElement.dataset.holdSend === "yes") {
+        await new Promise<void>((resolve, reject) => {
+          document.addEventListener("finish-send", () => resolve(), { once: true });
+          init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+        });
+      }
+      if (document.documentElement.dataset.refuseSend === "yes") return Response.json({ error: { code: "FORBIDDEN", message: "This message was refused.", retry_after_ms: null } }, { status: 403 });
+      const message: Message = { ...messages[0]!, id: `sent-${Date.now()}`, room_id: roomId, author_id: me.id, body: posted.body, reply_to: posted.reply_to ?? null, created_at: Date.now(), reactions: [] };
+      await frame({ op: "message.create", d: message });
+      return Response.json(message);
+    }
+    const before = url.searchParams.get("before");
+    const around = url.searchParams.get("around");
+    answer = url.pathname.includes("/general/") || roomId === spacingDm.id
+      ? (around === null
+          ? messages.filter((message) => before === null || message.id < before).slice(-100)
+          : [...messages.filter((message) => message.id <= around).slice(-50), ...messages.filter((message) => message.id > around).slice(0, 50)])
+          .slice().reverse().map((message) => ({ ...message, room_id: roomId }))
       : [];
+  } else if (url.pathname.endsWith("/knock")) {
+    if (document.documentElement.dataset.holdKnock === "yes") await new Promise<void>((resolve, reject) => {
+      document.addEventListener("finish-knock", () => resolve(), { once: true });
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+    });
+    return new Response(null, { status: 204 });
   } else if (url.pathname.endsWith("/voice/ice"))
     answer = { servers: [], ttl_secs: 0 };
   return new Response(JSON.stringify(answer), {
@@ -415,6 +460,11 @@ document.addEventListener(
       },
     }),
 );
+document.addEventListener("fixture-message", () => {
+  const message: Message = { ...messages.at(-1)!, id: `message-${String(messages.length).padStart(5, "0")}`, body: "A new arrival", created_at: Date.now() };
+  messages.push(message);
+  void frame({ op: "message.create", d: message });
+});
 const api = new AuthedApi(
   baseUrl,
   {

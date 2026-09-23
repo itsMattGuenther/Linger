@@ -22,8 +22,8 @@
  * people who reacted without turning their reaction into a score.
  *
  * **Nothing here counts anything** (SPEC §4.2). Where you left off is a line in
- * the stream, not a number beside a room name, and "since you were gone" is
- * something you pull from the header rather than something that arrives.
+ * the stream, not a number beside a room name. Opening a room returns to
+ * that line; messages arriving during a visit never change the landing.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -45,7 +45,6 @@ import type { Message } from "../generated/Message";
 import type { MessageId } from "../generated/MessageId";
 import type { PresenceState } from "../generated/PresenceState";
 import type { Room } from "../generated/Room";
-import type { RoomId } from "../generated/RoomId";
 import type { User } from "../generated/User";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { ActionIcon } from "../lib/icons";
@@ -77,7 +76,6 @@ import Attachments from "../media/Attachments";
 import LinkCards from "../media/LinkCards";
 import { personStyle } from "../lib/names";
 import { occupancyLine, occupantsOf } from "../lib/occupancy";
-import { peopleList } from "../notify/rules";
 import PersonName from "../status/PersonName";
 import VoiceBar from "../voice/VoiceBar";
 import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
@@ -118,9 +116,6 @@ const MAX_ATTACHMENTS = 10;
  * looking at the end of the room.
  */
 const BOTTOM_MARGIN_PX = 48;
-
-/** How many people "since you were gone" names before it trails off. */
-const SINCE_NAMES = 5;
 
 /**
  * How a jump to a message knows it has arrived.
@@ -191,18 +186,27 @@ export default function Stream({
   const now = useNow();
   const scroller = useRef<HTMLDivElement | null>(null);
 
-  // A room re-opens itself if the store drops it, which happens when a
-  // re-identify throws loaded history away.
+  const [entry, setEntry] = useState<{ room: string; target: MessageId | null; ready: boolean }>({ room: "", target: null, ready: false });
+  const entryReady = entry.room === room.id && entry.ready;
+  // Decide once per visit, after the saved marker arrives. Live messages do
+  // not re-run this effect, and an explicit search target always wins.
   useEffect(() => {
-    if (!loaded) void openRoom(api, room.id);
-  }, [api, room.id, loaded]);
-
-  // Walking in is what pins the "you left off here" line. Keyed on the room
-  // alone so it happens once per visit rather than once per message that
-  // arrives while you are standing there.
-  useEffect(() => {
+    if (!gateway.readLoaded) return;
+    let alive = true;
     enterRoom(api.baseUrl, room.id);
-  }, [api.baseUrl, room.id]);
+    const marker = gateway.read[room.id];
+    const newest = gateway.newest[room.id];
+    const target = !focus && marker !== undefined && newest !== undefined && newest > marker ? marker : null;
+    setEntry({ room: room.id, target, ready: false });
+    void (async () => {
+      if (target !== null) await openAround(api, room.id, target);
+      else if (!focus && stream && !stream.atEnd) await leaveWindow(api, room.id);
+      else await openRoom(api, room.id);
+      if (alive) setEntry({ room: room.id, target, ready: true });
+    })();
+    return () => { alive = false; };
+    // A new gateway session may have invalidated the loaded history too.
+  }, [api, room.id, gateway.readLoaded, gateway.sessionId]);
 
   const people = useMemo(() => new Map(users.map((person) => [person.id, person])), [users]);
   // Presence per author, for the card a name opens. Built once here rather
@@ -262,14 +266,12 @@ export default function Stream({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<MessageId | null>(null);
   const [flash, setFlash] = useState<MessageId | null>(null);
-  const [since, setSince] = useState(false);
 
   // A half-written reply belongs to the room it was written in.
   useEffect(() => {
     setReplyTo(null);
     setEditing(null);
     setFlash(null);
-    setSince(false);
   }, [room.id]);
 
   const virtualizer = useVirtualizer({
@@ -285,8 +287,7 @@ export default function Stream({
   });
   useResizeAnchor(scroller, virtualizer, room.id, rows.length, atEnd);
 
-  // Walking into a room puts you at the newest message, not where you last
-  // were.
+  // Land on the saved boundary, or the newest message when already caught up.
   //
   // Getting there takes several goes, and this is the part that is easy to get
   // wrong. Every row starts life as an estimated height and only gets its real
@@ -302,13 +303,17 @@ export default function Stream({
   // Require both the actual bottom and several stable frames. Otherwise an
   // early panel resize can leave WebKit a screenful above the last message.
   const landing = useRef({ room: "", done: false });
+  const [landingRevision, setLandingRevision] = useState(0);
+  const rowsNow = useRef(rows);
+  rowsNow.current = rows;
   useEffect(() => {
-    if (rows.length === 0) return;
+    if (rows.length === 0 || !entryReady || focus) return;
     if (landing.current.room !== room.id) landing.current = { room: room.id, done: false };
     if (landing.current.done) return;
     // A room opened *at* a message is already where it was asked to be; the
     // bottom of its window is six months ago and nobody asked to go there.
-    if (!atEnd) return;
+    const boundary = entry.target !== null && rows.some((row) => row.kind === "left-off");
+    if (!atEnd && !boundary) return;
 
     let frames = 0;
     let stable = 0;
@@ -319,30 +324,36 @@ export default function Stream({
       // loops aiming at two different rows fight, and the one aiming at an
       // eight-month-old message is the one the person asked for.
       if (landing.current.done) return;
-      virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
+      const targetIndex = boundary ? rowsNow.current.findIndex((row) => row.kind === "left-off") : rowsNow.current.length - 1;
+      if (targetIndex < 0) return;
+      virtualizer.scrollToIndex(targetIndex, { align: boundary ? "start" : "end" });
       const drawn = virtualizer.getVirtualItems();
       const total = virtualizer.getTotalSize();
       const element = scroller.current;
       const atBottom =
         element !== null &&
         element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
-      stable = atBottom && total === previousTotal ? stable + 1 : 0;
+      const targetRow = drawn.find((row) => row.index === targetIndex);
+      const atTarget = boundary ? targetRow !== undefined && Math.abs(targetRow.start - (virtualizer.scrollOffset ?? 0)) < 2 : atBottom;
+      stable = atTarget && total === previousTotal ? stable + 1 : 0;
       previousTotal = total;
       frames += 1;
       // The frame cap is a seatbelt, not a mechanism: a room that never settles
       // has to give the scrollbar back rather than fight for it forever.
       if (
-        (drawn[drawn.length - 1]?.index === rows.length - 1 && stable >= 5) ||
+        (atTarget && stable >= 5 && (!boundary || frames >= JUMP_MIN_FRAMES)) ||
         frames >= 60
       ) {
         landing.current.done = true;
+        // Recheck read markers and short windows after the last positioning frame.
+        setLandingRevision((revision) => revision + 1);
         return;
       }
       pending = requestAnimationFrame(step);
     };
     pending = requestAnimationFrame(step);
     return () => cancelAnimationFrame(pending);
-  }, [room.id, rows.length, atEnd, virtualizer]);
+  }, [room.id, rows.length, atEnd, virtualizer, entryReady, entry.target, focus]);
 
   // Following a new message down is not one scroll, for the same reason
   // walking into a room is not: a row is an estimated height until it has been
@@ -358,8 +369,8 @@ export default function Stream({
   const lastKey = rows[rows.length - 1]?.key;
   useEffect(() => {
     const element = scroller.current;
-    if (!element || rows.length === 0 || !landing.current.done || !atEnd) return;
-    if (element.scrollHeight - element.scrollTop - element.clientHeight > element.clientHeight) {
+    if (!element || rows.length === 0 || !entryReady || !landing.current.done || !atEnd || jumping.current) return;
+    if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) {
       return;
     }
     let frames = 0;
@@ -403,11 +414,11 @@ export default function Stream({
     const newest = messages?.[messages.length - 1];
     // The bottom of a historical window is not the bottom of the room, and
     // marking it read would eat the line that says where you actually stopped.
-    if (!atEnd) return;
+    if (!entryReady || !landing.current.done || jumping.current || !atEnd) return;
     if (!element || newest === undefined || !isLooking()) return;
     if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
     markRead(api, room.id, newest.id);
-  }, [api, room.id, messages, atEnd]);
+  }, [api, room.id, messages, atEnd, entryReady, landingRevision]);
 
   useEffect(() => {
     noteRead();
@@ -418,39 +429,23 @@ export default function Stream({
   const backfill = useCallback(() => {
     noteRead();
     const element = scroller.current;
-    if (!element || jumping.current) return;
+    if (!element || !entryReady || !landing.current.done || jumping.current) return;
     if (element.scrollTop <= BACKFILL_MARGIN_PX) void loadOlder(api, room.id);
     // The other edge only exists inside a historical window, and reading to the
     // bottom of one is how the room becomes whole again.
     const below = element.scrollHeight - element.scrollTop - element.clientHeight;
     if (below <= BACKFILL_MARGIN_PX) void loadNewer(api, room.id);
-  }, [api, room.id, noteRead]);
-
-  // Where "go to where you left off" goes.
-  const leftOffRow = useMemo(() => rows.findIndex((row) => row.kind === "left-off"), [rows]);
-  const goToLeftOff = useCallback(() => {
-    if (leftOffRow < 0) return;
-    // The same re-aim the rest of this file does, and for the same reason: a
-    // row is an estimated height until it has been drawn, so one jump lands
-    // near the target rather than on it.
-    let frames = 0;
-    const step = (): void => {
-      virtualizer.scrollToIndex(leftOffRow, { align: "start" });
-      frames += 1;
-      if (frames < 6) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [leftOffRow, virtualizer]);
+  }, [api, room.id, noteRead, entryReady]);
 
   // A room whose first page doesn't fill the window needs the next one before
   // anybody scrolls, or there is nothing to scroll.
   useEffect(() => {
     const element = scroller.current;
-    if (!element || !stream || stream.loading || jumping.current) return;
+    if (!element || !stream || stream.loading || !entryReady || !landing.current.done || jumping.current) return;
     if (element.scrollHeight - element.clientHeight > BACKFILL_MARGIN_PX) return;
     if (!stream.atStart) void loadOlder(api, room.id);
     else if (!stream.atEnd) void loadNewer(api, room.id);
-  }, [api, room.id, stream]);
+  }, [api, room.id, stream, landingRevision]);
 
   const actions: Actions = useMemo(
     () => ({
@@ -536,8 +531,7 @@ export default function Stream({
    * Two ways to get there, and which one is right depends on how far away it
    * is. If the message is already loaded, or within a page or two of the
    * newest, walking backwards is cheap and keeps the scrollback that is
-   * already on screen — that is `loadUntil`, the same reach "since you were
-   * gone" uses, and it stops at a thousand messages.
+   * already on screen — that is `loadUntil`, capped at a thousand messages.
    *
    * Past that, walking is the wrong tool: a search hit six months back in a
    * busy room is thousands of messages behind the newest, which is dozens of
@@ -594,10 +588,6 @@ export default function Stream({
   }, [messages, me?.id]);
 
   const items = virtualizer.getVirtualItems();
-  const newest = gateway.newest[room.id];
-  // Something happened here after you stopped reading. The header offers to
-  // tell you about it; nothing pushes it at you (SPEC §4.2).
-  const strayed = leftOff !== null && newest !== undefined && newest > leftOff;
   const who = occupancyLine(
     occupantsOf(room.id, gateway.occupancy, gateway.presence, users),
   );
@@ -614,46 +604,24 @@ export default function Stream({
             search hit is showing February, and without this the only route back
             to today is scrolling through everything in between. Reading
             forwards to the bottom gets there too — this is the shortcut. */}
-        {atEnd ? null : (
+        {atEnd && entry.target === null ? null : (
           <button
             type="button"
-            className="since-pull meta"
-            onClick={() => void leaveWindow(api, room.id)}
+            className="newest-action meta"
+            onClick={() => {
+              landing.current = { room: room.id, done: false };
+              setEntry({ room: room.id, target: null, ready: false });
+              void leaveWindow(api, room.id).then(() => setEntry({ room: room.id, target: null, ready: true }));
+            }}
           >
             back to the newest
           </button>
         )}
-        {strayed && atEnd ? (
-          <button
-            type="button"
-            className="since-pull meta"
-            aria-expanded={since}
-            onClick={() => setSince((open) => !open)}
-          >
-            since you were gone
-          </button>
-        ) : null}
       </header>
 
       {/* Voice happens in the room (SPEC §4.14), so its one line sits under
           the room's header and nowhere else. */}
       <VoiceBar api={api} room={room} users={users} />
-
-      {strayed && since && leftOff !== null ? (
-        <SinceYouWereGone
-          api={api}
-          roomId={room.id}
-          leftOff={leftOff}
-          messages={messages ?? []}
-          atStart={atStart}
-          people={people}
-          now={now}
-          onGo={() => {
-            setSince(false);
-            goToLeftOff();
-          }}
-        />
-      ) : null}
 
       {/* `tabIndex` is not decoration: scrollback has to be reachable without a
           mouse, and focused, this takes arrow keys and Page Up like any other
@@ -732,6 +700,7 @@ export default function Stream({
         isDm={isDm}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        onRestoreReply={setReplyTo}
         onEditLast={() => {
           if (lastMine) actions.edit(lastMine);
         }}
@@ -891,15 +860,14 @@ function MessageRow({
       data-flash={flashing ? "true" : undefined}
       data-names-me={namesMe ? "true" : undefined}
     >
-      {repliedTo === undefined && message.reply_to === null ? null : (
-        <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
-      )}
-
       {head ? (
         <p className="msg-head">
           <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
           {time}
         </p>
+      ) : null}
+      {!deleted && message.reply_to !== null ? (
+        <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
       ) : null}
       {deleted || editing ? null : (
         <button
@@ -1030,79 +998,6 @@ function MessageRow({
         />
       )}
     </div>
-  );
-}
-
-/**
- * "Since you were gone", pulled from the room header.
- *
- * SPEC §4.2 is specific that this is something you ask for and never something
- * that arrives, so it does not exist until you open it. What it tells you is
- * *who* has spoken and *when* it started — never how much, because how much is
- * the number this whole app exists to not show you. A count would also be the
- * one thing here that is a lie, since the client only holds the pages it has
- * fetched.
- *
- * Opening it reaches back through history until the message you stopped at is
- * loaded, which is what lets the "you left off here" line be drawn at all when
- * you have been away longer than one page.
- */
-function SinceYouWereGone({
-  api,
-  roomId,
-  leftOff,
-  messages,
-  atStart,
-  people,
-  now,
-  onGo,
-}: {
-  api: AuthedApi;
-  roomId: RoomId;
-  leftOff: MessageId;
-  messages: readonly Message[];
-  atStart: boolean;
-  people: Map<string, User>;
-  now: number;
-  onGo: () => void;
-}) {
-  useEffect(() => {
-    void loadUntil(api, roomId, leftOff);
-  }, [api, roomId, leftOff]);
-
-  const found = atStart || messages.some((message) => message.id <= leftOff);
-  const after = messages.filter(
-    (message) => message.id > leftOff && message.deleted_at === null,
-  );
-
-  // Everyone who has spoken since, in the order they first did.
-  const names: string[] = [];
-  for (const message of after) {
-    const who = people.get(message.author_id)?.display_name ?? "someone";
-    if (!names.includes(who)) names.push(who);
-  }
-  const opened = after[0];
-
-  return (
-    <section className="since" aria-label="since you were gone">
-      {!found ? (
-        <p className="meta">looking back…</p>
-      ) : opened === undefined ? (
-        <p className="meta">nothing since.</p>
-      ) : (
-        <>
-          <p className="since-who">
-            {names.length > SINCE_NAMES
-              ? `${peopleList(names.slice(0, SINCE_NAMES))} and others`
-              : peopleList(names)}
-            <span className="since-when meta">{sessionLabel(opened.created_at, now)}</span>
-          </p>
-          <button type="button" className="since-go meta" onClick={onGo}>
-            go to where you left off
-          </button>
-        </>
-      )}
-    </section>
   );
 }
 
@@ -1358,6 +1253,7 @@ export function Composer({
   isDm,
   replyTo,
   onClearReply,
+  onRestoreReply,
   onEditLast,
 }: {
   api: AuthedApi;
@@ -1367,12 +1263,23 @@ export function Composer({
   isDm: boolean;
   replyTo: Message | null;
   onClearReply: () => void;
+  onRestoreReply?: (message: Message | null) => void;
   onEditLast: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  type Submission = { key: number; room: Room; body: string; files: Pending[]; reply: Message | null };
+  const [failed, setFailed] = useState<Submission[]>([]);
+  const pending = useRef(false);
+  const serial = useRef(0);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
+  const currentRoom = useRef(room.id);
+  currentRoom.current = room.id;
   const [files, setFiles] = useState<Pending[]>([]);
+  const nextContext = useRef({ files, replyTo });
+  nextContext.current = { files, replyTo };
   const [dropping, setDropping] = useState(false);
   const [addMenu, setAddMenu] = useState<HTMLButtonElement | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -1454,31 +1361,50 @@ export function Composer({
   const ready = files.filter((one) => one.attachment !== null);
   const working = files.some((one) => one.attachment === null && one.problem === null);
 
-  const submit = async (): Promise<void> => {
-    const body = draft.trim();
-    // A message with a file on it may say nothing at all — sharing a photo
-    // without a caption is the ordinary case (PROTOCOL §4).
-    if ((body.length === 0 && ready.length === 0) || sending || working) return;
+  const deliver = async (submission: Submission): Promise<void> => {
+    pending.current = true;
     setSending(true);
+    setProblem(null);
     try {
       await sendMessage(
-        api,
-        room.id,
-        body,
-        replyTo?.id ?? null,
-        ready.map((one) => one.attachment).flatMap((one) => (one === null ? [] : [one.id])),
+        api, submission.room.id, submission.body.trim(), submission.reply?.id ?? null,
+        submission.files.flatMap((one) => one.attachment === null ? [] : [one.attachment.id]),
       );
-      setDraft("");
-      setFiles([]);
-      setProblem(null);
-      onClearReply();
+      setFailed((held) => held.filter((one) => one.key !== submission.key));
     } catch (error) {
-      // The composer is the only thing holding what they typed, so it is the
-      // only thing that can tell them it did not go — and it keeps the text.
-      setProblem(error instanceof ApiError ? error.message : "Couldn't reach the server.");
+      setProblem(error instanceof Error ? error.message : "Couldn't send the message.");
+      // A response belongs to its original room and submitted text. Never
+      // clear or replace the next draft while finishing this request.
+      if (currentRoom.current === submission.room.id && currentDraft.current === "" && nextContext.current.files.length === 0 && nextContext.current.replyTo === null) {
+        setDraft(submission.body);
+        setFiles((held) => [...submission.files, ...held]);
+        onRestoreReply?.(submission.reply);
+        setFailed((held) => held.filter((one) => one.key !== submission.key));
+      } else {
+        setFailed((held) => held.some((one) => one.key === submission.key) ? held : [...held, submission]);
+      }
     } finally {
+      pending.current = false;
       setSending(false);
     }
+  };
+
+  const submit = async (): Promise<void> => {
+    if (draft.trim().length === 0 && ready.length === 0) return;
+    if (pending.current || working) {
+      setProblem(pending.current
+        ? "The previous message is still sending. Your next draft is kept here."
+        : "The file is still uploading. Your draft is kept here.");
+      return;
+    }
+    const submission: Submission = { key: ++serial.current, room, body: draft, files: ready, reply: replyTo };
+    // Commit the text on Enter. Keystrokes from this point belong to the next message.
+    setDraft("");
+    currentDraft.current = "";
+    setFiles((held) => held.filter((one) => !ready.includes(one)));
+    onClearReply();
+    box.current?.focus();
+    await deliver(submission);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -1500,7 +1426,7 @@ export function Composer({
       onEditLast();
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void submit();
     }
@@ -1558,6 +1484,17 @@ export function Composer({
           </button>
         </p>
       ) : null}
+      {sending ? <p className="meta" role="status">Sending…</p> : null}
+      {failed.map((submission) => (
+        <div className="composer-unsent" key={submission.key}>
+          <p className="meta">Unsent message in {submission.room.kind === "dm" ? "your DM" : `#${submission.room.slug}`}</p>
+          <p className="composer-unsent-text">{submission.body}</p>
+          {submission.files.map((file) => <p key={file.key}>{file.name}</p>)}
+          <button type="button" disabled={sending} onClick={() => {
+            if (!pending.current) void deliver(submission);
+          }}>Retry unsent message</button>
+        </div>
+      ))}
       {problem ? <p className="composer-problem meta">{problem}</p> : null}
       {files.length === 0 ? null : (
         <ul className="composer-files">

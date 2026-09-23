@@ -86,7 +86,7 @@ export interface Seat {
  * shuffling itself while you are looking at it.
  *
  * Two sessions of one person (a laptop and a desktop) are two seats: they
- * are two connections, and each can be turned up or down on its own.
+ * are two connections, and both use the same saved volume for that person.
  */
 export function seatsOf(
   peers: readonly VoicePeer[],
@@ -149,4 +149,23 @@ export function volumeLabel(volume: number): string {
 export function clampVolume(volume: number): number {
   if (!Number.isFinite(volume)) return 1;
   return Math.min(2, Math.max(0, volume));
+}
+
+/** Per-server, per-person levels stay on this computer, never on the wire. */
+export function loadVoiceVolumes(server: string): Record<string, number> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(`linger.voice.volumes:${server}`) ?? "{}");
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+    return Object.fromEntries(Object.entries(raw).filter((entry): entry is [string, number] =>
+      typeof entry[1] === "number" && Number.isFinite(entry[1]) && entry[1] >= 0 && entry[1] <= 2,
+    ));
+  } catch { return {}; }
+}
+
+/** Saving volume never stores session ids or changes microphone/deafen choices. */
+export function saveVoiceVolume(server: string, userId: string, volume: number): void {
+  const levels = { ...loadVoiceVolumes(server), [userId]: clampVolume(volume) };
+  try { localStorage.setItem(`linger.voice.volumes:${server}`, JSON.stringify(levels)); } catch {
+    // The active visit still uses the chosen level if storage is unavailable.
+  }
 }

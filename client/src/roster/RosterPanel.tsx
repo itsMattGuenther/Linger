@@ -23,7 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
-import { ApiError, type AuthedApi } from "../lib/api";
+import { ApiError, TransportError, type AuthedApi } from "../lib/api";
 import { useNow } from "../lib/clock";
 import { useGateway } from "../lib/gateway";
 import { dmWhere } from "../dm/dm";
@@ -384,7 +384,10 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
     return () => window.clearTimeout(timer);
   }, [phase]);
 
+  const pending = useRef(false);
   const knock = async (): Promise<void> => {
+    if (pending.current) return;
+    pending.current = true;
     setPhase("knocking");
     setProblem(null);
     try {
@@ -399,8 +402,10 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
           ? "That's three this hour. Give them a bit."
           : error instanceof ApiError
             ? error.message
-            : "Couldn't knock.",
+            : error instanceof TransportError ? error.message : "Couldn't knock.",
       );
+    } finally {
+      pending.current = false;
     }
   };
 

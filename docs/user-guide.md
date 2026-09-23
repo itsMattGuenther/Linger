@@ -131,8 +131,10 @@ On Omarchy, run `omarchy pkg add fuse2`; on Arch, run
 substitute for this library; do not uninstall it. For other distributions,
 see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
-**`Could not create GBM EGL display` and the app aborts:** try this exact
-command, with your downloaded filename:
+**`Could not create GBM EGL display` and the app aborts:** Linux v0.3.3 and
+newer set WebKit’s narrow GBM workaround automatically, for every package
+format. An explicit `WEBKIT_DMABUF_RENDERER_DISABLE_GBM=0` still enables GBM.
+For **v0.3.2 and earlier**, use this exact command with your downloaded filename:
 
 ```bash
 WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 ~/Downloads/Linger_0.3.0_amd64.AppImage
@@ -145,9 +147,12 @@ the window opens you can close the terminal. It is not required on every
 Linux computer. If it still fails, keep the terminal error to share when
 asking for help; leave setup tokens and invite links out of screenshots.
 
-**Voxtype puts numbers or symbols into chat instead of your words:** use
-clipboard output, then paste. The `0.1.0` AppImage forces X11; on a Wayland
-desktop, simulated typing can be corrupted before Linger receives it.
+**Voxtype puts numbers or symbols into chat instead of your words:** v0.3.3
+uses native Wayland automatically on Wayland desktops, alongside the graphics
+workaround above. Older AppImages default to X11; on a Wayland desktop,
+simulated typing can be corrupted before Linger receives it. If you explicitly
+choose X11, that limitation still applies. Clipboard output and paste remain
+a workaround for older builds or an explicit X11 launch.
 
 With your existing Voxtype daemon running, start **one recording** from a
 terminal on your computer:
@@ -179,8 +184,8 @@ this. The packaging limitation and developer reproduction are tracked in
 `LINGER_LINUX_BACKEND=wayland` before the AppImage command. The older
 **v0.1.0 does not support this option**; use the clipboard workaround
 above with that version. The developer check page records the test commands
-and graphics limits. Native Wayland is opt-in; no desktop-wide setting needs
-to change.
+and graphics limits. Native Wayland is opt-in through v0.3.2 and automatic on Wayland desktops
+from v0.3.3. No desktop-wide setting needs to change.
 
 ---
 
@@ -276,7 +281,9 @@ successful save. Treat download links as private, especially for DM files.
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
 invite: you are already in the room, and **Join Voice** under the room's name
 turns your microphone on there. The line under the header then says who is in
-voice. Names stay readable; a small rule marks who is speaking.
+voice. Names stay readable; a bold name with an underline directly beneath its
+letters marks who is speaking. Your own name comes first, without a visible
+“you” label; screen readers still identify it.
 
 While you are in:
 
@@ -289,6 +296,8 @@ While you are in:
   **mic state unknown** means their client or the server needs an update.
   An unmuted microphone is not a guarantee somebody is listening.
 - Click a voice participant's name to adjust **how loud they are for you**.
+  This computer remembers the level for that person on this server, across
+  restarts and reconnects. Their other sessions use the same level.
   Right-click or keyboard activation works too. This never leaves your computer.
 - The **chevron beside Voice** collapses the participant strip without hiding
   your voice controls. It does not hide the People sidebar.
@@ -433,7 +442,11 @@ use **deafen** for that. Muting chimes keeps visual notifications visible.
 There are **no unread badges and no counters** anywhere in Linger. That is
 deliberate. Nothing is keeping score of what you have not read, so nothing can
 make you feel behind. When you come back, the stream shows a **go to where you
-left off** marker; use it or ignore it.
+left off** marker. Opening a room or DM with new messages returns to that
+line automatically. Caught-up rooms open at the bottom. There is no catch-up
+button or band; **back to the newest** skips ahead. Search results still open
+on the message you selected, and new arrivals do not pull you away from
+earlier messages you are reading.
 
 ## Taking everything with you
 

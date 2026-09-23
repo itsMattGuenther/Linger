@@ -1,5 +1,18 @@
 # Linux dictation input: T-928 / T-929
 
+## Default launch correction, 2026-09-23 (#114, #122)
+
+From v0.3.3, startup selects native Wayland when `WAYLAND_DISPLAY` is
+nonempty, overriding the AppImage launcher's X11 assignment. Explicit
+`LINGER_LINUX_BACKEND=x11` still selects X11; desktops without Wayland keep
+the existing fallback. Startup defaults the narrow GBM workaround to `1`
+without replacing explicit values. No Voxtype or desktop settings change.
+
+The earlier results below describe historical builds. Synthetic typing and
+paste can validate the input route, but a spoken recording with the normal
+shortcut still needs physical input evidence and must not be reported as
+passed by a synthetic test. An explicit X11 launch remains affected.
+
 ## Finding, 2026-09-17
 
 The reported symptom was numbers and symbols replacing dictated words on
@@ -111,8 +124,10 @@ scripts/appimage-input-check.sh /path/to/new-linger.AppImage x11 /tmp/linger-x11
 
 It refuses a standalone development executable. Every run gets private
 configuration, clipboard, D-Bus and a headless compositor with no physical
-input backend. No window names are read. Both graphics workarounds are set for
-software-rendered checks; this does **not** prove hardware acceleration works.
+input backend. No window names are read. The broad rendering workaround is set
+for software-rendered checks. The narrow GBM variable is unset before launch,
+and the probe verifies the package sets it to `1`; this does **not** prove
+hardware acceleration works. The `default` route must now select Wayland.
 Wayland must select `GdkWaylandDisplay` and preserve both samples exactly.
 X11 must select `GdkX11Display` and preserve paste; a typing `DIFFERENT` result
 is explicitly the known failure, not a passing dictation check. The helper

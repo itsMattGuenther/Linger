@@ -145,6 +145,7 @@ fn ready_frame(session_id: &str) -> Value {
         rooms: Vec::new(),
         dms: Vec::new(),
         presence: Vec::new(),
+        voice: None,
     };
     json!({ "op": "ready", "d": data, "s": 0 })
 }

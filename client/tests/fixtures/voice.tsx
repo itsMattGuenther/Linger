@@ -10,6 +10,8 @@ import VoiceBar from "../../src/voice/VoiceBar";
 import "../../src/fonts/fonts.css";
 import "../../src/styles/tokens.css";
 import "../../src/styles/base.css";
+import "../../src/styles/names.css";
+import "../../src/generated/palette.generated.css";
 
 const baseUrl = "https://fixture.example";
 Object.defineProperty(globalThis, "isTauri", { value: true });
@@ -41,6 +43,15 @@ await frame({ op: "voice.state", s: 2, d: { room_id: room.id, peers: [
   { session_id: "deafened", user_id: "Deafened friend", controls: { muted: true, deafened: true } },
   { session_id: "legacy", user_id: "Legacy friend" },
 ] } });
+document.addEventListener("fixture-seats", () => {
+  void frame({ op: "voice.state", d: { room_id: room.id, peers: [
+    { session_id: "mine", user_id: user.id, controls: { muted: false, deafened: false } },
+    { session_id: "duplicate", user_id: user.id, controls: { muted: false, deafened: false } },
+    { session_id: "muted", user_id: "Muted friend", controls: { muted: true, deafened: false } },
+  ] } });
+  void emit("voice:speaking", { server: baseUrl, peer: null, speaking: true });
+  void emit("voice:peer", { server: baseUrl, peer: "duplicate", state: "failed" });
+});
 const root = document.getElementById("root");
 if (!root) throw new Error("missing fixture root");
 createRoot(root).render(<VoiceBar api={api} room={room} users={users} />);

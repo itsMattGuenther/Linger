@@ -103,6 +103,10 @@ static gboolean find_view(gpointer unused) {
     char *path = g_build_filename(g_getenv("LINGER_CHECK_AREA"), "backend", NULL);
     g_file_set_contents(path, G_OBJECT_TYPE_NAME(gdk_display_get_default()), -1, NULL);
     g_free(path);
+    path = g_build_filename(g_getenv("LINGER_CHECK_AREA"), "gbm", NULL);
+    const char *gbm = g_getenv("WEBKIT_DMABUF_RENDERER_DISABLE_GBM");
+    g_file_set_contents(path, gbm ? gbm : "unset", -1, NULL);
+    g_free(path);
     prepare();
     return G_SOURCE_REMOVE;
 }

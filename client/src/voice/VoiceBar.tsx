@@ -159,7 +159,7 @@ export default function VoiceBar({
                 className="voice-person"
                 aria-expanded={selected === seat.sessionId}
                 aria-haspopup="dialog"
-                aria-label={`${seat.name}, voice options`}
+                aria-label={`${seat.name}${seat.isMe ? ", you" : ""}, voice options`}
                 onClick={(event) => {
                   selectedTrigger.current = event.currentTarget;
                   setSelected(
@@ -175,7 +175,6 @@ export default function VoiceBar({
                 <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
               </button>
               <div className="voice-seat-state">
-                {seat.isMe ? <span className="meta">you</span> : null}
                 {controls === null ? (
                   <span
                     className="meta"

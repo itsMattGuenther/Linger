@@ -59,6 +59,7 @@ import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound } from "./sound";
 import { voiceCue } from "./sound-events";
+import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "../voice/voice";
 import type { AuthedApi } from "./api";
 
 /**
@@ -142,6 +143,8 @@ export interface GatewayState {
    * whole point of the app and a count is the thing it refuses to have.
    */
   read: Record<string, MessageId>;
+  /** Initial marker fetch settled; opening a room must wait before marking it read. */
+  readLoaded: boolean;
   /**
    * Room id → the newest message that exists. Seeded from `ready` and kept up
    * to date by `message.create`, because the server computes a room's
@@ -265,6 +268,7 @@ const EMPTY: GatewayState = {
   streams: {},
   typing: {},
   read: {},
+  readLoaded: false,
   newest: {},
   leftOff: {},
   notifyRules: [],
@@ -534,9 +538,9 @@ function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         knocks: [],
         // A fresh `ready` is a fresh session, and a voice seat belongs to a
         // session (PROTOCOL §8): the old one is gone at the server, so it
-        // goes here too. The next `voice.state` per room refills the map.
+        // goes here too. Seed visible rooms without opening our microphone.
         sessionId: frame.d.session_id,
-        voice: {},
+        voice: Object.fromEntries((frame.d.voice ?? []).map((room) => [room.room_id, room.peers])),
         myVoice: null,
         // `read` and `leftOff` survive: one is a copy of something the server
         // is holding for us, and the other is where this session started, which
@@ -858,7 +862,9 @@ async function attachListeners(): Promise<void> {
       // deliberately: nothing the store holds changes because a peer connection
       // did, and the voice surface (T-1404) will read the core's own events.
       if (frame.op === "voice.state" || frame.op === "voice.signal") {
-        void voiceFrame(server, frame);
+        void voiceFrame(server, frame).then(() => {
+          if (frame.op === "voice.state") applySavedVoiceVolumes(server);
+        });
         // The fold above drops our seat if the server's list no longer has
         // us in it. The core still holds the devices, so tell it to let go —
         // a microphone left open after the server has said you are gone is
@@ -1133,7 +1139,7 @@ export async function leaveWindow(api: AuthedApi, roomId: RoomId): Promise<void>
 }
 
 /**
- * How far back "since you were gone" is willing to reach. Ten pages is a
+ * How far an explicit message jump walks before fetching a centered window. Ten pages is a
  * thousand messages; past that the line is somewhere you are not going to
  * scroll to anyway, and the alternative is a loop that pulls a year of history
  * because somebody was on holiday.
@@ -1143,10 +1149,8 @@ const MAX_CATCHUP_PAGES = 10;
 /**
  * Load older pages until `id` is inside the loaded range.
  *
- * This is what makes "since you were gone" work when you have been away longer
- * than one page: the "you left off here" line can only be drawn once the client
- * holds the message on *both* sides of it, or it would be marking the top of a
- * page rather than the place you stopped.
+ * Nearby reply and search targets reuse the loaded history. Distant targets
+ * use `openAround`; room-entry bookmarks go directly through that path.
  *
  * Answers whether the room now actually holds that message. A caller that has
  * somewhere else to go when walking does not reach — a search hit thousands of
@@ -1372,11 +1376,11 @@ export function enterRoom(server: string, roomId: RoomId): void {
  * helpful, not the app being wrong.
  */
 export async function loadReadMarkers(api: AuthedApi): Promise<void> {
-  let map: Record<string, MessageId>;
+  let map: Record<string, MessageId> = {};
   try {
     map = await api.get<Record<string, MessageId>>("/read");
   } catch {
-    return;
+    // An unavailable bookmark must not prevent opening the conversation.
   }
   if (linkFor(api) === null) return;
   const current = stateOf(api.baseUrl);
@@ -1388,7 +1392,7 @@ export async function loadReadMarkers(api: AuthedApi): Promise<void> {
   for (const [roomId, id] of Object.entries(map)) {
     leftOff[roomId] ??= id;
   }
-  publish(api.baseUrl, { ...current, read: { ...map, ...current.read }, leftOff });
+  publish(api.baseUrl, { ...current, read: { ...map, ...current.read }, leftOff, readLoaded: true });
 }
 
 /** PROTOCOL §4: at most one read-marker write per five seconds per room. */
@@ -1581,6 +1585,7 @@ export async function joinVoice(
       .then((answer) => answer.servers)
       .catch(() => []);
     await voiceJoin(server, current.sessionId, roomId, devices, ice);
+    applySavedVoiceVolumes(server);
   } catch (error) {
     publish(server, { ...stateOf(server), myVoice: null });
     throw error;
@@ -1645,15 +1650,39 @@ export function setVoiceDeafened(server: string, deafened: boolean): Promise<voi
   });
 }
 
-/** How loud one peer plays for you. Never leaves this machine. */
+/** Apply saved levels after devices open and whenever a person's sessions change. */
+function applySavedVoiceVolumes(server: string): void {
+  const current = stateOf(server);
+  const mine = current.myVoice;
+  if (mine === null) return;
+  const saved = loadVoiceVolumes(server);
+  const volumes = { ...mine.volumes };
+  for (const peer of current.voice[mine.roomId] ?? []) {
+    if (peer.session_id === current.sessionId) continue;
+    const volume = saved[peer.user_id] ?? volumes[peer.session_id] ?? 1;
+    volumes[peer.session_id] = volume;
+    void voiceVolume(server, peer.session_id, volume);
+  }
+  publish(server, { ...current, myVoice: { ...mine, volumes } });
+}
+
+/** How loud this person plays for you, across their sessions and future visits. */
 export function setVoiceVolume(server: string, peer: string, volume: number): void {
   const current = stateOf(server);
-  if (current.myVoice === null) return;
-  publish(server, {
-    ...current,
-    myVoice: { ...current.myVoice, volumes: { ...current.myVoice.volumes, [peer]: volume } },
-  });
-  void voiceVolume(server, peer, volume);
+  const mine = current.myVoice;
+  if (mine === null) return;
+  const peers = current.voice[mine.roomId] ?? [];
+  const person = peers.find((seat) => seat.session_id === peer);
+  if (!person || peer === current.sessionId) return;
+  const level = clampVolume(volume);
+  saveVoiceVolume(server, person.user_id, level);
+  const volumes = { ...mine.volumes };
+  for (const seat of peers) {
+    if (seat.user_id !== person.user_id || seat.session_id === current.sessionId) continue;
+    volumes[seat.session_id] = level;
+    void voiceVolume(server, seat.session_id, level);
+  }
+  publish(server, { ...current, myVoice: { ...mine, volumes } });
 }
 
 /**
