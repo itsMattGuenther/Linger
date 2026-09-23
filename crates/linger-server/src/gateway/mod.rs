@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use linger_core::gateway::{ServerEvent, ServerFrame, VoiceControls, VoicePeer};
+use linger_core::gateway::{ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState};
 use linger_core::limits::{MAX_VOICE_PEERS, RESUME_BUFFER_FRAMES, RESUME_WINDOW_MS};
 use linger_core::wire::{PresenceEntry, PresenceState};
 use linger_core::{RoomId, UserId};
@@ -323,6 +323,23 @@ impl Gateway {
             .collect();
         peers.sort_by(|a, b| a.session_id.cmp(&b.session_id));
         peers
+    }
+
+    /// Seed a fresh connection without exposing private rooms or starting voice.
+    pub fn voice_snapshot(&self, receiver: UserId) -> Vec<VoiceRoomState> {
+        let rooms: std::collections::BTreeSet<RoomId> = self
+            .voice
+            .iter()
+            .map(|seat| seat.value().room_id)
+            .filter(|room| self.can_see_room(receiver, *room))
+            .collect();
+        rooms
+            .into_iter()
+            .map(|room_id| VoiceRoomState {
+                room_id,
+                peers: self.voice_peers(room_id),
+            })
+            .collect()
     }
 
     /// Tell a room's members who is in voice there. The whole list, every time

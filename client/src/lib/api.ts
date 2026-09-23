@@ -166,18 +166,44 @@ async function send(
   );
 }
 
+/** Bound response headers and bodies alike, so pending controls always recover. */
+async function withDeadline<T>(
+  options: RequestOptions,
+  request: (bounded: RequestOptions) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const cancel = (): void => controller.abort();
+  if (options.signal?.aborted) cancel();
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  let expired = false;
+  const timer = setTimeout(() => { expired = true; controller.abort(); }, 30_000);
+  try {
+    return await request({ ...options, signal: controller.signal });
+  } catch (error) {
+    if (expired) throw new TransportError(
+      "The server did not confirm the request. Check whether it arrived before trying again.",
+    );
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", cancel);
+  }
+}
+
 async function requestJson<T>(
   baseUrl: string,
   method: string,
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const response = await send(baseUrl, method, path, options);
+  return withDeadline(options, async (bounded) => {
+  const response = await send(baseUrl, method, path, bounded);
   // The one place the wire becomes typed. `Response.json()` is untyped, and `T`
   // is always a ts-rs type generated from the server's own definition, so a
   // mismatch here is a server bug rather than a guess on our side.
   const parsed: T = await response.json();
   return parsed;
+  });
 }
 
 async function requestVoid(
@@ -186,7 +212,7 @@ async function requestVoid(
   path: string,
   options: RequestOptions = {},
 ): Promise<void> {
-  await send(baseUrl, method, path, options);
+  await withDeadline(options, (bounded) => send(baseUrl, method, path, bounded));
 }
 
 /** What the media grid is asking for (PROTOCOL §6). */

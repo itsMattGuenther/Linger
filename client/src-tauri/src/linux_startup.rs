@@ -14,21 +14,35 @@ use std::path::{Path, PathBuf};
 const MENU_ID: &str = "com.linger.desktop";
 const WM_CLASS: &str = "linger-client";
 
-fn backend(value: Option<&OsStr>) -> Result<Option<&'static str>, &'static str> {
+fn backend(
+    value: Option<&OsStr>,
+    wayland_display: Option<&OsStr>,
+) -> Result<Option<&'static str>, &'static str> {
     match value.and_then(OsStr::to_str) {
-        None if value.is_none() => Ok(None),
+        None if value.is_none() => Ok(wayland_display.filter(|v| !v.is_empty()).map(|_| "wayland")),
         Some("wayland") => Ok(Some("wayland")),
         Some("x11") => Ok(Some("x11")),
         _ => Err("LINGER_LINUX_BACKEND must be wayland or x11; unset it to use the default."),
     }
 }
 
+// Keep explicit values (including 0); skip only the failing GBM display by default.
+fn gbm_setting(value: Option<&OsStr>) -> &OsStr {
+    value.unwrap_or_else(|| OsStr::new("1"))
+}
+
 /// Run before GTK or any worker starts, so the launcher cannot override the choice.
 pub fn configure() -> Result<(), &'static str> {
     let requested = std::env::var_os("LINGER_LINUX_BACKEND");
-    if let Some(selected) = backend(requested.as_deref())? {
+    let wayland_display = std::env::var_os("WAYLAND_DISPLAY");
+    if let Some(selected) = backend(requested.as_deref(), wayland_display.as_deref())? {
         std::env::set_var("GDK_BACKEND", selected);
     }
+    let gbm = std::env::var_os("WEBKIT_DMABUF_RENDERER_DISABLE_GBM");
+    std::env::set_var(
+        "WEBKIT_DMABUF_RENDERER_DISABLE_GBM",
+        gbm_setting(gbm.as_deref()),
+    );
     ignore_terminal_hangup();
     if let Err(err) = install_appimage_menu_entry() {
         eprintln!("Linger couldn't add itself to the application menu: {err}");
@@ -130,10 +144,7 @@ fn exec_line(appimage: &Path) -> Option<String> {
 
 fn env_prefix() -> String {
     let mut parts = Vec::new();
-    for key in [
-        "WEBKIT_DMABUF_RENDERER_DISABLE_GBM",
-        "LINGER_LINUX_BACKEND",
-    ] {
+    for key in ["WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "LINGER_LINUX_BACKEND"] {
         if let Ok(raw) = std::env::var(key) {
             if let Some(value) = simple_token(&raw) {
                 parts.push(format!("{key}={value}"));
@@ -225,14 +236,27 @@ mod tests {
     use std::os::unix::ffi::OsStrExt;
 
     #[test]
-    fn only_an_explicit_supported_choice_overrides_the_launcher() {
-        assert_eq!(backend(None), Ok(None));
-        assert_eq!(backend(Some(OsStr::new("wayland"))), Ok(Some("wayland")));
-        assert_eq!(backend(Some(OsStr::new("x11"))), Ok(Some("x11")));
+    fn native_wayland_is_default_and_explicit_choices_win() {
+        assert_eq!(backend(None, None), Ok(None));
+        assert_eq!(backend(None, Some(OsStr::new(""))), Ok(None));
+        assert_eq!(
+            backend(None, Some(OsStr::new("wayland-0"))),
+            Ok(Some("wayland"))
+        );
+        assert_eq!(gbm_setting(None), OsStr::new("1"));
+        assert_eq!(gbm_setting(Some(OsStr::new("0"))), OsStr::new("0"));
+        assert_eq!(
+            backend(Some(OsStr::new("wayland")), None),
+            Ok(Some("wayland"))
+        );
+        assert_eq!(
+            backend(Some(OsStr::new("x11")), Some(OsStr::new("wayland-0"))),
+            Ok(Some("x11"))
+        );
         for invalid in ["", "auto", "wayland,x11", "WAYLAND"] {
-            assert!(backend(Some(OsStr::new(invalid))).is_err());
+            assert!(backend(Some(OsStr::new(invalid)), None).is_err());
         }
-        assert!(backend(Some(OsStr::from_bytes(&[0xff]))).is_err());
+        assert!(backend(Some(OsStr::from_bytes(&[0xff])), None).is_err());
     }
 
     #[test]
@@ -297,16 +321,11 @@ mod tests {
 
         write_menu_entry(&root.join("data"), &appimage, Some(&root.join("squash"))).unwrap();
 
-        let entry = fs::read_to_string(
-            root.join("data/applications/com.linger.desktop.desktop"),
-        )
-        .unwrap();
+        let entry =
+            fs::read_to_string(root.join("data/applications/com.linger.desktop.desktop")).unwrap();
         assert!(entry.contains("Name=Linger\n"));
         assert!(entry.contains("Terminal=false\n"));
-        assert!(entry.contains(&format!(
-            "Exec={}\n",
-            appimage.to_str().expect("utf8 path")
-        )));
+        assert!(entry.contains(&format!("Exec={}\n", appimage.to_str().expect("utf8 path"))));
         assert!(entry.contains("Icon=com.linger.desktop\n"));
         assert_eq!(
             fs::read(root.join("data/icons/hicolor/256x256/apps/com.linger.desktop.png")).unwrap(),

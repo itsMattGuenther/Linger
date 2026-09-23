@@ -470,3 +470,5 @@ button.msg-reply:hover {
 .composer-emoji-mark:focus-visible {
   background: var(--control-hover);
 }
+
+.composer-unsent-text { white-space: pre-wrap; overflow-wrap: anywhere; }

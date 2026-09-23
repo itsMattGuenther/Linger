@@ -687,9 +687,17 @@ S→C  { "op": "hello",  "d": { "heartbeat_interval_ms": 30000 } }
 C→S  { "op": "identify", "d": { "token": "<access_jwt>", "client": "linger-desktop/0.1.0" } }
 S→C  { "op": "ready",  "d": { "session_id", "user", "users": User[],
                               "rooms": Room[], "dms": Room[],
-                              "presence": PresenceEntry[] },
+                              "presence": PresenceEntry[],
+                              "voice"?: VoiceRoomState[] },
                               "s": 0 }
 ```
+
+`VoiceRoomState` is `{ room_id, peers: VoicePeer[] }`. New servers include
+`ready.voice` for occupied rooms visible to this member, including their DMs.
+Older servers omit it. Clients render these names without joining voice or
+playing arrival sounds. Subsequent `voice.state` events replace each list as
+usual. The snapshot is captured after subscribing to events, as with presence,
+so changes during sign-in are replayed rather than lost.
 
 ### Heartbeat
 

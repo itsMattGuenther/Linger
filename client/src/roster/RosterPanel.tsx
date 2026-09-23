@@ -384,7 +384,10 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
     return () => window.clearTimeout(timer);
   }, [phase]);
 
+  const pending = useRef(false);
   const knock = async (): Promise<void> => {
+    if (pending.current) return;
+    pending.current = true;
     setPhase("knocking");
     setProblem(null);
     try {
@@ -399,8 +402,10 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
           ? "That's three this hour. Give them a bit."
           : error instanceof ApiError
             ? error.message
-            : "Couldn't knock.",
+            : error instanceof Error ? error.message : "Couldn't knock.",
       );
+    } finally {
+      pending.current = false;
     }
   };
 

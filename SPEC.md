@@ -178,7 +178,10 @@ Replace with:
   past and stays visible for the rest of the session.
 - Rooms with new activity get a **weight change only** — label weight goes from normal to
   bold. No number, no dot, no color. Read rooms must remain readable too.
-- A **"since you were gone"** view the user *pulls* from the room header. Never pushed.
+- Opening a room or DM with new activity lands on **"you left off here"**.
+  A caught-up conversation opens at the newest messages. There is no catch-up
+  button or band. Live arrivals never move someone reading earlier messages.
+  Search still opens its exact result, and **"back to the newest"** skips ahead.
 
 **One exception:** direct mentions produce a real notification and a marker. Mentions
 are person-to-person only. `@everyone` and `@here` do not exist and will not be added.
@@ -320,9 +323,21 @@ whitespace and a soft divider labeled in natural language: `late Tuesday night`,
 `Saturday morning`, `yesterday afternoon`.
 
 **No avatar column or per-message colored bars.** Styled sender names in group
-headers and indented text underneath establish grouping. Consecutive messages
+headers and indented text underneath establish grouping. A reply’s short,
+clickable quote sits under its sender’s name and above its own text, aligned
+with that text. Deleting a reply hides its quote as well as its body; the
+original message and other replies remain unchanged. Consecutive messages
 do not reserve a hidden action row. A compact action button beside the text opens
 the message menu by pointer or keyboard, without moving the conversation on hover.
+
+**Sending.** Enter commits the current draft immediately and keeps focus in an
+empty composer. Subsequent typing belongs to the next message. Pending sends
+are visible; a failed send restores its text when the composer is empty, or
+keeps a separate unsent message with a retry action when a newer draft exists.
+Neither success nor failure may erase that newer draft. Shift+Enter inserts
+a newline. Requests that never answer time out visibly rather than leaving
+send or knock controls disabled indefinitely; an unconfirmed request is not
+reported as definitely undelivered.
 
 **Restrained embeds.** A link renders as a one-line inline card: favicon, title, domain.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
@@ -550,6 +565,11 @@ These controls last for the voice session, not in the database. Device failure
 and connection failure remain separate from a deliberate mute. Moving voice
 keeps your mute/deafen choices; leaving and joining starts afresh.
 
+**Per-person volume stays on this computer.** Remember each adjusted level
+by server and user, across leaving, restarting and the other person reconnecting.
+Two sessions of the same person share that level. Unadjusted people remain at
+100%. Volume never crosses the wire and deafen never overwrites it.
+
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at
 most one room at a time, for the same reason you are in one room at a time.
@@ -721,7 +741,7 @@ Desktop notification rules and notification chimes both live in Settings →
 Sound & Voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
-remain legible when not speaking; a simple rule marks speech. Click, right-click
+remain legible when not speaking; a bold name with a name-width underline directly beneath the letters marks speech. Click, right-click
 or keyboard-activate a participant to open their local volume controls. Names
 have no selector borders or dropdown arrows. A chevron on the bar collapses
 only the participants; joining and session controls align to the right. Hiding
