@@ -28,6 +28,8 @@ default.
 #121, #122 and #124; complete enhancements #120 and #123. Keep #81 and
 #101 deferred. M12 remains current. Validate the combined candidate before
 merge and release; retain the separate-device/network evidence limits.
+Implementation and regression coverage are in PR #125. The release candidate
+is 0.3.3; CI, signed packages and publication are the remaining steps.
 
 **0.3.2 release hardening — ✅ Matt, 2026-09-22.** Combine the issue-linked
 fixes in PRs #102, #103, #105, #106, #107, #109, #110 and #111; test the combined
