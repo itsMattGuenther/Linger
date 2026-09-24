@@ -310,11 +310,11 @@ async function inkRows(page: Page, clip: { x: number; y: number; width: number; 
     for (let y = 0; y < image.height; y++) {
       for (let x = 0; x < image.width; x++) {
         const at = (y * image.width + x) * 4;
-        if ([0, 1, 2].some((c) => Math.abs(data[at + c] - data[c]) > 40)) { rows.push(y); break; }
+        if ([0, 1, 2].some((c) => Math.abs((data[at + c] ?? 0) - (data[c] ?? 0)) > 40)) { rows.push(y); break; }
       }
     }
     const scale = image.height / height;
-    return [rows[0] / scale, rows[rows.length - 1] / scale] as [number, number];
+    return [(rows[0] ?? 0) / scale, (rows[rows.length - 1] ?? 0) / scale] as [number, number];
   }, [png, clip.height] as const);
 }
 
