@@ -258,10 +258,11 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
   text-underline-offset: 0.25em;
 }
 /* The left inset is the collapse chevron (2.25rem) plus the heading gap
-   (0.75rem), so the names start in line with "In voice" (#137). */
+   (0.75rem), less the name's own inset (0.375rem, voice.css), so the first
+   name's letters start in line with "In voice" (#137). */
 .voice-bar .voice-seats {
   gap: 0.75rem 2rem;
-  padding: 0.375rem 0.25rem 0.125rem 3rem;
+  padding: 0.375rem 0.25rem 0.125rem calc(3rem - 0.375rem);
 }
 .voice-bar .voice-seat-state {
   padding: 0;

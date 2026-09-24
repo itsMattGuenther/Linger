@@ -235,8 +235,58 @@ for (const theme of ["dark", "light"]) {
     expect(shape.gap).toBeLessThan(1);
     expect(shape.whitespace).toBe("nowrap");
     expect(shape.thickness).toBe("2px");
-    await expect(page.locator('[data-talking="true"] .voice-name')).toHaveCSS("font-weight", "700");
-    await expect(page.locator('[data-talking="true"] .voice-name')).toHaveCSS("text-decoration-line", "underline");
+    // The mark is #138's turned-over name, not #121's weight and underline.
+    const talking = page.locator('[data-talking="true"] .voice-name');
+    await expect(talking).toHaveCSS("background-image", /gradient/);
+    await expect(talking).toHaveCSS("text-decoration-line", "none");
+  });
+}
+
+/** The computed `rgb()` of a color token, for comparing against computed styles. */
+function tokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((token) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
+for (const theme of ["dark", "light"]) {
+  test(`a talking name turns over onto its own color, and only while talking, in ${theme} (#138)`, async ({ page, browserName }) => {
+    await page.goto("/tests/fixtures/voice.html");
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    await page.evaluate(() => document.dispatchEvent(new Event("fixture-seats")));
+    const talking = page.locator('.voice-seat[data-talking="true"] .voice-name');
+    const quiet = page.locator('.voice-seat:not([data-talking]) .voice-name').first();
+    await expect(talking).toHaveCount(1);
+    // Letters in the app background, which is the pair the palette's contrast
+    // test guarantees, on a block painted in the person's own color.
+    const background = await tokenColor(page, "--surface-0");
+    await expect(talking).toHaveCSS("-webkit-text-fill-color", background);
+    await expect(talking).toHaveCSS("background-image", /gradient/);
+    await expect(talking).toHaveCSS("background-clip", "border-box");
+    // Same weight as a quiet name: talking changes the block, not the letters.
+    await expect(talking).toHaveCSS("font-weight", await quiet.evaluate((name) => getComputedStyle(name).fontWeight));
+    await expect(quiet).toHaveCSS("background-image", "none");
+
+    // Normalized names: the block is the reader's text color.
+    await page.evaluate(() => { document.documentElement.dataset.normalize = "true"; });
+    await expect(talking).toHaveCSS("background-image", "none");
+    await expect(talking).toHaveCSS("background-color", await tokenColor(page, "--text-primary"));
+    await expect(talking).toHaveCSS("-webkit-text-fill-color", background);
+    await page.evaluate(() => { delete document.documentElement.dataset.normalize; });
+
+    // Forced colors strip author backgrounds; the mark must survive that.
+    // Only Chromium can emulate it.
+    if (browserName === "chromium") {
+      await page.emulateMedia({ forcedColors: "active" });
+      await expect(talking).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(talking).toHaveCSS("forced-color-adjust", "none");
+    }
   });
 }
 
@@ -280,14 +330,16 @@ for (const alone of [true, false]) {
       return Math.abs(s.x + s.width / 2 - (n.x + n.width / 2));
     }));
     for (const off of centers) expect(off).toBeLessThan(1);
-    const first = await page.locator(".voice-name").first().boundingBox();
+    // The name's letters, inside its padding, line up with the heading's.
+    const letters = await page.locator(".voice-name").first().evaluate((name) =>
+      name.getBoundingClientRect().x + parseFloat(getComputedStyle(name).paddingLeft));
     const heading = await page.locator(".voice-label").boundingBox();
-    expect(Math.abs((first?.x ?? 0) - (heading?.x ?? 0))).toBeLessThan(1);
+    expect(Math.abs(letters - (heading?.x ?? 0))).toBeLessThan(1);
 
     await talk(null, true);
     if (!alone) await talk("jules-voice", true);
     await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(alone ? 1 : 2);
-    await expect(page.locator('[data-talking="true"] .voice-name').first()).toHaveCSS("font-weight", "700");
+    await expect(page.locator('[data-talking="true"] .voice-name').first()).toHaveCSS("background-image", /gradient/);
     expect(await layout()).toEqual(quiet);
 
     await talk(null, false);

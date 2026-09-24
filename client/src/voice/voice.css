@@ -2,8 +2,8 @@
  * The voice line under a room's header (SPEC §4.14, T-1404).
  *
  * Console rules (SPEC §5): a hairline, no bubbles, no glow, no rings. Who is
- * talking is their name at full weight against everybody else at rest, the
- * same move the roster makes for presence.
+ * talking is their name turned over, drawn in the background color on a block
+ * of their own color, like selected text in a terminal (#138).
  */
 .voice-bar {
   display: grid;
@@ -55,30 +55,57 @@
   color: var(--text-secondary);
 }
 
-/* The name stacks over a hidden bold copy of itself, so its box is always the
-   talking width and going bold cannot widen the seat or shift the names beside
-   it (#137). The copy has no height and is hidden from screen readers. */
+/* The name keeps the talking block's inset at rest, so turning it over moves
+   nothing (#137, #138). */
 .voice-name {
-  display: inline-grid;
-  justify-items: center;
+  display: inline-block;
+  padding-inline: 0.375rem;
   font-size: 1.0625rem;
   font-weight: 500;
 }
-.voice-name::after {
-  content: attr(data-text);
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  font-weight: 700;
-  user-select: none;
+
+/*
+ * Talking: the name turns over (SPEC §5, #138). The letters are --surface-0
+ * on the person's own paint, which is the exact pair the palette's contrast
+ * test guarantees (linger-core `all_16_keys_hold_contrast_in_both_themes`), so
+ * every key reads in both themes and after dusk. A gradient name gets its
+ * gradient as the block. Shimmer and glow rest while the block is up. The
+ * block is a shape, so it does not depend on telling colors apart.
+ *
+ * The selector is deliberately heavier than the effect rules in names.css,
+ * which would otherwise clip this background back to the letters.
+ */
+.voice-bar .voice-seat[data-talking="true"] .voice-person .voice-name {
+  background-image: var(--person-paint);
+  background-size: 100% 100%;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--surface-0);
+  -webkit-text-fill-color: var(--surface-0);
+  text-shadow: none;
+  animation: none;
 }
 
-/* Talking: the name comes up to full. Nothing else moves. */
-.voice-seat[data-talking="true"] .voice-name {
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.15em;
+/* "Normalize everyone" (SPEC §4.5): the block is the reader's text color,
+   like every other name. */
+:root[data-normalize="true"]
+  .voice-bar
+  .voice-seat[data-talking="true"]
+  .voice-person
+  .voice-name {
+  background-image: none;
+  background-color: var(--text-primary);
+}
+
+/* Forced colors (Windows high contrast) strip author backgrounds, which would
+   erase the mark. Use the system's own selection pair instead. */
+@media (forced-colors: active) {
+  .voice-bar .voice-seat[data-talking="true"] .voice-person .voice-name {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    -webkit-text-fill-color: HighlightText;
+  }
 }
 .voice-seats[hidden] {
   display: none;

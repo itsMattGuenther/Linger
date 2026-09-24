@@ -741,10 +741,16 @@ Desktop notification rules and notification chimes both live in Settings →
 Sound & Voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
-remain legible when not speaking; a bold name with a name-width underline directly beneath the letters marks speech.
-Starting or stopping speech moves and resizes nothing: each name holds its
-speaking width at rest. Each name is centered in its own seat, over any state
-line, and the first name lines up with the bar's heading. Click, right-click
+remain legible when not speaking. A speaking name turns over: its letters are
+drawn in the app background color on a square block of the person's own color
+(a gradient name's block is its gradient; with names normalized, the reader's
+text color; under forced colors, the system highlight). That pair is the
+palette's contrast guarantee, so every key reads in both themes. The block is a
+shape, so speech does not depend on telling colors apart. No bold, underline,
+glow or motion; a name's shimmer or glow rests while its block is up.
+Starting or stopping speech moves and resizes nothing: each name keeps the
+block's inset at rest. Each name is centered in its own seat, over any state
+line, and the first name's letters line up with the bar's heading. Click, right-click
 or keyboard-activate a participant to open their local volume controls. Names
 have no selector borders or dropdown arrows. A chevron on the bar collapses
 only the participants; joining and session controls align to the right. Hiding

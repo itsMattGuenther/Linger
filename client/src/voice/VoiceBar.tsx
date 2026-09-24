@@ -8,8 +8,8 @@
  * in voice here, and then it says who.
  *
  * Console rules apply (SPEC §5): no bubbles, no glow, no animated rings.
- * Somebody talking is their name drawn a little brighter, the way a live
- * status is drawn anywhere else in the app.
+ * Somebody talking is their name turned over onto a block of their own color;
+ * the styling is all in voice.css.
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -172,13 +172,9 @@ export default function VoiceBar({
                   setSelected(seat.sessionId);
                 }}
               >
-                {/* `data-text` feeds the hidden bold copy in voice.css that
-                    holds the name at its talking width (#137). */}
-                <span {...nameProps(seat.user, "voice-name")} data-text={seat.name}>
-                  {seat.name}
-                </span>
+                <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
               </button>
-              {/* A screen reader gets the word; sighted people get the weight.
+              {/* A screen reader gets the word; sighted people get the block.
                   It sits outside the state line: in there it would wake the
                   empty line up and the bar would grow while you talk (#137). */}
               {talking ? <span className="sr-only">talking</span> : null}
