@@ -321,8 +321,10 @@ Linux v0.3.3 selects native Wayland when a Wayland display is available, so
 simulated dictation typing avoids the AppImage launcher's X11 path. Other
 desktops keep their existing backend. `LINGER_LINUX_BACKEND=x11` or `wayland`
 remains an explicit per-launch override. Linux startup also sets
-`WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1` unless already set; explicit `0` is
-preserved. These choices happen before GTK and change no desktop settings.
+`WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1` and `__NV_DISABLE_EXPLICIT_SYNC=1`
+unless already set; explicit `0` is preserved. The second stops NVIDIA +
+Wayland machines closing on launch with `Error 71`, so `pnpm tauri dev` needs
+no prefix either. These choices happen before GTK and change no desktop settings.
 See [Linux input checks](docs/linux-input-checks.md) for evidence and limits.
 
 ```bash

@@ -1,9 +1,10 @@
 //! Linux launch plumbing that has to run before GTK.
 //!
-//! Three jobs, all of them about the AppImage-from-a-terminal path:
-//! the backend override that survives linuxdeploy's X11 fallback, ignoring
-//! the hang-up that would otherwise kill the window when the terminal closes,
-//! and writing a user menu entry so the next open does not need a terminal.
+//! Graphics workarounds WebKitGTK needs on some GPUs, then three jobs about
+//! the AppImage-from-a-terminal path: the backend override that survives
+//! linuxdeploy's X11 fallback, ignoring the hang-up that would otherwise kill
+//! the window when the terminal closes, and writing a user menu entry so the
+//! next open does not need a terminal.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -12,6 +13,15 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 const MENU_ID: &str = "com.linger.desktop";
+
+/// Graphics workarounds that default to `1` when unset. GBM: WebKit aborts on
+/// some NVIDIA + AMD machines creating its GBM display. Explicit sync: NVIDIA's
+/// driver and newer WebKitGTK disagree on Wayland and the compositor closes
+/// the connection (`Error 71`); only NVIDIA's driver reads that variable.
+const DEFAULT_ON: [&str; 2] = [
+    "WEBKIT_DMABUF_RENDERER_DISABLE_GBM",
+    "__NV_DISABLE_EXPLICIT_SYNC",
+];
 const WM_CLASS: &str = "linger-client";
 
 fn backend(
@@ -26,8 +36,8 @@ fn backend(
     }
 }
 
-// Keep explicit values (including 0); skip only the failing GBM display by default.
-fn gbm_setting(value: Option<&OsStr>) -> &OsStr {
+// Keep explicit values (including 0); otherwise turn the workaround on.
+fn default_on(value: Option<&OsStr>) -> &OsStr {
     value.unwrap_or_else(|| OsStr::new("1"))
 }
 
@@ -38,11 +48,10 @@ pub fn configure() -> Result<(), &'static str> {
     if let Some(selected) = backend(requested.as_deref(), wayland_display.as_deref())? {
         std::env::set_var("GDK_BACKEND", selected);
     }
-    let gbm = std::env::var_os("WEBKIT_DMABUF_RENDERER_DISABLE_GBM");
-    std::env::set_var(
-        "WEBKIT_DMABUF_RENDERER_DISABLE_GBM",
-        gbm_setting(gbm.as_deref()),
-    );
+    for key in DEFAULT_ON {
+        let current = std::env::var_os(key);
+        std::env::set_var(key, default_on(current.as_deref()));
+    }
     ignore_terminal_hangup();
     if let Err(err) = install_appimage_menu_entry() {
         eprintln!("Linger couldn't add itself to the application menu: {err}");
@@ -134,7 +143,7 @@ fn write_menu_entry(data_home: &Path, appimage: &Path, appdir: Option<&Path>) ->
 fn exec_line(appimage: &Path) -> Option<String> {
     let path = std::str::from_utf8(appimage.as_os_str().as_bytes()).ok()?;
     let quoted = quote_exec_arg(path)?;
-    let prefix = env_prefix();
+    let prefix = env_prefix(|key| std::env::var(key).ok());
     if prefix.is_empty() {
         Some(quoted)
     } else {
@@ -142,10 +151,11 @@ fn exec_line(appimage: &Path) -> Option<String> {
     }
 }
 
-fn env_prefix() -> String {
+// The lookup is a parameter so tests need not touch the process environment.
+fn env_prefix(lookup: impl Fn(&str) -> Option<String>) -> String {
     let mut parts = Vec::new();
-    for key in ["WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "LINGER_LINUX_BACKEND"] {
-        if let Ok(raw) = std::env::var(key) {
+    for key in DEFAULT_ON.into_iter().chain(["LINGER_LINUX_BACKEND"]) {
+        if let Some(raw) = lookup(key) {
             if let Some(value) = simple_token(&raw) {
                 parts.push(format!("{key}={value}"));
             }
@@ -243,8 +253,8 @@ mod tests {
             backend(None, Some(OsStr::new("wayland-0"))),
             Ok(Some("wayland"))
         );
-        assert_eq!(gbm_setting(None), OsStr::new("1"));
-        assert_eq!(gbm_setting(Some(OsStr::new("0"))), OsStr::new("0"));
+        assert_eq!(default_on(None), OsStr::new("1"));
+        assert_eq!(default_on(Some(OsStr::new("0"))), OsStr::new("0"));
         assert_eq!(
             backend(Some(OsStr::new("wayland")), None),
             Ok(Some("wayland"))
@@ -291,6 +301,30 @@ mod tests {
     fn menu_entry_omits_icon_when_none_was_installed() {
         let body = desktop_entry("/opt/Linger.AppImage", false);
         assert!(!body.contains("Icon="));
+    }
+
+    #[test]
+    fn menu_entry_keeps_the_graphics_workarounds() {
+        let after_configure = |key: &str| match key {
+            "WEBKIT_DMABUF_RENDERER_DISABLE_GBM" | "__NV_DISABLE_EXPLICIT_SYNC" => {
+                Some("1".to_string())
+            }
+            _ => None,
+        };
+        assert_eq!(
+            env_prefix(after_configure),
+            "WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1 __NV_DISABLE_EXPLICIT_SYNC=1 "
+        );
+        let opted_out = |key: &str| match key {
+            "__NV_DISABLE_EXPLICIT_SYNC" => Some("0".to_string()),
+            "LINGER_LINUX_BACKEND" => Some("x11".to_string()),
+            _ => None,
+        };
+        assert_eq!(
+            env_prefix(opted_out),
+            "__NV_DISABLE_EXPLICIT_SYNC=0 LINGER_LINUX_BACKEND=x11 "
+        );
+        assert_eq!(env_prefix(|_| None), "");
     }
 
     #[test]
