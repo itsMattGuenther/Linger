@@ -259,10 +259,13 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
 }
 /* The left inset is the collapse chevron (2.25rem) plus the heading gap
    (0.75rem), less the name's own inset (0.375rem, voice.css), so the first
-   name's letters start in line with "In voice" (#137). */
+   name's letters start in line with "In voice" (#137).
+   No top padding: the 36px chevron already leaves room under the heading's
+   text, and the bar's own bottom padding is larger, so the space goes below
+   instead. That centers the names between the heading and the bar's edge. */
 .voice-bar .voice-seats {
   gap: 0.75rem 2rem;
-  padding: 0.375rem 0.25rem 0.125rem calc(3rem - 0.375rem);
+  padding: 0 0.25rem 0.5rem calc(3rem - 0.375rem);
 }
 .voice-bar .voice-seat-state {
   padding: 0;
