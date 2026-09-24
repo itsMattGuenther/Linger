@@ -2,6 +2,21 @@ import { type ReactNode, useLayoutEffect, useRef } from "react";
 import IconButton from "./IconButton";
 import { ActionIcon } from "./icons";
 
+/**
+ * How the person last reached for the app: a press of a pointer or of a key.
+ *
+ * A panel needs to know whether it was opened by mouse or keyboard, and asking
+ * the browser whether the opener "matches :focus-visible" is not a reliable
+ * answer — engines disagree, most of all after a script has handed focus back
+ * to the opener when the previous panel closed (#96, #143). The input that
+ * actually happened last is. Captured on `window` so nothing can stop it first.
+ */
+let lastInput: "pointer" | "keyboard" = "pointer";
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", () => { lastInput = "pointer"; }, { capture: true, passive: true });
+  window.addEventListener("keydown", () => { lastInput = "keyboard"; }, { capture: true });
+}
+
 /** Keep contextual controls beside their source, inside the viewport and out of scrollers. */
 export default function ContextPanel({
   anchor,
@@ -24,12 +39,19 @@ export default function ContextPanel({
   useLayoutEffect(() => {
     const node = dialog.current;
     if (!node) return;
-    // `showModal()` moves real focus into the panel. Keep that focus for
-    // screen readers and immediate keyboard use, but a pointer-opened panel
-    // should not pretend somebody already navigated to its first control.
-    // Capture the opener's focus-visible state before the dialog takes focus.
-    node.toggleAttribute("data-quiet-focus", !anchor.matches(":focus-visible"));
+    // `showModal()` moves real focus into the panel. A keyboard-opened panel
+    // puts it on the close button, where the ring and its name show at once.
+    // A pointer-opened one must not look as if somebody tabbed there (#143):
+    // a dialog panel takes focus on itself, so screen readers still land in it
+    // and Tab starts at its first control, and a menu keeps focus on its first
+    // item but draws it quietly until the keyboard is used.
+    const byKeyboard = lastInput === "keyboard";
+    node.toggleAttribute("data-quiet-focus", !byKeyboard);
     node.showModal();
+    if (variant === "dialog") {
+      if (byKeyboard) node.querySelector<HTMLElement>(".context-close")?.focus();
+      else node.focus({ preventScroll: true });
+    }
     const place = () => {
       const source = anchor.getBoundingClientRect();
       const box = node.getBoundingClientRect();
@@ -56,7 +78,7 @@ export default function ContextPanel({
       node.close();
       if (anchor.isConnected) anchor.focus({ preventScroll: true });
     };
-  }, [anchor, side]);
+  }, [anchor, side, variant]);
 
   return (
     <dialog
@@ -64,6 +86,7 @@ export default function ContextPanel({
       className={`context-panel ${variant === "menu" ? "context-menu" : ""} ${className}`}
       role={variant}
       aria-label={label}
+      tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -84,7 +107,12 @@ export default function ContextPanel({
         ].filter((node) => node.getClientRects().length > 0);
         const first = controls[0],
           last = controls.at(-1);
-        if (menuArrow) {
+        if (!menuArrow && document.activeElement === event.currentTarget) {
+          // Focus is on the panel itself, after a pointer open: Tab enters at
+          // the first control and Shift+Tab at the last, never out of it.
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        } else if (menuArrow) {
           event.preventDefault();
           const index = controls.findIndex((node) => node === document.activeElement);
           if (event.key === "Home") first?.focus();
@@ -119,7 +147,6 @@ export default function ContextPanel({
           className="context-close"
           tooltipSide="below"
           onClick={onClose}
-          autoFocus
         >
           <ActionIcon name="close" />
         </IconButton>

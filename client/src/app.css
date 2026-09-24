@@ -76,13 +76,6 @@
   font-weight: 500;
 }
 
-.room-occupancy {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .room-topic {
   flex: 1;
   min-width: 0;

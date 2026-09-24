@@ -564,7 +564,11 @@ else — wrong size, a file that is not the type it claimed, an image that will 
 
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
-simply has no poster. The published image installs them.
+simply has no poster. The published image installs them. The file they read is an
+upload and so hostile (§7), which makes both tools the video equivalent of the image
+decoder's limits: `ffprobe` gets 15 seconds, the poster gets 30 across both of its seek
+positions, and a run past its limit is killed and counts as no probe data or no poster —
+the same outcome as a server without ffmpeg.
 
 **The sweeper** (`expiry.rs`) is the server's one background task — spawned by `main`,
 not by `AppState`, so building the state in a test never starts a loop nobody asked for.
@@ -583,6 +587,17 @@ A status image is never taken, at any age: it is not on a message, so the third 
 would otherwise claim it. Deletion is bytes first, row second — the other order can lose
 an object with nothing left pointing at it, and a crash between the two leaves a row the
 next pass finishes.
+
+**Exports are the one path that brings bytes back to the app host.** An archive
+(`export.rs`, SPEC §4.11) is built in scratch under `{data_dir}/staging` and then stored
+as one object. On `local`, the files it carries are read in place, so one export needs
+local scratch of roughly the finished zip, and the zip is then renamed into the data dir.
+On `s3`, there is no way to read an object without fetching it, so every file the member
+can see is downloaded into scratch before zipping: one export needs roughly **twice** the
+member's visible data on local disk while it builds, and costs a full download of that
+data in egress (free on R2, billed on plain S3). The scratch is deleted when the job ends
+and the finished zip lives in the bucket, but a host sizing an S3-backed box should size
+the staging disk for the largest export, not only for the uploads in flight.
 
 **The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not

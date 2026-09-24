@@ -651,6 +651,9 @@ two it was is not the asker's business. A member has one archive at a time:
 starting a new export deletes the previous one's bytes, so an old `url` stops
 working. The rate limit is about the host's disk and CPU, not about permission;
 there is no host approval anywhere in this flow and there must never be one.
+For the same reason, one archive builds at a time across the whole server: a
+job waits in `queued` (progress `0.0`) until the one ahead of it finishes, so a
+client must not treat a long `queued` as a failure.
 
 **Knock** (SPEC §4.9, T-1101). One member nudges one member. The target has to
 be a member of this server — a stranger and somebody the host removed are both

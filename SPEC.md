@@ -152,8 +152,10 @@ keyboard focus. The conversation stays usable without reducing text size.
 A room is a place, not a filing cabinet.
 
 - Focusing the app on a room means you are **in the room**. Others see this.
-- Room headers show occupancy: `#garage · Matt, Callie`
-- Sidebar rooms show a small stack of who is in them.
+- Sidebar rooms show a small stack of who is in them, and Who's Around says which
+  room each person is in. That is where occupancy lives; the room header shows the
+  room's name and topic and no names (#145 — in a DM the list only repeated the
+  title).
 - Backgrounding the app or idling >90 seconds takes you out of the room.
 
 **Entrance sounds.** Each user picks a personal sound that plays for others already
@@ -698,9 +700,11 @@ The single-line composer input and Send button share an outer height; Send
 keeps that height when the input grows. Add centers on that height beside them,
 with the same 8px on either side of it as between the input and Send. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger. Pointer-opened contextual panels keep that automatic focus
-visually quiet until keyboard navigation begins; keyboard-opened panels show the
-focus ring immediately. Settings headings and navigation labels use title case.
+click or its trigger. A pointer-opened contextual panel takes focus on the panel
+itself, so no control inside it is highlighted and no tooltip shows until
+keyboard navigation begins; a pointer-opened menu keeps focus on its first item,
+drawn quietly. Keyboard-opened panels focus their close button (or first item)
+and show the focus ring immediately. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 

@@ -73,7 +73,6 @@ import { isLooking } from "../lib/looking";
 import Attachments from "../media/Attachments";
 import LinkCards from "../media/LinkCards";
 import { personStyle } from "../lib/names";
-import { occupancyLine, occupantsOf } from "../lib/occupancy";
 import PersonName from "../status/PersonName";
 import VoiceBar from "../voice/VoiceBar";
 import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
@@ -592,16 +591,12 @@ export default function Stream({
   }, [messages, me?.id]);
 
   const items = virtualizer.getVirtualItems();
-  const who = occupancyLine(
-    occupantsOf(room.id, gateway.occupancy, gateway.presence, users),
-  );
 
   return (
     <main className="stream">
       <header className="stream-header">
         <span className="room-title">
           <span className="room-name" title={title}>{title}</span>
-          {who !== "" ? <span className="room-occupancy meta">· {who}</span> : null}
         </span>
         {room.topic ? <span className="room-topic meta" title={room.topic}>{room.topic}</span> : null}
         {/* The way out of a historical window (SPEC §4.12). A room opened on a
@@ -889,7 +884,7 @@ function MessageRow({
           aria-expanded={menuAnchor !== null}
           onClick={(event) => setMenuAnchor(event.currentTarget)}
         >
-          <span aria-hidden="true">⋯</span>
+          <ActionIcon name="more" />
         </button>
       )}
       {menuAnchor && !deleted && !editing ? (
