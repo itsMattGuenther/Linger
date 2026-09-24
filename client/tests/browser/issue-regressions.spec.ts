@@ -240,6 +240,34 @@ for (const theme of ["dark", "light"]) {
   });
 }
 
+/**
+ * The first and last rows of `clip` that differ from its top-left pixel, read
+ * from a real screenshot: where the glyphs actually are, not their line box.
+ */
+async function inkRows(page: Page, clip: { x: number; y: number; width: number; height: number }): Promise<[number, number]> {
+  const png = (await page.screenshot({ clip })).toString("base64");
+  return page.evaluate(async ([png, height]) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${png}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, image.width, image.height);
+    const rows: number[] = [];
+    for (let y = 0; y < image.height; y++) {
+      for (let x = 0; x < image.width; x++) {
+        const at = (y * image.width + x) * 4;
+        if ([0, 1, 2].some((c) => Math.abs(data[at + c] - data[c]) > 40)) { rows.push(y); break; }
+      }
+    }
+    const scale = image.height / height;
+    return [rows[0] / scale, rows[rows.length - 1] / scale] as [number, number];
+  }, [png, clip.height] as const);
+}
+
 for (const alone of [true, false]) {
   test(`voice names sit centered and talking moves nothing, ${alone ? "alone" : "with others"} (#137)`, async ({ page }) => {
     await page.goto("/tests/fixtures/console.html");
@@ -283,6 +311,16 @@ for (const alone of [true, false]) {
     const first = await page.locator(".voice-name").first().boundingBox();
     const heading = await page.locator(".voice-label").boundingBox();
     expect(Math.abs((first?.x ?? 0) - (heading?.x ?? 0))).toBeLessThan(1);
+    if (alone && first && heading) {
+      // Vertically: the name's letters sit halfway between the heading's
+      // letters and the bar's bottom edge, measured in pixels.
+      const bar = (await page.locator(".voice-bar").boundingBox())!;
+      const label = await inkRows(page, heading);
+      const name = await inkRows(page, first);
+      const above = first.y + name[0] - (heading.y + label[1]);
+      const below = bar.y + bar.height - 1 - (first.y + name[1]);
+      expect(Math.abs(above - below)).toBeLessThanOrEqual(3);
+    }
 
     await talk(null, true);
     if (!alone) await talk("jules-voice", true);
