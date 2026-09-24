@@ -47,9 +47,12 @@ Who's Around cards and message actions — draws the one shared three-dot icon
 text beside it. Keep control states visible at rest; hover
 reinforces them. Keyboard focus has a separate, restrained 1px neutral ring,
 never just a color shift and never the server accent. Pointer-opened contextual
-panels keep their automatic initial focus without drawing that ring or exposing
-an icon tooltip; the first keyboard navigation reveals the ring. Keyboard-opened
-panels show it immediately. Disabled controls remain recognizable but do not
+panels focus the panel itself rather than their close button, so nothing inside
+draws that ring or exposes an icon tooltip until the first keyboard navigation;
+pointer-opened menus keep focus on their first item, drawn quietly. Whether a
+panel was opened by pointer or keyboard comes from the last input, not from the
+browser's `:focus-visible` guess about the opener. Keyboard-opened panels show
+the ring immediately. Disabled controls remain recognizable but do not
 compete with available actions.
 
 Settings headings and navigation labels use title case. Use sentence case for

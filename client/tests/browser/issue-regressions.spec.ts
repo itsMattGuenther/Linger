@@ -765,6 +765,22 @@ test("hovering a message shows its actions button and changes nothing else (#139
   }
 });
 
+for (const dm of [false, true]) {
+  test(`the ${dm ? "DM" : "room"} header shows its title and no names after it (#145)`, async ({ page }) => {
+    // The fixture puts three people in #general, so the room case is the one
+    // that listed names before. Who is in a room is on the rail and in Who's
+    // Around; the header is the room's name and topic alone.
+    await page.goto("/tests/fixtures/console.html?sending");
+    if (dm) await page.locator(".rail-dms").getByRole("button", { name: "Jules", exact: true }).click();
+    const header = page.locator(".stream > .stream-header");
+    await expect(header.locator(".room-name")).toHaveText(dm ? "Jules" : "#general");
+    await expect(header.locator(".room-title")).toHaveText(dm ? "Jules" : "#general");
+    await expect(header).not.toContainText("·");
+    // The same people are still shown on the rail, where occupancy lives.
+    await expect(page.locator(".room-stack").first()).toHaveAttribute("aria-label", /in the room$/);
+  });
+}
+
 for (const theme of ["dark", "light"]) {
   for (const scale of [100, 200]) {
     test(`every "more" button draws the same centered dots, and the server's lines up with its name, ${theme} ${scale}% (#144)`, async ({ page }) => {

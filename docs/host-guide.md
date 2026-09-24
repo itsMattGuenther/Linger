@@ -323,10 +323,25 @@ you.
 Two things keep it from being a problem. A member can only ask **once an hour**,
 and each member has **one** archive at a time — asking again deletes the
 previous one. So the most it can cost you is one extra copy of your server per
-member, and in practice far less.
+member, and in practice far less. And only **one archive is built at a time**
+across the whole server. If several people ask at once, the others wait their
+turn, so building never needs room for more than one archive at once.
 
 Those archives live alongside your uploaded files and are not counted in the
 storage figure members see. If disk space is tight, that is worth knowing.
+
+Where the space goes depends on your storage backend:
+
+- **`local` (the default):** an archive is built in `data/staging` and then
+  moved in with your uploads. While it builds, it needs about the size of the
+  finished zip in free space.
+- **`s3`:** the finished archive goes to your bucket, but building it does
+  not. The server has to download every file the member can see into
+  `data/staging` before it can zip them, so one export briefly needs about
+  **twice** that member's files in free space on the server's own disk, and
+  downloads all of them from your bucket. That download is free on Cloudflare
+  R2 and billed on plain AWS S3. Using S3 keeps uploads off your server's disk;
+  it does not do that for exports, so leave room for them.
 
 **An export is not your backup.** It is a readable copy for a person. Your
 backup is the `data` folder, above.
