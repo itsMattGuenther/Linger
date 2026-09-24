@@ -352,8 +352,8 @@ for (const alone of [true, false]) {
   test(`voice names sit centered and talking moves nothing, ${alone ? "alone" : "with others"} (#137)`, async ({ page }) => {
     await page.goto("/tests/fixtures/console.html");
     await page.getByRole("button", { name: "Join Voice", exact: true }).click();
-    // Jules is in voice before you join, so wait for your own seat: that
-    // arrives with the join's update, and "alone" has to land after it.
+    // Your own seat is drawn as soon as you click (#141). The fixture holds
+    // "alone" back until the join's own update has gone out, so it lands last.
     await expect(page.getByRole("button", { name: "Matt, you, voice options", exact: true })).toBeVisible();
     if (alone) {
       await page.evaluate(() => document.dispatchEvent(new Event("fixture-voice-alone")));
@@ -515,6 +515,11 @@ test("joining voice keeps your place when you have scrolled up (#142)", async ({
   await page.goto("/tests/fixtures/console.html?slowjoin&history");
   const stream = page.locator(".stream-body");
   await expect(page.locator(".msg").first()).toBeVisible();
+  // Scroll only once the room has finished landing on its newest message. A
+  // wheel turned while it is still landing gets pulled back to the bottom, and
+  // the room marks itself read only after the landing is over.
+  await expect(page.locator("html")).toHaveAttribute("data-read-marker", /.+/);
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await settledVoiceLayout(page);
   await stream.hover();
   await page.mouse.wheel(0, -1200);

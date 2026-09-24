@@ -355,7 +355,8 @@ bindings drift, frontend, and the desktop shell. Green there should mean green
 in CI. Separate checks need additional services or browser engines:
 
 - `scripts/minio-test.sh` tests S3 against a throwaway MinIO. The workspace
-  tests skip S3 without that service.
+  tests skip S3 without that service. MinIO no longer publishes downloads, so
+  build it from source with Go first; the script's header has the command.
 - `bash scripts/coturn-test.sh` needs Docker Engine and Compose. It checks
   that the shipped voice relay starts and refuses an empty secret, without
   opening host ports or using your server data. CI runs this too; it does not

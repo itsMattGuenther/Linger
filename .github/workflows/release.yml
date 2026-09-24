@@ -33,6 +33,7 @@ jobs:
   preflight:
     name: the tag and the key agree with the tree
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: versions match the tag
@@ -62,6 +63,7 @@ jobs:
     # A manual run is a check, not a release. Only a tag builds and publishes.
     if: github.ref_type == 'tag'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       # One platform failing should not throw away the other's finished build.
       # The release is a draft either way, so a partial one is reviewable.

@@ -19,6 +19,7 @@ jobs:
     # build/test jobs. Job-level skips report success even when checks become
     # required; skipping the entire workflow can leave them pending.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
       s3: ${{ steps.classify.outputs.s3 }}
@@ -50,6 +51,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -84,6 +86,7 @@ jobs:
     # and every laptop green without a bucket — so they need a job that sets it,
     # or they would never actually run anywhere.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       LINGER_TEST_S3_ENDPOINT: http://127.0.0.1:9000
       LINGER_TEST_S3_BUCKET: linger-test
@@ -94,22 +97,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # MinIO no longer publishes images or binaries: the Docker Hub image went
+      # first (#64), then the quay.io image and the dl.min.io downloads. The
+      # source is still public, so build the pinned release from it. The tag is
+      # pinned — an object store that changes under the tests is a flaky suite
+      # nobody can debug — and the binary is cached, so this builds once per tag.
+      - name: minio binary cache
+        id: minio-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/minio-bin
+          key: minio-RELEASE.2025-09-07T16-13-09Z-${{ runner.os }}
+      - uses: actions/setup-go@v5
+        if: steps.minio-cache.outputs.cache-hit != 'true'
+        with:
+          go-version: "1.24"
+          cache: false
+      - name: build minio
+        if: steps.minio-cache.outputs.cache-hit != 'true'
+        run: GOBIN="$HOME/minio-bin" go install github.com/minio/minio@RELEASE.2025-09-07T16-13-09Z
       - name: minio
-        # `docker run` and not a `services:` block: a service container cannot
-        # pass a command, and the MinIO image needs `server /data` to start at
-        # all. The tag is pinned — an object store that changes under the tests
-        # is a flaky suite nobody can debug.
+        # Started in the background; it lives until the job ends.
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=$LINGER_TEST_S3_ACCESS_KEY_ID \
-            -e MINIO_ROOT_PASSWORD=$LINGER_TEST_S3_SECRET_ACCESS_KEY \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          mkdir -p "$RUNNER_TEMP/minio-data"
+          MINIO_ROOT_USER=$LINGER_TEST_S3_ACCESS_KEY_ID \
+          MINIO_ROOT_PASSWORD=$LINGER_TEST_S3_SECRET_ACCESS_KEY \
+            nohup "$HOME/minio-bin/minio" server "$RUNNER_TEMP/minio-data" \
+            --address 127.0.0.1:9000 >"$RUNNER_TEMP/minio.log" 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS -o /dev/null "$LINGER_TEST_S3_ENDPOINT/minio/health/live" && exit 0
             sleep 1
           done
           echo "minio never came up" >&2
-          docker logs minio >&2
+          cat "$RUNNER_TEMP/minio.log" >&2
           exit 1
       - name: s3 backend tests
         # The bucket is created by the test harness on first use.
@@ -118,7 +138,10 @@ jobs:
   web:
     needs: changes
     if: ${{ needs.changes.outputs.web == 'true' }}
+    # Each job's limit is about three times a normal run. Without one, a hung
+    # job holds its check pending for GitHub's default of six hours.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: client
@@ -157,6 +180,7 @@ jobs:
     # of thing that has to be gated, not checked by hand. Signed bundles for all
     # three OSes are release.yml, which only a tag fires.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: system webview deps
@@ -190,6 +214,7 @@ jobs:
     # The AGENTS.md hard rules a grep can catch: no AI attribution in commits,
     # identities, or the tree, and the dropped vocabulary stays dropped (SPEC §1).
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
