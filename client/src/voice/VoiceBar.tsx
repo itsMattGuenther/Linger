@@ -149,6 +149,7 @@ export default function VoiceBar({
             }
             className="voice-collapse"
             tooltipSide="below"
+            floatingTooltip
             aria-expanded={!collapsed}
             aria-controls={seatsId}
             onClick={togglePeople}

@@ -60,6 +60,7 @@ export default function VoiceControls({
           type="button"
           className="voice-action"
           tooltipSide="below"
+          floatingTooltip
           aria-pressed={mine.muted}
           disabled={mine.deafened}
           onClick={() =>
@@ -74,6 +75,7 @@ export default function VoiceControls({
         type="button"
         className="voice-action"
         tooltipSide="below"
+        floatingTooltip
         aria-pressed={mine.deafened}
         title="Silence incoming voice and mute your microphone"
         onClick={() =>
@@ -87,6 +89,7 @@ export default function VoiceControls({
         type="button"
         className="voice-action"
         tooltipSide="below"
+        floatingTooltip
         onClick={() => void leaveVoice(server).catch(onProblem)}
       >
         <ActionIcon name="leave" />

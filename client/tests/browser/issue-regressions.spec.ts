@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * The fixture's `holdSend` mock records which sends it is currently holding
@@ -527,6 +527,78 @@ test("joining voice keeps your place when you have scrolled up (#142)", async ({
   // The same message is at the top of the view in every frame.
   expect(new Set(frames.map((frame) => frame.top)).size).toBe(1);
   expect(frames[0]!.fromBottom).toBeGreaterThan(100);
+});
+
+/**
+ * Hover `button` and require its name as one whole tooltip: inside the window,
+ * on top of everything at its middle and corners, and the button drawing no
+ * second, clippable copy of its own.
+ */
+async function expectWholeTooltip(page: Page, button: Locator, name: string): Promise<void> {
+  await button.hover();
+  const tip = page.getByRole("tooltip").filter({ hasText: name });
+  await expect(tip).toBeVisible();
+  const whole = await tip.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    const inset = 2;
+    const points = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + inset, r.top + inset],
+      [r.right - inset, r.top + inset], [r.left + inset, r.bottom - inset], [r.right - inset, r.bottom - inset]];
+    // Tooltips ignore the pointer, which also hides them from
+    // elementFromPoint; let it see this one just for the check.
+    const tooltip = node as HTMLElement;
+    tooltip.style.pointerEvents = "auto";
+    const onTop = points.every(([x, y]) => node.contains(document.elementFromPoint(x!, y!)));
+    tooltip.style.pointerEvents = "";
+    return {
+      inWindow: r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth,
+      onTop,
+    };
+  });
+  expect(whole).toEqual({ inWindow: true, onTop: true });
+  expect(await button.evaluate((node) => getComputedStyle(node, "::after").content)).toBe("none");
+  await page.mouse.move(1, 1);
+  await expect(tip).toHaveCount(0);
+}
+
+const VOICE_TIPS = ["Mute", "Deafen", "Leave voice"];
+
+for (const [label, height, collapse] of [["expanded", 800, false], ["collapsed", 800, true], ["collapsed in a short window", 340, true]] as const) {
+  test(`voice control tooltips show whole, ${label} (#140)`, async ({ page }) => {
+    await page.setViewportSize({ width: 900, height });
+    await page.goto("/tests/fixtures/console.html");
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Leave voice", exact: true })).toBeVisible();
+    const toggle = page.getByRole("button", { name: collapse ? "Collapse voice participants" : "Expand voice participants" });
+    if (await toggle.count()) await toggle.click();
+    if (collapse) await expect(page.locator(".voice-bar")).toHaveAttribute("data-collapsed", "true");
+    else await expect(page.locator(".voice-bar")).not.toHaveAttribute("data-collapsed");
+    for (const name of VOICE_TIPS) {
+      await expectWholeTooltip(page, page.getByRole("button", { name, exact: true }), name);
+    }
+    await expectWholeTooltip(page, page.locator(".voice-collapse"),
+      collapse ? "Expand voice participants" : "Collapse voice participants");
+  });
+}
+
+test("voice control tooltips show whole under the push-to-talk line and in the ongoing strip (#140)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  // Push-to-talk puts "hold ctrl to talk" in the bar. Before #141 that moved
+  // the controls to its bottom edge, where a tooltip drawn below them was cut
+  // off; the line now sits by the heading, and the tooltips must stay whole.
+  await expect(page.locator(".voice-bar .voice-line")).toBeVisible();
+  for (const name of ["Deafen", "Leave voice"]) {
+    await expectWholeTooltip(page, page.locator(".voice-bar").getByRole("button", { name, exact: true }), name);
+  }
+  // The ongoing strip sits on the window's bottom edge.
+  await page.getByRole("button", { name: "Settings", exact: true }).first().click();
+  const ongoing = page.getByRole("region", { name: "Ongoing voice" });
+  await expect(ongoing).toBeVisible();
+  for (const name of ["Deafen", "Leave voice"]) {
+    await expectWholeTooltip(page, ongoing.getByRole("button", { name, exact: true }), name);
+  }
 });
 
 test("a search jump wins over the saved room boundary (#123)", async ({ page }) => {
