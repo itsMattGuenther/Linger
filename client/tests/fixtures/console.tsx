@@ -230,6 +230,9 @@ const server = {
 };
 const frame = (value: ServerFrame) =>
   emit("gateway:frame", { server: baseUrl, frame: value });
+// A counter, not `Date.now()`: two sends held and released close together in
+// a test can land in the same millisecond, and real ids (UUIDv7) never tie.
+let sentSeq = 0;
 Object.defineProperty(globalThis, "isTauri", { value: true });
 mockIPC(
   async (cmd, args) => {
@@ -415,13 +418,19 @@ globalThis.fetch = async (input, init) => {
       const posted: CreateMessageRequest = JSON.parse(String(init.body));
       document.documentElement.dataset.lastSent = JSON.stringify(posted);
       if (document.documentElement.dataset.holdSend === "yes") {
+        // A bare "finish-send" releases every held send at once, which is all
+        // the single-send tests need. Several can be held at a time now that
+        // sending is optimistic (#128), so a test can also release one send
+        // by name — "finish-send:<body>" — without touching the others.
         await new Promise<void>((resolve, reject) => {
-          document.addEventListener("finish-send", () => resolve(), { once: true });
+          const release = (): void => resolve();
+          document.addEventListener("finish-send", release, { once: true });
+          document.addEventListener(`finish-send:${posted.body}`, release, { once: true });
           init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
         });
       }
       if (document.documentElement.dataset.refuseSend === "yes") return Response.json({ error: { code: "FORBIDDEN", message: "This message was refused.", retry_after_ms: null } }, { status: 403 });
-      const message: Message = { ...messages[0]!, id: `sent-${Date.now()}`, room_id: roomId, author_id: me.id, body: posted.body, reply_to: posted.reply_to ?? null, created_at: Date.now(), reactions: [] };
+      const message: Message = { ...messages[0]!, id: `sent-${String(++sentSeq).padStart(5, "0")}`, room_id: roomId, author_id: me.id, body: posted.body, reply_to: posted.reply_to ?? null, created_at: Date.now(), reactions: [] };
       await frame({ op: "message.create", d: message });
       return Response.json(message);
     }

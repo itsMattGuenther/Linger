@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 for (const dm of [false, true]) {
-  test(`Enter clears immediately and preserves the next draft in ${dm ? "DM" : "room"} (#117)`, async ({ page }) => {
+  test(`Enter clears immediately, shows the message before it is confirmed, and preserves the next draft in ${dm ? "DM" : "room"} (#117, #128)`, async ({ page }) => {
     await page.goto("/tests/fixtures/console.html?sending");
     if (dm) await page.locator(".rail-dms").getByRole("button", { name: "Jules", exact: true }).click();
     const box = page.locator(".composer-input");
@@ -10,10 +10,15 @@ for (const dm of [false, true]) {
     await box.press("Enter");
     await expect(box).toBeEmpty();
     await expect(box).toBeFocused();
+    // Shown right away — sending does not wait on the server's answer.
+    const row = page.locator(".msg", { hasText: "First message" });
+    await expect(row).toHaveAttribute("data-pending", "true");
+    await expect(row.locator(".msg-actions-trigger")).toHaveCount(0);
     await box.pressSequentially("Next draft");
     await expect(page.locator("html")).toHaveAttribute("data-last-sent", /First message/);
     await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
-    await expect(page.getByRole("status").filter({ hasText: "Sending…" })).toHaveCount(0);
+    await expect(row).not.toHaveAttribute("data-pending", "true");
+    await expect(row.locator(".msg-actions-trigger")).toHaveCount(1);
     await expect(box).toHaveValue("Next draft");
     await box.press("Shift+Enter");
     await box.pressSequentially("second line");
@@ -21,7 +26,7 @@ for (const dm of [false, true]) {
   });
 }
 
-test("failed sends restore text and preserve a newer draft separately (#117, #118)", async ({ page }) => {
+test("failed sends restore text, or keep a draft already being typed, untouched (#117, #118)", async ({ page }) => {
   await page.goto("/tests/fixtures/console.html?sending");
   const box = page.locator(".composer-input");
   await page.evaluate(() => { document.documentElement.dataset.refuseSend = "yes"; });
@@ -32,9 +37,9 @@ test("failed sends restore text and preserve a newer draft separately (#117, #11
   await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
   await box.press("Enter");
   await expect(box).toBeEmpty();
+  // A draft typed while that retry is still open — not a second send, just
+  // text sitting in the box — must not be touched by how the retry resolves.
   await box.fill("A newer draft");
-  await box.press("Enter");
-  await expect(page.getByText(/previous message is still sending/)).toBeVisible();
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
   await expect(page.locator(".composer-unsent-text")).toHaveText("Keep this text");
   await expect(box).toHaveValue("A newer draft");
@@ -44,6 +49,91 @@ test("failed sends restore text and preserve a newer draft separately (#117, #11
   await expect(box).toHaveValue("A newer draft");
   await box.press("Enter");
   await expect(box).toBeEmpty();
+});
+
+test("a second message can be sent before the first is confirmed, in submission order (#128)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?sending");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
+  await box.fill("Alpha");
+  await box.press("Enter");
+  await expect(box).toBeEmpty();
+  await box.fill("Beta");
+  await box.press("Enter");
+  await expect(box).toBeEmpty();
+  const bodies = page.locator(".msg-body");
+  await expect(bodies.nth(-2)).toHaveText("Alpha");
+  await expect(bodies.last()).toHaveText("Beta");
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
+  await expect(page.locator('.msg[data-pending="true"]')).toHaveCount(0);
+});
+
+test("whichever send confirms first settles ahead of one still pending, and the order holds once both land (#128)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?sending");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
+  await box.fill("Gamma");
+  await box.press("Enter");
+  await box.fill("Delta");
+  await box.press("Enter");
+  const bodies = page.locator(".msg-body");
+  // Typed and shown in that order, both still unconfirmed.
+  await expect(bodies.nth(-2)).toHaveText("Gamma");
+  await expect(bodies.last()).toHaveText("Delta");
+  // Delta's answer comes back first — it settles ahead of the still-pending
+  // Gamma, because a confirmed message is never shown behind an unconfirmed
+  // one. This is the one place the order you sent in and the order shown can
+  // legitimately differ.
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send:Delta")));
+  await expect(bodies.nth(-2)).toHaveText("Delta");
+  await expect(bodies.last()).toHaveText("Gamma");
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send:Gamma")));
+  await expect(bodies.nth(-2)).toHaveText("Delta");
+  await expect(bodies.last()).toHaveText("Gamma");
+  await expect(page.locator('.msg[data-pending="true"]')).toHaveCount(0);
+});
+
+test("a send's own live announcement arriving early never leaves a duplicate on screen (#128)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?sending");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
+  await box.fill("Solo delivery check");
+  await box.press("Enter");
+  // The fixture's own answer to this send announces the confirmed message
+  // over the socket before it lets the POST itself return — the same order a
+  // real server can produce. Nothing should ever show it twice.
+  await expect(page.locator(".msg-body", { hasText: "Solo delivery check" })).toHaveCount(1);
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
+  await expect(page.locator(".msg-body", { hasText: "Solo delivery check" })).toHaveCount(1);
+  await expect(page.locator(".msg", { hasText: "Solo delivery check" })).not.toHaveAttribute("data-pending", "true");
+});
+
+test("sending the same text twice settles as two separate messages, not one or three (#128)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?sending");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
+  await box.fill("Twin message");
+  await box.press("Enter");
+  await box.fill("Twin message");
+  await box.press("Enter");
+  const twins = page.locator(".msg-body", { hasText: "Twin message" });
+  await expect(twins).toHaveCount(2);
+  await expect(page.locator('.msg[data-pending="true"]', { hasText: "Twin message" })).toHaveCount(2);
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
+  await expect(twins).toHaveCount(2);
+  await expect(page.locator('.msg[data-pending="true"]', { hasText: "Twin message" })).toHaveCount(0);
+});
+
+test("nothing labeled Sending ever appears in the composer while a send is open (#129)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?sending");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => { document.documentElement.dataset.holdSend = "yes"; });
+  await box.fill("Checking the composer stays clear");
+  await box.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: "Sending" })).toHaveCount(0);
+  await expect(page.locator(".meta", { hasText: "Sending" })).toHaveCount(0);
+  await expect(box).toBeVisible();
+  await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
 });
 
 test("stalled send times out visibly and Enter recovers (#118)", async ({ page }) => {
