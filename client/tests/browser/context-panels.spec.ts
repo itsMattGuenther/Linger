@@ -214,14 +214,27 @@ test("context panels keep pointer autofocus quiet and show restrained keyboard f
     exact: true,
   });
 
+  // A pointer open focuses the panel itself, not its close button (#143).
   await trigger.click();
-  await expect(close).toBeFocused();
+  await expect(panel).toBeFocused();
+  await expect(close).not.toBeFocused();
+  await expect(panel).toHaveCSS("outline-style", "none");
   await expect(close).toHaveCSS("outline-style", "none");
   await expect
     .poll(() =>
       close.evaluate((node) => getComputedStyle(node, "::after").visibility),
     )
     .toBe("hidden");
+
+  // The first Tab enters at the close button and shows it as keyboard focus.
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await expect(close).toHaveCSS("outline-style", "solid");
+  await expect
+    .poll(() =>
+      close.evaluate((node) => getComputedStyle(node, "::after").visibility),
+    )
+    .toBe("visible");
 
   await page.keyboard.press("Tab");
   const settings = panel.getByRole("button", {
@@ -332,4 +345,72 @@ test("a late DM response cannot reopen a dismissed member popout", async ({
   await expect(
     page.getByRole("dialog", { name: "Jules's profile", exact: true }),
   ).toHaveCount(0);
+});
+
+/** The close button's tooltip, which is drawn by its `::after`. */
+function tooltipOf(close: import("@playwright/test").Locator) {
+  return close.evaluate((node) => getComputedStyle(node, "::after").visibility);
+}
+
+test("opening any panel with the mouse highlights nothing and shows no tooltip, even straight after a keyboard open (#143)", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/console.html");
+  const panels = [
+    {
+      trigger: page.getByRole("button", { name: "Server options", exact: true }),
+      name: "Server options",
+    },
+    {
+      trigger: page.locator(".roster").getByRole("button", { name: /Jules/ }),
+      name: "Jules's profile",
+    },
+    {
+      trigger: page.locator(".voice-seats").getByRole("button", { name: /Jules/ }).first(),
+      name: "Voice options for Jules",
+    },
+  ];
+
+  for (const { trigger, name } of panels) {
+    const panel = page.getByRole("dialog", { name, exact: true });
+    const close = panel.getByRole("button", { name: `Close ${name}`, exact: true });
+
+    // Keyboard first: Escape hands focus back to the opener with its ring on,
+    // which is exactly the state the old check misread as "opened by keyboard"
+    // on the next mouse click.
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(close).toBeFocused();
+    await expect(close).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    for (const when of ["first click after a keyboard open", "second click"]) {
+      const pass = `${name}, ${when}`;
+      await trigger.click();
+      await expect(panel, pass).toBeVisible();
+      await expect(panel, pass).toBeFocused();
+      await expect(close, pass).not.toBeFocused();
+      await expect(close, pass).toHaveCSS("outline-style", "none");
+      await expect.poll(() => tooltipOf(close), pass).toBe("hidden");
+
+      // Hover still names the button.
+      await close.hover();
+      await expect.poll(() => tooltipOf(close), pass).toBe("visible");
+      await page.mouse.move(1, 1);
+      await expect.poll(() => tooltipOf(close), pass).toBe("hidden");
+
+      // Shift+Tab from the panel wraps to its last control, not out of it.
+      // (For the voice panel out of voice, the close button is the only one.)
+      await page.keyboard.press("Shift+Tab");
+      await expect(
+        panel.locator("button:visible, input:visible, a[href]:visible").last(),
+        pass,
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(panel, pass).toHaveCount(0);
+      await expect(trigger, pass).toBeFocused();
+    }
+  }
 });

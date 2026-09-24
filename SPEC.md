@@ -699,9 +699,11 @@ switches use a pill track and circular thumb. Panels stay square and shadow-free
 The single-line composer input and Send button share an outer height; Send
 keeps that height when the input grows. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger. Pointer-opened contextual panels keep that automatic focus
-visually quiet until keyboard navigation begins; keyboard-opened panels show the
-focus ring immediately. Settings headings and navigation labels use title case.
+click or its trigger. A pointer-opened contextual panel takes focus on the panel
+itself, so no control inside it is highlighted and no tooltip shows until
+keyboard navigation begins; a pointer-opened menu keeps focus on its first item,
+drawn quietly. Keyboard-opened panels focus their close button (or first item)
+and show the focus ring immediately. Settings headings and navigation labels use title case.
 The shared control language covers chat, settings and welcome; see
 `docs/style-guide.md` for the reference and verification limits.
 
