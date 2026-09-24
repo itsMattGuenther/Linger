@@ -2,8 +2,16 @@ import { expect, test } from "@playwright/test";
 
 test("shared states distinguish mute, deafen and legacy clients", async ({ page }) => {
   await page.goto("/tests/fixtures/voice.html");
-  await expect(page.getByRole("listitem").filter({ hasText: "Muted friend" })).toContainText("muted");
-  await expect(page.getByRole("listitem").filter({ hasText: "Deafened friend" })).toContainText("deafened");
+  // Muted and deafened are the controls' glyphs, not words: the word is only
+  // for screen readers and the tooltip.
+  for (const [who, state] of [["Muted friend", "Muted"], ["Deafened friend", "Deafened"]] as const) {
+    const seat = page.getByRole("listitem").filter({ hasText: who });
+    const icon = seat.locator(".voice-state-icon");
+    await expect(icon).toHaveAttribute("title", state);
+    await expect(icon.locator("svg")).toBeVisible();
+    await expect(icon.locator(".sr-only")).toHaveText(state);
+    await expect(seat.locator(".meta")).toHaveCount(0);
+  }
   await expect(page.getByRole("listitem").filter({ hasText: "Legacy friend" })).toContainText("mic state unknown");
 });
 

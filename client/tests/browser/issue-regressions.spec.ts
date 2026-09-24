@@ -235,8 +235,58 @@ for (const theme of ["dark", "light"]) {
     expect(shape.gap).toBeLessThan(1);
     expect(shape.whitespace).toBe("nowrap");
     expect(shape.thickness).toBe("2px");
-    await expect(page.locator('[data-talking="true"] .voice-name')).toHaveCSS("font-weight", "700");
-    await expect(page.locator('[data-talking="true"] .voice-name')).toHaveCSS("text-decoration-line", "underline");
+    // The mark is #138's turned-over name, not #121's weight and underline.
+    const talking = page.locator('[data-talking="true"] .voice-name');
+    await expect(talking).toHaveCSS("background-image", /gradient/);
+    await expect(talking).toHaveCSS("text-decoration-line", "none");
+  });
+}
+
+/** The computed `rgb()` of a color token, for comparing against computed styles. */
+function tokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((token) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
+for (const theme of ["dark", "light"]) {
+  test(`a talking name turns over onto its own color, and only while talking, in ${theme} (#138)`, async ({ page, browserName }) => {
+    await page.goto("/tests/fixtures/voice.html");
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    await page.evaluate(() => document.dispatchEvent(new Event("fixture-seats")));
+    const talking = page.locator('.voice-seat[data-talking="true"] .voice-name');
+    const quiet = page.locator('.voice-seat:not([data-talking]) .voice-name').first();
+    await expect(talking).toHaveCount(1);
+    // Letters in the app background, which is the pair the palette's contrast
+    // test guarantees, on a block painted in the person's own color.
+    const background = await tokenColor(page, "--surface-0");
+    await expect(talking).toHaveCSS("-webkit-text-fill-color", background);
+    await expect(talking).toHaveCSS("background-image", /gradient/);
+    await expect(talking).toHaveCSS("background-clip", "border-box");
+    // Same weight as a quiet name: talking changes the block, not the letters.
+    await expect(talking).toHaveCSS("font-weight", await quiet.evaluate((name) => getComputedStyle(name).fontWeight));
+    await expect(quiet).toHaveCSS("background-image", "none");
+
+    // Normalized names: the block is the reader's text color.
+    await page.evaluate(() => { document.documentElement.dataset.normalize = "true"; });
+    await expect(talking).toHaveCSS("background-image", "none");
+    await expect(talking).toHaveCSS("background-color", await tokenColor(page, "--text-primary"));
+    await expect(talking).toHaveCSS("-webkit-text-fill-color", background);
+    await page.evaluate(() => { delete document.documentElement.dataset.normalize; });
+
+    // Forced colors strip author backgrounds; the mark must survive that.
+    // Only Chromium can emulate it.
+    if (browserName === "chromium") {
+      await page.emulateMedia({ forcedColors: "active" });
+      await expect(talking).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(talking).toHaveCSS("forced-color-adjust", "none");
+    }
   });
 }
 
@@ -268,6 +318,36 @@ async function inkRows(page: Page, clip: { x: number; y: number; width: number; 
   }, [png, clip.height] as const);
 }
 
+/**
+ * Every box whose size or place a reader could notice around the voice bar:
+ * the bar, each seat and name, the state line, and the first messages under it.
+ */
+function voiceLayout(page: Page) {
+  return page.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r ? [r.x, r.y, r.width, r.height] : null;
+    };
+    return [".voice-bar", ".voice-seat", ".voice-name", ".voice-seat-state", ".msg"].flatMap((selector) =>
+      [...document.querySelectorAll(selector)].slice(0, 4).map((el) => [selector, box(el)]));
+  });
+}
+
+/**
+ * [`voiceLayout`] once it has stopped changing: the stream is still measuring
+ * its rows just after load, so wait until two readings agree.
+ */
+async function settledVoiceLayout(page: Page) {
+  let last = await voiceLayout(page);
+  await expect.poll(async () => {
+    const again = await voiceLayout(page);
+    const settled = JSON.stringify(again) === JSON.stringify(last);
+    last = again;
+    return settled;
+  }).toBe(true);
+  return last;
+}
+
 for (const alone of [true, false]) {
   test(`voice names sit centered and talking moves nothing, ${alone ? "alone" : "with others"} (#137)`, async ({ page }) => {
     await page.goto("/tests/fixtures/console.html");
@@ -282,25 +362,8 @@ for (const alone of [true, false]) {
     const talk = (peer: string | null, talking: boolean) =>
       page.evaluate(([peer, talking]) =>
         document.dispatchEvent(new CustomEvent("fixture-talking", { detail: [peer, talking] })), [peer, talking] as const);
-    // Every box whose size or place a reader could notice: the bar, each seat
-    // and name, and the first message under the bar.
-    const layout = () => page.evaluate(() => {
-      const box = (el: Element | null) => {
-        const r = el?.getBoundingClientRect();
-        return r ? [r.x, r.y, r.width, r.height] : null;
-      };
-      return [".voice-bar", ".voice-seat", ".voice-name", ".voice-seat-state", ".msg"].flatMap((selector) =>
-        [...document.querySelectorAll(selector)].slice(0, 4).map((el) => [selector, box(el)]));
-    });
-    // The stream is still measuring its rows just after load; wait until two
-    // readings agree before calling this the at-rest layout.
-    let quiet = await layout();
-    await expect.poll(async () => {
-      const again = await layout();
-      const settled = JSON.stringify(again) === JSON.stringify(quiet);
-      quiet = again;
-      return settled;
-    }).toBe(true);
+    const layout = () => voiceLayout(page);
+    const quiet = await settledVoiceLayout(page);
 
     const seats = page.locator(".voice-seat");
     const centers = await seats.evaluateAll((nodes) => nodes.map((seat) => {
@@ -308,9 +371,12 @@ for (const alone of [true, false]) {
       return Math.abs(s.x + s.width / 2 - (n.x + n.width / 2));
     }));
     for (const off of centers) expect(off).toBeLessThan(1);
-    const first = await page.locator(".voice-name").first().boundingBox();
+    // The name's letters, inside its padding, line up with the heading's.
+    const letters = await page.locator(".voice-name").first().evaluate((name) =>
+      name.getBoundingClientRect().x + parseFloat(getComputedStyle(name).paddingLeft));
     const heading = await page.locator(".voice-label").boundingBox();
-    expect(Math.abs((first?.x ?? 0) - (heading?.x ?? 0))).toBeLessThan(1);
+    expect(Math.abs(letters - (heading?.x ?? 0))).toBeLessThan(1);
+    const first = await page.locator(".voice-name").first().boundingBox();
     if (alone && first && heading) {
       // Vertically: the name's letters sit halfway between the heading's
       // letters and the bar's bottom edge, measured in pixels.
@@ -325,13 +391,54 @@ for (const alone of [true, false]) {
     await talk(null, true);
     if (!alone) await talk("jules-voice", true);
     await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(alone ? 1 : 2);
-    await expect(page.locator('[data-talking="true"] .voice-name').first()).toHaveCSS("font-weight", "700");
+    await expect(page.locator('[data-talking="true"] .voice-name').first()).toHaveCSS("background-image", /gradient/);
     expect(await layout()).toEqual(quiet);
 
     await talk(null, false);
     if (!alone) await talk("jules-voice", false);
     await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(0);
     expect(await layout()).toEqual(quiet);
+  });
+}
+
+for (const alone of [true, false]) {
+  test(`muting shows a glyph beside the name and moves nothing, ${alone ? "alone" : "with others"} (#138)`, async ({ page }) => {
+    await page.goto("/tests/fixtures/console.html");
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Matt, you, voice options", exact: true })).toBeVisible();
+    if (alone) {
+      await page.evaluate(() => document.dispatchEvent(new Event("fixture-voice-alone")));
+      await expect(page.locator(".voice-seat")).toHaveCount(1);
+    }
+    const mine = page.locator(".voice-seat").first();
+    await expect(mine.locator(".voice-state-icon")).toHaveCount(0);
+    const before = await settledVoiceLayout(page);
+
+    await page.getByRole("button", { name: "Mute", exact: true }).click();
+    const icon = mine.locator(".voice-state-icon");
+    await expect(icon).toHaveAttribute("title", "Muted");
+    expect(await voiceLayout(page)).toEqual(before);
+
+    // The glyph reads as this name's: right of its letters, nearer them than
+    // the next name, and inside the bar.
+    const shape = await mine.evaluate((seat) => {
+      const name = seat.querySelector(".voice-name")!, glyph = seat.querySelector(".voice-state-icon")!;
+      const n = name.getBoundingClientRect(), g = glyph.getBoundingClientRect();
+      const letters = n.right - parseFloat(getComputedStyle(name).paddingRight);
+      const next = seat.nextElementSibling?.querySelector(".voice-name");
+      const nextLetters = next ? next.getBoundingClientRect().x + parseFloat(getComputedStyle(next).paddingLeft) : null;
+      const bar = seat.closest(".voice-bar")!.getBoundingClientRect();
+      return { own: g.x - letters, next: nextLetters === null ? null : nextLetters - g.right, right: g.right, barRight: bar.right,
+        middle: Math.abs(g.y + g.height / 2 - (n.y + n.height / 2)) };
+    });
+    expect(shape.own).toBeGreaterThan(0);
+    if (shape.next !== null) expect(shape.next).toBeGreaterThan(shape.own * 2);
+    expect(shape.right).toBeLessThanOrEqual(shape.barRight);
+    expect(shape.middle).toBeLessThan(1);
+
+    await page.getByRole("button", { name: "Muted", exact: true }).click();
+    await expect(icon).toHaveCount(0);
+    expect(await voiceLayout(page)).toEqual(before);
   });
 }
 

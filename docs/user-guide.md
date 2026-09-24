@@ -293,8 +293,8 @@ successful save. Treat download links as private, especially for DM files.
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
 invite: you are already in the room, and **Join Voice** under the room's name
 turns your microphone on there. The line under the header then says who is in
-voice. Names stay readable; a bold name with an underline directly beneath its
-letters marks who is speaking. Your own name comes first, without a visible
+voice. Names stay readable; whoever is speaking has their name turned over,
+drawn on a small block of their own color. Your own name comes first, without a visible
 “you” label; screen readers still identify it.
 
 While you are in:
@@ -304,7 +304,9 @@ While you are in:
 - **deafen** silences incoming voice and mutes your microphone together.
   **undeafen** restores your previous mic choice; with push-to-talk, press
   `ctrl` again to speak. Deafen does not change notification sounds.
-- Names show **muted** or **deafened** when that person shares their state.
+- A crossed-out microphone beside a name means that person is muted, and
+  crossed-out headphones mean they are deafened, when they share their state.
+  Hover the symbol for the word.
   **mic state unknown** means their client or the server needs an update.
   An unmuted microphone is not a guarantee somebody is listening.
 - Click a voice participant's name to adjust **how loud they are for you**.
