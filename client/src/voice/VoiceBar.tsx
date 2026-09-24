@@ -23,7 +23,14 @@ import {
   voicePeersIn,
 } from "../lib/gateway";
 import { nameProps } from "../lib/names";
-import { clampVolume, loadVoicePrefs, seatsOf, volumeLabel } from "./voice";
+import {
+  clampVolume,
+  loadVoicePrefs,
+  microphoneLine,
+  seatsOf,
+  volumeLabel,
+  withMySeat,
+} from "./voice";
 import "./voice.css";
 import { useWindowHeight } from "../lib/layout";
 import { useInterfaceScale } from "../lib/interface";
@@ -105,7 +112,25 @@ export default function VoiceBar({
     }
   };
 
-  const seats = seatsOf(peers, users, gateway.sessionId);
+  const me =
+    seatedHere && gateway.me !== null
+      ? {
+          userId: gateway.me.id,
+          controls: { muted: mine.muted, deafened: mine.deafened },
+        }
+      : null;
+  const seats = seatsOf(
+    withMySeat(peers, gateway.sessionId, me),
+    users,
+    gateway.sessionId,
+  );
+  // Your microphone's one line sits beside the heading rather than with the
+  // controls: there it changes no row's height and moves no button, so
+  // "opening the microphone…" appears in the bar's final layout (#141).
+  const line =
+    seatedHere && !mine.deafened
+      ? microphoneLine(mine.audio, mine.pushToTalk, mine.muted)
+      : null;
   const selectedSeat = seats.find((seat) => seat.sessionId === selected);
 
   return (
@@ -134,6 +159,7 @@ export default function VoiceBar({
           <ActionIcon name="mic" />
         )}
         <span className="voice-label">{seatedHere ? "In voice" : "Voice"}</span>
+        {line === null ? null : <span className="voice-line meta">{line}</span>}
       </div>
       <ul
         id={seatsId}
@@ -239,6 +265,7 @@ export default function VoiceBar({
           server={api.baseUrl}
           mine={mine}
           onProblem={controlProblem}
+          showLine={false}
         />
       ) : (
         <div className="voice-controls">
