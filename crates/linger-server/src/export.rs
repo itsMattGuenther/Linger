@@ -18,6 +18,11 @@
 //!   bytes first. Otherwise a server accumulates a complete copy of itself per
 //!   member per request, and the feature that is supposed to protect a host
 //!   fills their disk instead.
+//! - **One archive builds at a time, server-wide.** The per-member limits do
+//!   not stop twenty members asking in the same minute, and every archive being
+//!   built holds a copy of what it carries in scratch — twice over on S3, where
+//!   the files are downloaded before they are zipped. So jobs wait their turn in
+//!   `queued`, which the client already shows as work in progress.
 //! - **The zip is written on a blocking thread.** `zip` is synchronous and an
 //!   archive is hundreds of megabytes; writing it on the reactor would stall
 //!   every other connection (AGENTS.md: never block the reactor).
@@ -49,6 +54,11 @@ fn anyhowed(err: ApiError) -> anyhow::Error {
 /// How many messages one database round trip pulls. Big enough that a busy room
 /// is a handful of queries, small enough that none of them holds much memory.
 const BATCH: u32 = 500;
+
+/// How many archives build at the same time across the whole server. One:
+/// the peak scratch an export can take is then one member's archive, whatever
+/// everybody else does, and nobody is waiting on anything but time.
+pub const BUILDING_AT_ONCE: usize = 1;
 
 /// Where an archive's bytes live. Not an `attachments` key: an export is not
 /// part of the media collection, does not count against `LINGER_POOL_BYTES`,
@@ -92,6 +102,12 @@ pub async fn start(state: &AppState, user_id: UserId) -> Result<ExportId, ApiErr
 
     let worker = state.clone();
     tokio::spawn(async move {
+        // Wait for a turn before touching the disk. The permit is held until
+        // this task ends, whichever way it ends. The semaphore is never
+        // closed, so an error here cannot happen; the row stays `queued`.
+        let Ok(_turn) = worker.exports.acquire().await else {
+            return;
+        };
         if let Err(err) = run(&worker, id, user_id).await {
             tracing::error!(export = %id, error = %err, "export failed");
             let _ = sqlx::query(
@@ -177,10 +193,18 @@ async fn set_progress(state: &AppState, id: ExportId, progress: f64) {
 
 /// Build the archive, store it, mark the row complete.
 async fn run(state: &AppState, id: ExportId, asker: UserId) -> anyhow::Result<()> {
-    sqlx::query("UPDATE exports SET state = 'running' WHERE id = ?")
-        .bind(id.to_vec())
-        .execute(&state.db.write)
-        .await?;
+    // While this job waited its turn, the member may have asked again, and
+    // asking again deletes this row. Building it anyway would store an archive
+    // nothing points at — the leak `forget_previous` exists to prevent.
+    let claimed =
+        sqlx::query("UPDATE exports SET state = 'running' WHERE id = ? AND state = 'queued'")
+            .bind(id.to_vec())
+            .execute(&state.db.write)
+            .await?;
+    if claimed.rows_affected() == 0 {
+        tracing::info!(export = %id, "export was replaced while it waited; not building it");
+        return Ok(());
+    }
 
     // Scratch, not the data directory: everything here is thrown away, and
     // `TempDir` takes it with us whichever way this function leaves.

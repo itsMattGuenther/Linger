@@ -460,3 +460,122 @@ async fn asking_again_replaces_the_previous_archive() {
         "the previous archive is still downloadable"
     );
 }
+
+/// Poll one job through the worker, not the door, until it finishes.
+async fn wait_for(server: &TestServer, id: linger_core::ExportId, user: linger_core::UserId) {
+    for _ in 0..200 {
+        let job = linger_server::export::job(&server.state, id, user)
+            .await
+            .unwrap()
+            .expect("the job exists");
+        match job.state {
+            ExportState::Complete => return,
+            ExportState::Failed => panic!("the export failed"),
+            ExportState::Queued | ExportState::Running => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+    }
+    panic!("the export never finished");
+}
+
+#[tokio::test]
+async fn exports_wait_their_turn_rather_than_building_side_by_side() {
+    // The per-member limits do not stop every member asking at once, and
+    // every archive being built holds its own copy of the server in scratch.
+    // So there is one turn, server-wide, and everybody else waits in `queued`.
+    let server = spawn_server().await;
+    let host: AuthResponse = bootstrap_host(&server).await;
+    let member = join_member(&server, &host.access_token, "callie").await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    say(&server, &host.access_token, &room, "hello").await;
+
+    // Somebody else's archive is building: the one turn is taken.
+    let turn = server.state.exports.clone().acquire_owned().await.unwrap();
+
+    let mut started = Vec::new();
+    for who in [&host, &member] {
+        let job: ExportStarted = client()
+            .post(server.url("/export"))
+            .bearer_auth(&who.access_token)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        started.push((who, job.job_id));
+    }
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    for (who, id) in &started {
+        let job = linger_server::export::job(&server.state, *id, who.user.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(job.state, ExportState::Queued),
+            "an export started building while another held the turn"
+        );
+        assert!(job.progress.abs() < f32::EPSILON);
+    }
+    // Waiting costs no disk: nothing has been staged yet.
+    let staged = std::fs::read_dir(server.state.config.staging_dir())
+        .map(|entries| entries.count())
+        .unwrap_or(0);
+    assert_eq!(staged, 0, "a waiting export wrote to scratch");
+
+    drop(turn);
+    for (who, id) in started {
+        wait_for(&server, id, who.user.id).await;
+    }
+}
+
+#[tokio::test]
+async fn an_export_replaced_while_it_waited_is_never_built() {
+    // Asking again deletes the previous job's row. A job that was still
+    // waiting for its turn must notice, or it builds and stores an archive
+    // with nothing pointing at it — bytes on the host's disk nobody can reach.
+    use linger_server::storage::{ObjectStore, ServeAs};
+
+    let server = spawn_server().await;
+    let host: AuthResponse = bootstrap_host(&server).await;
+    make_room(&server, &host.access_token, "general", None).await;
+
+    let turn = server.state.exports.clone().acquire_owned().await.unwrap();
+    let replaced = linger_server::export::start(&server.state, host.user.id)
+        .await
+        .unwrap();
+    let current = linger_server::export::start(&server.state, host.user.id)
+        .await
+        .unwrap();
+    drop(turn);
+
+    wait_for(&server, current, host.user.id).await;
+    // Whichever of the two got the turn first, give the other time to take
+    // it and give it back.
+    for _ in 0..40 {
+        if server.state.exports.available_permits() == linger_server::export::BUILDING_AT_ONCE {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert!(
+        linger_server::export::job(&server.state, replaced, host.user.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let serve = ServeAs::for_object("application/zip", "archive.zip");
+    let object: &dyn ObjectStore = server.state.storage.as_ref();
+    assert!(
+        object
+            .read_object(&linger_server::export::object_key(replaced), &serve)
+            .await
+            .unwrap()
+            .is_none(),
+        "the replaced export was built and stored anyway"
+    );
+}

@@ -323,7 +323,9 @@ you.
 Two things keep it from being a problem. A member can only ask **once an hour**,
 and each member has **one** archive at a time — asking again deletes the
 previous one. So the most it can cost you is one extra copy of your server per
-member, and in practice far less.
+member, and in practice far less. And only **one archive is built at a time**
+across the whole server. If several people ask at once, the others wait their
+turn, so building never needs room for more than one archive at once.
 
 Those archives live alongside your uploaded files and are not counted in the
 storage figure members see. If disk space is tight, that is worth knowing.

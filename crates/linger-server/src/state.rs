@@ -3,6 +3,8 @@
 
 use std::sync::Arc;
 
+use tokio::sync::Semaphore;
+
 use crate::auth::JwtKeys;
 use crate::config::{Config, Storage};
 use crate::db::Db;
@@ -26,6 +28,10 @@ pub struct AppState {
     /// so the listener route needs the concrete type, and its absence is how
     /// that route knows it has nothing to do.
     pub local: Option<Arc<LocalStore>>,
+    /// How many export archives may build at once, across the whole server.
+    /// The per-member limits bound what one person can ask for; this bounds
+    /// what everybody asking at once costs the host's disk (`export.rs`).
+    pub exports: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -66,6 +72,7 @@ impl AppState {
             setup: Arc::new(SetupState::new(user_count == 0)),
             storage,
             local,
+            exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
         })
     }
 }
