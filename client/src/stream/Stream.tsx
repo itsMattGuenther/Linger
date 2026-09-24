@@ -884,7 +884,7 @@ function MessageRow({
           aria-expanded={menuAnchor !== null}
           onClick={(event) => setMenuAnchor(event.currentTarget)}
         >
-          <span aria-hidden="true">⋯</span>
+          <ActionIcon name="more" />
         </button>
       )}
       {menuAnchor && !deleted && !editing ? (

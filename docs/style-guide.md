@@ -41,7 +41,10 @@ play to preview sound, plus to add (in the composer: Add file…), a smile for
 emoji, a gear for settings.
 
 Icon-only controls are 36px minimum, named for screen readers, and show that
-name on hover and keyboard focus. Keep control states visible at rest; hover
+name on hover and keyboard focus. Every "more options" control — the server row,
+Who's Around cards and message actions — draws the one shared three-dot icon
+(`ActionIcon name="more"`), never a `…` or `⋯` character, centered on the line of
+text beside it. Keep control states visible at rest; hover
 reinforces them. Keyboard focus has a separate, restrained 1px neutral ring,
 never just a color shift and never the server accent. Pointer-opened contextual
 panels focus the panel itself rather than their close button, so nothing inside

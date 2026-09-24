@@ -234,6 +234,15 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
 }
 .server-options-trigger {
   margin-right: 0.5rem;
+  /* The row top-aligns (above), so put the button's middle on the middle of
+     the name's first line (#144): the name's top padding (0.75rem) plus half
+     of what its 1.6 line is short of the 2.25rem button. */
+  margin-top: calc(0.75rem + (1.6rem - 2.25rem) / 2);
+}
+/* At rest, the same quiet color as the other "more" dots; the shared
+   icon-button hover (later in this file) still brightens it. */
+.rail button.server-options-trigger {
+  color: var(--text-muted);
 }
 .rail-settings svg {
   width: 1rem;
@@ -281,10 +290,6 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
 }
 .voice-bar .voice-heading .voice-action {
   font-size: 0.8125rem;
-}
-.person button.person-head::after {
-  color: var(--text-primary);
-  font-size: 1.125rem;
 }
 .composer .composer-input {
   border-color: var(--control-border);

@@ -780,3 +780,83 @@ for (const dm of [false, true]) {
     await expect(page.locator(".room-stack").first()).toHaveAttribute("aria-label", /in the room$/);
   });
 }
+
+for (const theme of ["dark", "light"]) {
+  for (const scale of [100, 200]) {
+    test(`every "more" button draws the same centered dots, and the server's lines up with its name, ${theme} ${scale}% (#144)`, async ({ page }) => {
+      // Wide enough that the rail, stream and Who's Around all stay on screen.
+      await page.setViewportSize({ width: 13 * scale, height: 850 });
+      await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
+      await page.goto("/tests/fixtures/console.html");
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await expect(page.locator(".msg").last()).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      // The message button only shows on hover; its glyph is there either way.
+      await page.locator(".msg").last().hover();
+
+      const buttons = {
+        server: page.getByRole("button", { name: "Server options", exact: true }),
+        roster: page.locator(".roster button.person-head").first(),
+        message: page.locator(".msg").last().locator(".msg-actions-trigger"),
+      };
+      const glyphs = await Promise.all(
+        Object.entries(buttons).map(async ([where, button]) => {
+          await button.scrollIntoViewIfNeeded();
+          return button.evaluate((node, label) => {
+            const icons = node.querySelectorAll("svg.action-icon");
+            if (icons.length !== 1) throw new Error(`${label}: expected one icon, found ${icons.length}`);
+            const icon = icons[0] as SVGSVGElement;
+            const box = icon.getBoundingClientRect();
+            return {
+              where: label,
+              path: icon.querySelector("path")?.getAttribute("d"),
+              fill: getComputedStyle(icon).fill === "none" ? "none" : "filled",
+              width: box.width,
+              height: box.height,
+              middle: box.top + box.height / 2,
+              center: box.left + box.width / 2,
+              text: (node.textContent ?? "").replace(/\s/g, ""),
+            };
+          }, where);
+        }),
+      );
+      const [server, roster, message] = glyphs;
+      // One glyph, one size, one weight — not a character in some of them.
+      for (const glyph of [roster, message]) {
+        expect(glyph?.path, glyph?.where).toBe(server?.path);
+        expect(glyph?.fill, glyph?.where).toBe(server?.fill);
+        expect(glyph?.width, glyph?.where).toBeCloseTo(server?.width ?? 0, 1);
+        expect(glyph?.height, glyph?.where).toBeCloseTo(server?.height ?? 0, 1);
+      }
+      expect(message?.text).not.toContain("⋯");
+      expect(await buttons.roster.evaluate((node) => getComputedStyle(node, "::after").content)).toMatch(/none|normal/);
+
+      // Centered in its own box, for the two that are a box around the dots.
+      for (const [where, button] of [["server", buttons.server], ["message", buttons.message]] as const) {
+        const box = await button.boundingBox();
+        const glyph = glyphs.find((entry) => entry.where === where);
+        expect(box && glyph, where).toBeTruthy();
+        if (!box || !glyph) continue;
+        expect(Math.abs(glyph.middle - (box.y + box.height / 2)), where).toBeLessThan(0.75);
+        expect(Math.abs(glyph.center - (box.x + box.width / 2)), where).toBeLessThan(0.75);
+      }
+
+      // The server dots sit level with the first line of the server's name,
+      // and the roster dots level with the person's name.
+      const lineMiddle = (selector: string) =>
+        page.locator(selector).first().evaluate((node) => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const line = range.getClientRects()[0];
+          if (!line) throw new Error("no text line");
+          return line.top + line.height / 2;
+        });
+      expect(Math.abs((server?.middle ?? 0) - await lineMiddle(".rail .server-name")), "server").toBeLessThan(1.5 * scale / 100);
+      const nameMiddle = await lineMiddle(".roster .person-name");
+      expect(Math.abs((roster?.middle ?? 0) - nameMiddle), "roster").toBeLessThan(1.5 * scale / 100);
+      // Taking the old "…" character out must not leave the name off its presence dot.
+      const dot = await page.locator(".roster button.person-head .person-dot").first().boundingBox();
+      expect(Math.abs((dot ? dot.y + dot.height / 2 : 0) - nameMiddle), "presence dot").toBeLessThan(1.5 * scale / 100);
+    });
+  }
+}

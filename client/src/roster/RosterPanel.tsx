@@ -40,6 +40,7 @@ import {
 } from "./roster";
 import { usersInVoice } from "../voice/voice";
 import ContextPanel from "../lib/ContextPanel";
+import { ActionIcon } from "../lib/icons";
 import Button from "../lib/Button";
 import "./roster.css";
 
@@ -227,6 +228,12 @@ function PersonCard({
           }}
         >
           {head}
+          {/* There is something under this card. The same three dots as
+              every other "more" control (#144), and hidden from screen
+              readers: the button is already announced as opening a dialog. */}
+          <span className="person-more">
+            <ActionIcon name="more" />
+          </span>
         </button>
       ) : (
         <p className="person-head">{head}</p>

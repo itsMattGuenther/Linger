@@ -368,6 +368,10 @@
   color: var(--text-muted);
   font: inherit;
   line-height: 1;
+  /* The shared three-dot glyph (#144), centered in the box. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   /* Shown and hidden in one step, never faded (issue #139). An animated
      opacity lifts the button onto its own compositing layer, and a layer
