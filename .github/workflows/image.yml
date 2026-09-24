@@ -49,7 +49,10 @@ concurrency:
 
 jobs:
   image:
+    # Release builds add arm64 under emulation, which has taken up to 77
+    # minutes; a pull request's amd64-only build takes about five.
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 

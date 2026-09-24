@@ -19,6 +19,7 @@ jobs:
     # build/test jobs. Job-level skips report success even when checks become
     # required; skipping the entire workflow can leave them pending.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
       s3: ${{ steps.classify.outputs.s3 }}
@@ -50,6 +51,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -84,6 +86,7 @@ jobs:
     # and every laptop green without a bucket — so they need a job that sets it,
     # or they would never actually run anywhere.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       LINGER_TEST_S3_ENDPOINT: http://127.0.0.1:9000
       LINGER_TEST_S3_BUCKET: linger-test
@@ -118,7 +121,10 @@ jobs:
   web:
     needs: changes
     if: ${{ needs.changes.outputs.web == 'true' }}
+    # Each job's limit is about three times a normal run. Without one, a hung
+    # job holds its check pending for GitHub's default of six hours.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: client
@@ -157,6 +163,7 @@ jobs:
     # of thing that has to be gated, not checked by hand. Signed bundles for all
     # three OSes are release.yml, which only a tag fires.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: system webview deps
@@ -190,6 +197,7 @@ jobs:
     # The AGENTS.md hard rules a grep can catch: no AI attribution in commits,
     # identities, or the tree, and the dropped vocabulary stays dropped (SPEC §1).
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
