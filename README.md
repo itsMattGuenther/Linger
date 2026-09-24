@@ -106,8 +106,8 @@ These terms are used everywhere — UI, code, docs, error messages:
   poster frame and a blurhash generated for you
 - 🖥️ **Desktop client** for Linux and Windows (Tauri 2, not Electron).
   macOS builds from source; published Mac installers are deferred
-- 🏘️ **Several servers at once** — a list in the rail with a live dot each, and
-  a `+` button to join another. Each one is its own sign-in, its own people and its own
+- 🏘️ **Several servers at once** — a list in the rail, and a `+` button to join
+  another. Each one is its own sign-in, its own people and its own
   rooms; signing out of one leaves the rest alone
 - 📦 **Full export** — any member can export public rooms and their own DMs,
   including shared files, without host approval

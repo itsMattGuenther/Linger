@@ -913,3 +913,54 @@ for (const theme of ["dark", "light"]) {
     });
   }
 }
+
+for (const theme of ["dark", "light"]) {
+  for (const scale of [100, 200]) {
+    test(`the server row has no dot, and room and DM occupancy dots sit on the name's line, ${theme} ${scale}% (#164)`, async ({ page }) => {
+      await page.setViewportSize({ width: 13 * scale, height: 850 });
+      await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
+      await page.goto("/tests/fixtures/console.html?sending&dmhere");
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await page.evaluate(() => document.fonts.ready);
+
+      // The server row is its name and nothing before it.
+      const server = page.locator(".rail .server-item").first();
+      await expect(server).toBeVisible();
+      await expect(server.locator(".server-dot")).toHaveCount(0);
+      const [serverLeft, nameLeft] = await server.evaluate((node) => [
+        node.getBoundingClientRect().left + parseFloat(getComputedStyle(node).paddingLeft),
+        node.querySelector(".server-name")!.getBoundingClientRect().left,
+      ]);
+      expect(Math.abs(nameLeft! - serverLeft!), "the name starts where the row's text does").toBeLessThan(1);
+
+      // The middle of the dots against the middle of the name's first line.
+      const offsets = () => page.locator(".rail .room-stack").evaluateAll((stacks) =>
+        stacks.map((stack) => {
+          const row = stack.closest(".room-item")!;
+          const slug = row.querySelector(".room-slug")!;
+          const range = document.createRange();
+          range.selectNodeContents(slug);
+          const lines = range.getClientRects();
+          const first = lines[0]!;
+          const box = stack.getBoundingClientRect();
+          return {
+            name: slug.textContent ?? "",
+            dm: row.closest(".rail-dms") !== null,
+            lines: new Set([...lines].map((line) => Math.round(line.top))).size,
+            off: box.top + box.height / 2 - (first.top + first.height / 2),
+          };
+        }),
+      );
+      const rows = await offsets();
+      expect(rows.some((row) => !row.dm), "a room with people in it").toBe(true);
+      expect(rows.some((row) => row.dm), "a DM with somebody in it").toBe(true);
+      for (const row of rows) expect(Math.abs(row.off), row.name).toBeLessThan(0.75 * scale / 100);
+
+      // A name that wraps keeps its dots on its first line, not the row's middle.
+      await page.addStyleTag({ content: ".rail .room-slug { max-width: 2.5em; word-break: break-all; }" });
+      const wrapped = await offsets();
+      expect(wrapped.some((row) => row.lines > 1), "a wrapped name").toBe(true);
+      for (const row of wrapped) expect(Math.abs(row.off), `${row.name}, wrapped`).toBeLessThan(0.75 * scale / 100);
+    });
+  }
+}
