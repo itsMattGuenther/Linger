@@ -419,12 +419,12 @@
 /*
  * The server list at the top of the rail (SPEC §3, T-412).
  *
- * A dot and a name. The dot is the connection — filled once that server has
- * said `ready`, a hollow ring while it is retrying — and it is the one place in
- * the rail allowed a mark at all; still no colored icon squares (SPEC §5). A
- * server holding something you have not read gets the same weight change the
- * room list uses, because a badge is the thing this product refuses to have
- * (SPEC §4.2).
+ * A name and nothing else: no colored icon squares (SPEC §5), and no
+ * connection dot either (#164) — the button's label still says "connected" or
+ * "not connected" to a screen reader, and the status bar says it for the
+ * server on screen. A server holding something you have not read gets the same
+ * weight change the room list uses, because a badge is the thing this product
+ * refuses to have (SPEC §4.2).
  */
 .server-list {
   list-style: none;
@@ -475,20 +475,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.server-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1px solid var(--text-faint);
-  background: none;
-}
-
-.server-item[data-live="true"] .server-dot {
-  background: var(--text-primary);
-  border-color: transparent;
 }
 
 /* The room list. Plain rows: no colored icon squares in the rail (SPEC §5). */

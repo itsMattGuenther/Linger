@@ -373,6 +373,15 @@ mockIPC(
                 ],
               },
             });
+            // `?dmhere`: somebody is in the DM too, so its rail row draws
+            // the occupancy dots a room row does (#164).
+            if (query.has("dmhere")) {
+              await frame({
+                op: "room.occupancy",
+                s: 10,
+                d: { room_id: spacingDm.id, user_ids: ["jules"] },
+              });
+            }
           })(),
         30,
       );

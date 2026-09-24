@@ -975,7 +975,6 @@ function ServerRow({
         data-new={waiting ? "true" : undefined}
         onClick={onOpen}
       >
-        <span className="server-dot" aria-hidden="true" />
         <span className="server-name" title={name}>
           {name}
         </span>

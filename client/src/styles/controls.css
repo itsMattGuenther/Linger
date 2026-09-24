@@ -167,9 +167,11 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
   text-overflow: clip;
 }
 .rail .room-stack {
-  /* Nudged down from the row's very top edge to sit near the cap-height of
-     the name's first line instead of floating above it. */
-  margin-top: 0.35em;
+  /* The row top-aligns (above), so give the dots a box one line of the name
+     tall, from the top: `.room-stack` centers its dots, and that box's middle
+     is the middle of the name's first line (#164). The name's line is the
+     body's 1.6 at the row's own font size, which the stack inherits. */
+  height: calc(1em * 1.6);
 }
 .rail .rail-places .room-item {
   display: flex;
@@ -218,11 +220,6 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
   background: none;
   font-size: 1rem;
   align-items: flex-start;
-}
-.rail .server-dot {
-  /* Nudged to sit near the cap-height of the name's first line rather than
-     the top edge of a row that may now be several lines tall. */
-  margin-top: 0.35em;
 }
 /* The whole point of #83: this name wraps fully rather than clipping to two
    lines with an ellipsis. */
