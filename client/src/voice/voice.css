@@ -162,6 +162,15 @@
 }
 .voice-seat-state:empty { display: none; }
 .voice-seat-state .meta { white-space: nowrap; }
+/* Muted and deafened are the controls' own glyphs, at metadata color. */
+.voice-state-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.voice-state-icon .action-icon {
+  width: 1rem;
+  height: 1rem;
+}
 .voice-options.context-panel {
   display: flex;
   flex-direction: column;

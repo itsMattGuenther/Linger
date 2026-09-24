@@ -187,9 +187,9 @@ export default function VoiceBar({
                     mic state unknown
                   </span>
                 ) : controls.deafened ? (
-                  <span className="meta">deafened</span>
+                  <StateIcon name="headphonesOff" label="Deafened" />
                 ) : controls.muted ? (
-                  <span className="meta">muted</span>
+                  <StateIcon name="micOff" label="Muted" />
                 ) : null}
                 {link === "connecting" || link === "new" ? (
                   <span className="meta">connecting…</span>
@@ -255,6 +255,26 @@ export default function VoiceBar({
         <span className="voice-problem meta">{problem}</span>
       )}
     </div>
+  );
+}
+
+/**
+ * Somebody's shared mic state, drawn as the same glyph as the control that
+ * sets it, rather than a word under their name. The word is still there for a
+ * screen reader and as the hover tooltip.
+ */
+function StateIcon({
+  name,
+  label,
+}: {
+  name: "micOff" | "headphonesOff";
+  label: string;
+}) {
+  return (
+    <span className="voice-state-icon" title={label}>
+      <ActionIcon name={name} />
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 
