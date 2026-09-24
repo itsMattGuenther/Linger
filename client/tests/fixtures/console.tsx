@@ -252,6 +252,24 @@ mockIPC(
       document.documentElement.dataset.controls = JSON.stringify(args.controls);
     }
     if (cmd === "voice_leave") document.documentElement.dataset.left = "yes";
+    // Leaving the slow way too: the server stops listing you 250 ms later.
+    if (cmd === "voice_leave" && query.has("slowjoin"))
+      window.setTimeout(() => void frame({ op: "voice.state", d: { room_id: "general", peers: [] } }), 250);
+    // `?slowjoin` joins the way a real client does (#141, #142): nobody is in
+    // voice beforehand, the server lists you at 250 ms, the microphone
+    // finishes opening at 500 ms, and each lands as its own update.
+    if (cmd === "voice_join" && query.has("slowjoin")) {
+      window.setTimeout(() => void frame({
+        op: "voice.state",
+        d: {
+          room_id: "general",
+          peers: [{ session_id: "mine", user_id: "matt", controls: { muted: false, deafened: false } }],
+        },
+      }), 250);
+      window.setTimeout(() => void emit("voice:audio", { server: baseUrl, state: "sending" }), 500);
+      await new Promise((done) => window.setTimeout(done, 400));
+      return true;
+    }
     if (cmd === "voice_join") {
       window.setTimeout(() => {
         void emit("voice:audio", { server: baseUrl, state: "sending" });
@@ -320,7 +338,7 @@ mockIPC(
               s: 3,
               d: {
                 room_id: "general",
-                peers: [
+                peers: query.has("slowjoin") ? [] : [
                   {
                     session_id: "jules-voice",
                     user_id: "jules",

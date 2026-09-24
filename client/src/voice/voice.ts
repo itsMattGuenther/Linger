@@ -113,6 +113,27 @@ export function seatsOf(
     );
 }
 
+/**
+ * The room's voice list as this client knows it to be right now (#141). The
+ * server lists you a few hundred milliseconds after you join and stops a few
+ * hundred after you leave; drawn as-is, the bar would show you missing from a
+ * call you are in, then present in one you have left, and rebuild itself when
+ * the server caught up. So your own session follows what you did: `me` when
+ * you are in voice here adds your seat if the server has not yet, and null
+ * drops `mySessionId` if the server still lists it.
+ */
+export function withMySeat(
+  peers: readonly VoicePeer[],
+  mySessionId: string | null,
+  me: { userId: string; controls: VoiceControls } | null,
+): readonly VoicePeer[] {
+  if (mySessionId === null) return peers;
+  const listed = peers.some((peer) => peer.session_id === mySessionId);
+  if (me === null) return listed ? peers.filter((peer) => peer.session_id !== mySessionId) : peers;
+  if (listed) return peers;
+  return [...peers, { session_id: mySessionId, user_id: me.userId, controls: me.controls }];
+}
+
 /** Everybody who is in voice anywhere we can see, as a set of user ids. */
 export function usersInVoice(voice: Readonly<Record<string, VoicePeer[]>>): Set<string> {
   const out = new Set<string>();

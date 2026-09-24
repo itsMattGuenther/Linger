@@ -11,6 +11,7 @@ import {
   seatsOf,
   usersInVoice,
   volumeLabel,
+  withMySeat,
 } from "./voice";
 
 function person(id: string, name: string): User {
@@ -64,6 +65,39 @@ describe("seats in the bar", () => {
     expect(seats).toHaveLength(1);
     expect(seats[0]?.user).toBeUndefined();
     expect(seats[0]?.name).toBe("somebody");
+  });
+});
+
+describe("your own seat follows what you did (#141)", () => {
+  const controls = { muted: false, deafened: false };
+  const me = { userId: "u-me", controls };
+
+  it("adds you before the server has listed you", () => {
+    expect(withMySeat([seat("s-1", "u-amy")], "s-me", me)).toEqual([
+      seat("s-1", "u-amy"),
+      { session_id: "s-me", user_id: "u-me", controls },
+    ]);
+  });
+
+  it("uses the server's seat once it lists you, never a second one", () => {
+    const listed = [seat("s-me", "u-me"), seat("s-1", "u-amy")];
+    expect(withMySeat(listed, "s-me", me)).toBe(listed);
+  });
+
+  it("drops you as soon as you leave, while the server still lists you", () => {
+    expect(withMySeat([seat("s-me", "u-me"), seat("s-1", "u-amy")], "s-me", null)).toEqual([
+      seat("s-1", "u-amy"),
+    ]);
+  });
+
+  it("keeps your other devices, which are other sessions", () => {
+    const peers = [seat("s-laptop", "u-me"), seat("s-1", "u-amy")];
+    expect(withMySeat(peers, "s-me", null)).toBe(peers);
+  });
+
+  it("leaves the list alone before you are connected", () => {
+    const peers = [seat("s-1", "u-amy")];
+    expect(withMySeat(peers, null, me)).toBe(peers);
   });
 });
 

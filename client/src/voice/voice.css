@@ -194,14 +194,6 @@
 .voice-options > span:first-child {
   font-weight: 500;
 }
-.voice-bar:has(.voice-controls .voice-line) {
-  grid-template-columns: 1fr;
-}
-.voice-bar:has(.voice-controls .voice-line) .voice-controls {
-  grid-column: 1;
-  grid-row: auto;
-  justify-content: start;
-}
 .voice-volume-label {
   font-size: var(--text-label-size);
 }

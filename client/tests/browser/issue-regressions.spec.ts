@@ -443,6 +443,93 @@ for (const alone of [true, false]) {
 }
 
 /**
+ * Start recording what every painted frame looked like: sampled in a task
+ * queued from requestAnimationFrame, which runs after that frame's layout,
+ * observers and paint. Read the frames back with [`paintedFrames`].
+ */
+async function recordFrames(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const store = window as unknown as { painted: Record<string, unknown>[]; recording: boolean };
+    store.painted = [];
+    store.recording = true;
+    const sample = () => {
+      const bar = document.querySelector(".voice-bar")!.getBoundingClientRect();
+      const stream = document.querySelector(".stream-body")!;
+      const top = [...stream.querySelectorAll<HTMLElement>(".msg")].find((row) =>
+        row.getBoundingClientRect().top >= stream.getBoundingClientRect().top);
+      store.painted.push({
+        bar: Math.round(bar.height),
+        fromBottom: Math.round(stream.scrollHeight - stream.scrollTop - stream.clientHeight),
+        seats: document.querySelectorAll(".voice-seat").length,
+        line: document.querySelector(".voice-bar .voice-line")?.textContent ?? null,
+        seated: document.querySelector(".voice-label")?.textContent === "In voice",
+        top: top?.textContent?.slice(0, 40) ?? null,
+      });
+      if (store.recording) requestAnimationFrame(() => setTimeout(sample, 0));
+    };
+    requestAnimationFrame(() => setTimeout(sample, 0));
+  });
+}
+
+async function paintedFrames(page: Page) {
+  return page.evaluate(() => {
+    const store = window as unknown as {
+      painted: { bar: number; fromBottom: number; seats: number; line: string | null; seated: boolean; top: string | null }[];
+      recording: boolean;
+    };
+    store.recording = false;
+    return store.painted;
+  });
+}
+
+test("joining and leaving voice change the bar once each and never lift the conversation (#141, #142)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?slowjoin");
+  await expect(page.locator(".msg").first()).toBeVisible();
+  await settledVoiceLayout(page);
+  const before = (await page.locator(".voice-bar").boundingBox())!.height;
+  await recordFrames(page);
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  // The fixture lists you at 250 ms and opens the microphone at 500 ms.
+  await expect(page.locator(".voice-bar .voice-line")).toHaveCount(0, { timeout: 5000 });
+  await expect(page.getByRole("button", { name: "Leave voice", exact: true })).toBeVisible();
+  const during = (await page.locator(".voice-bar").boundingBox())!.height;
+  await page.getByRole("button", { name: "Leave voice", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Join Voice", exact: true })).toBeVisible();
+  await page.waitForTimeout(500);
+  const frames = await paintedFrames(page);
+
+  expect(frames.some((frame) => frame.line === "opening the microphone…")).toBe(true);
+  // Every painted frame is one of two bars: before joining, or in voice.
+  expect([...new Set(frames.map((frame) => frame.bar))].sort()).toEqual([before, during].map(Math.round).sort());
+  const steps = frames.filter((frame, i) => i > 0 && frame.bar !== frames[i - 1]!.bar);
+  expect(steps).toHaveLength(2);
+  for (const frame of frames) {
+    // In voice means your seat is drawn; out of voice means it is not.
+    expect(frame.seats).toBe(frame.seated ? 1 : 0);
+    // The conversation stays on its newest message in every painted frame.
+    expect(frame.fromBottom).toBeLessThanOrEqual(2);
+  }
+});
+
+test("joining voice keeps your place when you have scrolled up (#142)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html?slowjoin&history");
+  const stream = page.locator(".stream-body");
+  await expect(page.locator(".msg").first()).toBeVisible();
+  await settledVoiceLayout(page);
+  await stream.hover();
+  await page.mouse.wheel(0, -1200);
+  await expect.poll(() => stream.evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeGreaterThan(400);
+  await settledVoiceLayout(page);
+  await recordFrames(page);
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  await expect(page.locator(".voice-bar .voice-line")).toHaveCount(0, { timeout: 5000 });
+  const frames = await paintedFrames(page);
+  // The same message is at the top of the view in every frame.
+  expect(new Set(frames.map((frame) => frame.top)).size).toBe(1);
+  expect(frames[0]!.fromBottom).toBeGreaterThan(100);
+});
+
+/**
  * Hover `button` and require its name as one whole tooltip: inside the window,
  * on top of everything at its middle and corners, and the button drawing no
  * second, clippable copy of its own.
@@ -498,8 +585,9 @@ test("voice control tooltips show whole under the push-to-talk line and in the o
   await page.setViewportSize({ width: 900, height: 800 });
   await page.goto("/tests/fixtures/console.html");
   await page.getByRole("button", { name: "Join Voice", exact: true }).click();
-  // Push-to-talk puts "hold ctrl to talk" in the bar, and the controls move to
-  // its bottom edge, where a tooltip drawn below them used to be cut off.
+  // Push-to-talk puts "hold ctrl to talk" in the bar. Before #141 that moved
+  // the controls to its bottom edge, where a tooltip drawn below them was cut
+  // off; the line now sits by the heading, and the tooltips must stay whole.
   await expect(page.locator(".voice-bar .voice-line")).toBeVisible();
   for (const name of ["Deafen", "Leave voice"]) {
     await expectWholeTooltip(page, page.locator(".voice-bar").getByRole("button", { name, exact: true }), name);

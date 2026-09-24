@@ -14,10 +14,13 @@ export default function VoiceControls({
   server,
   mine,
   onProblem,
+  showLine = true,
 }: {
   server: string;
   mine: MyVoice;
   onProblem: (error: unknown) => void;
+  /** False where the surface draws the microphone line itself (the voice bar). */
+  showLine?: boolean;
 }) {
   const { pushToTalk } = mine;
   useEffect(() => {
@@ -44,9 +47,10 @@ export default function VoiceControls({
     };
   }, [pushToTalk, server, onProblem]);
 
-  const line = mine.deafened
-    ? null
-    : microphoneLine(mine.audio, pushToTalk, mine.muted);
+  const line =
+    !showLine || mine.deafened
+      ? null
+      : microphoneLine(mine.audio, pushToTalk, mine.muted);
   return (
     <div className="voice-controls">
       {line === null ? null : <span className="voice-line meta">{line}</span>}
