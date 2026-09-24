@@ -238,6 +238,11 @@ let sentSeq = 0;
 // test can wait for a send to actually be held before releasing it — see the
 // POST handler below.
 const heldSends: string[] = [];
+// Settles once the server's answer to a join has gone out. Your own seat is
+// drawn the moment you click Join (#141), so a test cannot see this from the
+// page; `fixture-voice-alone` waits on it instead, or the join's full list of
+// peers can land after it and put everybody back.
+let joinFrameSent: Promise<void> = Promise.resolve();
 const publishHeldSends = (): void => {
   document.documentElement.dataset.sendsHeld = JSON.stringify(heldSends);
 };
@@ -271,6 +276,8 @@ mockIPC(
       return true;
     }
     if (cmd === "voice_join") {
+      let sent = (): void => {};
+      joinFrameSent = new Promise((resolve) => { sent = resolve; });
       window.setTimeout(() => {
         void emit("voice:audio", { server: baseUrl, state: "sending" });
         void frame({
@@ -296,7 +303,7 @@ mockIPC(
               },
             ],
           },
-        });
+        }).then(sent);
       }, 20);
     }
     if (cmd === "gateway_connect") {
@@ -513,7 +520,7 @@ document.addEventListener("fixture-message", () => {
 // you in voice, and `fixture-talking` (detail: [session id or null for you,
 // talking]) starts or stops somebody talking.
 document.addEventListener("fixture-voice-alone", () => {
-  void frame({
+  void joinFrameSent.then(() => frame({
     op: "voice.state",
     d: {
       room_id: "general",
@@ -525,7 +532,7 @@ document.addEventListener("fixture-voice-alone", () => {
         },
       ],
     },
-  });
+  }));
 });
 document.addEventListener("fixture-talking", (event) => {
   const [peer, speaking] = (event as CustomEvent<[string | null, boolean]>)
