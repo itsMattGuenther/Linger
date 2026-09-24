@@ -860,3 +860,56 @@ for (const theme of ["dark", "light"]) {
     });
   }
 }
+
+for (const theme of ["dark", "light"]) {
+  for (const scale of [100, 150, 200]) {
+    test(`the Add button is centered on the input and Send, with even space either side, ${theme} ${scale}% (#146)`, async ({ page }) => {
+      await page.setViewportSize({ width: 13 * scale, height: 900 });
+      await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
+      await page.goto("/tests/fixtures/console.html");
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const input = page.locator(".composer-input");
+      await expect(input).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+
+      const measure = () => page.locator(".composer").evaluate((composer) => {
+        const box = (selector: string) => {
+          const node = composer.querySelector(selector);
+          if (!node) throw new Error(`missing ${selector}`);
+          return node.getBoundingClientRect();
+        };
+        const add = box(".composer-row > button[aria-label=\"Add\"]");
+        const glyph = box(".composer-row > button[aria-label=\"Add\"] svg");
+        const field = box(".composer-field");
+        const send = box(".composer-send");
+        const edge = composer.getBoundingClientRect().left + composer.clientLeft;
+        const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+        return {
+          glyphInButton: Math.max(
+            Math.abs(middle(glyph) - middle(add)),
+            Math.abs(glyph.left + glyph.width / 2 - (add.left + add.width / 2)),
+          ),
+          addToField: Math.abs(middle(add) - middle(field)),
+          addToSend: Math.abs(middle(add) - middle(send)),
+          before: add.left - edge,
+          after: field.left - add.right,
+          sendAfter: send.left - field.right,
+        };
+      });
+
+      const one = await measure();
+      expect(one.glyphInButton, "the + in its button").toBeLessThan(0.75);
+      expect(one.addToField, "Add against the input").toBeLessThan(0.75);
+      expect(one.addToSend, "Add against Send").toBeLessThan(0.75);
+      expect(Math.abs(one.before - one.after), "space either side of Add").toBeLessThan(0.75);
+      expect(Math.abs(one.after - one.sendAfter), "the same gap as input to Send").toBeLessThan(0.75);
+
+      // A draft of several lines: Add stays level with Send at the bottom.
+      await input.fill("one\ntwo\nthree\nfour");
+      await expect.poll(async () => (await input.boundingBox())?.height ?? 0).toBeGreaterThan(80 * scale / 100);
+      const many = await measure();
+      expect(many.addToSend, "Add against Send, several lines").toBeLessThan(0.75);
+      expect(Math.abs(many.before - one.before), "Add does not move sideways").toBeLessThan(0.75);
+    });
+  }
+}
