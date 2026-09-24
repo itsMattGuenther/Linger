@@ -139,10 +139,6 @@
   min-width: 0;
   flex-wrap: wrap;
 }
-.composer-row {
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
 .composer-input {
   min-height: 2.75rem;
   font-size: 1rem;
@@ -159,8 +155,21 @@
 
 .composer-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  /* Bottom-aligned so Send and Add stay beside the last line as the input
+     grows; each control centers itself on a one-line input from there. */
   align-items: flex-end;
+}
+
+/* Add is a 2.25rem icon button beside controls that are
+   --composer-control-height tall (#146). Lift it by half the difference so
+   its middle is the one-line input's middle, and pull it toward the edge so
+   the gap before it matches the 8px gap after it — the same gap as between
+   the input and Send. */
+.composer-row > .composer-add {
+  margin-bottom: calc((var(--composer-control-height) - 2.25rem) / 2);
+  margin-left: calc(8px - var(--gutter));
 }
 
 .composer-field {

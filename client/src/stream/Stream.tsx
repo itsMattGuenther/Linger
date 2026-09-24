@@ -1539,6 +1539,7 @@ export function Composer({
       <div className="composer-row">
         <IconButton
           label="Add"
+          className="composer-add"
           aria-expanded={addMenu !== null}
           aria-haspopup="menu"
           onClick={(event) => {

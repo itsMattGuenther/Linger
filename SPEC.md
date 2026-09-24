@@ -695,7 +695,8 @@ hover/focus tooltips. Less familiar actions keep visible labels. A person's
 name is not drawn as a selector. Buttons and inputs keep Console's 4px radius;
 switches use a pill track and circular thumb. Panels stay square and shadow-free.
 The single-line composer input and Send button share an outer height; Send
-keeps that height when the input grows. The attachment action opens a compact
+keeps that height when the input grows. Add centers on that height beside them,
+with the same 8px on either side of it as between the input and Send. The attachment action opens a compact
 menu above Add, focuses its first action and dismisses with Escape, outside
 click or its trigger. Pointer-opened contextual panels keep that automatic focus
 visually quiet until keyboard navigation begins; keyboard-opened panels show the
