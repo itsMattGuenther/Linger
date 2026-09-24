@@ -8,6 +8,13 @@ nonempty, overriding the AppImage launcher's X11 assignment. Explicit
 the existing fallback. Startup defaults the narrow GBM workaround to `1`
 without replacing explicit values. No Voxtype or desktop settings change.
 
+Native Wayland also moved the title bar: GTK draws its own there, where the
+X11 window had none under Hyprland. From the fix for #130 the shell builds the
+window itself (`client/src-tauri/src/window.rs`, with `"create": false` in
+`tauri.conf.json`) and leaves the title bar off when `HYPRLAND_INSTANCE_SIGNATURE`
+is set or `XDG_CURRENT_DESKTOP` names Hyprland. Every other desktop keeps it,
+since GNOME and others draw none of their own.
+
 The earlier results below describe historical builds. Synthetic typing and
 paste can validate the input route, but a spoken recording with the normal
 shortcut still needs physical input evidence and must not be reported as

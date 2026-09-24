@@ -7,6 +7,7 @@ mod notifications;
 mod secrets;
 mod updates;
 pub mod voice;
+mod window;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -474,6 +475,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Connections::default())
         .manage(VoiceEngines::default())
+        // The window is built here, not from the config, so it can leave the
+        // title bar off on Hyprland (#130). See `window.rs`.
+        .setup(|app| Ok(window::create(app)?))
         .invoke_handler(tauri::generate_handler![
             sessions_load,
             session_save,
