@@ -3,19 +3,17 @@
 #
 # `cargo test --workspace` skips crates/linger-server/tests/s3.rs, because most
 # machines have no bucket. This script gives it one: it starts a throwaway MinIO
-# on 127.0.0.1:9000, runs the tests, and stops it again. CI does the same thing
-# with a container.
+# on 127.0.0.1:9000, runs the tests, and stops it again. CI builds the same
+# MinIO release and does the same thing.
 #
-# MinIO is a single binary. Put it on your PATH, or set MINIO_BIN to it:
-#   curl -o minio https://dl.min.io/server/minio/release/linux-amd64/minio
-#   chmod +x minio
+# MinIO is a single binary. Put it on your PATH, or set MINIO_BIN to it.
+# MinIO no longer publishes binaries or images, so build the release CI uses
+# from source (needs Go 1.24 or newer):
+#   GOBIN="$HOME/.local/bin" go install github.com/minio/minio@RELEASE.2025-09-07T16-13-09Z
 #
-# Docker works too, if you would rather not have the binary around:
-#   docker run --rm -p 9000:9000 -e MINIO_ROOT_USER=lingertest \
-#     -e MINIO_ROOT_PASSWORD=lingertestsecret \
-#     quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
-# then run this script with LINGER_TEST_S3_ENDPOINT already set, and it will
-# use the server you started instead of launching one.
+# Any S3 server you already run works too: start it, then run this script with
+# LINGER_TEST_S3_ENDPOINT (and the key variables below) already set, and it will
+# use that server instead of launching one.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
