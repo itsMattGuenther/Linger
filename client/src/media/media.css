@@ -74,7 +74,9 @@
   cursor: pointer;
 }
 
-.att-get:hover {
+/* The media panel only. Inside a message, hovering shows the actions button
+   and changes nothing else (issue #139). */
+.media-actions .att-get:hover {
   color: var(--accent);
 }
 
@@ -184,11 +186,6 @@
   font-size: var(--text-label-size);
   text-align: left;
   cursor: pointer;
-}
-
-.card:hover {
-  border-left-color: var(--accent);
-  color: var(--text-primary);
 }
 
 .card-icon {

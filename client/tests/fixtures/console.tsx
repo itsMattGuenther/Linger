@@ -10,6 +10,8 @@ import type { Message } from "../../src/generated/Message";
 import type { SearchHit } from "../../src/generated/SearchHit";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
 import type { UpdateMeRequest } from "../../src/generated/UpdateMeRequest";
+import type { LinkPreview } from "../../src/generated/LinkPreview";
+import type { LinkPreviewRequest } from "../../src/generated/LinkPreviewRequest";
 import { sharedFiles, sharedMedia } from "./delight-data";
 import { AuthedApi } from "../../src/lib/api";
 import "../../src/fonts/fonts.css";
@@ -168,6 +170,11 @@ if (query.has("spacing")) bodies.splice(0, bodies.length,
   ["matt", "Short follow-up."],
   ["matt", "Another short line."],
 );
+// A link and its card, for the #139 hover checks.
+if (query.has("hovering")) bodies.push([
+  "jules",
+  "The trail map is up at https://trails.example/river if anybody wants it.",
+]);
 const spacingDm: Room = {
   id: "spacing-dm", slug: "spacing-dm", name: "spacing-dm", topic: null,
   kind: "dm", member_ids: ["matt", "jules"], position: 0,
@@ -208,6 +215,13 @@ const messages: Message[] = (
   deleted_at: null,
   created_at: Date.now() - (all.length - index) * 180_000,
 }));
+if (query.has("hovering")) {
+  messages[3]!.edited_at = messages[3]!.created_at + 60_000;
+  messages[6]!.attachments = [{
+    ...sharedFiles[0]!, id: "trail-notes", filename: "trail-notes.pdf",
+    mime: "application/pdf", width: null, height: null,
+  }];
+}
 if (query.has("catchup")) {
   rooms[0]!.last_message_id = messages.at(-1)!.id;
   spacingDm.last_message_id = messages.at(-1)!.id;
@@ -430,6 +444,13 @@ globalThis.fetch = async (input, init) => {
               item.kind === url.searchParams.get("kind"),
           )
         : [];
+  else if (url.pathname.endsWith("/links/preview")) {
+    const asked: LinkPreviewRequest = JSON.parse(String(init?.body));
+    const previews: LinkPreview[] = asked.urls.map((link) => ({
+      url: link, domain: new URL(link).hostname, title: "River trail map", icon: null,
+    }));
+    answer = previews;
+  }
   else if (url.pathname.endsWith("/read")) {
     if (init?.method === "PUT") {
       document.documentElement.dataset.readMarker = String(init.body);

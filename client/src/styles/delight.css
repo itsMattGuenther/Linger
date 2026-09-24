@@ -93,10 +93,6 @@ button:is(
 .reactions .reaction[data-mine="true"] {
   border-color: var(--hairline-strong);
 }
-.reactions .reaction:hover {
-  background: var(--surface-2);
-  border-color: var(--hairline-strong);
-}
 .reactions .reaction:active .reaction-glyph {
   transform: scale(0.9);
 }

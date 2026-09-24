@@ -264,10 +264,6 @@
   cursor: pointer;
 }
 
-.md-link:hover {
-  text-decoration-color: var(--text-secondary);
-}
-
 /* --- the line saying what a reply answers -------------------------------- */
 
 .msg-reply {
@@ -285,10 +281,6 @@
   color: var(--text-muted);
   text-align: left;
   cursor: pointer;
-}
-
-button.msg-reply:hover {
-  color: var(--text-secondary);
 }
 
 .reply-mark {
@@ -353,10 +345,6 @@ button.msg-reply:hover {
   position: relative;
 }
 
-.reaction:hover {
-  border-color: var(--hairline-strong);
-}
-
 /* Yours. Not accent — accent has four jobs and this is not one of them. */
 .reaction[data-mine="true"] {
   border-color: var(--text-muted);
@@ -381,9 +369,13 @@ button.msg-reply:hover {
   font: inherit;
   line-height: 1;
   cursor: pointer;
+  /* Shown and hidden in one step, never faded (issue #139). An animated
+     opacity lifts the button onto its own compositing layer, and a layer
+     inside a transformed row lifts that row's text with it; WebKitGTK at a
+     fractional scale then redraws the whole message a subpixel off, which
+     reads as the message changing size under the pointer. */
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--motion-fast);
 }
 
 .msg:hover .msg-actions-trigger,
