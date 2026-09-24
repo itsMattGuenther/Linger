@@ -622,6 +622,11 @@ dialog.context-panel {
 dialog.context-panel::backdrop {
   background: transparent;
 }
+/* A pointer-opened panel holds focus on itself (ContextPanel, #143). It is a
+   container, not a control, and its border already shows where it is. */
+dialog.context-panel:focus {
+  outline: none;
+}
 /* Native dialogs always move focus inside. Pointer opening keeps that real
    focus quiet until keyboard navigation begins; keyboard opening shows it. */
 dialog.context-panel[data-quiet-focus] :focus-visible {
