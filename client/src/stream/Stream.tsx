@@ -246,9 +246,14 @@ export default function Stream({
   // Pinned when the room was opened and never moved after that, so the line
   // stays somewhere you can find your way back to (SPEC §4.2).
   const leftOff = gateway.leftOff[room.id] ?? null;
+  // Sends still waiting on the server (issue #128), drawn after the confirmed
+  // messages rather than mixed into them — `messages` stays exactly what the
+  // server has confirmed.
+  const pending = stream?.pending ?? [];
+  const pendingIds = useMemo(() => new Set(pending.map((one) => one.message.id)), [pending]);
   const rows = useMemo(
-    () => buildRows(messages ?? [], { atStart, leftOff }),
-    [messages, atStart, leftOff],
+    () => buildRows([...(messages ?? []), ...pending.map((one) => one.message)], { atStart, leftOff }),
+    [messages, pending, atStart, leftOff],
   );
 
   // Replies point at a message by id, and a reply line has to show what it is
@@ -679,6 +684,7 @@ export default function Stream({
                       now={now}
                       editing={editing === row.message.id}
                       flashing={flash === row.message.id}
+                      pending={pendingIds.has(row.message.id)}
                       onEditDone={() => setEditing(null)}
                       actions={actions}
                     />
@@ -724,6 +730,7 @@ function MessageRow({
   now,
   editing,
   flashing,
+  pending,
   onEditDone,
   actions,
 }: {
@@ -738,6 +745,9 @@ function MessageRow({
   now: number;
   editing: boolean;
   flashing: boolean;
+  /** Sent, but not yet confirmed by the server (issue #128) — no actions or
+   *  reactions until it is a real message with a real id. */
+  pending: boolean;
   onEditDone: () => void;
   actions: Actions;
 }) {
@@ -858,6 +868,7 @@ function MessageRow({
       className="msg"
       data-flash={flashing ? "true" : undefined}
       data-names-me={namesMe ? "true" : undefined}
+      data-pending={pending ? "true" : undefined}
     >
       {head ? (
         <p className="msg-head">
@@ -868,7 +879,7 @@ function MessageRow({
       {!deleted && message.reply_to !== null ? (
         <ReplyLine target={repliedTo} people={people} onJump={actions.jumpTo} />
       ) : null}
-      {deleted || editing ? null : (
+      {deleted || editing || pending ? null : (
         <button
           type="button"
           className="msg-actions-trigger"
@@ -1267,10 +1278,13 @@ export function Composer({
 }) {
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   type Submission = { key: number; room: Room; body: string; files: Pending[]; reply: Message | null };
   const [failed, setFailed] = useState<Submission[]>([]);
-  const pending = useRef(false);
+  // Which sends are still open. The message itself already shows in the
+  // conversation the instant Enter is pressed (issue #128), so this exists
+  // only to keep a submission's own retry from being fired twice — it no
+  // longer blocks a second, different message from going out.
+  const [inFlight, setInFlight] = useState<ReadonlySet<number>>(new Set());
   const serial = useRef(0);
   const currentDraft = useRef(draft);
   currentDraft.current = draft;
@@ -1361,13 +1375,12 @@ export function Composer({
   const working = files.some((one) => one.attachment === null && one.problem === null);
 
   const deliver = async (submission: Submission): Promise<void> => {
-    pending.current = true;
-    setSending(true);
+    setInFlight((held) => new Set(held).add(submission.key));
     setProblem(null);
     try {
       await sendMessage(
         api, submission.room.id, submission.body.trim(), submission.reply?.id ?? null,
-        submission.files.flatMap((one) => one.attachment === null ? [] : [one.attachment.id]),
+        submission.files.flatMap((one) => one.attachment === null ? [] : [one.attachment]),
       );
       setFailed((held) => held.filter((one) => one.key !== submission.key));
     } catch (error) {
@@ -1383,17 +1396,22 @@ export function Composer({
         setFailed((held) => held.some((one) => one.key === submission.key) ? held : [...held, submission]);
       }
     } finally {
-      pending.current = false;
-      setSending(false);
+      setInFlight((held) => {
+        if (!held.has(submission.key)) return held;
+        const next = new Set(held);
+        next.delete(submission.key);
+        return next;
+      });
     }
   };
 
   const submit = async (): Promise<void> => {
     if (draft.trim().length === 0 && ready.length === 0) return;
-    if (pending.current || working) {
-      setProblem(pending.current
-        ? "The previous message is still sending. Your next draft is kept here."
-        : "The file is still uploading. Your draft is kept here.");
+    // Files still need to finish uploading before a message can point at
+    // them — the one wait that is still real (issue #128 is about the
+    // network round trip for the message itself, not this).
+    if (working) {
+      setProblem("The file is still uploading. Your draft is kept here.");
       return;
     }
     const submission: Submission = { key: ++serial.current, room, body: draft, files: ready, reply: replyTo };
@@ -1483,14 +1501,13 @@ export function Composer({
           </button>
         </p>
       ) : null}
-      {sending ? <p className="meta" role="status">Sending…</p> : null}
       {failed.map((submission) => (
         <div className="composer-unsent" key={submission.key}>
           <p className="meta">Unsent message in {submission.room.kind === "dm" ? "your DM" : `#${submission.room.slug}`}</p>
           <p className="composer-unsent-text">{submission.body}</p>
           {submission.files.map((file) => <p key={file.key}>{file.name}</p>)}
-          <button type="button" disabled={sending} onClick={() => {
-            if (!pending.current) void deliver(submission);
+          <button type="button" disabled={inFlight.has(submission.key)} onClick={() => {
+            if (!inFlight.has(submission.key)) void deliver(submission);
           }}>Retry unsent message</button>
         </div>
       ))}

@@ -59,6 +59,14 @@
   animation: msg-flash 1600ms ease-out forwards;
 }
 
+/* Sent, not yet confirmed (issue #128). Body only, the same carve-out as
+   aging (SPEC §5.6) — the author's name and timestamp stay fully legible. No
+   spinner or loop: it either settles into an ordinary message or, on
+   failure, is gone and back in the composer. */
+.msg[data-pending="true"] .msg-body {
+  opacity: 0.6;
+}
+
 @keyframes msg-flash {
   to {
     background: transparent;

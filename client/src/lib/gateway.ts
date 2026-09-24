@@ -29,7 +29,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useSyncExternalStore } from "react";
 
 import type { ClientFrame } from "../generated/ClientFrame";
-import type { AttachmentId } from "../generated/AttachmentId";
+import type { Attachment } from "../generated/Attachment";
 import type { CreateMessageRequest } from "../generated/CreateMessageRequest";
 import type { EditMessageRequest } from "../generated/EditMessageRequest";
 import type { Message } from "../generated/Message";
@@ -105,6 +105,22 @@ export interface RoomStream {
   atEnd: boolean;
   /** A page is in flight; stops the same backfill firing twice. */
   loading: boolean;
+  /**
+   * Sends still waiting on the server, shown in the room the instant Enter is
+   * pressed rather than after the round trip (issue #128). Never merged into
+   * `messages` — that list stays exactly what the server has confirmed, which
+   * is what every other reader of it (search, export, resume) depends on.
+   */
+  pending: PendingSend[];
+}
+
+/** One not-yet-confirmed send, kept next to its room. */
+export interface PendingSend {
+  /** Ties this entry to the `sendMessage` call that is still waiting on it. */
+  key: number;
+  /** A stand-in `Message`, built from what the composer already knows and
+   *  given a made-up id so it can never collide with a real one. */
+  message: Message;
 }
 
 export interface GatewayState {
@@ -256,6 +272,9 @@ export const KNOCK_TTL_MS = 8_000;
 /** Ids for knock cards. A counter, because nothing outside this tab ever sees
  *  one and two knocks in the same millisecond still have to be two cards. */
 let knockSeq = 0;
+
+/** Ids for pending sends, the same way — local only, never sent anywhere. */
+let pendingSeq = 0;
 
 const EMPTY: GatewayState = {
   status: { kind: "offline" },
@@ -454,6 +473,27 @@ function mergeMessage(list: Message[], message: Message): Message[] {
   return [...list, message].sort(byId);
 }
 
+/**
+ * Whether a confirmed message is the one a still-open send was waiting for.
+ *
+ * There is no id the two share — a stand-in's id is made up locally, and the
+ * server never sees it — so this matches on what was actually said. That is
+ * enough to catch the one race there is: the server's live announcement of a
+ * new message reaching this client before that message's own send call gets
+ * its answer back (`sendMessage` below). Whichever arrives first clears the
+ * stand-in; the other is then a no-op.
+ */
+function matchesPending(pending: Message, confirmed: Message): boolean {
+  return (
+    pending.room_id === confirmed.room_id &&
+    pending.author_id === confirmed.author_id &&
+    pending.body === confirmed.body &&
+    pending.reply_to === confirmed.reply_to &&
+    pending.attachments.length === confirmed.attachments.length &&
+    pending.attachments.every((one, index) => one.id === confirmed.attachments[index]?.id)
+  );
+}
+
 /** Fold a fetched page (the server sends newest-first) into what we hold. */
 function mergePage(list: Message[], page: Message[]): Message[] {
   if (page.length === 0) return list;
@@ -632,7 +672,7 @@ function apply(current: GatewayState, frame: ServerFrame): GatewayState {
     case "message.create":
     case "message.update": {
       const message = frame.d;
-      let next = withStream(current, message.room_id, (stream) =>
+      let next = withStream(current, message.room_id, (stream) => {
         // A room showing a historical window (a search hit, `openAround`) is
         // not at the newest message, so a new one does not join onto what it
         // holds — folding it in would put August next to February with nothing
@@ -641,10 +681,19 @@ function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         // (`loadNewer`) picks it up in its place. An *update* to a message
         // already in the window is a different thing and still lands: it
         // changes a message that is there rather than adding one that is not.
-        !stream.atEnd && !stream.messages.some((held) => held.id === message.id)
-          ? stream
-          : { ...stream, messages: mergeMessage(stream.messages, message) },
-      );
+        const merged =
+          !stream.atEnd && !stream.messages.some((held) => held.id === message.id)
+            ? stream
+            : { ...stream, messages: mergeMessage(stream.messages, message) };
+        // This announcement can beat the sender's own answer back
+        // (`sendMessage` below); either way should clear the stand-in.
+        if (frame.op !== "message.create") return merged;
+        const at = merged.pending.findIndex((one) => matchesPending(one.message, message));
+        if (at < 0) return merged;
+        const pending = [...merged.pending];
+        pending.splice(at, 1);
+        return { ...merged, pending };
+      });
       // Rooms nobody has opened have no stream to fold this into, and they are
       // exactly the rooms whose label has to change weight. So the newest id is
       // tracked separately from the history.
@@ -1070,6 +1119,7 @@ async function fetchWindow(
     atStart: replace ? older < WINDOW_OLDER : stream.atStart || older < WINDOW_OLDER,
     atEnd: newer < WINDOW_NEWER,
     loading: false,
+    pending: stream.pending,
   });
   return true;
 }
@@ -1086,7 +1136,7 @@ async function fetchWindow(
  */
 export async function openRoom(api: AuthedApi, roomId: RoomId): Promise<void> {
   if (linkFor(api) === null || stateOf(api.baseUrl).streams[roomId]) return;
-  putStream(api.baseUrl, roomId, { messages: [], atStart: false, atEnd: true, loading: true });
+  putStream(api.baseUrl, roomId, { messages: [], atStart: false, atEnd: true, loading: true, pending: [] });
   await fetchPage(api, roomId, null);
 }
 
@@ -1115,6 +1165,7 @@ export async function openAround(
     atStart: false,
     atEnd: false,
     loading: true,
+    pending: [],
   });
   const landed = await fetchWindow(api, roomId, around, true);
   // The message is gone, or the server is. Either way the room is better off
@@ -1230,24 +1281,72 @@ export async function loadNewer(api: AuthedApi, roomId: RoomId): Promise<void> {
  *
  * Failures are thrown, not swallowed: the composer is the only thing that knows
  * what the person was typing, so it is the only thing that can tell them.
+ *
+ * The message appears the instant this is called, not once the server answers
+ * (issue #128) — see the stand-in built below and `PendingSend` on
+ * `RoomStream`. Sending never waits on the round trip, and several of these
+ * can be in flight at once; the composer no longer has to refuse a second
+ * Enter while one is still open.
  */
 export async function sendMessage(
   api: AuthedApi,
   roomId: RoomId,
   body: string,
   replyTo: MessageId | null = null,
-  attachmentIds: AttachmentId[] = [],
+  attachments: Attachment[] = [],
 ): Promise<void> {
+  const server = api.baseUrl;
   const request: CreateMessageRequest = {
     body,
     reply_to: replyTo,
     // The files went up first and are already stored, checked and re-encoded;
     // this is the moment they become part of the conversation (PROTOCOL §6).
-    attachment_ids: attachmentIds.length === 0 ? null : attachmentIds,
+    attachment_ids: attachments.length === 0 ? null : attachments.map((one) => one.id),
   };
+
+  const key = ++pendingSeq;
+  const opening = stateOf(server).streams[roomId];
+  const me = stateOf(server).me;
+  // Only in the ordinary case — a room open at its newest message. A detached
+  // search window (`openAround`) is not where a message you are sending now
+  // belongs until the send actually lands there; `leaveWindow` below handles
+  // getting back to "now" the way it already does.
+  if (me !== null && opening && opening.atEnd && linkFor(api) !== null) {
+    const standIn: Message = {
+      id: `pending:${key}`,
+      room_id: roomId,
+      author_id: me.id,
+      body,
+      reply_to: replyTo,
+      attachments,
+      reactions: [],
+      pinned_at: null,
+      edited_at: null,
+      deleted_at: null,
+      created_at: Date.now(),
+    };
+    putStream(server, roomId, { ...opening, pending: [...opening.pending, { key, message: standIn }] });
+  }
+
+  const clearStandIn = (): void => {
+    const stream = stateOf(server).streams[roomId];
+    if (!stream) return;
+    const pending = stream.pending.filter((one) => one.key !== key);
+    if (pending.length !== stream.pending.length) putStream(server, roomId, { ...stream, pending });
+  };
+
   const path = `/rooms/${encodeURIComponent(roomId)}/messages`;
-  const message = await api.post<Message>(path, request);
-  const stream = stateOf(api.baseUrl).streams[roomId];
+  let message: Message;
+  try {
+    message = await api.post<Message>(path, request);
+  } finally {
+    // Whichever confirms the send first — this answer, or the room's own
+    // announcement of it arriving first over the socket — clears the
+    // stand-in; the other is then a no-op (see `matchesPending`).
+    clearStandIn();
+  }
+
+  const stream = stateOf(server).streams[roomId];
   if (linkFor(api) === null || !stream) return;
   // Saying something out of a historical window puts you back at the newest
   // message. It cannot be folded into a February window — that is the gap this
@@ -1257,7 +1356,7 @@ export async function sendMessage(
     await leaveWindow(api, roomId);
     return;
   }
-  putStream(api.baseUrl, roomId, { ...stream, messages: mergeMessage(stream.messages, message) });
+  putStream(server, roomId, { ...stream, messages: mergeMessage(stream.messages, message) });
 }
 
 /**
