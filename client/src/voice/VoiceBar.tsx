@@ -172,8 +172,16 @@ export default function VoiceBar({
                   setSelected(seat.sessionId);
                 }}
               >
-                <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
+                {/* `data-text` feeds the hidden bold copy in voice.css that
+                    holds the name at its talking width (#137). */}
+                <span {...nameProps(seat.user, "voice-name")} data-text={seat.name}>
+                  {seat.name}
+                </span>
               </button>
+              {/* A screen reader gets the word; sighted people get the weight.
+                  It sits outside the state line: in there it would wake the
+                  empty line up and the bar would grow while you talk (#137). */}
+              {talking ? <span className="sr-only">talking</span> : null}
               <div className="voice-seat-state">
                 {controls === null ? (
                   <span
@@ -187,8 +195,6 @@ export default function VoiceBar({
                 ) : controls.muted ? (
                   <span className="meta">muted</span>
                 ) : null}
-                {/* A screen reader gets the word; sighted people get the weight. */}
-                {talking ? <span className="sr-only">talking</span> : null}
                 {link === "connecting" || link === "new" ? (
                   <span className="meta">connecting…</span>
                 ) : link === "failed" || link === "disconnected" ? (

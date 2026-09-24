@@ -741,7 +741,10 @@ Desktop notification rules and notification chimes both live in Settings →
 Sound & Voice, in separately labelled sections. The people panel stays about people.
 
 **Voice.** A typographic participant strip stays under the room header. Names
-remain legible when not speaking; a bold name with a name-width underline directly beneath the letters marks speech. Click, right-click
+remain legible when not speaking; a bold name with a name-width underline directly beneath the letters marks speech.
+Starting or stopping speech moves and resizes nothing: each name holds its
+speaking width at rest. Each name is centered in its own seat, over any state
+line, and the first name lines up with the bar's heading. Click, right-click
 or keyboard-activate a participant to open their local volume controls. Names
 have no selector borders or dropdown arrows. A chevron on the bar collapses
 only the participants; joining and session controls align to the right. Hiding

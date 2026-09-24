@@ -41,20 +41,36 @@
   list-style: none;
 }
 
+/* A seat is as wide as its name (or its state line, if that is wider), so the
+   name is centered in it and the first one lines up under the heading. A
+   fixed minimum width left short names floating in the middle of an invisible
+   slot (#137). `position` keeps the talking word for screen readers, which is
+   absolutely placed, inside the seat. */
 .voice-seat {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.125rem;
-  min-width: 5rem;
   color: var(--text-secondary);
 }
 
+/* The name stacks over a hidden bold copy of itself, so its box is always the
+   talking width and going bold cannot widen the seat or shift the names beside
+   it (#137). The copy has no height and is hidden from screen readers. */
 .voice-name {
+  display: inline-grid;
+  justify-items: center;
   font-size: 1.0625rem;
   font-weight: 500;
-  opacity: 1;
-
+}
+.voice-name::after {
+  content: attr(data-text);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 700;
+  user-select: none;
 }
 
 /* Talking: the name comes up to full. Nothing else moves. */

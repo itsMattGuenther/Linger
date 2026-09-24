@@ -491,6 +491,29 @@ document.addEventListener("fixture-message", () => {
   messages.push(message);
   void frame({ op: "message.create", d: message });
 });
+// Voice seats for the #137 layout checks: `fixture-voice-alone` leaves only
+// you in voice, and `fixture-talking` (detail: [session id or null for you,
+// talking]) starts or stops somebody talking.
+document.addEventListener("fixture-voice-alone", () => {
+  void frame({
+    op: "voice.state",
+    d: {
+      room_id: "general",
+      peers: [
+        {
+          session_id: "mine",
+          user_id: "matt",
+          controls: { muted: false, deafened: false },
+        },
+      ],
+    },
+  });
+});
+document.addEventListener("fixture-talking", (event) => {
+  const [peer, speaking] = (event as CustomEvent<[string | null, boolean]>)
+    .detail;
+  void emit("voice:speaking", { server: baseUrl, peer, speaking });
+});
 const api = new AuthedApi(
   baseUrl,
   {
