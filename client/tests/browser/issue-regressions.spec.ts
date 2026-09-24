@@ -1,4 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * The fixture's `holdSend` mock records which sends it is currently holding
+ * open. Firing a "finish-send" event before a send has reached that point
+ * releases into nothing — a `{once: true}` listener that misses its event
+ * never gets another chance at it — so a test with more than one send in
+ * flight has to wait for all of them to actually be held first.
+ */
+async function waitForHeld(page: Page, ...bodies: string[]): Promise<void> {
+  const held = () =>
+    page.evaluate(() => JSON.parse(document.documentElement.dataset.sendsHeld ?? "[]") as string[]);
+  await expect.poll(async () => (await held()).slice().sort()).toEqual(bodies.slice().sort());
+}
 
 for (const dm of [false, true]) {
   test(`Enter clears immediately, shows the message before it is confirmed, and preserves the next draft in ${dm ? "DM" : "room"} (#117, #128)`, async ({ page }) => {
@@ -16,6 +29,7 @@ for (const dm of [false, true]) {
     await expect(row.locator(".msg-actions-trigger")).toHaveCount(0);
     await box.pressSequentially("Next draft");
     await expect(page.locator("html")).toHaveAttribute("data-last-sent", /First message/);
+    await waitForHeld(page, "First message");
     await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
     await expect(row).not.toHaveAttribute("data-pending", "true");
     await expect(row.locator(".msg-actions-trigger")).toHaveCount(1);
@@ -40,6 +54,7 @@ test("failed sends restore text, or keep a draft already being typed, untouched 
   // A draft typed while that retry is still open — not a second send, just
   // text sitting in the box — must not be touched by how the retry resolves.
   await box.fill("A newer draft");
+  await waitForHeld(page, "Keep this text");
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
   await expect(page.locator(".composer-unsent-text")).toHaveText("Keep this text");
   await expect(box).toHaveValue("A newer draft");
@@ -64,6 +79,7 @@ test("a second message can be sent before the first is confirmed, in submission 
   const bodies = page.locator(".msg-body");
   await expect(bodies.nth(-2)).toHaveText("Alpha");
   await expect(bodies.last()).toHaveText("Beta");
+  await waitForHeld(page, "Alpha", "Beta");
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
   await expect(page.locator('.msg[data-pending="true"]')).toHaveCount(0);
 });
@@ -80,6 +96,7 @@ test("whichever send confirms first settles ahead of one still pending, and the 
   // Typed and shown in that order, both still unconfirmed.
   await expect(bodies.nth(-2)).toHaveText("Gamma");
   await expect(bodies.last()).toHaveText("Delta");
+  await waitForHeld(page, "Gamma", "Delta");
   // Delta's answer comes back first — it settles ahead of the still-pending
   // Gamma, because a confirmed message is never shown behind an unconfirmed
   // one. This is the one place the order you sent in and the order shown can
@@ -103,6 +120,7 @@ test("a send's own live announcement arriving early never leaves a duplicate on 
   // over the socket before it lets the POST itself return — the same order a
   // real server can produce. Nothing should ever show it twice.
   await expect(page.locator(".msg-body", { hasText: "Solo delivery check" })).toHaveCount(1);
+  await waitForHeld(page, "Solo delivery check");
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
   await expect(page.locator(".msg-body", { hasText: "Solo delivery check" })).toHaveCount(1);
   await expect(page.locator(".msg", { hasText: "Solo delivery check" })).not.toHaveAttribute("data-pending", "true");
@@ -119,6 +137,7 @@ test("sending the same text twice settles as two separate messages, not one or t
   const twins = page.locator(".msg-body", { hasText: "Twin message" });
   await expect(twins).toHaveCount(2);
   await expect(page.locator('.msg[data-pending="true"]', { hasText: "Twin message" })).toHaveCount(2);
+  await waitForHeld(page, "Twin message", "Twin message");
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
   await expect(twins).toHaveCount(2);
   await expect(page.locator('.msg[data-pending="true"]', { hasText: "Twin message" })).toHaveCount(0);
@@ -133,6 +152,7 @@ test("nothing labeled Sending ever appears in the composer while a send is open 
   await expect(page.getByRole("status").filter({ hasText: "Sending" })).toHaveCount(0);
   await expect(page.locator(".meta", { hasText: "Sending" })).toHaveCount(0);
   await expect(box).toBeVisible();
+  await waitForHeld(page, "Checking the composer stays clear");
   await page.evaluate(() => document.dispatchEvent(new Event("finish-send")));
 });
 

@@ -233,6 +233,14 @@ const frame = (value: ServerFrame) =>
 // A counter, not `Date.now()`: two sends held and released close together in
 // a test can land in the same millisecond, and real ids (UUIDv7) never tie.
 let sentSeq = 0;
+// Which sends are currently held, one entry per send so two of the same text
+// held at once are still two entries. Mirrored onto `data-sends-held` so a
+// test can wait for a send to actually be held before releasing it — see the
+// POST handler below.
+const heldSends: string[] = [];
+const publishHeldSends = (): void => {
+  document.documentElement.dataset.sendsHeld = JSON.stringify(heldSends);
+};
 Object.defineProperty(globalThis, "isTauri", { value: true });
 mockIPC(
   async (cmd, args) => {
@@ -418,16 +426,25 @@ globalThis.fetch = async (input, init) => {
       const posted: CreateMessageRequest = JSON.parse(String(init.body));
       document.documentElement.dataset.lastSent = JSON.stringify(posted);
       if (document.documentElement.dataset.holdSend === "yes") {
+        // Several sends can be held at once now that sending is optimistic
+        // (#128). Recorded here — not just awaited — so a test can wait for a
+        // send to actually be held before releasing it: firing "finish-send"
+        // before this send has reached its own listener would be released
+        // into nothing, since a `{once: true}` listener that misses its event
+        // never gets another chance at it.
+        heldSends.push(posted.body);
+        publishHeldSends();
         // A bare "finish-send" releases every held send at once, which is all
-        // the single-send tests need. Several can be held at a time now that
-        // sending is optimistic (#128), so a test can also release one send
-        // by name — "finish-send:<body>" — without touching the others.
+        // the single-send tests need. A test can also release one send by
+        // name — "finish-send:<body>" — without touching the others.
         await new Promise<void>((resolve, reject) => {
           const release = (): void => resolve();
           document.addEventListener("finish-send", release, { once: true });
           document.addEventListener(`finish-send:${posted.body}`, release, { once: true });
           init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
         });
+        heldSends.splice(heldSends.indexOf(posted.body), 1);
+        publishHeldSends();
       }
       if (document.documentElement.dataset.refuseSend === "yes") return Response.json({ error: { code: "FORBIDDEN", message: "This message was refused.", retry_after_ms: null } }, { status: 403 });
       const message: Message = { ...messages[0]!, id: `sent-${String(++sentSeq).padStart(5, "0")}`, room_id: roomId, author_id: me.id, body: posted.body, reply_to: posted.reply_to ?? null, created_at: Date.now(), reactions: [] };
