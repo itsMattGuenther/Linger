@@ -7,6 +7,10 @@ nonempty, overriding the AppImage launcher's X11 assignment. Explicit
 `LINGER_LINUX_BACKEND=x11` still selects X11; desktops without Wayland keep
 the existing fallback. Startup defaults the narrow GBM workaround to `1`
 without replacing explicit values. No Voxtype or desktop settings change.
+From the fix for #135 it also defaults `__NV_DISABLE_EXPLICIT_SYNC` to `1`:
+with system WebKitGTK 2.52 on NVIDIA's 610 driver, Hyprland closed the
+Wayland connection at launch (`Error 71 (Protocol error)`). Only NVIDIA's
+driver reads the variable; the AppImage's older bundled WebKit was not affected.
 
 Native Wayland also moved the title bar: GTK draws its own there, where the
 X11 window had none under Hyprland. From the fix for #130 the shell builds the

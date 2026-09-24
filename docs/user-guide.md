@@ -147,6 +147,18 @@ the window opens you can close the terminal. It is not required on every
 Linux computer. If it still fails, keep the terminal error to share when
 asking for help; leave setup tokens and invite links out of screenshots.
 
+**The app closes on launch with `Error 71 (Protocol error) dispatching to
+Wayland display`:** this happens on some NVIDIA computers running Wayland.
+Releases after v0.3.3 set NVIDIA's workaround automatically. For v0.3.3 and
+earlier, launch with this exact command, using your downloaded filename:
+
+```bash
+__NV_DISABLE_EXPLICIT_SYNC=1 ~/Downloads/Linger_0.3.3_amd64.AppImage
+```
+
+Like the GBM command above, it changes only this launch. Only NVIDIA's driver
+reads it, so it does nothing on other graphics cards.
+
 **Voxtype puts numbers or symbols into chat instead of your words:** v0.3.3
 uses native Wayland automatically on Wayland desktops, alongside the graphics
 workaround above. Older AppImages default to X11; on a Wayland desktop,
