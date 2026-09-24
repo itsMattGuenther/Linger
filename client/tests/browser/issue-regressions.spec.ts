@@ -700,3 +700,62 @@ test("the composer and the edit box grow and shrink with their lines (#127)", as
   await expect(edit).toHaveValue(original);
   await expect.poll(() => heightOf(edit)).toBe(before);
 });
+
+test("hovering a message shows its actions button and changes nothing else (#139)", async ({ page }) => {
+  // Motion stays on: the fade this guards against is off under reduced motion.
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto("/tests/fixtures/console.html?qa&replies&delight&hovering");
+  const messages = page.locator(".msg");
+  await expect(messages.last()).toContainText("trail map");
+  // One of each kind the issue names, so a new hover rule on any of them fails here.
+  await expect(page.locator(".msg-reply").first()).toBeVisible();
+  await expect(page.locator(".reaction").first()).toBeVisible();
+  await expect(page.locator(".msg-edited").first()).toBeVisible();
+  await expect(page.locator(".msg .md-link").first()).toBeVisible();
+  await expect(page.locator(".msg .card").first()).toBeVisible();
+  await expect(page.locator(".msg .att-image").first()).toBeVisible();
+  await expect(page.locator(".msg .att-get").first()).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+
+  // Every box and every computed style in the message, the actions button aside.
+  const snapshot = (message: Locator) =>
+    message.evaluate((node) =>
+      [node, ...node.querySelectorAll("*")]
+        .filter((element) => !element.closest(".msg-actions-trigger"))
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const properties: Record<string, string> = {
+            box: `${box.top},${box.left},${box.width},${box.height}`,
+          };
+          for (const property of Array.from(style)) properties[property] = style.getPropertyValue(property);
+          return { name: `${element.tagName.toLowerCase()}.${element.className}`, properties };
+        }),
+    );
+  type Snapshot = Awaited<ReturnType<typeof snapshot>>;
+  const changes = (before: Snapshot, after: Snapshot): string[] =>
+    before.flatMap(({ name, properties }, index) =>
+      Object.entries(properties)
+        .filter(([property, value]) => after[index]?.properties[property] !== value)
+        .map(([property, value]) => `${name} ${property}: ${value} -> ${after[index]?.properties[property]}`),
+    );
+
+  const count = await messages.count();
+  for (let index = 0; index < count; index++) {
+    const message = messages.nth(index);
+    await page.mouse.move(1099, 1);
+    await message.scrollIntoViewIfNeeded();
+    const before = await snapshot(message);
+    const trigger = message.locator(".msg-actions-trigger");
+    // Hover each part of the message, not just its edge: a link, a reply line,
+    // a reaction and a name each had a hover style of their own.
+    const parts = message.locator(".msg-body, .msg-reply, .reaction, .md-link, .msg-author, .card, .att-image, .att-get");
+    for (let part = 0; part < await parts.count(); part++) {
+      await parts.nth(part).hover();
+      // Shown in the same frame, not faded in. An opacity fade puts the button
+      // on its own compositing layer, and WebKitGTK redraws the message around it.
+      expect(await trigger.evaluate((node) => getComputedStyle(node).opacity)).toBe("1");
+      expect(changes(before, await snapshot(message))).toEqual([]);
+    }
+  }
+});

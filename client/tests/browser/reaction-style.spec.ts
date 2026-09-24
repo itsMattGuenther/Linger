@@ -59,6 +59,7 @@ for (const theme of THEMES) {
         ),
       ).toBeGreaterThan(colors.fontSize);
 
+      // Hovering a message shows its actions button and nothing else (#139).
       await mark.hover();
       await expect
         .poll(() =>
@@ -67,7 +68,7 @@ for (const theme of THEMES) {
             return [style.backgroundColor, style.borderColor];
           }),
         )
-        .toEqual([colors.surface2, colors.hairlineStrong]);
+        .toEqual([colors.surface1, colors.hairlineStrong]);
 
       await mark.click();
       await expect(mark).toHaveAttribute("aria-pressed", "false");

@@ -115,9 +115,10 @@
    A name in the stream, and the card it opens.
    --------------------------------------------------------------------------- */
 
-/* The name keeps the type it always had; only the affordance is new. A button
-   reset rather than a restyle, so nothing about the stream's texture changes
-   until the pointer is actually over a name. */
+/* The name keeps the type it always had; only the cursor says it opens
+   something. A button reset rather than a restyle, and no hover underline:
+   hovering a message shows its actions button and changes nothing else in it
+   (issue #139). */
 /* A name that is also a button. The reset stops at the box: the face, the
    weight, the slant and the color belong to the person and come from `.name`
    in `styles/names.css`, so `font:` and `color:` are deliberately not reset
@@ -130,11 +131,6 @@
   line-height: inherit;
   cursor: pointer;
   text-align: left;
-}
-
-.person-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 /* Fixed to the viewport, because the stream it is opened from is a virtualized
