@@ -89,19 +89,25 @@
 
 button.person-head {
   cursor: pointer;
+  /* A button is taller than the name (buttons have a minimum height). Center
+     the presence dot, the name and the "more" dots on one line; aligning to
+     the baseline left the name at the top and the dots below it (#144). */
+  align-items: center;
 }
 
 /* There is a status under this one. A quiet mark, because most cards have
-   nothing to open and a row of affordances would be a row of noise. */
-button.person-head::after {
-  content: "…";
+   nothing to open and a row of affordances would be a row of noise. The same
+   three-dot glyph as the server and message "more" buttons (#144), centered on
+   the name's line rather than sitting on its baseline like a character. */
+.person-more {
+  display: inline-flex;
   margin-left: auto;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
-button.person-head:hover::after,
-button.person-head[aria-expanded="true"]::after {
-  color: var(--text-secondary);
+button.person-head:hover .person-more,
+button.person-head[aria-expanded="true"] .person-more {
+  color: var(--text-primary);
 }
 
 /* Sits with the name rather than out at the edge: it is part of reading who

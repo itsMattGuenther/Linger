@@ -24,7 +24,9 @@ const ACTION_PATHS = {
   check: "m5 12 4 4L19 6",
   chevronDown: "m6 9 6 6 6-6",
   chevronUp: "m6 15 6-6 6 6",
-  more: "M5 12h.01M12 12h.01M19 12h.01",
+  // Three filled dots. Every "more options" control draws this one (#144).
+  more:
+    "M3.25 12a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0ZM10.25 12a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0ZM17.25 12a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0Z",
   message: "M4 4h16v12H9l-5 4V4Z",
   settings: "M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6",
   send: "m3 3 18 9-18 9 4-9-4-9Zm4 9h14",
@@ -33,7 +35,7 @@ const ACTION_PATHS = {
     "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M9 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2M15 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2M8.5 14.5s1.5 2 3.5 2 3.5-2 3.5-2",
 } as const;
 
-const FILLED = new Set<keyof typeof ACTION_PATHS>(["play"]);
+const FILLED = new Set<keyof typeof ACTION_PATHS>(["play", "more"]);
 
 /** Familiar action glyphs share one stroke and inherit the label color. */
 export function ActionIcon({ name }: { name: keyof typeof ACTION_PATHS }) {
