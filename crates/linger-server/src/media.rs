@@ -14,9 +14,13 @@
 //!
 //! Video work shells out to `ffmpeg`/`ffprobe`. They are optional: a server
 //! without them stores videos perfectly well and simply has no poster frame.
+//! Every run is on a clock and killed when the clock runs out, because the
+//! file they are reading is untrusted and a crafted one can keep either tool
+//! busy forever.
 
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Output, Stdio};
+use std::time::Duration;
 
 use linger_core::media;
 
@@ -33,6 +37,17 @@ const BLURHASH_MAX_EDGE: u32 = 64;
 /// Where in a video to grab the poster frame. One second in, because frame zero
 /// of a lot of video is black.
 const POSTER_SECONDS: &str = "1";
+/// How long `ffprobe` gets to describe a file. Reading a container's header
+/// takes well under a second even for a 500 MB upload; this is room for a slow
+/// disk, not for a slow file.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long the poster frame gets, across both seek positions together — a
+/// file that is merely slow must not cost twice for being tried twice.
+const POSTER_TIMEOUT: Duration = Duration::from_secs(30);
+/// How much of a file ffmpeg reads before deciding what is in it. These are
+/// ffmpeg's own defaults, spelled out so a later ffmpeg changing them does not
+/// change what an upload can cost.
+const PROBE_ARGS: [&str; 4] = ["-probesize", "5000000", "-analyzeduration", "5000000"];
 
 /// What processing worked out about a file.
 pub struct Processed {
@@ -306,21 +321,39 @@ struct Probe {
     height: Option<u32>,
 }
 
+/// Run a tool against an untrusted file and wait for it, but not forever.
+///
+/// `None` when the tool is missing, fails to start, or runs past `limit`. On
+/// the last of those the child is killed rather than left behind: dropping the
+/// future is what gives up waiting, and `kill_on_drop` makes the drop take the
+/// process with it. Callers already treat `None` as "no probe data" or "no
+/// poster", which is the ordinary outcome on a server without ffmpeg.
+async fn bounded_output(mut command: tokio::process::Command, limit: Duration) -> Option<Output> {
+    command.stdin(Stdio::null()).kill_on_drop(true);
+    // Bound first and match after, so the timed-out future (and with it the
+    // child) is dropped here rather than at the end of the match.
+    let finished = tokio::time::timeout(limit, command.output()).await;
+    match finished {
+        Ok(output) => output.ok(),
+        Err(_) => {
+            tracing::warn!(
+                program = ?command.as_std().get_program(),
+                limit_secs = limit.as_secs(),
+                "media tool ran out of time; killed it"
+            );
+            None
+        }
+    }
+}
+
 async fn ffprobe(path: &Path) -> Option<Probe> {
-    let output = tokio::process::Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-        ])
-        .arg(path)
-        .stdin(Stdio::null())
-        .output()
-        .await
-        .ok()?;
+    let mut command = tokio::process::Command::new("ffprobe");
+    command
+        .args(["-v", "error"])
+        .args(PROBE_ARGS)
+        .args(["-print_format", "json", "-show_format", "-show_streams"])
+        .arg(path);
+    let output = bounded_output(command, PROBE_TIMEOUT).await?;
     if !output.status.success() {
         return None;
     }
@@ -352,25 +385,28 @@ async fn ffprobe(path: &Path) -> Option<Probe> {
     })
 }
 
-/// One frame, as JPEG. `None` whenever ffmpeg isn't installed or the file has
-/// no frame to give — a missing poster is not a failed upload.
+/// One frame, as JPEG. `None` whenever ffmpeg isn't installed, the file has
+/// no frame to give, or it takes too long to give one — a missing poster is not
+/// a failed upload.
 async fn poster_frame(path: &Path) -> Option<Vec<u8>> {
+    let deadline = tokio::time::Instant::now() + POSTER_TIMEOUT;
     for seek in [POSTER_SECONDS, "0"] {
         let temp = tempfile::Builder::new()
             .suffix(".jpg")
             .tempfile()
             .ok()?
             .into_temp_path();
-        let status = tokio::process::Command::new("ffmpeg")
-            .args(["-v", "error", "-y", "-ss", seek, "-i"])
+        let mut command = tokio::process::Command::new("ffmpeg");
+        command
+            .args(["-v", "error", "-nostdin", "-y"])
+            .args(PROBE_ARGS)
+            .args(["-ss", seek, "-i"])
             .arg(path)
-            .args(["-frames:v", "1", "-f", "image2"])
-            .arg(&temp)
-            .stdin(Stdio::null())
-            .status()
-            .await;
-        let Ok(status) = status else { return None };
-        if status.success() {
+            .args(["-an", "-sn", "-dn", "-frames:v", "1", "-f", "image2"])
+            .arg(&temp);
+        let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let output = bounded_output(command, left).await?;
+        if output.status.success() {
             if let Ok(bytes) = tokio::fs::read(&temp).await {
                 if !bytes.is_empty() {
                     return Some(bytes);
@@ -441,5 +477,66 @@ mod tests {
             "text/plain"
         );
         assert!(resolve_mime(&path, "image/jpeg").await.is_err());
+    }
+
+    /// The case the limit exists for: a tool that never finishes. It has to
+    /// come back as "no answer" on time, and it must not be left running.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_tool_that_runs_too_long_is_killed_and_gives_no_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let pidfile = dir.path().join("pid");
+        let mut command = tokio::process::Command::new("sh");
+        command
+            .arg("-c")
+            .arg(format!("echo $$ > '{}'; exec sleep 30", pidfile.display()));
+
+        let started = std::time::Instant::now();
+        assert!(bounded_output(command, Duration::from_millis(500))
+            .await
+            .is_none());
+        assert!(started.elapsed() < Duration::from_secs(5));
+
+        // `exec` makes the sleep the same process the shell was, so the pid
+        // it wrote is the process that has to be gone. A zombie waiting to be
+        // reaped counts as gone: it is dead and holds nothing.
+        #[cfg(target_os = "linux")]
+        {
+            let pid = std::fs::read_to_string(&pidfile).unwrap();
+            let stat = format!("/proc/{}/stat", pid.trim());
+            let mut alive = true;
+            for _ in 0..50 {
+                alive = std::fs::read_to_string(&stat)
+                    .map(|s| !s.split_whitespace().nth(2).is_some_and(|st| st == "Z"))
+                    .unwrap_or(false);
+                if !alive {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            assert!(!alive, "the timed-out child is still running");
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_tool_that_finishes_in_time_hands_back_its_output() {
+        let mut command = tokio::process::Command::new("sh");
+        command.arg("-c").arg("echo probed");
+        let output = bounded_output(command, Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"probed\n");
+    }
+
+    /// A tool that is not installed is the ordinary case on a server without
+    /// ffmpeg, and it is an absence, not an error.
+    #[tokio::test]
+    async fn a_missing_tool_gives_no_answer() {
+        let command = tokio::process::Command::new("linger-no-such-tool");
+        assert!(bounded_output(command, Duration::from_secs(1))
+            .await
+            .is_none());
     }
 }

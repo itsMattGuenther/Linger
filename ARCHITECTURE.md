@@ -564,7 +564,11 @@ else — wrong size, a file that is not the type it claimed, an image that will 
 
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
-simply has no poster. The published image installs them.
+simply has no poster. The published image installs them. The file they read is an
+upload and so hostile (§7), which makes both tools the video equivalent of the image
+decoder's limits: `ffprobe` gets 15 seconds, the poster gets 30 across both of its seek
+positions, and a run past its limit is killed and counts as no probe data or no poster —
+the same outcome as a server without ffmpeg.
 
 **The sweeper** (`expiry.rs`) is the server's one background task — spawned by `main`,
 not by `AppState`, so building the state in a test never starts a loop nobody asked for.
