@@ -64,7 +64,13 @@ export function useResizeAnchor(
           remember();
         } else pending = requestAnimationFrame(step);
       };
-      pending = requestAnimationFrame(step);
+      // The first correction happens here, not a frame later. A resize
+      // observer reports after layout but before paint, so scrolling now lands
+      // in the same frame as the resize; waiting a frame paints one frame of
+      // the conversation off the bottom, which reads as the whole window
+      // blinking whenever something above it (the voice bar) changes height
+      // (#142). Later frames only settle rows whose heights arrive late.
+      step();
     });
     observer.observe(element);
     element.addEventListener("scroll", remember, { passive: true });
