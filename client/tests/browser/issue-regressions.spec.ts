@@ -163,3 +163,69 @@ test("second knock settles and closing the profile leaves room and DM sending us
     await expect(page.locator("html")).toHaveAttribute("data-last-sent", dm ? /DM after knock/ : /Room after knock/);
   }
 });
+
+for (const dm of [false, true]) {
+  test(`typing in a multi-line ${dm ? "DM" : "room"} draft leaves the box and stream still (#127)`, async ({ page }) => {
+    await page.goto("/tests/fixtures/console.html?history&sending");
+    if (dm) await page.locator(".rail-dms").getByRole("button", { name: "Jules", exact: true }).click();
+    const box = page.locator(".composer-input");
+    const stream = page.locator(".stream-body");
+    await page.evaluate(() => document.fonts.ready);
+    await box.fill("first line\nsecond line\n");
+    const gap = () => stream.evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight);
+    await expect.poll(gap).toBeLessThanOrEqual(2);
+    // Wait out the stream's own landing, which re-aims for a few frames.
+    await stream.evaluate((node) => new Promise<void>((resolve) => {
+      let quiet = window.setTimeout(resolve, 500);
+      node.addEventListener("scroll", () => {
+        window.clearTimeout(quiet);
+        quiet = window.setTimeout(resolve, 500);
+      });
+    }));
+    const height = (await box.boundingBox())?.height;
+    // Measuring by collapsing the real box rewrote its height twice per key and
+    // moved the stream above it; typing inside a line should do neither.
+    await page.evaluate(() => {
+      const record = { scrolls: 0, heights: 0 };
+      (window as unknown as { typing: typeof record }).typing = record;
+      document.querySelector(".stream-body")?.addEventListener("scroll", () => { record.scrolls += 1; });
+      new MutationObserver((changes) => { record.heights += changes.length; })
+        .observe(document.querySelector(".composer-input")!, { attributes: true, attributeFilter: ["style"] });
+    });
+    await box.pressSequentially("third line keeps up");
+    await expect(box).toHaveValue("first line\nsecond line\nthird line keeps up");
+    const record = await page.evaluate(() => (window as unknown as { typing: { scrolls: number; heights: number } }).typing);
+    expect(record).toEqual({ scrolls: 0, heights: 0 });
+    expect((await box.boundingBox())?.height).toBe(height);
+    expect(await gap()).toBeLessThanOrEqual(2);
+  });
+}
+
+test("the composer and the edit box grow and shrink with their lines (#127)", async ({ page }) => {
+  await page.goto("/tests/fixtures/console.html");
+  const box = page.locator(".composer-input");
+  await page.evaluate(() => document.fonts.ready);
+  const heightOf = async (node: import("@playwright/test").Locator) => (await node.boundingBox())?.height ?? 0;
+  await box.fill("one");
+  const single = await heightOf(box);
+  await box.fill("one\ntwo\nthree");
+  await expect.poll(() => heightOf(box)).toBeGreaterThan(single);
+  await box.fill("one");
+  await expect.poll(() => heightOf(box)).toBe(single);
+
+  await box.fill("");
+  await box.press("ArrowUp");
+  const edit = page.getByRole("textbox", { name: "edit this message" });
+  await expect(edit).toBeFocused();
+  const original = await edit.inputValue();
+  const before = await heightOf(edit);
+  // The box shows all of the message: nothing hidden behind its own scrollbar.
+  expect(await edit.evaluate((node) => node.scrollHeight <= node.clientHeight)).toBe(true);
+  await edit.press("Shift+Enter");
+  await edit.pressSequentially("another line");
+  await expect(edit).toHaveValue(`${original}\nanother line`);
+  await expect.poll(() => heightOf(edit)).toBeGreaterThan(before);
+  for (let i = 0; i < "\nanother line".length; i++) await edit.press("Backspace");
+  await expect(edit).toHaveValue(original);
+  await expect.poll(() => heightOf(edit)).toBe(before);
+});

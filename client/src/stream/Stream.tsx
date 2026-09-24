@@ -30,10 +30,8 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
-  type RefObject,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useId,
   useMemo,
   useRef,
@@ -83,6 +81,7 @@ import { uploadFile } from "../lib/upload";
 import { linkTargets, mentionHandles, plainText } from "./markdown";
 import { REACTIONS, reactionOf, reactionTitle, reactionWeight } from "./reactions";
 import { COMPOSER_EMOJI, insertGlyph } from "./composerEmoji";
+import { useAutoGrow } from "./autoGrow";
 import { buildRows, type StreamRow } from "./rows";
 import { useResizeAnchor } from "./resize";
 import { ageOpacity, clockTime, fullTime, sessionLabel } from "./time";
@@ -1642,22 +1641,6 @@ export function Composer({
       ) : null}
     </form>
   );
-}
-
-/**
- * Grow a textarea to fit what is in it, up to the height CSS allows.
- *
- * Resetting to `auto` first is the whole trick: `scrollHeight` is the content's
- * height *or* the box's, whichever is larger, so measuring without collapsing
- * it first means the box can grow and never shrink.
- */
-function useAutoGrow(box: RefObject<HTMLTextAreaElement | null>, value: string): void {
-  useLayoutEffect(() => {
-    const element = box.current;
-    if (!element) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [box, value]);
 }
 
 /**
