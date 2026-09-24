@@ -10,15 +10,22 @@ import { createPortal } from "react-dom";
 const GAP_PX = 4;
 const EDGE_PX = 8;
 
-/** Draw short help text outside clipped or transformed app surfaces. */
+/**
+ * Draw short help text outside clipped or transformed app surfaces.
+ *
+ * `prefer` picks the side when both have room; when only one does, that one
+ * wins, so the text is never pushed off the window.
+ */
 export default function Tooltip({
   anchor,
   id,
   children,
+  prefer = "above",
 }: {
   anchor: HTMLElement;
   id: string;
   children: ReactNode;
+  prefer?: "above" | "below";
 }) {
   const tooltip = useRef<HTMLDivElement | null>(null);
   const [placement, setPlacement] = useState<CSSProperties>({
@@ -38,7 +45,10 @@ export default function Tooltip({
       const roomBelow = window.innerHeight - source.bottom;
       const fitsAbove = roomAbove >= size.height + GAP_PX + EDGE_PX;
       const fitsBelow = roomBelow >= size.height + GAP_PX + EDGE_PX;
-      const above = fitsAbove || (!fitsBelow && roomAbove > roomBelow);
+      const above =
+        prefer === "above"
+          ? fitsAbove || (!fitsBelow && roomAbove > roomBelow)
+          : !fitsBelow && (fitsAbove || roomAbove > roomBelow);
       const desiredTop = above
         ? source.top - size.height - GAP_PX
         : source.bottom + GAP_PX;
@@ -67,7 +77,7 @@ export default function Tooltip({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [anchor, children]);
+  }, [anchor, children, prefer]);
 
   return createPortal(
     <div

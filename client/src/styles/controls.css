@@ -586,6 +586,11 @@ button.ui-icon:hover::after,
 button.ui-icon:focus-visible::after {
   visibility: visible;
 }
+/* A floating tooltip (IconButton `floatingTooltip`, lib/Tooltip) replaces the
+   one drawn on the button; never show both (#140). */
+button.ui-icon[data-tooltip-floating]::after {
+  content: none;
+}
 button.voice-collapse::after {
   left: 0;
   right: auto;
