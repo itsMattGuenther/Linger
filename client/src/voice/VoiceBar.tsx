@@ -154,26 +154,36 @@ export default function VoiceBar({
               data-talking={talking ? "true" : undefined}
               data-link={link}
             >
-              <button
-                type="button"
-                className="voice-person"
-                aria-expanded={selected === seat.sessionId}
-                aria-haspopup="dialog"
-                aria-label={`${seat.name}${seat.isMe ? ", you" : ""}, voice options`}
-                onClick={(event) => {
-                  selectedTrigger.current = event.currentTarget;
-                  setSelected(
-                    selected === seat.sessionId ? null : seat.sessionId,
-                  );
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  selectedTrigger.current = event.currentTarget;
-                  setSelected(seat.sessionId);
-                }}
-              >
-                <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
-              </button>
+              {/* The name and, beside it, their mute or deafen glyph. The
+                  glyph is placed off the name's right edge rather than laid
+                  out, so muting moves and resizes nothing (#138). */}
+              <span className="voice-person-line">
+                <button
+                  type="button"
+                  className="voice-person"
+                  aria-expanded={selected === seat.sessionId}
+                  aria-haspopup="dialog"
+                  aria-label={`${seat.name}${seat.isMe ? ", you" : ""}, voice options`}
+                  onClick={(event) => {
+                    selectedTrigger.current = event.currentTarget;
+                    setSelected(
+                      selected === seat.sessionId ? null : seat.sessionId,
+                    );
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    selectedTrigger.current = event.currentTarget;
+                    setSelected(seat.sessionId);
+                  }}
+                >
+                  <span {...nameProps(seat.user, "voice-name")}>{seat.name}</span>
+                </button>
+                {controls?.deafened ? (
+                  <StateIcon name="headphonesOff" label="Deafened" />
+                ) : controls?.muted ? (
+                  <StateIcon name="micOff" label="Muted" />
+                ) : null}
+              </span>
               {/* A screen reader gets the word; sighted people get the block.
                   It sits outside the state line: in there it would wake the
                   empty line up and the bar would grow while you talk (#137). */}
@@ -186,10 +196,6 @@ export default function VoiceBar({
                   >
                     mic state unknown
                   </span>
-                ) : controls.deafened ? (
-                  <StateIcon name="headphonesOff" label="Deafened" />
-                ) : controls.muted ? (
-                  <StateIcon name="micOff" label="Muted" />
                 ) : null}
                 {link === "connecting" || link === "new" ? (
                   <span className="meta">connecting…</span>

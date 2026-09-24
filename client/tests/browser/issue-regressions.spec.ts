@@ -318,6 +318,36 @@ async function inkRows(page: Page, clip: { x: number; y: number; width: number; 
   }, [png, clip.height] as const);
 }
 
+/**
+ * Every box whose size or place a reader could notice around the voice bar:
+ * the bar, each seat and name, the state line, and the first messages under it.
+ */
+function voiceLayout(page: Page) {
+  return page.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r ? [r.x, r.y, r.width, r.height] : null;
+    };
+    return [".voice-bar", ".voice-seat", ".voice-name", ".voice-seat-state", ".msg"].flatMap((selector) =>
+      [...document.querySelectorAll(selector)].slice(0, 4).map((el) => [selector, box(el)]));
+  });
+}
+
+/**
+ * [`voiceLayout`] once it has stopped changing: the stream is still measuring
+ * its rows just after load, so wait until two readings agree.
+ */
+async function settledVoiceLayout(page: Page) {
+  let last = await voiceLayout(page);
+  await expect.poll(async () => {
+    const again = await voiceLayout(page);
+    const settled = JSON.stringify(again) === JSON.stringify(last);
+    last = again;
+    return settled;
+  }).toBe(true);
+  return last;
+}
+
 for (const alone of [true, false]) {
   test(`voice names sit centered and talking moves nothing, ${alone ? "alone" : "with others"} (#137)`, async ({ page }) => {
     await page.goto("/tests/fixtures/console.html");
@@ -332,25 +362,8 @@ for (const alone of [true, false]) {
     const talk = (peer: string | null, talking: boolean) =>
       page.evaluate(([peer, talking]) =>
         document.dispatchEvent(new CustomEvent("fixture-talking", { detail: [peer, talking] })), [peer, talking] as const);
-    // Every box whose size or place a reader could notice: the bar, each seat
-    // and name, and the first message under the bar.
-    const layout = () => page.evaluate(() => {
-      const box = (el: Element | null) => {
-        const r = el?.getBoundingClientRect();
-        return r ? [r.x, r.y, r.width, r.height] : null;
-      };
-      return [".voice-bar", ".voice-seat", ".voice-name", ".voice-seat-state", ".msg"].flatMap((selector) =>
-        [...document.querySelectorAll(selector)].slice(0, 4).map((el) => [selector, box(el)]));
-    });
-    // The stream is still measuring its rows just after load; wait until two
-    // readings agree before calling this the at-rest layout.
-    let quiet = await layout();
-    await expect.poll(async () => {
-      const again = await layout();
-      const settled = JSON.stringify(again) === JSON.stringify(quiet);
-      quiet = again;
-      return settled;
-    }).toBe(true);
+    const layout = () => voiceLayout(page);
+    const quiet = await settledVoiceLayout(page);
 
     const seats = page.locator(".voice-seat");
     const centers = await seats.evaluateAll((nodes) => nodes.map((seat) => {
@@ -385,6 +398,47 @@ for (const alone of [true, false]) {
     if (!alone) await talk("jules-voice", false);
     await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(0);
     expect(await layout()).toEqual(quiet);
+  });
+}
+
+for (const alone of [true, false]) {
+  test(`muting shows a glyph beside the name and moves nothing, ${alone ? "alone" : "with others"} (#138)`, async ({ page }) => {
+    await page.goto("/tests/fixtures/console.html");
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Matt, you, voice options", exact: true })).toBeVisible();
+    if (alone) {
+      await page.evaluate(() => document.dispatchEvent(new Event("fixture-voice-alone")));
+      await expect(page.locator(".voice-seat")).toHaveCount(1);
+    }
+    const mine = page.locator(".voice-seat").first();
+    await expect(mine.locator(".voice-state-icon")).toHaveCount(0);
+    const before = await settledVoiceLayout(page);
+
+    await page.getByRole("button", { name: "Mute", exact: true }).click();
+    const icon = mine.locator(".voice-state-icon");
+    await expect(icon).toHaveAttribute("title", "Muted");
+    expect(await voiceLayout(page)).toEqual(before);
+
+    // The glyph reads as this name's: right of its letters, nearer them than
+    // the next name, and inside the bar.
+    const shape = await mine.evaluate((seat) => {
+      const name = seat.querySelector(".voice-name")!, glyph = seat.querySelector(".voice-state-icon")!;
+      const n = name.getBoundingClientRect(), g = glyph.getBoundingClientRect();
+      const letters = n.right - parseFloat(getComputedStyle(name).paddingRight);
+      const next = seat.nextElementSibling?.querySelector(".voice-name");
+      const nextLetters = next ? next.getBoundingClientRect().x + parseFloat(getComputedStyle(next).paddingLeft) : null;
+      const bar = seat.closest(".voice-bar")!.getBoundingClientRect();
+      return { own: g.x - letters, next: nextLetters === null ? null : nextLetters - g.right, right: g.right, barRight: bar.right,
+        middle: Math.abs(g.y + g.height / 2 - (n.y + n.height / 2)) };
+    });
+    expect(shape.own).toBeGreaterThan(0);
+    if (shape.next !== null) expect(shape.next).toBeGreaterThan(shape.own * 2);
+    expect(shape.right).toBeLessThanOrEqual(shape.barRight);
+    expect(shape.middle).toBeLessThan(1);
+
+    await page.getByRole("button", { name: "Muted", exact: true }).click();
+    await expect(icon).toHaveCount(0);
+    expect(await voiceLayout(page)).toEqual(before);
   });
 }
 

@@ -162,8 +162,20 @@
 }
 .voice-seat-state:empty { display: none; }
 .voice-seat-state .meta { white-space: nowrap; }
-/* Muted and deafened are the controls' own glyphs, at metadata color. */
+/* Muted and deafened are the controls' own glyphs, at metadata color, just
+   right of the name. The glyph hangs off the name's edge instead of taking
+   space, so muting moves and resizes nothing; the seat gap in controls.css is
+   wide enough that it reads as this name's and not the next one's (#138). */
+.voice-person-line {
+  position: relative;
+  display: inline-flex;
+}
 .voice-state-icon {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0.125rem;
   display: inline-flex;
   color: var(--text-muted);
 }

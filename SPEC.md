@@ -748,8 +748,12 @@ text color; under forced colors, the system highlight). That pair is the
 palette's contrast guarantee, so every key reads in both themes. The block is a
 shape, so speech does not depend on telling colors apart. No bold, underline,
 glow or motion; a name's shimmer or glow rests while its block is up.
-Starting or stopping speech moves and resizes nothing: each name keeps the
-block's inset at rest. Each name is centered in its own seat, over any state
+A person who shares that they are muted or deafened shows the mute or deafen
+control's own glyph just right of their name, in metadata color; the word is
+only for screen readers and the tooltip.
+Starting or stopping speech, or muting, moves and resizes nothing: each name
+keeps the block's inset at rest, and the glyph hangs off the name's edge in the
+gap between seats rather than taking space. Each name is centered in its own seat, over any state
 line, and the first name's letters line up with the bar's heading. Click, right-click
 or keyboard-activate a participant to open their local volume controls. Names
 have no selector borders or dropdown arrows. A chevron on the bar collapses
