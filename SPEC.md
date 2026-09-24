@@ -152,8 +152,10 @@ keyboard focus. The conversation stays usable without reducing text size.
 A room is a place, not a filing cabinet.
 
 - Focusing the app on a room means you are **in the room**. Others see this.
-- Room headers show occupancy: `#garage · Matt, Callie`
-- Sidebar rooms show a small stack of who is in them.
+- Sidebar rooms show a small stack of who is in them, and Who's Around says which
+  room each person is in. That is where occupancy lives; the room header shows the
+  room's name and topic and no names (#145 — in a DM the list only repeated the
+  title).
 - Backgrounding the app or idling >90 seconds takes you out of the room.
 
 **Entrance sounds.** Each user picks a personal sound that plays for others already
