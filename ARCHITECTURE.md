@@ -584,6 +584,17 @@ would otherwise claim it. Deletion is bytes first, row second — the other orde
 an object with nothing left pointing at it, and a crash between the two leaves a row the
 next pass finishes.
 
+**Exports are the one path that brings bytes back to the app host.** An archive
+(`export.rs`, SPEC §4.11) is built in scratch under `{data_dir}/staging` and then stored
+as one object. On `local`, the files it carries are read in place, so one export needs
+local scratch of roughly the finished zip, and the zip is then renamed into the data dir.
+On `s3`, there is no way to read an object without fetching it, so every file the member
+can see is downloaded into scratch before zipping: one export needs roughly **twice** the
+member's visible data on local disk while it builds, and costs a full download of that
+data in egress (free on R2, billed on plain S3). The scratch is deleted when the job ends
+and the finished zip lives in the bucket, but a host sizing an S3-backed box should size
+the staging disk for the largest export, not only for the uploads in flight.
+
 **The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not
 rows a host edits from inside the app (`docs/decisions.md`). `GET /server` reports the
