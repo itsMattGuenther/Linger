@@ -240,6 +240,63 @@ for (const theme of ["dark", "light"]) {
   });
 }
 
+for (const alone of [true, false]) {
+  test(`voice names sit centered and talking moves nothing, ${alone ? "alone" : "with others"} (#137)`, async ({ page }) => {
+    await page.goto("/tests/fixtures/console.html");
+    await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+    // Jules is in voice before you join, so wait for your own seat: that
+    // arrives with the join's update, and "alone" has to land after it.
+    await expect(page.getByRole("button", { name: "Matt, you, voice options", exact: true })).toBeVisible();
+    if (alone) {
+      await page.evaluate(() => document.dispatchEvent(new Event("fixture-voice-alone")));
+      await expect(page.locator(".voice-seat")).toHaveCount(1);
+    }
+    const talk = (peer: string | null, talking: boolean) =>
+      page.evaluate(([peer, talking]) =>
+        document.dispatchEvent(new CustomEvent("fixture-talking", { detail: [peer, talking] })), [peer, talking] as const);
+    // Every box whose size or place a reader could notice: the bar, each seat
+    // and name, and the first message under the bar.
+    const layout = () => page.evaluate(() => {
+      const box = (el: Element | null) => {
+        const r = el?.getBoundingClientRect();
+        return r ? [r.x, r.y, r.width, r.height] : null;
+      };
+      return [".voice-bar", ".voice-seat", ".voice-name", ".voice-seat-state", ".msg"].flatMap((selector) =>
+        [...document.querySelectorAll(selector)].slice(0, 4).map((el) => [selector, box(el)]));
+    });
+    // The stream is still measuring its rows just after load; wait until two
+    // readings agree before calling this the at-rest layout.
+    let quiet = await layout();
+    await expect.poll(async () => {
+      const again = await layout();
+      const settled = JSON.stringify(again) === JSON.stringify(quiet);
+      quiet = again;
+      return settled;
+    }).toBe(true);
+
+    const seats = page.locator(".voice-seat");
+    const centers = await seats.evaluateAll((nodes) => nodes.map((seat) => {
+      const s = seat.getBoundingClientRect(), n = seat.querySelector(".voice-name")!.getBoundingClientRect();
+      return Math.abs(s.x + s.width / 2 - (n.x + n.width / 2));
+    }));
+    for (const off of centers) expect(off).toBeLessThan(1);
+    const first = await page.locator(".voice-name").first().boundingBox();
+    const heading = await page.locator(".voice-label").boundingBox();
+    expect(Math.abs((first?.x ?? 0) - (heading?.x ?? 0))).toBeLessThan(1);
+
+    await talk(null, true);
+    if (!alone) await talk("jules-voice", true);
+    await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(alone ? 1 : 2);
+    await expect(page.locator('[data-talking="true"] .voice-name').first()).toHaveCSS("font-weight", "700");
+    expect(await layout()).toEqual(quiet);
+
+    await talk(null, false);
+    if (!alone) await talk("jules-voice", false);
+    await expect(page.locator('.voice-seat[data-talking="true"]')).toHaveCount(0);
+    expect(await layout()).toEqual(quiet);
+  });
+}
+
 test("a search jump wins over the saved room boundary (#123)", async ({ page }) => {
   await page.goto("/tests/fixtures/console.html?catchup");
   await expect(page.locator(".left-off")).toBeInViewport();
