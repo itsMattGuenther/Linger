@@ -53,6 +53,7 @@ import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, 
 import { talkingNow } from "../../core/voice";
 import { markerOf, Spinner, type TabItem } from "../../kit";
 import { useFollowing } from "../useFollowing";
+import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
 import { type ChatPane, ChatView } from "./ChatView";
 
@@ -340,6 +341,15 @@ function Conversations({ following }: { following: Following }) {
     return null;
   }, [servers]);
 
+  // With several servers every conversation says where it's from: a stripe
+  // on its tab in the server's color, and its name in the header (MULTI-6).
+  const infos = useServerInfos(apis);
+  const several = apis.size > 1;
+  const serverTag = useCallback(
+    (server: string) => ({ name: infos[server]?.name ?? hostOf(server), color: infos[server]?.accent ?? "slate" }),
+    [infos],
+  );
+
   const items = useMemo(
     () =>
       tabs.open.flatMap((tab): TabItem[] => {
@@ -350,7 +360,8 @@ function Conversations({ following }: { following: Following }) {
           {
             id: model.id,
             title: model.title,
-            label: model.label,
+            label: several ? `${model.label}, ${serverTag(tab.server).name}` : model.label,
+            stripe: several ? serverTag(tab.server).color : undefined,
             lead: model.lead === null ? undefined : model.lead.kind === "room" ? { kind: "room" } : { kind: "person", person: markerOf(model.lead.user, model.lead.state) },
             fresh: model.fresh,
             voice: model.voice ?? undefined,
@@ -359,7 +370,7 @@ function Conversations({ following }: { following: Following }) {
           },
         ];
       }),
-    [tabs, servers],
+    [tabs, servers, several, serverTag],
   );
 
 
@@ -507,8 +518,9 @@ function Conversations({ following }: { following: Following }) {
           people: others,
           onKnock: others.length === 1 && only && only.state !== "offline" ? () => knock(only.user) : undefined,
           knocked: only ? knocked.has(only.user.id) : false,
+          server: several ? serverTag(active.server) : undefined,
         }
-      : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id) };
+      : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id), server: several ? serverTag(active.server) : undefined };
     return {
       id: paneId,
       header,

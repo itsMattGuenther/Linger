@@ -22,8 +22,12 @@ import { SERVER, messages, people, previews } from "./evening";
 export interface DesktopOptions {
   /** This window's label, as the shell would give it. */
   label: string;
-  /** What the owner shares in its snapshot. */
+  /** What the owner shares in its snapshot, for the main server. */
   ownerState: GatewayState;
+  /** More servers the owner is signed in to, by address, and what it shares of each. */
+  others?: Record<string, GatewayState>;
+  /** Each server's name and color, for `GET /server`. */
+  infos?: Record<string, { name: string; accent: string | null }>;
   query: URLSearchParams;
   /** Questions the owner answers beyond the snapshot and tokens, by event. */
   asks?: Record<string, (question: Record<string, unknown>) => unknown>;
@@ -60,7 +64,7 @@ export function refuse(status: number, code: string, message: string): Response 
  */
 export const PHOTO_PATH = "/media/speakers.svg";
 
-export function fakeDesktop({ label, ownerState, query, asks = {}, routes, commands = {} }: DesktopOptions): Desktop {
+export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query, asks = {}, routes, commands = {} }: DesktopOptions): Desktop {
   const did: string[] = [];
   const note = (what: string) => {
     did.push(what);
@@ -122,7 +126,10 @@ export function fakeDesktop({ label, ownerState, query, asks = {}, routes, comma
   // --- the owner ---------------------------------------------------------
   const EPOCH = "s-evening";
   let seq = 100;
-  const shared = { ...ownerState, sessionId: EPOCH };
+  const shared: Record<string, GatewayState> = {
+    [SERVER]: { ...ownerState, sessionId: EPOCH },
+    ...Object.fromEntries(Object.entries(others).map(([server, state]) => [server, { ...state, sessionId: `${EPOCH}-${new URL(server).hostname}` }])),
+  };
   let tokens = 1;
 
   function ownerHears(event: string, payload: unknown): void {
@@ -133,7 +140,12 @@ export function fakeDesktop({ label, ownerState, query, asks = {}, routes, comma
       case "next:snapshot":
         if (query.has("noowner")) return;
         reply({
-          servers: [{ server: SERVER, state: shared, position: { epoch: EPOCH, seq }, lent: { token: `token-${tokens}`, expiresAt: Date.now() + 3_600_000 } }],
+          servers: Object.entries(shared).map(([server, state]) => ({
+            server,
+            state,
+            position: { epoch: state.sessionId, seq: server === SERVER ? seq : 1 },
+            lent: { token: `token-${tokens}`, expiresAt: Date.now() + 3_600_000 },
+          })),
         });
         return;
       case "next:token":
@@ -200,21 +212,27 @@ export function fakeDesktop({ label, ownerState, query, asks = {}, routes, comma
     return upTo.slice(-limit);
   };
 
-  const PREFIX = `${SERVER}/api/v1`;
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (!url.href.startsWith(PREFIX)) return realFetch(input, init);
-    const path = url.href.slice(PREFIX.length).split("?")[0] ?? "";
+    if (!(url.origin in shared) || !url.pathname.startsWith("/api/v1")) return realFetch(input, init);
+    const path = url.pathname.slice("/api/v1".length);
     const method = init?.method ?? "GET";
     const auth = new Headers(init?.headers).get("Authorization") ?? "";
-    note(`${method} ${path}${url.search}${auth ? ` as ${auth.replace("Bearer ", "")}` : ""}`);
+    // The main server's requests are written by path alone; another server's with its address.
+    const where = url.origin === SERVER ? "" : url.origin;
+    note(`${method} ${where}${path}${url.search}${auth ? ` as ${auth.replace("Bearer ", "")}` : ""}`);
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
     await new Promise((settle) => window.setTimeout(settle, 20));
     if (query.has("expired") && auth === "Bearer token-1") return refuse(401, "UNAUTHENTICATED", "Your sign-in ran out.");
 
     const own = routes?.(method, path, url, body);
     if (own) return own;
+    const info = infos[url.origin];
+    if (path === "/server" && method === "GET" && info) {
+      return json({ name: info.name, accent_key: info.accent, icon_key: null, member_count: 7, created_at: 0 });
+    }
+    if (url.origin !== SERVER) return json(url.pathname.endsWith("/messages") ? [] : {});
 
     const messagesOf = /^\/rooms\/([^/]+)\/messages$/.exec(path);
     if (messagesOf && method === "GET") return json(page(decodeURIComponent(messagesOf[1] ?? ""), url.searchParams));

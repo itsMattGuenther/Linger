@@ -224,6 +224,26 @@ test("switching back to tabs sends a conversation's own window home", async ({ p
   expect(intents(await did(page))).toContainEqual({ kind: "tabs", server: SERVER, roomId: "d-jules" });
 });
 
+test("with several servers, a tab carries its server's stripe and name, and the header says which", async ({ page }) => {
+  await open(page, "room=r-general&servers");
+  await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
+  const raid = page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" });
+  await expect(raid).toHaveAttribute("aria-selected", "true");
+  // Two servers, two tabs, each striped in its own server's color.
+  await expect(page.getByRole("tab", { name: "#general, The Good Company" })).toBeVisible();
+  const stripes = await page.locator(".k-tab[data-stripe='yes']").evaluateAll((tabs) => tabs.map((tab) => getComputedStyle(tab).getPropertyValue("--tab-stripe").trim()));
+  const palette = await page.evaluate(() => ["amber", "violet"].map((key) => getComputedStyle(document.documentElement).getPropertyValue(`--name-${key}`).trim()));
+  expect(stripes).toEqual(palette);
+  await expect(page.locator(".nx-pane-server")).toHaveText("Ashen Lanterns");
+});
+
+test("with one server, tabs and headers say nothing about servers", async ({ page }) => {
+  await open(page);
+  await expect(page.getByRole("tab", { name: "#general" })).toBeVisible();
+  await expect(page.locator(".k-tab[data-stripe='yes']")).toHaveCount(0);
+  await expect(page.locator(".nx-pane-server")).toHaveCount(0);
+});
+
 test("remembers open tabs across a restart", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.owner?.open("d-jules"));
