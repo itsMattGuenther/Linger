@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Installing or using Linger
+    url: https://github.com/itsMattGuenther/Linger/blob/main/docs/user-guide.md
+    about: The user guide covers installing, getting in, and troubleshooting.
+  - name: Running a server
+    url: https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md
+    about: Setup, updates and fixing a server you host.
