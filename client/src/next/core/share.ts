@@ -31,6 +31,7 @@ import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 
 /** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
 const CHAT = "chat";
+import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
 import { close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing } from "./showing";
 
 /** A late window asks for the owner's state. */
@@ -43,6 +44,13 @@ export const INTENT = "next:intent";
 export const SHARED = "next:shared";
 /** The desktop shell tells the owner a window has gone, however it went (src-tauri/src/window.rs). */
 export const CLOSED = "next:closed";
+/** The owner tells every window how conversations open now (core/conversations.ts). */
+export const MODE = "next:mode";
+
+export interface ModeMessage {
+  v: number;
+  mode: ConversationsMode;
+}
 
 export interface ServerShare {
   server: string;
@@ -84,7 +92,9 @@ export type Intent =
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
-  | { kind: "tabs"; server: string; roomId: RoomId };
+  | { kind: "tabs"; server: string; roomId: RoomId }
+  /** Settings changed how conversations open: every window rearranges itself. */
+  | { kind: "conversations"; mode: ConversationsMode };
 
 /**
  * How the owner opens windows: the desktop shell's commands in the app
@@ -126,7 +136,14 @@ export interface SharedMessage {
  * Start sharing. `sessions` is read on every question, so servers signed into
  * or out of later are handled without restarting.
  */
-export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, opener?: WindowOpener): Promise<Sharing> {
+export interface ShareOptions {
+  /** How windows open. Without one, nothing opens (tests that don't care). */
+  opener?: WindowOpener;
+  /** Where this computer keeps how conversations open. */
+  store?: ModeStore | null;
+}
+
+export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, { opener, store = null }: ShareOptions = {}): Promise<Sharing> {
   const lend = async (api: AuthedApi, stale?: string): Promise<Lent> => {
     const current = await api.accessToken();
     if (stale === undefined || current.token !== stale) return current;
@@ -164,7 +181,7 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     if (kind !== null) opener?.conversation(server, roomId, kind);
   };
   const open = (server: string, roomId: RoomId) => {
-    if (ownWindow(server, roomId)) inOwnWindow(server, roomId);
+    if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId);
     else opener?.chat(server, roomId);
   };
 
@@ -213,6 +230,13 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         case "tabs":
           if (sessions().has(intent.server)) opener?.chat(intent.server, intent.roomId);
           return;
+        case "conversations": {
+          if (!isMode(intent.mode)) return;
+          saveMode(store, intent.mode);
+          const message: ModeMessage = { v: PROTOCOL, mode: intent.mode };
+          void bus.broadcast(MODE, message);
+          return;
+        }
         case "voice.join": {
           const api = sessions().get(intent.server);
           if (!api) return;

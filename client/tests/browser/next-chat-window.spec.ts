@@ -191,6 +191,39 @@ test("a conversation back from its own window arrives with its draft", async ({ 
   expect(await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#d-jules`)).toBeNull();
 });
 
+test("switching to windows moves every tab into its own window, the one showing last", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.owner?.open("d-jules");
+    window.owner?.open("r-plans");
+  });
+  await page.getByRole("tab", { name: "DM with Jules" }).click();
+  await box(page).click();
+  await page.keyboard.type("for jules");
+  // Already tabs: nothing moves. Proving nothing happens takes a moment's wait.
+  await page.evaluate(() => window.owner?.mode("tabs"));
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("tab")).toHaveCount(3);
+  expect(await did(page)).not.toContain("window:close");
+  await page.evaluate(() => window.owner?.mode("windows"));
+  await expect.poll(() => did(page)).toContain("window:close");
+  expect(intents(await did(page)).filter((intent) => intent.kind === "popout")).toEqual([
+    { kind: "popout", server: SERVER, roomId: "r-general" },
+    { kind: "popout", server: SERVER, roomId: "r-plans" },
+    { kind: "popout", server: SERVER, roomId: "d-jules" },
+  ]);
+  const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#d-jules`);
+  expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "for jules" });
+});
+
+test("switching back to tabs sends a conversation's own window home", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-chat-window.html?room=d-jules&single=1");
+  await expect(page.getByRole("region", { name: "Jules" })).toBeVisible();
+  await page.evaluate(() => window.owner?.mode("tabs"));
+  await expect.poll(() => did(page)).toContain("window:close");
+  expect(intents(await did(page))).toContainEqual({ kind: "tabs", server: SERVER, roomId: "d-jules" });
+});
+
 test("remembers open tabs across a restart", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.owner?.open("d-jules"));

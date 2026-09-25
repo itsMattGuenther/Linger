@@ -165,6 +165,8 @@ declare global {
       say: (room: string, author: string, body: string) => string;
       /** What the page's server holds for a room, newest last. */
       held: (room: string) => Message[];
+      /** Settings changed how conversations open, as the owner tells every window. */
+      mode: (mode: "tabs" | "windows") => void;
     };
   }
 }
@@ -181,6 +183,7 @@ window.owner = {
     return message.id;
   },
   held: (room) => store[room] ?? [],
+  mode: (mode) => deliver("next:mode", { v: 1, mode }),
 };
 
 // ---------------------------------------------------------------------------

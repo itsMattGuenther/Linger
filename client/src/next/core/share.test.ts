@@ -284,8 +284,10 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.gateway.connect(api as never);
     const opened: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
-      conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
+      opener: {
+        chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
+        conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
+      },
     });
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
@@ -311,6 +313,41 @@ describe("a viewer window sharing the owner's connection", () => {
     await follower.intend({ kind: "popout", server: HOME, roomId: "r-nowhere" });
     await new Promise((settle) => setTimeout(settle, 20));
     expect(opened).toHaveLength(before);
+    sharing.stop();
+    follower.stop();
+  });
+
+  it("switching to windows opens every conversation in its own window, and every window hears of it", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const opened: string[] = [];
+    const items = new Map<string, string>();
+    const store = { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) };
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      opener: {
+        chat: (_server, roomId) => opened.push(`chat ${roomId}`),
+        conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
+      },
+      store,
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const heard: unknown[] = [];
+    await viewer.bus.listen(owner.share.MODE, (message) => heard.push(message));
+
+    await follower.intend({ kind: "conversations", mode: "windows" });
+    await vi.waitFor(() => expect(heard).toEqual([{ v: 1, mode: "windows" }]));
+    expect(items.get("linger.next.conversations")).toBe("windows");
+    sharing.open(HOME, "r-general");
+    expect(opened).toEqual(["own r-general room"]);
+
+    // Something that isn't a mode changes nothing.
+    await follower.intend({ kind: "conversations", mode: "stacked" as never });
+    await follower.intend({ kind: "conversations", mode: "tabs" });
+    await vi.waitFor(() => expect(heard).toEqual([{ v: 1, mode: "windows" }, { v: 1, mode: "tabs" }]));
+    sharing.open(HOME, "r-general");
+    expect(opened.at(-1)).toBe("chat r-general");
     sharing.stop();
     follower.stop();
   });

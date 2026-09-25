@@ -174,7 +174,8 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `voice.join` (which also moves voice), `voice.leave`, `voice.mute`,
   `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window;
 - `popout` and `tabs`: move a conversation into a window of its own, or back
-  into the chat window's tabs (only the owner opens windows).
+  into the chat window's tabs (only the owner opens windows);
+- `conversations`: tabs or windows, from Settings.
 
 Anything else a viewer can do with REST it does itself, with its borrowed
 token: send, edit, delete, load history, upload, knock, and typing through the
@@ -204,7 +205,12 @@ never leaves you standing in a room.
   once and thrown away after a minute (`core/handoff.ts`). Files waiting to
   be sent stay behind.
 - **Windows mode:** one window per conversation. A tiling desktop such as
-  Hyprland places them.
+  Hyprland places them. The choice is kept on this computer
+  (`core/conversations.ts`); Settings asks the owner to change it (the
+  `conversations` intent), and the owner tells every window (`next:mode`).
+  Switching moves what's open at once: every tab into a window of its own,
+  the showing one last so it lands on top, or every such window back into the
+  tabs.
 - **Title bars.** Every new-client window is frameless and draws its own title
   bar from the kit, with a drag region and window controls where the desktop
   has none. Windows 11 shadows and resizing on frameless windows need checking

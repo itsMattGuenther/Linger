@@ -117,7 +117,7 @@ function ServerList({ session }: { session: ServerSession }) {
     if (!isTauri()) return;
     let held: Sharing | null = null;
     let gone = false;
-    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), shell).then((started) => {
+    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), { opener: shell, store: localStore() }).then((started) => {
       if (gone) started.stop();
       else held = sharing = started;
     });
@@ -296,6 +296,15 @@ const shell: WindowOpener = {
     );
   },
 };
+
+/** This computer's storage, or none where it's refused. */
+function localStore(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 /** This window's sharing, once it has started: it knows which conversations have their own windows. */
 let sharing: Sharing | null = null;

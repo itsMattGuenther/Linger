@@ -31,7 +31,7 @@ import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { uploadFile } from "../../../lib/upload";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
-import { tauriBus } from "../../core/bus";
+import { PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
   dmPeople,
@@ -48,6 +48,7 @@ import { voiceStrip } from "../../core/chat/voice";
 import { tabCommand } from "../../core/keys";
 import { type Following, followOwner } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
+import { MODE, type ModeMessage } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { markerOf, Spinner, type TabItem } from "../../kit";
@@ -257,6 +258,42 @@ function Conversations({ following }: { following: Following }) {
     void intend({ kind: "tabs", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
     closeWindow();
   }, [intend, closeWindow]);
+
+  // Settings changed how conversations open, and whatever is open moves at
+  // once: every tab into a window of its own (the one showing last, so it
+  // lands on top), or every window of its own back into the tabs.
+  const rearrange = useRef<(mode: ModeMessage["mode"]) => void>(() => undefined);
+  rearrange.current = (mode) => {
+    if (mode === "tabs" && SINGLE) {
+      backToTabs();
+      return;
+    }
+    if (mode !== "windows" || SINGLE) return;
+    const { open, active } = tabsNow.current;
+    const store = handoffStore();
+    for (const tab of [...open.filter((held) => !same(held, active)), ...open.filter((held) => same(held, active))]) {
+      if (store) leaveDraft(store, keyOf(tab), typed.current.get(keyOf(tab)) ?? "", Date.now());
+      void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
+    }
+    setTabs({ open: [], active: null });
+  };
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<ModeMessage>(MODE, (message) => {
+        if (message.v === PROTOCOL) rearrange.current(message.mode);
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   // A window with no conversations left has nothing to show: it closes.
   const empty = tabs.open.length === 0;
