@@ -86,3 +86,24 @@
   font-style: italic;
   color: var(--text-away);
 }
+
+/* With several servers: a short bar in each server's color, in your order. */
+.nx-you-marks {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-0-5);
+}
+
+.nx-you-marks i {
+  width: var(--space-1);
+  height: var(--space-2-5);
+  border-radius: var(--radius-xs);
+  background: var(--server);
+}
+
+.nx-you-problem {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-danger);
+}

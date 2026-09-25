@@ -4,6 +4,7 @@
  */
 export { Button, type ButtonProps, type ButtonVariant, type ControlSize } from "./Button";
 export { Card, Popover } from "./Card";
+export { Checkbox } from "./Checkbox";
 export { ChoiceCards, type Choice } from "./ChoiceCard";
 export { Chip } from "./Chip";
 export { Icon, type IconName, type IconSize } from "./Icon";

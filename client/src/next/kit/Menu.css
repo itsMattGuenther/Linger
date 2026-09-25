@@ -59,3 +59,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* An on/off item that's on: a tick at the end, in the lamp. */
+.k-menu-tick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-left: auto;
+  color: var(--text-accent);
+}

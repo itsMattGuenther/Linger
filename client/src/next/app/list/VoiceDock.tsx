@@ -2,6 +2,7 @@ import type { User } from "../../../generated/User";
 import { Button, Chip, IconButton, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import "./VoiceDock.css";
+import { serverColor } from "./ServerSection";
 
 export interface VoiceDockPerson {
   user: User;
@@ -18,6 +19,11 @@ export interface VoiceDockProps {
   pushToTalk: boolean;
   /** The one thing worth saying about your microphone, if anything (lib/voice.ts). */
   line: string | null;
+  /**
+   * With several servers, which one: its name and color, and how full the
+   * room is in words when it's nearly full (core/servers.ts `seatsWords`).
+   */
+  server?: { name: string; accent: string | null; seats: string | null };
   onGoToRoom: () => void;
   onMute: (muted: boolean) => void;
   onDeafen: (deafened: boolean) => void;
@@ -30,16 +36,30 @@ export interface VoiceDockProps {
  * Mute, Deafen and Leave: the list is always open, so they're always in
  * reach, and closing a chat tab or window never ends voice.
  */
-export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, onGoToRoom, onMute, onDeafen, onLeave }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, server, onGoToRoom, onMute, onDeafen, onLeave }: VoiceDockProps) {
   const anyone = people.some((person) => person.speaking);
   return (
-    <section className="nx-voice" aria-label={`In voice in ${where}`}>
+    <section className="nx-voice" aria-label={server ? `In voice in ${where} on ${server.name}` : `In voice in ${where}`}>
       <div className="nx-voice-head">
         <VoiceGlyph speaking={anyone} mine />
         <span className="nx-voice-label">In voice</span>
         <span className="nx-voice-where">{where}</span>
         <IconButton icon="go" label={`Go to ${where}`} size="sm" onClick={onGoToRoom} />
       </div>
+      {server ? (
+        <p className="nx-voice-server" style={serverColor(server.accent)}>
+          <span className="nx-voice-server-mark" aria-hidden="true" />
+          <span className="nx-voice-server-name">{server.name}</span>
+          {server.seats ? (
+            <>
+              <span className="nx-voice-server-sep" aria-hidden="true">
+                ·
+              </span>
+              <span className="nx-voice-server-seats">{server.seats}</span>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       <ul className="nx-voice-people" aria-label="Who's in voice">
         {people.map((person) => (
           <li key={person.user.id}>

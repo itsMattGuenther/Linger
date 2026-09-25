@@ -15,6 +15,7 @@ import { PALETTE_KEYS } from "../../src/lib/palette";
 import {
   Button,
   Card,
+  Checkbox,
   ChoiceCards,
   Chip,
   GroupMarker,
@@ -245,6 +246,7 @@ function Tabs() {
 
 function Gallery() {
   const [switches, setSwitches] = useState({ quiet: true, door: false, plain: false });
+  const [shownOn, setShownOn] = useState({ home: true, guild: false });
   const [mode, setMode] = useState<"tabs" | "windows">("tabs");
   const [field, setField] = useState("");
   const [status, setStatus] = useState("fixing the porch light (the real one)");
@@ -579,6 +581,17 @@ function Gallery() {
           />
           <SettingRow title="Use plain names and message fonts" control={<Switch label="Use plain names and message fonts" checked={false} disabled onChange={() => {}} />} />
           <SettingRow title="Play" description="A preview of the knock chime." control={<Button size="sm" icon="play">Play</Button>} />
+        </div>
+        <div className="g-fields" data-testid="checkboxes">
+          <Checkbox checked={shownOn.home} onChange={(home) => setShownOn((s) => ({ ...s, home }))}>
+            Show it on The Good Company
+          </Checkbox>
+          <Checkbox checked={shownOn.guild} onChange={(guild) => setShownOn((s) => ({ ...s, guild }))}>
+            Show it on Ashen Lanterns
+          </Checkbox>
+          <Checkbox checked disabled onChange={() => {}}>
+            Knocks still get through
+          </Checkbox>
         </div>
         <ChoiceCards
           legend="Conversations open"

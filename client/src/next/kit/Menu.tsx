@@ -13,8 +13,17 @@ export interface MenuItem {
   icon?: IconName;
   /** Destructive: drawn in the danger color. */
   tone?: "danger";
+  /**
+   * An on/off choice (a `menuitemcheckbox`), like a server's Quiet: true
+   * or false says which, and a tick shows when it's on. Leave out for a
+   * plain action.
+   */
+  checked?: boolean;
   onSelect: () => void;
 }
+
+/** Every item the keyboard moves through, whatever kind. */
+const ITEMS = '[role="menuitem"], [role="menuitemcheckbox"]';
 
 /** Where the menu was opened from: the trigger's box in the window. */
 export interface MenuAnchor {
@@ -67,7 +76,7 @@ export function Menu({
   // hidden for measuring.
   const placed = place !== null;
   useEffect(() => {
-    if (placed) box.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    if (placed) box.current?.querySelector<HTMLElement>(ITEMS)?.focus();
   }, [itemKey, placed]);
 
   useEffect(() => {
@@ -80,7 +89,7 @@ export function Menu({
   }, [onClose]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const all = [...(box.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const all = [...(box.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
     const at = all.findIndex((item) => item === document.activeElement);
     let next: number | null = null;
     if (event.key === "ArrowDown") next = (at + 1) % all.length;
@@ -117,7 +126,8 @@ export function Menu({
         <button
           key={item.id}
           type="button"
-          role="menuitem"
+          role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+          aria-checked={item.checked}
           className="k-menu-item"
           data-kit="MenuItem"
           data-kit-control=""
@@ -131,6 +141,11 @@ export function Menu({
             {item.icon ? <Icon name={item.icon} size="md" /> : null}
           </span>
           <span className="k-menu-text">{item.label}</span>
+          {item.checked ? (
+            <span className="k-menu-tick" aria-hidden="true">
+              <Icon name="check" size="sm" />
+            </span>
+          ) : null}
         </button>
       ))}
     </div>,

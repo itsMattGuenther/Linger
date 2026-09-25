@@ -132,7 +132,11 @@ To look at pieces without the desktop shell, run `pnpm exec vite` in `client/`
 and open any of these pages:
 
 - `/tests/fixtures/kit.html`: every component in every state;
-- `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening;
+- `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening.
+  Add `?servers` for the prototype's three servers (the first open, the rest
+  folded), with `&folded` or `&open` to start them all one way, `&quiet` to
+  quiet the guild, `&awayfail` to have one server refuse an away message, and
+  `&voice` to be in voice;
 - `/tests/fixtures/next-chat.html`: the chat window on the same evening. Add
   `?voice=mine`, `?voice=elsewhere` or `?voice=off` for the voice strip's
   states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
@@ -149,7 +153,7 @@ and open any of these pages:
   refused, `?away`, `?long`, and `?devices=none` or `?devices=looking`.
 
 Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
-`next-chat.spec.ts`, `next-settings.spec.ts`) measure the rules in
+`next-servers.spec.ts`, `next-chat.spec.ts`, `next-settings.spec.ts`) measure the rules in
 `docs/design/system.md`;
 `next-chat-window.spec.ts` checks what the chat window asks of the list window
 and the server.

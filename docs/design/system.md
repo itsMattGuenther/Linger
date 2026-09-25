@@ -331,6 +331,8 @@ message's Reply, Edit and Delete.
   closes it. The caller puts focus back on the trigger, since only it knows
   what the trigger was.
 - **Width** is `--menu-w`; a long label ends in "…".
+- **`checked`** makes an item an on/off choice (`menuitemcheckbox`), like a
+  server's Quiet: a tick in the lamp at its end when it's on.
 
 ### TextField
 
@@ -362,6 +364,10 @@ readers.
   36×24 hit box, the lamp when on.
 - **`SettingRow`** is one setting: its name, one line saying what it does, and
   its control at the end. It is the building block for Settings.
+- **`Checkbox`** is one of several choices that are each on or off together,
+  like the servers an away message shows on: a real checkbox in a 32px row,
+  a 16px box in the lamp when ticked, and its words beside it as its name.
+  The row draws the focus ring, as a field's box does.
 
 ### ChoiceCards
 
@@ -507,6 +513,30 @@ saying what it's for.
 - **The window** is 720 by 640, and works down to 560 wide; fields sit side by
   side while they fit.
 
+## The list with several servers
+
+Each server is a section of the list (`ServerSection`, `core/servers.ts`),
+built on the rows' own grid so nothing new lines up by eye:
+
+- **The header** is a 32px row. Its fold caret sits in the row's left
+  padding; the server's color is a short bar in the lead column, where a
+  person's marker sits; its name starts on the same edge as every other name
+  in the list, bold only when something inside is new and never while the
+  server is Quiet. The dots of who's on end the row. The menu button (Quiet,
+  Move up, Move down) shows over the end of the dots on hover or focus, on a
+  patch of whatever is behind it.
+- **The line under it** is 16px on the same grid: an icon in the lead column
+  when voice is on, then one plain sentence that ends in "…". Folded, it says
+  what's happening there; open, who you are there and your status there,
+  which you can change from it. It never holds a digit: a nearly full voice
+  room says "room for one more".
+- **Pinned:** the header and its line stay at the top while you scroll
+  through a long server, and what slides under them fades over 10px rather
+  than being cut mid-letter.
+- **The top card** keeps only what's true everywhere: you, whether you're
+  away (and where), and Away, whose editor ticks a `Checkbox` per server.
+- **One server** draws the list exactly as before, with no section header.
+
 ## What the tests enforce
 
 | Rule | Test |
@@ -532,6 +562,8 @@ saying what it's for.
 | Compact `ChoiceCards` sit side by side with their titles on one line | `kit.spec.ts` › compact choice cards sit side by side |
 | Settings: sections per scope (Hosting only for the host, Servers only with several), the sidebar's keyboard, every save saying how it went, Escape backing out to its button, and at 720 and 560 wide every control 24/32/40, nothing clipped or past the edge, labels and choices on one edge | `next-settings.spec.ts` |
 | Settings copy: title-case headings and labels, SPEC §1's words | `core/settings.test.ts` |
+| Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
+| What a server's header and line say, from its store | `core/servers.test.ts` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |
