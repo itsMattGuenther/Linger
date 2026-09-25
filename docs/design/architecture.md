@@ -246,9 +246,13 @@ one.
   has none. Windows 11 shadows and resizing on frameless windows need checking
   early on Windows.
 - **Remembering.** Open tabs and their order are remembered on this computer
-  (`linger.next.tabs`); window positions join them in windows mode. Closing
-  the last tab closes the chat window, and the next conversation opened starts
-  a fresh set.
+  (`linger.next.tabs`). Closing the last tab closes the chat window, and the
+  next conversation opened starts a fresh set. Every new-client window's size,
+  position and maximized state are remembered by the desktop shell
+  (`tauri-plugin-window-state`, `remembered_windows` in `window.rs`), for the
+  new client only; today's client is left as it was. Each window also
+  remembers which interface size it was sized for, so a remembered window
+  isn't grown again on the next run (`core/appearance.ts`).
 
 ## The hidden switch
 

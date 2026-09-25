@@ -475,6 +475,9 @@ pub fn run() {
         // capability file grants the WebView none of the plugin's own commands,
         // so the page goes through `updates.rs` or not at all.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Where each Buddy list window was, and how big (T-1808). Registered
+        // before `setup` so the windows built there are restored too.
+        .plugin(window::remembered_windows())
         .manage(Connections::default())
         .manage(VoiceEngines::default())
         // The window is built here, not from the config, so it can leave the

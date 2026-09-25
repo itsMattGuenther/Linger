@@ -57,6 +57,9 @@ tauri-plugin-opener = "2.5.4"
 # talks to the freedesktop notification service over zbus, so it adds no system
 # package to anybody's build.
 tauri-plugin-notification = "2"
+# Window positions and sizes, remembered on this computer (T-1808), for the
+# Buddy list client's windows only (`window::remembered_windows`).
+tauri-plugin-window-state = "2"
 # Already used by that plugin. Direct access requests silent desktop banners,
 # so the one app sound player owns mute/quiet-hours on every desktop platform.
 notify-rust = "4"

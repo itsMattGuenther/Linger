@@ -18,6 +18,7 @@ vi.mock("@tauri-apps/api/window", () => ({
     ) {}
   },
   getCurrentWindow: () => ({
+    label: "main",
     scaleFactor: async () => 2,
     innerSize: async () => ({ toLogical: () => ({ ...shell.size }) }),
     setSize: async (size: { width: number; height: number }) => {
@@ -33,6 +34,9 @@ vi.mock("./bus", () => ({
 const storage = new Map<string, string>();
 beforeEach(() => {
   storage.clear();
+  shell.zoom = 1;
+  shell.size = { width: 340, height: 820 };
+  shell.broadcast = [];
   vi.stubGlobal("window", {
     localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => void storage.set(key, value) },
   });
@@ -62,6 +66,27 @@ describe("how the new client looks, in every window", () => {
     await vi.waitFor(() => expect(shell.size).toEqual({ width: 340, height: 820 }));
     expect(shell.zoom).toBe(1);
     expect(shell.broadcast).toContainEqual(["next:appearance", { v: 1 }]);
+  });
+
+  it("a window remembered at a size opens at it, and doesn't grow again on every run", async () => {
+    vi.resetModules();
+    let run = await import("./appearance");
+    run.saveScale(150);
+    await run.applyAppearance();
+    expect(shell.size).toEqual({ width: 510, height: 1230 });
+
+    // A new run: the shell has put the window back at the size it was, 510 wide.
+    vi.resetModules();
+    run = await import("./appearance");
+    shell.zoom = 1;
+    await run.applyAppearance();
+    expect(shell.zoom).toBe(1.5);
+    expect(shell.size).toEqual({ width: 510, height: 1230 });
+
+    // Back to 100 in that run: it shrinks to what it was made for.
+    run.saveScale(100);
+    await run.applyAppearance();
+    expect(shell.size).toEqual({ width: 340, height: 820 });
   });
 
   it("saves only sizes on the list, and 100 for anything else", async () => {

@@ -16,6 +16,23 @@ use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, Webview
 /// Hyprland. The config marks them `"create": false` so Tauri doesn't build
 /// them first; changing the frame after the window is on screen would flash
 /// the bar and resize the page underneath it.
+/// Window positions and sizes, remembered on this computer (T-1808): where
+/// each Buddy list window was and how big, restored when it opens again, the
+/// chat window's and every popped-out conversation's included. Today's client
+/// keeps its old behavior, so its main window is left out. Only size,
+/// position and maximized are kept: whether a window has a frame depends on
+/// the desktop it opens on (`create`), not on last time.
+pub fn remembered_windows() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_window_state::{Builder, StateFlags};
+    let builder = Builder::default()
+        .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED);
+    if chosen_client(std::env::var_os(NEXT).as_deref()) == Client::Next {
+        builder.build()
+    } else {
+        builder.with_denylist(&[OWNER]).build()
+    }
+}
+
 pub fn create(app: &App) -> tauri::Result<()> {
     let decorated = !on_hyprland(
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),

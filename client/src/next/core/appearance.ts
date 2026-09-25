@@ -9,6 +9,12 @@
  * font would grow nothing. A window grows by the same ratio, so its layout
  * keeps the width it was designed at: a list at 150% is 510 wide, not 340
  * wide with a 227-pixel layout squeezed into it.
+ *
+ * The desktop shell remembers each window's size between runs
+ * (`remembered_windows` in src-tauri/src/window.rs), so each window also
+ * remembers which interface size it was last sized for and only grows or
+ * shrinks by the difference: a window remembered at 150% opens at 150% and
+ * doesn't grow again.
  */
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -53,23 +59,41 @@ export function resizedFor(size: { width: number; height: number }, from: number
   return { width: Math.round(size.width * ratio), height: Math.round(size.height * ratio) };
 }
 
-/** The size this window is zoomed to; 100 when it opened, at its designed size. */
-let applied = 100;
+/** The zoom this page has; a page opens at 100. */
+let zoomed = 100;
+
+/** Which interface size a window's size was last made for, kept per window. */
+function sizedForKey(label: string): string {
+  return `linger.next.windowScale.${label}`;
+}
 
 /** Apply what's saved to this window. */
 export async function applyAppearance(): Promise<void> {
   applyNormalize(loadNormalize());
   const scale = loadScale();
-  if (!isTauri() || scale === applied) return;
-  const from = applied;
-  applied = scale;
-  const window = getCurrentWindow();
+  if (!isTauri()) return;
+  const current = getCurrentWindow();
   try {
-    await getCurrentWebview().setZoom(scale / 100);
-    const factor = await window.scaleFactor();
-    const inner = (await window.innerSize()).toLogical(factor);
-    const next = resizedFor(inner, from, scale);
-    await window.setSize(new LogicalSize(next.width, next.height));
+    if (zoomed !== scale) {
+      zoomed = scale;
+      await getCurrentWebview().setZoom(scale / 100);
+    }
+    let sizedFor = 100;
+    try {
+      sizedFor = validScale(Number(window.localStorage.getItem(sizedForKey(current.label)) ?? "100"));
+    } catch {
+      // Storage refused: treat the window as its designed size.
+    }
+    if (sizedFor === scale) return;
+    const factor = await current.scaleFactor();
+    const inner = (await current.innerSize()).toLogical(factor);
+    const next = resizedFor(inner, sizedFor, scale);
+    await current.setSize(new LogicalSize(next.width, next.height));
+    try {
+      window.localStorage.setItem(sizedForKey(current.label), String(scale));
+    } catch {
+      // Storage refused: the next run sizes it from its designed size again.
+    }
   } catch {
     // A desktop that won't resize (a tiling one) still gets the zoom.
   }

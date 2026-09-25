@@ -841,8 +841,9 @@ Rules for this milestone:
 - ⬜ **T-1807 · Media, search and uploads.**
 - 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
   remembered, and the tray. Pop-out and back are built (with the draft going
-  along), and so is switching between tabs and windows, waiting for its
-  place in Settings. Window positions and the tray are not.
+  along), and so is switching between tabs and windows (Settings → Windows).
+  Window positions and sizes are remembered. The tray isn't built (decisions
+  4 and 5).
 - 🟡 **T-1809 · Several servers** — folding sections, the time there, quiet,
   and a server in its own window. Folding sections, your order and Quiet are
   built, with the list window connecting to every server; "the time there"
