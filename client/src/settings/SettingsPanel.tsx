@@ -276,7 +276,7 @@ export function SoundSection() {
   const liveSilenced = prefs.muted
     ? "All live chimes are off. Play still previews."
     : prefs.quietHours && inQuietHours(new Date(now))
-      ? `Quiet hours are silencing live chimes until 0${QUIET_UNTIL_HOUR}:00. Play still previews.`
+      ? `Quiet hours are silencing message and knock chimes until 0${QUIET_UNTIL_HOUR}:00. Voice and mute/deafen sounds still play.`
       : null;
 
   return (
@@ -293,7 +293,7 @@ export function SoundSection() {
       />
       <PreferenceSwitch
         label="Quiet hours"
-        hint={`No chimes from ${QUIET_FROM_HOUR}:00 to 0${QUIET_UNTIL_HOUR}:00, on this computer’s clock.`}
+        hint={`No DM, room or knock chimes from ${QUIET_FROM_HOUR}:00 to 0${QUIET_UNTIL_HOUR}:00, on this computer’s clock. Voice and mute/deafen sounds still play.`}
         checked={prefs.quietHours}
         onChange={(quietHours) => change({ ...prefs, quietHours })}
       />

@@ -92,13 +92,29 @@ describe("notification sound policy", () => {
     expect(sound.loadSoundPrefs().muted).toBe(true);
   });
 
-  it("master mute and quiet hours win over every category", async () => {
+  it("master mute wins over every category", async () => {
     const sound = await import("./sound");
     for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock"] as const) {
-      const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } };
+      const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } };
+      expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(false);
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 3))).toBe(false);
-      expect(sound.cueAllowed(cue, { ...prefs, muted: true }, new Date())).toBe(false);
     }
+  });
+
+  it("quiet hours silence notifications, not the controls of a call you are in (#186)", async () => {
+    const sound = await import("./sound");
+    const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } };
+    const night = new Date(2026, 8, 17, 3);
+    for (const cue of ["dm", "room", "knock"] as const) {
+      expect(sound.cueAllowed(cue, prefs, night)).toBe(false);
+      expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(true);
+    }
+    for (const cue of ["mute", "unmute", "deafen", "undeafen", "voice-join", "voice-leave", "voice-move", "peer-join", "peer-leave"] as const) {
+      expect(sound.cueAllowed(cue, prefs, night)).toBe(true);
+    }
+    // Their own switches still silence them.
+    expect(sound.cueAllowed("mute", { ...prefs, categories: { ...prefs.categories, controls: false } }, night)).toBe(false);
+    expect(sound.cueAllowed("voice-join", { ...prefs, categories: { ...prefs.categories, voice: false } }, night)).toBe(false);
   });
 
   it("keeps master silence when storage can be read but writes fail", async () => {

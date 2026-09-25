@@ -10,7 +10,9 @@
  * - **Quiet hours, 22:00–08:00 in the listener's own time, off until they
  *   turn it on.** The listener's clock, never the sender's — 2am for you is
  *   what matters, and somebody knocking from another timezone does not get to
- *   decide that.
+ *   decide that. Quiet hours silence *notifications*: DMs, room messages and
+ *   knocks, which arrive on their own. Voice and mic/deafen cues answer
+ *   something you are doing in a call, so they still play (#186).
  *
  * Both are the reader's preference about their own machine, so they live in
  * local storage beside appearance preferences rather than in the gateway store.
@@ -45,7 +47,7 @@ let storageUnavailable = false;
 export interface SoundPrefs {
   /** Nothing makes a sound. Off by default. */
   muted: boolean;
-  /** Nothing makes a sound between 22:00 and 08:00. Off until they opt in. */
+  /** No notification chimes between 22:00 and 08:00. Off until they opt in. */
   quietHours: boolean;
   categories: Record<SoundCategory, boolean>;
 }
@@ -57,8 +59,10 @@ export function inQuietHours(at: Date): boolean {
 }
 
 /**
- * Whether a sound may be played right now. Pure, so the rule can be tested
- * without a clock, an audio device or a browser.
+ * Whether a *notification* may sound right now: not muted, and not inside
+ * quiet hours. Voice and control cues skip the quiet-hours half (see
+ * {@link cueAllowed}). Pure, so the rule can be tested without a clock, an
+ * audio device or a browser.
  */
 export function soundAllowed(prefs: SoundPrefs, at: Date): boolean {
   if (prefs.muted) return false;
@@ -162,6 +166,14 @@ export function playKnock(now: Date = new Date()): Promise<boolean> {
   return playSound("knock", now);
 }
 
+/**
+ * What quiet hours silence: the notifications that arrive on their own. Voice
+ * and mic/deafen cues are feedback for a call you are in, and going quiet on
+ * those at night only makes the controls feel broken (#186). Mute and each
+ * category's own switch still silence them.
+ */
+export const QUIET_HOURS_SILENCE: readonly SoundCategory[] = ["dms", "rooms", "knocks"];
+
 export function categoryOf(cue: SoundCue): SoundCategory {
   if (cue === "knock") return "knocks";
   if (cue === "dm") return "dms";
@@ -171,7 +183,9 @@ export function categoryOf(cue: SoundCue): SoundCategory {
 }
 
 export function cueAllowed(cue: SoundCue, prefs: SoundPrefs, at: Date): boolean {
-  return soundAllowed(prefs, at) && prefs.categories[categoryOf(cue)];
+  const category = categoryOf(cue);
+  if (prefs.muted || !prefs.categories[category]) return false;
+  return QUIET_HOURS_SILENCE.includes(category) ? soundAllowed(prefs, at) : true;
 }
 
 const lastPlayed = new Map<SoundCategory, number>();

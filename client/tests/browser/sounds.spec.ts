@@ -43,7 +43,7 @@ test("quiet defaults, category choices and master silence survive reload", async
   ).toBeChecked();
 });
 
-test("quiet hours silence live chimes but play still previews", async ({
+test("quiet hours silence message and knock chimes but play still previews (#186)", async ({
   page,
 }) => {
   await page.clock.install({ time: new Date("2026-09-17T03:00:00Z") });
@@ -52,13 +52,13 @@ test("quiet hours silence live chimes but play still previews", async ({
     page.getByRole("switch", { name: "Quiet hours", exact: true }),
   ).not.toBeChecked();
   await expect(
-    page.getByText(/Quiet hours are silencing live chimes/),
+    page.getByText(/Quiet hours are silencing/),
   ).toHaveCount(0);
   await page
     .getByRole("switch", { name: "Quiet hours", exact: true })
     .check();
   await expect(
-    page.getByText(/Quiet hours are silencing live chimes until 08:00/),
+    page.getByText("Quiet hours are silencing message and knock chimes until 08:00. Voice and mute/deafen sounds still play."),
   ).toBeVisible();
   await expect(
     page
@@ -76,7 +76,7 @@ test("quiet hours silence live chimes but play still previews", async ({
     .getByRole("switch", { name: "Quiet hours", exact: true })
     .uncheck();
   await expect(
-    page.getByText(/Quiet hours are silencing live chimes/),
+    page.getByText(/Quiet hours are silencing/),
   ).toHaveCount(0);
   await expect(
     page.getByText(/To silence people in voice, use deafen/),
