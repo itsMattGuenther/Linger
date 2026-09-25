@@ -199,8 +199,10 @@ keyword-based system delivers it.
 **Notification chimes** (2026-09-17). Optional, short, quiet cues, with one
 master silence switch and separate controls for voice sessions, microphone/
 deafen controls, DMs, room messages and knocks. Voice/control/DM/knock sounds
-default on; ordinary room-message sounds default off. Quiet hours remain
-22:00–08:00 listener-local, off until they opt in. Quiet hours silence the
+default on; ordinary room-message sounds default off. Quiet hours are
+listener-local, off until they opt in, and run 22:00–08:00 unless the listener
+moves them: a start and an end in half-hour steps, crossing midnight or not
+(#185). Quiet hours silence the
 notifications that arrive on their own: DM, room-message and knock chimes.
 Voice and mic/deafen cues answer something the listener is doing in a call, so
 quiet hours leave them alone; mute and their own switches still silence them

@@ -406,8 +406,8 @@ person sees a small card for eight seconds, then it is gone. Your button says
 request, not that they saw it. There is no message and nothing for them to
 answer. Three an hour per person, so it stays a tap. A soft sound accompanies
 the card unless sounds are muted or quiet hours are on (22:00–08:00 on this
-computer's clock). Quiet hours are off until you turn them on. They silence
-the sound, not the card.
+computer's clock unless you move them). Quiet hours are off until you turn them
+on. They silence the sound, not the card.
 
 ## Finding things again
 
@@ -494,7 +494,9 @@ beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
 hear what you are choosing. Quiet hours, when you turn them on, silence
 DM, room-message and knock chimes between 22:00 and 08:00 on your computer's
-clock. Voice and mute/deafen sounds still play during quiet hours, because
+clock. Once they're on, **Quiet from** and **Quiet until** move the window in
+half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
+sleep late. Voice and mute/deafen sounds still play during quiet hours, because
 they answer something you just did, and voice chat itself is never affected.
 
 Messages you are already reading, your own messages, reconnect replay and
