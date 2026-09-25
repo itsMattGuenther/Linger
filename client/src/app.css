@@ -70,6 +70,14 @@
   min-width: 0;
 }
 
+/* The conversation's title line is as tall as the button that can join it
+   (`.newest-action`, 2.25rem in controls.css), so the button appearing never
+   changes the header's height and moves the conversation under it (#173). */
+.stream > .stream-header > .room-title {
+  min-height: 2.25rem;
+  align-items: center;
+}
+
 .room-name {
   flex: none;
   font-size: 1.125rem;
@@ -309,6 +317,10 @@
 /* The roster panel styles itself, both ways round: `roster/roster.css`. */
 
 .newest-action {
+  /* The end of the title's line, beside the name (#173). */
+  margin-left: auto;
+  flex: none;
+  align-self: center;
   background: none;
   border: 0;
   padding: 2px 6px;
