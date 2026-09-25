@@ -48,15 +48,19 @@
   line-height: var(--line-display);
 }
 
-/* Inside a sentence: the sentence's size and line, flowing with its words.
-   The sentence (not the name) is what ends in an ellipsis. */
+/* Inside a sentence: the sentence's size, flowing with its words, on its
+   baseline. The sentence (not the name) is what ends in an ellipsis. The
+   name adds no height of its own: a face whose letters sit higher or lower
+   than the sentence's would otherwise push its line half a pixel taller in
+   WebKit (CI, kit.spec.ts › inline names). Its letters and paint don't use
+   the line height, so nothing drawn moves. */
 .k-name[data-size="inline"] {
   display: inline;
   max-width: none;
   height: auto;
   padding-inline-end: 0;
   font-size: inherit;
-  line-height: inherit;
+  line-height: 0;
   white-space: inherit;
   overflow: visible;
   vertical-align: baseline;
