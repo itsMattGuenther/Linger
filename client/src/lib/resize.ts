@@ -19,16 +19,22 @@ export function useResizeAnchor(
     let width = element.clientWidth;
     let height = element.clientHeight;
     let pinned = element.scrollHeight - element.scrollTop - height <= 2;
+    // Between a release and its re-read: whether the reader was on the edge
+    // when they pressed. A resize in that gap (a click that opens a reply
+    // line under the conversation) is judged by it, not by a guess of false.
+    let pinnedAtRelease: boolean | null = null;
     let settling = false;
     let pending = 0;
     const remember = () => {
       // WebKit can report its clamped scroll before ResizeObserver delivers
       // the new size. That is reflow, not a person leaving the live edge.
       if (settling || element.clientWidth !== width || element.clientHeight !== height) return;
+      pinnedAtRelease = null;
       pinned = element.scrollHeight - element.scrollTop - height <= 2;
     };
     const release = () => {
       cancelAnimationFrame(pending);
+      pinnedAtRelease = settling || element.scrollHeight - element.scrollTop - element.clientHeight <= 2;
       settling = false;
       pinned = false;
       // A click or an outward wheel at the end may not emit a scroll event.
@@ -42,6 +48,10 @@ export function useResizeAnchor(
       const changed = width !== element.clientWidth || height !== element.clientHeight;
       width = element.clientWidth;
       height = element.clientHeight;
+      if (changed && pinnedAtRelease !== null) {
+        pinned = pinnedAtRelease;
+        pinnedAtRelease = null;
+      }
       if (!changed || !pinned || !target.current.atEnd || target.current.count === 0) return;
       cancelAnimationFrame(pending);
       settling = true;
