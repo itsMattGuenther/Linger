@@ -414,3 +414,42 @@ test("opening any panel with the mouse highlights nothing and shows no tooltip, 
     }
   }
 });
+
+for (const theme of ["dark", "light"]) {
+  test(`the account footer is your name and Settings, with no "you" under it, ${theme} (#171)`, async ({ page }) => {
+    await page.goto("/tests/fixtures/console.html");
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await page.evaluate(() => document.fonts.ready);
+
+    const account = page.getByRole("region", { name: "Your account" });
+    await expect(account).toBeVisible();
+    await expect(account.getByText("you", { exact: true })).toHaveCount(0);
+    await expect(account.locator(".meta")).toHaveCount(0);
+
+    const layout = () => page.evaluate(() => {
+      const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const name = rect(".rail-self-name"), cog = rect(".rail-settings"), self = rect(".rail-self");
+      const account = rect(".rail-account");
+      return {
+        offset: name.top + name.height / 2 - (cog.top + cog.height / 2),
+        cogInside: cog.right <= account.right + 0.5,
+        rowHeight: self.height,
+        cogHeight: cog.height,
+        nameHeight: name.height,
+      };
+    });
+    const short = await layout();
+    expect(Math.abs(short.offset), "name and Settings share a middle").toBeLessThan(1);
+    // One line: the row is the Settings button plus the space above it, not
+    // a second line of text.
+    expect(short.rowHeight).toBeLessThanOrEqual(short.cogHeight + 8.5);
+
+    // A long name still wraps and leaves the cog inside the rail.
+    await page.locator(".rail-self-name").evaluate((node) => {
+      node.textContent = "Somebody With A Remarkably Long Display Name Indeed";
+    });
+    const long = await layout();
+    expect(long.nameHeight, "the long name wraps").toBeGreaterThan(short.nameHeight * 1.5);
+    expect(long.cogInside, "Settings stays inside the rail").toBe(true);
+  });
+}

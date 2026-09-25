@@ -718,10 +718,9 @@ export function Console({
           </div>
           <section className="rail-account" aria-label="Your account">
             <div className="rail-self">
-              <span className="rail-self-name">
-                {you.display_name}
-                <span className="meta">you</span>
-              </span>
+              {/* No "you" under it: this corner is already yours, and the
+              section's label says so to a screen reader (#171). */}
+              <span className="rail-self-name">{you.display_name}</span>
               <IconButton
                 label="Settings"
                 className="rail-settings"
