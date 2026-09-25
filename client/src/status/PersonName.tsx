@@ -19,7 +19,7 @@ import type { User } from "../generated/User";
 import { nameProps, personStyle } from "../lib/names";
 import { stateWord } from "../lib/roster";
 import StatusCard from "./StatusCard";
-import { awayMessageOf, isBlank } from "./status";
+import { awayMessageOf, isBlank } from "../lib/status";
 import "./status.css";
 
 /** Breathing room between the name and the card, and from the window edge. */

@@ -45,7 +45,7 @@ import {
   type StatusDraft,
   type StatusImage,
   statusOf,
-} from "./status";
+} from "../lib/status";
 import "./status.css";
 
 /** The fields that are boxes of text. The image is not one of them. */
