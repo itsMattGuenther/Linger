@@ -4,46 +4,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
-import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
 import { openExternal } from "../../../lib/external";
-import {
-  deleteMessage,
-  editMessage,
-  enterRoom,
-  type GatewayState,
-  leaveWindow,
-  loadNewer,
-  loadOlder,
-  openAround,
-  openRoom,
-  releaseOtherRooms,
-  sendMessage,
-  serverState,
-  startedTyping,
-  trimHistory,
-  useServers,
-} from "../../../lib/gateway";
+import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
-import { uploadFile } from "../../../lib/upload";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
 import { PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
   dmPeople,
-  openingAt,
   peopleInRoom,
   tabModel,
   typingIn,
   voiceHere,
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
-import { added, type Drafts, filesIn, NO_DRAFTS, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
-import type { Submission } from "../../core/chat/sending";
 import { voiceStrip } from "../../core/chat/voice";
 import { isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
@@ -56,6 +35,8 @@ import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
 import { type ChatPane, ChatView } from "./ChatView";
+import { useFileDrafts } from "./useFileDrafts";
+import { useLanding, useReading } from "./visit";
 
 /** Open tabs and their order, on this computer (docs/design/architecture.md, "Remembering"). */
 const TABS_KEY = "linger.next.tabs";
@@ -136,9 +117,6 @@ function Conversations({ following }: { following: Following }) {
   // Bumped when the window should put the cursor in the box: it opened, or a
   // conversation was opened from the list.
   const [focusAsk, setFocusAsk] = useState(1);
-  const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
-  const draftsNow = useRef(drafts);
-  draftsNow.current = drafts;
   const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
   const reporter = useRef<Reporter | null>(null);
   const intendNow = useRef(intend);
@@ -433,56 +411,13 @@ function Conversations({ following }: { following: Following }) {
   );
   const actions = useMemo(() => ({ save, remove, openLink: openExternal, download, wantCards }), [save, remove, download, wantCards]);
 
-  // Files, per conversation, uploading on their own (core/chat/drafts.ts).
-  const onAttach = useCallback(
-    (chosen: File[]) => {
-      if (!api || paneId === null) return;
-      const files = chosen.map((file) => ({ file, key: `${paneId} ${file.name} ${Date.now()} ${Math.random()}` }));
-      setDrafts((held) => added(held, paneId, files.map(({ key, file }) => ({ key, name: file.name }))));
-      for (const { file, key } of files) {
-        uploadFile(api, file, { onProgress: (fraction) => setDrafts((held) => progressed(held, key, fraction)) }).then(
-          (attachment) => setDrafts((held) => uploaded(held, key, attachment)),
-          (error: unknown) => setDrafts((held) => refused(held, key, error instanceof ApiError ? error.message : "That file didn't go up.")),
-        );
-      }
-    },
-    [api, paneId],
-  );
-  const onRemoveFile = useCallback(
-    (key: string) => {
-      const { drafts: next, abandoned } = removed(draftsNow.current, key);
-      setDrafts(next);
-      // A finished upload nothing will point at: give the server its space back.
-      if (abandoned && api) void api.cancelUpload(String(abandoned.id)).catch(() => undefined);
-    },
-    [api],
-  );
-  const onRestoreFiles = useCallback((keys: string[]) => setDrafts((held) => restored(held, keys)), []);
-
-  const onSend = useCallback(
-    async (submission: Submission) => {
-      const tab = find(submission.conversation);
-      const sendApi = tab ? apis.get(tab.server) : undefined;
-      if (!tab || !sendApi) throw new Error("That conversation is closed. Your message is kept here.");
-      const taking = taken(draftsNow.current, submission.conversation, submission.fileKeys);
-      if (taking === null) throw new Error("A file is still uploading. Your message is kept here.");
-      setDrafts(taking.drafts);
-      draftsNow.current = taking.drafts;
-      try {
-        await sendMessage(sendApi, tab.roomId, submission.body, submission.replyTo, taking.attachments);
-      } catch (error: unknown) {
-        throw new Error(error instanceof ApiError ? error.message : "Couldn't reach the server. Your message is kept here.");
-      }
-      setDrafts((held) => sent(held, submission.fileKeys));
-    },
-    [apis, find],
-  );
+  const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
   const onTyping = useCallback(() => {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files: paneId === null ? [] : filesIn(drafts, paneId), onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft }),
-    [drafts, paneId, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft],
   );
 
   const knock = useCallback(
@@ -581,91 +516,4 @@ function rethrowInWords(fallback: string): (error: unknown) => never {
   return (error: unknown) => {
     throw new Error(error instanceof ApiError || error instanceof TransportError ? error.message : fallback);
   };
-}
-
-/**
- * Walking into a conversation, as today's client does (`stream/Stream.tsx`):
- * pin the "you left off here" line, let go of other rooms' scrollback (#173),
- * and load the history around where you left off, or the newest. Once per
- * visit, after the read positions are in; again after a reconnect, which may
- * have made the loaded history stale.
- */
-function useLanding(api: AuthedApi | null, roomId: RoomId | null, state: GatewayState | null): { ready: boolean; at: "left-off" | "end" } {
-  const readLoaded = state?.readLoaded ?? false;
-  const sessionId = state?.sessionId ?? null;
-  const key = api && roomId !== null ? `${api.baseUrl}#${roomId}` : "";
-  const [land, setLand] = useState<{ key: string; ready: boolean; at: "left-off" | "end" }>({ key: "", ready: false, at: "end" });
-
-  useEffect(() => {
-    if (!api || roomId === null || !readLoaded) return;
-    const server = api.baseUrl;
-    const here = `${server}#${roomId}`;
-    let alive = true;
-    const current = serverState(server);
-    const target = openingAt(current, roomId);
-    const stream = current.streams[roomId];
-    enterRoom(server, roomId);
-    releaseOtherRooms(server, roomId);
-    setLand({ key: here, ready: false, at: target === null ? "end" : "left-off" });
-    void (async () => {
-      if (target !== null) await openAround(api, roomId, target);
-      else if (stream && !stream.atEnd) await leaveWindow(api, roomId);
-      else await openRoom(api, roomId);
-      if (alive) setLand({ key: here, ready: true, at: target === null ? "end" : "left-off" });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [api, roomId, readLoaded, sessionId]);
-
-  const ready = land.key === key && land.ready;
-  const at = land.key === key ? land.at : "end";
-  // One object per change, so the conversation isn't redrawn by every update to the store.
-  return useMemo(() => ({ ready, at }), [ready, at]);
-}
-
-/**
- * You have read what you can see: the newest message is on screen, the
- * conversation is at its end, and this window has your attention. A
- * conversation open on a second screen while you type elsewhere hasn't been
- * read, and marking it would eat the line that says where you stopped. The
- * owner keeps read positions, so this asks it (core/share.ts, "read").
- */
-function useReading(
-  intend: Following["intend"],
-  active: TabKey | null,
-  state: GatewayState | null,
-  landed: boolean,
-): (id: MessageId) => void {
-  const seen = useRef<{ tab: string; id: MessageId } | null>(null);
-  // What was last asked for, so the owner hears each position once.
-  const asked = useRef<{ tab: string; id: MessageId } | null>(null);
-  const atEnd = active && state ? (state.streams[active.roomId]?.atEnd ?? false) : false;
-  const tab = active ? keyOf(active) : "";
-
-  const mark = useCallback(() => {
-    const newest = seen.current;
-    if (!active || !newest || newest.tab !== tab || !landed || !atEnd) return;
-    if (!document.hasFocus() || document.visibilityState !== "visible") return;
-    if (asked.current?.tab === tab && asked.current.id === newest.id) return;
-    asked.current = newest;
-    void intend({ kind: "read", server: active.server, roomId: active.roomId, messageId: newest.id }).catch(() => undefined);
-  }, [active, tab, landed, atEnd, intend]);
-  const markNow = useRef(mark);
-  markNow.current = mark;
-
-  // Coming back to the window with the newest message on screen is reading it.
-  useEffect(() => {
-    const onFocus = () => markNow.current();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
-
-  return useCallback(
-    (id: MessageId) => {
-      seen.current = { tab, id };
-      markNow.current();
-    },
-    [tab],
-  );
 }
