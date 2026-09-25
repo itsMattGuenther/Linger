@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buddy list · Linger prototype</title>
+    <link rel="stylesheet" href="../shared/base.css" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="tb-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="tb-app">Linger</span>
+        <span class="tb-server">The Good Company</span>
+      </div>
+      <div class="tb-right">
+        <nav class="proto-toggle" aria-label="Prototype only: how many servers you're on">
+          <span class="pt-label">prototype</span>
+          <a href="./" id="pt-one">one server</a>
+          <a href="./?servers" id="pt-three">three servers</a>
+        </nav>
+        <button class="tb-btn" id="sounds" aria-pressed="false" title="Door sounds: a soft chime when somebody comes in">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h2.5L9 3v10L5.5 10H3z" fill="currentColor"/><path class="wave" d="M11 5.5c.9.7 1.4 1.5 1.4 2.5s-.5 1.8-1.4 2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+          <span>Door sounds</span>
+        </button>
+        <button class="tb-btn" id="tile" aria-pressed="false" title="Tile windows side by side (T)">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="4" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="7" y="2.5" width="7.5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="7" y="9" width="7.5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span>Tile</span><kbd>T</kbd>
+        </button>
+        <time class="tb-clock" id="clock">Fri 10:52 PM</time>
+      </div>
+    </header>
+    <main class="desktop" id="desktop" aria-label="Desktop">
+      <img class="wallpaper-porch" src="../shared/porch-icon.webp" alt="" aria-hidden="true" />
+    </main>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <script type="module" src="./app.js"></script>
+    <script type="module" src="../shared/shots.js"></script>
+  </body>
+</html>

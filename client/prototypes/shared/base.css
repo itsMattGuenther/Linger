@@ -1,0 +1,32 @@
+/* Shared by the prototypes: the bundled fonts, the real 16-color name
+   palette and the logo's colors. Each prototype brings its own
+   everything-else. */
+@import "/src/fonts/fonts.css";
+@import "/src/generated/palette.generated.css";
+
+:root {
+  /* Taken from the logo: night sky, porch lamp, the cyan sign, ivory type. */
+  --logo-night: #0b1322;
+  --logo-navy: #122040;
+  --logo-blue: #1d3f7a;
+  --logo-cyan: #2ec5f2;
+  --logo-lamp: #f6b24e;
+  --logo-lamp-hot: #ffd98a;
+  --logo-ivory: #fff1d6;
+  --logo-leaf: #74c947;
+  --logo-brick: #8a4b2a;
+  --logo-cat: #e8792b;
+
+  --sans: "Geist Sans", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --pixel: "Silkscreen", monospace;
+  --pixel-mono: "Departure Mono", monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+img { display: block; }
