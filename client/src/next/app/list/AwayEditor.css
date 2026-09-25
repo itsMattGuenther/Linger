@@ -1,0 +1,88 @@
+/* The away-message editor. Layout only; tokens only. */
+.nx-away {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+/* Only the title shares a row with the close button, so only it leaves room. */
+.nx-away-title {
+  margin: 0;
+  padding-right: var(--space-6);
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-away-choices {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-away-choice {
+  display: block;
+  width: 100%;
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: var(--text-meta);
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.nx-away-choice:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.nx-away-choice[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+
+.nx-away-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  margin: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: var(--text-meta);
+}
+
+.nx-away-preview-label {
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* Your name never gives way; the message does, with an ellipsis. */
+.nx-away-preview-name {
+  flex: none;
+  display: flex;
+}
+
+.nx-away-preview-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+  color: var(--text-away);
+}
+
+.nx-away-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

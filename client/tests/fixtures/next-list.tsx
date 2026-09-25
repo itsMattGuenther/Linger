@@ -12,13 +12,21 @@ import { createRoot } from "react-dom/client";
 import { serverState } from "../../src/lib/gateway";
 import { listModel } from "../../src/next/core/list";
 import { voiceModel } from "../../src/next/core/voice";
+import { awayChoices } from "../../src/next/core/you";
 import { ListView } from "../../src/next/app/list/ListView";
 import "../../src/next/styles/app.css";
 import { NOW, SERVER, SERVER_NAME, evening, people } from "./next/evening";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk.
 const query = new URLSearchParams(location.search);
-const base = evening(serverState(SERVER));
+// `?away`: you're away already, so the top card offers "I'm back".
+const night = evening(serverState(SERVER));
+const base = query.has("away")
+  ? (() => {
+      const me = night.me && { ...night.me, status: night.me.status && { ...night.me.status, away_message: "walking the dog 🐕" } };
+      return { ...night, me, users: night.users.map((user) => (me && user.id === me.id ? me : user)) };
+    })()
+  : night;
 const state = query.has("voice")
   ? {
       ...base,
@@ -68,6 +76,21 @@ createRoot(root).render(
       }
       onOpenRoom={(id) => note(`room:${id}`)}
       onOpenDm={(id) => note(`dm:${id}`)}
+      you={{
+        awayChoices: awayChoices([]),
+        saveLine: async (line) => {
+          note(`line:${line}`);
+          return null;
+        },
+        goAway: async (message) => {
+          note(`away:${message}`);
+          return null;
+        },
+        comeBack: async () => {
+          note("back");
+          return null;
+        },
+      }}
       onMessage={(user) => note(`message:${user.id}`)}
       onKnock={async (user) => {
         note(`knock:${user.id}`);

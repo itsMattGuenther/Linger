@@ -3,10 +3,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { ListModel, PersonRow } from "../../core/list";
 import {
-  Marker,
   MarkerCluster,
-  markerStateOf,
-  MARKER_WORDS,
   Name,
   Row,
   RowList,
@@ -18,6 +15,7 @@ import { LogoMark } from "../LogoMark";
 import { markerFor } from "../markers";
 import "./ListView.css";
 import { type KnockResult, PersonCard } from "./PersonCard";
+import { type YouActions, YouCard } from "./YouCard";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 
 export interface ListViewProps {
@@ -35,6 +33,8 @@ export interface ListViewProps {
   onClose?: () => void;
   /** You're in voice: the voice bar at the bottom. */
   voice?: VoiceDockProps;
+  /** Changing your status and going away, from the top card. */
+  you?: YouActions;
 }
 
 type Fold = "rooms" | "dms" | "people" | "away" | "offline";
@@ -44,7 +44,7 @@ type Fold = "rooms" | "dms" | "people" | "away" | "offline";
  * with who's in them, your DMs, and everyone else. Drawn only from the model
  * and the kit, so the same view serves the real window and the fixture page.
  */
-export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onMessage, onKnock, onClose, voice }: ListViewProps) {
+export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onMessage, onKnock, onClose, voice, you }: ListViewProps) {
   // Offline starts folded (the design); everything else starts open.
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
   const toggle = (fold: Fold) =>
@@ -92,20 +92,7 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
         {serverName}
       </TitleBar>
 
-      {model.me ? (
-        <section className="nx-list-me" aria-label="You">
-          <Name person={model.me.user} size="display" />
-          <span className="nx-list-me-where">
-            <Marker
-              {...markerFor(model.me.user, model.me.state)}
-              size="sm"
-              label={MARKER_WORDS[markerStateOf(model.me.state)]}
-            />
-            <span className="nx-list-me-text">{model.me.where}</span>
-          </span>
-          {model.me.user.status?.line ? <p className="nx-list-me-status">{model.me.user.status.line}</p> : null}
-        </section>
-      ) : null}
+      {model.me ? <YouCard me={model.me} actions={you} /> : null}
 
       <div className="nx-list-scroll">
         <SectionLabel label="Rooms" open={open("rooms")} onToggle={() => toggle("rooms")} controls="nx-rooms" />

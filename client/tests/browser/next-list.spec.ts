@@ -212,3 +212,60 @@ test.describe("in voice", () => {
     expect(scroll && bar && scroll.y + scroll.height <= bar.y + 0.5).toBe(true);
   });
 });
+
+test.describe("you, at the top", () => {
+  test("change your status line: Enter saves, Escape leaves it alone", async ({ page }) => {
+    const you = page.getByRole("region", { name: "You" });
+    const line = you.getByRole("button", { name: /Your status: fixing the porch light/ });
+    await line.click();
+    const field = you.getByRole("textbox", { name: "Your status" });
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue("fixing the porch light (the real one)");
+    await field.fill("second coffee");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "line:second coffee");
+    await expect(field).toHaveCount(0);
+
+    await line.click();
+    await field.fill("never mind");
+    await page.keyboard.press("Escape");
+    await expect(field).toHaveCount(0);
+    await expect(line).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "line:second coffee");
+  });
+
+  test("a status line that's too long says so and isn't saved", async ({ page }) => {
+    const you = page.getByRole("region", { name: "You" });
+    await you.getByRole("button", { name: /Your status/ }).click();
+    await you.getByRole("textbox", { name: "Your status" }).fill("a".repeat(250));
+    await page.keyboard.press("Enter");
+    await expect(you).toContainText("That's 10 characters too long.");
+    await expect(page.locator("body")).not.toHaveAttribute("data-opened", /line:/);
+  });
+
+  test("go away with a preset, seeing what friends will see", async ({ page }) => {
+    await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Away" }).click();
+    const editor = page.getByRole("dialog", { name: "Away message" });
+    await editor.getByRole("button", { name: "asleep 💤" }).click();
+    await expect(editor).toContainText("Friends see");
+    await expect(editor).toContainText("“asleep 💤”");
+    await editor.getByRole("button", { name: "I'm away" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "away:asleep 💤");
+    await expect(editor).toHaveCount(0);
+  });
+
+  test("when you're away it shows your message and offers I'm back", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?away");
+    const you = page.getByRole("region", { name: "You" });
+    await expect(you).toContainText("“walking the dog 🐕”");
+    await you.getByRole("button", { name: "I'm back" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "back");
+  });
+
+  test("the away editor fits inside the list window", async ({ page }) => {
+    await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Away" }).click();
+    const box = await page.getByRole("dialog", { name: "Away message" }).boundingBox();
+    const size = page.viewportSize();
+    expect(box && size && box.x >= 8 && box.x + box.width <= size.width - 8 && box.y + box.height <= size.height - 8).toBe(true);
+  });
+});

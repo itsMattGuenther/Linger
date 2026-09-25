@@ -9,6 +9,7 @@ import {
   leaveVoice,
   loadNotifyRules,
   noteDm,
+  saveStatus,
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
@@ -18,11 +19,13 @@ import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
 import { forgetNotifications, resetNotifications } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
-import { dropPresence, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { RoomId } from "../../../generated/RoomId";
 import { tauriBus } from "../../core/bus";
 import { listModel } from "../../core/list";
 import { talkingNow, voiceModel } from "../../core/voice";
+import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
+import type { YouActions } from "./YouCard";
 import { shareAsOwner } from "../../core/share";
 import { Spinner, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
@@ -162,12 +165,38 @@ function ServerList({ session }: { session: ServerSession }) {
 
   const voice = useMemo(() => voiceDock(gateway, speaking, baseUrl), [gateway, speaking, baseUrl]);
 
+  // Your status line and away, from the top card. The status is saved as a
+  // whole (every other field carried over) the way today's client saves it,
+  // then presence is told you're away or back (lib/watchPresence).
+  const me = gateway.me;
+  const you = useMemo<YouActions | undefined>(() => {
+    if (me === null) return undefined;
+    return {
+      awayChoices: awayChoices(loadRecentAway()),
+      saveLine: (line) => said(saveStatus(api, withLine(me.status, line))),
+      goAway: async (message) => {
+        const problem = await said(saveStatus(api, withAway(me.status, message)));
+        if (problem === null) {
+          setAway(baseUrl, message);
+          saveRecentAway(rememberAway(loadRecentAway(), message));
+        }
+        return problem;
+      },
+      comeBack: async () => {
+        const problem = await said(saveStatus(api, withAway(me.status, null)));
+        if (problem === null) setAway(baseUrl, null);
+        return problem;
+      },
+    };
+  }, [api, baseUrl, me]);
+
   return (
     <ListView
       serverName={serverName ?? hostOf(baseUrl)}
       model={model}
       speaking={speaking}
       voice={voice}
+      you={you}
       onOpenRoom={(room) => openChat(baseUrl, room)}
       onOpenDm={(room) => openChat(baseUrl, room)}
       onMessage={(user) => void messageWith(api, user)}
@@ -175,6 +204,37 @@ function ServerList({ session }: { session: ServerSession }) {
       onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
     />
   );
+}
+
+/** A save's outcome as the top card wants it: null, or what went wrong in words. */
+async function said(saving: Promise<unknown>): Promise<string | null> {
+  try {
+    await saving;
+    return null;
+  } catch (error: unknown) {
+    // The server's own words when it has any (PROTOCOL §1: written to be shown).
+    return error instanceof ApiError ? error.message : "Couldn't save that. The server didn't answer.";
+  }
+}
+
+/** Your own recent away messages, remembered on this computer only. */
+const RECENT_AWAY = "linger.next.recentAway";
+
+function loadRecentAway(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_AWAY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 8) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentAway(recent: string[]): void {
+  try {
+    window.localStorage.setItem(RECENT_AWAY, JSON.stringify(recent));
+  } catch {
+    // Storage refused: the presets still work, this is a convenience.
+  }
 }
 
 /**
