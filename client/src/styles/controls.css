@@ -173,10 +173,13 @@ button:is(.ui-primary, .auth-go, .composer-send, .voice-join):disabled {
      body's 1.6 at the row's own font size, which the stack inherits. */
   height: calc(1em * 1.6);
 }
+/* `Media` and `Search` are fixed one-word labels that never wrap, so the
+   top-alignment room rows need for long names (#83) only lifted the icon
+   above its word here. Center the pair instead. */
 .rail .rail-places .room-item {
   display: flex;
   gap: 0.625rem;
-  align-items: flex-start;
+  align-items: center;
   border: 0;
   margin-inline: 0;
   padding: 0.625rem 0.875rem;
