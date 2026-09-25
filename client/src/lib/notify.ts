@@ -32,11 +32,11 @@ import {
 
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
-import type { GatewayState } from "../lib/gateway";
-import { isLooking } from "../lib/looking";
-import { playSound } from "../lib/sound";
-import { plainText } from "../stream/markdown";
-import { notificationText, notifyReason } from "./rules";
+import type { GatewayState } from "./gateway";
+import { isLooking } from "./looking";
+import { playSound } from "./sound";
+import { plainText } from "./markdown";
+import { notificationText, notifyReason } from "./notify-rules";
 
 /**
  * How long a room's messages are collected before one notification goes out.

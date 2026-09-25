@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "../generated/Message";
 import type { NotifyRule } from "../generated/NotifyRule";
 import type { User } from "../generated/User";
-import { notificationText, notifyReason, peopleList } from "./rules";
+import { notificationText, notifyReason, peopleList } from "./notify-rules";
 
 function person(id: string, username: string): User {
   return {

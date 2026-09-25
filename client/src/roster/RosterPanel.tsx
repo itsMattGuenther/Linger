@@ -38,7 +38,7 @@ import {
   shortAgo,
   stateWord,
 } from "../lib/roster";
-import { usersInVoice } from "../voice/voice";
+import { usersInVoice } from "../lib/voice";
 import ContextPanel from "../lib/ContextPanel";
 import { ActionIcon } from "../lib/icons";
 import Button from "../lib/Button";

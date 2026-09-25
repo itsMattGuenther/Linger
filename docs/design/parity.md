@@ -58,7 +58,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    voice bar. If the list is tucked into the tray during a call, where are
    mute, deafen and leave: a tray menu, or does the list refuse to hide while
    you're in voice? *(VOICE-14, WIN-7)*
-6. **Push-to-talk key.** Today it is fixed to Ctrl (`voice/voice.ts`). The
+6. **Push-to-talk key.** Today it is fixed to Ctrl (`lib/voice.ts`). The
    design's Settings shows "push to talk with its key", which suggests
    choosing it. Ctrl also starts the new shortcuts (Ctrl+Tab, Ctrl+W, Ctrl+K,
    Ctrl+,), so while push-to-talk is on, every shortcut briefly opens the
@@ -183,7 +183,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G |
 | CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) |
 | CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G |
-| CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. | `stream/markdown.ts` | Same | C (tests exist) + F |
+| CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. | `lib/markdown.ts` | Same | C (tests exist) + F |
 | CONV-9 | Replies: a short, clickable quote that jumps to the original. It belongs to the reply, not the message above (#116, #181). An unloaded original says so. | `Stream.tsx` `ReplyLine`, SPEC §4.7 | Quote placement with inline names: **decision 9** | F + G (spacing) |
 | CONV-10 | Deleting a reply hides its quote too; the original and other replies are unchanged (#115). A deleted message stays as "deleted". | `Stream.tsx` | Same | F |
 | CONV-11 | "You left off here": opening a room with something new lands on the line (#123). A caught-up room opens at the newest. The line stays put for the session; there's no catch-up band. | `Stream.tsx`, `rows.ts`, SPEC §4.2 | Same, per tab | F (exists: `console.spec`) |
@@ -301,7 +301,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof |
 |---|---|---|---|---|
-| NOTE-1 | Only two things notify: a message that names you (by username), or one from a person you asked to hear from. There's no `@everyone`. | `notify/rules.ts` | Same | U (exists) |
+| NOTE-1 | Only two things notify: a message that names you (by username), or one from a person you asked to hear from. There's no `@everyone`. | `lib/notify-rules.ts` | Same | U (exists) |
 | NOTE-2 | "Always notify me when [person] posts": everywhere, or in chosen rooms. | `notify/NotifyRules.tsx`, `GET/PUT/DELETE /me/notify-rules` | Settings → Notifications | F |
 | NOTE-3 | Nothing notifies about the room you're looking at. | `notify.ts` | The focused window's visible tab | U |
 | NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C |
@@ -332,9 +332,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-5 | Who's talking is shown without moving anything. | `voice/VoiceBar.tsx` (turned-over block, #138) | **Decision 7** | G (no geometry change) |
 | VOICE-6 | Shared mute/deafen state: the control's own glyph beside the name, with the word for screen readers. An older client or server "does not share voice controls". | `VoiceBar.tsx` | Same | F |
 | VOICE-7 | Per-peer connection trouble: "connecting…" and "can't reach", one phrase centered on its person (#124). | `VoiceBar.tsx` | Same | G |
-| VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `voice/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F |
+| VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `lib/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F |
 | VOICE-9 | Microphone and speakers chosen per computer, with the system default first. A missing remembered device is shown, marked, and falls back to the default. | Settings → Sound & Voice, `voice_devices` | Same | F + D |
-| VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `voice/voice.ts`, `VoiceBar.tsx` | Where it lives: **decision 8** | U + F |
+| VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `lib/voice.ts`, `VoiceBar.tsx` | Where it lives: **decision 8** | U + F |
 | VOICE-11 | Devices that change mid-call recover within a second or two (hotplug, default change, sample rate). | `src-tauri/src/voice/device.rs` (T-1405) | Same | C + M |
 | VOICE-12 | The relay (TURN) password is fetched fresh at each join. With no relay, a join still works on one network. | `lib/gateway.ts`, `GET /voice/ice` | Same | C |
 | VOICE-13 | A full voice room (8 people) refuses a join and says so in words. | server `MAX_VOICE_PEERS` | Words, never a number ("room for one more") | F |

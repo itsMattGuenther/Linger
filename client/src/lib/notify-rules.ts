@@ -14,7 +14,7 @@
 import type { Message } from "../generated/Message";
 import type { NotifyRule } from "../generated/NotifyRule";
 import type { User } from "../generated/User";
-import { mentionHandles } from "../stream/markdown";
+import { mentionHandles } from "./markdown";
 
 /** Why a message is worth saying something about. */
 export type Reason = "mention" | "rule";

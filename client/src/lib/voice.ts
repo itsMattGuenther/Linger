@@ -12,7 +12,7 @@
 import type { User } from "../generated/User";
 import type { VoicePeer } from "../generated/VoicePeer";
 import type { VoiceControls } from "../generated/VoiceControls";
-import type { VoiceDeviceChoice } from "../lib/ipc";
+import type { VoiceDeviceChoice } from "./ipc";
 
 const INPUT_KEY = "linger.voice.input";
 const OUTPUT_KEY = "linger.voice.output";

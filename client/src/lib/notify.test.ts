@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { GatewayState } from "../lib/gateway";
+import type { GatewayState } from "./gateway";
 import type { Message } from "../generated/Message";
 import type { Room } from "../generated/Room";
 
 const played: string[] = [];
 const banners: unknown[] = [];
 let looking = false;
-vi.mock("../lib/sound", () => ({ playSound: (cue: string) => { played.push(cue); } }));
-vi.mock("../lib/looking", () => ({ isLooking: () => looking }));
+vi.mock("./sound", () => ({ playSound: (cue: string) => { played.push(cue); } }));
+vi.mock("./looking", () => ({ isLooking: () => looking }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async (_cmd: string, args: unknown) => { banners.push(args); } }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted: async () => true, requestPermission: async () => "granted" }));
 const { considerFrame, resetNotifications, setViewing } = await import("./notify");
-const { serverState } = await import("../lib/gateway");
+const { serverState } = await import("./gateway");
 const server = "https://sound.example";
 const room: Room = { id: "room", name: "room", slug: "room", kind: "room", topic: null, member_ids: null, position: 0, archived_at: null, last_message_id: null };
 const snapshot: GatewayState = { ...serverState(server), rooms: [room], dms: [{ ...room, id: "dm", kind: "dm", member_ids: ["me", "friend"] }], me: {

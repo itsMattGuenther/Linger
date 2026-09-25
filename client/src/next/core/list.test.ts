@@ -6,7 +6,7 @@ import type { User } from "../../generated/User";
 
 // The store module reaches for a notifier and a sound player at load; neither
 // has anything to do with what the list shows.
-vi.mock("../../notify/notify", () => ({ considerFrame: () => undefined }));
+vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { serverState } = await import("../../lib/gateway");
@@ -116,7 +116,10 @@ describe("the buddy list for one server", () => {
     const { dms } = listModel(evening(), NOW);
     expect(dms.map((row) => row.label)).toEqual(["Jules", "Eli and Sam"]);
     expect(dms[0]?.fresh).toBe(true);
-    expect(dms[1]?.people.map((user) => user.id)).toEqual(["u-eli", "u-sam"]);
+    expect(dms[1]?.people.map(({ user, state }) => [user.id, state])).toEqual([
+      ["u-eli", "in_room"],
+      ["u-sam", "away"],
+    ]);
   });
 
   it("puts you in your own card, not among the people", () => {

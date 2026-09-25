@@ -78,7 +78,7 @@ import PersonName from "../status/PersonName";
 import VoiceBar from "../voice/VoiceBar";
 import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
 import { uploadFile } from "../lib/upload";
-import { linkTargets, mentionHandles, plainText } from "./markdown";
+import { linkTargets, mentionHandles, plainText } from "../lib/markdown";
 import { COMPOSER_EMOJI, insertGlyph } from "./composerEmoji";
 import { useAutoGrow } from "./autoGrow";
 import { buildRows, type StreamRow } from "./rows";

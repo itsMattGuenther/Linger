@@ -47,9 +47,15 @@ export interface DmRow {
   id: RoomId;
   /** Named by who else is in it (SPEC §4.13). */
   label: string;
-  /** Everyone in it but you, for the markers. */
-  people: User[];
+  /** Everyone in it but you, with where they are, for the markers. */
+  people: Present[];
   fresh: boolean;
+}
+
+/** A person and their presence, which is all a marker needs. */
+export interface Present {
+  user: User;
+  state: PresenceState;
 }
 
 export interface PersonRow {
@@ -86,11 +92,16 @@ export function listModel(state: GatewayState, now: number): ListModel {
       }),
     );
 
+  const presenceOf = new Map(state.presence.map((entry) => [entry.user_id, entry.state]));
+  // No entry means the server isn't tracking them, and it tracks only
+  // connected clients: absent is offline (the same rule as the roster).
+  const stateOf = (id: string): PresenceState => presenceOf.get(id) ?? "offline";
+
   const dms = orderDms(state.dms, (room: Room) => hasNewActivity(state, room.id)).map(
     (room): DmRow => ({
       id: room.id,
       label: dmLabel(room, users, meId),
-      people: peopleIn(room, users, meId),
+      people: peopleIn(room, users, meId).map((user) => ({ user, state: stateOf(user.id) })),
       fresh: hasNewActivity(state, room.id),
     }),
   );

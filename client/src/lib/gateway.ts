@@ -45,7 +45,7 @@ import type { UpdateReadMarkerRequest } from "../generated/UpdateReadMarkerReque
 import type { User } from "../generated/User";
 import type { UserStatus } from "../generated/UserStatus";
 import type { UserId } from "../generated/UserId";
-import { considerFrame } from "../notify/notify";
+import { considerFrame } from "./notify";
 import {
   type VoiceDeviceChoice,
   voiceFrame,
@@ -58,7 +58,7 @@ import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound } from "./sound";
 import { voiceCue } from "./sound-events";
-import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "../voice/voice";
+import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "./voice";
 import type { AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 

@@ -23,7 +23,7 @@ vi.mock("@tauri-apps/api/event", () => ({
     return () => handlers.delete(name);
   },
 }));
-vi.mock("../notify/notify", () => ({ considerFrame: () => undefined }));
+vi.mock("./notify", () => ({ considerFrame: () => undefined }));
 vi.mock("./sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { apply, connect, disconnect, serverState, snapshotOf } = await import("./gateway");

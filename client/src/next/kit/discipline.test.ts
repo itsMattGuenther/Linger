@@ -189,3 +189,32 @@ describe("kit components cannot be resized by their callers", () => {
     expect(problems, problems.join("\n")).toEqual([]);
   });
 });
+
+describe("the shared core stands on its own", () => {
+  // src/lib's logic is what both clients share, and what remains when the
+  // old client is deleted at the switch (docs/design/architecture.md). If it
+  // leaned on the old client's screens, deleting them would break it.
+  it("imports nothing from the old client's UI in src/lib's logic", () => {
+    const LIB = join(SRC, "lib");
+    const logic = walk(LIB).filter((file) => file.endsWith(".ts"));
+    expect(logic.length).toBeGreaterThan(10);
+    const problems: string[] = [];
+    const pattern = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|vi\.mock\(\s*)["']([^"']+)["']/gm;
+    for (const file of logic) {
+      const text = readFileSync(file, "utf8");
+      for (const found of text.matchAll(pattern)) {
+        const specifier = found[1];
+        if (!specifier) continue;
+        const target = importTarget(file, specifier);
+        if (target === null) continue;
+        const top = relative(SRC, target).split(sep)[0] ?? "";
+        if (OLD_UI.includes(top)) {
+          problems.push(
+            `${rel(file)}: imports "${specifier}" (src/${top}). src/lib is the core both clients share and the part that outlives the old client; move the logic it needs into src/lib instead.`,
+          );
+        }
+      }
+    }
+    expect(problems, problems.join("\n")).toEqual([]);
+  });
+});

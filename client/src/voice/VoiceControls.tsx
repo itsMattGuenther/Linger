@@ -5,7 +5,7 @@ import {
   setVoiceMuted,
   type MyVoice,
 } from "../lib/gateway";
-import { microphoneLine, PUSH_TO_TALK_KEY } from "./voice";
+import { microphoneLine, PUSH_TO_TALK_KEY } from "../lib/voice";
 import IconButton from "../lib/IconButton";
 import { ActionIcon } from "../lib/icons";
 

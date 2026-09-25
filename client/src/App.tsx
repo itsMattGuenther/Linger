@@ -90,7 +90,7 @@ import {
   forgetNotifications,
   resetNotifications,
   setViewing,
-} from "./notify/notify";
+} from "./lib/notify";
 import RosterPanel from "./roster/RosterPanel";
 import SearchPanel from "./search/SearchPanel";
 import Stream from "./stream/Stream";

@@ -54,7 +54,7 @@ import {
   PUSH_TO_TALK_KEY,
   saveVoicePrefs,
   type VoicePrefs,
-} from "../voice/voice";
+} from "../lib/voice";
 import "./settings.css";
 import AppearanceSettings from "./AppearanceSettings";
 import PreferenceSwitch from "./PreferenceSwitch";
