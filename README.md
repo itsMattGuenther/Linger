@@ -18,8 +18,9 @@ installation, updates and voice still have outstanding checks on real computers.
 See the [release readiness review](docs/release-readiness.md) for the priorities
 and [SPEC.md](SPEC.md) for the full product specification.
 
-The [0.3.3 release notes](docs/releases/0.3.3.md) cover Linux startup, messaging, voice and reading-position
-fixes since 0.3.2, upgrade steps, and the checks still open for this testing release.
+The [0.3.4 release notes](docs/releases/0.3.4.md) cover the composer, voice bar,
+Linux window and layout fixes since 0.3.3, the new server limits on exports and
+video processing, upgrade steps, and the checks still open for this testing release.
 
 ---
 

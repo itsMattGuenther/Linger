@@ -24,6 +24,12 @@ default.
 
 ## How to run a task
 
+**0.3.4 release — ⏳ Matt, 2026-09-24.** Bugs #127–#130, #135, #137–#146,
+#151–#153 and #164 are fixed and merged (PRs #132–#165), with each issue linked
+and closed. Version bumped in all four files; notes in `docs/releases/0.3.4.md`.
+Tag, check the signed packages, server image and updater manifest, then publish.
+#81, #101 and #147 remain deferred. M12 remains current.
+
 **0.3.3 issue fixes — ✅ Matt, 2026-09-23.** PR #125 fixed bugs #114–#119,
 #121, #122 and #124 and completed enhancements #120 and #123, with all eleven
 issues linked and closed. #81 and #101 remain deferred. The full local gate,
