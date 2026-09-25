@@ -20,6 +20,13 @@ export default defineConfig({
     },
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],
+  // Find every dependency at startup, the test pages' too. Otherwise one only
+  // a test page uses (like Tauri's mocks) is found halfway through a
+  // Playwright run, and the dev server reloads every open page under the
+  // tests that were running.
+  optimizeDeps: {
+    entries: ["index.html", "next.html", "tests/fixtures/*.html"],
+  },
   build: {
     // WebKitGTK is the floor (ARCHITECTURE §2): keep output conservative.
     target: ["es2022", "safari15"],
