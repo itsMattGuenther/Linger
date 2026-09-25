@@ -43,7 +43,7 @@ import {
   itemDescription,
   itemLabel,
   KIND_FILTERS,
-} from "./media";
+} from "../lib/media";
 import "./media.css";
 import DownloadFile from "./DownloadFile";
 

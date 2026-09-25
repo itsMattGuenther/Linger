@@ -152,7 +152,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | SRV-4 | The server's name is fetched, and re-fetched every 2 minutes. On failure, the hostname is shown. | `App.tsx` `ServerLink` | Same, in the server header | F |
 | SRV-5 | You're only ever in one room: switching servers takes you out of the last room. | `App.tsx`, `watchPresence.ts` | In tabs, the visible tab of the focused chat window is where you are (design). | U + F |
 | SRV-6 | Connection state in words: ready, connecting, retrying, can't reach. | `App.tsx` status bar, gateway `status` | **Silent** (decision 1) | F |
-| SRV-7 | Storage figure (used / limit, file expiry) visible to anyone sharing. | `App.tsx`, `media/media.ts` `storageLine` | **Silent** (decision 1) | U + F |
+| SRV-7 | Storage figure (used / limit, file expiry) visible to anyone sharing. | `App.tsx`, `lib/media.ts` `storageLine` | **Silent** (decision 1) | U + F |
 | SRV-8 | Host controls are absent, not greyed out, for members. Decided per server. | `App.tsx`, `HostPanel.tsx` | Settings → Hosting appears only for the host. | F |
 | SRV-9 | A server that goes away (signed out, refused) leaves nothing on screen pointing at it. | `App.tsx` | Same, including its tabs and windows | F |
 | SRV-10 | A room that's archived, or a DM you've lost access to, is never held open. | `App.tsx` | Same; its tab closes or says so | F |
@@ -225,7 +225,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|
 | FILE-1 | Resumable uploads: a slot, then parts PUT straight to storage, then complete. Missing parts are re-sent. Per-file progress, and a refusal shown on its file. | `lib/upload.ts`, PROTOCOL §6 | Same | C + F |
 | FILE-2 | Remove a file before sending ("don't send X"); an already-uploaded file is withdrawn (`DELETE /uploads/:id`). | `Stream.tsx` | Same | F |
-| FILE-3 | Images inline at true aspect ratio, capped at 400px tall. The box is sized before the bytes arrive, so rows don't jump. Lazy loaded. | `media/Attachments.tsx`, `media/media.ts` | Same | U + G |
+| FILE-3 | Images inline at true aspect ratio, capped at 400px tall. The box is sized before the bytes arrive, so rows don't jump. Lazy loaded. | `media/Attachments.tsx`, `lib/media.ts` | Same | U + G |
 | FILE-4 | Click to expand: centered in the window, fitted without cropping or upscaling, refits on resize. Escape, a click or close dismisses it and returns focus. | `Attachments.tsx`, SPEC §4.10 | Same, per window | F |
 | FILE-5 | Video: poster frame and player. Audio: player. Anything else: one line and a download. | `Attachments.tsx` | Same | F |
 | FILE-6 | Downloads go to the system browser and say so. A failed handoff offers a retry and a selectable URL, and never claims the file was saved. | `media/DownloadFile.tsx`, SPEC §4.10 | Same | F + D |

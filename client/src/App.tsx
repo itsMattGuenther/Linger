@@ -37,7 +37,7 @@ import HostPanel, { type HostSection } from "./host/HostPanel";
 import KnockCards from "./knock/KnockCards";
 import type { MessageId } from "./generated/MessageId";
 import MediaPanel from "./media/MediaPanel";
-import { storageDetail, storageLine } from "./media/media";
+import { storageDetail, storageLine } from "./lib/media";
 import { useNow } from "./lib/clock";
 import { applyNormalize, loadNormalize } from "./lib/normalize";
 import {
