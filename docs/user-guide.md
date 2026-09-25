@@ -456,7 +456,9 @@ room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
 hear what you are choosing. Quiet hours, when you turn them on, silence
-*live* chimes between 22:00 and 08:00 on your computer's clock.
+DM, room-message and knock chimes between 22:00 and 08:00 on your computer's
+clock. Voice and mute/deafen sounds still play during quiet hours, because
+they answer something you just did, and voice chat itself is never affected.
 
 Messages you are already reading, your own messages, reconnect replay and
 push-to-talk presses do not chime. These switches do not silence voice chat;
