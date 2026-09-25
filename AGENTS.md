@@ -292,22 +292,19 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M9 knock                                                          ← V2, built
   → M10 search                                                        ← V2, built
   → M11 DMs                                                          ← V2, built
-  → M12 voice                                                        ← implemented; HC-8/HC-9 open
+  → M12 voice                                                        ← V2, built
   → M13 ambient voice                                                ← V2, planned
   → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
 ```
 
-V1 is built. Four of its release checks remain open; HC-5 export passed in
-real desktop clients on 2026-09-08 — see `TASKS.md`, *Release checks*.
-Desktop automation can own technical checks; separate machines, networks,
-physical devices and listening still need their stated evidence.
-**M9 (knock), M10 (search), and M11 (DMs) are built** — M10's
-notes are in `docs/tasks/m10.md`, and its second half changed how the client
-holds history, so read it before touching message loading. **M12 is the current
-milestone:** voice implementation is present, but its checks on separate
-computers and networks are open. There are nine release checks, eight open. M13 is
-planned and not started. See `docs/release-readiness.md` for the release review;
-close the existing checks before starting another milestone.
+V1 is built, and so are **M9 (knock), M10 (search), M11 (DMs) and M12
+(voice)**. M10's notes are in `docs/tasks/m10.md`, and its second half changed
+how the client holds history, so read it before touching message loading.
+**All nine release checks closed on 2026-09-25** from real use of the published
+app; the steps are kept in `docs/tasks/release-checks.md` for re-running when
+their area changes. No milestone is in progress: M13 is planned and not
+started, a client rebuild around the Buddy list design is proposed (#198), and
+larger groups are #197. Close a milestone's checks before starting the next.
 
 ---
 

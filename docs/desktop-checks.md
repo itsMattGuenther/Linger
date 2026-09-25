@@ -70,4 +70,5 @@ This is evidence for HC-5 and the local desktop portions of HC-4 and HC-7.
 It does not prove installer updates, production TLS/media domains, behavior
 on Windows/macOS, physical audio devices, independent networks or how voice
 sounds. It is an optional desktop gate alongside `scripts/check.sh`, not a
-replacement for the remaining [release checks](../TASKS.md#human-checks--things-only-you-can-do).
+replacement for re-running the [release checks](tasks/release-checks.md)
+when their area changes.
