@@ -186,7 +186,10 @@ The owner keeps what each window shows and puts you in the room of the window
 you were last in (`core/showing.ts`). A window that closes stops counting: it
 says so itself, and the Rust shell also tells the owner whenever a viewer
 window is destroyed (`next:closed`), so a crash or the desktop's own close
-never leaves you standing in a room.
+never leaves you standing in a room. The same bookkeeping tells the
+notifier which conversation you're looking at: the one in the window that has
+focus, if any. A message arriving there doesn't chime or pop a banner, as in
+today's client.
 
 ## Window management
 

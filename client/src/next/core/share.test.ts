@@ -40,7 +40,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: async () => undefined,
 }));
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ label: "main", listen: async () => () => undefined }) }));
-vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
+// What the owner tells the notifier you're looking at, newest last.
+const viewed = vi.hoisted(() => [] as unknown[]);
+vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined, setViewing: (at: unknown) => viewed.push(at) }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const HOME = "https://home.example";
@@ -253,6 +255,30 @@ describe("a viewer window sharing the owner's connection", () => {
     await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
     await vi.waitFor(() => expect(sentFrames()).toContainEqual({ op: "room.focus", d: { room_id: "r-general" } }));
     stopPresence();
+    follower.stop();
+  });
+
+  it("tells the notifier what you're reading only while its window has focus", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    viewed.length = 0;
+
+    await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
+    await follower.intend({ kind: "window", focused: true, input: true });
+    await vi.waitFor(() => expect(viewed.at(-1)).toEqual({ server: HOME, roomId: "r-general" }));
+    // Over to the list, or another app: a message there should reach you again.
+    await follower.intend({ kind: "window", focused: false, input: false });
+    await vi.waitFor(() => expect(viewed.at(-1)).toBeNull());
+    await follower.intend({ kind: "window", focused: true, input: true });
+    await vi.waitFor(() => expect(viewed.at(-1)).toEqual({ server: HOME, roomId: "r-general" }));
+    // Gone without a word: nothing is being read.
+    await viewer.bus.send("main", CLOSED, viewer.bus.label);
+    await vi.waitFor(() => expect(viewed.at(-1)).toBeNull());
+    sharing.stop();
     follower.stop();
   });
 

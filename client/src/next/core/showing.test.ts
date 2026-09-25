@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { close, focus, NOTHING_SHOWN, presenceRoom, show } from "./showing";
+import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, viewing } from "./showing";
 
 const HOME = "https://home.example";
 const WORK = "https://work.example";
@@ -47,5 +47,24 @@ describe("the room you're in, with several windows", () => {
     showing = show(showing, "chat", HOME, "r-general");
     showing = show(showing, "chat-2", HOME, "r-listening");
     expect(presenceRoom(showing, SIGNED_IN)?.roomId).toBe("r-listening");
+  });
+
+  it("is looking at a conversation only while its window has focus", () => {
+    let showing = show(NOTHING_SHOWN, "chat", HOME, "r-general");
+    // Shown but never focused: you haven't looked at it.
+    expect(viewing(showing, SIGNED_IN)).toBeNull();
+    showing = focus(showing, "chat", 10);
+    expect(viewing(showing, SIGNED_IN)).toEqual({ server: HOME, roomId: "r-general" });
+    showing = show(showing, "chat", HOME, "r-listening");
+    expect(viewing(showing, SIGNED_IN)).toEqual({ server: HOME, roomId: "r-listening" });
+    // Away to the list, or to another app: looking at nothing, but still in the room.
+    showing = blur(showing, "chat");
+    expect(viewing(showing, SIGNED_IN)).toBeNull();
+    expect(presenceRoom(showing, SIGNED_IN)?.roomId).toBe("r-listening");
+    // Another window gets focus.
+    showing = focus(show(showing, "chat-2", WORK, "r-raid"), "chat-2", 20);
+    expect(viewing(showing, SIGNED_IN)).toEqual({ server: WORK, roomId: "r-raid" });
+    expect(viewing(showing, new Set([HOME]))).toBeNull();
+    expect(viewing(close(showing, "chat-2"), SIGNED_IN)).toBeNull();
   });
 });

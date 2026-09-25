@@ -26,13 +26,14 @@ import {
   snapshotOf,
 } from "../../lib/gateway";
 import { loadVoicePrefs } from "../../lib/voice";
+import { setViewing } from "../../lib/notify";
 import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 
 /** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
 const CHAT = "chat";
 import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
-import { close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing } from "./showing";
+import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
 
 /** A late window asks for the owner's state. */
 export const SNAPSHOT = "next:snapshot";
@@ -162,10 +163,21 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     if (room) setPresenceRoom(room.server, room.roomId);
     else for (const server of sessions().keys()) setPresenceRoom(server, null);
   };
+  // The conversation you're looking at right now, so a message arriving in
+  // it doesn't chime or pop a banner (lib/notify.ts). Only the owner notifies.
+  let looked: string | null = null;
+  const look = () => {
+    const now = viewing(showing, new Set(sessions().keys()));
+    const key = now ? `${now.server} ${now.roomId}` : "";
+    if (key === looked) return;
+    looked = key;
+    setViewing(now);
+  };
   const gone = (label: string) => {
     forgetWindow(label);
     showing = close(showing, label);
     place();
+    look();
   };
 
   // A conversation's own window, if one shows it: any window but the tabs.
@@ -211,15 +223,15 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         }
         case "window":
           reportWindow(intent.from, { focused: intent.focused, input: intent.input });
-          if (intent.focused) {
-            showing = focus(showing, intent.from, Date.now());
-            place();
-          }
+          showing = intent.focused ? focus(showing, intent.from, Date.now()) : blur(showing, intent.from);
+          place();
+          look();
           return;
         case "room":
           if (!sessions().has(intent.server)) return;
           showing = show(showing, intent.from, intent.server, intent.roomId);
           place();
+          look();
           return;
         case "closing":
           gone(intent.from);
