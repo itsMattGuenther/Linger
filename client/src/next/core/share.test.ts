@@ -10,6 +10,7 @@ import type { Message } from "../../generated/Message";
 import type { Room } from "../../generated/Room";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
+import { CLOSED } from "./share";
 
 // What the Rust core's `app.emit` reaches in the owner: the store's own
 // listeners (today's client's path, unchanged).
@@ -250,6 +251,27 @@ describe("a viewer window sharing the owner's connection", () => {
     await follower.intend({ kind: "window", focused: true, input: true });
     await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
     await vi.waitFor(() => expect(sentFrames()).toContainEqual({ op: "room.focus", d: { room_id: "r-general" } }));
+    stopPresence();
+    follower.stop();
+  });
+
+  it("takes you out of the room when the chat window goes, even if it never said so", async () => {
+    const { owner, viewer, core } = await windows();
+    const presence = owner.presence;
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    const stopPresence = presence.startPresence();
+    evening().slice(0, 3).forEach(core);
+    presence.setPresenceLive(HOME, true);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    await follower.intend({ kind: "window", focused: true, input: true });
+    await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(sentFrames()).toContainEqual({ op: "room.focus", d: { room_id: "r-general" } }));
+    // The desktop shell reports the window gone (a crash, or the desktop's own close).
+    await viewer.bus.send("main", CLOSED, viewer.bus.label);
+    await vi.waitFor(() => expect(sentFrames().at(-1)).toEqual({ op: "room.focus", d: { room_id: null } }));
     stopPresence();
     follower.stop();
   });

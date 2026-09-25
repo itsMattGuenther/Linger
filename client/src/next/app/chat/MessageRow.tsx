@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -27,6 +27,8 @@ export interface MessageActions {
   openLink: (href: string) => void;
   openImage: (file: Attachment) => void;
   download: (file: Attachment) => void;
+  /** This row's links are on screen: ask the server about them, for their cards. */
+  wantCards?: (urls: readonly string[]) => void;
 }
 
 /**
@@ -82,6 +84,14 @@ export const MessageRow = memo(function MessageRow({
   const namesMe = me !== null && !deleted && mentionHandles(message.body).includes(me.username);
   const links = deleted || editing ? [] : linkTargets(message.body);
   const justCard = cardOnly(message.body, links, (url) => previews[url] !== undefined);
+  // Rows exist only while on screen (the list is virtualized), so this asks
+  // about the links people can see and nothing further back. Keyed on the
+  // joined list: the array is rebuilt every render.
+  const linkKey = links.join(" ");
+  const wantCards = actions.wantCards;
+  useEffect(() => {
+    if (linkKey !== "") wantCards?.(linkKey.split(" "));
+  }, [linkKey, wantCards]);
   const who = author?.display_name ?? "someone";
 
   const run = (work: Promise<void>): void => {

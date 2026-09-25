@@ -9,21 +9,13 @@ import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
 import "./Composer.css";
+import type { DraftFile } from "../../core/chat/drafts";
 
 /** `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE`, mirrored to refuse the eleventh file up front. */
 export const MAX_ATTACHMENTS = 10;
 
 /** A file on its way into the next message. The window uploads it; the composer shows it. */
-export interface DraftFile {
-  key: string;
-  name: string;
-  /** 0 to 1. */
-  progress: number;
-  /** The server has it: it can go with a message. */
-  ready: boolean;
-  /** Why it didn't go up, in words. */
-  problem: string | null;
-}
+export type { DraftFile };
 
 export interface ComposerProps {
   /**
@@ -56,6 +48,8 @@ export interface ComposerProps {
   onTyping: () => void;
   /** Up in an empty box: edit your last message. */
   onEditLast: () => void;
+  /** Changes when the window wants the cursor in the box: it opened, or a conversation was opened from the list. */
+  focusRequest?: number;
 }
 
 /**
@@ -83,6 +77,7 @@ export const Composer = memo(function Composer({
   onSend,
   onTyping,
   onEditLast,
+  focusRequest,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -101,6 +96,10 @@ export const Composer = memo(function Composer({
   now.current = { conversation, draft, fileCount: files.length, replying: replyTo !== null };
 
   useAutoGrow(box, draft);
+
+  useEffect(() => {
+    if (focusRequest !== undefined) box.current?.focus();
+  }, [focusRequest]);
 
   // Choosing to reply is choosing to type; showing another tab that has a
   // reply waiting is not.

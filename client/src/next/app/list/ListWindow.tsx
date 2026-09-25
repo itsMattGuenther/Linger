@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
@@ -27,14 +27,13 @@ import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
 import { shareAsOwner } from "../../core/share";
-import { Spinner, TitleBar } from "../../kit";
-import { LogoMark } from "../LogoMark";
+import { Spinner } from "../../kit";
+import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
 import type { KnockResult } from "./PersonCard";
 import type { VoiceDockProps } from "./VoiceDock";
 import { ApiError, TransportError } from "../../../lib/api";
 import type { User } from "../../../generated/User";
-import "./ListWindow.css";
 
 /** How often the server's name is asked for again. It changes about once ever. */
 const INFO_REFRESH_MS = 120_000;
@@ -316,18 +315,4 @@ function hostOf(baseUrl: string): string {
   } catch {
     return baseUrl;
   }
-}
-
-/** A window with nothing to list yet: the title bar, and a quiet line. */
-function WindowMessage({ children }: { children: ReactNode }) {
-  return (
-    <div className="nx-window">
-      <TitleBar leading={<LogoMark />} onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}>
-        Linger
-      </TitleBar>
-      <div className="nx-window-message" role="status">
-        {children}
-      </div>
-    </div>
-  );
 }

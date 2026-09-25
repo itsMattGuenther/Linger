@@ -122,12 +122,14 @@ window instead of today's client. Everything else is unchanged:
 - the same servers;
 - the same `linger.*` preferences.
 
-The switch is also in the production build, so an installed copy honours it.
+Opening a room or a DM from the list opens the chat window, with a tab for
+each conversation. The switch is also in the production build, so an installed
+copy honours it.
 Any other value, or none, opens today's client. The new client can't sign in
 yet: sign in with today's client first.
 
 To look at pieces without the desktop shell, run `pnpm exec vite` in `client/`
-and open either page:
+and open any of these pages:
 
 - `/tests/fixtures/kit.html`: every component in every state;
 - `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening;
@@ -135,10 +137,15 @@ and open either page:
   `?voice=mine`, `?voice=elsewhere` or `?voice=off` for the voice strip's
   states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
   messages (`&paged` to load it a page at a time), and `?fail` to have every
-  send refused.
+  send refused;
+- `/tests/fixtures/next-chat-window.html?room=r-general`: the real chat window,
+  wired, with the desktop shell, the list window and the server faked in the
+  page. The options are listed at the top of `next-chat-window.tsx`.
 
 Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
-`next-chat.spec.ts`) measure the rules in `docs/design/system.md`.
+`next-chat.spec.ts`) measure the rules in `docs/design/system.md`;
+`next-chat-window.spec.ts` checks what the chat window asks of the list window
+and the server.
 
 ## Icons and Windows packaging
 

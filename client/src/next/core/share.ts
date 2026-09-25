@@ -27,7 +27,8 @@ import {
 } from "../../lib/gateway";
 import { loadVoicePrefs } from "../../lib/voice";
 import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
-import { answer, type Bus, type Envelope, PROTOCOL } from "./bus";
+import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
+import { close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing } from "./showing";
 
 /** A late window asks for the owner's state. */
 export const SNAPSHOT = "next:snapshot";
@@ -37,6 +38,8 @@ export const TOKEN = "next:token";
 export const INTENT = "next:intent";
 /** The owner tells every window about fields that change without a frame. */
 export const SHARED = "next:shared";
+/** The desktop shell tells the owner a window has gone, however it went (src-tauri/src/window.rs). */
+export const CLOSED = "next:closed";
 
 export interface ServerShare {
   server: string;
@@ -102,6 +105,24 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     return api.accessToken(true);
   };
 
+  // What each window shows, so presence puts you in the room of the window
+  // you were last in (core/showing.ts), and nowhere once they have all gone.
+  let showing: Showing = NOTHING_SHOWN;
+  let placed: string | null = null;
+  const place = () => {
+    const room = presenceRoom(showing, new Set(sessions().keys()));
+    const key = room ? `${room.server} ${room.roomId}` : "";
+    if (key === placed) return;
+    placed = key;
+    if (room) setPresenceRoom(room.server, room.roomId);
+    else for (const server of sessions().keys()) setPresenceRoom(server, null);
+  };
+  const gone = (label: string) => {
+    forgetWindow(label);
+    showing = close(showing, label);
+    place();
+  };
+
   const stops = await Promise.all([
     answer<Record<string, never>, SnapshotAnswer>(bus, SNAPSHOT, async () => ({
       servers: await Promise.all(
@@ -128,12 +149,18 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         }
         case "window":
           reportWindow(intent.from, { focused: intent.focused, input: intent.input });
+          if (intent.focused) {
+            showing = focus(showing, intent.from, Date.now());
+            place();
+          }
           return;
         case "room":
-          if (sessions().has(intent.server)) setPresenceRoom(intent.server, intent.roomId);
+          if (!sessions().has(intent.server)) return;
+          showing = show(showing, intent.from, intent.server, intent.roomId);
+          place();
           return;
         case "closing":
-          forgetWindow(intent.from);
+          gone(intent.from);
           return;
         case "voice.join": {
           const api = sessions().get(intent.server);
@@ -167,6 +194,10 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           }
         }
       }
+    }),
+    // A window that crashed or was closed by the desktop never said "closing".
+    bus.listen<string>(CLOSED, (label) => {
+      if (label !== OWNER) gone(label);
     }),
   ]);
 

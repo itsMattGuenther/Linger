@@ -37,10 +37,10 @@ export type ChatStream = Pick<
 >;
 
 /** What the window does for a message. Reply, edit and pictures the view handles itself. */
-export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download">;
+export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards">;
 
 /** What the window does for the box: uploads and sending. */
-export type ChatComposer = Pick<ComposerProps, "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping">;
+export type ChatComposer = Pick<ComposerProps, "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest">;
 
 /** The showing conversation. */
 export interface ChatPane {
@@ -121,7 +121,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onPopOut, on
     };
     // The window's callbacks are stable (L-14); each one is listed so a
     // changed one still reaches the rows.
-  }, [paneId, parentActions?.save, parentActions?.remove, parentActions?.openLink, parentActions?.download, setReply]);
+  }, [paneId, parentActions?.save, parentActions?.remove, parentActions?.openLink, parentActions?.download, parentActions?.wantCards, setReply]);
 
   // The reply target as it is now: an edit since it was chosen shows.
   const held = paneId === null ? undefined : replies.get(paneId);

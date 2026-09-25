@@ -165,22 +165,32 @@ proves that.
 ## Viewer → owner: intents
 
 A viewer asks the owner to do the things only the owner may do. Each **intent**
-is typed, versioned and handled in one place (`core/intents.ts`). Examples:
+is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 
-- open a conversation (in tabs mode, the chat window);
-- join, move or leave voice;
-- mute and deafen;
-- start a DM.
+- `read`: mark a conversation read up to a message (the owner keeps read
+  positions and tells every window);
+- `window`, `room`, `closing`: for presence, this window's focus, the person
+  moving in it, the conversation it shows, and that it is going;
+- `voice.join` (which also moves voice), `voice.leave`, `voice.mute`,
+  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window.
 
-Anything a viewer can do with REST it does itself, with its borrowed token:
-send, edit, delete, load history, mark read, knock.
+Anything else a viewer can do with REST it does itself, with its borrowed
+token: send, edit, delete, load history, upload, knock, and typing through the
+shared connection.
+
+**Presence with several windows.** You are in one room at a time (SPEC §4.3).
+The owner keeps what each window shows and puts you in the room of the window
+you were last in (`core/showing.ts`). A window that closes stops counting: it
+says so itself, and the Rust shell also tells the owner whenever a viewer
+window is destroyed (`next:closed`), so a crash or the desktop's own close
+never leaves you standing in a room.
 
 ## Window management
 
-- **Opening windows.** The owner asks Rust to open or focus a window through
-  one command (`next_open_window { kind, server, room }`). Rust builds the URL
-  from a fixed pattern: no page can open an arbitrary URL, and only `main` may
-  call the command. That is least privilege, as ARCHITECTURE §7 asks. The
+- **Opening windows.** The owner asks Rust to open or focus a window through a
+  command (`next_open_chat { server, room }` today; Settings and windows mode
+  add their own). Rust builds the URL from a fixed pattern: no page can open
+  an arbitrary URL, and only `main` may call the command. That is least privilege, as ARCHITECTURE §7 asks. The
   capability file lists each window's permissions. Viewers get what they need
   to read events and open links, and nothing more.
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
@@ -191,8 +201,10 @@ send, edit, delete, load history, mark read, knock.
   bar from the kit, with a drag region and window controls where the desktop
   has none. Windows 11 shadows and resizing on frameless windows need checking
   early on Windows.
-- **Remembering.** Window positions, open tabs and their order are remembered
-  per server, on this computer.
+- **Remembering.** Open tabs and their order are remembered on this computer
+  (`linger.next.tabs`); window positions join them in windows mode. Closing
+  the last tab closes the chat window, and the next conversation opened starts
+  a fresh set.
 
 ## The hidden switch
 
@@ -219,7 +231,7 @@ fixed gets a test at that layer.
 | Contrast | text tokens and all 16 name colors against every surface | vitest (`contrast.test.ts`) | `pnpm test`, CI |
 | Kit geometry and access | the three control heights, centered icons, identical row heights across all 12 faces, aligned names, ellipsis instead of clipping, 24px hit targets, visible focus, accessible names, keyboard roving | Playwright on the kit gallery | Chromium locally; Chromium and WebKit in CI |
 | Screens | tabs, the voice bar, the person card, the new-message picker, Settings, driven with a fake store | Playwright on fixture pages | local and CI |
-| Several windows | catch-up and intents end to end, with two pages sharing a fake event bus | Playwright fixture | local and CI |
+| Several windows | catch-up, borrowed tokens and every intent end to end: two copies of the store in one test sharing an in-memory bus (`core/share.test.ts`), and the real chat window against a faked shell, owner and server (`tests/fixtures/next-chat-window.html`) | vitest; Playwright | local and CI |
 | Real WebKitGTK | real windows and title bars, fonts, typing latency, scrolling, several windows at once | `tauri-driver` desktop checks under Xvfb (`docs/desktop-checks.md`) | local, before each merge |
 | Real world | the parity checklist, then the release checks on real computers and networks | people | before the switch |
 

@@ -824,8 +824,10 @@ Rules for this milestone:
 - ⬜ **T-1802 · The switch and the owner window** — `LINGER_NEXT=1` opens
   `next.html` as `main`. It signs in with the existing sessions and shows real
   rooms, DMs and people from the kit.
-- ⬜ **T-1803 · The chat window** — the `chat` window with tabs, the catch-up
-  protocol, borrowed tokens, and reading, sending and history in a tab.
+- 🟡 **T-1803 · The chat window** — the `chat` window with tabs, the catch-up
+  protocol, borrowed tokens, and reading, sending and history in a tab. Built
+  and tested against a faked owner and server; not yet tried in the desktop
+  app against a real server.
 - ⬜ **T-1804 · Voice** — the voice bar, the room strips, and "move voice here"
   as an intent. Tabs and windows never leave voice.
 - 🟡 **T-1805 · People and DMs** — the person card (Message, Knock), the

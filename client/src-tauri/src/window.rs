@@ -161,12 +161,31 @@ pub fn next_open_chat(
     }
     WebviewWindowBuilder::new(&app, CHAT, WebviewUrl::App(url.into()))
         .title("Linger")
-        .inner_size(720.0, 820.0)
+        .inner_size(780.0, 820.0)
         .min_inner_size(420.0, 360.0)
         .decorations(false)
         .build()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Tell the owner a Buddy list window has gone, however it went: its own close
+/// button, the desktop's, or a crash. A window that closes cleanly says so
+/// itself first; this covers the ones that can't, so the owner never keeps
+/// counting a window that no longer exists towards you being here
+/// (docs/design/architecture.md, "Windows and their roles").
+pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if matches!(event, tauri::WindowEvent::Destroyed) && is_viewer(window.label()) {
+        let _ = window
+            .app_handle()
+            .emit_to(OWNER, "next:closed", window.label());
+    }
+}
+
+/// The Buddy list client's windows other than the owner: the chat window,
+/// conversations popped out of it, and Settings.
+fn is_viewer(label: &str) -> bool {
+    label == CHAT || label == "settings" || label.starts_with("chat-")
 }
 
 /// Hyprland exports its instance signature to every client it starts;
@@ -191,7 +210,9 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
-    use super::{buddy_list, chat_url, chosen_client, escape, is_origin, on_hyprland, Client};
+    use super::{
+        buddy_list, chat_url, chosen_client, escape, is_origin, is_viewer, on_hyprland, Client,
+    };
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
 
@@ -268,5 +289,15 @@ mod tests {
         assert!(!on_hyprland(None, Some(OsStr::new("ubuntu:GNOME"))));
         assert!(!on_hyprland(None, Some(OsStr::new("KDE"))));
         assert!(!on_hyprland(None, Some(OsStr::new("NotHyprland"))));
+    }
+
+    #[test]
+    fn only_the_buddy_list_windows_other_than_the_owner_are_viewers() {
+        for label in ["chat", "chat-2", "chat-r-general", "settings"] {
+            assert!(is_viewer(label), "{label}");
+        }
+        for label in ["main", "", "chatty", "settings-2", "Chat"] {
+            assert!(!is_viewer(label), "{label}");
+        }
     }
 }

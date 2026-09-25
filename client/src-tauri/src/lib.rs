@@ -3,9 +3,9 @@
 //! has no others.
 
 pub mod gateway;
-pub mod packaging;
 pub mod graphics;
 mod notifications;
+pub mod packaging;
 mod secrets;
 mod updates;
 pub mod voice;
@@ -480,6 +480,7 @@ pub fn run() {
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| Ok(window::create(app)?))
+        .on_window_event(window::on_event)
         .invoke_handler(tauri::generate_handler![
             sessions_load,
             session_save,
