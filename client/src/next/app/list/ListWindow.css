@@ -1,0 +1,26 @@
+/* A window with nothing to list yet. Tokens only. */
+.nx-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-secondary);
+}
+
+.nx-window-message {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+
+.nx-window-hint {
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}

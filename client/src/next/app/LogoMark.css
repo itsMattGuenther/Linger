@@ -1,0 +1,21 @@
+.nx-logomark {
+  display: block;
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+}
+
+.nx-logomark-edge {
+  fill: var(--sign-1);
+}
+
+.nx-logomark-tile {
+  fill: var(--night-0);
+}
+
+.nx-logomark-ink {
+  fill: var(--ink-1);
+}
+
+.nx-logomark-lamp {
+  fill: var(--lamp-1);
+}

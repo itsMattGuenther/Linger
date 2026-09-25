@@ -8,7 +8,9 @@
 //! bar: GNOME, for one, draws nothing, and without it the window could not be
 //! moved or closed with the mouse.
 
-use tauri::{App, WebviewWindowBuilder};
+use std::ffi::OsStr;
+
+use tauri::{App, WebviewUrl, WebviewWindowBuilder};
 
 /// Create every window in `tauri.conf.json`, with the title bar dropped on
 /// Hyprland. The config marks them `"create": false` so Tauri doesn't build
@@ -19,12 +21,50 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
+    let client = chosen_client(std::env::var_os(NEXT).as_deref());
     for config in &app.config().app.windows {
+        if client == Client::Next && config.label == "main" {
+            WebviewWindowBuilder::from_config(app, &buddy_list(config))?.build()?;
+            continue;
+        }
         WebviewWindowBuilder::from_config(app, config)?
             .decorations(config.decorations && decorated)
             .build()?;
     }
     Ok(())
+}
+
+/// The hidden switch for the Buddy list client under development (M15,
+/// `docs/design/architecture.md`). `LINGER_NEXT=1` opens it as the main
+/// window; anything else, including unset, opens today's client, so nobody
+/// meets the new one by accident.
+const NEXT: &str = "LINGER_NEXT";
+
+#[derive(Debug, PartialEq, Eq)]
+enum Client {
+    Current,
+    Next,
+}
+
+fn chosen_client(value: Option<&OsStr>) -> Client {
+    match value.and_then(OsStr::to_str) {
+        Some("1") => Client::Next,
+        _ => Client::Current,
+    }
+}
+
+/// The main window as the Buddy list client wants it: the list's own page, a
+/// tall narrow window, and no system title bar on any desktop, because every
+/// window of the new client draws its own (`docs/design/buddy-list.md`).
+fn buddy_list(config: &tauri::utils::config::WindowConfig) -> tauri::utils::config::WindowConfig {
+    let mut list = config.clone();
+    list.url = WebviewUrl::App("next.html".into());
+    list.width = 340.0;
+    list.height = 820.0;
+    list.min_width = Some(300.0);
+    list.min_height = Some(480.0);
+    list.decorations = false;
+    list
 }
 
 /// Hyprland exports its instance signature to every client it starts;
@@ -49,8 +89,32 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
-    use super::on_hyprland;
+    use super::{buddy_list, chosen_client, on_hyprland, Client};
     use std::ffi::OsStr;
+    use tauri::WebviewUrl;
+
+    #[test]
+    fn only_linger_next_1_opens_the_new_client() {
+        assert_eq!(chosen_client(Some(OsStr::new("1"))), Client::Next);
+        for other in ["", "0", "true", "yes", "2", " 1"] {
+            assert_eq!(
+                chosen_client(Some(OsStr::new(other))),
+                Client::Current,
+                "{other:?}"
+            );
+        }
+        assert_eq!(chosen_client(None), Client::Current);
+    }
+
+    #[test]
+    fn the_buddy_list_window_is_tall_narrow_and_frameless() {
+        let main = tauri::utils::config::WindowConfig::default();
+        let list = buddy_list(&main);
+        assert_eq!(list.url, WebviewUrl::App("next.html".into()));
+        assert!(list.height > list.width);
+        assert!(!list.decorations);
+        assert_eq!(list.label, main.label);
+    }
 
     #[test]
     #[cfg(target_os = "linux")]

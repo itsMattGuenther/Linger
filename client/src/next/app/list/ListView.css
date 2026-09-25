@@ -1,0 +1,63 @@
+/* The buddy list's layout. Sizes, colors and type come from tokens only
+   (docs/design/system.md); every row, label and marker is a kit piece. */
+
+.nx-list {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-primary);
+}
+
+/* You, at the top. */
+.nx-list-me {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.nx-list-me-where {
+  display: flex;
+  align-items: center;
+  gap: var(--marker-gap);
+  min-width: 0;
+  height: var(--line-meta);
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+  color: var(--text-muted);
+}
+
+.nx-list-me-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-list-me-status {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Everything below you scrolls; you and the title bar stay put. */
+.nx-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2) var(--space-4);
+}
+
+/* A room row's end: the voice mark, then who's in it. */
+.nx-list-room-end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}

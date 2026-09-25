@@ -105,6 +105,36 @@ keeping that WebKit off it (delete the file to try again). An explicit
 GTK and change no desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
+## The Buddy list client (M15, in progress)
+
+The new client is built next to today's in `client/src/next/`
+([architecture](design/architecture.md), [design system](design/system.md)).
+It opens only behind a hidden switch:
+
+```bash
+cd client && LINGER_NEXT=1 pnpm tauri dev
+```
+
+With `LINGER_NEXT=1`, the shell opens the buddy list (`next.html`) as the main
+window instead of today's client. Everything else is unchanged:
+
+- the same sign-ins from the keyring;
+- the same servers;
+- the same `linger.*` preferences.
+
+The switch is also in the production build, so an installed copy honours it.
+Any other value, or none, opens today's client. The new client can't sign in
+yet: sign in with today's client first.
+
+To look at pieces without the desktop shell, run `pnpm exec vite` in `client/`
+and open either page:
+
+- `/tests/fixtures/kit.html`: every component in every state;
+- `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening.
+
+Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`) measure the rules
+in `docs/design/system.md`.
+
 ## Icons and Windows packaging
 
 The desktop icon comes from the friend group's selected

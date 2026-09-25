@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linger</title>
+    <!-- The Buddy list client (M15, docs/design/architecture.md). Every one of
+         its windows loads this page; the window's role comes from the URL.
+         Paint the window surface before CSS loads, so no white flash: this is
+         --surface-window from src/next/styles/tokens.css. -->
+    <style>
+      html { background: #131a28; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/next/main.tsx"></script>
+  </body>
+</html>
