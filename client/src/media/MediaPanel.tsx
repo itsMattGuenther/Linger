@@ -28,7 +28,7 @@ import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { openExternal } from "../lib/external";
 import { absoluteUrl } from "../lib/url";
-import { conversationLabel } from "../dm/dm";
+import { conversationLabel } from "../lib/dm";
 import { personStyle } from "../lib/names";
 import EmptyState from "../lib/EmptyState";
 import DestinationHeader from "../lib/DestinationHeader";

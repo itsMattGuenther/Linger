@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import type { PresenceState } from "../generated/PresenceState";
 import type { User } from "../generated/User";
 import { nameProps, personStyle } from "../lib/names";
-import { stateWord } from "../roster/roster";
+import { stateWord } from "../lib/roster";
 import StatusCard from "./StatusCard";
 import { awayMessageOf, isBlank } from "./status";
 import "./status.css";

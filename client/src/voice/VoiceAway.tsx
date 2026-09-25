@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoomId } from "../generated/RoomId";
-import { dmLabel } from "../dm/dm";
+import { dmLabel } from "../lib/dm";
 import { useServers } from "../lib/gateway";
 import { hostOf } from "../lib/link";
 import type { ServerSession } from "../lib/session";

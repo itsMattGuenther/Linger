@@ -49,7 +49,7 @@ import { ActionIcon } from "../lib/icons";
 import IconButton from "../lib/IconButton";
 import ContextPanel from "../lib/ContextPanel";
 import { useNow } from "../lib/clock";
-import { dmLabel } from "../dm/dm";
+import { dmLabel } from "../lib/dm";
 import { emptyRoom } from "../settings/copy";
 import {
   deleteMessage,

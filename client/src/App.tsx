@@ -63,7 +63,7 @@ import {
   useGateway,
   useServers,
 } from "./lib/gateway";
-import { dmLabel, noDms, orderDms } from "./dm/dm";
+import { dmLabel, noDms, orderDms } from "./lib/dm";
 import { frameLayout, useWindowWidth } from "./lib/layout";
 import {
   applyInterfaceScale,
