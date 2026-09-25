@@ -52,6 +52,7 @@ export const ICON_NAMES = [
   "leave",
   "go",
   "intoTabs",
+  "smile",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -270,6 +271,14 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   intoTabs: (
     <>
       <path d="M1.8 5.5h12.4M1.8 5.5V13a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V5.5M1.8 5.5V3a1 1 0 0 1 1-1h3.4a1 1 0 0 1 .9.6l.6 1.3" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinejoin="round" /><path d="M8 7.8v4M6.2 10.2L8 12l1.8-1.8" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  smile: (
+    <>
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" fill="none" />
+      <path d="M5.4 9.4c.6 1 1.5 1.6 2.6 1.6s2-.6 2.6-1.6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <circle cx="6" cy="6.6" r=".9" fill="currentColor" />
+      <circle cx="10" cy="6.6" r=".9" fill="currentColor" />
     </>
   ),
 };

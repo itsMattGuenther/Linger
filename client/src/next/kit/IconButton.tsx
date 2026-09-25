@@ -62,7 +62,8 @@ export function IconButton({
       >
         <Icon name={icon} size={ICON_FOR[size]} />
       </button>
-      {tip.bubble}
+      {/* Open, its tooltip would sit over what it opened. */}
+      {expanded ? null : tip.bubble}
     </>
   );
 }

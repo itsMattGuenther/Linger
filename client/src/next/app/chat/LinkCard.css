@@ -1,0 +1,61 @@
+.nx-linkcard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  width: min(100%, var(--linkcard-w));
+  height: var(--row-2);
+  margin-top: var(--space-1-5);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  text-align: left;
+}
+
+.nx-linkcard:hover {
+  border-color: var(--surface-control-edge);
+}
+
+.nx-linkcard-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--icon-default);
+}
+
+.nx-linkcard-icon img {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.nx-linkcard-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nx-linkcard-title,
+.nx-linkcard-domain {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-linkcard-title {
+  height: var(--line-name);
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  font-weight: 500;
+  line-height: var(--line-name);
+}
+
+.nx-linkcard-domain {
+  height: var(--line-meta);
+  color: var(--text-muted);
+  font: var(--text-label) / var(--line-meta) var(--font-mono);
+}

@@ -2,7 +2,13 @@ import type { User } from "../../generated/User";
 import { nameProps } from "../../lib/names";
 import "./Name.css";
 
-export type NameSize = "meta" | "control" | "body" | "name" | "display";
+/**
+ * The fixed sizes draw the name in its own line box. `inline` is for a name
+ * inside a sentence ("Eli and Jules are talking", a reply's quote): it takes
+ * the sentence's size and flows with its words, so a long sentence can still
+ * end in an ellipsis.
+ */
+export type NameSize = "meta" | "control" | "body" | "name" | "display" | "inline";
 
 /**
  * A person's name, drawn the way they styled it (SPEC §4.5): their face,

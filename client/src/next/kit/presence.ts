@@ -1,4 +1,6 @@
 import type { PresenceState } from "../../generated/PresenceState";
+import type { User } from "../../generated/User";
+import { paletteKey } from "../../lib/names";
 
 /**
  * How a person's presence is drawn. Five states on the wire (SPEC §4.3), five
@@ -29,3 +31,12 @@ export const MARKER_WORDS: Record<MarkerState, string> = {
   away: "away",
   offline: "offline",
 };
+
+/**
+ * A person's marker: their palette color (a gradient name uses its first
+ * color) and their presence. The one way a person becomes a marker, so the
+ * same person looks the same in every list, tab, strip and card.
+ */
+export function markerOf(user: User, presence: PresenceState): { color: string; state: MarkerState } {
+  return { color: paletteKey(user) ?? "slate", state: markerStateOf(presence) };
+}

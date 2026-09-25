@@ -67,6 +67,12 @@ body {
   background: var(--surface-window);
 }
 
+.g-sentence {
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
 .g-narrow {
   width: 180px;
 }

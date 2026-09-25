@@ -42,6 +42,21 @@
   color: var(--text-primary);
 }
 
+/* The server this tab belongs to, when there are several. */
+.k-tab[data-stripe="yes"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 var(--space-2) auto;
+  height: var(--rule-strong);
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
+  background: var(--tab-stripe);
+  opacity: 0.7;
+}
+
+.k-tab[data-stripe="yes"][data-active="yes"]::before {
+  opacity: 1;
+}
+
 .k-tab-main {
   display: flex;
   flex: 1;
@@ -66,6 +81,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A room's #: the same faint ink as everywhere, against the name. */
+.k-tab-hash {
+  margin-right: var(--space-0-5);
+  color: var(--icon-faint);
+  font-weight: 400;
 }
 
 .k-tab[data-fresh="yes"] .k-tab-title {

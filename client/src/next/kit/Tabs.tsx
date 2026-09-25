@@ -1,12 +1,23 @@
-import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconButton } from "./IconButton";
+import { Marker, type MarkerPerson } from "./Marker";
 import { VoiceGlyph } from "./VoiceGlyph";
 import "./Tabs.css";
 
+/** A palette key becomes a color only through the generated palette. */
+function stripeStyle(key: string | undefined): CSSProperties | undefined {
+  if (!key || !/^[a-z]{2,16}$/.test(key)) return undefined;
+  return { "--tab-stripe": `var(--name-${key})` } as CSSProperties;
+}
+
+/** What leads a tab's title: a room's #, or a one-to-one DM's person. */
+export type TabLead = { kind: "room" } | { kind: "person"; person: MarkerPerson };
+
 export interface TabItem {
   id: string;
-  /** What the tab shows: a room's name, a `Name`, a DM's people. */
+  /** What the tab shows: a room's name (the # comes from `lead`), a DM's people. */
   title: ReactNode;
+  lead?: TabLead;
   /** The tab's accessible name, like "#general" or "DM with Jules". */
   label: string;
   /** Something new arrived while another tab was showing: bold, never a count. */
@@ -15,6 +26,11 @@ export interface TabItem {
   voice?: "mine" | "others";
   speaking?: boolean;
   closable?: boolean;
+  /**
+   * With several servers, the server's palette key (never a color value): a
+   * thin stripe along the tab's top says which server it belongs to.
+   */
+  stripe?: string;
 }
 
 export interface TabStripProps {
@@ -107,6 +123,8 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, panelIdPref
             data-tab-id={tab.id}
             data-active={active ? "yes" : undefined}
             data-fresh={tab.fresh && !active ? "yes" : undefined}
+            data-stripe={tab.stripe ? "yes" : undefined}
+            style={stripeStyle(tab.stripe)}
             role="presentation"
           >
             <button
@@ -121,7 +139,15 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, panelIdPref
               tabIndex={active ? 0 : -1}
               onClick={() => onSelect(tab.id)}
             >
-              <span className="k-tab-title">{tab.title}</span>
+              {tab.lead?.kind === "person" ? <Marker {...tab.lead.person} size="sm" /> : null}
+              <span className="k-tab-title">
+                {tab.lead?.kind === "room" ? (
+                  <span className="k-tab-hash" aria-hidden="true">
+                    #
+                  </span>
+                ) : null}
+                {tab.title}
+              </span>
               {tab.voice ? <VoiceGlyph speaking={tab.speaking ?? false} mine={tab.voice === "mine"} /> : null}
             </button>
             {onClose && tab.closable !== false ? (

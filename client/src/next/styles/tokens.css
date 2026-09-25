@@ -195,6 +195,22 @@
   --line-meta: 16px;
   --line-display: 28px;
 
+  /* Conversations (docs/design/system.md, "The conversation"). A message line
+     is the same 20px box as a name, so an inline name and its words share a
+     baseline whatever the name's face. */
+  --line-body: 20px;
+  --pane-head: 40px;
+  --voice-strip: 40px;
+  --measure: 80ch; /* the longest a line of a message runs (SPEC §4.7) */
+  --name-inline-max: 14em; /* an inline name longer than this ends in … */
+  --media-max-w: 320px;
+  --media-max-h: 400px; /* SPEC §4.7: images are capped at 400px tall */
+  --linkcard-w: 360px;
+  --composer-max: 200px; /* the message box grows to this, then scrolls */
+  --rule-strong: 2px; /* the bracket beside a reply's quote */
+  --menu-w: 200px;
+  --emoji-grid: 8; /* columns in the composer's emoji panel */
+
   /* Chrome. */
   --titlebar: 40px;
   --tab: 32px;

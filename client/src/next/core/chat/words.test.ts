@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { excerpt, joinList, verbFor } from "./words";
+import { cardOnly, excerpt, joinList, verbFor } from "./words";
 
 const said = (parts: ReturnType<typeof joinList<string>>) => parts.map((part) => ("item" in part ? part.item : part.text)).join("");
 
@@ -21,5 +21,22 @@ describe("chat window wording", () => {
     expect(excerpt("**Perfect** timing. What are we `listening` to?")).toBe("Perfect timing. What are we listening to?");
     expect(excerpt("one\n\ntwo")).toBe("one two");
     expect(excerpt("a".repeat(200), 10)).toBe(`${"a".repeat(10)}…`);
+  });
+});
+
+describe("a message that is only a link", () => {
+  const url = "https://millrace-trail.org/river-loop";
+  const known = (href: string) => href === url;
+
+  it("shows just the card when there is one", () => {
+    expect(cardOnly(url, [url], known)).toBe(true);
+    expect(cardOnly(`  ${url}\n`, [url], known)).toBe(true);
+  });
+
+  it("keeps the words when there are words, more links, or no card", () => {
+    expect(cardOnly(`look: ${url}`, [url], known)).toBe(false);
+    expect(cardOnly(`${url} ${url}/2`, [url, `${url}/2`], known)).toBe(false);
+    expect(cardOnly(url, [url], () => false)).toBe(false);
+    expect(cardOnly("", [], known)).toBe(false);
   });
 });

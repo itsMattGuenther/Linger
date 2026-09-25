@@ -130,10 +130,15 @@ To look at pieces without the desktop shell, run `pnpm exec vite` in `client/`
 and open either page:
 
 - `/tests/fixtures/kit.html`: every component in every state;
-- `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening.
+- `/tests/fixtures/next-list.html`: the buddy list on the prototype's evening;
+- `/tests/fixtures/next-chat.html`: the chat window on the same evening. Add
+  `?voice=mine`, `?voice=elsewhere` or `?voice=off` for the voice strip's
+  states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
+  messages (`&paged` to load it a page at a time), and `?fail` to have every
+  send refused.
 
-Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`) measure the rules
-in `docs/design/system.md`.
+Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
+`next-chat.spec.ts`) measure the rules in `docs/design/system.md`.
 
 ## Icons and Windows packaging
 

@@ -1,0 +1,77 @@
+.nx-atts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1-5);
+}
+
+/* The frame hugs the picture: it is capped here, and the picture fills it. */
+.nx-att-image {
+  display: block;
+  max-width: min(100%, var(--media-max-w));
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
+}
+
+/* The width comes from the file's own size (set on the element, so the box
+   is right before the bytes arrive); height follows the shape. A file that
+   didn't say its size is capped and fitted instead. */
+.nx-att-image img {
+  display: block;
+  max-width: 100%;
+  max-height: var(--media-max-h);
+  height: auto;
+  object-fit: contain;
+}
+
+.nx-att-video {
+  display: block;
+  max-width: min(100%, var(--media-max-w));
+  max-height: var(--media-max-h);
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.nx-att-video {
+  border: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+}
+
+.nx-att-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: min(100%, var(--linkcard-w));
+  min-height: var(--row-2);
+  padding: var(--space-1-5) var(--space-2) var(--space-1-5) var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--icon-default);
+}
+
+.nx-att-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: var(--text-control);
+}
+
+.nx-att-meta {
+  flex: none;
+  color: var(--text-muted);
+  font: var(--text-label) / var(--line-meta) var(--font-mono);
+}
+
+.nx-att-audio {
+  flex-basis: 100%;
+  width: 100%;
+  height: var(--control-md);
+}

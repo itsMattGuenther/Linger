@@ -25,6 +25,7 @@ import {
   Marker,
   MarkerCluster,
   MarkerSlot,
+  Menu,
   Name,
   Notice,
   Popover,
@@ -39,6 +40,7 @@ import {
   TitleBar,
   VoiceGlyph,
   type MarkerState,
+  type MenuAnchor,
   type TabItem,
 } from "../../src/next/kit";
 import "../../src/next/styles/app.css";
@@ -123,16 +125,96 @@ function Label({ children }: { children: ReactNode }) {
   return <span className="g-label">{children}</span>;
 }
 
+const ROOM = { kind: "room" } as const;
+
+/** Tabs from two servers: a stripe in each server's color says which is which. */
+function StripedTabs() {
+  const tabs: TabItem[] = [
+    { id: "good-general", title: "general", lead: ROOM, label: "#general, The Good Company", stripe: "amber" },
+    { id: "raid-lobby", title: "lobby", lead: ROOM, label: "#lobby, Raid Night", stripe: "violet", voice: "others" },
+    { id: "good-plans", title: "weekend-plans", lead: ROOM, label: "#weekend-plans, The Good Company", stripe: "amber", fresh: true },
+  ];
+  const [active, setActive] = useState("good-general");
+  return (
+    <div className="g-window">
+      <TitleBar onClose={() => {}}>
+        <TabStrip label="Tabs from two servers" tabs={tabs} activeId={active} onSelect={setActive} />
+      </TitleBar>
+      <div className="g-window-body">Two servers: the stripe along each tab's top is its server's color.</div>
+    </div>
+  );
+}
+
+/** A message's actions, with the confirm step a delete has. */
+function MenuDemo() {
+  const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [chose, setChose] = useState("nothing yet");
+  const close = () => {
+    setAnchor(null);
+    setConfirming(false);
+  };
+  return (
+    <div className="g-row">
+      <span data-testid="menu-trigger">
+        <IconButton
+          icon="more"
+          label="Actions for Eli's message"
+          expanded={anchor !== null}
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            setAnchor((open) => (open ? null : { top: box.top, left: box.left, right: box.right, bottom: box.bottom }));
+          }}
+        />
+      </span>
+      <span className="g-label" data-testid="menu-chose">
+        {chose}
+      </span>
+      {anchor ? (
+        <Menu
+          label="Actions for Eli's message"
+          anchor={anchor}
+          items={
+            confirming
+              ? [
+                  { id: "delete-for-good", label: "Delete for good", icon: "close", tone: "danger", onSelect: () => {
+                      setChose("deleted");
+                      close();
+                    } },
+                  { id: "keep", label: "Keep it", icon: "check", onSelect: close },
+                ]
+              : [
+                  { id: "reply", label: "Reply", icon: "message", onSelect: () => {
+                      setChose("reply");
+                      close();
+                    } },
+                  { id: "edit", label: "Edit", icon: "pencil", onSelect: () => {
+                      setChose("edit");
+                      close();
+                    } },
+                  { id: "delete", label: "Delete", icon: "close", tone: "danger", onSelect: () => setConfirming(true) },
+                ]
+          }
+          onClose={(reason) => {
+            close();
+            if (reason === "escape" || reason === "tab") document.querySelector<HTMLElement>("[data-testid='menu-trigger'] button")?.focus();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function Tabs() {
   const [tabs, setTabs] = useState<TabItem[]>([
-    { id: "general", title: "#general", label: "#general", voice: "mine", speaking: true, closable: true },
-    { id: "listening", title: "#listening-room", label: "#listening-room", closable: true },
-    { id: "jules", title: <Name person={jules} size="control" />, label: "DM with Jules", fresh: true, closable: true },
-    { id: "weekend", title: "#weekend-plans", label: "#weekend-plans", fresh: true, closable: true },
-    { id: "raid", title: "#raid-night", label: "#raid-night", voice: "others", closable: true },
-    { id: "long", title: "#a-room-with-a-name-that-goes-on-and-on", label: "#a-room-with-a-name-that-goes-on-and-on", closable: true },
-    { id: "geral", title: "#geral", label: "#geral", closable: true },
-    { id: "fotos", title: "#fotos", label: "#fotos", closable: true },
+    { id: "general", title: "general", lead: ROOM, label: "#general", voice: "mine", speaking: true, closable: true },
+    { id: "listening", title: "listening-room", lead: ROOM, label: "#listening-room", closable: true },
+    { id: "jules", title: "Jules", lead: { kind: "person", person: { color: "fern", state: "here" } }, label: "DM with Jules", fresh: true, closable: true },
+    { id: "weekend", title: "weekend-plans", lead: ROOM, label: "#weekend-plans", fresh: true, closable: true },
+    { id: "raid", title: "raid-night", lead: ROOM, label: "#raid-night", voice: "others", closable: true },
+    { id: "long", title: "a-room-with-a-name-that-goes-on-and-on", lead: ROOM, label: "#a-room-with-a-name-that-goes-on-and-on", closable: true },
+    { id: "geral", title: "geral", lead: ROOM, label: "#geral", closable: true },
+    { id: "fotos", title: "fotos", lead: ROOM, label: "#fotos", closable: true },
   ]);
   const [active, setActive] = useState("listening");
   return (
@@ -304,6 +386,12 @@ function Gallery() {
             <div className="g-row g-narrow">
               <Name person={longName} />
             </div>
+            <p className="g-row g-sentence" data-testid="inline-names">
+              <span>
+                Replying to <Name person={jules} size="inline" />: <Name person={eli} size="inline" /> and{" "}
+                <Name person={sam} size="inline" /> are typing, inside a sentence, in its own size and line.
+              </span>
+            </p>
           </div>
         </div>
       </Section>
@@ -433,6 +521,7 @@ function Gallery() {
 
       <Section id="tabs" title="Tabs and title bars">
         <Tabs />
+        <StripedTabs />
         <div className="g-window">
           <TitleBar leading={<Icon name="house" />} actions={<IconButton icon="gear" label="Settings" />} onClose={() => {}}>
             The Good Company
@@ -445,6 +534,10 @@ function Gallery() {
           </TitleBar>
           <div className="g-window-body">Unfocused: the title dims.</div>
         </div>
+      </Section>
+
+      <Section id="menus" title="Menus">
+        <MenuDemo />
       </Section>
 
       <Section id="fields" title="Fields">

@@ -37,3 +37,13 @@ export function excerpt(body: string, limit = 140): string {
   const text = plainText(body).replace(/\s+/g, " ").trim();
   return text.length <= limit ? text : `${text.slice(0, limit).trimEnd()}…`;
 }
+
+/**
+ * A message that is nothing but one link, with a card for it, shows just the
+ * card: the card already says where it goes, and the address above it would
+ * say it twice (the prototype's river-trail message).
+ */
+export function cardOnly(body: string, links: readonly string[], hasCard: (url: string) => boolean): boolean {
+  const [only] = links;
+  return links.length === 1 && only !== undefined && body.trim() === only && hasCard(only);
+}

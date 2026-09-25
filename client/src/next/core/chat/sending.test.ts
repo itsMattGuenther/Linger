@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { afterFailure, canSend, dropUnsent, keepUnsent, type Submission } from "./sending";
 
-const one: Submission = { key: 1, body: "hello", replyTo: null, fileKeys: [] };
+const one: Submission = { key: 1, conversation: "general", body: "hello", replyTo: null, fileKeys: [] };
+const box = { conversation: "general", draft: "", fileCount: 0, replying: false };
 
 describe("what a failed send does (SPEC §4.7, L-16)", () => {
   it("puts the text back only into an untouched box", () => {
-    expect(afterFailure({ draft: "", fileCount: 0, replying: false })).toBe("restore");
+    expect(afterFailure(one, box)).toBe("restore");
+  });
+
+  it("never puts it into another conversation's box: it waits in its own", () => {
+    expect(afterFailure(one, { ...box, conversation: "jules" })).toBe("keep");
   });
 
   it("never touches a newer draft, file or reply: it keeps the failed one apart", () => {
-    expect(afterFailure({ draft: "next thing", fileCount: 0, replying: false })).toBe("keep");
-    expect(afterFailure({ draft: "", fileCount: 1, replying: false })).toBe("keep");
-    expect(afterFailure({ draft: "", fileCount: 0, replying: true })).toBe("keep");
+    expect(afterFailure(one, { ...box, draft: "next thing" })).toBe("keep");
+    expect(afterFailure(one, { ...box, fileCount: 1 })).toBe("keep");
+    expect(afterFailure(one, { ...box, replying: true })).toBe("keep");
   });
 
   it("keeps each unsent message once, and lets it go when a retry lands", () => {

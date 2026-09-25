@@ -18,6 +18,7 @@ SPEC §5 ("Console") until the switch.
 | The components | `client/src/next/kit/` (one `.tsx` and one `.css` each; `index.ts` exports them) |
 | The gallery | `client/tests/fixtures/kit.html` + `kit.tsx` |
 | Geometry tests | `client/tests/browser/kit.spec.ts` |
+| The chat window's views | `client/src/next/app/chat/`, its rules in `client/src/next/core/chat/`, its page `client/tests/fixtures/next-chat.html` and its spec `client/tests/browser/next-chat.spec.ts` |
 | Source-discipline tests | `client/src/next/kit/discipline.test.ts` |
 | Contrast tests | `client/src/next/styles/contrast.test.ts` |
 
@@ -113,7 +114,8 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Icon boxes | `--icon-sm` 12 · `--icon-md` 16 · `--icon-lg` 20 |
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
-| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 |
+| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
@@ -186,6 +188,8 @@ A square with one icon, exactly centered by the grid.
   show a keyboard shortcut.
 - **`skipTab`** takes the button out of the tab order, for something the
   keyboard reaches another way, like a tab's close (Delete).
+- **`expanded`** is for a button that opens something. While it is open the
+  tooltip stays hidden, since it would sit over what the button opened.
 
 ### Marker, MarkerSlot, GroupMarker, HashMark, MarkerCluster
 
@@ -231,6 +235,10 @@ gradient at 92°, and shimmer or glow.
 - **Long names** end in "…".
 - **`raw`** draws the person's own style even with plain names on, for the
   style picker's preview.
+- **`size="inline"`** is the one size without a box: the name flows inside a
+  sentence ("Replying to Jules:", "Eli and Sam are typing", a message's
+  author) at the sentence's own size and line height, so it never makes its
+  line taller. A caller that needs it cut short sets the width it may have.
 
 ### Row and RowList
 
@@ -280,6 +288,11 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   - `fresh` makes a tab bold when something arrives while it isn't showing.
   - `voice` adds the voice glyph: `mine` in the lamp, `others` dim.
   - A close button shows on hover, focus and the active tab.
+- **`lead`:** a room's tab leads with its `#`, in the same faint ink as
+  everywhere and set against the name; a one-to-one DM's tab leads with the
+  person's small marker. A group DM has no lead.
+- **`stripe`:** with several servers, a server's palette key (never a color
+  value) draws a 2px stripe along the tab's top, dim until the tab shows.
 - **Keyboard:** only the showing tab is in the tab order. Arrow keys move and
   show, Home and End jump, and Delete closes.
 - **Overflow:** more tabs than fit scroll sideways, the showing tab stays in
@@ -295,6 +308,24 @@ The top of every Linger window, drawn by Linger (decided 2026-09-25), 40px.
   clickable.
 - **Focus:** `focused={false}` dims it.
 - **Long titles:** plain-text titles end in "…".
+
+### Menu
+
+A short list of actions that floats by the button that opened it: a
+message's Reply, Edit and Delete.
+
+- **Placement:** drawn in a portal, below the trigger with its right edge on
+  the trigger's, or above when there is no room below; always inside the
+  window. It is measured before it is shown, so it never flashes in the wrong
+  place.
+- **Items** are 32px, with an optional icon, and `tone="danger"` for a
+  destructive one. A step that needs confirming (delete) swaps the items for
+  the confirm pair rather than opening a second menu.
+- **Keyboard:** it opens with its first item focused. Arrows, Home and End
+  move and wrap, Enter chooses, Escape and Tab close. A click anywhere else
+  closes it. The caller puts focus back on the trigger, since only it knows
+  what the trigger was.
+- **Width** is `--menu-w`; a long label ends in "…".
 
 ### TextField
 
@@ -350,6 +381,73 @@ chip. The text ends in "…".
   around a chosen one is drawn in its own color.
 - **`Spinner`** is the busy mark inside a `Button`.
 
+## The conversation
+
+The chat window's conversation is a screen, not a kit component, but its
+geometry is part of the system and its spec (`next-chat.spec.ts`) measures it.
+
+**Inline names (decision 9).** A message is one grid row:
+
+```
+padding 8 | name: | gap 8 | words (to --measure) | gap 8 | time | gap 8 | actions 24 | padding 4
+```
+
+- **The name sits on the words' line**, in the person's style at body size,
+  followed by a muted colon. The name cell, the words and the time share the
+  20px line box, so they sit on one line in any face.
+- **Wrapped lines hang under the words**, not under the name.
+- **A continuation** (same author, within 10 minutes, same session) draws the
+  same name and colon *invisibly*. Its words therefore start exactly where the
+  head's do, in any face, with nothing measured. Its time shows on hover and
+  focus only.
+- **Heights:** a one-line continuation is 24px (its 20px line plus 2px above
+  and below, which is also the 24px action target). A group's first row has
+  8px more above it. Nothing else adds space between messages.
+
+**Grouping** follows SPEC §4.7 (same author, a gap under 10 minutes, the same
+session; sessions break after 3 hours with a divider in words: "tonight",
+"yesterday evening"), with one change for inline names: **a reply always opens
+a group.** Its quote sits above its own line, and a quote over a line with no
+name would read as a quote of the message above. So a reply names its author
+and gets a group's space above it, which also keeps it off the message before
+(#181).
+
+**Quotes.** A reply's quote is part of the reply: a 24px line above it, from
+the row's left edge, with a 2px rule, the quoted person's name and an excerpt.
+It is a button that jumps to the quoted message and marks it for a moment.
+When the quoted message isn't loaded it says "an earlier message".
+
+**What else a message holds.** Pictures are sized from their stored width and
+height before they load (at most 320 by 400), so a row is measured once. A
+message that is nothing but one link shows only its link card. Files that
+aren't pictures, video or sound are a card with a Download button. Mono type
+appears only in metadata (times, a link card's domain), never in words.
+
+**Lines between messages.** Session dividers and "you left off here" use the
+label face. The left-off line is in the lamp and is the whole of what
+replaces an unread count.
+
+**Around the conversation:**
+
+- **Pane header**, 40px: a room's `#name`, who's in it (markers) and its
+  topic; a DM's people, a 1:1's status, and Knock.
+- **Voice strip**, 40px in every state, so voice changing never moves the
+  conversation: who's in voice as chips (lit while talking) and one way in
+  (Join, Move voice here, Start talking, Talk here instead), or "You're in
+  voice here" with no buttons. Mute, deafen and leave are only in the list's
+  voice bar.
+- **Typing line**, 24px, always there, so the box never jumps.
+- **The box**, 40px for one line: a `›` prompt by the first line, the text,
+  then add-a-file, emoji and send (32px each). It grows with its text to
+  `--composer-max`, measuring a hidden copy so typing never lays out the
+  conversation (L-12).
+
+**It never moves a reader.** A short conversation hangs from the bottom,
+above the box. At the end, new messages follow, and anything that grows
+(an edit box, the reply line, a card arriving) keeps the end in view. Read
+further up, and arrivals and older history loading above leave what you're
+reading exactly where it is.
+
 ## What the tests enforce
 
 | Rule | Test |
@@ -363,6 +461,12 @@ chip. The text ends in "…".
 | Every interactive element has an accessible name | `kit.spec.ts` › every interactive element has an accessible name |
 | Everything the keyboard reaches shows the focus ring | `kit.spec.ts` › the focus ring shows on everything the keyboard reaches |
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |
+| Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
+| Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
+| An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
+| The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
+| The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
+| 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |

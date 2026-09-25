@@ -9,6 +9,8 @@ import type { MessageId } from "../../../generated/MessageId";
 export interface Submission {
   /** Unique in this composer, so a retry can't be fired twice. */
   key: number;
+  /** The conversation (tab) it was typed in. */
+  conversation: string;
   body: string;
   replyTo: MessageId | null;
   /** The files that went with it, by the key the window holds them under. */
@@ -17,18 +19,22 @@ export interface Submission {
 
 /** What the composer holds right now, when a send comes back refused. */
 export interface ComposerNow {
+  /** The conversation showing. */
+  conversation: string;
   draft: string;
   fileCount: number;
   replying: boolean;
 }
 
 /**
- * Put the failed text back in the box only when the box is untouched: empty,
- * no files, not replying. Otherwise keep it as a separate unsent message with
- * a retry, and leave the newer draft exactly as it is.
+ * Put the failed text back in the box only when it is the same conversation's
+ * box and it is untouched: empty, no files, not replying. Otherwise keep it
+ * as a separate unsent message with a retry (shown in its own conversation),
+ * and leave the newer draft exactly as it is.
  */
-export function afterFailure(now: ComposerNow): "restore" | "keep" {
-  return now.draft === "" && now.fileCount === 0 && !now.replying ? "restore" : "keep";
+export function afterFailure(submission: Submission, now: ComposerNow): "restore" | "keep" {
+  const untouched = now.draft === "" && now.fileCount === 0 && !now.replying;
+  return untouched && submission.conversation === now.conversation ? "restore" : "keep";
 }
 
 /** Add a failed submission to the unsent list, once. */

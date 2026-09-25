@@ -48,6 +48,20 @@
   line-height: var(--line-display);
 }
 
+/* Inside a sentence: the sentence's size and line, flowing with its words.
+   The sentence (not the name) is what ends in an ellipsis. */
+.k-name[data-size="inline"] {
+  display: inline;
+  max-width: none;
+  height: auto;
+  padding-inline-end: 0;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  overflow: visible;
+  vertical-align: baseline;
+}
+
 .name {
   color: var(--person-name, var(--text-primary));
   font-family: var(--person-font, var(--font-ui));

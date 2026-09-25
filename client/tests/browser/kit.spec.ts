@@ -297,6 +297,83 @@ test("tabs move with the arrow keys, Home and End, and close with Delete", async
   await expect(strip.locator('[role="tab"]')).toHaveCount(before - 1);
 });
 
+test("a menu opens on its first item, moves with the arrows, and gives focus back when it closes", async ({ page }) => {
+  const trigger = page.getByTestId("menu-trigger").getByRole("button", { name: "Actions for Eli's message" });
+  const menu = page.getByRole("menu", { name: "Actions for Eli's message" });
+  const items = menu.getByRole("menuitem");
+  const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim());
+
+  await trigger.click();
+  await expect(items).toHaveText(["Reply", "Edit", "Delete"]);
+  await expect(items.first()).toBeFocused();
+  const heights = await items.evaluateAll((all) => all.map((item) => item.getBoundingClientRect().height));
+  expect(new Set(heights)).toEqual(new Set([32]));
+  // Inside the window, below its trigger.
+  const [box, button] = [await menu.boundingBox(), await trigger.boundingBox()];
+  expect(box && button && box.y >= button.y + button.height && box.x >= 0 && box.x + box.width <= 1280).toBe(true);
+
+  await page.keyboard.press("ArrowDown");
+  expect(await focused()).toBe("Edit");
+  await page.keyboard.press("End");
+  expect(await focused()).toBe("Delete");
+  await page.keyboard.press("ArrowDown");
+  expect(await focused()).toBe("Reply");
+  await page.keyboard.press("ArrowUp");
+  expect(await focused()).toBe("Delete");
+
+  // A confirm step replaces the items and focuses the first again.
+  await page.keyboard.press("Enter");
+  await expect(items).toHaveText(["Delete for good", "Keep it"]);
+  await expect(items.first()).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await page.mouse.click(5, 5);
+  await expect(menu).toHaveCount(0);
+
+  await trigger.click();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("menu-chose")).toHaveText("reply");
+});
+
+test("a name inside a sentence sits on the sentence's own lines (inline names)", async ({ page }) => {
+  const sentence = page.getByTestId("inline-names");
+  const lines = await sentence.locator("span").first().evaluate((span) => {
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    // Which 20px band each piece of text sits in (its middle), from the top.
+    const top = span.getBoundingClientRect().top;
+    const bands = new Set(
+      [...range.getClientRects()].filter((box) => box.width > 0).map((box) => Math.floor((box.top + box.height / 2 - top) / 20)),
+    );
+    return { count: bands.size, height: span.getBoundingClientRect().height };
+  });
+  // Every line is the body line's 20px: a name never makes its line taller.
+  expect(lines.height).toBe(lines.count * 20);
+  const names = await sentence.locator("[data-kit='Name']").evaluateAll((all) => all.map((name) => getComputedStyle(name).display));
+  expect(names).toEqual(["inline", "inline", "inline"]);
+});
+
+test("tabs lead with a room's # or a person's marker, and a server stripe in a palette color", async ({ page }) => {
+  const strip = page.getByRole("tablist", { name: "Conversations" });
+  await expect(strip.getByRole("tab", { name: "#general" }).locator(".k-tab-hash")).toHaveText("#");
+  await expect(strip.getByRole("tab", { name: "DM with Jules" }).locator("[data-kit='Marker']")).toHaveCount(1);
+  const two = page.getByRole("tablist", { name: "Tabs from two servers" });
+  const stripes = await two.locator(".k-tab").evaluateAll((tabs) =>
+    tabs.map((tab) => {
+      const line = getComputedStyle(tab, "::before");
+      return { height: line.height, color: line.backgroundColor, key: (tab as HTMLElement).style.getPropertyValue("--tab-stripe") };
+    }),
+  );
+  expect(stripes.map((stripe) => stripe.key)).toEqual(["var(--name-amber)", "var(--name-violet)", "var(--name-amber)"]);
+  expect(new Set(stripes.map((stripe) => stripe.height))).toEqual(new Set(["2px"]));
+  expect(stripes[0]?.color).toBe(stripes[2]?.color);
+  expect(stripes[0]?.color).not.toBe(stripes[1]?.color);
+});
+
 test("review sheets: one screenshot per gallery section, for people to look at", async ({ page }) => {
   for (const section of await page.locator("[data-section]").all()) {
     const id = await section.getAttribute("data-section");

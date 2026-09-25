@@ -1,0 +1,30 @@
+/* The chat window's frame. Every piece inside is its own component; this
+   only stacks them and gives the conversation the room that's left. */
+.nx-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-primary);
+}
+
+/* Tabs fill the title bar's height so the showing tab meets the pane. */
+.nx-chat .k-titlebar {
+  padding-left: 0;
+}
+
+.nx-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.nx-chat-none {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-control);
+}

@@ -1,0 +1,96 @@
+.nx-conv {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The log. Focusable, so history is reachable with the keyboard. */
+/* A column, so a short conversation hangs from the bottom, just above the
+   box, the way the newest line of a chat should sit. */
+.nx-conv-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-control) transparent;
+}
+
+.nx-conv-scroll:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.nx-conv-rows {
+  position: relative;
+  flex: none;
+  width: 100%;
+  margin-top: auto;
+}
+
+.nx-conv-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.nx-conv-empty {
+  margin: auto 0 0;
+  padding: var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* A session break: a hairline either side of words in the label face. */
+.nx-divider,
+.nx-left-off {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  margin: 0;
+  padding: var(--space-4) var(--space-2) var(--space-1);
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-divider::before,
+.nx-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* "You left off here": the lamp, with its line fading out to the right. */
+.nx-left-off {
+  padding-top: var(--space-3);
+  color: var(--text-accent);
+  text-transform: none;
+}
+
+.nx-left-off::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+.nx-divider-label,
+.nx-left-off-label {
+  flex: none;
+}
+
+/* Out of a historical window: floats, so it moves nothing when it appears. */
+.nx-conv-newest {
+  position: absolute;
+  bottom: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-raised);
+}
