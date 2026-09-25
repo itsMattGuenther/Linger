@@ -964,3 +964,39 @@ for (const theme of ["dark", "light"]) {
     });
   }
 }
+
+for (const theme of ["dark", "light"]) {
+  for (const scale of [100, 200]) {
+    test(`Media and Search icons sit on the middle of their labels, ${theme} ${scale}% (#172)`, async ({ page }) => {
+      await page.setViewportSize({ width: 13 * scale, height: 850 });
+      await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
+      await page.goto("/tests/fixtures/console.html");
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await page.evaluate(() => document.fonts.ready);
+
+      const rows = await page.locator(".rail-places .room-item").evaluateAll((items) =>
+        items.map((item) => {
+          const icon = item.querySelector<SVGSVGElement>(".action-icon")!;
+          const range = document.createRange();
+          range.selectNodeContents(item.querySelector(".room-slug")!);
+          const text = range.getBoundingClientRect();
+          const box = icon.getBoundingClientRect();
+          // Where the stroke actually is, in the icon's own 24-unit box.
+          const drawn = icon.querySelector("path")!.getBBox();
+          return {
+            label: item.textContent ?? "",
+            offset: box.top + box.height / 2 - (text.top + text.height / 2),
+            glyphX: drawn.x + drawn.width / 2,
+            glyphY: drawn.y + drawn.height / 2,
+          };
+        }),
+      );
+      expect(rows.map((row) => row.label)).toEqual(["Media", "Search"]);
+      for (const row of rows) {
+        expect(Math.abs(row.offset), `${row.label} icon against its label`).toBeLessThan(1);
+        expect(Math.abs(row.glyphX - 12), `${row.label} glyph, across`).toBeLessThan(0.5);
+        expect(Math.abs(row.glyphY - 12), `${row.label} glyph, down`).toBeLessThan(0.5);
+      }
+    });
+  }
+}
