@@ -21,13 +21,18 @@ export type UpdateCheck =
   | { kind: "ready"; version: string; notes: string | null }
   | { kind: "current" }
   | { kind: "unconfigured" }
-  | { kind: "failed"; reason: string };
+  | { kind: "failed"; reason: string }
+  // A package manager installed this copy and updates it (#188).
+  | { kind: "managed"; by: string };
 
 /**
  * Only ever a reason it did not happen. A successful install replaces the
  * running process, so there is nothing left to resolve the promise.
  */
-export type UpdateInstall = { kind: "unconfigured" } | { kind: "failed"; reason: string };
+export type UpdateInstall =
+  | { kind: "unconfigured" }
+  | { kind: "failed"; reason: string }
+  | { kind: "managed"; by: string };
 
 /** The version this copy was built as, or `null` outside the shell. */
 export async function appVersion(): Promise<string | null> {
@@ -84,5 +89,10 @@ export function updateLine(check: UpdateCheck | null, busy: boolean): string {
       return "This copy was not built to update itself. Install a new one from the release page.";
     case "failed":
       return `Couldn't check for updates: ${check.reason}`;
+    case "managed":
+      // Omarchy's Update runs `pacman -Syu`, which is what brings it.
+      return check.by === "pacman"
+        ? "This copy updates with your system: use Update in the Omarchy menu, or run sudo pacman -Syu."
+        : `This copy updates with your system, through ${check.by}.`;
   }
 }

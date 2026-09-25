@@ -1,0 +1,58 @@
+# Linger for Arch and Omarchy (#188).
+#
+# This repackages the program from each release's .deb. The .deb is built on
+# Ubuntu 22.04 and links WebKitGTK by its library name, so on Arch it runs
+# against the system's WebKit, which is the point: the AppImage's bundled
+# WebKitGTK 2.50.4 cannot use the GPU display path on NVIDIA + Wayland
+# machines, and without it typing and scrolling run a frame behind (#169, #187).
+#
+# packaging/arch/build-repo.sh fills in pkgver and the checksum and builds it;
+# the arch-repo workflow publishes it to the pacman repository. Built by hand:
+#   packaging/arch/build-repo.sh 0.3.6 /tmp/linger-repo
+pkgname=linger
+pkgver=0.0.0
+pkgrel=1
+pkgdesc='A small place for friends to hang out'
+arch=('x86_64')
+url='https://github.com/itsMattGuenther/Linger'
+license=('AGPL-3.0-only')
+depends=(
+  'alsa-lib'
+  'cairo'
+  'dbus'
+  'gdk-pixbuf2'
+  'glib2'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gtk3'
+  'libsoup3'
+  'webkit2gtk-4.1'
+  'xdg-utils'
+)
+optdepends=('gnome-keyring: remember sign-ins between launches')
+options=('!strip' '!debug')
+source=("Linger_${pkgver}_amd64.deb::${url}/releases/download/v${pkgver}/Linger_${pkgver}_amd64.deb"
+        'linger.desktop')
+sha256sums=('SKIP'
+            'SKIP')
+noextract=("Linger_${pkgver}_amd64.deb")
+
+package() {
+  local unpacked="$srcdir/deb"
+  mkdir -p "$unpacked"
+  bsdtar -xf "$srcdir/Linger_${pkgver}_amd64.deb" -C "$unpacked"
+  bsdtar -xf "$unpacked"/data.tar.* -C "$unpacked"
+
+  install -Dm755 "$unpacked/usr/bin/linger-client" "$pkgdir/usr/bin/linger-client"
+  local icon size
+  for icon in "$unpacked"/usr/share/icons/hicolor/*/apps/linger-client.png; do
+    size=$(basename "$(dirname "$(dirname "$icon")")")
+    install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/$size/apps/linger-client.png"
+  done
+  install -Dm644 "$srcdir/linger.desktop" "$pkgdir/usr/share/applications/linger.desktop"
+
+  # Tells the app that pacman updates it, so its own updater stands down
+  # (client/src-tauri/src/packaging.rs).
+  install -dm755 "$pkgdir/usr/share/linger"
+  printf 'pacman\n' > "$pkgdir/usr/share/linger/package-manager"
+}

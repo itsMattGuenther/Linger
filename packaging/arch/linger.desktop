@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Linger
+Comment=A small place for friends to hang out
+Exec=linger-client
+Icon=linger-client
+Terminal=false
+Categories=Network;InstantMessaging;
+StartupWMClass=linger-client

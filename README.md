@@ -182,6 +182,20 @@ Grab the installer for your platform from
 Windows are built; **macOS is not built yet**, so on a Mac you build from a
 checkout (see Development below).
 
+**Omarchy and Arch** get a package instead, from Linger's own pacman
+repository. Set it up once and Linger updates with the rest of the system
+(Omarchy's Update, or `sudo pacman -Syu`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsMattGuenther/Linger/main/packaging/arch/setup.sh | bash
+```
+
+The [user guide](docs/user-guide.md#arch-and-omarchy) shows each step the
+script takes. The package uses the system's WebKit, which is why it's the fast
+option on Omarchy: the AppImage's older bundled WebKit can't use the GPU on
+NVIDIA + Wayland machines (#187). How the repository is built and signed is in
+[`packaging/arch/`](packaging/arch/) and `.github/workflows/arch-repo.yml`.
+
 The app and installer display name is **Linger**. Linux download filenames are
 case-sensitive; use the exact downloaded name, including its capital `L` on
 newer builds. Technical commands and app identifiers remain unchanged.
@@ -273,6 +287,8 @@ crates/linger-core/       shared types, IDs, palette — the wire contract
 crates/linger-server/     axum REST + WS gateway, SQLite (WAL), object store
 client/                   Tauri 2 shell + React/TypeScript frontend
 deploy/                   Dockerfile, compose, Caddyfile
+packaging/arch/           the Arch/Omarchy package, its signing key and the
+                          script that builds the pacman repository
 docs/                     host-guide.md, user-guide.md, decisions.md and
                           screenshots; docs/tasks/ archives closed milestones
 screenshots/              current Console review images and their capture notes

@@ -1,0 +1,126 @@
+name: arch repo
+
+# The pacman repository for Arch and Omarchy (#188).
+#
+# Runs when a release is *published*, not when it is tagged: publishing is the
+# human decision that ships an update (release.yml), and a pacman user gets the
+# new version the next time they update their system, so this must wait for
+# that click too.
+#
+# It repackages the release's .deb for Arch (packaging/arch/), signs the
+# package and the repository database with the Linger packages key
+# (packaging/arch/linger.asc; the secret half is ARCH_SIGNING_KEY), and uploads
+# both to the `arch` release, which is the repository pacman reads:
+#
+#   [linger]
+#   Server = https://github.com/itsMattGuenther/Linger/releases/download/arch
+#
+# The `arch` release is a pre-release on purpose. The in-app updater reads
+# releases/latest/download/latest.json, and a pre-release can never be latest.
+#
+# Running it by hand (workflow_dispatch) packages any published version into
+# any repository release, e.g. a throwaway `arch-test` to try the setup out.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published version to package, without the v (e.g. 0.3.6)"
+        required: true
+      repository:
+        description: "Release tag that hosts the repository"
+        required: true
+        default: arch
+
+permissions:
+  contents: write
+
+# One repository, one writer: two releases published close together must not
+# race each other's database.
+concurrency:
+  group: arch-repo
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: package and publish
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      REPOSITORY: ${{ inputs.repository || 'arch' }}
+      REQUESTED: ${{ inputs.version || github.event.release.tag_name }}
+    steps:
+      - name: tools
+        run: pacman -Syu --noconfirm --needed git github-cli
+
+      - uses: actions/checkout@v4
+
+      - name: which version
+        run: |
+          version="${REQUESTED#v}"
+          case "$version" in
+            ''|*[!0-9.]*) echo "not a release version: $REQUESTED" >&2; exit 1 ;;
+          esac
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # makepkg refuses to run as root, so the build runs as `builder`, and
+      # the key lives in that user's keyring.
+      - name: signing key
+        env:
+          ARCH_SIGNING_KEY: ${{ secrets.ARCH_SIGNING_KEY }}
+        run: |
+          useradd --create-home builder
+          printf '%s\n' "$ARCH_SIGNING_KEY" | sudo -u builder gpg --batch --import
+          fpr=$(sudo -u builder gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')
+          # The secret has to be the mate of the key people were told to
+          # trust. A package signed by any other key would be refused by every
+          # pacman that trusts the committed one, so stop here instead.
+          committed=$(gpg --show-keys --with-colons packaging/arch/linger.asc | awk -F: '/^fpr/{print $10; exit}')
+          if [ -z "$fpr" ] || [ "$fpr" != "$committed" ]; then
+            echo "ARCH_SIGNING_KEY ($fpr) is not the key in packaging/arch/linger.asc ($committed)" >&2
+            exit 1
+          fi
+          echo "GPGKEY=$fpr" >> "$GITHUB_ENV"
+
+      - name: the repository release exists
+        run: |
+          if ! gh release view "$REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$REPOSITORY" --prerelease --latest=false \
+              --target "$GITHUB_SHA" \
+              --title "Arch and Omarchy package repository" \
+              --notes "The pacman repository for Linger on Arch and Omarchy. Not a release: see the latest release for what changed, and the README for the one-time setup."
+          fi
+          # Belt and braces: whatever happened to it, it must never be latest.
+          gh release edit "$REPOSITORY" --prerelease --latest=false
+
+      - name: build and sign
+        run: |
+          mkdir -p repo
+          # The database as it is published now; nothing on the first run.
+          gh release download "$REPOSITORY" --dir repo \
+            --pattern linger.db --pattern linger.db.sig \
+            --pattern linger.files --pattern linger.files.sig || true
+          chown -R builder repo
+          sudo -u builder env GPGKEY="$GPGKEY" packaging/arch/build-repo.sh "$VERSION" repo
+
+      - name: publish
+        run: |
+          cd repo
+          pkg=$(ls linger-"$VERSION"-*.pkg.tar.zst)
+          # The package before the database, so pacman never reads a database
+          # that names a file which is not there yet.
+          gh release upload "$REPOSITORY" "$pkg" "$pkg.sig" --clobber
+          gh release upload "$REPOSITORY" linger.db linger.db.sig linger.files linger.files.sig \
+            ../packaging/arch/linger.asc --clobber
+          # Only the current package is kept; the database no longer names
+          # the old ones.
+          gh release view "$REPOSITORY" --json assets --jq '.assets[].name' |
+            grep -E '^linger-.*\.pkg\.tar\.zst(\.sig)?$' | grep -v -F "$pkg" |
+            while read -r old; do gh release delete-asset "$REPOSITORY" "$old" --yes; done

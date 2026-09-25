@@ -104,6 +104,15 @@ not kill the window, and an AppImage writes a user menu entry
 (`com.linger.desktop`) so the next open does not need a terminal. Packaged
 `.deb` / `.rpm` installs already ship a system launcher.
 
+Arch and Omarchy get a pacman package from Linger's own repository (#188),
+built by repackaging the release `.deb` (`packaging/arch/`), so it runs against
+the system's WebKitGTK. The package installs `share/linger/package-manager`
+beside the program. With that marker present the in-app updater reports
+"managed" and never installs anything (the program inside is stamped for
+Debian's installer), and startup removes a stale AppImage menu entry, which
+would otherwise shadow the package's own launcher
+(`client/src-tauri/src/packaging.rs`).
+
 ---
 
 ## 3. Repository layout
@@ -422,6 +431,14 @@ E2EE launders a false promise, which is worse than an honest limitation.
    installing an unverified one. The WebView is granted none of the updater
    plugin's permissions — it calls two of the app's own commands
    (`client/src-tauri/src/updates.rs`), so a page can never start an installer.
+   **The Arch package is signed too, by a separate key.** The package and the
+   repository database are signed with the Linger packages OpenPGP key
+   (`packaging/arch/linger.asc`, fingerprint
+   `A539799132574CE3EB51B01AB5FA9838135B10DF`), whose private half is the
+   `ARCH_SIGNING_KEY` secret and an offline backup. pacman refuses anything the
+   key did not sign. The repository only changes when a release is published
+   (`.github/workflows/arch-repo.yml`), and its `arch` release stays a
+   pre-release so the updater's `releases/latest` can never point at it.
 9. **No telemetry.** Not opt-in, not anonymous, not crash reporting. None.
 
 ### User content is hostile
