@@ -66,8 +66,7 @@ Message actions use a compact ellipsis button in a reserved column beside the
 text, never a hidden row above it. This dense-list target is 24px square at
 default scale; other icon controls retain their 36px minimum. Hover and keyboard
 focus reveal the button without covering text or changing row height. Activating
-it opens a dismissible menu with full-size action targets and wrapping reaction
-choices. Escape and outside click dismiss it and return focus to the button.
+it opens a dismissible menu with full-size action targets. Escape and outside click dismiss it and return focus to the button.
 Message bodies offer the four bundled sans faces; saved non-sans keys fall back
 to the default body face without restricting name styling.
 Rooms and DMs use 1.3 message line height, 2px between prose blocks and 8px
@@ -106,10 +105,6 @@ avatars, rounded panels, shadows or gradients on surfaces.
 
 ## Quiet delight
 
-- **Reactions:** clear pressed state and a check on your own marks. One silent,
-  160ms emphasis follows an accepted local addition, not loaded history or a
-  remote event. A pending request cannot be double-submitted. Refusal restores
-  the previous state and reports the error beside the message.
 - **Controls:** brief press and panel-entry feedback, with no spring, loop or
   idle animation. Reduced motion removes it; state remains visible. Switching
   Settings categories resets that category's scroll position to its heading.

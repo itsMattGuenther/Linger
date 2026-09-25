@@ -37,7 +37,6 @@ import type { MessageId } from "../generated/MessageId";
 import type { NotifyRule } from "../generated/NotifyRule";
 import type { PresenceEntry } from "../generated/PresenceEntry";
 import type { PresenceState } from "../generated/PresenceState";
-import type { ReactionGroup } from "../generated/ReactionGroup";
 import type { Room } from "../generated/Room";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
@@ -513,19 +512,6 @@ function mergePage(list: Message[], page: Message[]): Message[] {
 }
 
 /**
- * Replace one reaction group in place, so the server's canonical key order
- * survives. A count of zero is the last person taking theirs back.
- */
-function applyReaction(groups: ReactionGroup[], update: ReactionGroup): ReactionGroup[] {
-  const at = groups.findIndex((group) => group.key === update.key);
-  if (update.count === 0) return at < 0 ? groups : groups.filter((_, index) => index !== at);
-  if (at < 0) return [...groups, update];
-  const next = [...groups];
-  next[at] = update;
-  return next;
-}
-
-/**
  * Rewrite one room's stream inside a snapshot. Returning the stream unchanged
  * returns the snapshot unchanged, so a frame that touches nothing re-renders
  * nothing.
@@ -748,28 +734,9 @@ function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         },
       };
     }
-    case "reaction.update": {
-      // The only frame that names a message without naming its room, so the
-      // rooms we hold get searched. There are a handful of them, not hundreds.
-      const { message_id, key, count, user_ids } = frame.d;
-      const update: ReactionGroup = { key, count, user_ids };
-      let next = current;
-      for (const roomId of Object.keys(current.streams)) {
-        next = withStream(next, roomId, (stream) =>
-          stream.messages.some((held) => held.id === message_id)
-            ? {
-                ...stream,
-                messages: stream.messages.map((held) =>
-                  held.id === message_id
-                    ? { ...held, reactions: applyReaction(held.reactions, update) }
-                    : held,
-                ),
-              }
-            : stream,
-        );
-      }
-      return next;
-    }
+    // `reaction.update` is still sent, and deliberately not applied: the app
+    // shows no reactions during the trial (#168), and a frame that changes
+    // nothing on screen should not re-render anything.
     default:
       return current;
   }
@@ -1399,52 +1366,6 @@ export async function deleteMessage(api: AuthedApi, message: Message): Promise<v
       d: { id: message.id, room_id: message.room_id },
     }),
   );
-}
-
-/**
- * Add or take back one reaction, whichever the person does not already have.
- *
- * The server answers 204 with no body, so unlike an edit there is nothing to
- * fold in — it sends the new group as a `reaction.update` frame instead. That
- * frame is the truth, and it usually beats the HTTP response back. What happens
- * here first is a guess at the same answer so the mark moves under the cursor
- * rather than a round trip later; if the guess is wrong, the frame corrects it.
- */
-export async function toggleReaction(
-  api: AuthedApi,
-  message: Message,
-  key: string,
-): Promise<void> {
-  const server = api.baseUrl;
-  const me = stateOf(server).me;
-  if (!me) return;
-  const held = message.reactions.find((group) => group.key === key);
-  const mine = held?.user_ids.includes(me.id) ?? false;
-
-  const others = held?.user_ids.filter((id) => id !== me.id) ?? [];
-  const guess = mine ? others : [...others, me.id];
-  const guessed = (user_ids: UserId[]): void => {
-    publish(
-      server,
-      apply(stateOf(server), {
-        op: "reaction.update",
-        d: { message_id: message.id, key, count: user_ids.length, user_ids },
-      }),
-    );
-  };
-  guessed(guess);
-
-  const path = `/messages/${encodeURIComponent(message.id)}/reactions/${encodeURIComponent(key)}`;
-  try {
-    if (mine) await api.delete(path);
-    else await api.put(path);
-  } catch (error) {
-    // Put it back. With the socket up a frame would have corrected this
-    // anyway, but a refusal while the socket is down would otherwise leave a
-    // mark on screen that the server never accepted.
-    if (linkFor(api) !== null) guessed(held?.user_ids ?? []);
-    throw error;
-  }
 }
 
 // ---------------------------------------------------------------------------

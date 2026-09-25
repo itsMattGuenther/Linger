@@ -40,14 +40,6 @@
     opacity: 1;
   }
 }
-@keyframes reaction-confirm {
-  from {
-    transform: scale(0.85);
-  }
-  to {
-    transform: scale(1);
-  }
-}
 dialog.context-panel[open],
 .panel-drawer[open],
 .att-expanded {
@@ -59,8 +51,7 @@ button:is(
   .settings-save,
   .settings-mini,
   .editor-save,
-  .media-star,
-  .reaction
+  .media-star
 ) {
   transition:
     background var(--motion-fast),
@@ -77,37 +68,6 @@ button:is(
     .media-star
   ):active:not(:disabled) {
   transform: translateY(1px);
-}
-.reaction[data-confirmed="true"] .reaction-glyph {
-  animation: reaction-confirm var(--motion-base);
-}
-.reactions .reaction {
-  position: relative;
-  justify-content: center;
-  min-width: 2.5rem;
-  min-height: 2rem;
-  padding: 0.25rem 0.75rem;
-  background: var(--surface-1);
-  border-color: var(--hairline);
-}
-.reactions .reaction[data-mine="true"] {
-  border-color: var(--hairline-strong);
-}
-.reactions .reaction:active .reaction-glyph {
-  transform: scale(0.9);
-}
-.reaction-glyph {
-  display: inline-block;
-}
-.reaction .reaction-own {
-  position: absolute;
-  right: 0.125rem;
-  bottom: 0;
-  font: 0.625rem var(--font-ui);
-  color: var(--text-primary);
-}
-.reaction[aria-busy="true"] {
-  cursor: progress;
 }
 .feedback-saved {
   display: inline-flex;
@@ -225,8 +185,7 @@ button:is(
       .settings-mini,
       .editor-save,
       .media-star
-    ):active:not(:disabled),
-  .reactions .reaction:active .reaction-glyph {
+    ):active:not(:disabled) {
     transform: none;
   }
 }

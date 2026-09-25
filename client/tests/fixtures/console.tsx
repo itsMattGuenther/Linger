@@ -82,14 +82,6 @@ const users: User[] = [
     last_seen_at: Date.now() - 3_600_000,
   },
 ];
-if (query.has("tooltip")) {
-  users.push(
-    { ...me, id: "robin", username: "robin", display_name: "Robin Redwood", is_host: false },
-    { ...me, id: "casey", username: "casey", display_name: "Casey Thompson", is_host: false },
-    { ...me, id: "avery", username: "avery", display_name: "Avery Bennett", is_host: false },
-    { ...me, id: "morgan", username: "morgan", display_name: "Morgan Rivera", is_host: false },
-  );
-}
 if (query.has("longnames"))
   users.push({
     ...me,
@@ -200,15 +192,11 @@ const messages: Message[] = (
   reply_to: query.has("qa") && index === all.length - 1 ? "message-00007" : null,
   attachments:
     query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
+  // The server still stores and sends reactions; the app draws none of them
+  // during the trial (#168). This one is here so a test can prove that.
   reactions:
     index === 5 && !query.has("spacing")
-      ? [{
-          key: "heart",
-          count: query.has("tooltip") ? 8 : 2,
-          user_ids: query.has("tooltip")
-            ? ["jules", "matt", "eli", "sam", "robin", "casey", "avery", "morgan"]
-            : ["jules", "matt"],
-        }]
+      ? [{ key: "heart", count: 2, user_ids: ["jules", "matt"] }]
       : [],
   pinned_at: null,
   edited_at: null,
