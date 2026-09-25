@@ -40,7 +40,10 @@ sed -e "s/^pkgver=.*/pkgver=$version/" \
     "$here/PKGBUILD" > "$work/PKGBUILD"
 grep -q "SKIP" "$work/PKGBUILD" && { echo "checksums were not filled in" >&2; exit 1; }
 
-(cd "$work" && makepkg --clean --sign --key "$GPGKEY" --noconfirm >&2)
+# --nodeps: nothing is compiled, only repackaged, so the build machine does not
+# need Linger's runtime dependencies installed. They are still recorded in the
+# package, and pacman installs them for the user.
+(cd "$work" && makepkg --clean --nodeps --sign --key "$GPGKEY" --noconfirm >&2)
 pkg=$(cd "$work" && ls linger-"$version"-*.pkg.tar.zst)
 cp "$work/$pkg" "$work/$pkg.sig" "$repo/"
 
