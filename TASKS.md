@@ -831,9 +831,9 @@ Rules for this milestone:
 - ⬜ **T-1804 · Voice** — the voice bar, the room strips, and "move voice here"
   as an intent. Tabs and windows never leave voice.
 - 🟡 **T-1805 · People and DMs** — the person card (Message, Knock), the
-  new-message picker, away and away messages. Built in the list window and
-  tested on its fixture page; not yet tried against a real server in the
-  desktop app.
+  new-message picker, away and away messages, and knocks on your door (a card
+  above the voice bar). Built in the list window and tested on its fixture
+  pages; not yet tried against a real server in the desktop app.
 - 🟡 **T-1806 · Settings** — every setting in `parity.md`, in the Settings
   window. Built and wired (Ctrl+, opens it) and tested against a faked owner
   and server; not yet tried in the desktop app. Evening warmth waits for an
@@ -843,8 +843,10 @@ Rules for this milestone:
   remembered, and the tray. Pop-out and back are built (with the draft going
   along), and so is switching between tabs and windows, waiting for its
   place in Settings. Window positions and the tray are not.
-- ⬜ **T-1809 · Several servers** — folding sections, the time there, quiet,
-  and a server in its own window.
+- 🟡 **T-1809 · Several servers** — folding sections, the time there, quiet,
+  and a server in its own window. Folding sections, your order and Quiet are
+  built, with the list window connecting to every server; "the time there"
+  waits on decision 3, and a server in its own window isn't built.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
   new client becomes the default, the old one stays one release as a fallback,
   then is deleted. SPEC §3/§5 are rewritten from `system.md`.

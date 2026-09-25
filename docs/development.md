@@ -142,6 +142,10 @@ and open any of these pages:
   states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
   messages (`&paged` to load it a page at a time), and `?fail` to have every
   send refused;
+- `/tests/fixtures/next-list-window.html` (`?one` for a single server): the
+  real list window, restoring sign-ins and connecting to three faked
+  servers;
+- `/tests/fixtures/next-knocks.html` (`?voice`): knocks landing on the list;
 - `/tests/fixtures/next-chat-window.html?room=r-general` and
   `/tests/fixtures/next-settings-window.html`: the real chat and Settings
   windows, wired, with the desktop shell, the list window and the server

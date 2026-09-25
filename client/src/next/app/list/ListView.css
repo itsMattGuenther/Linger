@@ -17,6 +17,15 @@
   padding: var(--space-1) var(--space-2) var(--space-4);
 }
 
+/* Where notices land: a line with no height between the list and the voice
+   bar. What's in it is laid over the bottom of the list, just above the bar,
+   whatever the bar's height. */
+.nx-list-notices {
+  position: relative;
+  flex: none;
+  height: 0;
+}
+
 /* A room row's end: the voice mark, then who's in it. */
 .nx-list-room-end {
   display: inline-flex;

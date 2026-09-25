@@ -207,6 +207,16 @@ notifier which conversation you're looking at: the one in the window that has
 focus, if any. A message arriving there doesn't chime or pop a banner, as in
 today's client.
 
+## Several servers
+
+The list window connects to every server you're signed in to and shares all
+of them with the other windows. Your order of servers and which are Quiet are
+kept on this computer (`core/serverPrefs.ts`). A quiet server makes no chime
+(`setQuietServers` in `lib/notify.ts`) and its name isn't bold; a mention still
+gets its banner and a knock still gets through. Knocks from every server land
+as cards just above the voice bar, naming the server when there's more than
+one.
+
 ## Window management
 
 - **Opening windows.** The owner asks Rust to open or focus a window through a

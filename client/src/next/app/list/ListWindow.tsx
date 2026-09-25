@@ -1,10 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
   disconnect,
+  dismissKnock,
   type GatewayState,
   leaveVoice,
   loadNotifyRules,
@@ -14,9 +15,10 @@ import {
   setVoiceDeafened,
   setVoiceMuted,
   useGateway,
+  useServers,
 } from "../../../lib/gateway";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
-import { forgetNotifications, resetNotifications } from "../../../lib/notify";
+import { forgetNotifications, resetNotifications, setQuietServers } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
@@ -24,6 +26,8 @@ import type { RoomId } from "../../../generated/RoomId";
 import { tauriBus } from "../../core/bus";
 import { isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
+import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
+import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
@@ -31,9 +35,13 @@ import { type Accounts, type Sharing, shareAsOwner, type WindowOpener } from "..
 import { Spinner } from "../../kit";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
+import type { ServerListing } from "./ServerSection";
+import type { AwayEverywhere } from "./YouEverywhere";
+import { type KnockCard, KnockCards } from "./KnockCards";
 import type { KnockResult } from "./PersonCard";
 import type { VoiceDockProps } from "./VoiceDock";
 import { ApiError, TransportError } from "../../../lib/api";
+import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 
 /** How often the server's name is asked for again. It changes about once ever. */
@@ -41,9 +49,8 @@ const INFO_REFRESH_MS = 120_000;
 
 /**
  * The buddy list window: the owner (docs/design/architecture.md). It restores
- * the sign-ins, connects to each server, watches presence and draws the list.
- *
- * One server for now: several servers as folding sections are M15.8.
+ * the sign-ins, connects to each server, watches presence and draws the list:
+ * one server's list, or a section per server with several (T-1809).
  */
 export function ListWindow() {
   const sessions = useSessions();
@@ -57,8 +64,7 @@ export function ListWindow() {
     );
   }
 
-  const [first] = sessions.state.servers;
-  if (first === undefined) {
+  if (sessions.state.servers.length === 0) {
     // The new client's sign-in comes later (docs/design/parity.md, SIGN-*).
     return (
       <WindowMessage>
@@ -72,27 +78,18 @@ export function ListWindow() {
     reauthenticate: (server, auth) => sessions.addServer(server, auth),
     signOut: (server) => sessions.signOut(server),
   };
-  return <ServerList session={first} accounts={accounts} />;
+  return <Servers signedIn={sessions.state.servers} accounts={accounts} />;
 }
 
-function ServerList({ session, accounts }: { session: ServerSession; accounts: Accounts }) {
+/**
+ * One server's connection, owned by this window and closed when it goes: no
+ * UI of its own. The same shape as today's client (App.tsx, ServerLink), which
+ * is what keeps a StrictMode remount from leaving a socket nobody follows.
+ */
+function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void }) {
   const { api, baseUrl } = session;
-  const gateway = useGateway(baseUrl);
-  const now = useNow();
-  const [serverName, setServerName] = useState<string | null>(null);
+  const status = useGateway(baseUrl).status.kind;
 
-  // One presence watcher for the window, for as long as it is open.
-  useEffect(() => {
-    const stop = startPresence();
-    return () => {
-      stop();
-      resetNotifications();
-    };
-  }, []);
-
-  // The connection, owned by this window and closed when it goes. The same
-  // shape as today's client (App.tsx, ServerLink), which is what keeps a
-  // StrictMode remount from leaving a socket nobody follows.
   useEffect(() => {
     void connect(api);
     return () => {
@@ -108,29 +105,71 @@ function ServerList({ session, accounts }: { session: ServerSession; accounts: A
     void loadNotifyRules(api).catch(() => undefined);
   }, [api]);
 
-  // Around, in no room: rooms open in the chat window (M15.2).
+  // Around, in no room: rooms open in the chat window, which tells the owner.
   useEffect(() => {
     setPresenceRoom(baseUrl, null);
   }, [baseUrl]);
   useEffect(() => {
-    setPresenceLive(baseUrl, gateway.status.kind === "ready");
-  }, [baseUrl, gateway.status.kind]);
+    setPresenceLive(baseUrl, status === "ready");
+  }, [baseUrl, status]);
 
-  // The sign-ins change identity every render; sharing reads the latest.
+  // Its name and color. They change about once ever.
+  const asOf = useNow(INFO_REFRESH_MS);
+  useEffect(() => {
+    const abort = new AbortController();
+    void api
+      .serverInfo(abort.signal)
+      .then((info) => onInfo(baseUrl, info))
+      .catch(() => undefined);
+    return () => abort.abort();
+  }, [api, baseUrl, asOf, onInfo]);
+
+  return null;
+}
+
+function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: Accounts }) {
+  const states = useServers();
+  const now = useNow();
+  const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
+  const ordered = useMemo(() => inOrder(signedIn, prefs.order), [signedIn, prefs.order]);
+  const quiet = useMemo(() => new Set(prefs.quiet), [prefs.quiet]);
+  const [infos, setInfos] = useState<Readonly<Record<string, ServerInfo>>>({});
+  const onInfo = useCallback((server: string, info: ServerInfo) => setInfos((held) => ({ ...held, [server]: info })), []);
+  const several = ordered.length > 1;
+
+  const changePrefs = (next: ServerPrefs) => {
+    setPrefs(next);
+    saveServerPrefs(localStore(), next);
+  };
+
+  // One presence watcher for the window, for as long as it is open.
+  useEffect(() => {
+    const stop = startPresence();
+    return () => {
+      stop();
+      resetNotifications();
+    };
+  }, []);
+
+  // A quiet server makes no sound (lib/notify.ts); its knocks still get through.
+  useEffect(() => setQuietServers(quiet), [quiet]);
+
+  // The owner's half of sharing these connections with the other windows
+  // (docs/design/architecture.md): snapshots, lent tokens, intents. It reads
+  // the signed-in servers when asked, so signing in or out needs no restart.
+  const apisRef = useRef(new Map<string, ServerSession["api"]>());
+  apisRef.current = new Map(signedIn.map((session) => [session.baseUrl, session.api]));
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
-
-  // The owner's half of sharing this connection with the chat window
-  // (docs/design/architecture.md): snapshots, lent tokens, intents.
   useEffect(() => {
+    if (!isTauri()) return;
     const accountsNow: Accounts = {
       reauthenticate: (server, auth) => accountsRef.current.reauthenticate(server, auth),
       signOut: (server) => accountsRef.current.signOut(server),
     };
-    if (!isTauri()) return;
     let held: Sharing | null = null;
     let gone = false;
-    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), { opener: shell, store: localStore(), accounts: accountsNow }).then((started) => {
+    void shareAsOwner(tauriBus(), () => apisRef.current, { opener: shell, store: localStore(), accounts: accountsNow }).then((started) => {
       if (gone) started.stop();
       else held = sharing = started;
     });
@@ -139,21 +178,7 @@ function ServerList({ session, accounts }: { session: ServerSession; accounts: A
       held?.stop();
       if (sharing === held) sharing = null;
     };
-  }, [api, baseUrl]);
-
-  const asOf = useNow(INFO_REFRESH_MS);
-  useEffect(() => {
-    const abort = new AbortController();
-    void api
-      .serverInfo(abort.signal)
-      .then((info) => setServerName(info.name))
-      .catch(() => undefined);
-    return () => abort.abort();
-  }, [api, asOf]);
-
-  const model = useMemo(() => listModel(gateway, now), [gateway, now]);
-  const speaking = useMemo(() => talkingNow(gateway), [gateway]);
-  const pushToTalk = gateway.myVoice?.pushToTalk ?? false;
+  }, []);
 
   // Ctrl+, opens Settings from the list too.
   useEffect(() => {
@@ -166,14 +191,19 @@ function ServerList({ session, accounts }: { session: ServerSession; accounts: A
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Your voice seat, on whichever server has it: one at a time (SPEC §4.14).
+  const voiceServer = ordered.find((session) => states[session.baseUrl]?.myVoice)?.baseUrl ?? null;
+  const voiceState = voiceServer === null ? undefined : states[voiceServer];
+  const pushToTalk = voiceState?.myVoice?.pushToTalk ?? false;
+
   // Push-to-talk while the list has focus, as today's client does; a chat
   // window reports its own key presses (core/share.ts, "voice.talk").
   useEffect(() => {
-    if (!pushToTalk) return;
+    if (!pushToTalk || voiceServer === null) return;
     const down = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(baseUrl, false).catch(() => undefined);
+      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
     };
-    const release = () => void setVoiceMuted(baseUrl, true).catch(() => undefined);
+    const release = () => void setVoiceMuted(voiceServer, true).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
       if (event.key === PUSH_TO_TALK_KEY) release();
     };
@@ -185,21 +215,58 @@ function ServerList({ session, accounts }: { session: ServerSession; accounts: A
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", release);
     };
-  }, [baseUrl, pushToTalk]);
+  }, [voiceServer, pushToTalk]);
 
-  const voice = useMemo(() => voiceDock(gateway, speaking, baseUrl), [gateway, speaking, baseUrl]);
+  const voice = useMemo(() => {
+    if (!voiceState || voiceServer === null) return undefined;
+    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer);
+    if (!dock || !several) return dock;
+    const info = infos[voiceServer];
+    const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
+    return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
+  }, [voiceState, voiceServer, several, infos]);
 
-  // Your status line and away, from the top card. The status is saved as a
-  // whole (every other field carried over) the way today's client saves it,
-  // then presence is told you're away or back (lib/watchPresence).
-  const me = gateway.me;
+  const listings = useMemo(
+    () =>
+      ordered.flatMap((session): ServerListing[] => {
+        const state = states[session.baseUrl];
+        if (!state) return [];
+        const { api, baseUrl } = session;
+        const model = listModel(state, now);
+        const isQuiet = quiet.has(baseUrl);
+        const me = state.me;
+        return [
+          {
+            id: baseUrl,
+            name: infos[baseUrl]?.name ?? hostOf(baseUrl),
+            accent: infos[baseUrl]?.accent_key ?? null,
+            model,
+            header: serverHeader(state, model, isQuiet),
+            quiet: isQuiet,
+            speaking: talkingNow(state),
+            onOpenRoom: (room) => openChat(baseUrl, room),
+            onOpenDm: (room) => openChat(baseUrl, room),
+            onMessage: (user) => void messageWith(api, user),
+            onKnock: (user) => knock(api, user),
+            onStartDm: (people) => startDm(api, people),
+            saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
+          },
+        ];
+      }),
+    [ordered, states, now, quiet, infos],
+  );
+
+  // One server: your status and away from the top card, as before.
+  const only = ordered.length === 1 ? ordered[0] : undefined;
+  const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
   const you = useMemo<YouActions | undefined>(() => {
-    if (me === null) return undefined;
+    if (!only || onlyMe === null) return undefined;
+    const { api, baseUrl } = only;
     return {
       awayChoices: awayChoices(loadRecentAway()),
-      saveLine: (line) => said(saveStatus(api, withLine(me.status, line))),
+      saveLine: (line) => said(saveStatus(api, withLine(onlyMe.status, line))),
       goAway: async (message) => {
-        const problem = await said(saveStatus(api, withAway(me.status, message)));
+        const problem = await said(saveStatus(api, withAway(onlyMe.status, message)));
         if (problem === null) {
           setAway(baseUrl, message);
           saveRecentAway(rememberAway(loadRecentAway(), message));
@@ -207,27 +274,74 @@ function ServerList({ session, accounts }: { session: ServerSession; accounts: A
         return problem;
       },
       comeBack: async () => {
-        const problem = await said(saveStatus(api, withAway(me.status, null)));
+        const problem = await said(saveStatus(api, withAway(onlyMe.status, null)));
         if (problem === null) setAway(baseUrl, null);
         return problem;
       },
     };
-  }, [api, baseUrl, me]);
+  }, [only, onlyMe]);
+
+  // Several servers: away on the ones you tick, each answering for itself.
+  const everywhere = useMemo<AwayEverywhere | undefined>(() => {
+    if (!several) return undefined;
+    const each = async (servers: string[], message: string | null): Promise<Record<string, string | null>> => {
+      const answers = await Promise.all(
+        servers.map(async (server): Promise<[string, string | null]> => {
+          const session = signedIn.find((one) => one.baseUrl === server);
+          const me = states[server]?.me;
+          if (!session || !me) return [server, "You're not signed in there any more."];
+          const problem = await said(saveStatus(session.api, withAway(me.status, message)));
+          if (problem === null) setAway(server, message);
+          return [server, problem];
+        }),
+      );
+      return Object.fromEntries(answers);
+    };
+    return {
+      awayChoices: awayChoices(loadRecentAway()),
+      goAway: async (message, servers) => {
+        const answers = await each(servers, message);
+        if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
+        return answers;
+      },
+      comeBack: (servers) => each(servers, null),
+    };
+  }, [several, signedIn, states]);
+
+  // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
+  const knocks = useMemo(
+    (): KnockCard[] =>
+      ordered.flatMap((session) => {
+        const state = states[session.baseUrl];
+        if (!state) return [];
+        return state.knocks.map((one) => ({
+          server: session.baseUrl,
+          id: one.id,
+          at: one.at,
+          from: state.users.find((user) => user.id === one.from) ?? null,
+          serverName: several ? (infos[session.baseUrl]?.name ?? hostOf(session.baseUrl)) : null,
+        }));
+      }),
+    [ordered, states, several, infos],
+  );
 
   return (
-    <ListView
-      serverName={serverName ?? hostOf(baseUrl)}
-      model={model}
-      speaking={speaking}
-      voice={voice}
-      you={you}
-      onOpenRoom={(room) => openChat(baseUrl, room)}
-      onOpenDm={(room) => openChat(baseUrl, room)}
-      onMessage={(user) => void messageWith(api, user)}
-      onKnock={(user) => knock(api, user)}
-      onStartDm={(people) => startDm(api, people)}
-      onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
-    />
+    <>
+      {signedIn.map((session) => (
+        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
+      ))}
+      <ListView
+        servers={listings}
+        voice={voice}
+        you={you}
+        everywhere={everywhere}
+        onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
+        onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
+        onSettings={() => shell.settings()}
+        notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
+        onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
+      />
+    </>
   );
 }
 

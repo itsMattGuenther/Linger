@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { ListModel } from "../../core/list";
-import { TitleBar } from "../../kit";
+import { IconButton, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./ListView.css";
 import { ServerBody, type ServerBodyActions } from "./ServerBody";
@@ -40,6 +40,13 @@ export type ListViewProps = ListShared &
 interface ListShared {
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
+  /** The gear: opens Settings (Ctrl+, does too). */
+  onSettings?: () => void;
+  /**
+   * Cards that come and go, like a knock on your door: laid over the bottom
+   * of the list, just above the voice bar, so they never cover its controls.
+   */
+  notices?: ReactNode;
   /** You're in voice: the voice bar at the bottom. */
   voice?: VoiceDockProps;
   /** One server: changing your status and going away, from the top card. */
@@ -61,18 +68,27 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, voice, you, everywhere, onQuiet, onMove, folded } = props;
-  const servers = props.servers;
-  const [foldedIds, setFoldedIds] = useState<ReadonlySet<string>>(
-    () => new Set(folded ?? (servers ?? []).slice(1).map((server) => server.id)),
+  const { onClose, onSettings, notices, voice, you, everywhere, onQuiet, onMove, folded } = props;
+  const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
+  const bottom = (
+    <>
+      <div className="nx-list-notices">{notices}</div>
+      {voice ? <VoiceDock {...voice} /> : null}
+    </>
   );
+  const servers = props.servers;
+  // What you've folded or opened yourself, by server. Anything you haven't
+  // touched follows `folded`, or starts folded if it isn't your first server;
+  // decided as each server appears, since they arrive one by one.
+  const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const isFolded = (id: string, index: number) => chosen.get(id) ?? (folded ? folded.includes(id) : index > 0);
 
   if (servers === undefined || servers.length <= 1) {
     const only: (OneServer | ServerListing) | undefined = servers === undefined ? props : servers[0];
     const name = only === undefined ? "Linger" : "serverName" in only ? only.serverName : only.name;
     return (
       <div className="nx-list" data-screen="list">
-        <TitleBar leading={<LogoMark />} onClose={onClose}>
+        <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
           {name}
         </TitleBar>
 
@@ -92,7 +108,7 @@ export function ListView(props: ListViewProps) {
           ) : null}
         </div>
 
-        {voice ? <VoiceDock {...voice} /> : null}
+        {bottom}
       </div>
     );
   }
@@ -100,17 +116,12 @@ export function ListView(props: ListViewProps) {
   // Who you are, for the top card: you on your first server. The card only
   // says what's true everywhere; each server's section says who you are there.
   const me = servers.find((server) => server.model.me !== null)?.model.me?.user ?? null;
-  const toggle = (id: string) =>
-    setFoldedIds((held) => {
-      const next = new Set(held);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggle = (id: string, index: number) =>
+    setChosen((held) => new Map(held).set(id, !(held.get(id) ?? (folded ? folded.includes(id) : index > 0))));
 
   return (
     <div className="nx-list" data-screen="list" data-servers="several">
-      <TitleBar leading={<LogoMark />} onClose={onClose}>
+      <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
         Linger
       </TitleBar>
 
@@ -122,17 +133,17 @@ export function ListView(props: ListViewProps) {
             key={listing.id}
             listing={listing}
             index={index}
-            folded={foldedIds.has(listing.id)}
+            folded={isFolded(listing.id, index)}
             first={index === 0}
             last={index === servers.length - 1}
-            onToggle={() => toggle(listing.id)}
+            onToggle={() => toggle(listing.id, index)}
             onQuiet={onQuiet ? (quiet) => onQuiet(listing.id, quiet) : undefined}
             onMove={onMove ? (by) => onMove(listing.id, by) : undefined}
           />
         ))}
       </div>
 
-      {voice ? <VoiceDock {...voice} /> : null}
+      {bottom}
     </div>
   );
 }

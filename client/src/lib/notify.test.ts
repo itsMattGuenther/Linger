@@ -10,7 +10,7 @@ vi.mock("./sound", () => ({ playSound: (cue: string) => { played.push(cue); } })
 vi.mock("./looking", () => ({ isLooking: () => looking }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async (_cmd: string, args: unknown) => { banners.push(args); } }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted: async () => true, requestPermission: async () => "granted" }));
-const { considerFrame, resetNotifications, setViewing } = await import("./notify");
+const { considerFrame, resetNotifications, setQuietServers, setViewing } = await import("./notify");
 const { serverState } = await import("./gateway");
 const server = "https://sound.example";
 const room: Room = { id: "room", name: "room", slug: "room", kind: "room", topic: null, member_ids: null, position: 0, archived_at: null, last_message_id: null };
@@ -20,7 +20,7 @@ const snapshot: GatewayState = { ...serverState(server), rooms: [room], dms: [{ 
 } };
 const message: Message = { id: "message", room_id: "dm", author_id: "friend", body: "hello", attachments: [], reply_to: null, reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: 0 };
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal("window", { setTimeout, clearTimeout }); played.length = 0; banners.length = 0; looking = false; });
-afterEach(() => { resetNotifications(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { resetNotifications(); setQuietServers(new Set()); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 it("routes DMs and room messages to distinct sound categories, not banner permission", () => {
   considerFrame(server, { op: "message.create", s: 1, d: message }, snapshot);
@@ -53,4 +53,15 @@ it("replay is silent while preserving existing mention-banner batching", async (
   await vi.advanceTimersByTimeAsync(1200);
   expect(played).toEqual([]);
   expect(banners).toHaveLength(1);
+});
+it("a quiet server makes no sound, but a mention there still gets its banner", async () => {
+  setQuietServers(new Set([server]));
+  considerFrame(server, { op: "message.create", s: 1, d: message }, snapshot);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, id: "named", room_id: "room", body: "@me look" } }, snapshot);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(played).toEqual([]);
+  expect(banners).toHaveLength(1);
+  // Another server isn't quieted by it.
+  considerFrame("https://other.example", { op: "message.create", s: 3, d: message }, snapshot);
+  expect(played).toEqual(["dm"]);
 });

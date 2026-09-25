@@ -53,6 +53,19 @@ export function setViewing(at: { server: string; roomId: RoomId } | null): void 
   viewing = at;
 }
 
+/** Servers set to Quiet (the Buddy list client): no chimes from them. */
+let quietServers: ReadonlySet<string> = new Set();
+
+/**
+ * Quiet a set of servers (docs/design/buddy-list.md, "Several servers"): their
+ * messages make no sound. A mention still gets its banner, and knocks still get
+ * through, because they are somebody asking for you rather than a room being
+ * busy.
+ */
+export function setQuietServers(servers: ReadonlySet<string>): void {
+  quietServers = servers;
+}
+
 interface Batch {
   slug: string;
   /** Distinct, in the order they first spoke. */
@@ -95,7 +108,7 @@ export function considerFrame(
 
   const dm = snapshot.dms.some((room) => room.id === message.room_id);
   // Sound switches are independent of desktop-banner rules and permission.
-  if (!replayed) void playSound(dm ? "dm" : "room");
+  if (!replayed && !quietServers.has(server)) void playSound(dm ? "dm" : "room");
   if (notifyReason(message, me, snapshot.notifyRules) === null) return;
 
   const slug = snapshot.rooms.find((room) => room.id === message.room_id)?.slug ?? "a room";
