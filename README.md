@@ -76,67 +76,40 @@ These terms are used everywhere — UI, code, docs, error messages:
 | Media/link archive | **media** |
 | A user's status card | **their status** |
 
-## ✨ What is implemented
+## ✨ What it does
 
-- 🪑 **Rooms you're in** — focusing a room means you're in it; others see
-  occupancy. Personal entrance sounds are planned and deferred
-- 👥 **A roster-forward layout** — people are the primary surface, not a gutter; each
-  friend is a card showing presence, the room they are in, and their status
-- 🔎 **Readable Console controls** — larger text, 100–200% interface scaling,
-  resizable side panels and a Settings gear beside your name. Server management
-  stays separate from everyday member actions. No avatars, badges or unread counts.
-  One comfortable layout; no density modes. Narrow windows put the right panel
-  behind **People** and, when needed, the left panel behind **Navigation**.
-  Dark, light and system themes remain.
-- 🔕 **No unread counts** — rooms and DMs open at "you left off here" when new
-  messages await, with a subtle label-weight change,
-  never a badge; notifications are for direct mentions and people you choose to follow
-- ✍️ **Styled names** (the AIM feature) — curated fonts, a named 16-color palette,
-  gradients, shimmer/glow; and **statuses** with away messages
-- 🗄️ **Media** — everything ever shared, browsable and filterable; star things to
-  keep them forever
-- 📝 **Text that stays text** — a small markdown subset (bold, italic, strikethrough,
-  code, quotes, lists, links), plus edit, delete and reply. Message bodies are parsed
-  into a tree and drawn as elements; **no raw HTML from a message, ever**.
-  Message bodies use the four bundled sans-serif choices; older non-sans
-  choices fall back to the default reading face. Names retain all twelve fonts.
-  Closely spaced messages group beneath sender names, without colored bars.
-  Hover or keyboard focus reveals a **⋯** button; activate it to open message actions.
-  There are no reactions, as a trial: answer by saying something, emoji and all.
-- 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a
-  poster frame and a blurhash generated for you
-- 🖥️ **Desktop client** for Linux and Windows (Tauri 2, not Electron).
-  macOS builds from source; published Mac installers are deferred
-- 🏘️ **Several servers at once** — a list in the rail, and a `+` button to join
-  another. Each one is its own sign-in, its own people and its own
-  rooms; signing out of one leaves the rest alone
-- 📦 **Full export** — any member can export public rooms and their own DMs,
-  including shared files, without host approval
-- 💬 **DMs and group DMs** — private to their participants within the server;
-  people outside a DM cannot find it through messages, media, search or export
-- 🎙️ **Voice rooms** — join, mute, deafen, shared mic/deafen state, push-to-talk, locally remembered per-person volume and device
-  selection. Controls remain reachable while browsing Settings or another room.
-  A host can run a relay for different networks. **Experimental:
-  the tests across separate computers and networks are still open**
-- 🚪 **Knock** *(the first piece of V2, built)* — nudge one person from their card in
-  the roster. They get a soft knock and a card that fades on its own: no message, no
-  thread, nothing to dismiss, and nothing written down at either end. Three an hour
-  per person. Quiet hours (22:00–08:00 on your own clock) are off until you turn
-  them on
-- 🔉 **Optional chimes** — voice-session events, mic/deafen controls, DMs and
-  knocks; ordinary room-message sounds default off. Settings → sound & voice
-  has category switches, a master silence control and quiet hours. No chimes
-  for replayed messages, messages you are reading, or push-to-talk presses.
-- 🔎 **Search** *(the second piece of V2, built)* — `search` sits in the rail under the
-  rooms, next to `media`, and `Ctrl`/`Cmd`+`K` opens it. It covers what people typed and
-  the names of the files they shared. Whole words with English endings folded together,
-  so `photo` finds `photos`; several words means all of them; quotes mean a phrase.
-  **No query language** — `AND` and `OR` are words to look for like any others, because
-  a search box that quietly has a syntax is a search box that lies to most of the people
-  typing in it. Newest first, always: no relevance ranking, no search history, no saved
-  searches, nothing written down on either side. Click a hit and you land on that
-  message in its room, however far back it is. A deleted message is findable by nothing
-  — not its words, not the names of the files it was carrying
+- 🪑 **Rooms you're in.** Focusing a room means you're in it, and everyone sees
+  who's where.
+- 👥 **People first.** The right-hand panel is a stack of cards, one per friend:
+  presence, which room they're in, and their status.
+- 🔕 **No unread counts.** Rooms and DMs open at "you left off here", and a room
+  with something new just gets a heavier name. Never a badge. Notifications are
+  for direct mentions and people you choose to follow.
+- ✍️ **Styled names and statuses** (the AIM feature): curated fonts, a named
+  16-color palette, gradients, shimmer and glow, and away messages.
+- 📝 **Text that stays text.** A small markdown subset, edit, delete and reply,
+  drawn as elements, with **no raw HTML from a message, ever**. No reactions,
+  for now: a trial of answering by saying something, emoji and all.
+- 📁 **Files and media.** 500 MB uploads, resumable, **EXIF always stripped**. The
+  Media view collects everything ever shared; star things to keep them forever.
+- 💬 **DMs and group DMs**, private to the people in them: nobody else can find
+  them through messages, media, search or export.
+- 🎙️ **Voice rooms.** Mute, deafen, push-to-talk, per-person volume and device
+  choice, with a relay the host can run for friends on different networks.
+  **Experimental: the checks across separate computers and networks are still
+  open.**
+- 🚪 **Knock.** Nudge one person from their card: a soft sound and a card that
+  fades on its own. No message, nothing written down.
+- 🔎 **Search** (`Ctrl`/`Cmd`+`K`) through what people said and the names of files
+  they shared. Newest first, no query language, no search history.
+- 🔉 **Optional chimes** for voice, mic/deafen, DMs and knocks, with a master
+  switch and quiet hours you can move. Room-message sounds start off.
+- 📦 **Full export.** Any member can export public rooms and their own DMs,
+  with files, without asking the host.
+- 🏘️ **Several servers at once**, each its own sign-in, people and rooms.
+- 🖥️ **A desktop app for Linux and Windows** (Tauri 2, not Electron), readable at
+  100–200% interface scale, in dark, light or system theme. macOS builds from
+  source; Mac installers aren't published yet.
 
 ## 🚫 What it will never have
 
@@ -169,116 +142,104 @@ Other privacy properties that *are* guaranteed:
 - Zero telemetry and zero crash reporting — not even opt-in. The client does
   contact GitHub to check for application updates
 
-## 📦 Installing the client
+## 📦 Installing the app
 
-**New here? The [user guide](docs/user-guide.md) covers installing and using
-Linger in plain language**, including choosing a download, opening it again,
-and the Linux AppImage troubleshooting commands. **New members need an invite
-link from their host**; entering only a server address opens sign-in for an
-existing account.
+**New members need an invite link from their host.** The
+[user guide](docs/user-guide.md) walks through everything below in plain
+language, including what to do when something goes wrong.
 
-Grab the installer for your platform from
-[Releases](https://github.com/itsMattGuenther/Linger/releases). Linux and
-Windows are built; **macOS is not built yet**, so on a Mac you build from a
-checkout (see Development below).
+| Your computer | How |
+|---|---|
+| **Omarchy or Arch** | Run the one-time setup below. Updates then come with your system updates. |
+| **Windows** | The `…x64-setup.exe` from the [latest release](https://github.com/itsMattGuenther/Linger/releases/latest). |
+| **Ubuntu, Debian, Mint** | The `…amd64.deb`: `sudo apt install ~/Downloads/Linger_<version>_amd64.deb` |
+| **Fedora, openSUSE** | The `…x86_64.rpm`: `sudo dnf install` (or `zypper install`) the file |
+| **Any other Linux** | The `…amd64.AppImage`: `chmod +x` it, then run it |
 
-**Omarchy and Arch** get a package instead, from Linger's own pacman
-repository. Set it up once and Linger updates with the rest of the system
-(Omarchy's Update, or `sudo pacman -Syu`):
+**Omarchy and Arch** get Linger from its own signed pacman repository. It uses
+the system's WebKit, which is the fast option on Omarchy: the AppImage's older
+bundled WebKit can't use the GPU on NVIDIA + Wayland machines. The script
+trusts Linger's signing key after checking its fingerprint, adds the
+repository and installs Linger; the [user guide](docs/user-guide.md#arch-and-omarchy)
+shows each step it takes.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/itsMattGuenther/Linger/main/packaging/arch/setup.sh | bash
 ```
 
-The [user guide](docs/user-guide.md#arch-and-omarchy) shows each step the
-script takes. The package uses the system's WebKit, which is why it's the fast
-option on Omarchy: the AppImage's older bundled WebKit can't use the GPU on
-NVIDIA + Wayland machines (#187). How the repository is built and signed is in
-[`packaging/arch/`](packaging/arch/) and `.github/workflows/arch-repo.yml`.
+**Windows will warn you** with *"Windows protected your PC"*; *Run anyway* is
+behind *More info*. The installer isn't code-signed, which is a
+[decision](docs/decisions.md), not a broken download. Updates are signed, and
+the app checks that signature before installing anything.
 
-The app and installer display name is **Linger**. Linux download filenames are
-case-sensitive; use the exact downloaded name, including its capital `L` on
-newer builds. Technical commands and app identifiers remain unchanged.
-The MSI upgrade code is pinned to its original value so this capitalization
-change does not create a separate Windows application.
-Windows MSI upgrades preserve renamed, moved or deleted desktop shortcuts;
-they refresh the original desktop shortcut only when it is still present.
-
-**Windows will warn you.** You get *"Windows protected your PC"*, and *Run
-anyway* is hidden behind the *More info* link. That is SmartScreen saying the
-installer is not code-signed, which is true — see
-[docs/decisions.md](docs/decisions.md) for why it isn't, and *Cutting a release*
-for the difference between that and the signature on updates, which is in place.
-Nothing about the download is broken.
-
-The app offers updates under *Settings → Account & App → Updates* and
-downloads nothing until you choose *install and restart*. A code push is not
-a published desktop release. See the [update instructions](docs/user-guide.md#updates)
-for the manual fallback; the full real-machine updater check (HC-1) is still open.
+**Updates.** Settings → Account & App → Updates checks for a new version and
+downloads nothing until you choose *install and restart*. The Arch package
+updates with the system instead.
 
 ## 🚀 Running a server
 
-**[The host guide](docs/host-guide.md) is the step-by-step path**, including a
-VPS-first route, a numbered Ubuntu Docker install step, DNS, first-run setup,
-and the home-router alternative. [Creating your first VPS](docs/vps-setup.md)
-covers SSH keys and the cloud firewall. This is the short version for someone
-who already has Docker:
+**[The host guide](docs/host-guide.md) is the step-by-step path**: a VPS or a
+computer at home, Docker, DNS, first-run setup, voice, backups and updates.
+[Creating your first VPS](docs/vps-setup.md) covers SSH keys and the cloud
+firewall. The short version, for someone who already has Docker:
 
 ```bash
-cd deploy
-# point two DNS records at this machine; allow incoming TCP 80 and 443
-# edit compose.yaml and Caddyfile: set both to your domain
+mkdir linger && cd linger
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/Caddyfile
+# point two DNS names at this machine (yours, and cdn. in front of it);
+# allow incoming TCP 80 and 443; put both names in compose.yaml and Caddyfile
 docker compose run --rm --user root --entrypoint chown linger linger:linger /data
 docker compose up -d
-docker compose logs linger   # prints a one-time setup URL on first run
+docker compose logs linger   # prints a one-time setup link on first run
 ```
 
-Paste that setup URL into the desktop app, not a browser. It makes your account,
-makes you the host, and names the server. It works once, and a restart replaces
-it.
+Paste that setup link into the desktop app, not a browser. It makes your
+account, makes you the host and names the server. It works once.
 
-**It needs two names, and they have to be names.** An installed client only
-talks `https`, and there is no certificate for a bare `IP:port` — so a server
-without a domain is reachable from `pnpm tauri dev` and from nothing anybody
-installed. The server says so at startup when `LINGER_DOMAIN` is unset. Buying a
-domain is not required; two free dynamic-DNS names work. Uploads answer on the
-`cdn.` name and nothing else does, because a file somebody sent you gets a lot
-of latitude from a browser if it appears to come from the app itself. The server
-refuses to start if both names point at one place.
+- **It needs two names, and they have to be names.** An installed app only
+  talks `https`, and there's no certificate for a bare `IP:port`. Free
+  dynamic-DNS names work. Files are served only from the `cdn.` name, and the
+  server refuses to start if both names point at one place.
+- **Voice between different networks needs the relay:** follow the
+  [voice setup](docs/host-guide.md#voice-between-different-networks), then
+  `docker compose --profile voice up -d`.
+- **Everything else is in the app.** The host gets a `+` beside Rooms and a
+  **⋯** menu beside the server for settings, invites, rooms and members.
 
-**Voice across different networks needs the relay too.** Follow the
-[voice setup](docs/host-guide.md#voice-between-different-networks) for the
-shared secret and firewall ports, then start with
-`docker compose --profile voice up -d`. Check
-`docker compose --profile voice ps -a`: `coturn` must stay **Up**, not
-`Restarting` or `Exited`. Starting text chat alone does not start the relay.
-
-Everything else is inside the app. As host you get a `+` beside **Rooms** and
-an **⋯** menu beside the selected server. That menu opens server settings,
-invites, rooms and member management. Nobody else sees those controls. None of
-it needs `curl` and none of it is a config file.
-
-What hosts actually change, all in `compose.yaml`:
+What hosts change, in `compose.yaml`:
 
 | | |
 |---|---|
 | `LINGER_POOL_BYTES` | total storage for files, default 50 GB |
 | `LINGER_FILE_EXPIRY_DAYS` | default 365, or `off`. Starred and pinned files never expire |
-| `LINGER_STORAGE: s3` | keep files in a bucket instead of on disk, plus five `LINGER_S3_*` lines. Pick Cloudflare R2 — it charges nothing for bytes going out, which is most of the bill for a place people share video |
+| `LINGER_STORAGE: s3` | keep files in a bucket instead of on disk, plus five `LINGER_S3_*` lines. Cloudflare R2 charges nothing for bytes going out, which is most of the bill |
 
-**Backup is two paths**, `data/linger.db` and `data/objects/` (on S3, the second
-one is the bucket):
+**Backup is two paths**, `data/linger.db` and `data/objects/` (on S3, the
+second one is the bucket):
 
 ```bash
 sqlite3 data/linger.db ".backup data/backups/linger-$(date +%F).db"
 ```
 
-**Locked out?** There is no reset email — Linger has no address to send one to,
-so the proof that the server is yours is that you can reach the machine it runs
-on. Stop the server, then `docker compose run --rm linger reset-password <name>`.
+**Updating:** `docker compose pull && docker compose up -d` (add
+`--profile voice` to both if you run the relay). Nothing updates itself.
 
-Uploads, expiry, S3, exports and what to do when something breaks are all in the
-[host guide](docs/host-guide.md) at length.
+**Locked out?** There's no reset email; being able to reach the machine is the
+proof the server is yours. Stop the server, then
+`docker compose run --rm linger reset-password <name>`.
+
+## 🐞 Reporting a problem
+
+Open an [issue](https://github.com/itsMattGuenther/Linger/issues/new/choose);
+the forms ask for what a report needs. Issues are public, so leave out message
+text, other people's names, server addresses and invite links.
+
+Using a coding agent such as Claude Code or Codex? The
+[`linger-report` and `linger-contribute` skills](agents/) teach it to look into
+a problem, check whether it's already known or fixed, and draft the issue, or to
+make a fix and open a pull request the way this project needs. It shows you
+everything first and files nothing without your yes.
 
 ## 🛠️ Development
 
@@ -289,21 +250,20 @@ client/                   Tauri 2 shell + React/TypeScript frontend
 deploy/                   Dockerfile, compose, Caddyfile
 packaging/arch/           the Arch/Omarchy package, its signing key and the
                           script that builds the pacman repository
-docs/                     host-guide.md, user-guide.md, decisions.md and
-                          screenshots; docs/tasks/ archives closed milestones
+agents/                   skills for people's own coding agents
+docs/                     guides, decisions, release notes and checks;
+                          docs/tasks/ archives closed milestones
 screenshots/              current Console review images and their capture notes
 assets/fonts/             the twelve bundled faces, vendored rather than
-                          fetched — no CDN and no remote font URL, ever, because
-                          a remote face is a fingerprinting vector and somebody
-                          else's uptime. See its own README before touching them
+                          fetched — no CDN and no remote font URL, ever
 scripts/                  check.sh (the whole local gate) and the smaller
                           checks it calls
 ```
 
 Read first, in order: [SPEC.md](SPEC.md) → [ARCHITECTURE.md](ARCHITECTURE.md) →
 [PROTOCOL.md](PROTOCOL.md) → [AGENTS.md](AGENTS.md). The docs are the source of
-truth, and if code and docs disagree the docs win. Contributing — with any coding
-agent, or none — starts at [CONTRIBUTING.md](CONTRIBUTING.md); the work queue is
+truth, and if code and docs disagree the docs win. Contributing, with any coding
+agent or none, starts at [CONTRIBUTING.md](CONTRIBUTING.md); the work queue is
 [TASKS.md](TASKS.md).
 
 ```bash
@@ -313,43 +273,8 @@ cd client && pnpm tauri dev                   # the desktop app
 ```
 
 The desktop app is the only part that needs system libraries: a webview, ALSA
-headers for the microphone, and cmake to build the bundled Opus codec.
-
-The desktop icon comes from the friend group's selected
-[porch artwork](<assets/logo/Linger Pixel Porch Icon Set FINAL.png>).
-To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
-source, run `python3 scripts/app-icons.py` from the repository root after
-`pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
-padding to make the source square, without cropping or stretching the artwork.
-Use `python3 scripts/app-icons.py --check` to verify the committed files without
-changing them. The [desktop icon audit](docs/app-icon-checks.md) explains the
-package checks and remaining visual checks. Packaging changes run an unsigned
-Linux/Windows test build; these artifacts do not ship an update. Published
-v0.2.0 includes the porch icon; older v0.1.0 downloads have the previous icon.
-
-The MSI uses `client/src-tauri/windows/main.wxs`, based on the pinned Tauri
-CLI's template with a desktop-shortcut preservation condition. When updating
-Tauri, compare it with the upstream template named in its header. Windows
-package checks install the published 0.3.0 MSI, upgrade to the newly built
-package, and check original, renamed, moved and deleted desktop shortcuts,
-including uninstall cleanup. See [the update check](docs/windows-update-checks.md).
-
-Linux v0.3.3 selects native Wayland when a Wayland display is available, so
-simulated dictation typing avoids the AppImage launcher's X11 path. Other
-desktops keep their existing backend. `LINGER_LINUX_BACKEND=x11` or `wayland`
-remains an explicit per-launch override. Linux startup also sets
-`__NV_DISABLE_EXPLICIT_SYNC=1` unless already set, which stops NVIDIA +
-Wayland machines closing on launch with `Error 71`, so `pnpm tauri dev` needs
-no prefix. WebKit's GPU display path (GBM) is on under native Wayland for
-packages that use the system's WebKit, because turning it off puts every frame
-a beat behind the keyboard (#169). It is off in the AppImage, whose bundled
-WebKitGTK 2.50.4 aborts creating a GBM display on NVIDIA + Wayland machines
-(#187), and off under X11. If a launch that tried it dies before drawing, the
-next launch notices and writes `~/.local/state/linger/gbm-off-<webkit version>`,
-keeping that WebKit off it (delete the file to try again). An explicit
-`WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins. These choices happen before
-GTK and change no desktop settings.
-See [Linux input checks](docs/linux-input-checks.md) for evidence and limits.
+headers for the microphone, cmake for the bundled Opus codec, and the GStreamer
+plugins for sound.
 
 ```bash
 # Debian/Ubuntu
@@ -360,170 +285,11 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
 sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-plugins-good
 ```
 
-Notification chimes need the WebView's audio runtime as well as the native
-voice engine. AppImages bundle GStreamer playback plugins; DEB/RPM packages
-require them through the package manager. Both Windows installers install
-WebView2 if it is missing (an internet connection is required for that step).
-Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
-the media runtime. See [packaged audio checks](docs/packaged-audio-checks.md)
-for runtime and chime-onset tests. These checks also need Node and installed
-client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
-bundles the current sound player before running it inside each package. The same
-isolated run checks navigation overflow with real Console components and the
-package's shipped CSS, in both themes at all six interface sizes. No test code
-is shipped in the app. See [the testing strategy](docs/testing-strategy.md).
-
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
-order CI runs it — rules lint, version check, fmt, clippy, workspace tests,
-bindings drift, frontend, and the desktop shell. Green there should mean green
-in CI. Separate checks need additional services or browser engines:
-
-- `scripts/minio-test.sh` tests S3 against a throwaway MinIO. The workspace
-  tests skip S3 without that service. MinIO no longer publishes downloads, so
-  build it from source with Go first; the script's header has the command.
-- `bash scripts/coturn-test.sh` needs Docker Engine and Compose. It checks
-  that the shipped voice relay starts and refuses an empty secret, without
-  opening host ports or using your server data. CI runs this too; it does not
-  replace the voice checks on separate networks.
-- In `client`, run `pnpm exec playwright install --with-deps chromium webkit`
-  once, then `pnpm test:browser` for Console layout, panel resizing, interface
-  scaling, keyboard use, voice controls, image previews, file downloads and
-  temporary knock feedback. Download tests simulate browser
-  handoff success and refusal; installed-app downloads still need a real
-  desktop check.
-  Composer tests also cover ordinary typing and Unicode/multiline insertion;
-  browser automation does not exercise Linux dictation drivers. See
-  [Linux input checks](docs/linux-input-checks.md) for the isolated native
-  comparison (`scripts/linux-input-check.sh`) and its optional developer
-  tools. The current AppImage's simulated-typing limitation has a
-  [clipboard workaround](docs/user-guide.md#appimage-troubleshooting).
-  Playwright is a development-only dependency; its browsers are not shipped
-  in Linger. CI tests Chromium and WebKit. These component checks do not replace
-  testing a packaged desktop client. The installer may request administrator
-  access for system libraries on supported Linux distributions. To use an
-  existing Chromium without installing browsers, run
-  `LINGER_CHROMIUM_PATH=/usr/bin/chromium pnpm test:browser --project=chromium`.
-- To refresh the [Console screenshots](screenshots/README.md), run
-  `node scripts/console-screenshots.mjs` from `client`. It starts and stops its
-  own local preview and writes to the root `screenshots/` directory. Set
-  `LINGER_CHROMIUM_PATH=/usr/bin/chromium` to use an existing browser. These
-  captures use the real UI with fictional people and local test responses,
-  not saved accounts or a live server. They do not validate a packaged app.
-  Pass an output folder to retain earlier reviews, for example
-  `node scripts/console-screenshots.mjs ../screenshots/review-04`. The capture
-  also writes `sounds/index.html` and playable WAV samples of the notification
-  cues. Open that page to listen; it never autoplays. Samples are rendered
-  locally from the app's synthesizer, not downloaded sound assets.
-- The [control style guide](docs/style-guide.md) records the approved Console
-  controls and their usage. Run `pnpm dev` from `client`
-  and open `http://localhost:1420/tests/fixtures/styleguide.html` to try its
-  shared buttons and switches in both themes.
-
-For a **documentation-only** change, run `scripts/lint-rules.sh` and
-`scripts/version-check.sh`. CI still runs those quick checks, but skips the
-Rust, S3, web, desktop, and relay jobs. `scripts/ci-scope.mjs` selects affected
-jobs from the full PR: frontend changes run browser and Linux/Windows package
-checks; server changes run Rust and real S3 tests; shell changes run its Rust
-tests and packages. Shared types, CI changes and unknown paths run everything.
-Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
-for seven days. Docs-only follow-up commits to a source PR still test its full
-scope; a green last commit must not conceal an untested earlier change.
-
-For real desktop interaction, `python3 scripts/desktop-check.py` runs three
-isolated Linux clients through live styling, private messages, uploads and a
-browser-downloaded export. It needs additional test tools and built debug
-binaries; see [desktop checks](docs/desktop-checks.md) for setup and the
-[dated results](docs/desktop-check-results.md). It does not replace checks on
-separate computers and networks.
-
-Six things that catch people out. How the rest fits together is
-[ARCHITECTURE.md](ARCHITECTURE.md).
-
-- **Wire types and the color palette are generated, not written.** Both come out
-  of `linger-core` when you run `cargo test -p linger-core`, into
-  `client/src/generated/`. The output is committed and CI fails if it drifts, so
-  commit the regenerated files alongside your change. Never hand-write a type
-  that crosses the wire, and never put a hex or `oklch()` literal in the
-  frontend — a color is a palette key everywhere.
-- **Renaming a wire type leaves an orphan.** `ts-rs` writes files but never
-  deletes them, so the old `.ts` stays behind and the drift check will not catch
-  it. Delete it by hand.
-- **The version number lives in four files** — `client/package.json`,
-  `client/src-tauri/Cargo.toml`, `client/src-tauri/tauri.conf.json` and the root
-  `Cargo.toml`. Bump all four together; `scripts/version-check.sh` fails if they
-  disagree. If they drift, a release ships under the old number and every
-  installed copy decides it is already up to date, which looks exactly like
-  success.
-- **`client/src-tauri` is not in the cargo workspace.** It links against webview
-  libraries CI and server boxes do not have, so `cargo fmt`, `clippy` and `test`
-  at the root never touch it. Build it with `pnpm tauri`; its own tests are `cd
-  client/src-tauri && cargo test`. A few need a real desktop session — an
-  unlocked keyring, for one — and are marked `#[ignore]`.
-- **There are two content-security policies, and you develop under the loose
-  one.** `pnpm tauri dev` may reach `http://localhost:*`; nothing you ship can.
-  Tighten one and you must tighten both — `client/src-tauri/tests/csp.rs` fails
-  if they drift apart.
-- **File names that differ only in case break Windows and macOS.** They are the
-  same file on both, so `Foo.tsx` beside `foo.ts` typechecks on Linux and fails
-  everywhere else. `scripts/lint-rules.sh` rejects it.
-
-### Cutting a release
-
-`.github/workflows/release.yml` builds the installers, and only a tag fires it —
-that job uses the signing key, so it has no business running on an ordinary push.
-
-**Once, before the first release ever ships**, generate the update signing key:
-
-```bash
-scripts/updater-key.sh
-```
-
-It writes the public half into `client/src-tauri/tauri.conf.json` (commit that)
-and prints what to do with the private half — back it up offline, then add it and
-its password as repository secrets:
-
-```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.local/share/linger/updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # prompts; paste the password
-```
-
-**Losing that key means you can never ship an update to an installed copy
-again**, short of reinstalling every machine by hand. It is generated once and
-never regenerated. To check the secrets without releasing anything, run the
-`release` workflow from the Actions tab: it signs a throwaway file and checks
-the key id against the committed public key, then stops. "Present" is not
-"correct" — a key that signs fine but is not the mate of the committed one
-produces a green release that no installed copy will accept.
-
-**Per release:**
-
-```bash
-# bump the version in all four files, then:
-scripts/version-check.sh
-git commit -am "chore: 0.3.1"
-git tag v0.3.1 && git push origin main v0.3.1
-```
-
-That builds Linux and Windows, signs the updater artifacts, and opens a **draft**
-release carrying `latest.json`. Read it, then publish it — publishing is what
-makes installed copies see the update, and it is a human's click on purpose. The
-same tag publishes the server image to `ghcr.io/itsmattguenther/linger` as
-`0.3.1`, `0.3` and `latest`, for x86-64 and ARM64. Nothing about the image is
-signed and nothing auto-updates; a host chooses when to `docker compose pull`.
-
-**One thing to do by hand, once ever:** the first image push creates the ghcr
-package as *private*, and a private package means `docker compose up` fails with
-`unauthorized` for everybody who is not you. Set it public at
-`github.com/users/<you>/packages/container/linger/settings`.
-
-**Two signatures are easy to confuse.** The **update** signature is in place: the
-app verifies it before installing anything, with no way to skip. The **installer**
-signature — what your OS checks the first time you run a download — is the one
-this project does not have, which is why Windows shows a warning. macOS is
-deliberately not built at all yet. Both are decisions, not gaps; see
-[docs/decisions.md](docs/decisions.md).
-
-Current work queue lives in [TASKS.md](TASKS.md).
+order CI runs it. The browser tests, the S3 and relay checks, packaging, the
+things that catch people out, and how the app starts on Linux are in
+[docs/development.md](docs/development.md). Cutting a release, including the
+Arch package, is in [docs/releasing.md](docs/releasing.md).
 
 ## 🗺️ Roadmap
 
@@ -532,11 +298,9 @@ Current work queue lives in [TASKS.md](TASKS.md).
 - **Later (still V1, not on the critical path)** — entrance sounds (T-901…T-903).
   In the spec, not next. See [TASKS.md](TASKS.md) *Backburner*.
 - **V2** — **knock (M9), search (M10) and DMs (M11) are built.** Voice rooms
-  (M12) are most of the way there: the signalling, the audio path (microphone →
-  Opus → peer connection → speakers) and the surface (join, mute, push-to-talk,
-  who is talking, per-person volume, a device picker) and the relay a host runs
-  for people on different networks are built. **None of it has crossed two
-  machines yet.** Ambient voice is planned and not started; V1 still has to be
+  (M12) are built, including the relay a host runs for people on different
+  networks, but **the checks across separate computers and networks are still
+  open.** Ambient voice is planned and not started; V1 still has to be
   installed and used by real people.
 - **Backburner** — a mobile client. Desktop comes first and has to be solid
   before anything else starts.
