@@ -37,7 +37,7 @@ import {
   updateLine,
   type UpdateCheck,
 } from "../lib/updates";
-import { exportLine, type ExportPhase, runExport } from "./export";
+import { exportLine, type ExportPhase, runExport } from "../lib/export";
 import StylePicker from "./StylePicker";
 import { saveDisplayName, useGateway } from "../lib/gateway";
 import {
@@ -47,7 +47,7 @@ import {
   MIN_PASSWORD_CHARS,
   passwordReady,
   passwordRequest,
-} from "./settings";
+} from "../lib/account";
 import { type VoiceDeviceList, voiceDevices } from "../lib/ipc";
 import {
   loadVoicePrefs,

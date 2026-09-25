@@ -27,11 +27,13 @@ import {
   MarkerSlot,
   Menu,
   Name,
+  NavList,
   Notice,
   Popover,
   Row,
   RowList,
   SectionLabel,
+  Select,
   SettingRow,
   Swatch,
   Switch,
@@ -248,6 +250,10 @@ function Gallery() {
   const [status, setStatus] = useState("fixing the porch light (the real one)");
   const [open, setOpen] = useState({ offline: false, away: true, rooms: true });
   const [swatch, setSwatch] = useState<string>("azure");
+  const [theme, setTheme] = useState<"dark" | "light" | "system">("dark");
+  const [scale, setScale] = useState("100");
+  const [mic, setMic] = useState("");
+  const [place, setPlace] = useState<"profile" | "appearance" | "sound" | "rooms" | "people">("appearance");
   const [picked, setPicked] = useState([eli, jules, longName]);
 
   return (
@@ -595,6 +601,60 @@ function Gallery() {
           ]}
           note="Voice stays on when you switch tabs or close a window."
         />
+        <div className="g-compact">
+          <ChoiceCards
+            legend="Color theme"
+            name="theme"
+            compact
+            value={theme}
+            onChange={setTheme}
+            choices={[
+              { value: "dark", title: "Dark", description: "The porch at night.", art: "moon" },
+              { value: "light", title: "Light", description: "For bright rooms and daylight.", art: "sun" },
+              { value: "system", title: "System", description: "Follow your desktop's choice, light by day and dark at night.", art: "windows" },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section id="selects" title="Drop-downs and places">
+        <div className="g-fields">
+          <Select
+            label="Interface size"
+            value={scale}
+            onChange={setScale}
+            options={["100", "110", "125", "150", "175", "200"].map((size) => ({ value: size, label: size === "100" ? "100%, the usual" : `${size}%` }))}
+          />
+          <Select
+            label="Microphone"
+            value={mic}
+            onChange={setMic}
+            hint="A change applies the next time you join voice."
+            options={[
+              { value: "", label: "System default (Built-in microphone with a name far too long to fit in the box)" },
+              { value: "usb", label: "USB microphone" },
+            ]}
+          />
+          <Select label="Quiet from" size="sm" value="1320" onChange={() => {}} options={[{ value: "1320", label: "10:00 PM" }]} />
+          <Select label="Speakers" size="lg" disabled value="" onChange={() => {}} options={[{ value: "", label: "System default" }]} />
+        </div>
+        <div className="g-nav">
+          <NavList
+            label="Settings sections"
+            current={place}
+            onSelect={setPlace}
+            entries={[
+              { kind: "group", label: "You" },
+              { kind: "item", key: "profile", label: "Profile", icon: "tag" },
+              { kind: "group", label: "This app" },
+              { kind: "item", key: "appearance", label: "Appearance", icon: "sun" },
+              { kind: "item", key: "sound", label: "Sound & Voice, with a label far too long to fit", icon: "speaker" },
+              { kind: "group", label: "Hosting", sub: "The Good Company, a server with a long name" },
+              { kind: "item", key: "rooms", label: "Rooms", icon: "hash" },
+              { kind: "item", key: "people", label: "People", icon: "people" },
+            ]}
+          />
+        </div>
       </Section>
 
       <Section id="chips" title="Chips and swatches">

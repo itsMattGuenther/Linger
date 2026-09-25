@@ -27,7 +27,7 @@ import { useNow } from "../lib/clock";
 import { useGateway } from "../lib/gateway";
 import { nameProps } from "../lib/names";
 import { colorVar, PALETTE_KEYS } from "../lib/palette";
-import { deadWords, expiryWords, inviteUrl, moveRoom, useWords } from "./host";
+import { deadWords, expiryWords, inviteUrl, moveRoom, useWords } from "../lib/host";
 import "./host.css";
 import Removal from "./Removal";
 

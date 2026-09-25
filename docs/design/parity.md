@@ -282,7 +282,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof |
 |---|---|---|---|---|
-| NAME-1 | Your name's face (12 bundled), weight (400/500/700), italic, one palette color or a 92° gradient of two, and an effect (none/shimmer/glow), with a live preview through the stream's own code. | `settings/StylePicker.tsx`, `style.ts`, `lib/names.ts` | Settings → Profile "Make yourself at home" | C + F |
+| NAME-1 | Your name's face (12 bundled), weight (400/500/700), italic, one palette color or a 92° gradient of two, and an effect (none/shimmer/glow), with a live preview through the stream's own code. | `settings/StylePicker.tsx`, `lib/nameStyle.ts`, `lib/names.ts` | Settings → Profile "Make yourself at home" | C + F |
 | NAME-2 | Colors are palette keys, validated by the server. No hex anywhere. An unknown key falls back to something drawable. | `lib/palette.ts`, `generated/palette.generated.css`, AGENTS rules 8 and 12 | Same | C + U (discipline) |
 | NAME-3 | Your message font: one of the four sans faces. Other saved choices draw in the default body face. | SPEC §4.5 | Same | F |
 | NAME-4 | "Use plain names and message fonts" flattens every name and message font on your screen, with one attribute on `<html>`. | `lib/normalize.ts`, `styles/names.css` | Same, in every window at once | F |
@@ -373,7 +373,7 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof |
 |---|---|---|---|---|
-| EXP-1 | Any member exports the server (public rooms and their own DMs) as a zip of Markdown and media. It polls with progress in words, and the finished file goes to the system browser. | `settings/export.ts`, `POST /export`, `GET /export/:job_id` | Settings → Account & App | C + F + D |
+| EXP-1 | Any member exports the server (public rooms and their own DMs) as a zip of Markdown and media. It polls with progress in words, and the finished file goes to the system browser. | `lib/export.ts`, `POST /export`, `GET /export/:job_id` | Settings → Account & App | C + F + D |
 | EXP-2 | Once an hour: a second request says, in words, when you can ask again. | `export.ts` (`retry_after_ms`) | Same | U |
 
 ## UPD — updates

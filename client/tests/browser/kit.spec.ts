@@ -412,6 +412,47 @@ test("tabs lead with a room's # or a person's marker, and a server stripe in a p
   expect(stripes[0]?.color).not.toBe(stripes[1]?.color);
 });
 
+test("a list of places moves with the arrow keys, Home and End, with only the showing one in the tab order", async ({ page }) => {
+  const nav = page.getByRole("tablist", { name: "Settings sections" });
+  const showing = () => nav.getByRole("tab", { selected: true });
+  await expect(showing()).toHaveText("Appearance");
+  await expect(nav.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
+  await showing().focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(showing()).toHaveText(/Sound & Voice/);
+  await expect(showing()).toBeFocused();
+  // Groups are passed over, and the ends wrap.
+  await page.keyboard.press("ArrowDown");
+  await expect(showing()).toHaveText("Rooms");
+  await page.keyboard.press("End");
+  await expect(showing()).toHaveText("People");
+  await page.keyboard.press("ArrowDown");
+  await expect(showing()).toHaveText("Profile");
+  await page.keyboard.press("ArrowUp");
+  await expect(showing()).toHaveText("People");
+  await page.keyboard.press("Home");
+  await expect(showing()).toHaveText("Profile");
+  await expect(nav.locator('[role="tab"][tabindex="0"]')).toHaveText("Profile");
+});
+
+test("a drop-down is named by its label, keeps the choice picked, and a disabled one refuses", async ({ page }) => {
+  const size = page.getByRole("combobox", { name: "Interface size" });
+  await expect(size).toHaveValue("100");
+  await size.selectOption("150");
+  await expect(size).toHaveValue("150");
+  await expect(page.getByRole("combobox", { name: "Speakers" })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Microphone" })).toHaveAccessibleDescription("A change applies the next time you join voice.");
+});
+
+test("compact choice cards sit side by side with their titles on one line", async ({ page }) => {
+  const titles = await page
+    .getByRole("group", { name: "Color theme" })
+    .locator(".k-choice-title")
+    .evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
+  expect(titles).toHaveLength(3);
+  expect(new Set(titles).size).toBe(1);
+});
+
 test("review sheets: one screenshot per gallery section, for people to look at", async ({ page }) => {
   for (const section of await page.locator("[data-section]").all()) {
     const id = await section.getAttribute("data-section");

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Invite } from "../generated/Invite";
 import type { Room } from "../generated/Room";
-import { parsePastedLink } from "../lib/link";
+import { parsePastedLink } from "./link";
 import { deadWords, expiryWords, inviteState, inviteUrl, moveRoom, useWords } from "./host";
 
 const NOW = 1_700_000_000_000;

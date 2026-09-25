@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ExportJob } from "../generated/ExportJob";
-import { ApiError, TransportError, AuthedApi } from "../lib/api";
+import { ApiError, TransportError, AuthedApi } from "./api";
 import {
   comeBackIn,
   exportLine,

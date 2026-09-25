@@ -16,8 +16,8 @@
  *   (`lib/external.ts`): a window that follows a download has left the app.
  */
 import type { ExportJob } from "../generated/ExportJob";
-import { ApiError, type AuthedApi, TransportError } from "../lib/api";
-import { absoluteUrl } from "../lib/url";
+import { ApiError, type AuthedApi, TransportError } from "./api";
+import { absoluteUrl } from "./url";
 
 /** How often to ask. Slow enough to be polite, fast enough to feel alive. */
 export const POLL_MS = 1500;

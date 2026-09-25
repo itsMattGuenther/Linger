@@ -161,3 +161,18 @@ body {
 .g-narrow .g-list {
   width: 100%;
 }
+
+/* Narrow enough that the cards' words wrap to different lengths. */
+.g-compact {
+  max-width: calc(var(--space-8) * 15);
+  margin-top: var(--space-5);
+}
+
+.g-nav {
+  width: var(--settings-nav);
+  margin-top: var(--space-5);
+  padding: var(--space-2-5) var(--space-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}

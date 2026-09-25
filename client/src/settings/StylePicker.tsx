@@ -37,7 +37,7 @@ import {
   styleRequest,
   WEIGHTS,
   withColor,
-} from "./style";
+} from "../lib/nameStyle";
 
 /** What each effect is called, and what it is for. */
 const EFFECT_WORDS: Record<(typeof EFFECTS)[number], string> = {

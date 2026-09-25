@@ -24,6 +24,7 @@
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-3);
@@ -96,4 +97,18 @@
   color: var(--text-muted);
   font-size: var(--text-meta);
   line-height: var(--leading-body);
+}
+
+/* Compact: narrower cards with the art over the words, for short choices. */
+.k-choices[data-compact="yes"] .k-choices-grid {
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-8) * 4), 1fr));
+}
+
+.k-choices[data-compact="yes"] .k-choice {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.k-choices[data-compact="yes"] .k-choice-art {
+  justify-content: start;
 }

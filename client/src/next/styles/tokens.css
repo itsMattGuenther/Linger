@@ -221,6 +221,12 @@
   --switch-thumb: 14px;
   --swatch: 24px;
 
+  /* Settings (docs/design/buddy-list.md, "Settings"). */
+  --settings-nav: 196px; /* the sidebar of sections */
+  --settings-label: 104px; /* the label column beside rows of choices */
+  --status-image-w: 400px; /* a status picture is shown at 400 × 200 (SPEC §4.6) */
+  --status-image-h: 200px;
+
   /* Radii. */
   --radius-xs: 4px;
   --radius-sm: 6px;

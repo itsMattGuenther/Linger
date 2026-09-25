@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Style } from "../generated/Style";
 import type { User } from "../generated/User";
-import { draftOf, isDirty, previewUser, styleOf, styleRequest, withColor } from "./style";
+import { draftOf, isDirty, previewUser, styleOf, styleRequest, withColor } from "./nameStyle";
 
 function style(over: Partial<Style> = {}): Style {
   return {

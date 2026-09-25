@@ -140,10 +140,15 @@ and open any of these pages:
   send refused;
 - `/tests/fixtures/next-chat-window.html?room=r-general`: the real chat window,
   wired, with the desktop shell, the list window and the server faked in the
-  page. The options are listed at the top of `next-chat-window.tsx`.
+  page. The options are listed at the top of `next-chat-window.tsx`;
+- `/tests/fixtures/next-settings.html`: the Settings window on the same
+  evening. Add `?section=invites` (any section) to open on it, `?member` to
+  lose Hosting, `?servers` for three servers, `?fail` to have every save
+  refused, `?away`, `?long`, and `?devices=none` or `?devices=looking`.
 
 Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
-`next-chat.spec.ts`) measure the rules in `docs/design/system.md`;
+`next-chat.spec.ts`, `next-settings.spec.ts`) measure the rules in
+`docs/design/system.md`;
 `next-chat-window.spec.ts` checks what the chat window asks of the list window
 and the server.
 

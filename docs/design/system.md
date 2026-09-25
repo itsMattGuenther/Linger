@@ -116,6 +116,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
 | Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--composer-max` 200 · `--emoji-grid` 8 columns |
+| Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) · `--status-image-w` 400 · `--status-image-h` 200 (a status picture) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
@@ -342,6 +343,19 @@ or an error in words underneath.
   plus a soft ring.
 - **`onEnter`** submits on Enter.
 
+### Select
+
+One choice from a longer list, like an interface size or a microphone: the
+system's own drop-down in a box of 24, 32 or 40px, labelled like a
+`TextField`, with optional help underneath that is linked to it for screen
+readers.
+
+- **The box draws the focus**, as a field's does; the select inside never
+  draws a second ring.
+- **A caret** sits over the box's end and lets clicks through.
+- **Short lists** of two or three belong in pressed `Button`s or `ChoiceCards`
+  instead, where every choice is in view.
+
 ### Switch and SettingRow
 
 - **`Switch`** is a `role="switch"` with a required name: a 36×20 track in a
@@ -358,6 +372,22 @@ in its own window".
   hear a group.
 - The selected card takes the lamp's wash and edge, and keyboard focus rings
   the whole card.
+- **`compact`** puts the art over the words, for short choices that should sit
+  three or four across, like the color theme. A card's contents always start
+  at its top, so titles line up across a row whatever the descriptions' length.
+
+### NavList
+
+A column of places to go, like Settings' sections: an icon and a word per
+place, in groups, the showing one lit by the lamp with a bar along its edge.
+
+- It is a vertical tab list: the arrows move between items and show them,
+  Home and End jump to the ends, and only the showing item is in the tab
+  order. Group headings are passed over.
+- Items are 32px tall. A group can carry a second line, like the name of the
+  server you host; that group starts a new part of the list, with a rule
+  above it.
+- A long label or second line ends in "…".
 
 ### Chip
 
@@ -452,6 +482,31 @@ above the box. At the end, new messages follow, and anything that grows
 further up, and arrivals and older history loading above leave what you're
 reading exactly where it is.
 
+## Settings
+
+Settings is its own window (`app/settings/`): the `NavList` sidebar on the
+left, and the showing section on the right, with its title and one sentence
+saying what it's for.
+
+- **A section is made of blocks.** Each has a heading (the label face, in the
+  lamp's color, like a `ChoiceCards` legend), an optional sentence, and its
+  controls, with a hairline between blocks.
+- **Words come from one place.** Headings and navigation labels are in title
+  case and sentences in sentence case (SPEC §5.6, #90); they live in
+  `core/settings.ts`, whose test checks the casing and SPEC §1's vocabulary.
+- **A save says how it went on its own line.** The end of a form carries
+  "Saved", "Saving…" or the server's words, to the left of its buttons, so a
+  save never moves what's below it. Every save is a callback resolving to the
+  problem in words, or null.
+- **Rows of small choices** (a font, a weight, an invite's lifetime) are
+  pressed `Button`s beside a label in a column of its own, so every row's
+  choices start on one edge. In a narrow window the label moves above them.
+- **Escape backs out** of an inline edit or a question ("Archive #general for
+  everyone?") and puts focus back on the button that opened it. A question
+  opens on its safe answer.
+- **The window** is 720 by 640, and works down to 560 wide; fields sit side by
+  side while they fit.
+
 ## What the tests enforce
 
 | Rule | Test |
@@ -472,6 +527,11 @@ reading exactly where it is.
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
+| A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
+| A `Select` is named by its label, keeps the choice, links its help, and a disabled one refuses | `kit.spec.ts` › a drop-down is named by its label |
+| Compact `ChoiceCards` sit side by side with their titles on one line | `kit.spec.ts` › compact choice cards sit side by side |
+| Settings: sections per scope (Hosting only for the host, Servers only with several), the sidebar's keyboard, every save saying how it went, Escape backing out to its button, and at 720 and 560 wide every control 24/32/40, nothing clipped or past the edge, labels and choices on one edge | `next-settings.spec.ts` |
+| Settings copy: title-case headings and labels, SPEC §1's words | `core/settings.test.ts` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |

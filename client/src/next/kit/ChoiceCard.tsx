@@ -21,6 +21,7 @@ export function ChoiceCards<V extends string>({
   onChange,
   choices,
   note,
+  compact = false,
 }: {
   legend: string;
   name: string;
@@ -29,9 +30,11 @@ export function ChoiceCards<V extends string>({
   choices: Choice<V>[];
   /** A line under the cards. */
   note?: ReactNode;
+  /** Short choices, stacked art over words, so three or four fit across. */
+  compact?: boolean;
 }) {
   return (
-    <fieldset className="k-choices" data-kit="ChoiceCards">
+    <fieldset className="k-choices" data-kit="ChoiceCards" data-compact={compact ? "yes" : undefined}>
       <legend className="k-choices-legend">{legend}</legend>
       <div className="k-choices-grid">
         {choices.map((choice) => (

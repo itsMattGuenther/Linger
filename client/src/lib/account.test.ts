@@ -7,7 +7,7 @@ import {
   MIN_PASSWORD_CHARS,
   passwordReady,
   passwordRequest,
-} from "./settings";
+} from "./account";
 
 describe("displayNameRequest", () => {
   it("only sends the name, so a save cannot wipe a status", () => {

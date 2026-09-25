@@ -16,8 +16,8 @@
 import type { Style } from "../generated/Style";
 import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
 import type { User } from "../generated/User";
-import { isFontKey, isMessageFontKey } from "../lib/fonts";
-import { isPaletteKey } from "../lib/palette";
+import { isFontKey, isMessageFontKey } from "./fonts";
+import { isPaletteKey } from "./palette";
 
 /** The three weights SPEC §4.5 offers. Not a range, not a slider. */
 export const WEIGHTS = [400, 500, 700] as const;
