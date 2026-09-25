@@ -58,7 +58,7 @@ export type Intent =
   | { kind: "read"; server: string; roomId: RoomId; messageId: MessageId }
   /** The window gained or lost focus, or the person typed or moved in it (presence). */
   | { kind: "window"; focused: boolean; input: boolean }
-  /** The conversation this window shows; a room puts you in it, a DM or none does not. */
+  /** The conversation this window shows (a room or DM; null for none), as today's client passes it. */
   | { kind: "room"; server: string; roomId: RoomId | null }
   /** The window is closing: it no longer counts towards being here. */
   | { kind: "closing" };
