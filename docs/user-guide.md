@@ -22,7 +22,8 @@ current installers are for 64-bit Intel/AMD computers (`x64`, `x86_64` and
 | Windows | File ending in `x64-setup.exe` → [Windows](#windows) |
 | Ubuntu, Debian, Mint | File ending in `amd64.deb` → [Linux packages](#linux-packages) |
 | Fedora or openSUSE | File ending in `x86_64.rpm` → [Linux packages](#linux-packages) |
-| Omarchy, Arch, or other Linux | File ending in `amd64.AppImage` → [AppImage](#linux-appimage-including-omarchy) |
+| Omarchy or Arch | Nothing to download → [Arch and Omarchy](#arch-and-omarchy) |
+| Any other Linux | File ending in `amd64.AppImage` → [AppImage](#linux-appimage) |
 
 You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
@@ -37,7 +38,40 @@ There are no macOS or ARM desktop installers yet.
 3. Open **Linger** from the Start menu. Use that same entry to reopen it later.
 4. Continue to [Getting in](#getting-in).
 
-### Linux AppImage (including Omarchy)
+### Arch and Omarchy
+
+Linger has its own package for Arch-based systems. You set it up once, and
+after that Linger updates with the rest of your system: **Update** in the
+Omarchy menu, or `sudo pacman -Syu`. It is also faster than the AppImage on
+many computers, because it uses your system's WebKit, which can draw with the
+graphics card (the AppImage's older copy often can't).
+
+Open a terminal and paste this line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsMattGuenther/Linger/main/packaging/arch/setup.sh | bash
+```
+
+It asks for your password once. It trusts Linger's package signing key,
+adds Linger's package repository to pacman, installs Linger, and removes the
+menu entry an old Linger AppImage left behind. Then open **Linger** from your
+application menu and go to [Getting in](#getting-in). You stay signed in if you
+used the AppImage before; you can delete the old `.AppImage` file.
+
+If you'd rather see each step, this is all the script does:
+
+```bash
+curl -fsSLO https://github.com/itsMattGuenther/Linger/releases/download/arch/linger.asc
+sudo pacman-key --add linger.asc
+sudo pacman-key --lsign-key A539799132574CE3EB51B01AB5FA9838135B10DF
+printf '\n[linger]\nServer = https://github.com/itsMattGuenther/Linger/releases/download/arch\n' | sudo tee -a /etc/pacman.conf
+sudo pacman -Sy linger
+```
+
+To remove it later: `sudo pacman -R linger`, then delete the `[linger]` lines
+from `/etc/pacman.conf`.
+
+### Linux AppImage
 
 An AppImage is the app itself, not an installer. Open a terminal on **your own
 computer**, paste these two lines, and press Enter. This example uses version
@@ -502,6 +536,9 @@ you can come back.
    release is available.
 3. When you are ready to close the app, choose **install and restart** if
    offered. Nothing downloads or installs until you choose it.
+
+**Arch and Omarchy package:** there is nothing to do in the app. New versions
+arrive with your system updates, and the Updates panel says so.
 
 If this copy cannot update itself, or an update fails, download the newer
 installer/AppImage from [Releases](https://github.com/itsMattGuenther/Linger/releases/latest)

@@ -50,3 +50,17 @@ describe("releaseNotesUrl", () => {
     );
   });
 });
+
+describe("a copy the system updates", () => {
+  it("points pacman installs at the system update, not the install button", () => {
+    expect(updateLine({ kind: "managed", by: "pacman" }, false)).toBe(
+      "This copy updates with your system: use Update in the Omarchy menu, or run sudo pacman -Syu.",
+    );
+  });
+
+  it("names any other manager", () => {
+    expect(updateLine({ kind: "managed", by: "dnf" }, false)).toBe(
+      "This copy updates with your system, through dnf.",
+    );
+  });
+});

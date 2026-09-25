@@ -210,3 +210,33 @@ If the trial sticks, removing the server side is a separate decision. It is a
 protocol change that breaks older clients, and its migration deletes every
 stored reaction.
 
+---
+
+## Decided — Omarchy and Arch get a package, from our own repository
+
+**Matt, 2026-09-25 (#188).** The AppImage bundles an older WebKitGTK (2.50.4,
+from the Ubuntu 22.04 build machine) so it runs on any Linux. On the Omarchy
+machine that copy can't use the GPU display path at all (#187), and without it
+typing and scrolling run a frame behind (#169). The system's WebKitGTK 2.52.6
+has no such problem. Omarchy is popular in Matt's circle, so Omarchy and Arch
+users get a package that uses the system's WebKit.
+
+**How:** the program inside each release's `.deb` already runs on Arch against
+the system's libraries, so the package repackages it (`packaging/arch/`); there
+is no separate Arch build. It is served from a pacman repository on the `arch`
+GitHub release, a pre-release so the in-app updater's `releases/latest` never
+points at it. Omarchy's Update runs `pacman -Syu`, which checks every
+repository, so new versions arrive with system updates. The repository only
+changes when a release is **published**, keeping "publishing is a person's
+click" true for pacman users.
+
+**Signed.** A dedicated Linger packages OpenPGP key signs every package and the
+database (fingerprint `A539799132574CE3EB51B01AB5FA9838135B10DF`). Its public
+half is `packaging/arch/linger.asc`; the private half is the `ARCH_SIGNING_KEY`
+secret, with an offline backup Matt keeps. Losing it means a new key that
+everybody trusts again; leaking it means somebody could sign packages that
+pacman installs as Linger.
+
+**Not the AUR, yet.** AUR registration was closed on 2026-09-25. The same
+recipe can be published there as `linger-bin` when it reopens.
+

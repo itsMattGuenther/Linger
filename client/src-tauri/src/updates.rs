@@ -43,6 +43,9 @@ pub enum UpdateCheck {
     Unconfigured,
     /// The check failed — offline, a bad manifest, an OS with no updater.
     Failed { reason: String },
+    /// A system package manager installed this copy and updates it (#188):
+    /// on Omarchy, its Update runs `pacman -Syu`. `by` names the manager.
+    Managed { by: String },
 }
 
 /// What an install attempt came back with.
@@ -56,6 +59,7 @@ pub enum UpdateCheck {
 pub enum UpdateInstall {
     Unconfigured,
     Failed { reason: String },
+    Managed { by: String },
 }
 
 /// Whether this build can update itself at all: a non-empty public key *and*
@@ -97,6 +101,9 @@ pub fn app_version(app: AppHandle) -> String {
 /// put on screen.
 #[tauri::command]
 pub async fn update_check(app: AppHandle) -> UpdateCheck {
+    if let Some(by) = crate::packaging::package_manager() {
+        return UpdateCheck::Managed { by };
+    }
     if !ready(&app) {
         return UpdateCheck::Unconfigured;
     }
@@ -111,10 +118,7 @@ pub async fn update_check(app: AppHandle) -> UpdateCheck {
     match updater.check().await {
         Ok(Some(update)) => UpdateCheck::Ready {
             version: update.version.clone(),
-            notes: update
-                .body
-                .clone()
-                .filter(|notes| !notes.trim().is_empty()),
+            notes: update.body.clone().filter(|notes| !notes.trim().is_empty()),
         },
         Ok(None) => UpdateCheck::Current,
         Err(problem) => UpdateCheck::Failed {
@@ -131,6 +135,11 @@ pub async fn update_check(app: AppHandle) -> UpdateCheck {
 /// was opened.
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> UpdateInstall {
+    // Never replace a copy the package manager owns: the program inside is
+    // stamped for Debian's installer, and an Arch system has none (#188).
+    if let Some(by) = crate::packaging::package_manager() {
+        return UpdateInstall::Managed { by };
+    }
     if !ready(&app) {
         return UpdateInstall::Unconfigured;
     }
@@ -212,6 +221,12 @@ mod tests {
 
         let unconfigured = serde_json::to_string(&UpdateCheck::Unconfigured).expect("serialize");
         assert_eq!(unconfigured, r#"{"kind":"unconfigured"}"#);
+
+        let managed = serde_json::to_string(&UpdateCheck::Managed {
+            by: "pacman".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(managed, r#"{"kind":"managed","by":"pacman"}"#);
 
         let failed = serde_json::to_string(&UpdateCheck::Failed {
             reason: "offline".to_string(),

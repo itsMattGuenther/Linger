@@ -187,7 +187,35 @@ pub fn configure() -> Result<(), &'static str> {
     if let Err(err) = install_appimage_menu_entry(&chosen) {
         eprintln!("Linger couldn't add itself to the application menu: {err}");
     }
+    // A package-manager install has its own menu entry. A leftover one from
+    // the AppImage has the same name, sits in the user's folder and wins, so
+    // the menu would keep launching the old AppImage (#188).
+    if std::env::var_os("APPIMAGE").is_none()
+        && linger_client_lib::packaging::package_manager().is_some()
+    {
+        if let Ok(home) = data_home() {
+            remove_appimage_menu_entry(&home);
+        }
+    }
     Ok(())
+}
+
+/// Delete the menu entry and icon an AppImage wrote for itself, if that is
+/// what is there. Anything that isn't recognisably ours is left alone.
+fn remove_appimage_menu_entry(data_home: &Path) {
+    let entry = data_home.join(format!("applications/{MENU_ID}.desktop"));
+    let Ok(text) = fs::read_to_string(&entry) else {
+        return;
+    };
+    let ours = text.contains(&format!("StartupWMClass={WM_CLASS}"))
+        && text
+            .lines()
+            .any(|line| line.starts_with("Exec=") && line.contains(".AppImage"));
+    if ours {
+        let _ = fs::remove_file(&entry);
+        let _ =
+            fs::remove_file(data_home.join(format!("icons/hicolor/256x256/apps/{MENU_ID}.png")));
+    }
 }
 
 /// Closing the terminal sends SIGHUP to this process. A GUI app should keep
@@ -674,6 +702,39 @@ mod tests {
         let path = appimage.to_str().expect("utf8 path");
         assert!(entry.contains(&format!("Exec=env LINGER_LINUX_BACKEND=wayland {path}\n")));
         assert!(!entry.contains(GBM));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_package_install_removes_the_appimage_menu_entry_and_nothing_else() {
+        let root = scratch("menu-cleanup");
+        let appimage = root.join("Linger.AppImage");
+        fs::write(&appimage, []).unwrap();
+        fs::create_dir_all(root.join("squash")).unwrap();
+        fs::write(root.join("squash/.DirIcon"), b"png").unwrap();
+        write_menu_entry(
+            &root.join("data"),
+            &appimage,
+            Some(&root.join("squash")),
+            &nothing_chosen(),
+        )
+        .unwrap();
+        let entry = root.join("data/applications/com.linger.desktop.desktop");
+        let icon = root.join("data/icons/hicolor/256x256/apps/com.linger.desktop.png");
+        assert!(entry.exists() && icon.exists());
+
+        remove_appimage_menu_entry(&root.join("data"));
+        assert!(!entry.exists());
+        assert!(!icon.exists());
+
+        // An entry somebody wrote by hand under the same name is not ours.
+        fs::write(
+            &entry,
+            "[Desktop Entry]\nName=Linger\nExec=/opt/linger/run\n",
+        )
+        .unwrap();
+        remove_appimage_menu_entry(&root.join("data"));
+        assert!(entry.exists());
         fs::remove_dir_all(&root).unwrap();
     }
 }

@@ -3,6 +3,7 @@
 //! has no others.
 
 pub mod gateway;
+pub mod packaging;
 pub mod graphics;
 mod notifications;
 mod secrets;
