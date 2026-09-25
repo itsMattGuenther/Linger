@@ -1,6 +1,6 @@
 /**
- * Ordinary Unicode for the composer. This is typing, not a reaction: SPEC §4.8
- * still forbids custom emoji and an arbitrary-mark reaction picker.
+ * Ordinary Unicode for the composer. Emoji go in what you say: there are no
+ * reactions during the trial (#168), and no custom emoji (SPEC §4.8).
  */
 
 export interface ComposerEmoji {

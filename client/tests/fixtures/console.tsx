@@ -89,14 +89,6 @@ const users: User[] = [
     last_seen_at: Date.now() - 3_600_000,
   },
 ];
-if (query.has("tooltip")) {
-  users.push(
-    { ...me, id: "robin", username: "robin", display_name: "Robin Redwood", is_host: false },
-    { ...me, id: "casey", username: "casey", display_name: "Casey Thompson", is_host: false },
-    { ...me, id: "avery", username: "avery", display_name: "Avery Bennett", is_host: false },
-    { ...me, id: "morgan", username: "morgan", display_name: "Morgan Rivera", is_host: false },
-  );
-}
 if (query.has("longnames"))
   users.push({
     ...me,
@@ -207,15 +199,11 @@ const messages: Message[] = (
   reply_to: query.has("qa") && index === all.length - 1 ? "message-00007" : null,
   attachments:
     query.has("delight") && index === 4 ? sharedFiles.slice(0, 1) : [],
+  // The server still stores and sends reactions; the app draws none of them
+  // during the trial (#168). This one is here so a test can prove that.
   reactions:
     index === 5 && !query.has("spacing")
-      ? [{
-          key: "heart",
-          count: query.has("tooltip") ? 8 : 2,
-          user_ids: query.has("tooltip")
-            ? ["jules", "matt", "eli", "sam", "robin", "casey", "avery", "morgan"]
-            : ["jules", "matt"],
-        }]
+      ? [{ key: "heart", count: 2, user_ids: ["jules", "matt"] }]
       : [],
   pinned_at: null,
   edited_at: null,
@@ -400,7 +388,15 @@ mockIPC(
         default_input: null,
         default_output: null,
       };
-    if (cmd === "check_for_update") return { kind: "current" };
+    // `?update` has a newer version waiting, with the long release body the
+    // updater really hands over, so a test can see it is not reprinted (#174).
+    if (cmd === "update_check")
+      return query.has("update")
+        ? { kind: "ready", version: "0.3.5", notes: "# Linger 0.3.5\n\n## Messaging\n\n- A very long list of changes" }
+        : { kind: "current" };
+    if (cmd === "app_version") return "0.3.4";
+    if (cmd === "plugin:opener|open_url" && args && "url" in args && typeof args.url === "string")
+      document.documentElement.dataset.openedUrl = args.url;
     return true;
   },
   { shouldMockEvents: true },

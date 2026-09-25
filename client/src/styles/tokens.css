@@ -45,7 +45,7 @@
 
   /* The twelve curated faces (SPEC §5.7), one variable per `linger-core::FONTS`
      key. The keys are the contract and the server validates them; which family
-     a key draws is a client concern, the same way a reaction key's glyph is.
+     a key draws is a client concern.
      T-604 fetches, subsets and `@font-face`s the real files — until it lands
      every stack falls through to the generic at its end, so a name in a face
      nobody has installed is plain rather than missing. */

@@ -83,7 +83,7 @@ summary {
 button.meta {
   font-size: var(--text-label-size);
 }
-button:where(:not(.style-swatch):not(.reaction)),
+button:where(:not(.style-swatch)),
 select,
 summary {
   min-height: 2rem;

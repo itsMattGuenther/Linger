@@ -300,56 +300,6 @@
   text-overflow: ellipsis;
 }
 
-/* --- reactions ----------------------------------------------------------- */
-
-/*
- * Weight, not numbers (SPEC §4.8). `--weight` runs 0 to 1 and drives size and
- * how solidly the mark sits on the surface; six people make a bigger, denser
- * mark than one. No numeral is drawn anywhere; hover or keyboard focus names
- * the people who reacted instead of turning them into a count.
- */
-.reactions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px 0 0 0.875rem;
-}
-
-.reaction {
-  --weight: 0;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  background: none;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  padding: calc(1px + var(--weight) * 2px) calc(5px + var(--weight) * 3px);
-  font-size: calc(12px + var(--weight) * 6px);
-  line-height: 1.1;
-  cursor: pointer;
-  transition: border-color var(--motion-fast);
-}
-
-/* The fill is a layer rather than a blended color so the mark itself never
-   dims — a faint reaction is a small one, not a greyed-out one. */
-.reaction::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--surface-2);
-  border-radius: var(--radius-control);
-  opacity: calc(0.2 + var(--weight) * 0.8);
-}
-
-.reaction > span {
-  position: relative;
-}
-
-/* Yours. Not accent — accent has four jobs and this is not one of them. */
-.reaction[data-mine="true"] {
-  border-color: var(--text-muted);
-}
-
 /* --- message actions ----------------------------------------------------- */
 
 /* Reserve width, never an empty row. The 24px target fits a continuation;
@@ -399,14 +349,6 @@
 .msg-actions-trigger:hover {
   background: var(--surface-2);
   color: var(--text-primary);
-}
-
-.msg-reaction-choices {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.msg-reaction-choices button {
-  text-align: center;
 }
 
 /* A refusal, next to the message it was about. */

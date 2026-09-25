@@ -33,6 +33,7 @@ import {
   appVersion,
   checkForUpdate,
   installUpdate,
+  releaseNotesUrl,
   updateLine,
   type UpdateCheck,
 } from "../lib/updates";
@@ -636,9 +637,6 @@ function UpdatesSection() {
       >
         {problem ?? updateLine(check, looking)}
       </p>
-      {ready && check.notes !== null ? (
-        <p className="settings-notes">{check.notes}</p>
-      ) : null}
       <div className="settings-update-actions">
         <button
           type="button"
@@ -648,6 +646,16 @@ function UpdatesSection() {
         >
           check again
         </button>
+        {ready ? (
+          // The notes themselves stay on the release page (#174).
+          <button
+            type="button"
+            className="settings-mini"
+            onClick={() => openExternal(releaseNotesUrl(check.version))}
+          >
+            what's new
+          </button>
+        ) : null}
         {ready ? (
           <button
             type="button"

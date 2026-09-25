@@ -17,8 +17,11 @@ const ACTION_PATHS = {
   headphones:
     "M4 14v-3a8 8 0 0 1 16 0v3M4 13h3v8H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm16 0h-3v8h3a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Z",
   leave: "M10 4H4v16h6M9 12h12m-5-5 5 5-5 5",
-  media: "M3 4h18v16H3V4Zm0 12 5-5 5 5 3-3 5 5M16 8h.01",
-  search: "M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
+  // Both destination glyphs are drawn around the box's center (12, 12), so
+  // centering the icon on its label centers what you see, not empty space.
+  media:
+    "M3 4h18v16H3V4Zm0 12 5-5 5 5 3-3 5 5M14 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0Z",
+  search: "M21 21l-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
   close: "m6 6 12 12M18 6 6 18",
   arrow: "M4 12h16m-6-6 6 6-6 6",
   check: "m5 12 4 4L19 6",

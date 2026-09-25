@@ -714,7 +714,6 @@ test("hovering a message shows its actions button and changes nothing else (#139
   await expect(messages.last()).toContainText("trail map");
   // One of each kind the issue names, so a new hover rule on any of them fails here.
   await expect(page.locator(".msg-reply").first()).toBeVisible();
-  await expect(page.locator(".reaction").first()).toBeVisible();
   await expect(page.locator(".msg-edited").first()).toBeVisible();
   await expect(page.locator(".msg .md-link").first()).toBeVisible();
   await expect(page.locator(".msg .card").first()).toBeVisible();
@@ -752,9 +751,9 @@ test("hovering a message shows its actions button and changes nothing else (#139
     await message.scrollIntoViewIfNeeded();
     const before = await snapshot(message);
     const trigger = message.locator(".msg-actions-trigger");
-    // Hover each part of the message, not just its edge: a link, a reply line,
-    // a reaction and a name each had a hover style of their own.
-    const parts = message.locator(".msg-body, .msg-reply, .reaction, .md-link, .msg-author, .card, .att-image, .att-get");
+    // Hover each part of the message, not just its edge: a link, a reply line
+    // and a name each had a hover style of their own.
+    const parts = message.locator(".msg-body, .msg-reply, .md-link, .msg-author, .card, .att-image, .att-get");
     for (let part = 0; part < await parts.count(); part++) {
       await parts.nth(part).hover();
       // Shown in the same frame, not faded in. An opacity fade puts the button
@@ -961,6 +960,42 @@ for (const theme of ["dark", "light"]) {
       const wrapped = await offsets();
       expect(wrapped.some((row) => row.lines > 1), "a wrapped name").toBe(true);
       for (const row of wrapped) expect(Math.abs(row.off), `${row.name}, wrapped`).toBeLessThan(0.75 * scale / 100);
+    });
+  }
+}
+
+for (const theme of ["dark", "light"]) {
+  for (const scale of [100, 200]) {
+    test(`Media and Search icons sit on the middle of their labels, ${theme} ${scale}% (#172)`, async ({ page }) => {
+      await page.setViewportSize({ width: 13 * scale, height: 850 });
+      await page.addInitScript((value) => localStorage.setItem("linger.interface.scale", String(value)), scale);
+      await page.goto("/tests/fixtures/console.html");
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await page.evaluate(() => document.fonts.ready);
+
+      const rows = await page.locator(".rail-places .room-item").evaluateAll((items) =>
+        items.map((item) => {
+          const icon = item.querySelector<SVGSVGElement>(".action-icon")!;
+          const range = document.createRange();
+          range.selectNodeContents(item.querySelector(".room-slug")!);
+          const text = range.getBoundingClientRect();
+          const box = icon.getBoundingClientRect();
+          // Where the stroke actually is, in the icon's own 24-unit box.
+          const drawn = icon.querySelector("path")!.getBBox();
+          return {
+            label: item.textContent ?? "",
+            offset: box.top + box.height / 2 - (text.top + text.height / 2),
+            glyphX: drawn.x + drawn.width / 2,
+            glyphY: drawn.y + drawn.height / 2,
+          };
+        }),
+      );
+      expect(rows.map((row) => row.label)).toEqual(["Media", "Search"]);
+      for (const row of rows) {
+        expect(Math.abs(row.offset), `${row.label} icon against its label`).toBeLessThan(1);
+        expect(Math.abs(row.glyphX - 12), `${row.label} glyph, across`).toBeLessThan(0.5);
+        expect(Math.abs(row.glyphY - 12), `${row.label} glyph, down`).toBeLessThan(0.5);
+      }
     });
   }
 }

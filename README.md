@@ -101,8 +101,7 @@ These terms are used everywhere — UI, code, docs, error messages:
   choices fall back to the default reading face. Names retain all twelve fonts.
   Closely spaced messages group beneath sender names, without colored bars.
   Hover or keyboard focus reveals a **⋯** button; activate it to open message actions.
-- 🎚️ **Reactions by weight** — a fixed palette of 12; six identical reactions render
-  denser and larger, not "👍 6"
+  There are no reactions, as a trial: answer by saying something, emoji and all.
 - 📁 **File sharing** — 500 MB files, resumable uploads, **EXIF always stripped**, a
   poster frame and a blurhash generated for you
 - 🖥️ **Desktop client** for Linux and Windows (Tauri 2, not Electron).

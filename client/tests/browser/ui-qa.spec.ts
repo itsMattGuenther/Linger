@@ -8,8 +8,8 @@ async function openSettings(page: Page, section: string) {
 }
 
 async function assertActionsClear(message: Locator) {
-  // Sample one layout frame: opening reaction choices can scroll the measured
-  // virtual row between separate browser calls.
+  // Sample one layout frame: opening the menu can scroll the measured virtual
+  // row between separate browser calls.
   const { actions, body, bounds, heading } = await message.evaluate((node) => {
     const rect = (element: Element) => {
       const { x, y, width, height } = element.getBoundingClientRect();
@@ -62,9 +62,7 @@ for (const [width, height, scale] of [[1100, 720, 100], [760, 480, 100], [760, 4
       await page.keyboard.press("Enter");
       const menu = page.getByRole("menu", { name: /^Actions for/ });
       await expect(menu).toBeVisible();
-      await expect(menu.getByRole("menuitem", { name: /^react to/ })).toBeFocused();
-      await page.keyboard.press("Enter");
-      await expect(menu.getByRole("menuitem", { name: /^react with/ })).toHaveCount(12);
+      await expect(menu.getByRole("menuitem", { name: /^reply to/ })).toBeFocused();
       await expect(menu.getByRole("menuitem").first()).toBeFocused();
       const box = await menu.boundingBox();
       expect(box).not.toBeNull();
