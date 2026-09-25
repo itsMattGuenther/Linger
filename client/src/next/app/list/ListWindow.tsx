@@ -26,7 +26,7 @@ import { listModel } from "../../core/list";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
-import { shareAsOwner } from "../../core/share";
+import { type Sharing, shareAsOwner, type WindowOpener } from "../../core/share";
 import { Spinner } from "../../kit";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
@@ -115,15 +115,16 @@ function ServerList({ session }: { session: ServerSession }) {
   // (docs/design/architecture.md): snapshots, lent tokens, intents.
   useEffect(() => {
     if (!isTauri()) return;
-    let stop: (() => void) | null = null;
+    let held: Sharing | null = null;
     let gone = false;
-    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]])).then((unshare) => {
-      if (gone) unshare();
-      else stop = unshare;
+    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), shell).then((started) => {
+      if (gone) started.stop();
+      else held = sharing = started;
     });
     return () => {
       gone = true;
-      stop?.();
+      held?.stop();
+      if (sharing === held) sharing = null;
     };
   }, [api, baseUrl]);
 
@@ -282,15 +283,30 @@ async function knock(api: ServerSession["api"], user: User): Promise<KnockResult
   }
 }
 
+/** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */
+const shell: WindowOpener = {
+  chat: (server, roomId) => {
+    if (!isTauri()) return;
+    void invoke("next_open_chat", { server, room: roomId }).catch((error: unknown) => console.error("could not open the chat window", error));
+  },
+  conversation: (server, roomId, kind) => {
+    if (!isTauri()) return;
+    void invoke("next_open_conversation", { server, room: roomId, kind }).catch((error: unknown) =>
+      console.error("could not open the conversation's window", error),
+    );
+  },
+};
+
+/** This window's sharing, once it has started: it knows which conversations have their own windows. */
+let sharing: Sharing | null = null;
+
 /**
- * Open the chat window on a conversation, or show it in the one that is open
- * (src-tauri/src/window.rs, `next_open_chat`).
+ * Show a conversation: in its own window if it was popped out into one,
+ * otherwise as a tab in the chat window (core/share.ts, `open`).
  */
 function openChat(server: string, room: RoomId): void {
-  if (!isTauri()) return;
-  void invoke("next_open_chat", { server, room }).catch((error: unknown) => {
-    console.error("could not open the chat window", error);
-  });
+  if (sharing) sharing.open(server, room);
+  else shell.chat(server, room);
 }
 
 /**

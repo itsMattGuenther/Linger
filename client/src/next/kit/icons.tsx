@@ -31,6 +31,7 @@ export const ICON_NAMES = [
   "star",
   "quiet",
   "popout",
+  "tabs",
   "plus",
   "more",
   "up",
@@ -166,6 +167,11 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   popout: (
     <>
       <path d="M9 2.5h4.5V7M13.3 2.7L7.5 8.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  tabs: (
+    <>
+      <path d="M1.8 5.5h12.4M1.8 5.5V13a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V5.5M1.8 5.5V3a1 1 0 0 1 1-1h3.4a1 1 0 0 1 .9.6l.6 1.3" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinejoin="round" /><path d="M8 7.8v4M6.2 10.2L8 12l1.8-1.8" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
   plus: (

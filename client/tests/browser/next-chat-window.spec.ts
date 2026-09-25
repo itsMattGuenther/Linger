@@ -139,6 +139,58 @@ test("moves between tabs and closes them from the keyboard, even while typing", 
   await expect(showing).toHaveAccessibleName("DM with Jules");
 });
 
+test("pops the showing tab out into its own window, and its draft goes with it", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.owner?.open("d-jules"));
+  await page.getByRole("tab", { name: "#general" }).click();
+  await box(page).click();
+  await page.keyboard.type("half a thought");
+  await page.getByRole("button", { name: "Open in its own window" }).click();
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "popout", server: SERVER, roomId: "r-general" });
+  await expect(page.getByRole("tab")).toHaveText([/Jules/]);
+  const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#r-general`);
+  expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "half a thought" });
+});
+
+test("a conversation in its own window: its header is the title bar, and Back to tabs takes it and its draft back", async ({ page }) => {
+  await page.addInitScript((key) => {
+    if (!sessionStorage.getItem("seeded")) {
+      localStorage.setItem(key, JSON.stringify({ text: "carried over", at: Date.now() }));
+      sessionStorage.setItem("seeded", "yes");
+    }
+  }, `linger.next.handoff.${SERVER}#r-general`);
+  await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&single=1");
+  const pane = page.getByRole("region", { name: "#general" });
+  await expect(pane).toBeVisible();
+  await expect(page.getByRole("tablist")).toHaveCount(0);
+  const title = page.locator(".k-titlebar");
+  await expect(title).toContainText("general");
+  await expect(title).toContainText("Good company. No hurry.");
+  // The draft that came with it is in the box, and the cursor is there.
+  await expect(box(page)).toHaveValue("carried over");
+  await expect(box(page)).toBeFocused();
+  // It doesn't take over the tabs remembered for the chat window.
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.next.tabs"))).toBeNull();
+
+  await page.keyboard.type(", and more");
+  await page.getByRole("button", { name: "Back to tabs" }).click();
+  await expect.poll(() => did(page)).toContain("window:close");
+  expect(intents(await did(page))).toContainEqual({ kind: "tabs", server: SERVER, roomId: "r-general" });
+  const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#r-general`);
+  expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "carried over, and more" });
+});
+
+test("a conversation back from its own window arrives with its draft", async ({ page }) => {
+  await open(page);
+  await page.evaluate((key) => window.localStorage.setItem(key, JSON.stringify({ text: "still typing", at: Date.now() })), `linger.next.handoff.${SERVER}#d-jules`);
+  await page.evaluate(() => window.owner?.open("d-jules"));
+  await expect(page.getByRole("tab", { name: "DM with Jules" })).toHaveAttribute("aria-selected", "true");
+  await expect(box(page)).toHaveValue("still typing");
+  // Taken once: it isn't waiting to turn up again.
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#d-jules`)).toBeNull();
+});
+
 test("remembers open tabs across a restart", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.owner?.open("d-jules"));

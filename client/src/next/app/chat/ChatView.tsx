@@ -5,7 +5,7 @@ import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
-import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
+import { Button, IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
 import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
 import { ImageViewer } from "./ImageViewer";
@@ -40,7 +40,7 @@ export type ChatStream = Pick<
 export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards">;
 
 /** What the window does for the box: uploads and sending. */
-export type ChatComposer = Pick<ComposerProps, "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest">;
+export type ChatComposer = Pick<ComposerProps, "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft">;
 
 /** The showing conversation. */
 export interface ChatPane {
@@ -76,6 +76,11 @@ export interface ChatViewProps {
   onCloseWindow?: () => void;
   /** The window has focus: full-strength title bar. */
   focused?: boolean;
+  /**
+   * One conversation in a window of its own: no tabs, the header in the
+   * title bar, and a way back into the chat window's tabs.
+   */
+  single?: { onBackToTabs: () => void };
   /** The showing conversation, or null when no tab is open. */
   pane: ChatPane | null;
 }
@@ -95,7 +100,7 @@ function titleOf(header: PaneHeaderProps): string {
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, focused = true, pane }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, focused = true, single, pane }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -153,16 +158,29 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   }, [paneId, messages, meId, atEnd]);
 
   const popOut = onPopOut && activeId !== null ? <IconButton icon="popout" label="Open in its own window" onClick={() => onPopOut(activeId)} /> : undefined;
+  const backToTabs = single ? (
+    <Button size="sm" variant="secondary" icon="tabs" onClick={single.onBackToTabs}>
+      Back to tabs
+    </Button>
+  ) : undefined;
 
   return (
-    <div className="nx-chat" data-screen="chat">
-      <TitleBar focused={focused} actions={popOut} onClose={onCloseWindow}>
-        <TabStrip label="Conversations" tabs={tabs} activeId={activeId ?? ""} onSelect={onSelectTab} onClose={onCloseTab} onMove={onMoveTab} panelIdPrefix="nx-pane-" />
+    <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined}>
+      <TitleBar focused={focused} actions={single ? backToTabs : popOut} onClose={onCloseWindow}>
+        {single ? (
+          pane ? (
+            <PaneHeader {...pane.header} place="title" />
+          ) : (
+            "Linger"
+          )
+        ) : (
+          <TabStrip label="Conversations" tabs={tabs} activeId={activeId ?? ""} onSelect={onSelectTab} onClose={onCloseTab} onMove={onMoveTab} panelIdPrefix="nx-pane-" />
+        )}
       </TitleBar>
 
       {pane && actions ? (
-        <section className="nx-pane" id={`nx-pane-${pane.id}`} role="tabpanel" aria-label={titleOf(pane.header)}>
-          <PaneHeader {...pane.header} />
+        <section className="nx-pane" id={`nx-pane-${pane.id}`} role={single ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
+          {single ? null : <PaneHeader {...pane.header} />}
           {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} onJoin={pane.voice.onJoin} /> : null}
           <Conversation
             key={pane.id}

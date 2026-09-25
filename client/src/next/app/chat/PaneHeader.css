@@ -47,6 +47,19 @@
   line-height: var(--line-meta);
 }
 
+/* In a conversation's own window the title bar is the header: it brings
+   the height, the padding and the edge. */
+.nx-pane-head[data-place="title"] {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-bottom: 0;
+  /* The title bar sets its title in bold; here only the name is. */
+  font-weight: 400;
+}
+
 .nx-pane-head[data-kind="dm"] .nx-pane-sub {
   font-style: italic;
 }

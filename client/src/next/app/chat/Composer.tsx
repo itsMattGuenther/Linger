@@ -50,6 +50,13 @@ export interface ComposerProps {
   onEditLast: () => void;
   /** Changes when the window wants the cursor in the box: it opened, or a conversation was opened from the list. */
   focusRequest?: number;
+  /**
+   * A draft that came with a conversation from another window. Put in that
+   * conversation's box if it's empty; a new object each time one arrives.
+   */
+  seed?: { conversation: string; text: string } | null;
+  /** The box's text changed, for a window that has to carry it elsewhere. Called often: keep it cheap. */
+  onDraft?: (conversation: string, text: string) => void;
 }
 
 /**
@@ -78,6 +85,8 @@ export const Composer = memo(function Composer({
   onTyping,
   onEditLast,
   focusRequest,
+  seed,
+  onDraft,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -128,7 +137,18 @@ export const Composer = memo(function Composer({
   const change = (next: string, where = conversation) => {
     setDrafts((held) => new Map(held).set(where, next));
     if (where === now.current.conversation) now.current = { ...now.current, draft: next };
+    onDraft?.(where, next);
   };
+
+  // A draft that travelled here from another window, into an empty box only.
+  useEffect(() => {
+    if (!seed) return;
+    setDrafts((held) => {
+      if ((held.get(seed.conversation) ?? "") !== "") return held;
+      onDraft?.(seed.conversation, seed.text);
+      return new Map(held).set(seed.conversation, seed.text);
+    });
+  }, [seed]);
 
   const say = (text: string | null, where = conversation) =>
     setProblems((held) => {

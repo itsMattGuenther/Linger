@@ -837,8 +837,9 @@ Rules for this milestone:
 - ⬜ **T-1806 · Settings** — every setting in `parity.md`, in the Settings
   window.
 - ⬜ **T-1807 · Media, search and uploads.**
-- ⬜ **T-1808 · Windows mode** — separate windows, pop-out and back, positions
-  remembered, and the tray.
+- 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
+  remembered, and the tray. Pop-out and back are built (with the draft going
+  along); the windows-mode setting, positions and the tray are not.
 - ⬜ **T-1809 · Several servers** — folding sections, the time there, quiet,
   and a server in its own window.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The

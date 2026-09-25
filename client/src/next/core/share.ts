@@ -28,6 +28,9 @@ import {
 import { loadVoicePrefs } from "../../lib/voice";
 import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
+
+/** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
+const CHAT = "chat";
 import { close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing } from "./showing";
 
 /** A late window asks for the owner's state. */
@@ -77,7 +80,32 @@ export type Intent =
   | { kind: "voice.mute"; muted: boolean }
   | { kind: "voice.deafen"; deafened: boolean }
   /** The push-to-talk key went down or up in this window. */
-  | { kind: "voice.talk"; down: boolean };
+  | { kind: "voice.talk"; down: boolean }
+  /** Pop a tab out into a window of its own. */
+  | { kind: "popout"; server: string; roomId: RoomId }
+  /** A conversation in its own window goes back into the chat window's tabs. */
+  | { kind: "tabs"; server: string; roomId: RoomId };
+
+/**
+ * How the owner opens windows: the desktop shell's commands in the app
+ * (src-tauri/src/window.rs; only the owner may call them), fakes in tests.
+ */
+export interface WindowOpener {
+  /** The chat window, adding a tab for this conversation or showing it. */
+  chat(server: string, roomId: RoomId): void;
+  /** This conversation in a window of its own, or that window brought forward. */
+  conversation(server: string, roomId: RoomId, kind: "room" | "dm"): void;
+}
+
+/** What the owner can do once it is sharing. */
+export interface Sharing {
+  stop(): void;
+  /**
+   * Show a conversation: in the window it was popped out into, if it has one,
+   * otherwise in the chat window's tabs.
+   */
+  open(server: string, roomId: RoomId): void;
+}
 
 /**
  * Where your voice seat is, if anywhere: at most one server has one. Voice
@@ -98,7 +126,7 @@ export interface SharedMessage {
  * Start sharing. `sessions` is read on every question, so servers signed into
  * or out of later are handled without restarting.
  */
-export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>): Promise<() => void> {
+export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, opener?: WindowOpener): Promise<Sharing> {
   const lend = async (api: AuthedApi, stale?: string): Promise<Lent> => {
     const current = await api.accessToken();
     if (stale === undefined || current.token !== stale) return current;
@@ -121,6 +149,23 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     forgetWindow(label);
     showing = close(showing, label);
     place();
+  };
+
+  // A conversation's own window, if one shows it: any window but the tabs.
+  const ownWindow = (server: string, roomId: RoomId): boolean =>
+    [...showing].some(([label, shown]) => label !== CHAT && shown.server === server && shown.roomId === roomId);
+  const kindOf = (server: string, roomId: RoomId): "room" | "dm" | null => {
+    const state = serverState(server);
+    if (state.dms.some((dm) => dm.id === roomId)) return "dm";
+    return state.rooms.some((room) => room.id === roomId) ? "room" : null;
+  };
+  const inOwnWindow = (server: string, roomId: RoomId) => {
+    const kind = kindOf(server, roomId);
+    if (kind !== null) opener?.conversation(server, roomId, kind);
+  };
+  const open = (server: string, roomId: RoomId) => {
+    if (ownWindow(server, roomId)) inOwnWindow(server, roomId);
+    else opener?.chat(server, roomId);
   };
 
   const stops = await Promise.all([
@@ -161,6 +206,12 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           return;
         case "closing":
           gone(intent.from);
+          return;
+        case "popout":
+          if (sessions().has(intent.server)) inOwnWindow(intent.server, intent.roomId);
+          return;
+        case "tabs":
+          if (sessions().has(intent.server)) opener?.chat(intent.server, intent.roomId);
           return;
         case "voice.join": {
           const api = sessions().get(intent.server);
@@ -215,8 +266,11 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     }
   });
 
-  return () => {
-    stopWatching();
-    for (const stop of stops) stop();
+  return {
+    stop() {
+      stopWatching();
+      for (const stop of stops) stop();
+    },
+    open,
   };
 }

@@ -500,7 +500,8 @@ pub fn run() {
             updates::update_check,
             updates::update_install,
             graphics::graphics_started,
-            window::next_open_chat
+            window::next_open_chat,
+            window::next_open_conversation
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

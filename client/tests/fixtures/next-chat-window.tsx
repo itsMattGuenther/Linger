@@ -15,7 +15,8 @@
  * `?fail` refuses every send; `?noowner` has the owner never answer;
  * `?expired` has the server refuse the first lent token, as if it ran out;
  * `?ptt` puts you in voice in #general with push-to-talk on; `?limit`
- * refuses knocks, as the fourth in an hour. The
+ * refuses knocks, as the fourth in an hour; `&single=1` is the conversation
+ * in a window of its own. The
  * photo loads only where something serves `PHOTO_PATH` (the spec does).
  * `window.owner` lets a test act as the owner or the shell; what the window
  * asked for is written to `body[data-did]`, `|`-separated.

@@ -41,6 +41,7 @@ import {
   typingIn,
   voiceHere,
 } from "../../core/chat/conversation";
+import { leaveDraft, takeDraft } from "../../core/handoff";
 import { added, type Drafts, filesIn, NO_DRAFTS, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
 import { voiceStrip } from "../../core/chat/voice";
@@ -111,11 +112,24 @@ export function ChatWindow() {
   return <Conversations following={held.following} />;
 }
 
+/** This window shows one conversation in a window of its own (window.rs, `next_open_conversation`). */
+const SINGLE = new URLSearchParams(window.location.search).get("single") === "1";
+
+/** Where drafts wait while their conversation moves between windows (core/handoff.ts). */
+function handoffStore(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /** The tabs this window starts with: the ones remembered, and the one it was opened on. */
 function firstTabs(apis: ReadonlyMap<string, AuthedApi>): Tabs {
   let remembered: string | null = null;
   try {
-    remembered = window.localStorage.getItem(TABS_KEY);
+    // A window of its own shows just the one conversation it was opened on.
+    remembered = SINGLE ? null : window.localStorage.getItem(TABS_KEY);
   } catch {
     // Storage refused: start with just the conversation asked for.
   }
@@ -136,6 +150,7 @@ function Conversations({ following }: { following: Following }) {
   const [tabs, setTabs] = useState<Tabs>(() => firstTabs(apis));
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
+  const find = useCallback((id: string): TabKey | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
   // Bumped when the window should put the cursor in the box: it opened, or a
   // conversation was opened from the list.
   const [focusAsk, setFocusAsk] = useState(1);
@@ -144,6 +159,16 @@ function Conversations({ following }: { following: Following }) {
   draftsNow.current = drafts;
   const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
   const reporter = useRef<Reporter | null>(null);
+  // What each conversation's box holds, so a draft can go with it to another window.
+  const typed = useRef(new Map<string, string>());
+  const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
+  // A draft that came with a conversation from another window.
+  const [seed, setSeed] = useState<{ conversation: string; text: string } | null>(() => {
+    const store = handoffStore();
+    const first = tabs.active;
+    const text = store && first ? takeDraft(store, keyOf(first), Date.now()) : null;
+    return first && text !== null ? { conversation: keyOf(first), text } : null;
+  });
 
   // Opened from the list while this window is already open (window.rs, `next_open_chat`).
   useEffect(() => {
@@ -153,8 +178,13 @@ function Conversations({ following }: { following: Following }) {
     void tauriBus()
       .listen<{ server: string; room: string }>("next:open", ({ server, room }) => {
         if (!apis.has(server)) return;
-        setTabs((held) => openTab(held, { server, roomId: room }));
+        const tab = { server, roomId: room };
+        setTabs((held) => openTab(held, tab));
         setFocusAsk((ask) => ask + 1);
+        // Back from a window of its own, perhaps with a draft.
+        const store = handoffStore();
+        const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
+        if (text !== null) setSeed({ conversation: keyOf(tab), text });
       })
       .then((unlisten) => {
         if (gone) unlisten();
@@ -178,6 +208,7 @@ function Conversations({ following }: { following: Following }) {
   }, [servers]);
 
   useEffect(() => {
+    if (SINGLE) return;
     try {
       window.localStorage.setItem(TABS_KEY, saveTabs(tabs));
     } catch {
@@ -204,6 +235,28 @@ function Conversations({ following }: { following: Following }) {
     reporter.current?.stop();
     if (isTauri()) void getCurrentWindow().close();
   }, []);
+
+  // A tab into a window of its own, and back: the owner opens windows, and
+  // the draft goes along (core/handoff.ts).
+  const popOut = useCallback(
+    (id: string) => {
+      const tab = find(id);
+      const store = handoffStore();
+      if (!tab) return;
+      if (store) leaveDraft(store, id, typed.current.get(id) ?? "", Date.now());
+      void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
+      setTabs((held) => closeTab(held, tab));
+    },
+    [find, intend],
+  );
+  const backToTabs = useCallback(() => {
+    const tab = tabsNow.current.active;
+    const store = handoffStore();
+    if (!tab) return;
+    if (store) leaveDraft(store, keyOf(tab), typed.current.get(keyOf(tab)) ?? "", Date.now());
+    void intend({ kind: "tabs", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
+    closeWindow();
+  }, [intend, closeWindow]);
 
   // A window with no conversations left has nothing to show: it closes.
   const empty = tabs.open.length === 0;
@@ -285,7 +338,6 @@ function Conversations({ following }: { following: Following }) {
     [tabs, servers],
   );
 
-  const find = useCallback((id: string): TabKey | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
 
   // ------------------------------------------------------------------
   // The showing conversation.
@@ -394,8 +446,8 @@ function Conversations({ following }: { following: Following }) {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files: paneId === null ? [] : filesIn(drafts, paneId), onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk }),
-    [drafts, paneId, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk],
+    () => ({ files: paneId === null ? [] : filesIn(drafts, paneId), onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft }),
+    [drafts, paneId, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft],
   );
 
   const knock = useCallback(
@@ -480,6 +532,8 @@ function Conversations({ following }: { following: Following }) {
         const tab = find(id);
         if (tab) setTabs((held) => moveTab(held, tab, to));
       }}
+      onPopOut={SINGLE ? undefined : popOut}
+      single={SINGLE ? { onBackToTabs: backToTabs } : undefined}
       onCloseWindow={isTauri() ? closeWindow : undefined}
       pane={pane}
     />

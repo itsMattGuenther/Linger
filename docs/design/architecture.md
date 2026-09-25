@@ -172,7 +172,9 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `window`, `room`, `closing`: for presence, this window's focus, the person
   moving in it, the conversation it shows, and that it is going;
 - `voice.join` (which also moves voice), `voice.leave`, `voice.mute`,
-  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window.
+  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window;
+- `popout` and `tabs`: move a conversation into a window of its own, or back
+  into the chat window's tabs (only the owner opens windows).
 
 Anything else a viewer can do with REST it does itself, with its borrowed
 token: send, edit, delete, load history, upload, knock, and typing through the
@@ -188,13 +190,19 @@ never leaves you standing in a room.
 ## Window management
 
 - **Opening windows.** The owner asks Rust to open or focus a window through a
-  command (`next_open_chat { server, room }` today; Settings and windows mode
-  add their own). Rust builds the URL from a fixed pattern: no page can open
+  command: `next_open_chat { server, room }` for the tabs, and
+  `next_open_conversation { server, room, kind }` for a conversation in its
+  own window, labelled from the conversation so asking again brings the same
+  window forward. Opening a conversation from the list shows it in its own
+  window if it has one (`Sharing.open` in `core/share.ts`). Rust builds the URL from a fixed pattern: no page can open
   an arbitrary URL, and only `main` may call the command. That is least privilege, as ARCHITECTURE §7 asks. The
   capability file lists each window's permissions. Viewers get what they need
   to read events and open links, and nothing more.
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
   tab or shows it. A tab can be popped out into its own window, and put back.
+  A half-typed message goes along, through this computer's storage, taken
+  once and thrown away after a minute (`core/handoff.ts`). Files waiting to
+  be sent stay behind.
 - **Windows mode:** one window per conversation. A tiling desktop such as
   Hyprland places them.
 - **Title bars.** Every new-client window is frameless and draws its own title

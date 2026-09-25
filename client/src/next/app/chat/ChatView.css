@@ -13,6 +13,12 @@
   padding-left: 0;
 }
 
+/* A conversation in its own window: the title bar holds its header, inset
+   like the header's own row so the name lines up with the voice line below. */
+.nx-chat[data-single="yes"] .k-titlebar {
+  padding-left: var(--space-3-5);
+}
+
 .nx-pane {
   display: flex;
   flex: 1;

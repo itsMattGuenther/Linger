@@ -119,7 +119,8 @@ function fakeOwnerApi(tokens: string[]) {
   return api;
 }
 
-async function windows() {
+/** The owner and one viewer; `viewerLabel` is the viewer's window (`chat`, the tabs, by default). */
+async function windows(viewerLabel = "chat") {
   const { memoryHub } = await import("./bus.memory");
   const hub = memoryHub();
 
@@ -134,7 +135,7 @@ async function windows() {
   const viewer = {
     gateway: await import("../../lib/gateway"),
     mirror: await import("./mirror"),
-    bus: hub.bus("chat"),
+    bus: hub.bus(viewerLabel),
   };
 
   /** The Rust core emitting one frame: every window receives it, in order. */
@@ -273,6 +274,44 @@ describe("a viewer window sharing the owner's connection", () => {
     await viewer.bus.send("main", CLOSED, viewer.bus.label);
     await vi.waitFor(() => expect(sentFrames().at(-1)).toEqual({ op: "room.focus", d: { room_id: null } }));
     stopPresence();
+    follower.stop();
+  });
+
+  it("pops a tab out into its own window, sends it back, and shows a popped-out conversation in its window", async () => {
+    // The viewer here is the popped-out window itself.
+    const { owner, viewer, core } = await windows("chat-5f1e");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const opened: string[] = [];
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
+      conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    // Nothing popped out: the list opens conversations as tabs.
+    sharing.open(HOME, "r-general");
+    expect(opened).toEqual([`chat ${HOME} r-general`]);
+
+    await follower.intend({ kind: "popout", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(opened.at(-1)).toBe(`own ${HOME} r-general room`));
+    // Once that window shows it, opening it from the list brings that window forward.
+    await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => {
+      sharing.open(HOME, "r-general");
+      expect(opened.at(-1)).toBe(`own ${HOME} r-general room`);
+    });
+
+    await follower.intend({ kind: "tabs", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(opened.at(-1)).toBe(`chat ${HOME} r-general`));
+    // Nobody can pop out a conversation on a server the owner isn't signed in to, or one that doesn't exist.
+    const before = opened.length;
+    await follower.intend({ kind: "popout", server: "https://elsewhere.example", roomId: "r-general" });
+    await follower.intend({ kind: "popout", server: HOME, roomId: "r-nowhere" });
+    await new Promise((settle) => setTimeout(settle, 20));
+    expect(opened).toHaveLength(before);
+    sharing.stop();
     follower.stop();
   });
 

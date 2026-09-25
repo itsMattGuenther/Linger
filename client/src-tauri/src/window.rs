@@ -96,6 +96,39 @@ fn chat_url(server: &str, room: &str) -> Result<String, String> {
     ))
 }
 
+/// The page for one conversation in a window of its own: popped out of the
+/// tabs, or every conversation in windows mode.
+fn conversation_url(server: &str, room: &str) -> Result<String, String> {
+    chat_url(server, room).map(|url| url + "&single=1")
+}
+
+/// One window per conversation: the label is made from the conversation, so
+/// asking again brings the same window forward rather than opening a second.
+/// FNV-1a, because it gives the same label in every run and every build,
+/// which std's hasher does not promise.
+fn conversation_label(server: &str, room: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in server
+        .bytes()
+        .chain(std::iter::once(b'#'))
+        .chain(room.bytes())
+    {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("chat-{hash:016x}")
+}
+
+/// A room's window is tall, for reading; a DM's is smaller (the prototype's
+/// sizes). Anything else is refused.
+fn conversation_size(kind: &str) -> Result<(f64, f64), String> {
+    match kind {
+        "room" => Ok((560.0, 760.0)),
+        "dm" => Ok((460.0, 500.0)),
+        _ => Err("not a kind of conversation".into()),
+    }
+}
+
 /// `https://host[:port]` or `http://host[:port]`, with nothing after it.
 fn is_origin(value: &str) -> bool {
     let Some(rest) = value
@@ -169,6 +202,37 @@ pub fn next_open_chat(
         .map_err(|e| e.to_string())
 }
 
+/// Open one conversation in a window of its own, or bring its window forward.
+/// Only the list window may ask; a chat window asks the list window (an
+/// intent) to pop a tab out.
+#[tauri::command]
+pub fn next_open_conversation(
+    app: AppHandle,
+    window: WebviewWindow,
+    server: String,
+    room: String,
+    kind: String,
+) -> Result<(), String> {
+    if window.label() != OWNER {
+        return Err("only the list window opens windows".into());
+    }
+    let url = conversation_url(&server, &room)?;
+    let (width, height) = conversation_size(&kind)?;
+    let label = conversation_label(&server, &room);
+    if let Some(open) = app.get_webview_window(&label) {
+        let _ = open.unminimize();
+        return open.set_focus().map_err(|e| e.to_string());
+    }
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
+        .title("Linger")
+        .inner_size(width, height)
+        .min_inner_size(360.0, 360.0)
+        .decorations(false)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Tell the owner a Buddy list window has gone, however it went: its own close
 /// button, the desktop's, or a crash. A window that closes cleanly says so
 /// itself first; this covers the ones that can't, so the owner never keeps
@@ -211,7 +275,8 @@ fn on_hyprland(
 #[cfg(test)]
 mod tests {
     use super::{
-        buddy_list, chat_url, chosen_client, escape, is_origin, is_viewer, on_hyprland, Client,
+        buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
+        conversation_url, escape, is_origin, is_viewer, on_hyprland, Client,
     };
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
@@ -299,5 +364,45 @@ mod tests {
         for label in ["main", "", "chatty", "settings-2", "Chat"] {
             assert!(!is_viewer(label), "{label}");
         }
+    }
+
+    #[test]
+    fn a_conversation_window_has_one_label_per_conversation() {
+        let general = conversation_label("https://home.example", "r-general");
+        assert_eq!(
+            general,
+            conversation_label("https://home.example", "r-general")
+        );
+        assert_ne!(
+            general,
+            conversation_label("https://work.example", "r-general")
+        );
+        assert_ne!(
+            general,
+            conversation_label("https://home.example", "r-plans")
+        );
+        // The same bytes split differently are a different conversation.
+        assert_ne!(
+            conversation_label("https://a.example", "b-c"),
+            conversation_label("https://a.example#b", "c")
+        );
+        assert!(general.starts_with("chat-") && general.len() == 21);
+        assert!(general
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-'));
+        assert!(is_viewer(&general));
+    }
+
+    #[test]
+    fn a_conversation_window_opens_only_on_a_real_conversation() {
+        assert_eq!(
+            conversation_url("https://home.example", "r-general").as_deref(),
+            Ok("next.html?window=chat&server=https%3A%2F%2Fhome.example&room=r-general&single=1")
+        );
+        assert!(conversation_url("javascript:alert(1)", "r-general").is_err());
+        assert!(conversation_url("https://home.example", "../settings").is_err());
+        assert_eq!(conversation_size("room"), Ok((560.0, 760.0)));
+        assert_eq!(conversation_size("dm"), Ok((460.0, 500.0)));
+        assert!(conversation_size("settings").is_err());
     }
 }
