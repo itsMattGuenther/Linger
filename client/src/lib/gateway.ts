@@ -269,8 +269,8 @@ export interface Knock {
  */
 export const KNOCK_TTL_MS = 8_000;
 
-/** Ids for knock cards. A counter, because nothing outside this tab ever sees
- *  one and two knocks in the same millisecond still have to be two cards. */
+/** Ids for knock cards that arrive without a sequence number, which a
+ *  knock never should: the ones that do are named by it (see `apply`). */
 let knockSeq = 0;
 
 /** Ids for pending sends, the same way — local only, never sent anywhere. */
@@ -725,13 +725,16 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // throttled, a card unmounted by a re-render — must not come back later
       // as a knock from the past.
       const fresh = current.knocks.filter((held) => Date.now() - held.at < KNOCK_TTL_MS);
+      // Named by the frame's sequence number, which is unique within a
+      // connection (a fresh `ready` clears knocks anyway), so every window
+      // that folds this frame names it the same: the Buddy list client's
+      // windows must reach the same state from the same frames
+      // (docs/design/architecture.md). The counter covers an unsequenced frame.
       knockSeq += 1;
+      const id = frame.s === undefined ? `knock-local-${knockSeq}` : `knock-${frame.s}`;
       return {
         ...current,
-        knocks: [
-          ...fresh,
-          { id: `knock-${knockSeq}`, from: frame.d.from_user_id, at: Date.now() },
-        ],
+        knocks: [...fresh, { id, from: frame.d.from_user_id, at: Date.now() }],
       };
     }
     case "typing": {
@@ -788,6 +791,91 @@ const links = new Map<string, Link>();
  * The Buddy list client's owner window hands both to a window that opens late.
  */
 const positions = new Map<string, Position>();
+
+// ---------------------------------------------------------------------------
+// Following without connecting: the Buddy list client's viewer windows
+// (docs/design/architecture.md, "How windows share state").
+//
+// The owner window connects, as today's client does. A viewer window never
+// calls `connect`: the core already delivers every frame to every window, so
+// a viewer only needs a link (for the REST helpers below, with a borrowed
+// sign-in), the owner's snapshot to start from, and the same pure `apply`.
+// None of the owner's side effects run here: no chimes, no notifications, no
+// voice frames handed to the core, no token supplied to the gateway.
+// ---------------------------------------------------------------------------
+
+/**
+ * Start following a server in a viewer window. History loads, sends, read
+ * markers and typing go through `api`, which borrows the owner's sign-in.
+ */
+export function follow(api: AuthedApi): void {
+  links.set(api.baseUrl, {
+    api,
+    givenToken: null,
+    supplying: null,
+    readSentAt: {},
+    readTimers: {},
+    typingSentAt: {},
+  });
+}
+
+/** Stop following a server in a viewer window and forget what it said. */
+export function unfollow(server: string): void {
+  const link = links.get(server);
+  links.delete(server);
+  positions.delete(server);
+  if (link) clearTimers(link);
+  forget(server);
+}
+
+/**
+ * Take the owner's snapshot as this window's copy. This window's own loaded
+ * history is kept: the snapshot never carries any.
+ */
+export function adopt(server: string, snapshot: { state: GatewayState; position: Position }): void {
+  positions.set(server, snapshot.position);
+  publish(server, { ...snapshot.state, streams: stateOf(server).streams });
+}
+
+/** Apply one frame in a viewer window: the fold, and nothing else. */
+export function applyFollowed(server: string, frame: ServerFrame): void {
+  if (!links.has(server)) return;
+  positions.set(server, advance(positions.get(server) ?? START, frame));
+  publish(server, apply(stateOf(server), frame));
+}
+
+/** A viewer's copy of the connection's status, as the core reports it. */
+export function followStatus(server: string, status: GatewayStatus): void {
+  if (!links.has(server)) return;
+  publish(server, { ...stateOf(server), status });
+}
+
+/** Where this window's copy of a server stands (`catchup.ts`). */
+export function positionOf(server: string): Position {
+  return positions.get(server) ?? START;
+}
+
+/**
+ * The fields that change without a frame, which the owner keeps and shares
+ * (docs/design/architecture.md, the table under "How windows share state").
+ */
+export type SharedLocal = Pick<GatewayState, "myVoice" | "read" | "readLoaded" | "notifyRules">;
+
+export function sharedLocalOf(server: string): SharedLocal {
+  const { myVoice, read, readLoaded, notifyRules } = stateOf(server);
+  return { myVoice, read, readLoaded, notifyRules };
+}
+
+/** A viewer takes the owner's copy of those fields. */
+export function adoptShared(server: string, shared: SharedLocal): void {
+  if (!links.has(server)) return;
+  publish(server, { ...stateOf(server), ...shared });
+}
+
+/** Be told whenever any server's state changes, outside React. */
+export function onStateChange(notify: () => void): () => void {
+  return subscribe(notify);
+}
 
 /**
  * One server's state as another window should adopt it, and the position it
