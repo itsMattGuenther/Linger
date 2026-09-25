@@ -63,7 +63,7 @@ and both Rust lockfiles together. Tag once, wait for signed packages and the
 server image, inspect the draft and updater manifest, then publish. Never move a
 published version tag to fix a failed release; use the next patch version.
 
-Use [the 0.3.4 checklist](releases/0.3.4.md#checks-on-installed-clients) for this patch. Record OS,
+Use [the 0.3.5 checklist](releases/0.3.5.md#checks-on-installed-clients) for this patch. Record OS,
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
 
