@@ -39,13 +39,32 @@ function daysBetween(from: Date, to: Date): number {
   return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_MS);
 }
 
+// One formatter per shape, built once. `toLocaleString(undefined, options)`
+// builds a fresh `Intl.DateTimeFormat` on every call, and that is slow enough
+// to matter here: every message row formats its time twice, and scrolling the
+// stream re-renders rows on every frame. Before these were shared, formatting
+// dates was a quarter of the work of a scroll (#170).
+//
+// `undefined` is still the machine's own locale; it is just read once, when
+// the app loads, rather than on every call.
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "long" });
+const MONTH_DAY = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric" });
+const MONTH_DAY_YEAR = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+});
+const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const FULL = new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "short" });
+const HIT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
 /**
  * The natural-language label on a session divider: `SATURDAY MORNING`,
  * `YESTERDAY AFTERNOON`, `LATE TUESDAY NIGHT` (SPEC §4.7 — the CSS uppercases
  * it, so this returns ordinary sentence-shaped text).
  *
- * Weekday and date come from `toLocaleDateString` with no locale argument, so
- * they land in whatever language and date order the machine is set to.
+ * Weekday and date are formatted in the machine's own locale, so they land in
+ * whatever language and date order the machine is set to.
  */
 export function sessionLabel(at: number, now: number): string {
   const when = new Date(at);
@@ -63,15 +82,11 @@ export function sessionLabel(at: number, now: number): string {
   // and "in 2 days morning" is worse than being slightly wrong for a minute.
   const today = new Date(now);
   const ago = Math.max(0, daysBetween(anchor, today));
-  const weekday = anchor.toLocaleDateString(undefined, { weekday: "long" });
+  const weekday = WEEKDAY.format(anchor);
   const dated =
     anchor.getFullYear() === today.getFullYear()
-      ? anchor.toLocaleDateString(undefined, { month: "long", day: "numeric" })
-      : anchor.toLocaleDateString(undefined, {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
+      ? MONTH_DAY.format(anchor)
+      : MONTH_DAY_YEAR.format(anchor);
 
   // Past a week the weekday alone stops locating anything, so the date joins it.
   const suffix = ago < 7 ? "" : `, ${dated}`;
@@ -92,18 +107,12 @@ export function sessionLabel(at: number, now: number): string {
 
 /** The local time on a message group header. */
 export function clockTime(at: number): string {
-  return new Date(at).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return CLOCK.format(at);
 }
 
 /** The full date and time, for the tooltip on a timestamp. */
 export function fullTime(at: number): string {
-  return new Date(at).toLocaleString(undefined, {
-    dateStyle: "full",
-    timeStyle: "short",
-  });
+  return FULL.format(at);
 }
 
 /**
@@ -114,10 +123,7 @@ export function fullTime(at: number): string {
  * the date has to fit beside them and still say which year.
  */
 export function hitTime(at: number): string {
-  return new Date(at).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return HIT.format(at);
 }
 
 /**

@@ -30,6 +30,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -65,6 +66,7 @@ import {
   startedTyping,
   typistsIn,
   useGateway,
+  type PendingSend,
 } from "../lib/gateway";
 import { isLooking } from "../lib/looking";
 import Attachments from "../media/Attachments";
@@ -165,6 +167,9 @@ interface StreamProps {
   onFocused?: () => void;
 }
 
+/** One shared empty list, so a room with nothing pending doesn't rebuild its rows on every render. */
+const NO_PENDING: readonly PendingSend[] = [];
+
 export default function Stream({
   api,
   room,
@@ -243,7 +248,7 @@ export default function Stream({
   // Sends still waiting on the server (issue #128), drawn after the confirmed
   // messages rather than mixed into them — `messages` stays exactly what the
   // server has confirmed.
-  const pending = stream?.pending ?? [];
+  const pending = stream?.pending ?? NO_PENDING;
   const pendingIds = useMemo(() => new Set(pending.map((one) => one.message.id)), [pending]);
   const rows = useMemo(
     () => buildRows([...(messages ?? []), ...pending.map((one) => one.message)], { atStart, leftOff }),
@@ -263,6 +268,11 @@ export default function Stream({
 
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<MessageId | null>(null);
+  // Stable, so a scroll re-render leaves every drawn row and the composer
+  // alone (#170): `MessageRow` and `Composer` are memoized, and a fresh arrow
+  // here would count as a changed prop on every frame.
+  const stopEditing = useCallback(() => setEditing(null), []);
+  const clearReply = useCallback(() => setReplyTo(null), []);
   const [flash, setFlash] = useState<MessageId | null>(null);
 
   // A half-written reply belongs to the room it was written in.
@@ -583,6 +593,9 @@ export default function Stream({
     }
     return null;
   }, [messages, me?.id]);
+  const editLast = useCallback(() => {
+    if (lastMine) actions.edit(lastMine);
+  }, [lastMine, actions]);
 
   const items = virtualizer.getVirtualItems();
 
@@ -674,7 +687,7 @@ export default function Stream({
                       editing={editing === row.message.id}
                       flashing={flash === row.message.id}
                       pending={pendingIds.has(row.message.id)}
-                      onEditDone={() => setEditing(null)}
+                      onEditDone={stopEditing}
                       actions={actions}
                     />
                   )}
@@ -693,11 +706,9 @@ export default function Stream({
         title={title}
         isDm={isDm}
         replyTo={replyTo}
-        onClearReply={() => setReplyTo(null)}
+        onClearReply={clearReply}
         onRestoreReply={setReplyTo}
-        onEditLast={() => {
-          if (lastMine) actions.edit(lastMine);
-        }}
+        onEditLast={editLast}
       />
     </main>
   );
@@ -707,7 +718,10 @@ export default function Stream({
 // One message
 // ---------------------------------------------------------------------------
 
-function MessageRow({
+// Memoized: the virtualizer re-renders the stream on every scroll frame, and a
+// row whose message, author and state haven't changed has nothing to redraw.
+// Only rows coming into view should do any work (#170).
+const MessageRow = memo(function MessageRow({
   api,
   row,
   author,
@@ -914,7 +928,7 @@ function MessageRow({
       {problem ? <p className="msg-problem meta" role="alert">{problem}</p> : null}
     </div>
   );
-}
+});
 
 /** The line above a reply saying what it is answering. */
 function ReplyLine({
@@ -1056,7 +1070,9 @@ interface Pending {
 }
 
 /** Keep text entry testable without connecting a real account or message stream. */
-export function Composer({
+// Memoized for the same reason as `MessageRow`: scrolling the stream must not
+// rebuild the composer and everything in it (#170).
+export const Composer = memo(function Composer({
   api,
   room,
   title,
@@ -1459,7 +1475,7 @@ export function Composer({
       ) : null}
     </form>
   );
-}
+});
 
 /**
  * Who is writing something, above the composer.
@@ -1469,7 +1485,7 @@ export function Composer({
  * coming. Two seconds is under the six the signal lives for, so the line
  * disappears within a beat of the person stopping.
  */
-function Typing({
+const Typing = memo(function Typing({
   api,
   roomId,
   people,
@@ -1496,7 +1512,7 @@ function Typing({
       {names.length === 0 ? "" : `${listOf(names)} ${names.length === 1 ? "is" : "are"} typing…`}
     </p>
   );
-}
+});
 
 function listOf(names: readonly string[]): string {
   if (names.length === 1) return names[0] ?? "";
