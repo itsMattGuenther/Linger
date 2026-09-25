@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
@@ -14,7 +14,10 @@ import { forgetNotifications, resetNotifications } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import type { RoomId } from "../../../generated/RoomId";
+import { tauriBus } from "../../core/bus";
 import { listModel } from "../../core/list";
+import { shareAsOwner } from "../../core/share";
 import { Spinner, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import { ListView } from "./ListView";
@@ -96,6 +99,22 @@ function ServerList({ session }: { session: ServerSession }) {
     setPresenceLive(baseUrl, gateway.status.kind === "ready");
   }, [baseUrl, gateway.status.kind]);
 
+  // The owner's half of sharing this connection with the chat window
+  // (docs/design/architecture.md): snapshots, lent tokens, intents.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]])).then((unshare) => {
+      if (gone) unshare();
+      else stop = unshare;
+    });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, [api, baseUrl]);
+
   const asOf = useNow(INFO_REFRESH_MS);
   useEffect(() => {
     const abort = new AbortController();
@@ -114,9 +133,22 @@ function ServerList({ session }: { session: ServerSession }) {
       serverName={serverName ?? hostOf(baseUrl)}
       model={model}
       speaking={speaking}
+      onOpenRoom={(room) => openChat(baseUrl, room)}
+      onOpenDm={(room) => openChat(baseUrl, room)}
       onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
     />
   );
+}
+
+/**
+ * Open the chat window on a conversation, or show it in the one that is open
+ * (src-tauri/src/window.rs, `next_open_chat`).
+ */
+function openChat(server: string, room: RoomId): void {
+  if (!isTauri()) return;
+  void invoke("next_open_chat", { server, room }).catch((error: unknown) => {
+    console.error("could not open the chat window", error);
+  });
 }
 
 /**

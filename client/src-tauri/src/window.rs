@@ -10,7 +10,7 @@
 
 use std::ffi::OsStr;
 
-use tauri::{App, WebviewUrl, WebviewWindowBuilder};
+use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// Create every window in `tauri.conf.json`, with the title bar dropped on
 /// Hyprland. The config marks them `"create": false` so Tauri doesn't build
@@ -67,6 +67,108 @@ fn buddy_list(config: &tauri::utils::config::WindowConfig) -> tauri::utils::conf
     list
 }
 
+/// The owner window's label. Only it may open the Buddy list client's other
+/// windows (docs/design/architecture.md, "Window management").
+const OWNER: &str = "main";
+
+/// The chat window's label, in tabs mode (the default): one window, one tab
+/// per conversation.
+const CHAT: &str = "chat";
+
+/// The page for a chat window opened on one conversation. The address is
+/// built here from a fixed pattern, never taken from the page, so no window
+/// can be told to load something else. `server` must be a plain origin and
+/// `room` an id; anything else is refused.
+fn chat_url(server: &str, room: &str) -> Result<String, String> {
+    if !is_origin(server) {
+        return Err("not a server address".into());
+    }
+    if room.is_empty()
+        || room.len() > 64
+        || !room.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err("not a room id".into());
+    }
+    Ok(format!(
+        "next.html?window=chat&server={}&room={}",
+        escape(server),
+        escape(room)
+    ))
+}
+
+/// `https://host[:port]` or `http://host[:port]`, with nothing after it.
+fn is_origin(value: &str) -> bool {
+    let Some(rest) = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest.len() <= 255
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':' | b'[' | b']'))
+}
+
+/// Percent-encode everything but the unreserved characters (RFC 3986).
+fn escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            out.push(char::from(byte));
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// What an already-open chat window is told when asked to show a conversation.
+#[derive(Clone, serde::Serialize)]
+struct OpenConversation<'a> {
+    server: &'a str,
+    room: &'a str,
+}
+
+/// Open the chat window on a conversation, or, if it is already open, bring it
+/// forward and tell it to show that conversation (it adds a tab or selects
+/// one). Only the list window may ask.
+#[tauri::command]
+pub fn next_open_chat(
+    app: AppHandle,
+    window: WebviewWindow,
+    server: String,
+    room: String,
+) -> Result<(), String> {
+    if window.label() != OWNER {
+        return Err("only the list window opens windows".into());
+    }
+    let url = chat_url(&server, &room)?;
+    if let Some(chat) = app.get_webview_window(CHAT) {
+        let _ = chat.unminimize();
+        let _ = chat.set_focus();
+        return app
+            .emit_to(
+                CHAT,
+                "next:open",
+                OpenConversation {
+                    server: &server,
+                    room: &room,
+                },
+            )
+            .map_err(|e| e.to_string());
+    }
+    WebviewWindowBuilder::new(&app, CHAT, WebviewUrl::App(url.into()))
+        .title("Linger")
+        .inner_size(720.0, 820.0)
+        .min_inner_size(420.0, 360.0)
+        .decorations(false)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Hyprland exports its instance signature to every client it starts;
 /// `XDG_CURRENT_DESKTOP` covers a launch that passed through something which
 /// dropped it. Only Linux has either, so this is false everywhere else.
@@ -89,7 +191,7 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
-    use super::{buddy_list, chosen_client, on_hyprland, Client};
+    use super::{buddy_list, chat_url, chosen_client, escape, is_origin, on_hyprland, Client};
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
 
@@ -104,6 +206,39 @@ mod tests {
             );
         }
         assert_eq!(chosen_client(None), Client::Current);
+    }
+
+    #[test]
+    fn a_chat_window_opens_only_our_page_with_a_real_server_and_room() {
+        assert_eq!(
+            chat_url("https://linger.example", "0193a2b4-7c1d-7000-8000-000000000001").as_deref(),
+            Ok("next.html?window=chat&server=https%3A%2F%2Flinger.example&room=0193a2b4-7c1d-7000-8000-000000000001")
+        );
+        assert!(chat_url("http://localhost:8080", "r-general").is_ok());
+        for server in [
+            "",
+            "linger.example",
+            "javascript:alert(1)",
+            "https://linger.example/path",
+            "https://a b",
+            "file:///etc/passwd",
+            "https://",
+        ] {
+            assert!(chat_url(server, "r-general").is_err(), "{server:?}");
+        }
+        for room in ["", "r general", "../x", "r&x=1", "r?x", &"r".repeat(65)] {
+            assert!(
+                chat_url("https://linger.example", room).is_err(),
+                "{room:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn origins_and_escaping_are_strict() {
+        assert!(is_origin("https://[::1]:8443"));
+        assert!(!is_origin("https://linger.example?x=1"));
+        assert_eq!(escape("a b/c:d"), "a%20b%2Fc%3Ad");
     }
 
     #[test]
