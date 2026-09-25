@@ -108,7 +108,7 @@ jobs:
             --pattern linger.db --pattern linger.db.sig \
             --pattern linger.files --pattern linger.files.sig || true
           chown -R builder repo
-          sudo -u builder env GPGKEY="$GPGKEY" packaging/arch/build-repo.sh "$VERSION" repo
+          sudo -u builder env GPGKEY="$GPGKEY" bash packaging/arch/build-repo.sh "$VERSION" repo
 
       - name: publish
         run: |
