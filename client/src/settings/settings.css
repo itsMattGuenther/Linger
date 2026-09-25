@@ -349,3 +349,12 @@
   align-items: center;
   gap: 8px;
 }
+
+/* Quiet hours' own times (#185), tucked under the switch they belong to. */
+.quiet-window {
+  display: grid;
+  gap: 0.5rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--hairline);
+}
+

@@ -73,7 +73,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(held) });
     const sound = await import("./sound");
     const prefs = sound.loadSoundPrefs();
-    expect(prefs).toEqual({ muted: true, quietHours: false, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } });
+    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } });
     held.set("linger.sound.quietHours", "true");
     expect(sound.loadSoundPrefs().quietHours).toBe(true);
     sound.saveSoundPrefs({ ...prefs, muted: false, categories: { ...prefs.categories, rooms: false } });
@@ -90,6 +90,20 @@ describe("notification sound policy", () => {
     expect(sound.loadSoundPrefs()).toEqual(sound.DEFAULT_SOUND_PREFS);
     sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, muted: true });
     expect(sound.loadSoundPrefs().muted).toBe(true);
+  });
+
+  it("remembers a moved quiet window and ignores a damaged one (#185)", async () => {
+    const held = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: storage(held) });
+    const sound = await import("./sound");
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, quietHours: true, quietFrom: 21 * 60, quietUntil: 6 * 60 });
+    expect(held.get("linger.sound.quietFrom")).toBe(String(21 * 60));
+    const loaded = sound.loadSoundPrefs();
+    expect([loaded.quietFrom, loaded.quietUntil]).toEqual([21 * 60, 6 * 60]);
+    for (const bad of ["", "-30", "1440", "9.5", "nine"]) {
+      held.set("linger.sound.quietFrom", bad);
+      expect(sound.loadSoundPrefs().quietFrom).toBe(sound.DEFAULT_QUIET_FROM);
+    }
   });
 
   it("master mute wins over every category", async () => {

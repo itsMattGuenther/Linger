@@ -18,8 +18,7 @@ import { openExternal } from "../lib/external";
 import {
   inQuietHours,
   loadSoundPrefs,
-  QUIET_FROM_HOUR,
-  QUIET_UNTIL_HOUR,
+  QUIET_STEP_MINUTES,
   saveSoundPrefs,
   SOUND_CATEGORIES,
   playPreview,
@@ -28,6 +27,7 @@ import {
   type SoundPrefs,
 } from "../lib/sound";
 import { useNow } from "../lib/clock";
+import { clockTime } from "../stream/time";
 import { type ThemePref } from "../lib/theme";
 import {
   appVersion,
@@ -259,8 +259,8 @@ export default function SettingsPanel({
  * anybody else can see, so they live here beside appearance preferences.
  *
  * Quiet hours is **off** until they turn it on. The window is 22:00–08:00 in
- * your own time — a knock from a friend six timezones away is judged by your
- * clock, not theirs.
+ * your own time unless you move it (#185) — a knock from a friend six
+ * timezones away is judged by your clock, not theirs.
  *
  * Notification cues share the same player and listener-local policy as knocks.
  */
@@ -273,10 +273,12 @@ export function SoundSection() {
     saveSoundPrefs(next);
   };
 
+  const from = quietTime(prefs.quietFrom);
+  const until = quietTime(prefs.quietUntil);
   const liveSilenced = prefs.muted
     ? "All live chimes are off. Play still previews."
-    : prefs.quietHours && inQuietHours(new Date(now))
-      ? `Quiet hours are silencing message and knock chimes until 0${QUIET_UNTIL_HOUR}:00. Voice and mute/deafen sounds still play.`
+    : prefs.quietHours && inQuietHours(new Date(now), prefs.quietFrom, prefs.quietUntil)
+      ? `Quiet hours are silencing message and knock chimes until ${until}. Voice and mute/deafen sounds still play.`
       : null;
 
   return (
@@ -293,10 +295,26 @@ export function SoundSection() {
       />
       <PreferenceSwitch
         label="Quiet hours"
-        hint={`No DM, room or knock chimes from ${QUIET_FROM_HOUR}:00 to 0${QUIET_UNTIL_HOUR}:00, on this computer’s clock. Voice and mute/deafen sounds still play.`}
+        hint={`No DM, room or knock chimes from ${from} to ${until}, on this computer’s clock. Voice and mute/deafen sounds still play.`}
         checked={prefs.quietHours}
         onChange={(quietHours) => change({ ...prefs, quietHours })}
       />
+      {/* Where the window sits is yours to move (#185). Only shown while quiet
+          hours are on: a time for something switched off is noise. */}
+      {prefs.quietHours ? (
+        <div className="quiet-window">
+          <QuietTimePicker
+            label="Quiet from"
+            value={prefs.quietFrom}
+            onChange={(quietFrom) => change({ ...prefs, quietFrom })}
+          />
+          <QuietTimePicker
+            label="Quiet until"
+            value={prefs.quietUntil}
+            onChange={(quietUntil) => change({ ...prefs, quietUntil })}
+          />
+        </div>
+      ) : null}
       {liveSilenced ? <p className="settings-lead">{liveSilenced}</p> : null}
       {SOUND_CATEGORIES.map((category) => (
         <div key={category} className="sound-preference">
@@ -525,6 +543,51 @@ function VoiceSection() {
         {prefs.pushToTalk ? "push to talk" : "open microphone"}
       </button>
     </section>
+  );
+}
+
+/** A minute of the day as this computer writes clock times: `9:00 PM` or `21:00`. */
+function quietTime(minutes: number): string {
+  return clockTime(new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).getTime());
+}
+
+/** Every half hour of the day, as minutes after midnight. */
+const QUIET_CHOICES = Array.from(
+  { length: (24 * 60) / QUIET_STEP_MINUTES },
+  (_, step) => step * QUIET_STEP_MINUTES,
+);
+
+/**
+ * One edge of the quiet window. A saved time that isn't on the half hour
+ * (none are today) still shows, rather than the picker claiming another.
+ */
+function QuietTimePicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (minutes: number) => void;
+}) {
+  const choices = QUIET_CHOICES.includes(value)
+    ? QUIET_CHOICES
+    : [...QUIET_CHOICES, value].sort((a, b) => a - b);
+  return (
+    <label className="settings-row">
+      <span className="settings-row-label">{label}</span>
+      <select
+        className="settings-select"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      >
+        {choices.map((minutes) => (
+          <option key={minutes} value={minutes}>
+            {quietTime(minutes)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

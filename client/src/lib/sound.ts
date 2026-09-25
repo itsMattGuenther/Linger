@@ -7,8 +7,8 @@
  * The gate is SPEC §4.1's, and it applies to knocks too:
  *
  * - **Global mute.** Off by default; one switch in settings.
- * - **Quiet hours, 22:00–08:00 in the listener's own time, off until they
- *   turn it on.** The listener's clock, never the sender's — 2am for you is
+ * - **Quiet hours, 22:00–08:00 by default in the listener's own time, off
+ *   until they turn it on, and movable (#185).** The listener's clock, never the sender's — 2am for you is
  *   what matters, and somebody knocking from another timezone does not get to
  *   decide that. Quiet hours silence *notifications*: DMs, room messages and
  *   knocks, which arrive on their own. Voice and mic/deafen cues answer
@@ -23,12 +23,19 @@
  */
 import { renderChime } from "./chimes";
 
-/** Quiet hours run from 22:00 to 08:00, listener-local (SPEC §4.1). */
-export const QUIET_FROM_HOUR = 22;
-export const QUIET_UNTIL_HOUR = 8;
+/**
+ * Quiet hours start at 22:00 and end at 08:00 unless the listener moves them
+ * (#185), listener-local (SPEC §4.2). Minutes after midnight.
+ */
+export const DEFAULT_QUIET_FROM = 22 * 60;
+export const DEFAULT_QUIET_UNTIL = 8 * 60;
+/** The steps the window moves in: every half hour. */
+export const QUIET_STEP_MINUTES = 30;
 
 const MUTE_KEY = "linger.sound.muted";
 const QUIET_KEY = "linger.sound.quietHours";
+const QUIET_FROM_KEY = "linger.sound.quietFrom";
+const QUIET_UNTIL_KEY = "linger.sound.quietUntil";
 const CATEGORY_KEY = "linger.sound.categories";
 
 export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks"] as const;
@@ -38,6 +45,7 @@ export type SoundCue = "voice-join" | "voice-leave" | "voice-move" | "peer-join"
 
 export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   muted: false, quietHours: false,
+  quietFrom: DEFAULT_QUIET_FROM, quietUntil: DEFAULT_QUIET_UNTIL,
   categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true },
 };
 let fallbackPrefs = DEFAULT_SOUND_PREFS;
@@ -47,15 +55,35 @@ let storageUnavailable = false;
 export interface SoundPrefs {
   /** Nothing makes a sound. Off by default. */
   muted: boolean;
-  /** No notification chimes between 22:00 and 08:00. Off until they opt in. */
+  /** No notification chimes between `quietFrom` and `quietUntil`. Off until they opt in. */
   quietHours: boolean;
+  /** When quiet hours start, in minutes after midnight on this computer's clock. */
+  quietFrom: number;
+  /** When they end. Earlier than `quietFrom` means the window crosses midnight. */
+  quietUntil: number;
   categories: Record<SoundCategory, boolean>;
 }
 
-/** Whether `at` falls inside quiet hours. Wraps midnight, hence the `||`. */
-export function inQuietHours(at: Date): boolean {
-  const hour = at.getHours();
-  return hour >= QUIET_FROM_HOUR || hour < QUIET_UNTIL_HOUR;
+/**
+ * Whether `at` falls inside the quiet window `[from, until)`, in minutes after
+ * midnight. A window that ends before it starts crosses midnight (22:00–08:00),
+ * hence the `||`. A window that starts and ends at the same minute is empty.
+ */
+export function inQuietHours(
+  at: Date,
+  from: number = DEFAULT_QUIET_FROM,
+  until: number = DEFAULT_QUIET_UNTIL,
+): boolean {
+  const minute = at.getHours() * 60 + at.getMinutes();
+  if (from === until) return false;
+  return from < until ? minute >= from && minute < until : minute >= from || minute < until;
+}
+
+/** A saved window edge, if it is a real minute of the day; otherwise `fallback`. */
+function minuteOfDay(saved: string | null, fallback: number): number {
+  if (saved === null || !/^\d+$/.test(saved)) return fallback;
+  const value = Number(saved);
+  return Number.isInteger(value) && value >= 0 && value < 24 * 60 ? value : fallback;
 }
 
 /**
@@ -66,7 +94,7 @@ export function inQuietHours(at: Date): boolean {
  */
 export function soundAllowed(prefs: SoundPrefs, at: Date): boolean {
   if (prefs.muted) return false;
-  return !(prefs.quietHours && inQuietHours(at));
+  return !(prefs.quietHours && inQuietHours(at, prefs.quietFrom, prefs.quietUntil));
 }
 
 /**
@@ -88,6 +116,8 @@ export function loadSoundPrefs(): SoundPrefs {
     return {
       muted: window.localStorage.getItem(MUTE_KEY) === "true",
       quietHours: window.localStorage.getItem(QUIET_KEY) === "true",
+      quietFrom: minuteOfDay(window.localStorage.getItem(QUIET_FROM_KEY), DEFAULT_QUIET_FROM),
+      quietUntil: minuteOfDay(window.localStorage.getItem(QUIET_UNTIL_KEY), DEFAULT_QUIET_UNTIL),
       categories,
     };
   } catch {
@@ -102,6 +132,8 @@ export function saveSoundPrefs(prefs: SoundPrefs): void {
   try {
     window.localStorage.setItem(MUTE_KEY, String(prefs.muted));
     window.localStorage.setItem(QUIET_KEY, String(prefs.quietHours));
+    window.localStorage.setItem(QUIET_FROM_KEY, String(prefs.quietFrom));
+    window.localStorage.setItem(QUIET_UNTIL_KEY, String(prefs.quietUntil));
     window.localStorage.setItem(CATEGORY_KEY, JSON.stringify(prefs.categories));
   } catch {
     // The setting still holds for this session.
