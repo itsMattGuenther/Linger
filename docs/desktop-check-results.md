@@ -3,6 +3,10 @@
 **HC-5 export passed. HC-4 and HC-7 have local native desktop evidence; their
 separate-machine checks remain open.** M12 remains the current milestone.
 
+> **Superseded, 2026-09-25:** all nine release checks are now closed from real
+> use of the published app. See [`tasks/release-checks.md`](tasks/release-checks.md).
+> This record is kept as the 2026-09-08 evidence it was.
+
 Environment: Linux x86-64, WebKitGTK 2.52.6, tauri-driver 2.0.6, Chromium
 152.0.7977.82. App version 0.1.0, debug binaries built from the working source
 with T-920 (`ca60c7d`). Three clients used separate Xvfb displays and private

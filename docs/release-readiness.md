@@ -1,5 +1,12 @@
 # Release readiness review — 2026-09-08
 
+> **Update, 2026-09-25:** the release checks this review asked for are closed.
+> Matt closed all nine from real use of the published app with friends on Linux
+> and Windows. Two parts were not tried: HC-3's 400 MB video, and HC-9's phone
+> hotspot and four-person hour, which move to #197. Results and the original
+> steps are in [`tasks/release-checks.md`](tasks/release-checks.md). The review
+> below is kept as it was written.
+
 Linger has enough implemented functionality for a friend-group pilot. It does
 not yet have the evidence needed to call it a dependable Discord replacement.
 The next work should close the existing end-to-end flows and run the release
@@ -42,7 +49,7 @@ M12's implementation is present. Its acceptance check is still four people on
 four networks for an hour. Earlier milestones also have outstanding manual
 checks. Passing unit and integration tests does not close those checks.
 
-Use [HC-1 through HC-9](../TASKS.md#human-checks--things-only-you-can-do) as the
+Use [HC-1 through HC-9](tasks/release-checks.md) as the
 release checklist, and record the version, operating systems, date, outcome and
 failures for each. For the Windows/Linux pilot, leave HC-2's macOS portion
 explicitly deferred, not passed. Start with installing and updating on a machine that did not

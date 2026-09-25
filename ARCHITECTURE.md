@@ -720,22 +720,22 @@ passes its check.
 | **M8** | Export | One archive contains every message and file, and it opens | 1 day |
 
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
-(2026-08-29 and 2026-08-31). **M12's signalling, audio path, controls, relay and
-device recovery are implemented; its real-network acceptance check is open.**
-M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
+(2026-08-29 and 2026-08-31). **M12 is built:** signalling, audio path,
+controls, relay and device recovery, with voice in daily use across separate
+networks. M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
-project. V1 has four release checks still open; HC-5 export passed in real
-desktop clients on 2026-09-08 (`TASKS.md`, *Release checks*). M9, M11 and M12
-bring the total to nine checks, eight open. Native desktop automation can
-validate technical flows; separate-machine and real-network evidence remains
-required where the checklist calls for it.
+project. All nine release checks (V1's and those of M9, M11 and M12) closed
+on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
+checks*; steps in `docs/tasks/release-checks.md`). M12's full four-people,
+four-networks hour was not run; it moves to #197, which rebuilds voice for
+large rooms and reruns every voice check.
 
 | # | Milestone | Done when | Estimate |
 |---|---|---|---|
-| **M9** | Knock (SPEC §4.9) | A knock crosses two machines, fades on its own, and leaves nothing behind | 1–2 days — **built 2026-08-29; the two-machine half of the check is HC-6** |
+| **M9** | Knock (SPEC §4.9) | A knock crosses two machines, fades on its own, and leaves nothing behind | 1–2 days — **built 2026-08-29; its two-machine check passed in real use 2026-09-25 (HC-6)** |
 | **M10** | Search | Type a word, get the messages containing it, click one, land on it in its room | 3–4 days — **built: index and endpoint 2026-08-30, surface 2026-08-31. Its check passed in a running app** |
-| **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server; the two-machine half is a human check |
-| **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). Proven on one machine only — HC-8 and HC-9** |
+| **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
+| **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
 | **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
