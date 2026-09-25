@@ -146,10 +146,10 @@ a task fails its acceptance criteria twice.
 
 ## Status
 
-**M12 (voice) is built, and every release check closed on 2026-09-25.** No
-milestone is in progress. M13 (ambient voice) is planned and not started. A
-rebuild of the client around the Buddy list design is proposed in #198, and
-larger groups in #197. The [release readiness review](docs/release-readiness.md)
+**M12 (voice) is built, and every release check closed on 2026-09-25.**
+**M15, the Buddy list client (#198), is in progress** on `feat/198-buddy-list`;
+see [M15](#m15--the-buddy-list-client-198). M13 (ambient voice) is planned and
+not started, and larger groups are #197. The [release readiness review](docs/release-readiness.md)
 records the 2026-09-08 audit.
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
@@ -787,6 +787,59 @@ flows and do not start a new milestone. Evidence and rationale are in the
   `+ file` no longer takes the accent on hover; SPEC §5.3 spends that on four
   things and this is not one. Native form controls follow the theme
   (`color-scheme`), so the device pickers and filters stopped rendering white.
+
+---
+
+## M15 — the Buddy list client (#198)
+
+**In progress on `feat/198-buddy-list`, started 2026-09-25.** Matt chose the
+Buddy list design and asked for the client to be rebuilt around it as
+intentionally crafted software: long-term stability, easy maintenance and
+thorough tests. It is built next to today's client, in `client/src/next/`, and
+opens only behind a hidden switch until it can do everything the old one does.
+The released app keeps shipping from the old client until the switch.
+
+Read these before touching it, in this order:
+1. [`docs/design/buddy-list.md`](docs/design/buddy-list.md): the design.
+2. [`docs/design/architecture.md`](docs/design/architecture.md): code layout,
+   window roles, shared state, tokens, tests and build order.
+3. [`docs/design/system.md`](docs/design/system.md): tokens, the kit and the
+   rules the tests enforce.
+4. [`docs/design/lessons.md`](docs/design/lessons.md): what the first client
+   taught us, each lesson a rule with a check.
+5. [`docs/design/parity.md`](docs/design/parity.md): the gate for switching.
+
+Rules for this milestone:
+- **New-client code lives in `client/src/next/`.** It reuses the shared core
+  in `client/src/lib/`, `client/src/generated/` and `client/src/fonts/`. It
+  never imports the old client's UI (`discipline.test.ts`).
+- **Screens are built only from the kit.** A size, color or spacing that the
+  tokens don't have is a change to the tokens and `system.md` first.
+- **The old client is frozen:** bug fixes only, no features.
+- **SPEC §3 and §5 still describe the shipping client.** They are rewritten
+  from `system.md` at the switch (T-1810), not before.
+
+- 🟡 **T-1801 · Foundations** — the design docs, tokens, the kit, the gallery
+  (`tests/fixtures/kit.html`), and the discipline, contrast and geometry tests.
+- ⬜ **T-1802 · The switch and the owner window** — `LINGER_NEXT=1` opens
+  `next.html` as `main`. It signs in with the existing sessions and shows real
+  rooms, DMs and people from the kit.
+- ⬜ **T-1803 · The chat window** — the `chat` window with tabs, the catch-up
+  protocol, borrowed tokens, and reading, sending and history in a tab.
+- ⬜ **T-1804 · Voice** — the voice bar, the room strips, and "move voice here"
+  as an intent. Tabs and windows never leave voice.
+- ⬜ **T-1805 · People and DMs** — the person card (Message, Knock), the
+  new-message picker, away and away messages.
+- ⬜ **T-1806 · Settings** — every setting in `parity.md`, in the Settings
+  window.
+- ⬜ **T-1807 · Media, search and uploads.**
+- ⬜ **T-1808 · Windows mode** — separate windows, pop-out and back, positions
+  remembered, and the tray.
+- ⬜ **T-1809 · Several servers** — folding sections, the time there, quiet,
+  and a server in its own window.
+- ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
+  new client becomes the default, the old one stays one release as a fallback,
+  then is deleted. SPEC §3/§5 are rewritten from `system.md`.
 
 ---
 

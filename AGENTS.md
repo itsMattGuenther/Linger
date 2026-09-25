@@ -294,6 +294,7 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M11 DMs                                                          ← V2, built
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                                ← V2, planned
+  → M15 the Buddy list client (#198)                                  ← in progress
   → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
 ```
 
@@ -303,8 +304,17 @@ how the client holds history, so read it before touching message loading.
 **All nine release checks closed on 2026-09-25** from real use of the published
 app; the steps are kept in `docs/tasks/release-checks.md` for re-running when
 their area changes. No milestone is in progress: M13 is planned and not
-started, a client rebuild around the Buddy list design is proposed (#198), and
-larger groups are #197. Close a milestone's checks before starting the next.
+started, and larger groups are #197. Close a milestone's checks before
+starting the next.
+
+**M15 is in progress: the client is being rebuilt around the Buddy list design
+(#198)**, next to today's client, in `client/src/next/`. Read
+`docs/design/architecture.md` before touching it.
+- **Visual rules:** `docs/design/system.md` governs the new client, and the
+  kit's tests enforce it. SPEC §3 and §5 keep governing the shipping client
+  until the switch.
+- **Old UI imports:** new-client code never imports the old client's UI.
+- **Old client:** gets bug fixes only.
 
 ---
 

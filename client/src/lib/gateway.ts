@@ -60,6 +60,7 @@ import { playKnock, playSound } from "./sound";
 import { voiceCue } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "../voice/voice";
 import type { AuthedApi } from "./api";
+import { START, advance, type Position } from "./catchup";
 
 /**
  * Mirrors `Status` in `src-tauri/src/gateway.rs`. Allowed to be hand-written:
@@ -537,8 +538,11 @@ function stoppedTyping(current: GatewayState, roomId: RoomId, userId: UserId): G
   return { ...current, typing: { ...current.typing, [roomId]: next } };
 }
 
-/** Apply one server frame. */
-function apply(current: GatewayState, frame: ServerFrame): GatewayState {
+/**
+ * Apply one server frame. Pure, and exported because every window of the
+ * Buddy list client folds the same frames with it (docs/design/architecture.md).
+ */
+export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
   switch (frame.op) {
     case "ready":
       // A fresh `ready` replaces everything. It arrives after a re-identify,
@@ -778,6 +782,25 @@ interface Link {
 const links = new Map<string, Link>();
 
 /**
+ * Where each server's snapshot stands: the session it was built from and the
+ * last sequence number applied (`catchup.ts`). Updated in the same handler
+ * that applies the frame, so a snapshot and its position can never disagree.
+ * The Buddy list client's owner window hands both to a window that opens late.
+ */
+const positions = new Map<string, Position>();
+
+/**
+ * One server's state as another window should adopt it, and the position it
+ * is at. Loaded history is left out: every window loads what it shows.
+ */
+export function snapshotOf(server: string): { state: GatewayState; position: Position } {
+  return {
+    state: { ...stateOf(server), streams: {} },
+    position: positions.get(server) ?? START,
+  };
+}
+
+/**
  * The link for this exact sign-in, or null if it has been replaced.
  *
  * Every async path checks this before publishing. Comparing the `AuthedApi`
@@ -866,6 +889,7 @@ async function attachListeners(): Promise<void> {
       const before = stateOf(server);
       const seated = before.myVoice !== null;
       const next = apply(before, frame);
+      positions.set(server, advance(positions.get(server) ?? START, frame));
       publish(server, next);
       // After the fold, never before: whether a message is worth interrupting
       // somebody for depends on who they are and what rules they have, and
@@ -986,6 +1010,7 @@ export function disconnect(server: string): Promise<void> {
 async function close(server: string): Promise<void> {
   const link = links.get(server);
   links.delete(server);
+  positions.delete(server);
   if (link) clearTimers(link);
   forget(server);
   if (isTauri()) await invoke("gateway_disconnect", { baseUrl: server });
