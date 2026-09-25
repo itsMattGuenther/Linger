@@ -829,6 +829,7 @@ const MessageRow = memo(function MessageRow({
       data-flash={flashing ? "true" : undefined}
       data-names-me={namesMe ? "true" : undefined}
       data-pending={pending ? "true" : undefined}
+      data-reply={!deleted && message.reply_to !== null && !head ? "continued" : undefined}
     >
       {head ? (
         <p className="msg-head">
