@@ -254,6 +254,71 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("joins, talks and leaves voice through the owner, and every window sees the seat", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(invoked.map((call) => call.cmd)).toContain("voice_join"));
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general"));
+    expect(owner.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general");
+
+    await follower.intend({ kind: "voice.mute", muted: true });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+
+    await follower.intend({ kind: "voice.leave" });
+    await vi.waitFor(() => expect(invoked.map((call) => call.cmd)).toContain("voice_leave"));
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice).toBeNull());
+    expect(owner.gateway.serverState(HOME).myVoice).toBeNull();
+    follower.stop();
+  });
+
+  it("push-to-talk opens the microphone only while the key is held, and only when it is on", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const controls = () => invoked.filter((call) => call.cmd === "voice_controls").map((call) => call.args.controls);
+
+    // Push-to-talk off: the key does nothing to the microphone.
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.audio).toBeDefined());
+    const before = controls().length;
+    await follower.intend({ kind: "voice.talk", down: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(controls().length).toBe(before);
+    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false);
+    follower.stop();
+  });
+
+  it("with push-to-talk on, the key held in the chat window opens the microphone and letting go closes it", async () => {
+    const saved = new Map([["linger.voice.pushToTalk", "true"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true);
+
+    await follower.intend({ kind: "voice.talk", down: true });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    await follower.intend({ kind: "voice.talk", down: false });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    follower.stop();
+  });
+
   it("gives up clearly when there is no owner to answer", async () => {
     const { viewer } = await windows();
     vi.useRealTimers();

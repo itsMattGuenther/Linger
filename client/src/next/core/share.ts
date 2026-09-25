@@ -14,12 +14,18 @@ import type { AuthedApi, Lent } from "../../lib/api";
 import type { Position } from "../../lib/catchup";
 import {
   type GatewayState,
+  joinVoice,
+  leaveVoice,
   markRead,
   onStateChange,
+  serverState,
+  setVoiceDeafened,
+  setVoiceMuted,
   type SharedLocal,
   sharedLocalOf,
   snapshotOf,
 } from "../../lib/gateway";
+import { loadVoicePrefs } from "../../lib/voice";
 import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, PROTOCOL } from "./bus";
 
@@ -61,7 +67,23 @@ export type Intent =
   /** The conversation this window shows (a room or DM; null for none), as today's client passes it. */
   | { kind: "room"; server: string; roomId: RoomId | null }
   /** The window is closing: it no longer counts towards being here. */
-  | { kind: "closing" };
+  | { kind: "closing" }
+  /** Join voice in a room, or move it there: you are in voice in one room at a time (SPEC §4.14). */
+  | { kind: "voice.join"; server: string; roomId: RoomId }
+  | { kind: "voice.leave" }
+  | { kind: "voice.mute"; muted: boolean }
+  | { kind: "voice.deafen"; deafened: boolean }
+  /** The push-to-talk key went down or up in this window. */
+  | { kind: "voice.talk"; down: boolean };
+
+/**
+ * Where your voice seat is, if anywhere: at most one server has one. Voice
+ * controls act on that server.
+ */
+function voiceServer(servers: Iterable<string>): string | null {
+  for (const server of servers) if (serverState(server).myVoice !== null) return server;
+  return null;
+}
 
 export interface SharedMessage {
   v: number;
@@ -113,6 +135,37 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         case "closing":
           forgetWindow(intent.from);
           return;
+        case "voice.join": {
+          const api = sessions().get(intent.server);
+          if (!api) return;
+          // The same devices and push-to-talk choice today's client joins
+          // with. A device that can't be opened leaves you out of voice, and
+          // the list window's voice bar says so.
+          const prefs = loadVoicePrefs();
+          void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
+          return;
+        }
+        default: {
+          const server = voiceServer(sessions().keys());
+          if (server === null) return;
+          const mine = serverState(server).myVoice;
+          switch (intent.kind) {
+            case "voice.leave":
+              void leaveVoice(server).catch(() => undefined);
+              return;
+            case "voice.mute":
+              void setVoiceMuted(server, intent.muted).catch(() => undefined);
+              return;
+            case "voice.deafen":
+              void setVoiceDeafened(server, intent.deafened).catch(() => undefined);
+              return;
+            case "voice.talk":
+              // Push-to-talk only means something when it is on: the key
+              // opens the microphone while held and closes it on release.
+              if (mine?.pushToTalk) void setVoiceMuted(server, !intent.down).catch(() => undefined);
+              return;
+          }
+        }
       }
     }),
   ]);
