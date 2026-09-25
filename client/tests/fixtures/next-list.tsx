@@ -46,6 +46,17 @@ const state = query.has("voice")
       },
     }
   : base;
+// `?crowd`: four more people, so the new-message picker can reach its limit of seven.
+const crowd = ["Ada", "Bo", "Kit", "Noor"].map((name) => ({
+  ...people.callie,
+  id: `u-${name.toLowerCase()}`,
+  username: name.toLowerCase(),
+  display_name: name,
+  status: null,
+}));
+const crowded = query.has("crowd") ? { ...state, users: [...state.users, ...crowd] } : state;
+// `?nodms`: nobody has started a DM yet.
+const shown = query.has("nodms") ? { ...crowded, dms: [] } : crowded;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
@@ -61,7 +72,7 @@ createRoot(root).render(
   <StrictMode>
     <ListView
       serverName={SERVER_NAME}
-      model={listModel(state, NOW)}
+      model={listModel(shown, NOW)}
       speaking={speaking}
       voice={
         voice
@@ -92,6 +103,11 @@ createRoot(root).render(
         },
       }}
       onMessage={(user) => note(`message:${user.id}`)}
+      onStartDm={async (people) => {
+        note(`newdm:${people.map((person) => person.id).join(",")}`);
+        // `?dmfail`: the server refuses, and the picker says so and stays open.
+        return query.has("dmfail") ? "The server didn't answer." : null;
+      }}
       onKnock={async (user) => {
         note(`knock:${user.id}`);
         // `?limit`: the fourth knock inside an hour (SPEC §4.9).

@@ -1,0 +1,70 @@
+/* The new-message picker. Layout only; tokens only. */
+.nx-newdm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+.nx-newdm-title {
+  margin: 0;
+  padding-right: var(--space-6);
+  font-size: var(--text-control);
+  line-height: var(--control-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nx-newdm-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--control-sm);
+}
+
+.nx-newdm-to-label {
+  flex: none;
+  font: var(--text-label) / var(--control-sm) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-newdm-nobody {
+  font-size: var(--text-meta);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* The people scroll inside the picker, so it never grows past the window. */
+.nx-newdm-list {
+  /* Five and a half rows: the half row says there are more below. */
+  max-height: calc(var(--row-2) * 5.5);
+  overflow-y: auto;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 0 var(--space-1);
+}
+
+.nx-newdm-empty {
+  margin: 0;
+  padding: var(--space-2);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+.nx-newdm-line {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+}
+
+.nx-newdm-line[data-problem] {
+  color: var(--text-danger);
+}
+
+.nx-newdm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

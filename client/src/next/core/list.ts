@@ -49,6 +49,8 @@ export interface DmRow {
   label: string;
   /** Everyone in it but you, with where they are, for the markers. */
   people: Present[];
+  /** Everyone in it, you included, as the server lists them: the DM's identity (SPEC §4.13). */
+  memberIds: string[];
   fresh: boolean;
 }
 
@@ -102,6 +104,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
       id: room.id,
       label: dmLabel(room, users, meId),
       people: peopleIn(room, users, meId).map((user) => ({ user, state: stateOf(user.id) })),
+      memberIds: room.member_ids ?? [],
       fresh: hasNewActivity(state, room.id),
     }),
   );

@@ -36,7 +36,12 @@
   height: var(--row-2);
 }
 
-.k-row-main:hover,
+/* Half strength, not the icon buttons' third: a row still has words to read. */
+.k-row-main:disabled {
+  opacity: 0.5;
+}
+
+.k-row-main:hover:not(:disabled),
 .k-row[data-selected="yes"] .k-row-main {
   background: var(--surface-hover);
   color: var(--text-primary);

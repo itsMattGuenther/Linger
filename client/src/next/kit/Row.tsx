@@ -36,6 +36,8 @@ export interface RowProps {
   selected?: boolean;
   /** The accessible name, when the visible text isn't enough on its own. */
   label?: string;
+  /** Shown but not usable for now, like people once a picker is full. */
+  disabled?: boolean;
   onActivate?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDoubleActivate?: (event: MouseEvent<HTMLButtonElement>) => void;
 }
@@ -83,6 +85,7 @@ export function Row({
   fresh = false,
   selected = false,
   label,
+  disabled = false,
   onActivate,
   onDoubleActivate,
 }: RowProps) {
@@ -101,6 +104,7 @@ export function Row({
         className="k-row-main"
         aria-label={label}
         aria-current={selected || undefined}
+        disabled={disabled}
         onClick={onActivate}
         onDoubleClick={onDoubleActivate}
       >
@@ -112,7 +116,8 @@ export function Row({
             {note ? <span className="k-row-note">{note}</span> : null}
             {end ? <span className="k-row-end">{end}</span> : null}
           </span>
-          {lines === "two" ? (
+          {/* No second line to show: the row keeps its height and the name sits level with the marker. */}
+          {lines === "two" && detail ? (
             <span className="k-row-detail" data-away={away ? "yes" : undefined}>
               {detail}
             </span>

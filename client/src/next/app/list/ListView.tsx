@@ -3,6 +3,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { ListModel, PersonRow } from "../../core/list";
 import {
+  IconButton,
   MarkerCluster,
   Name,
   Row,
@@ -14,6 +15,7 @@ import {
 import { LogoMark } from "../LogoMark";
 import { markerFor } from "../markers";
 import "./ListView.css";
+import { NewDmPicker } from "./NewDmPicker";
 import { type KnockResult, PersonCard } from "./PersonCard";
 import { type YouActions, YouCard } from "./YouCard";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
@@ -29,6 +31,8 @@ export interface ListViewProps {
   onMessage?: (user: User) => void;
   /** From a person's card: knock (SPEC §4.9). */
   onKnock?: (user: User) => Promise<KnockResult>;
+  /** From the new-message picker: open the DM with exactly these people; resolves to a problem in words, or null. */
+  onStartDm?: (people: User[]) => Promise<string | null>;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
   /** You're in voice: the voice bar at the bottom. */
@@ -44,7 +48,7 @@ type Fold = "rooms" | "dms" | "people" | "away" | "offline";
  * with who's in them, your DMs, and everyone else. Drawn only from the model
  * and the kit, so the same view serves the real window and the fixture page.
  */
-export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onMessage, onKnock, onClose, voice, you }: ListViewProps) {
+export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onMessage, onKnock, onStartDm, onClose, voice, you }: ListViewProps) {
   // Offline starts folded (the design); everything else starts open.
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
   const toggle = (fold: Fold) =>
@@ -60,6 +64,9 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
   // The card that is open, the row it came from, and where that row was.
   const [card, setCard] = useState<{ row: PersonRow; anchor: { top: number; bottom: number } } | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
+  const [picking, setPicking] = useState<{ bottom: number } | null>(null);
+  const pickerOpener = useRef<HTMLButtonElement | null>(null);
+  const everyone = [...model.people.here, ...model.people.away, ...model.people.offline];
   const closeCard = () => {
     setCard(null);
     // Focus goes back to the row that opened it.
@@ -124,30 +131,48 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
           </div>
         ) : null}
 
-        {model.dms.length > 0 ? (
-          <>
-            <SectionLabel label="DMs" open={open("dms")} onToggle={() => toggle("dms")} controls="nx-dms" />
-            {open("dms") ? (
-              <div id="nx-dms">
-                <RowList label="DMs">
-                  {model.dms.map((dm) => (
-                    <Row
-                      key={dm.id}
-                      lead={
-                        dm.people.length === 1 && dm.people[0]
-                          ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
-                          : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
-                      }
-                      lines="one"
-                      title={dm.label}
-                      fresh={dm.fresh}
-                      onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
-                    />
-                  ))}
-                </RowList>
-              </div>
-            ) : null}
-          </>
+        <SectionLabel
+          label="DMs"
+          open={open("dms")}
+          onToggle={() => toggle("dms")}
+          controls="nx-dms"
+          action={
+            onStartDm ? (
+              <IconButton
+                icon="compose"
+                label="New message"
+                size="sm"
+                onClick={(event) => {
+                  pickerOpener.current = event.currentTarget;
+                  setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
+                }}
+              />
+            ) : undefined
+          }
+        />
+        {open("dms") ? (
+          <div id="nx-dms">
+            {model.dms.length === 0 ? (
+              <p className="nx-list-empty">No DMs yet.</p>
+            ) : (
+              <RowList label="DMs">
+                {model.dms.map((dm) => (
+                  <Row
+                    key={dm.id}
+                    lead={
+                      dm.people.length === 1 && dm.people[0]
+                        ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
+                        : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
+                    }
+                    lines="one"
+                    title={dm.label}
+                    fresh={dm.fresh}
+                    onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
+                  />
+                ))}
+              </RowList>
+            )}
+          </div>
         ) : null}
 
         <SectionLabel label="People" open={open("people")} onToggle={() => toggle("people")} controls="nx-people" />
@@ -185,6 +210,24 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
       </div>
 
       {voice ? <VoiceDock {...voice} /> : null}
+
+      {picking && onStartDm ? (
+        <NewDmPicker
+          people={everyone}
+          meId={model.me?.user.id ?? null}
+          dms={model.dms.map((dm) => ({ id: dm.id, member_ids: dm.memberIds }))}
+          anchor={picking}
+          onStart={async (people) => {
+            const problem = await onStartDm(people);
+            if (problem === null) setPicking(null);
+            return problem;
+          }}
+          onCancel={() => {
+            setPicking(null);
+            pickerOpener.current?.focus();
+          }}
+        />
+      ) : null}
 
       {card ? (
         <PersonCard

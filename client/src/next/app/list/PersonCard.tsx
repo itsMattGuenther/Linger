@@ -41,7 +41,8 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
   useLayoutEffect(() => {
     const card = first.current?.parentElement;
     if (!card) return;
-    const { width, height } = card.getBoundingClientRect();
+    // Layout sizes, not the drawn box: the card is still scaled down by its opening animation here.
+    const { offsetWidth: width, offsetHeight: height } = card;
     const below = anchor.bottom + GAP;
     const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
     const x = Math.max(EDGE, Math.round((window.innerWidth - width) / 2));

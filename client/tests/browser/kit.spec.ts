@@ -72,6 +72,24 @@ test("icons and markers sit exactly in the middle of their boxes (#144, #164, #1
   expect(off).toEqual([]);
 });
 
+test("a person with no status line has their name level with their marker, not above an empty line", async ({ page }) => {
+  const off = await page.evaluate((tolerance) => {
+    const problems: string[] = [];
+    for (const row of document.querySelectorAll('[data-kit="Row"][data-row-kind="two"]')) {
+      if (row.querySelector(".k-row-detail")) continue;
+      const slot = row.querySelector('[data-kit="MarkerSlot"]')?.getBoundingClientRect();
+      const top = row.querySelector(".k-row-top")?.getBoundingClientRect();
+      if (!slot || !top) continue;
+      const dy = Math.abs(slot.top + slot.height / 2 - (top.top + top.height / 2));
+      if (dy > tolerance) problems.push(`${row.textContent?.trim().slice(0, 20)}: off by ${dy.toFixed(2)}`);
+    }
+    return problems;
+  }, HALF_PIXEL);
+  expect(off).toEqual([]);
+  // The gallery has such a row, or this proves nothing.
+  expect(await page.locator('[data-kit="Row"][data-row-kind="two"]:not(:has(.k-row-detail))').count()).toBeGreaterThan(0);
+});
+
 test("rows of a kind are one height, in every name face (uneven rows)", async ({ page }) => {
   const rows = await page.$$eval('[data-kit="Row"]', (els) =>
     els.map((el) => ({
@@ -206,10 +224,11 @@ test("every interactive element has an accessible name", async ({ page }) => {
   expect(nameless).toEqual([]);
 });
 
-test("the focus ring shows on everything the keyboard reaches", async ({ page }) => {
+test("the focus ring shows once on everything the keyboard reaches", async ({ page }) => {
   await page.locator("main").click({ position: { x: 2, y: 2 } });
   const seen = new Set<string>();
   const missing: string[] = [];
+  const doubled: string[] = [];
   for (let i = 0; i < 400; i += 1) {
     await page.keyboard.press("Tab");
     const result = await page.evaluate(() => {
@@ -234,15 +253,21 @@ test("the focus ring shows on everything the keyboard reaches", async ({ page })
       const box = el.closest("[data-kit-control]");
       const boxRing = box instanceof HTMLElement && getComputedStyle(box).boxShadow !== "none";
       const visible = ringOn(el) || ringOn(el.closest("label")) || boxRing;
-      return { path, visible, what: el.getAttribute("aria-label") ?? el.textContent?.trim().slice(0, 30) ?? el.tagName };
+      // A box that draws focus around its input, and the lamp on the input too: two rings.
+      const twice = box !== el && boxRing && ringOn(el);
+      const field = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? (el.labels?.[0]?.textContent?.trim() ?? el.placeholder) : null;
+      const what = el.getAttribute("aria-label") || field || el.textContent?.trim().slice(0, 30) || el.tagName;
+      return { path, visible, twice, what };
     });
     if (!result) continue;
     if (seen.has(result.path)) break;
     seen.add(result.path);
     if (!result.visible) missing.push(result.what);
+    if (result.twice) doubled.push(result.what);
   }
   expect(seen.size).toBeGreaterThan(40);
   expect(missing).toEqual([]);
+  expect(doubled).toEqual([]);
 });
 
 test("tabs move with the arrow keys, Home and End, and close with Delete", async ({ page }) => {

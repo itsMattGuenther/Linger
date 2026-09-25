@@ -23,3 +23,14 @@
   align-items: center;
   gap: var(--space-1-5);
 }
+
+/* A section with nothing in it yet says so, quietly, in the row's place. */
+.nx-list-empty {
+  margin: 0;
+  /* Where a row's title starts: the row's margin and padding, then the marker slot. */
+  padding: 0 var(--space-2) 0 calc(var(--space-1-5) + var(--space-2-5) + var(--marker-slot) + var(--marker-gap));
+  height: var(--row-1);
+  line-height: var(--row-1);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}

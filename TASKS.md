@@ -828,8 +828,10 @@ Rules for this milestone:
   protocol, borrowed tokens, and reading, sending and history in a tab.
 - ⬜ **T-1804 · Voice** — the voice bar, the room strips, and "move voice here"
   as an intent. Tabs and windows never leave voice.
-- ⬜ **T-1805 · People and DMs** — the person card (Message, Knock), the
-  new-message picker, away and away messages.
+- 🟡 **T-1805 · People and DMs** — the person card (Message, Knock), the
+  new-message picker, away and away messages. Built in the list window and
+  tested on its fixture page; not yet tried against a real server in the
+  desktop app.
 - ⬜ **T-1806 · Settings** — every setting in `parity.md`, in the Settings
   window.
 - ⬜ **T-1807 · Media, search and uploads.**

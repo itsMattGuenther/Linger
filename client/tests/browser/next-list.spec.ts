@@ -63,6 +63,12 @@ test("lists DMs by who is in them, with the new one first", async ({ page }) => 
   await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
 });
 
+test("with no DMs yet, the heading and its New message button are still there", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?nodms");
+  await expect(page.locator("#nx-dms")).toHaveText("No DMs yet.");
+  await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
+});
+
 test("groups people into here, away and a folded offline", async ({ page }) => {
   await expect(rows(page, "People here")).toHaveText([/Dave.*in #listening-room/, /Eli.*in #general/, /Jules.*in #general/, /Callie.*around/]);
   await expect(rows(page, "Away")).toHaveText([/Sam.*back after work/]);
@@ -167,6 +173,108 @@ test.describe("a person's card", () => {
     expect(card.x + card.width).toBeLessThanOrEqual(size.width - 8);
     expect(card.y).toBeGreaterThanOrEqual(8);
     expect(card.y + card.height).toBeLessThanOrEqual(size.height - 8);
+    // In the middle, measured at its real size (not while its opening animation still shrinks it).
+    expect(Math.abs(card.x - (size.width - card.x - card.width))).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe("the new-message picker", () => {
+  const picker = (page: Page) => page.getByRole("dialog", { name: "New message" });
+  const offered = (page: Page) => rows(page, "People to pick");
+  const openPicker = async (page: Page) => {
+    await page.getByRole("button", { name: "New message" }).click();
+    await expect(picker(page)).toBeVisible();
+  };
+
+  test("opens from the DMs heading on everyone but you, typing already", async ({ page }) => {
+    await openPicker(page);
+    await expect(offered(page)).toHaveText([/Callie/, /Dave/, /Eli/, /Jen/, /Jules/, /Sam/]);
+    await expect(picker(page).getByRole("textbox", { name: "Add someone" })).toBeFocused();
+    await expect(picker(page).getByRole("status")).toHaveText("Pick up to 7 people.");
+    await expect(picker(page).getByRole("button", { name: "Start the DM" })).toBeDisabled();
+  });
+
+  test("finds people by name whatever the case, and says when nobody matches", async ({ page }) => {
+    await openPicker(page);
+    await page.keyboard.type("JUL");
+    await expect(offered(page)).toHaveText([/Jules/]);
+    await page.keyboard.type("x");
+    await expect(picker(page)).toContainText("Nobody called “JULx”.");
+  });
+
+  test("Enter picks the first match and Backspace takes the last pick back", async ({ page }) => {
+    await openPicker(page);
+    await page.keyboard.type("ca");
+    await page.keyboard.press("Enter");
+    await expect(picker(page).getByRole("button", { name: "Remove Callie" })).toBeVisible();
+    await expect(offered(page)).not.toContainText(["Callie"]);
+    await page.keyboard.press("Backspace");
+    await expect(picker(page).getByRole("button", { name: "Remove Callie" })).toHaveCount(0);
+    await expect(offered(page).first()).toContainText("Callie");
+  });
+
+  test("a set of people you already have a DM with opens that DM", async ({ page }) => {
+    await openPicker(page);
+    await offered(page).getByRole("button", { name: "Add Jules" }).click();
+    await expect(picker(page).getByRole("status")).toHaveText("You already have a DM with Jules.");
+    await expect(picker(page).getByRole("button", { name: "Open the DM" })).toBeEnabled();
+    await offered(page).getByRole("button", { name: "Add Eli" }).click();
+    await expect(picker(page).getByRole("status")).toHaveText("A new DM with Jules and Eli.");
+    await picker(page).getByRole("button", { name: "Remove Jules" }).click();
+    await offered(page).getByRole("button", { name: "Add Sam" }).click();
+    await expect(picker(page).getByRole("button", { name: "Open the DM" })).toBeVisible();
+  });
+
+  test("Start the DM hands over exactly who was picked, then closes", async ({ page }) => {
+    await openPicker(page);
+    await offered(page).getByRole("button", { name: "Add Eli" }).click();
+    await offered(page).getByRole("button", { name: "Add Callie" }).click();
+    await picker(page).getByRole("button", { name: "Start the DM" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "newdm:u-eli,u-callie");
+    await expect(picker(page)).toHaveCount(0);
+  });
+
+  test("a DM the server won't open says so and keeps the picks", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?dmfail");
+    await openPicker(page);
+    await offered(page).getByRole("button", { name: "Add Eli" }).click();
+    await picker(page).getByRole("button", { name: "Start the DM" }).click();
+    await expect(picker(page).getByRole("status")).toHaveText("The server didn't answer.");
+    await expect(picker(page).getByRole("button", { name: "Remove Eli" })).toBeVisible();
+    await expect(picker(page).getByRole("button", { name: "Start the DM" })).toBeEnabled();
+  });
+
+  test("stops at seven people, the most a DM holds besides you", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?crowd");
+    await openPicker(page);
+    for (let i = 0; i < 7; i += 1) {
+      await page.keyboard.press("Enter");
+    }
+    await expect(picker(page).getByRole("button", { name: /^Remove / })).toHaveCount(7);
+    await expect(picker(page).getByRole("textbox")).toBeDisabled();
+    await expect(offered(page).getByRole("button").first()).toBeDisabled();
+  });
+
+  test("Escape closes it and focus goes back to the button", async ({ page }) => {
+    await openPicker(page);
+    await page.keyboard.press("Escape");
+    await expect(picker(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New message" })).toBeFocused();
+  });
+
+  test("fits inside the list window, in the middle, and stays put as people are picked", async ({ page }) => {
+    await openPicker(page);
+    // Once the opening animation is over, the box is its real size.
+    await picker(page).evaluate((dialog) => Promise.all(dialog.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+    const box = await picker(page).boundingBox();
+    const size = page.viewportSize();
+    expect(box && size).toBeTruthy();
+    if (!box || !size) return;
+    expect(box.y).toBeGreaterThanOrEqual(8);
+    expect(box.y + box.height).toBeLessThanOrEqual(size.height - 8);
+    expect(Math.abs(box.x - (size.width - box.x - box.width))).toBeLessThanOrEqual(1);
+    await offered(page).getByRole("button", { name: "Add Eli" }).click();
+    expect((await picker(page).boundingBox())?.x).toBe(box.x);
   });
 });
 

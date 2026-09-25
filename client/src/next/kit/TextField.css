@@ -76,6 +76,11 @@
   text-overflow: ellipsis;
 }
 
+/* The box shows focus with its edge; the lamp on the input inside would double it. */
+.k-field-input:focus-visible {
+  outline: none;
+}
+
 .k-field-box[data-size="sm"] .k-field-input {
   font-size: var(--text-control);
 }

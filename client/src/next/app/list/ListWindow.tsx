@@ -201,6 +201,7 @@ function ServerList({ session }: { session: ServerSession }) {
       onOpenDm={(room) => openChat(baseUrl, room)}
       onMessage={(user) => void messageWith(api, user)}
       onKnock={(user) => knock(api, user)}
+      onStartDm={(people) => startDm(api, people)}
       onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
     />
   );
@@ -248,6 +249,21 @@ async function messageWith(api: ServerSession["api"], user: User): Promise<void>
     openChat(api.baseUrl, dm.id);
   } catch (error: unknown) {
     console.error("could not open a DM", error);
+  }
+}
+
+/**
+ * Open the DM with exactly these people from the new-message picker: the
+ * server hands back the one you already have, or makes it (SPEC §4.13).
+ */
+async function startDm(api: ServerSession["api"], people: User[]): Promise<string | null> {
+  try {
+    const dm = await api.openDm(people.map((person) => person.id));
+    noteDm(api.baseUrl, dm);
+    openChat(api.baseUrl, dm.id);
+    return null;
+  } catch (error: unknown) {
+    return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't open the DM.";
   }
 }
 
