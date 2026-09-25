@@ -184,6 +184,10 @@ Replace with:
   A caught-up conversation opens at the newest messages. There is no catch-up
   button or band. Live arrivals never move someone reading earlier messages.
   Search still opens its exact result, and **"back to the newest"** skips ahead.
+- The client holds what is on screen plus a margin, not everything ever scrolled
+  past (#173). Reading far back lets go of the newest end: the header then offers
+  **"back to the newest"**, and reading down brings the rest back with no gap.
+  Rooms you have left keep only their newest page.
 
 **One exception:** direct mentions produce a real notification and a marker. Mentions
 are person-to-person only. `@everyone` and `@here` do not exist and will not be added.

@@ -460,7 +460,9 @@ left off** marker. Opening a room or DM with new messages returns to that
 line automatically. Caught-up rooms open at the bottom. There is no catch-up
 button or band; **back to the newest** skips ahead. Search results still open
 on the message you selected, and new arrivals do not pull you away from
-earlier messages you are reading.
+earlier messages you are reading. If you scroll a long way back, the header
+offers **back to the newest** too — Linger has put down the newest messages
+to save memory, and scrolling down picks them up again.
 
 ## Taking everything with you
 

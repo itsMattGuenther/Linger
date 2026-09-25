@@ -14,6 +14,7 @@ import type { LinkPreview } from "../../src/generated/LinkPreview";
 import type { LinkPreviewRequest } from "../../src/generated/LinkPreviewRequest";
 import { sharedFiles, sharedMedia } from "./delight-data";
 import { AuthedApi } from "../../src/lib/api";
+import { serverState } from "../../src/lib/gateway";
 import "../../src/fonts/fonts.css";
 import "../../src/styles/tokens.css";
 import "../../src/generated/palette.generated.css";
@@ -22,6 +23,12 @@ import "../../src/styles/names.css";
 
 const baseUrl = "https://console.example";
 const query = new URLSearchParams(location.search);
+// Which messages the store holds for a room, oldest first, so a test can see
+// history being let go of (#173) — nothing on screen says how much is held.
+Object.assign(window, {
+  heldIds: (roomId: string): string[] | null =>
+    serverState(baseUrl).streams[roomId]?.messages.map((message) => message.id) ?? null,
+});
 // A single unbroken word with no spaces to break on, for the rail-overflow
 // regressions (#83, #100): real room, server and display names can be this
 // long, and the layout has to wrap them without help from whitespace.

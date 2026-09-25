@@ -59,10 +59,13 @@ const {
   KNOCK_TTL_MS,
   leaveWindow,
   loadNewer,
+  loadOlder,
   openAround,
   openRoom,
+  releaseOtherRooms,
   send,
   serverState,
+  trimHistory,
 } = await import("./gateway");
 
 const HOME = "https://home.example";
@@ -598,6 +601,215 @@ describe("a room opened on a search hit", () => {
     expect(stream?.atEnd).toBe(true);
     expect(stream?.messages.some((held) => held.id === id(NEWEST))).toBe(true);
     expect(stream?.messages.some((held) => held.id === id(HIT))).toBe(false);
+  });
+});
+
+/**
+ * Letting go of history nobody is looking at (#173).
+ *
+ * What matters is what is never allowed to happen while doing it: a gap in
+ * what is held, a duplicate, or a message that arrived during a page and got
+ * lost between the two.
+ */
+describe("letting go of history", () => {
+  /** A room with `newest` messages that can grow while a page is on the wire. */
+  function growingRoom(start: number): {
+    get: (path: string) => Message[];
+    grow: () => Message;
+    duringWindow: { run: (() => void) | null };
+  } {
+    let newest = start;
+    const duringWindow: { run: (() => void) | null } = { run: null };
+    const get = (path: string): Message[] => {
+      const url = new URL(`https://x${path}`);
+      const roomId = url.pathname.split("/")[2] ?? "r-garage";
+      const inRoom = (list: Message[]) => list.map((one) => ({ ...one, room_id: roomId }));
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      const around = url.searchParams.get("around");
+      if (around !== null) {
+        const at = Number(around.slice(1));
+        // Answered as of now; anything posted during the round trip is not in it.
+        const page = pageOf(Math.max(1, at - Math.ceil(limit / 2) + 1), Math.min(newest, at + Math.floor(limit / 2)));
+        const run = duringWindow.run;
+        duringWindow.run = null;
+        run?.();
+        return inRoom(page);
+      }
+      const before = url.searchParams.get("before");
+      const top = before === null ? newest : Number(before.slice(1)) - 1;
+      return inRoom(pageOf(Math.max(1, top - limit + 1), top));
+    };
+    const grow = (): Message => {
+      newest += 1;
+      return message(newest);
+    };
+    return { get, grow, duringWindow };
+  }
+
+  function held(roomId = "r-garage"): string[] {
+    return (serverState(HOME).streams[roomId]?.messages ?? []).map((one) => one.id);
+  }
+
+  /** Consecutive ids, oldest first: no gap and no duplicate anywhere. */
+  function expectContiguous(ids: string[]): void {
+    const numbers = ids.map((one) => Number(one.slice(1)));
+    for (let at = 1; at < numbers.length; at += 1) expect(numbers[at]).toBe((numbers[at - 1] ?? 0) + 1);
+  }
+
+  async function scrollBack(api: AuthedApi, pages: number): Promise<void> {
+    for (let page = 0; page < pages; page += 1) await loadOlder(api, "r-garage");
+  }
+
+  beforeEach(async () => {
+    await disconnect(HOME);
+    invoked.length = 0;
+  });
+
+  it("keeps what is on screen plus a margin, and only past a threshold", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    await scrollBack(api, 6);
+    // 700 held: under the threshold, so nothing is let go of.
+    trimHistory(HOME, "r-garage", id(9_400), id(9_420));
+    expect(held()).toHaveLength(700);
+
+    await scrollBack(api, 4);
+    expect(held()).toHaveLength(1_100);
+    // Reading near the top of what is held: the newer end goes.
+    trimHistory(HOME, "r-garage", id(8_950), id(8_980));
+    const ids = held();
+    expect(ids[0]).toBe(id(8_901));
+    expect(ids[ids.length - 1]).toBe(id(9_280));
+    expectContiguous(ids);
+    const stream = serverState(HOME).streams["r-garage"];
+    // No longer at the newest message: live messages wait on the server.
+    expect(stream?.atEnd).toBe(false);
+    expect(stream?.atStart).toBe(false);
+  });
+
+  it("reads back to the newest without a gap after letting the newer end go", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    await scrollBack(api, 10);
+    trimHistory(HOME, "r-garage", id(8_950), id(8_980));
+
+    // A live message while the room is behind: dropped, and remembered as newest.
+    const fresh = room.grow();
+    arrive(HOME, { s: 2, op: "message.create", d: fresh } as ServerFrame);
+    expect(held()).not.toContain(fresh.id);
+
+    for (let read = 0; read < 40 && serverState(HOME).streams["r-garage"]?.atEnd !== true; read += 1) {
+      await loadNewer(api, "r-garage");
+    }
+    const ids = held();
+    expect(serverState(HOME).streams["r-garage"]?.atEnd).toBe(true);
+    expect(ids[ids.length - 1]).toBe(fresh.id);
+    expectContiguous(ids);
+  });
+
+  it("does not lose a message posted while the last page was on the wire", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    // Twenty messages short of the newest: one read forwards reaches the end,
+    // and a message lands while that read is on the wire.
+    await openAround(api, "r-garage", id(9_930));
+    expect(serverState(HOME).streams["r-garage"]?.atEnd).toBe(false);
+    let fresh: Message | null = null;
+    room.duringWindow.run = () => {
+      fresh = room.grow();
+      arrive(HOME, { s: 2, op: "message.create", d: fresh } as ServerFrame);
+    };
+    await loadNewer(api, "r-garage");
+    const ids = held();
+    expect(fresh).not.toBeNull();
+    expect(ids[ids.length - 1]).toBe(id(10_001));
+    expect(serverState(HOME).streams["r-garage"]?.atEnd).toBe(true);
+    expectContiguous(ids);
+  });
+
+  it("fetches the older end again without a gap after letting it go", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    await scrollBack(api, 10);
+    // Back at the bottom: the older end goes, and the room stays live.
+    trimHistory(HOME, "r-garage", id(9_980), id(10_000));
+    expect(held()[0]).toBe(id(9_680));
+    expect(serverState(HOME).streams["r-garage"]?.atEnd).toBe(true);
+
+    await loadOlder(api, "r-garage");
+    const ids = held();
+    expect(ids[0]).toBe(id(9_580));
+    expectContiguous(ids);
+  });
+
+  it("leaves a page in flight alone rather than trimming under it", async () => {
+    let answer: (() => void) | null = null;
+    let hold = false;
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, async (path: string) => {
+      if (hold && path.includes("before=")) await new Promise<void>((done) => { answer = done; });
+      return room.get(path);
+    });
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    await scrollBack(api, 9);
+    hold = true;
+    const older = loadOlder(api, "r-garage");
+    await vi.waitFor(() => expect(answer).not.toBeNull());
+    trimHistory(HOME, "r-garage", id(9_980), id(10_000));
+    expect(held()).toHaveLength(1_000);
+    (answer as (() => void) | null)?.();
+    await older;
+    expect(held()).toHaveLength(1_100);
+    expectContiguous(held());
+  });
+
+  it("keeps only the newest page of rooms you have left", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    await scrollBack(api, 4);
+    await openAround(api, "r-den", id(5_000));
+    await openRoom(api, "r-porch");
+
+    releaseOtherRooms(HOME, "r-porch");
+    const streams = serverState(HOME).streams;
+    // The room you left keeps its newest page and stays live.
+    expect(held("r-garage")).toHaveLength(100);
+    expect(held("r-garage").at(-1)).toBe(id(10_000));
+    expect(streams["r-garage"]?.atEnd).toBe(true);
+    expectContiguous(held("r-garage"));
+    // A window is dropped whole; walking back in opens the room fresh.
+    expect(streams["r-den"]).toBeUndefined();
+    // The room being opened is untouched.
+    expect(held("r-porch")).toHaveLength(100);
+  });
+
+  it("drops an edit to a message that is not held instead of floating it above the rest", async () => {
+    const room = growingRoom(10_000);
+    const api = fakeApi(HOME, room.get);
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+
+    const old = { ...message(42), body: "edited", edited_at: 1 };
+    arrive(HOME, { s: 2, op: "message.update", d: old } as ServerFrame);
+    expect(held()).not.toContain(id(42));
+    expectContiguous(held());
   });
 });
 

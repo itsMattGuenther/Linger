@@ -63,9 +63,11 @@ import {
   markRead,
   openAround,
   openRoom,
+  releaseOtherRooms,
   sendMessage,
   startedTyping,
   toggleReaction,
+  trimHistory,
   typistsIn,
   useGateway,
 } from "../lib/gateway";
@@ -92,6 +94,8 @@ import "./stream.css";
  * anyone reaches the end of what is there.
  */
 const BACKFILL_MARGIN_PX = 1200;
+/** How long scrolling has to stop before far-off history is let go of (#173). */
+const TRIM_IDLE_MS = 600;
 
 /**
  * `linger-core::limits::MAX_MESSAGE_CHARS`. The server is the authority and
@@ -192,6 +196,8 @@ export default function Stream({
     if (!gateway.readLoaded) return;
     let alive = true;
     enterRoom(api.baseUrl, room.id);
+    // Only the room on screen keeps its scrollback (#173).
+    releaseOtherRooms(api.baseUrl, room.id);
     const marker = gateway.read[room.id];
     const newest = gateway.newest[room.id];
     const target = !focus && marker !== undefined && newest !== undefined && newest > marker ? marker : null;
@@ -429,8 +435,16 @@ export default function Stream({
     return () => window.removeEventListener("focus", noteRead);
   }, [noteRead]);
 
+  // Letting go of history far from the screen (#173), once scrolling stops.
+  // `trimNow` is filled in below, where everything it has to check exists.
+  const trimTimer = useRef(0);
+  const trimNow = useRef<() => void>(() => undefined);
+  useEffect(() => () => window.clearTimeout(trimTimer.current), [room.id]);
+
   const backfill = useCallback(() => {
     noteRead();
+    window.clearTimeout(trimTimer.current);
+    trimTimer.current = window.setTimeout(() => trimNow.current(), TRIM_IDLE_MS);
     const element = scroller.current;
     if (!element || !entryReady || !landing.current.done || jumping.current) return;
     if (element.scrollTop <= BACKFILL_MARGIN_PX) void loadOlder(api, room.id);
@@ -580,15 +594,35 @@ export default function Stream({
     }
   }, [hunting, rowOf, actions, onFocused]);
 
+  trimNow.current = () => {
+    // Never while the view is being aimed somewhere: a landing, a jump or a
+    // search hit each find their row by what is held.
+    if (!entryReady || !landing.current.done || jumping.current || hunting !== null) return;
+    const range = virtualizer.range;
+    if (!range) return;
+    let first: MessageId | null = null;
+    let last: MessageId | null = null;
+    for (let index = range.startIndex; index <= range.endIndex; index += 1) {
+      const row = rows[index];
+      if (row?.kind !== "message" || pendingIds.has(row.message.id)) continue;
+      first ??= row.message.id;
+      last = row.message.id;
+    }
+    if (first !== null && last !== null) trimHistory(api.baseUrl, room.id, first, last);
+  };
+
   // The composer's Up-arrow shortcut, and the keyboard's only route to editing.
+  // Only at the end of the room: inside a window, the newest message you hold
+  // of yours is not the last thing you said.
   const lastMine = useMemo(() => {
+    if (!atEnd) return null;
     const held = messages ?? [];
     for (let at = held.length - 1; at >= 0; at -= 1) {
       const message = held[at];
       if (message && message.author_id === me?.id && message.deleted_at === null) return message;
     }
     return null;
-  }, [messages, me?.id]);
+  }, [messages, me?.id, atEnd]);
 
   const items = virtualizer.getVirtualItems();
 
@@ -597,25 +631,29 @@ export default function Stream({
       <header className="stream-header">
         <span className="room-title">
           <span className="room-name" title={title}>{title}</span>
+          {/* The way out of a historical window (SPEC §4.12). A room opened on a
+              search hit is showing February, and without this the only route back
+              to today is scrolling through everything in between. Reading
+              forwards to the bottom gets there too — this is the shortcut.
+              It sits on the title's own line: on a line of its own it made the
+              header taller the moment it appeared, which moved the whole
+              conversation down mid-read once history started being let go
+              of (#173). */}
+          {atEnd && entry.target === null ? null : (
+            <button
+              type="button"
+              className="newest-action meta"
+              onClick={() => {
+                landing.current = { room: room.id, done: false };
+                setEntry({ room: room.id, target: null, ready: false });
+                void leaveWindow(api, room.id).then(() => setEntry({ room: room.id, target: null, ready: true }));
+              }}
+            >
+              back to the newest
+            </button>
+          )}
         </span>
         {room.topic ? <span className="room-topic meta" title={room.topic}>{room.topic}</span> : null}
-        {/* The way out of a historical window (SPEC §4.12). A room opened on a
-            search hit is showing February, and without this the only route back
-            to today is scrolling through everything in between. Reading
-            forwards to the bottom gets there too — this is the shortcut. */}
-        {atEnd && entry.target === null ? null : (
-          <button
-            type="button"
-            className="newest-action meta"
-            onClick={() => {
-              landing.current = { room: room.id, done: false };
-              setEntry({ room: room.id, target: null, ready: false });
-              void leaveWindow(api, room.id).then(() => setEntry({ room: room.id, target: null, ready: true }));
-            }}
-          >
-            back to the newest
-          </button>
-        )}
       </header>
 
       {/* Voice happens in the room (SPEC §4.14), so its one line sits under
