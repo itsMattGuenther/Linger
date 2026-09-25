@@ -20,6 +20,7 @@ import {
   sharedLocalOf,
   snapshotOf,
 } from "../../lib/gateway";
+import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, PROTOCOL } from "./bus";
 
 /** A late window asks for the owner's state. */
@@ -52,7 +53,15 @@ export interface TokenQuestion {
 }
 
 /** What a window may ask the owner to do. Kept small on purpose. */
-export type Intent = { kind: "read"; server: string; roomId: RoomId; messageId: MessageId };
+export type Intent =
+  /** Mark a conversation read up to a message (the owner keeps read positions). */
+  | { kind: "read"; server: string; roomId: RoomId; messageId: MessageId }
+  /** The window gained or lost focus, or the person typed or moved in it (presence). */
+  | { kind: "window"; focused: boolean; input: boolean }
+  /** The conversation this window shows; a room puts you in it, a DM or none does not. */
+  | { kind: "room"; server: string; roomId: RoomId | null }
+  /** The window is closing: it no longer counts towards being here. */
+  | { kind: "closing" };
 
 export interface SharedMessage {
   v: number;
@@ -89,11 +98,20 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     }),
     bus.listen<Intent & Envelope>(INTENT, (intent) => {
       if (intent.v !== PROTOCOL) return;
-      const api = sessions().get(intent.server);
-      if (!api) return;
       switch (intent.kind) {
-        case "read":
-          markRead(api, intent.roomId, intent.messageId);
+        case "read": {
+          const api = sessions().get(intent.server);
+          if (api) markRead(api, intent.roomId, intent.messageId);
+          return;
+        }
+        case "window":
+          reportWindow(intent.from, { focused: intent.focused, input: intent.input });
+          return;
+        case "room":
+          if (sessions().has(intent.server)) setPresenceRoom(intent.server, intent.roomId);
+          return;
+        case "closing":
+          forgetWindow(intent.from);
           return;
       }
     }),

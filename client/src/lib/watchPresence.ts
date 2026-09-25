@@ -79,6 +79,13 @@ function watchFor(server: string): Watch {
 
 // The window's own state, shared by every server.
 let focused = false;
+/**
+ * The app's other windows, by label, and whether each has focus: the Buddy
+ * list client's chat windows report here (docs/design/architecture.md). The
+ * person is at Linger when any of its windows has focus; today's client has
+ * one window and never reports, so for it this stays empty.
+ */
+const otherWindows = new Map<string, boolean>();
 let lastInputAt = 0;
 let blurredAt = 0;
 let attached = false;
@@ -176,8 +183,14 @@ function tickAll(): void {
   for (const server of watches.keys()) void tick(server);
 }
 
+function anyFocused(): boolean {
+  if (readFocused()) return true;
+  for (const has of otherWindows.values()) if (has) return true;
+  return false;
+}
+
 function syncFocus(): void {
-  const next = readFocused();
+  const next = anyFocused();
   if (next === focused) return;
   const now = Date.now();
   if (next) lastInputAt = now;
@@ -193,6 +206,26 @@ function onInput(): void {
 }
 
 function onFocusChange(): void {
+  syncFocus();
+  tickAll();
+}
+
+/**
+ * Another window of the app gained or lost focus, or saw the person type or
+ * move (the Buddy list client's chat windows, reported through the owner).
+ * Presence then treats the app as focused if any window is, and counts input
+ * in any window as the person being here.
+ */
+export function reportWindow(label: string, report: { focused: boolean; input?: boolean }): void {
+  otherWindows.set(label, report.focused);
+  if (report.input === true) lastInputAt = Date.now();
+  syncFocus();
+  tickAll();
+}
+
+/** A window of the app closed: it no longer counts towards being here. */
+export function forgetWindow(label: string): void {
+  if (!otherWindows.delete(label)) return;
   syncFocus();
   tickAll();
 }
@@ -313,6 +346,7 @@ function stopPresence(): void {
   attached = false;
   for (const watch of watches.values()) clearTimer(watch);
   watches.clear();
+  otherWindows.clear();
   unlisten?.();
   unlisten = null;
   stopLooking();

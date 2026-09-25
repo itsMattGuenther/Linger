@@ -16,7 +16,20 @@ import type { User } from "../../generated/User";
 type Handler = (event: { payload: unknown }) => void;
 const ownerCore = new Map<string, Handler>();
 
-vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async () => true }));
+// Every command the pages send to the core, so a test can see what reached the wire.
+const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
+vi.mock("@tauri-apps/api/core", () => ({
+  isTauri: () => true,
+  invoke: async (cmd: string, args: Record<string, unknown>) => {
+    invoked.push({ cmd, args });
+    return true;
+  },
+}));
+
+/** Frames the owner sent upstream through the core. */
+function sentFrames(): unknown[] {
+  return invoked.filter((call) => call.cmd === "gateway_send").map((call) => call.args.frame);
+}
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (name: string, handler: Handler) => {
     ownerCore.set(name, handler);
@@ -113,6 +126,7 @@ async function windows() {
   const owner = {
     gateway: await import("../../lib/gateway"),
     share: await import("./share"),
+    presence: await import("../../lib/watchPresence"),
     bus: hub.bus("main"),
   };
   vi.resetModules();
@@ -133,6 +147,7 @@ async function windows() {
 describe("a viewer window sharing the owner's connection", () => {
   beforeEach(() => {
     ownerCore.clear();
+    invoked.length = 0;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-25T22:52:00Z"));
   });
@@ -218,6 +233,24 @@ describe("a viewer window sharing the owner's connection", () => {
     expect(owner.gateway.serverState(HOME).read["r-general"]).toBe("m000016");
     expect(owner.gateway.hasNewActivity(owner.gateway.serverState(HOME), "r-general")).toBe(false);
     expect(api.put).toHaveBeenCalledWith("/rooms/r-general/read", { last_read_id: "m000016" });
+    follower.stop();
+  });
+
+  it("puts you in the room the chat window shows, through the owner's presence", async () => {
+    const { owner, viewer, core } = await windows();
+    const presence = owner.presence;
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    const stopPresence = presence.startPresence();
+    evening().slice(0, 3).forEach(core);
+    presence.setPresenceLive(HOME, true);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    await follower.intend({ kind: "window", focused: true, input: true });
+    await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(sentFrames()).toContainEqual({ op: "room.focus", d: { room_id: "r-general" } }));
+    stopPresence();
     follower.stop();
   });
 
