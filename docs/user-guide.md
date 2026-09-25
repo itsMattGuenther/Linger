@@ -554,9 +554,6 @@ A code push to GitHub is **not a release**. New downloads appear when a
 desktop release is published. Updating your app also does not update the
 server: the host follows the [server update steps](host-guide.md#updating-the-server).
 
-The in-app updater is implemented, but its full real-machine upgrade check
-is still open ([HC-1](../TASKS.md#hc-1--cut-a-release-and-watch-a-machine-update-itself)).
-
 ## Signing out
 
 **Settings → Account & App → sign out.** That forgets the server on this
