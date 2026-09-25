@@ -9,11 +9,15 @@ import {
 } from "../shared/data.js";
 import { createLife, still } from "../shared/life.js";
 import { servers, srvOf, extraPeople, extraRooms, extraDms, extraMessages } from "./servers.js";
+import { markHTML, MARK_KINDS } from "./marks.js";
+import { createSettings } from "./settings.js";
 
 // ?servers: the same list for somebody on three servers. Off by default, so
 // the one-server version stays exactly as it was.
 const params = new URLSearchParams(location.search);
 const MULTI = params.has("servers");
+// Linger's small mark beside the server name: ?mark=l|dots|lamp|word.
+const MARK = MARK_KINDS.includes(params.get("mark")) ? params.get("mark") : "l";
 // How conversations open: each in its own window (the default here, so the
 // earlier screenshots stay true), or as tabs in one chat window (?tabs, or
 // the setting behind the gear in the list's title bar).
@@ -49,6 +53,24 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // --- icons -----------------------------------------------------------------
 
 const svg = (body, vb = "0 0 16 16") => `<svg viewBox="${vb}" aria-hidden="true">${body}</svg>`;
+
+// A cog with eight square teeth, drawn as one outline so it matches the other
+// line icons: unmistakably a gear, not a sun.
+function cogPath(teeth = 8, rOut = 7.1, rIn = 5.2) {
+  const step = (Math.PI * 2) / teeth;
+  const pts = [];
+  for (let i = 0; i < teeth; i++) {
+    const a = i * step - Math.PI / 2;
+    pts.push([a - step * 0.24, rIn], [a - step * 0.15, rOut], [a + step * 0.15, rOut], [a + step * 0.24, rIn]);
+  }
+  const P = ([a, r]) => `${(8 + r * Math.cos(a)).toFixed(2)} ${(8 + r * Math.sin(a)).toFixed(2)}`;
+  let d = `M${P(pts[0])}`;
+  pts.forEach((_, i) => {
+    const next = pts[(i + 1) % pts.length];
+    d += i % 4 === 3 ? ` A${rIn} ${rIn} 0 0 1 ${P(next)}` : ` L${P(next)}`;
+  });
+  return `${d}Z`;
+}
 const I = {
   close: svg(`<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>`),
   caret: svg(`<path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
@@ -77,7 +99,17 @@ const I = {
   up: svg(`<path d="M4 10l4-4 4 4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
   down: svg(`<path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
   check: svg(`<path d="M3.5 8.4l3 3 6-6.6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
-  gear: svg(`<circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`),
+  gear: svg(`<path d="${cogPath()}" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.35"/>`),
+  tag: svg(`<path d="M2.5 8.2V3.3c0-.5.4-.8.8-.8h4.9l5.3 5.3-5.7 5.7z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><circle cx="5.6" cy="5.6" r="1.1" fill="currentColor"/>`),
+  windows: svg(`<rect x="1.8" y="2.5" width="12.4" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M1.8 5.6h12.4M6.4 5.6v7.9" stroke="currentColor" stroke-width="1.35"/>`),
+  bell: svg(`<path d="M4.2 11.2V7.4a3.8 3.8 0 0 1 7.6 0v3.8l1.2 1.3H3z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M6.6 13.9a1.5 1.5 0 0 0 2.8 0" stroke="currentColor" stroke-width="1.35" fill="none" stroke-linecap="round"/>`),
+  key: svg(`<circle cx="5.4" cy="10.6" r="2.9" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M7.5 8.5l5.8-5.8M11.3 4.7l1.6 1.6M9.7 6.3l1.4 1.4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>`),
+  stack: svg(`<path d="M8 2.2l6 3-6 3-6-3z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M2 8.2l6 3 6-3M2 11l6 3 6-3" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/>`),
+  hash: svg(`<path d="M6.2 2.5L5 13.5M11 2.5L9.8 13.5M2.8 5.8h11M2.2 10.2h11" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>`),
+  people: svg(`<circle cx="5.6" cy="5.4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.35"/><circle cx="11.2" cy="6.2" r="1.7" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M1.8 13.2c.4-2.2 2-3.5 3.8-3.5s3.4 1.3 3.8 3.5M10 9.7c1.9-.3 3.6.8 4.1 3" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>`),
+  house: svg(`<path d="M2.5 7.3L8 2.8l5.5 4.5M4 6.2v7.3h8V6.2" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"/><path d="M6.8 13.5v-3.3h2.4v3.3" fill="none" stroke="currentColor" stroke-width="1.35"/>`),
+  play: svg(`<path d="M5 3.4v9.2l7.4-4.6z" fill="currentColor"/>`),
+  compose: svg(`<path d="M13.5 8.6v3.9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3.9" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><path d="M11.6 2.2l2.2 2.2-5.6 5.6-2.8.6.6-2.8z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/>`),
   head: svg(`<path d="M2.8 10.5V8.3a5.2 5.2 0 0 1 10.4 0v2.2" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9.4" width="3.2" height="4.4" rx="1.2" fill="currentColor"/><rect x="10.8" y="9.4" width="3.2" height="4.4" rx="1.2" fill="currentColor"/>`),
   headOff: svg(`<path d="M2.8 10.5V8.3a5.2 5.2 0 0 1 10.4 0v2.2" stroke="currentColor" stroke-width="1.4" fill="none" opacity=".55"/><rect x="2" y="9.4" width="3.2" height="4.4" rx="1.2" fill="currentColor" opacity=".55"/><rect x="10.8" y="9.4" width="3.2" height="4.4" rx="1.2" fill="currentColor" opacity=".55"/><path d="M2.5 2.5l11 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`),
   leave: svg(`<path d="M6.5 2.5H3.3a.8.8 0 0 0-.8.8v9.4c0 .4.4.8.8.8h3.2M10 5l3 3-3 3M13 8H6.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`),
@@ -145,8 +177,20 @@ function toggleDeafen() {
   onLife("voice", { id: my.id, on: true });
 }
 
+// One marker per state, all the same size: here is a solid dot, away is a
+// crescent moon, offline is the dot dimmed. Always in the person's color; the
+// words live in labels and tooltips.
+const MOON = `<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5.09 0.20A4.8 4.8 0 1 0 9.77 5.55A3.7 3.7 0 0 1 5.09 0.20Z" fill="currentColor"/></svg>`;
 const dotHTML = (p, cls = "") =>
-  `<span class="dot ${p.presence} ${cls}" style="--c:${color(p.color)}" aria-hidden="true"></span>`;
+  `<span class="dot ${p.presence} ${cls}" style="--c:${color(p.color)}" aria-hidden="true">${p.presence === "away" ? MOON : ""}</span>`;
+
+// The marker column every row shares, so names line up whether a row is one
+// person or a group. A group's markers sit together inside the same slot.
+function slotHTML(ps) {
+  if (ps.length === 1) return `<span class="pm-slot" aria-hidden="true">${dotHTML(ps[0])}</span>`;
+  const shown = ps.slice(0, 4);
+  return `<span class="pm-slot" aria-hidden="true"><span class="pm-group n${shown.length}">${shown.map((p) => dotHTML(p, "g")).join("")}</span></span>`;
+}
 
 const voiceMark = (p) =>
   p.voice
@@ -174,17 +218,13 @@ function timeThere(s) {
   const h = t.getHours();
   return { text: `${fmtTime(t)} there`, night: h < 7 || h >= 20 };
 }
-const timeThereHTML = (s) => {
-  const t = timeThere(s);
-  return t ? `<span class="there" title="The time in ${esc(s.tz.place)}, set by the host">${t.night ? I.moon : I.sun}${t.text}</span>` : "";
-};
 
 const srvStyle = (s) => `--acc:${color(s.accent)}`;
 const srvTag = (id) => {
   if (!MULTI) return "";
   const s = srvById[srvOf(id)];
   const t = timeThere(s);
-  return `<span class="srv-tag" style="${srvStyle(s)}"><i aria-hidden="true"></i>${esc(s.name)}${t ? `<span class="tt">${t.night ? I.moon : I.sun}${esc(t.text)}</span>` : ""}</span>`;
+  return `<span class="srv-tag" style="${srvStyle(s)}" title="${esc(s.name)}${t ? ` · ${esc(t.text)}` : ""}"><i aria-hidden="true"></i><span class="st-t">${esc(s.name)}${t ? `<span class="tt">${t.night ? I.moon : I.sun}${esc(t.text)}</span>` : ""}</span></span>`;
 };
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"];
@@ -199,28 +239,38 @@ function srvDots(s) {
   const rank = (p) => (p.voice ? 0 : p.presence === "in_room" ? 1 : p.presence === "away" ? 3 : 2);
   return ps
     .sort((a, b) => rank(a) - rank(b))
-    .map((p) => `<span class="dot xs ${p.presence}" style="--c:${color(p.color)}" title="${esc(p.name)}"></span>`)
+    .map((p) => `<span class="dot xs ${p.presence}" style="--c:${color(p.color)}" title="${esc(p.name)}">${p.presence === "away" ? MOON : ""}</span>`)
     .join("");
 }
 
 const namesList = (ps) =>
   ps.length === 1 ? nameHTML(ps[0]) : `${ps.slice(0, -1).map((p) => nameHTML(p)).join(", ")} and ${nameHTML(ps.at(-1))}`;
 
+// The line under a server's name: a fixed icon slot, so the words start under
+// the name, then one line of text that ends in an ellipsis if it runs long.
+const subLine = (icon, html) => `<span class="sub-ic" aria-hidden="true">${icon}</span><span class="sub-t">${html}</span>`;
+
 // One line that says what a folded server is like right now.
 function srvSummary(s) {
   const ps = peopleOf(s.id).filter((p) => !p.you);
   const parts = [];
-  const there = timeThereHTML(s);
-  if (there) parts.push(there);
+  const t = timeThere(s);
+  let icon = "";
+  if (t) {
+    icon = t.night ? I.moon : I.sun;
+    parts.push(`<span class="there" title="The time in ${esc(s.tz.place)}, set by the host">${esc(t.text)}</span>`);
+  }
   const voiceRoom = roomsOf(s.id).find((r) => ps.some((p) => voiceRoomOf(p) === r.id));
   if (voiceRoom) {
     const talking = ps.filter((p) => voiceRoomOf(p) === voiceRoom.id);
     const my = meOf(s.id);
     const seats = seatsWords(talking.length + (voiceRoomOf(my) === voiceRoom.id ? 1 : 0));
+    const speaker = icon ? `<span class="talk-ic">${I.speaker}</span>` : "";
+    icon ||= `<span class="talk-ic">${I.speaker}</span>`;
     parts.push(
       talking.length <= 2
-        ? `<span class="talk">${I.speaker}${namesList(talking)} in <b>#${esc(voiceRoom.name)}</b></span>`
-        : `<span class="talk">${I.speaker}<b>#${esc(voiceRoom.name)}</b> in voice</span>`,
+        ? `<span class="talk">${speaker}${namesList(talking)} in <b>#${esc(voiceRoom.name)}</b></span>`
+        : `<span class="talk">${speaker}<b>#${esc(voiceRoom.name)}</b> in voice</span>`,
     );
     if (seats) parts.push(seats);
   } else {
@@ -231,13 +281,21 @@ function srvSummary(s) {
     else if (around.length) parts.push(`quiet · ${namesList(around.slice(0, 2))} are up`);
     else parts.push("quiet");
   }
-  return parts.join('<span class="sep">·</span>');
+  return subLine(icon, parts.join('<span class="sep">·</span>'));
 }
 
-// Who you are on this server, and your status there.
+// Who you are on this server, and your status there. The status is the part
+// that gives way, with an ellipsis, when the line is short.
 function srvYou(s) {
   const my = meOf(s.id);
-  return `<button class="srv-you" data-edit-status="${s.id}" data-key="you-${s.id}" aria-label="You're ${esc(my.name)} on ${esc(s.name)}. Your status there: ${esc(my.status ?? "")}. Edit it">you're ${nameHTML(my)} here${my.presence === "away" ? `<span class="sep">·</span><span class="st away">“${esc(my.away)}”</span>` : my.status ? `<span class="sep">·</span><span class="st">${esc(my.status)}</span>` : ""}</button>`;
+  const st = my.presence === "away" ? `<span class="st away">“${esc(my.away)}”</span>` : my.status ? `<span class="st">${esc(my.status)}</span>` : "";
+  return `<button class="srv-you" data-edit-status="${s.id}" data-key="you-${s.id}" aria-label="You're ${esc(my.name)} on ${esc(s.name)}. Your status there: ${esc(my.status ?? "")}. Edit it"><span class="you-is">you're ${nameHTML(my)} here</span>${st ? `<span class="sep">·</span>${st}` : ""}</button>`;
+}
+
+// An open server's line: the time there, if the host set one, then you.
+function srvOpenLine(s) {
+  const t = timeThere(s);
+  return `<span class="sub-ic" aria-hidden="true">${t ? (t.night ? I.moon : I.sun) : ""}</span>${t ? `<span class="there" title="The time in ${esc(s.tz.place)}, set by the host">${esc(t.text)}</span><span class="sep">·</span>` : ""}${srvYou(s)}`;
 }
 
 function serverHTML(s) {
@@ -256,11 +314,12 @@ function serverHTML(s) {
       <button class="srv-menu-btn" data-srv-menu="${s.id}" data-key="menu-${s.id}" aria-haspopup="menu" aria-label="${esc(s.name)} options">${I.more}</button>
     </div>`;
   if (popped) {
-    return `<section class="srv popped" data-srv="${s.id}" style="${srvStyle(s)}">${head}<div class="srv-sub">${timeThereHTML(s)}${s.tz ? '<span class="sep">·</span>' : ""}in its own window</div></section>`;
+    const t = timeThere(s);
+    return `<section class="srv popped" data-srv="${s.id}" style="${srvStyle(s)}">${head}<div class="srv-sub">${subLine(t ? (t.night ? I.moon : I.sun) : "", `${t ? `${esc(t.text)}<span class="sep">·</span>` : ""}in its own window`)}</div></section>`;
   }
   return `<section class="srv ${isFolded ? "folded" : ""} ${s.quiet ? "quiet" : ""}" data-srv="${s.id}" style="${srvStyle(s)}">
     ${head}
-    <div class="srv-sub">${isFolded ? srvSummary(s) : `${timeThereHTML(s)}${s.tz ? '<span class="sep">·</span>' : ""}${srvYou(s)}`}</div>
+    <div class="srv-sub ${isFolded ? "" : "open"}">${isFolded ? srvSummary(s) : srvOpenLine(s)}</div>
     ${isFolded ? "" : `<div class="srv-body">${sectionHTML(s.id)}</div>`}
   </section>`;
 }
@@ -463,6 +522,7 @@ function closeWindow(key) {
   const last = [...wins.keys()].at(-1);
   if (last) focusWin(last);
   syncOpenRooms();
+  if (key === "settings") syncGear(false);
   // A server's own window folds back into the buddy list when it closes.
   if (key.startsWith("srv-")) {
     poppedOut.delete(key.slice(4));
@@ -564,7 +624,6 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("input, textarea")) return;
   if (e.key.toLowerCase() === "t" && !e.metaKey && !e.ctrlKey && !e.altKey) setTiled(!tiled);
   if (e.key === "Escape") {
-    if (setEl) return closeSettings(true);
     const key = document.activeElement?.closest(".win")?.dataset.key;
     // Escape closes a small window, never the whole chat window and its tabs.
     if (key && key !== "buddies" && key !== CHAT) closeWindow(key);
@@ -575,7 +634,7 @@ addEventListener("resize", () => tiled && tile(true));
 // --- the buddy list --------------------------------------------------------
 
 const collapsed = new Set(["offline", "ash:offline", "rib:offline"]);
-let selected = null;
+let cardFor = null; // whose card is open
 
 function buildBuddyList(win) {
   win.body.innerHTML = `
@@ -604,7 +663,7 @@ function buildBuddyList(win) {
     if (b.dataset.vd === "deafen") toggleDeafen();
     if (b.dataset.vd === "leave") leaveVoice();
   });
-  win.el.querySelector("#settings-btn")?.addEventListener("click", (e) => (setEl ? closeSettings() : openSettings(e.currentTarget)));
+  win.el.querySelector("#settings-btn")?.addEventListener("click", () => (settings.isOpen() && wins.get(settings.KEY).el.classList.contains("focused") ? settings.close() : settings.open()));
   renderDock();
 }
 
@@ -656,7 +715,6 @@ function renderMe() {
     el.classList.add("me-multi");
     el.innerHTML = `
       <div class="me-top">
-        <img class="me-porch" src="../shared/porch-icon.webp" alt="" />
         <div class="me-who">
           <div class="me-name">${nameHTML(me)}</div>
           <div class="me-where">${
@@ -686,7 +744,6 @@ function renderMe() {
   }
   el.innerHTML = `
     <div class="me-top">
-      <img class="me-porch" src="../shared/porch-icon.webp" alt="" />
       <div class="me-who">
         <div class="me-name">${nameHTML(me)}</div>
         <div class="me-where">${dotHTML(me, "sm")}<span class="mw-text">${away ? `away${me.since && me.since !== "now" ? ` · ${me.since}` : ""}` : me.presence === "in_room" && me.room ? `in #${me.room}` : "around"}</span></div>
@@ -729,40 +786,41 @@ function editStatus() {
   input.addEventListener("blur", () => done(true), { once: true });
 }
 
-function buddyGroups(s = "good") {
-  // Keys for the first server stay unprefixed, as they were with one server.
-  const kp = s === "good" ? "" : `${s}:`;
+// Where someone is, in a few faint words.
+const whereWords = (p) =>
+  p.presence === "in_room" ? `in #${rname(p.room)}`
+  : p.presence === "away" ? `away${p.since ? ` · ${p.since}` : ""}`
+  : p.presence === "offline" ? `last here ${p.since ?? "a while ago"}`
+  : p.presence === "idle" ? "idle"
+  : "around";
+
+// Everyone on a server, in one list: who's here first, then away, then
+// offline. Not grouped by room: the rooms above already show who's where.
+function peopleGroups(s = "good") {
   const others = peopleOf(s).filter((p) => !p.you);
-  const groups = [];
-  for (const r of roomsOf(s)) {
-    const inRoom = others.filter((p) => p.presence === "in_room" && p.room === r.id);
-    if (inRoom.length) groups.push({ key: `room-${r.id}`, room: r, people: inRoom });
-  }
-  const around = others.filter((p) => p.presence === "around" || p.presence === "idle");
-  const away = others.filter((p) => p.presence === "away");
-  const offline = others.filter((p) => p.presence === "offline");
-  if (around.length) groups.push({ key: `${kp}around`, label: "Around", people: around });
-  if (away.length) groups.push({ key: `${kp}away`, label: "Away", people: away });
-  if (offline.length) groups.push({ key: `${kp}offline`, label: "Offline", people: offline });
-  return groups;
+  const rank = (p) => (voiceRoomOf(p) ? 0 : p.presence === "in_room" ? 1 : p.presence === "around" ? 2 : 3);
+  return {
+    here: others.filter((p) => ["in_room", "around", "idle"].includes(p.presence)).sort((a, b) => rank(a) - rank(b)),
+    away: others.filter((p) => p.presence === "away"),
+    offline: others.filter((p) => p.presence === "offline"),
+  };
 }
 
 function buddyHTML(p) {
-  const glyph = glyphFor(p);
   let status;
-  if (p.presence === "away") status = `“${esc(p.away)}”<span class="since">${esc(p.since)}</span>`;
-  else if (p.presence === "offline") status = `${p.away ? `“${esc(p.away)}”` : "offline"}<span class="since">${esc(p.since)}</span>`;
+  if (p.presence === "away") status = `“${esc(p.away)}”`;
+  else if (p.presence === "offline") status = p.away ? `“${esc(p.away)}”` : "";
   else status = esc(p.status ?? "");
-  const where = p.presence === "in_room" ? `in #${p.room}` : p.presence;
+  // Every row keeps its second line, so the list has one rhythm.
+  status ||= "&nbsp;";
   return `
-    <li class="buddy p-${p.presence} ${selected === p.id ? "selected" : ""} ${life.state.knocked === p.id ? "knocking" : ""}" data-person="${p.id}">
-      <button class="buddy-main" data-key="buddy-${p.id}" aria-label="${esc(p.name)}, ${where}${p.voice ? ", in voice" : ""}. ${p.presence === "away" ? "Away: " + esc(p.away) : esc(p.status ?? "")}. Press Enter to message">
-        ${dotHTML(p)}
+    <li class="buddy p-${p.presence} ${cardFor === p.id ? "selected" : ""} ${life.state.knocked === p.id ? "knocking" : ""}" data-person="${p.id}">
+      <button class="buddy-main" data-key="buddy-${p.id}" aria-haspopup="dialog" aria-expanded="${cardFor === p.id}" aria-label="${esc(p.name)}, ${esc(whereWords(p))}${p.voice ? ", in voice" : ""}. ${p.presence === "away" ? "Away: " + esc(p.away) : esc(p.status ?? "")}. Open their card">
+        ${slotHTML([p])}
         <span class="buddy-text">
-          <span class="buddy-name">${nameHTML(p)}${voiceMark(p)}</span>
+          <span class="buddy-top"><span class="buddy-name">${nameHTML(p)}${voiceMark(p)}</span><span class="buddy-where">${esc(whereWords(p))}</span></span>
           <span class="buddy-status">${status}</span>
         </span>
-        <span class="buddy-glyph" ${glyph ? `title="${esc(glyph[1])}"` : ""}>${glyph ? glyph[0] : ""}</span>
       </button>
       <span class="buddy-actions">
         <button class="act" data-act="knock" data-key="knock-${p.id}" aria-label="Knock on ${esc(p.name)}'s door" title="Knock">${I.knock}</button>
@@ -772,51 +830,58 @@ function buddyHTML(p) {
     </li>`;
 }
 
-// One server's people, rooms and DMs. With one server this is the whole list.
+// A room row: the activity view. Who's in it, and whether voice is on.
+function roomRowHTML(r) {
+  const here = people.filter((p) => p.presence === "in_room" && p.room === r.id);
+  const talking = people.filter((p) => voiceRoomOf(p) === r.id);
+  const mine = myVoiceRoom() === r.id;
+  return `<li><button class="room-row ${r.fresh ? "fresh" : ""} ${convOpen(r.id) ? "open" : ""} ${talking.length ? "voiced" : ""}" data-room="${r.id}" data-key="room-${r.id}" aria-label="#${esc(r.name)}${r.fresh ? ", something new" : ""}${here.length ? ", " + here.map((p) => p.name).join(", ") + " in it" : ", nobody in"}${talking.length ? ", voice is on" : ""}">
+    <span class="pm-slot hash" aria-hidden="true">#</span><span class="room-name">${esc(r.name)}</span>
+    <span class="room-dots">${talking.length ? `<span class="vo room-vo ${mine ? "mine" : ""}" data-speak-room="${r.id}" title="${mine ? "You're in voice here" : "Voice is on"}">${I.speaker}<span class="bars"><i></i><i></i><i></i></span></span>` : ""}${here.map((p) => dotHTML(p, "sm")).join("")}</span>
+  </button></li>`;
+}
+
+// Away and Offline inside People: the same small heading, the same caret.
+// Away starts open, Offline folded; a folded one says "show".
+function subGroup(key, label, list) {
+  const open = !collapsed.has(key);
+  return `<button class="sub-h sub-toggle ${open ? "" : "folded"}" data-group="${key}" data-key="group-${key}" aria-expanded="${open}">${I.caret.replace("<svg", '<svg class="caret"')}${label}<span class="sub-hint">${open ? "hide" : "show"}</span></button>
+    ${open ? `<ul class="plist">${list.map(buddyHTML).join("")}</ul>` : ""}`;
+}
+
+const groupHead = (key, label, extra = "") =>
+  `<div class="group-hd"><button class="group-h" data-group="${key}" data-key="group-${key}" aria-expanded="${!collapsed.has(key)}">${I.caret.replace("<svg", '<svg class="caret"')}${label}</button>${extra}</div>`;
+
+// One server's rooms, DMs and people. With one server this is the whole list.
 function sectionHTML(s = "good") {
   const kp = s === "good" ? "" : `${s}:`;
-  const groups = buddyGroups(s);
-  const inVoice = (r) => people.some((p) => voiceRoomOf(p) === r.id);
-  return (
-    groups
-      .map((g) => {
-        const open = !collapsed.has(g.key);
-        const label = g.room
-          ? `In <span class="room-link">#${esc(g.room.name)}</span>${inVoice(g.room) ? `<span class="voice-tag">${I.speaker}talking</span>` : ""}`
-          : g.label;
-        return `
-        <section class="group" ${open ? "" : "data-collapsed"}>
-          <button class="group-h" data-group="${g.key}" data-key="group-${g.key}" aria-expanded="${open}">${I.caret.replace("<svg", '<svg class="caret"')}${label}</button>
-          <ul>${g.people.map(buddyHTML).join("")}</ul>
-        </section>`;
-      })
-      .join("") +
-    `<section class="rooms">
-      <button class="group-h" data-group="${kp}rooms" data-key="group-${kp}rooms" aria-expanded="${!collapsed.has(`${kp}rooms`)}">${I.caret.replace("<svg", '<svg class="caret"')}Rooms</button>
-      <ul ${collapsed.has(`${kp}rooms`) ? "hidden" : ""}>${roomsOf(s)
-        .map((r) => {
-          const here = people.filter((p) => p.presence === "in_room" && p.room === r.id);
-          return `<li><button class="room-row ${r.fresh ? "fresh" : ""} ${convOpen(r.id) ? "open" : ""}" data-room="${r.id}" data-key="room-${r.id}" aria-label="#${esc(r.name)}${r.fresh ? ", something new" : ""}${here.length ? ", " + here.map((p) => p.name).join(", ") + " in it" : ""}">
-            <span class="hash" aria-hidden="true">#</span><span class="room-name">${esc(r.name)}</span>
-            <span class="room-dots">${inVoice(r) ? I.speaker : ""}${here.map((p) => dotHTML(p, "sm")).join("")}</span>
-          </button></li>`;
-        })
-        .join("")}</ul>
+  const g = peopleGroups(s);
+  const dmRows = dmsOf(s)
+    .map((d) => {
+      const others = d.members.filter((id) => !byId[id].you).map((id) => byId[id]);
+      return `<li><button class="room-row dm-row ${d.fresh ? "fresh" : ""} ${convOpen(d.id) ? "open" : ""}" data-room="${d.id}" data-key="room-${d.id}" aria-label="DM with ${esc(dmTitle(d))}${d.fresh ? ", something new" : ""}">
+        ${slotHTML(others)}
+        <span class="room-name">${esc(dmTitle(d))}</span>
+      </button></li>`;
+    })
+    .join("");
+  return `
+    <section class="rooms lead">
+      ${groupHead(`${kp}rooms`, "Rooms")}
+      <ul ${collapsed.has(`${kp}rooms`) ? "hidden" : ""}>${roomsOf(s).map(roomRowHTML).join("")}</ul>
     </section>
-    <section class="rooms">
-      <button class="group-h" data-group="${kp}dms" data-key="group-${kp}dms" aria-expanded="${!collapsed.has(`${kp}dms`)}">${I.caret.replace("<svg", '<svg class="caret"')}DMs</button>
-      <ul ${collapsed.has(`${kp}dms`) ? "hidden" : ""}>${dmsOf(s)
-        .map((d) => {
-          const others = d.members.filter((id) => !byId[id].you).map((id) => byId[id]);
-          return `<li><button class="room-row ${d.fresh ? "fresh" : ""} ${convOpen(d.id) ? "open" : ""}" data-room="${d.id}" data-key="room-${d.id}" aria-label="DM with ${esc(dmTitle(d))}${d.fresh ? ", something new" : ""}">
-            <span class="room-dots" style="width:12px;justify-content:center">${others.length > 1 ? "" : dotHTML(others[0], "sm")}</span>
-            <span class="room-name">${esc(dmTitle(d))}</span>
-            <span class="room-dots">${others.length > 1 ? others.map((p) => dotHTML(p, "sm")).join("") : ""}</span>
-          </button></li>`;
-        })
-        .join("")}</ul>
-    </section>`
-  );
+    <section class="rooms dms">
+      ${groupHead(`${kp}dms`, "DMs", `<button class="hd-btn" data-new-dm="${s}" data-key="newdm-${s}" aria-label="New message${MULTI ? ` on ${esc(srvById[s].name)}` : ""}" title="New message">${I.compose}</button>`)}
+      <ul ${collapsed.has(`${kp}dms`) ? "hidden" : ""}>${dmRows || `<li class="dm-empty">No DMs yet.</li>`}</ul>
+    </section>
+    <section class="people">
+      ${groupHead(`${kp}people`, "People")}
+      <div class="people-body" ${collapsed.has(`${kp}people`) ? "hidden" : ""}>
+        <ul class="plist">${g.here.map(buddyHTML).join("")}</ul>
+        ${g.away.length ? subGroup(`${kp}away`, "Away", g.away) : ""}
+        ${g.offline.length ? subGroup(`${kp}offline`, "Offline", g.offline) : ""}
+      </div>
+    </section>`;
 }
 
 function paintList(scroll, html) {
@@ -829,7 +894,7 @@ function paintList(scroll, html) {
 
 function renderList() {
   const scroll = document.getElementById("bl-scroll");
-  if (scroll) paintList(scroll, MULTI ? serversHTML() : `${sectionHTML()}\n    <p class="bl-hint">Double-click a friend to talk.</p>`);
+  if (scroll) paintList(scroll, MULTI ? serversHTML() : sectionHTML());
   for (const id of poppedOut) {
     const win = wins.get(`srv-${id}`);
     if (!win) continue;
@@ -862,6 +927,8 @@ function onListClick(e) {
     renderList();
     return;
   }
+  const nd = e.target.closest("[data-new-dm]");
+  if (nd) return openNewDM(nd.dataset.newDm);
   const act = e.target.closest("[data-act]");
   if (act) {
     const id = act.closest(".buddy").dataset.person;
@@ -873,11 +940,10 @@ function onListClick(e) {
   if (room) return openConversation(room.dataset.room);
   const main = e.target.closest(".buddy-main");
   if (main) {
+    // Click or Enter: their card, with Message and Knock on it. A second
+    // click puts it away; a double-click goes straight to a DM.
     const id = main.closest(".buddy").dataset.person;
-    // A keyboard press arrives as a click with no pointer detail: open the DM.
-    if (e.detail === 0) return openDMWith(id);
-    selected = selected === id ? null : id;
-    for (const li of document.querySelectorAll(".buddy")) li.classList.toggle("selected", li.dataset.person === selected);
+    return cardFor === id ? closeCard() : openCard(id, main);
   }
 }
 
@@ -912,7 +978,220 @@ function editSrvStatus(btn, id) {
 
 function onListDblClick(e) {
   const main = e.target.closest(".buddy-main");
-  if (main) openDMWith(main.closest(".buddy").dataset.person);
+  if (!main) return;
+  closeCard();
+  openDMWith(main.closest(".buddy").dataset.person);
+}
+
+// --- a person's card ------------------------------------------------------
+//
+// Everything about them in one place, and the two things you can do: message
+// them, or knock. It opens beside the list, from a click or Enter on their row.
+
+let cardEl = null;
+let cardAnchor = null;
+
+function openCard(id, anchor) {
+  closeCard();
+  cardFor = id;
+  cardAnchor = anchor;
+  cardEl = document.createElement("div");
+  cardEl.className = "pcard";
+  cardEl.setAttribute("role", "dialog");
+  document.body.append(cardEl);
+  renderCard();
+  placeCard();
+  for (const li of document.querySelectorAll(".buddy")) li.classList.toggle("selected", li.dataset.person === id);
+  anchor?.setAttribute("aria-expanded", "true");
+  cardEl.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pc]");
+    if (!b || b.disabled) return;
+    if (b.dataset.pc === "close") return closeCard(true);
+    if (b.dataset.pc === "knock") return life.knock(id);
+    if (b.dataset.pc === "message") {
+      closeCard();
+      openDMWith(id);
+    }
+  });
+  cardEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      closeCard(true);
+    }
+  });
+  if (!still) cardEl.querySelector("[data-pc=message]")?.focus({ preventScroll: true });
+}
+
+function placeCard() {
+  if (!cardEl || !cardAnchor) return;
+  const list = cardAnchor.closest(".win") ?? wins.get("buddies")?.el;
+  const lr = list.getBoundingClientRect();
+  const rr = cardAnchor.getBoundingClientRect();
+  const w = cardEl.offsetWidth;
+  const h = cardEl.offsetHeight;
+  const right = lr.right + 10 + w < innerWidth - 8;
+  cardEl.style.left = `${right ? lr.right + 10 : lr.left - w - 10}px`;
+  cardEl.style.top = `${Math.max(44, Math.min(rr.top - 10, innerHeight - h - 12))}px`;
+  cardEl.classList.toggle("from-left", !right);
+}
+
+function renderCard() {
+  if (!cardEl || !cardFor) return;
+  const p = byId[cardFor];
+  const knocked = life.state.knocked === p.id;
+  const offline = p.presence === "offline";
+  const lines = [
+    p.listening && [I.note, "listening to", p.listening],
+    p.reading && [I.book, "reading", p.reading],
+    p.working && [I.pencil, "working on", p.working],
+  ].filter(Boolean);
+  const said = p.presence === "away" || offline ? p.away : p.status;
+  cardEl.setAttribute("aria-label", `${p.name}'s card`);
+  cardEl.style.setProperty("--c", color(p.color));
+  cardEl.innerHTML = `
+    <div class="pc-top">
+      ${dotHTML(p)}
+      <span class="pc-name">${nameHTML(p)}</span>${voiceMark(p)}
+      <button class="win-btn pc-x" data-pc="close" aria-label="Close ${esc(p.name)}'s card">${I.close}</button>
+    </div>
+    <div class="pc-where">${esc(whereWords(p))}${voiceRoomOf(p) ? " · in voice" : ""}${MULTI ? srvTag(p.id) : ""}</div>
+    ${said ? `<p class="pc-said ${p.presence === "away" || offline ? "away" : ""}" style="font-family:'${p.font}',var(--sans);font-style:${p.style ?? "normal"}">${p.presence === "away" || offline ? `${I.moon.replace("<svg", '<svg class="pc-moon"')}` : ""}${esc(said)}</p>` : ""}
+    ${lines.length ? `<ul class="pc-lines">${lines.map(([icon, what, v]) => `<li>${icon}<span class="pc-what">${what}</span><span>${esc(v)}</span></li>`).join("")}</ul>` : ""}
+    <div class="pc-btns">
+      <button class="pill-btn lamp" data-pc="message">${I.message}<span>Message</span></button>
+      <button class="pill-btn ${knocked ? "knocked" : ""}" data-pc="knock" ${offline ? `disabled title="They're offline, so a knock can't reach them."` : `title="A soft knock. Nothing to answer, nothing left behind."`}>${I.knock}<span>${knocked ? "knocked" : "Knock"}</span></button>
+    </div>`;
+  syncSpeaking();
+}
+
+function closeCard(refocus = false) {
+  if (!cardEl) return;
+  cardEl.remove();
+  cardEl = null;
+  const id = cardFor;
+  cardFor = null;
+  for (const li of document.querySelectorAll(".buddy.selected")) li.classList.remove("selected");
+  cardAnchor?.setAttribute("aria-expanded", "false");
+  if (refocus) document.querySelector(`[data-key="buddy-${CSS.escape(id)}"]`)?.focus();
+  cardAnchor = null;
+}
+document.addEventListener("pointerdown", (e) => {
+  if (cardEl && !cardEl.contains(e.target) && !e.target.closest(".buddy-main")) closeCard();
+});
+
+// --- a new message ----------------------------------------------------------
+//
+// Pick one to seven people from this server (a DM is two to eight, you
+// included). The same people twice opens the same DM (SPEC §4.13).
+
+function openNewDM(srv = "good", preset = []) {
+  const picked = new Set(preset);
+  let query = "";
+  const s = srvById[srv];
+  const me_ = meOf(srv);
+  const list = wins.get("buddies")?.el.getBoundingClientRect();
+  closeWindow("new-dm");
+  openWindow("new-dm", {
+    title: `${I.compose.replace("<svg", '<svg width="15" height="15" style="color:var(--ink-3)"')}<span>New message</span>${MULTI ? `<span class="srv-tag" style="${srvStyle(s)}"><i aria-hidden="true"></i>${esc(s.name)}</span>` : ""}`,
+    label: "New message",
+    kind: "newdm",
+    x: list ? Math.round(list.right) + 14 : 360, y: 70, w: 380, h: 560,
+    build(win) {
+      win.el.style.setProperty("--acc", color(s.accent));
+      const paint = () => {
+        const q = query.trim().toLowerCase();
+        const pool = peopleOf(srv).filter((p) => !p.you);
+        const rank = (p) => (["in_room", "around", "idle"].includes(p.presence) ? 0 : p.presence === "away" ? 1 : 2);
+        const shown = pool.filter((p) => !q || p.name.toLowerCase().includes(q)).sort((a, b) => rank(a) - rank(b));
+        const full = picked.size >= 7;
+        const chosen = [...picked].map((id) => byId[id]);
+        const existing = picked.size ? findDM(srv, [...picked]) : null;
+        const names = chosen.map((p) => p.name);
+        const who = names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+        win.body.innerHTML = `
+          <div class="ndm">
+            <div class="ndm-to">
+              <span class="ndm-l">To</span>
+              ${chosen.map((p) => `<button class="ndm-chip" data-unpick="${p.id}" aria-label="Remove ${esc(p.name)}">${dotHTML(p, "sm")}${nameHTML(p)}${I.close.replace("<svg", '<svg class="x"')}</button>`).join("")}
+              <input class="ndm-find" placeholder="${chosen.length ? "Add someone" : "Find people"}" aria-label="Find people on ${esc(s.name)}" value="${esc(query)}" />
+            </div>
+            <ul class="ndm-list" role="listbox" aria-multiselectable="true" aria-label="People on ${esc(s.name)}">${
+              shown.length
+                ? shown
+                    .map((p) => {
+                      const on = picked.has(p.id);
+                      const line = p.presence === "away" || p.presence === "offline" ? (p.away ? `“${esc(p.away)}”` : "") : esc(p.status ?? "");
+                      return `<li><button class="ndm-p ${on ? "on" : ""}" role="option" aria-selected="${on}" data-pick="${p.id}" ${!on && full ? "disabled" : ""}>
+                        ${slotHTML([p])}
+                        <span class="ndm-t"><span class="ndm-n">${nameHTML(p)}<span class="buddy-where">${esc(whereWords(p))}</span></span><span class="ndm-s">${line || "&nbsp;"}</span></span>
+                        <span class="ndm-check">${on ? I.check : ""}</span>
+                      </button></li>`;
+                    })
+                    .join("")
+                : `<li class="ndm-none">Nobody here by that name.</li>`
+            }</ul>
+            <div class="ndm-foot">
+              <p class="ndm-say">${
+                !picked.size
+                  ? "Pick one person, or up to seven for a group."
+                  : existing
+                    ? `You already have a DM with ${esc(who)}. It opens where you left off.`
+                    : `A new DM with ${esc(who)}${MULTI && srv !== "good" ? `, as ${esc(me_.name)}` : ""}.`
+              }${full ? " That's everyone a DM can hold: eight, you included. A bigger group is a room." : ""}</p>
+              <div class="away-actions"><button class="pill-btn" data-ndm="cancel">Cancel</button><button class="pill-btn lamp" data-ndm="go" ${picked.size ? "" : "disabled"}>${I.message}<span>${existing ? "Open the DM" : "Start the DM"}</span></button></div>
+            </div>
+          </div>`;
+        const input = win.body.querySelector(".ndm-find");
+        input.addEventListener("input", () => {
+          query = input.value;
+          const at = input.selectionStart;
+          paint();
+          const again = win.body.querySelector(".ndm-find");
+          again.focus();
+          again.setSelectionRange(at, at);
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const first = win.body.querySelector(".ndm-p:not([disabled]):not(.on)");
+            if (query && first) {
+              picked.add(first.dataset.pick);
+              query = "";
+              paint();
+              win.body.querySelector(".ndm-find").focus();
+            } else if (picked.size) go();
+          }
+          if (e.key === "Backspace" && !input.value && picked.size) {
+            picked.delete([...picked].at(-1));
+            paint();
+            win.body.querySelector(".ndm-find").focus();
+          }
+        });
+      };
+      const go = () => {
+        if (!picked.size) return;
+        closeWindow("new-dm");
+        openDMFor(srv, [...picked]);
+      };
+      win.body.addEventListener("click", (e) => {
+        const pick = e.target.closest("[data-pick]");
+        if (pick && !pick.disabled) {
+          const id = pick.dataset.pick;
+          picked.has(id) ? picked.delete(id) : picked.add(id);
+          return paint();
+        }
+        const un = e.target.closest("[data-unpick]");
+        if (un) {
+          picked.delete(un.dataset.unpick);
+          return paint();
+        }
+        const b = e.target.closest("[data-ndm]");
+        if (b?.dataset.ndm === "cancel") closeWindow("new-dm");
+        if (b?.dataset.ndm === "go") go();
+      });
+      paint();
+      if (!still) win.body.querySelector(".ndm-find")?.focus();
+    },
+  });
 }
 
 function syncOpenRooms() {
@@ -922,12 +1201,21 @@ function syncOpenRooms() {
 // --- conversations ---------------------------------------------------------
 
 function openDMWith(id) {
-  let dm = dms.find((d) => d.members.length === 2 && d.members.includes(id));
+  openDMFor(srvOf(id), [id]);
+}
+
+// Asking for the same set of people again gives the same DM (SPEC §4.13). A
+// DM belongs to the server all of you are on, as whoever you are there.
+function findDM(srv, ids) {
+  const want = [meOf(srv).id, ...ids].sort().join(",");
+  return dms.find((d) => srvOf(d.id) === srv && [...d.members].sort().join(",") === want) ?? null;
+}
+
+function openDMFor(srv, ids) {
+  let dm = findDM(srv, ids);
   if (!dm) {
-    // Asking for the same set of people again gives the same DM (SPEC §4.13).
-    // A DM belongs to the server both of you are on, as whoever you are there.
-    const s = srvOf(id);
-    dm = s === "good" ? { id: `dm-${id}`, members: [me.id, id] } : { id: `${s}:dm-${id.split(":")[1]}`, members: [meOf(s).id, id] };
+    const short = ids.map((id) => (id.includes(":") ? id.split(":")[1] : id)).sort().join("-");
+    dm = { id: srv === "good" ? `dm-${short}` : `${srv}:dm-${short}`, members: [meOf(srv).id, ...ids] };
     dms.push(dm);
     messages[dm.id] ??= [];
     renderList();
@@ -1512,72 +1800,18 @@ function setMode(next) {
   }
   document.documentElement.classList.toggle("tabs-mode", mode === "tabs");
   renderList();
-  renderSettings();
+  settings?.paint();
 }
 
 // --- settings --------------------------------------------------------------
+//
+// Its own window, built in settings.js. It's created further down, once
+// everything it reaches for exists.
 
-let setEl = null;
-let setBtn = null;
-
-const tabsArt = `<svg viewBox="0 0 44 30" aria-hidden="true"><rect x="1" y="5" width="42" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1 10h42" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="1.5" width="12" height="8.5" rx="2" fill="currentColor" opacity=".9"/><rect x="16.5" y="3" width="10" height="7" rx="2" fill="currentColor" opacity=".35"/><rect x="28" y="3" width="10" height="7" rx="2" fill="currentColor" opacity=".35"/><path d="M6 15h22M6 19h28M6 23h16" stroke="currentColor" stroke-width="1.3" opacity=".5" stroke-linecap="round"/></svg>`;
-const winsArt = `<svg viewBox="0 0 44 30" aria-hidden="true"><rect x="1" y="1" width="12" height="28" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="15" y="1" width="13" height="28" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="30" y="1" width="13" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="30" y="16" width="13" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M15 5.5h13M30 5.5h13M30 20.5h13M1 5.5h12" stroke="currentColor" stroke-width="1.2" opacity=".6"/><circle cx="4.5" cy="10" r="1.2" fill="currentColor" opacity=".7"/><circle cx="4.5" cy="14" r="1.2" fill="currentColor" opacity=".7"/></svg>`;
-
-function openSettings(btn) {
-  closeSettings();
-  setBtn = btn;
-  setEl = document.createElement("div");
-  setEl.className = "set-pop";
-  setEl.setAttribute("role", "dialog");
-  setEl.setAttribute("aria-label", "Settings");
-  setEl.innerHTML = `
-    <div class="sp-h">${I.gear}<span>Settings</span></div>
-    <fieldset class="sp-group">
-      <legend>Conversations open</legend>
-      <label class="sp-opt">
-        <input type="radio" name="conv-mode" value="tabs" />
-        <span class="sp-art">${tabsArt}</span>
-        <span class="sp-text"><b>As tabs in one window</b><small>Good on any desktop. Pop a tab out when you want two side by side.</small></span>
-      </label>
-      <label class="sp-opt">
-        <input type="radio" name="conv-mode" value="windows" />
-        <span class="sp-art">${winsArt}</span>
-        <span class="sp-text"><b>Each in its own window</b><small>Good on a tiling desktop like Omarchy, which lays them out for you.</small></span>
-      </label>
-    </fieldset>
-    <p class="sp-note">${I.speaker}<span>Voice stays on when you switch tabs or close a window. Mute, deafen and leave are in the voice bar at the bottom of your list.</span></p>`;
-  document.body.append(setEl);
-  const r = btn.getBoundingClientRect();
-  setEl.style.left = `${Math.max(10, Math.min(r.left - 12, innerWidth - 340))}px`;
-  setEl.style.top = `${r.bottom + 8}px`;
-  renderSettings();
-  setEl.addEventListener("change", (e) => {
-    if (e.target.name === "conv-mode") setMode(e.target.value);
-  });
-  setEl.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      closeSettings(true);
-    }
-  });
-  btn.setAttribute("aria-expanded", "true");
-  setEl.querySelector("input:checked")?.focus();
+let settings = null;
+function syncGear(on) {
+  document.getElementById("settings-btn")?.setAttribute("aria-expanded", String(on));
 }
-
-function renderSettings() {
-  if (!setEl) return;
-  for (const input of setEl.querySelectorAll("input[name=conv-mode]")) input.checked = input.value === mode;
-}
-
-function closeSettings(refocus = false) {
-  setEl?.remove();
-  setEl = null;
-  setBtn?.setAttribute("aria-expanded", "false");
-  if (refocus) setBtn?.focus();
-}
-document.addEventListener("pointerdown", (e) => {
-  if (setEl && !setEl.contains(e.target) && !e.target.closest("#settings-btn")) closeSettings();
-});
 
 // --- small windows ---------------------------------------------------------
 
@@ -1711,19 +1945,17 @@ function openSearch() {
 
 // --- door toasts and sounds ------------------------------------------------
 
+// Both live in Settings → Sound & Voice. Arrival cards are on and door sounds
+// are off until you turn them on.
 let sounds = false;
+let cards = true;
 let audio = null;
-document.getElementById("sounds").addEventListener("click", (e) => {
-  sounds = !sounds;
-  e.currentTarget.setAttribute("aria-pressed", String(sounds));
-  if (sounds) chime();
-});
 
-function chime() {
-  if (!sounds) return;
+function chime(force = false, notes = [659.25, 880]) {
+  if (!sounds && !force) return;
   audio ??= new AudioContext();
   const t = audio.currentTime;
-  for (const [i, f] of [[0, 659.25], [1, 880]]) {
+  for (const [i, f] of notes.map((f, i) => [i, f])) {
     const o = audio.createOscillator();
     const g = audio.createGain();
     o.type = "sine";
@@ -1737,7 +1969,14 @@ function chime() {
   }
 }
 
-function toast(html, { icon = I.door, stay = false, srv = null } = {}) {
+// A short preview for Settings' Play buttons: always sounds, whatever the switches say.
+const PREVIEWS = { door: [659.25, 880], voice: [523.25, 659.25], controls: [784], dms: [880, 1046.5], rooms: [698.46], knocks: [392, 392] };
+function preview(kind) {
+  chime(true, PREVIEWS[kind] ?? PREVIEWS.door);
+}
+
+function toast(html, { icon = I.door, stay = false, srv = null, arrival = false } = {}) {
+  if (arrival && !cards) return;
   const el = document.createElement("div");
   el.className = "toast";
   const s = MULTI && srv ? srvById[srv] : null;
@@ -1792,13 +2031,14 @@ function onLife(type, d) {
     }
     renderTabs();
     renderDock();
+    if (cardFor === p.id) renderCard();
     // A quiet server shows no arrival cards.
     if (!p.you && !srvById[srvOf(p.id)].quiet) {
       const srv = srvOf(p.id);
-      if (p.presence === "in_room" && d.from !== "in_room") toast(`${nameHTML(p)} came into <b>#${esc(rname(p.room))}</b>`, { srv });
-      else if (p.presence === "in_room") toast(`${nameHTML(p)} went over to <b>#${esc(rname(p.room))}</b>`, { srv });
-      else if (p.presence === "around" && d.from === "away") toast(`${nameHTML(p)} is back`, { icon: I.sun, srv });
-      else if (p.presence === "away") toast(`${nameHTML(p)} stepped away`, { icon: I.moon, srv });
+      if (p.presence === "in_room" && d.from !== "in_room") toast(`${nameHTML(p)} came into <b>#${esc(rname(p.room))}</b>`, { srv, arrival: true });
+      else if (p.presence === "in_room") toast(`${nameHTML(p)} went over to <b>#${esc(rname(p.room))}</b>`, { srv, arrival: true });
+      else if (p.presence === "around" && d.from === "away") toast(`${nameHTML(p)} is back`, { icon: I.sun, srv, arrival: true });
+      else if (p.presence === "away") toast(`${nameHTML(p)} stepped away`, { icon: I.moon, srv, arrival: true });
     }
   }
   if (type === "voice") {
@@ -1815,6 +2055,7 @@ function onLife(type, d) {
   if (type === "knock" || type === "knock-reset") {
     for (const li of document.querySelectorAll(`.buddy[data-person="${d.id}"]`)) li.classList.toggle("knocking", type === "knock");
     for (const key of openConvIds()) renderInfo(key);
+    if (cardFor === d.id) renderCard();
   }
   if (type === "enter") {
     renderList();
@@ -1822,6 +2063,53 @@ function onLife(type, d) {
   }
 }
 life.on(onLife);
+
+// --- settings, wired to everything above ------------------------------------
+
+// Everything that shows a name, drawn again: after you save a new look, or
+// turn plain names on or off.
+function refreshAll() {
+  renderMe();
+  renderList();
+  for (const id of openConvIds()) {
+    renderStream(id);
+    renderVoice(id);
+    renderTyping(id);
+    if (!rooms.some((r) => r.id === id)) renderInfo(id);
+  }
+  renderTabs();
+  renderDock();
+  renderCard();
+}
+
+settings = createSettings({
+  I, esc, nameHTML, color, dotHTML, MULTI,
+  me, people, rooms, srvOf, order, srvById, meOf, timeThere, poppedOut,
+  hostServer: srvById.good,
+  setQuiet, popOut, popIn, renderList, openAddServer, refreshAll,
+  getMode: () => mode,
+  setMode,
+  getCards: () => cards,
+  setCards: (on) => (cards = on),
+  getDoor: () => sounds,
+  setDoor: (on) => (sounds = on),
+  preview,
+  now: () => life.now(),
+  isPlain: () => document.documentElement.classList.contains("plain"),
+  setPlain: (on) => {
+    document.documentElement.classList.toggle("plain", on);
+    refreshAll();
+  },
+  wins, openWindow, closeWindow, focusWin, deskRect, syncGear,
+});
+
+// Ctrl+, opens Settings, as it does in most desktop apps.
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+    e.preventDefault();
+    settings.open();
+  }
+});
 
 // --- first paint -----------------------------------------------------------
 
@@ -1834,14 +2122,14 @@ setInterval(clock, 15000);
 
 const { w: DW, h: DH } = deskRect();
 openWindow("buddies", {
-  title: `<img class="app-icon" src="../shared/porch-icon.webp" alt="" /><span>${MULTI ? "Linger" : esc(server.name)}</span>`,
+  title: `${markHTML(MARK)}<span class="bl-title">${MULTI ? "Linger" : esc(server.name)}</span>`,
   label: "Buddy list",
   kind: "buddies",
   // A little wider with several servers, so a folded server's line fits.
   x: MULTI ? 22 : 28, y: 22, w: MULTI ? 322 : 304, h: Math.min(DH - 76, 820),
   build: buildBuddyList,
   focus: false,
-  extra: `<button class="win-btn" id="settings-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings" title="Settings">${I.gear}</button>`,
+  extra: `<button class="win-btn gear" id="settings-btn" aria-expanded="false" aria-label="Settings" title="Settings (Ctrl+,)">${I.gear}</button>`,
 });
 if (mode === "tabs") {
   // One chat window beside the list, holding what would have been two windows.
@@ -1917,10 +2205,11 @@ window.lab = {
     collapsed.delete(key);
     renderList();
   },
-  select: (id) => {
-    selected = id;
-    renderList();
-  },
+  // A person's card, as if their row were clicked.
+  card: (id) => openCard(id, document.querySelector(`[data-key="buddy-${CSS.escape(id)}"]`)),
+  select: (id) => openCard(id, document.querySelector(`[data-key="buddy-${CSS.escape(id)}"]`)),
+  closeCard,
+  newDM: (srv = "good", preset = []) => openNewDM(srv, preset),
   focus: focusWin,
   place: (key, box) => {
     const win = wins.get(key);
@@ -1950,8 +2239,8 @@ window.lab = {
   popIn,
   // Tabs and voice.
   mode: setMode,
-  settings: () => openSettings(document.getElementById("settings-btn")),
-  closeSettings,
+  settings: (section) => settings.open(section),
+  closeSettings: () => settings.close(),
   openTab: (id) => {
     ensureChat();
     addTab(id);

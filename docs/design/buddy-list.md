@@ -10,13 +10,28 @@ dropped. This page and the prototype in `client/prototypes/` are what is left.
 
 ![The list and two conversations](buddy-list/buddy-list-1-desktop.webp)
 
+## Agreed on 2026-09-25
+
+- **Keep the prototype's look and feel exactly:** the colors, type and spacing,
+  and how fast and snappy it feels.
+- **The buddy list is the app.** It is Linger's own window, not a page in a
+  browser. Conversations are real windows, or tabs in one.
+- **Linger draws its own title bars in every window,** so the look is the same
+  everywhere. The operating system still moves, snaps, resizes and tiles them.
+- **Tabs are the default everywhere, Hyprland included.** The first room you
+  open gets a chat window, which Hyprland tiles beside your list. The rooms you
+  open after that join it as tabs. Any tab can be popped out into its own
+  window. "Each in its own window" is a setting you turn on.
+- **Linux and Windows first.** No Mac version for now.
+- **No avatars.** Nobody has a picture, you included. Identity is the styled
+  name and the colored dot.
+
 ## The idea
 
 Eight friends don't need Discord's four columns; they need a buddy list. The
 spec already calls name styling "the AIM feature" and the status "the AIM away
 message". This goes all the way: the main window is a tall list of your
-friends, and conversations open beside it, as tabs in one window or each in
-its own window.
+friends, and conversations open beside it.
 
 It fits either way of working. Keep it minimal, with one slim list at the edge
 of the screen, or fill the screen with rooms side by side.
@@ -40,10 +55,13 @@ Add these to the address to change how it starts:
 | `?tabs` | conversations as tabs in one window |
 | `?servers` | the list for somebody on three servers |
 | `?tabs&servers` | both |
+| `?mark=l`, `dots`, `lamp`, `word` | the placeholder small-logo options (below) |
 | `?still` | one frozen moment, for screenshots |
 
-The gear at the top of the list switches between tabs and windows, and a
-dashed prototype-only switch in the top bar toggles one server or three.
+The gear at the top of the list opens Settings (Ctrl+, does too). The bar
+across the top of the page stands in for your desktop's own bar, such as
+Waybar. Its dashed group holds the prototype-only controls: one server or
+three, and Tile.
 
 ## The look
 
@@ -54,30 +72,92 @@ It takes its colors from the logo, a lamp-lit porch at night:
   and "you left off here".
 - **Cyan:** a faint outline on the focused window, like the logo's sign.
 - **Labels:** Departure Mono.
-- **The top bar:** Silkscreen, the logo's pixel face.
 - **Message text:** always a plain sans.
 
-People are colored dots in their own palette color, next to names in their own
-styling.
+People show a marker in their own palette color, next to their name in its
+own styling. There's one marker per state, all the same size:
+
+- **here:** a solid dot;
+- **away:** a small crescent moon;
+- **offline:** the dot, dimmed.
+
+The words ("away", "last here yesterday") are in the row and in tooltips and
+screen-reader labels, so nothing relies on the shape or the color alone.
+
+Every row in the list shares one marker column: a room's `#`, a DM's people,
+a person's marker. So names line up down the whole list. A group DM's people
+share that column too, arranged inside it. Rows have a fixed line height, so a
+name set in a big serif or a small pixel face never changes the spacing.
+
+**The small mark is a placeholder.** The porch picture could not be read at the
+16–20px it gets beside the server name, so four pixel-drawn options were tried:
+
+- a pixel "L" on the logo's night panel, with a cyan border (the default);
+- the logo's three dots;
+- the porch lamp;
+- the word "Linger" in the logo's pixel face.
+
+Matt didn't like any of them (2026-09-25), and the small logo gets redesigned
+later. The "L" stays in as a stand-in, and `?mark=` still switches between the
+four.
 
 ## The buddy list
 
-- **You are at the top:** your styled name, your status (click to edit), and an
-  **Away** button. It opens an AIM-style away-message editor with saved
-  presets.
-- **Friends are grouped by where they are:** In #general, In #listening-room,
-  Around, Away, Offline.
-  - There are no counts in the headings.
-  - Away messages show in full; in this design they are the stars.
-  - Offline starts folded.
-- **Hover a friend** for Knock and Message. Double-click opens a DM, the old
-  AIM habit.
-- **A knock** makes the friend's row wiggle, and the button says "knocked" for
-  three seconds.
-- **Rooms and DMs sit below the people,** with the dots of who is in each. A
-  room with something new gets a bold name and nothing else.
-- **Arrivals** show as small cards at the bottom right, like AIM's door sounds.
-  A very quiet door chime is there, off by default.
+From top to bottom, for each server:
+
+1. **You:** your styled name, where you are, your status (click to edit), and an
+   **Away** button. It opens an AIM-style away-message editor with saved
+   presets. There is no picture.
+2. **Rooms,** right under you, because they're where the activity shows:
+   - the room's name, bold when something new arrives (weight only, no number);
+   - the dots of who's in it;
+   - moving sound bars while voice is on.
+
+   Click a room to open it.
+3. **DMs,** with a **new message** button on the heading (see below). A DM with
+   something new goes bold.
+4. **People:** everyone on the server in one list, not grouped by room, since
+   the rooms above already show who's where.
+   - People who are here come first, whether they're in a room or around.
+   - Then **Away**, with their away messages. In this design they're the stars.
+   - Then **Offline**. Away and Offline have the same small heading with a
+     caret: Away starts open, and Offline starts folded with "show". There are
+     no counts anywhere.
+
+   Each row has their dot, their styled name, one line of status or away
+   message, and a faint note on the right: "in #general", "around" or "last
+   here yesterday".
+5. **Media and Search** at the bottom.
+
+![A person's card, with Message and Knock](buddy-list/buddy-list-13-person-card.webp)
+
+**Click someone (or press Enter) and their card opens beside the list:**
+
+- the status in full, in their own face;
+- what they're listening to, reading or working on;
+- where they are.
+
+The card has two clear buttons: **Message** and **Knock**. A knock makes their
+row wiggle, and the button says "knocked" for three seconds. Offline people
+can't be knocked. Hovering a row still shows the small Knock and Message
+buttons, and a double-click still goes straight to a DM, the old AIM habit.
+
+![The new-message picker](buddy-list/buddy-list-12-new-dm.webp)
+
+**New message.** The button on the DMs heading opens a small picker:
+
+- **Choosing:** pick one person, or up to seven for a group, since a DM holds
+  two to eight people, you included. There's a search field, and each person
+  has their dot, styled name and status.
+- **The same people twice** opens the same DM (SPEC §4.13), and the picker says
+  so before you confirm.
+- **A new set of people** makes a new DM.
+- **Keyboard:** Enter picks the first match, and Backspace removes the last
+  person you picked.
+
+**Arrivals** show as small cards at the corner of the screen, like AIM's door
+sounds. A very quiet door chime can go with them. Both are switches in
+Settings: the cards are on and the chime is off to start.
 
 | The away message | The list alone at the edge of the screen |
 |---|---|
@@ -85,12 +165,11 @@ styling.
 
 ## Conversations: tabs or windows
 
-A setting chooses how conversations open: **As tabs in one window** or **Each
-in its own window**. Switching moves whatever is open straight away.
+A setting in Settings → Windows chooses how conversations open: **As tabs in
+one window** (the default) or **Each in its own window**. Switching moves
+whatever is open straight away.
 
 ![Tabs, reading #listening-room while in voice in #general](buddy-list/buddy-list-8-tabs.webp)
-
-**Tabs** are the recommended default, because they work on any desktop.
 
 - The chat window's title bar is a row of tabs, like a browser. Opening a room
   or DM adds a tab, or shows it if it's already open.
@@ -100,9 +179,9 @@ in its own window**. Switching moves whatever is open straight away.
 - The desktop app would use Ctrl+Tab and Ctrl+W. The prototype uses Alt+←/→
   and Alt+W, because a browser keeps the Ctrl keys for itself.
 
-**Windows** are one setting away. They are what a tiling desktop like Omarchy
-wants: each conversation is a real window, and Hyprland lays them out by
-itself. The prototype's **Tile** button (or the T key) previews that.
+**Windows** suit a tiling desktop like Omarchy: each conversation is a real
+window, and Hyprland lays them out by itself. The prototype's **Tile** control
+(or the T key) previews that.
 
 ![Windows, tiled, with a knock landing on Dave](buddy-list/buddy-list-3-tiled.webp)
 
@@ -125,13 +204,64 @@ Khruangbin…`), which suits smaller windows.
 Today's app already keeps you in voice while you read another room (SPEC §5.6);
 Matt confirmed it in the real app. The design keeps that rule.
 
+## Settings
+
+![Settings, trying a new look in Profile](buddy-list/buddy-list-10-settings.webp)
+
+Settings is its own window, opened from the gear at the top of the list or
+with Ctrl+,. A sidebar splits it into sections. **Settings must cover
+everything today's app has.** This is today's settings panel and host panel,
+regrouped, plus the new choices this design needs:
+
+- **Profile:**
+  - **Who you are:** display name and username.
+  - **Your status:** status line, reading, listening to, working on, status
+    image, and away message.
+  - **Make yourself at home:** your name's font, weight, italic, one color or
+    two blended, effect, and your message font, with a live preview. Saving
+    changes your name in the list and in every conversation.
+- **Appearance:**
+  - color theme (dark, light, or follow the system);
+  - interface size, with a preview;
+  - evening warmth;
+  - use plain names and message fonts (this one works in the prototype).
+- **Windows** (new): conversations open as tabs or windows (this works), and
+  what closing the list does: keep Linger running in the tray, or quit.
+- **Sound & Voice:**
+  - mute all notification sounds;
+  - quiet hours, from and until in half-hour steps;
+  - each chime with a Play preview: voice, mute and deafen, DMs, room
+    messages, knocks;
+  - **arrival cards** and **door sounds** (new);
+  - microphone, speakers, and push to talk with its key.
+- **Notifications:** desktop banners for mentions, plus "always notify me when
+  this person posts", everywhere or in chosen rooms.
+- **Account & App:** password, take everything with you (the export), updates,
+  and signing out.
+- **Servers** (with several servers): for each server, who you are there,
+  Quiet, Own window, its place in the order, and signing out of it. Also Add a
+  server.
+- **Hosting** (for the host, with the server's name under the label):
+  - **Rooms:** make a room, and change the order, names and topics, or archive
+    one.
+  - **Invites:** good for one person, five people or anyone; expiring after a
+    day, a week or never; plus the links you've made.
+  - **People:** members, removing someone, and letting someone back in.
+  - **Server:** its name and its accent color.
+
+Two things changed on purpose from today's wording. The host's room list, once
+"The Rail", is now "Your rooms, in order", because there is no rail. Desktop
+notifications have a section of their own instead of sitting under Sound &
+Voice.
+
 ## Several servers
 
 ![Three servers in one list](buddy-list/buddy-list-5-servers.webp)
 
-- **One list, each server a section,** like AIM's buddy groups. You choose the
-  order, and it never reshuffles by activity. A long server's header stays
-  pinned while you scroll through it.
+- **One list, each server a section,** like AIM's buddy groups. Inside each
+  are its rooms, DMs and people, in the order above. You choose the order of
+  the servers, and it never reshuffles by activity. A long server's header
+  stays pinned while you scroll through it.
 - **A folded server still shows its lights.** The header carries:
   - the server's color;
   - its name, bold when something inside is new;
@@ -149,7 +279,8 @@ Matt confirmed it in the real app. The design keeps that rule.
   - A friend on two of your servers appears twice, not linked, on purpose.
 - **Away goes everywhere, with a choice.** The away editor has a checkbox per
   server.
-- **Each server has a small menu:**
+- **Each server has a small menu,** and the same choices are in Settings →
+  Servers:
   - **Quiet:** no chimes, no bold and no arrival cards for that server. Knocks
     still get through.
   - **Own window:** the server pops out into its own list.
@@ -160,7 +291,7 @@ Matt confirmed it in the real app. The design keeps that rule.
 |---|---|
 | ![](buddy-list/buddy-list-6-raid-night.webp) | ![](buddy-list/buddy-list-7-edge-servers.webp) |
 
-![The setting, tabs from three servers, and one popped out](buddy-list/buddy-list-9-tabs-setting.webp)
+![Settings → Windows, tabs from three servers, and one popped out](buddy-list/buddy-list-9-tabs-setting.webp)
 
 ## Rules it changes
 
@@ -173,8 +304,6 @@ breaks these current rules:
   (§3).
 - **Names sit inline** before the text, not above it (§4.7).
 - **Labels** use pixel-style faces (§5.2).
-- **Your own picture** sits at the top of the list; the porch icon stands in.
-  That is an avatar, which §5.1 bans. Keep it or drop it when building.
 
 The principles don't change:
 
@@ -182,6 +311,7 @@ The principles don't change:
 - new activity shows as weight only;
 - nothing about which apps anyone has open;
 - no AI, no telemetry;
+- no avatars;
 - the same vocabulary.
 
 ## What building it would take
@@ -190,18 +320,25 @@ The principles don't change:
   the message box and the voice bar. Use it for a while before spreading it.
 - **Real windows.** Tauri can open several windows, but the connection to the
   server has to live in one place and feed all of them.
+- **Title bars.** Linger draws its own in every window, with the system still
+  moving, snapping and tiling.
 - **Voice keeps running** with its room's tab or window closed.
-- **Window positions and open tabs are remembered.** Closing the list means
-  quitting, or tucking Linger into the system tray.
+- **Window positions and open tabs are remembered.** What closing the list does
+  follows the setting in Settings → Windows.
+- **Every setting today's app has** comes across, as listed under Settings.
 - **The contrast test** needs the new backgrounds added, so all 16 name colors
   still pass on them.
 
 ## Open questions
 
+- **The small logo.** The mark beside the server name is a placeholder. Matt
+  didn't like the options tried (2026-09-25), and the small logo gets
+  redesigned later.
+- **Closing the list.** Should it keep Linger running in the tray by default,
+  as the prototype does, or quit?
 - **New DMs.** A new DM only turns its row bold. AIM popped a window open, which
   is the kind of obligation Linger avoids, but some people will miss it.
 - **Many rooms.** The narrow list suits three to six rooms per server, not
   fifteen.
-- **Your picture.** Keep the avatar at the top of the list, or drop it?
 - **Big groups.** Voice rooms above eight people and servers of 50–60 are a
   separate piece of work, tracked in #197.
