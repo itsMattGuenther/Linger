@@ -7,9 +7,9 @@
  * machine's own locale produces rather than hard-coded English, so the suite
  * does not quietly depend on the runner being set to en-US.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { ageOpacity, clockTime, sessionLabel } from "./time";
+import { ageOpacity, clockTime, fullTime, hitTime, sessionLabel } from "./time";
 
 /** Local-time helper: `at(2026, 8, 15, 9, 14)` is 15 August 2026, 9:14am. */
 function at(year: number, month: number, day: number, hour: number, minute = 0): number {
@@ -98,3 +98,32 @@ describe("ageOpacity", () => {
     expect(ageOpacity(now - 365 * 24 * 60 * 60 * 1000, now)).toBe(0.78);
   });
 });
+
+describe("formatting a time", () => {
+  // Building a date formatter is the slow part of formatting a date, and
+  // every row formats its time on every render. They are built once, when the
+  // module loads, and never per call (#170). `Date#toLocale*String` with
+  // options builds one internally on every call, where a spy on the
+  // constructor cannot see it, so those are watched too.
+  it("reuses its formatters instead of building one per call", () => {
+    const spies = [
+      vi.spyOn(Intl, "DateTimeFormat"),
+      vi.spyOn(Date.prototype, "toLocaleString"),
+      vi.spyOn(Date.prototype, "toLocaleDateString"),
+      vi.spyOn(Date.prototype, "toLocaleTimeString"),
+    ];
+    const at = Date.UTC(2026, 8, 24, 21, 5);
+    for (let i = 0; i < 50; i += 1) {
+      clockTime(at + i);
+      fullTime(at + i);
+      hitTime(at + i);
+      sessionLabel(at + i, at + 9 * 86_400_000);
+      sessionLabel(at + i, at + 400 * 86_400_000);
+    }
+    for (const spy of spies) {
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    }
+  });
+});
+
