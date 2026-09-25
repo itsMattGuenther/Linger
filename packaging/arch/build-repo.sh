@@ -17,6 +17,7 @@ repo=$(realpath -m "${2:?usage: build-repo.sh <version> <repo-dir> [deb]}")
 deb=${3:-}
 : "${GPGKEY:?set GPGKEY to the fingerprint of the signing key}"
 here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/../.." && pwd)
 url="https://github.com/itsMattGuenther/Linger/releases/download/v$version/Linger_${version}_amd64.deb"
 
 work=$(mktemp -d)
@@ -29,16 +30,21 @@ else
   curl -fsSL --retry 3 -o "$work/Linger_${version}_amd64.deb" "$url"
 fi
 cp "$here/linger.desktop" "$work/"
+# The agent skills (#147), flattened to the names the PKGBUILD lists.
+cp "$root/agents/skills/linger-report/SKILL.md" "$work/linger-report.SKILL.md"
+cp "$root/agents/skills/linger-report/reporting.md" "$work/linger-report.reporting.md"
+cp "$root/agents/skills/linger-contribute/SKILL.md" "$work/linger-contribute.SKILL.md"
+cp "$root/agents/link-skills.sh" "$work/link-skills.sh"
 
 # Real checksums in the copy that gets built; the committed PKGBUILD says
-# SKIP only because it has no version yet.
-deb_sum=$(sha256sum "$work/Linger_${version}_amd64.deb" | cut -d' ' -f1)
-desktop_sum=$(sha256sum "$work/linger.desktop" | cut -d' ' -f1)
-sed -e "s/^pkgver=.*/pkgver=$version/" \
-    -e "s/^sha256sums=('SKIP'/sha256sums=('$deb_sum'/" \
-    -e "s/^            'SKIP')/            '$desktop_sum')/" \
+# SKIP only because it has no version yet. makepkg -g hashes every source.
+sed -e "s/^pkgver=.*/pkgver=$version/" -e '/^sha256sums=(/,/)$/d' \
     "$here/PKGBUILD" > "$work/PKGBUILD"
-grep -q "SKIP" "$work/PKGBUILD" && { echo "checksums were not filled in" >&2; exit 1; }
+(cd "$work" && makepkg -g >> PKGBUILD 2>/dev/null)
+if grep -q "SKIP" "$work/PKGBUILD" || ! grep -q "^sha256sums=" "$work/PKGBUILD"; then
+  echo "checksums were not filled in" >&2
+  exit 1
+fi
 
 # --nodeps: nothing is compiled, only repackaged, so the build machine does not
 # need Linger's runtime dependencies installed. They are still recorded in the

@@ -20,6 +20,11 @@ applies to you too.
 5. Run `scripts/check.sh` until it is green, push, and open a PR against `main`.
    Fill in the checklist — it is short and every line on it has bitten someone.
 
+Found a bug rather than a task? The issue forms ask for what a report needs.
+If you use a coding agent, the [`linger-report` and `linger-contribute`
+skills](agents/) walk it through reporting a problem or opening a PR the way
+this project needs.
+
 ## No AI attribution — ever, no exceptions
 
 The author of every commit is the human who ran the session, under their own

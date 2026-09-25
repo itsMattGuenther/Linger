@@ -117,6 +117,13 @@ pass.
   Describe the remaining checks explicitly; missing acceptance evidence is not a
   reason to leave an issue looking unclaimed. Linked issues close on merge when
   repository auto-closing is enabled, so finish their acceptance checks before merging.
+- `agents/skills/` holds two skills for people's own agents (#147):
+  `linger-report` turns a problem into a well-formed, private-safe issue, and
+  `linger-contribute` is the short path from a fix to a PR under these rules. They
+  restate rules from this file. When a rule here changes (the hard rules, branch
+  names, `scripts/check.sh`, PR linking), change them in the same commit. The
+  `.github/ISSUE_TEMPLATE/` forms ask for what `linger-report` collects; keep the
+  two in step too.
 
 **The README**
 

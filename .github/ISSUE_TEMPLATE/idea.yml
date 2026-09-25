@@ -1,0 +1,20 @@
+name: An idea
+description: Something Linger could do, or do better.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write: Linger has chosen not to have some things, on purpose. The README's **"What it will never have"** and `SPEC.md` §2 list them (no unread counts, telemetry, AI features, roles, threads, federation or anything for sale). Ideas within those lines are very welcome.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like, and what it would make better for a small group of friends.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What happens today
+      description: What you do now instead, or what gets in the way.

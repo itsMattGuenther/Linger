@@ -1,0 +1,79 @@
+name: Something's wrong
+description: Linger crashed, lags, looks wrong, or doesn't do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Issues are **public**: leave out message text, other people's names, server addresses, invite links and which apps anybody has open.
+        Using an AI coding agent? The `linger-report` skill in [`agents/`](https://github.com/itsMattGuenther/Linger/tree/main/agents) collects all of this for you.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, in your own words. Not a guess at why.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, from opening Linger. Say whether it happens every time, sometimes, or once.
+      placeholder: |
+        1. Open Linger
+        2. ...
+        Happens: every time
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Linger version
+      description: Settings → Account & App → Updates shows it.
+      placeholder: "0.3.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How Linger is installed
+      options:
+        - Windows (.exe or .msi)
+        - Arch / Omarchy package
+        - Linux AppImage
+        - Linux .deb
+        - Linux .rpm
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: "Omarchy 4.0.4 / Windows 11 24H2 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: input
+    id: linux
+    attributes:
+      label: "Linux only: desktop, Wayland or X11, and graphics card"
+      description: "`echo $XDG_CURRENT_DESKTOP $XDG_SESSION_TYPE` and `lspci | grep -iE 'vga|3d|display'`"
+      placeholder: "Hyprland, wayland, NVIDIA RTX 4090 + AMD Raphael"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        Exact error text, screenshots or a short recording cropped to the problem.
+        On a Linux crash: `coredumpctl list linger-client`, and what Linger prints when started from a terminal. Never attach a core dump itself; it can contain your messages.
+  - type: textarea
+    id: voice
+    attributes:
+      label: "Voice only: devices and networks"
+      description: Which microphone and speakers, and whether the others were on different networks.

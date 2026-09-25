@@ -31,9 +31,20 @@ depends=(
 )
 optdepends=('gnome-keyring: remember sign-ins between launches')
 options=('!strip' '!debug')
+# The agent skills (#147) come from agents/ in this repository;
+# build-repo.sh copies them next to this file under these names.
 source=("Linger_${pkgver}_amd64.deb::${url}/releases/download/v${pkgver}/Linger_${pkgver}_amd64.deb"
-        'linger.desktop')
+        'linger.desktop'
+        'linger-report.SKILL.md'
+        'linger-report.reporting.md'
+        'linger-contribute.SKILL.md'
+        'link-skills.sh')
+# build-repo.sh replaces these with real checksums (makepkg -g).
 sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
             'SKIP')
 noextract=("Linger_${pkgver}_amd64.deb")
 
@@ -50,6 +61,14 @@ package() {
     install -Dm644 "$icon" "$pkgdir/usr/share/icons/hicolor/$size/apps/linger-client.png"
   done
   install -Dm644 "$srcdir/linger.desktop" "$pkgdir/usr/share/applications/linger.desktop"
+
+  # Skills for people's own coding agents (agents/README.md). Nothing links
+  # them into an agent until the user runs linger-agent-skills.
+  local skills="$pkgdir/usr/share/linger/agents/skills"
+  install -Dm644 "$srcdir/linger-report.SKILL.md" "$skills/linger-report/SKILL.md"
+  install -Dm644 "$srcdir/linger-report.reporting.md" "$skills/linger-report/reporting.md"
+  install -Dm644 "$srcdir/linger-contribute.SKILL.md" "$skills/linger-contribute/SKILL.md"
+  install -Dm755 "$srcdir/link-skills.sh" "$pkgdir/usr/bin/linger-agent-skills"
 
   # Tells the app that pacman updates it, so its own updater stands down
   # (client/src-tauri/src/packaging.rs).
