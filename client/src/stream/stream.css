@@ -98,6 +98,14 @@
   padding-top: 0.125rem;
 }
 
+/* A reply that continues somebody's group starts something new: room above
+   it, so its quote reads as the head of this message rather than the tail of
+   the one before (#181). A reply that opens a group already has the group gap
+   and its name heading. Padding, not margin — the virtualizer measures the box. */
+.msg[data-reply="continued"] {
+  padding-top: 0.625rem;
+}
+
 .msg-edited {
   margin-left: 6px;
 }
@@ -267,11 +275,17 @@
 /* --- the line saying what a reply answers -------------------------------- */
 
 .msg-reply {
+  position: relative;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
+  /* One small line, not a 2rem control: the button floor in base.css left
+     10px of empty space under the quote, so it sat nearer the message above
+     than the reply it belongs to (#181). 1.5rem keeps a 24px click target,
+     with the slack split evenly above and below the text. */
+  min-height: 1.5rem;
   /* Share the body's indentation so a reply belongs to the text below it. */
-  padding: 0 0 2px 0.875rem;
+  padding: 0 0 0 0.875rem;
   max-width: 100%;
   background: none;
   border: 0;
@@ -281,6 +295,21 @@
   color: var(--text-muted);
   text-align: left;
   cursor: pointer;
+}
+
+/* The bracket that ties a quote to its reply (#181): a hairline elbow in the
+   gutter, from the quote's middle down to the reply's first line. Neutral —
+   it is structure, not identity, so it takes no person's color (SPEC §5). */
+.msg-reply::before {
+  content: "";
+  position: absolute;
+  left: 0.3125rem;
+  top: 50%;
+  width: 0.375rem;
+  height: calc(50% + 0.5rem);
+  border-top: 1px solid var(--hairline-strong);
+  border-left: 1px solid var(--hairline-strong);
+  pointer-events: none;
 }
 
 .reply-mark {

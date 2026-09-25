@@ -327,7 +327,10 @@ whitespace and a soft divider labeled in natural language: `late Tuesday night`,
 **No avatar column or per-message colored bars.** Styled sender names in group
 headers and indented text underneath establish grouping. A reply’s short,
 clickable quote sits under its sender’s name and above its own text, aligned
-with that text. Deleting a reply hides its quote as well as its body; the
+with that text. The quote sits tight against its own text, a neutral hairline
+bracket in the gutter joins the two, and a reply inside a group gets space
+above it, so a quote never reads as the tail of the message before. Deleting a
+reply hides its quote as well as its body; the
 original message and other replies remain unchanged. Consecutive messages
 do not reserve a hidden action row. A compact action button beside the text opens
 the message menu by pointer or keyboard, without moving the conversation on hover.
