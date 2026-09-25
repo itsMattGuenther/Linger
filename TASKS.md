@@ -834,8 +834,10 @@ Rules for this milestone:
   new-message picker, away and away messages. Built in the list window and
   tested on its fixture page; not yet tried against a real server in the
   desktop app.
-- ⬜ **T-1806 · Settings** — every setting in `parity.md`, in the Settings
-  window.
+- 🟡 **T-1806 · Settings** — every setting in `parity.md`, in the Settings
+  window. Built and wired (Ctrl+, opens it) and tested against a faked owner
+  and server; not yet tried in the desktop app. Evening warmth waits for an
+  evening version of the new colors; a light theme waits on decision 2.
 - ⬜ **T-1807 · Media, search and uploads.**
 - 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
   remembered, and the tray. Pop-out and back are built (with the draft going

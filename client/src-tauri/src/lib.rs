@@ -501,7 +501,8 @@ pub fn run() {
             updates::update_install,
             graphics::graphics_started,
             window::next_open_chat,
-            window::next_open_conversation
+            window::next_open_conversation,
+            window::next_open_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

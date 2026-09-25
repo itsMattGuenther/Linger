@@ -18,8 +18,11 @@ export interface AppearanceProps {
   theme?: Live<ThemePref> & { choices: readonly ThemePref[] };
   /** Interface size, a percentage from `SCALE_OPTIONS` (LOOK-1). */
   scale: Live<number>;
-  /** Evening warmth (LOOK-2). */
-  warmth: Live<boolean>;
+  /**
+   * Evening warmth (LOOK-2). Left out while the new client's colors have no
+   * evening version: a switch that changed nothing would be a broken promise.
+   */
+  warmth?: Live<boolean>;
   /** Use plain names and message fonts (NAME-4). */
   plainNames: Live<boolean>;
 }
@@ -34,21 +37,26 @@ const THEME_CHOICES: Record<ThemePref, Choice<ThemePref>> = {
 export function AppearanceSection({ theme, scale, warmth, plainNames }: AppearanceProps) {
   return (
     <>
-      <Plain>
-        {theme && theme.choices.length > 1 ? (
-          <ChoiceCards
-            legend={HEADINGS.theme}
-            compact
-            name="theme"
-            value={theme.value}
-            onChange={theme.onChange}
-            choices={theme.choices.map((choice) => THEME_CHOICES[choice])}
-          />
-        ) : (
-          <h3 className="nx-set-heading">{HEADINGS.theme}</h3>
-        )}
-        <SettingRow title="Evening warmth" description="Softer colors after sunset." control={<Switch label="Evening warmth" checked={warmth.value} onChange={warmth.onChange} />} />
-      </Plain>
+      {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
+      {(theme && theme.choices.length > 1) || warmth ? (
+        <Plain>
+          {theme && theme.choices.length > 1 ? (
+            <ChoiceCards
+              legend={HEADINGS.theme}
+              compact
+              name="theme"
+              value={theme.value}
+              onChange={theme.onChange}
+              choices={theme.choices.map((choice) => THEME_CHOICES[choice])}
+            />
+          ) : (
+            <h3 className="nx-set-heading">{HEADINGS.theme}</h3>
+          )}
+          {warmth ? (
+            <SettingRow title="Evening warmth" description="Softer colors after sunset." control={<Switch label="Evening warmth" checked={warmth.value} onChange={warmth.onChange} />} />
+          ) : null}
+        </Plain>
+      ) : null}
       <Block heading={HEADINGS.size} lead="Text, buttons and windows grow together.">
         <div className="nx-set-size">
           <div className="nx-set-size-preview" aria-hidden="true">

@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
@@ -22,11 +22,12 @@ import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { RoomId } from "../../../generated/RoomId";
 import { tauriBus } from "../../core/bus";
+import { isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
-import { type Sharing, shareAsOwner, type WindowOpener } from "../../core/share";
+import { type Accounts, type Sharing, shareAsOwner, type WindowOpener } from "../../core/share";
 import { Spinner } from "../../kit";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
@@ -67,10 +68,14 @@ export function ListWindow() {
     );
   }
 
-  return <ServerList session={first} />;
+  const accounts: Accounts = {
+    reauthenticate: (server, auth) => sessions.addServer(server, auth),
+    signOut: (server) => sessions.signOut(server),
+  };
+  return <ServerList session={first} accounts={accounts} />;
 }
 
-function ServerList({ session }: { session: ServerSession }) {
+function ServerList({ session, accounts }: { session: ServerSession; accounts: Accounts }) {
   const { api, baseUrl } = session;
   const gateway = useGateway(baseUrl);
   const now = useNow();
@@ -111,13 +116,21 @@ function ServerList({ session }: { session: ServerSession }) {
     setPresenceLive(baseUrl, gateway.status.kind === "ready");
   }, [baseUrl, gateway.status.kind]);
 
+  // The sign-ins change identity every render; sharing reads the latest.
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
+
   // The owner's half of sharing this connection with the chat window
   // (docs/design/architecture.md): snapshots, lent tokens, intents.
   useEffect(() => {
+    const accountsNow: Accounts = {
+      reauthenticate: (server, auth) => accountsRef.current.reauthenticate(server, auth),
+      signOut: (server) => accountsRef.current.signOut(server),
+    };
     if (!isTauri()) return;
     let held: Sharing | null = null;
     let gone = false;
-    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), { opener: shell, store: localStore() }).then((started) => {
+    void shareAsOwner(tauriBus(), () => new Map([[baseUrl, api]]), { opener: shell, store: localStore(), accounts: accountsNow }).then((started) => {
       if (gone) started.stop();
       else held = sharing = started;
     });
@@ -141,6 +154,17 @@ function ServerList({ session }: { session: ServerSession }) {
   const model = useMemo(() => listModel(gateway, now), [gateway, now]);
   const speaking = useMemo(() => talkingNow(gateway), [gateway]);
   const pushToTalk = gateway.myVoice?.pushToTalk ?? false;
+
+  // Ctrl+, opens Settings from the list too.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!isSettingsKey(event)) return;
+      event.preventDefault();
+      shell.settings();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Push-to-talk while the list has focus, as today's client does; a chat
   // window reports its own key presses (core/share.ts, "voice.talk").
@@ -294,6 +318,10 @@ const shell: WindowOpener = {
     void invoke("next_open_conversation", { server, room: roomId, kind }).catch((error: unknown) =>
       console.error("could not open the conversation's window", error),
     );
+  },
+  settings: (section) => {
+    if (!isTauri()) return;
+    void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
 };
 

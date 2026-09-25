@@ -10,8 +10,14 @@ describe("which window a page is", () => {
   it("never makes a second owner: any other window without a role shows nothing", () => {
     expect(windowRole("", "chat")).toBe("none");
     expect(windowRole("", "settings")).toBe("none");
-    expect(windowRole("?window=settings", "settings")).toBe("none");
     expect(windowRole("?window=list", "chat-1")).toBe("none");
+  });
+
+  it("is Settings only in the window the shell made for it", () => {
+    expect(windowRole("?window=settings", "settings")).toBe("settings");
+    expect(windowRole("?window=settings&section=invites", "settings")).toBe("settings");
+    expect(windowRole("?window=settings", "main")).toBe("none");
+    expect(windowRole("?window=settings", "chat")).toBe("none");
   });
 
   it("is the chat window where the shell asked for one, and never in main", () => {

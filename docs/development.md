@@ -138,9 +138,11 @@ and open any of these pages:
   states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
   messages (`&paged` to load it a page at a time), and `?fail` to have every
   send refused;
-- `/tests/fixtures/next-chat-window.html?room=r-general`: the real chat window,
-  wired, with the desktop shell, the list window and the server faked in the
-  page. The options are listed at the top of `next-chat-window.tsx`;
+- `/tests/fixtures/next-chat-window.html?room=r-general` and
+  `/tests/fixtures/next-settings-window.html`: the real chat and Settings
+  windows, wired, with the desktop shell, the list window and the server
+  faked in the page (`tests/fixtures/next/desktop.ts`). The options are listed
+  at the top of each page's `.tsx`;
 - `/tests/fixtures/next-settings.html`: the Settings window on the same
   evening. Add `?section=invites` (any section) to open on it, `?member` to
   lose Hosting, `?servers` for three servers, `?fail` to have every save

@@ -10,7 +10,10 @@
  */
 import type { MessageId } from "../../generated/MessageId";
 import type { RoomId } from "../../generated/RoomId";
-import type { AuthedApi, Lent } from "../../lib/api";
+import type { AuthResponse } from "../../generated/AuthResponse";
+import type { NotifyRule } from "../../generated/NotifyRule";
+import { ApiError, type AuthedApi, type Lent, PublicApi, TransportError } from "../../lib/api";
+import { passwordRequest } from "../../lib/account";
 import type { Position } from "../../lib/catchup";
 import {
   type GatewayState,
@@ -22,12 +25,13 @@ import {
   setVoiceDeafened,
   setVoiceMuted,
   type SharedLocal,
+  setNotifyRule,
   sharedLocalOf,
   snapshotOf,
 } from "../../lib/gateway";
 import { loadVoicePrefs } from "../../lib/voice";
 import { setViewing } from "../../lib/notify";
-import { forgetWindow, reportWindow, setPresenceRoom } from "../../lib/watchPresence";
+import { forgetWindow, reportWindow, setAway, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 
 /** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
@@ -47,6 +51,27 @@ export const SHARED = "next:shared";
 export const CLOSED = "next:closed";
 /** The owner tells every window how conversations open now (core/conversations.ts). */
 export const MODE = "next:mode";
+/** Settings asks the owner to turn a notification rule on or off (the owner keeps them). */
+export const NOTIFY = "next:notify";
+/** Settings asks the owner to change your password and sign back in with the new one. */
+export const PASSWORD = "next:password";
+
+export interface NotifyQuestion {
+  server: string;
+  rule: NotifyRule;
+  on: boolean;
+}
+
+export interface PasswordQuestion {
+  server: string;
+  current: string;
+  next: string;
+}
+
+/** How a request to the owner went: the problem in words, or null. */
+export interface Outcome {
+  problem: string | null;
+}
 
 export interface ModeMessage {
   v: number;
@@ -95,7 +120,13 @@ export type Intent =
   /** A conversation in its own window goes back into the chat window's tabs. */
   | { kind: "tabs"; server: string; roomId: RoomId }
   /** Settings changed how conversations open: every window rearranges itself. */
-  | { kind: "conversations"; mode: ConversationsMode };
+  | { kind: "conversations"; mode: ConversationsMode }
+  /** Open Settings (Ctrl+, in any window), on a section if one is named. */
+  | { kind: "settings"; section?: string }
+  /** Sign out of a server on this computer. */
+  | { kind: "signout"; server: string }
+  /** You went away (with the message) or came back (null), from Settings: presence is the owner's. */
+  | { kind: "away"; server: string; message: string | null };
 
 /**
  * How the owner opens windows: the desktop shell's commands in the app
@@ -106,6 +137,15 @@ export interface WindowOpener {
   chat(server: string, roomId: RoomId): void;
   /** This conversation in a window of its own, or that window brought forward. */
   conversation(server: string, roomId: RoomId, kind: "room" | "dm"): void;
+  /** The Settings window, on a section if one is named. */
+  settings(section?: string): void;
+}
+
+/** The sign-ins, which only the owner holds (lib/session.ts). */
+export interface Accounts {
+  /** A fresh sign-in for a server, after a password change ended the old one. */
+  reauthenticate(server: string, auth: AuthResponse): Promise<void>;
+  signOut(server: string): Promise<void>;
 }
 
 /** What the owner can do once it is sharing. */
@@ -142,9 +182,16 @@ export interface ShareOptions {
   opener?: WindowOpener;
   /** Where this computer keeps how conversations open. */
   store?: ModeStore | null;
+  /** The sign-ins, for a password change and signing out. */
+  accounts?: Accounts;
 }
 
-export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, { opener, store = null }: ShareOptions = {}): Promise<Sharing> {
+/** An error from a request, as a sentence for the person. */
+function inWords(error: unknown, fallback: string): string {
+  return error instanceof ApiError || error instanceof TransportError ? error.message : fallback;
+}
+
+export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, { opener, store = null, accounts }: ShareOptions = {}): Promise<Sharing> {
   const lend = async (api: AuthedApi, stale?: string): Promise<Lent> => {
     const current = await api.accessToken();
     if (stale === undefined || current.token !== stale) return current;
@@ -208,6 +255,37 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         }),
       ),
     })),
+    answer<NotifyQuestion, Outcome>(bus, NOTIFY, async ({ server, rule, on }) => {
+      const api = sessions().get(server);
+      if (!api) return { problem: "You're not signed in to that server any more." };
+      try {
+        await setNotifyRule(api, rule, on);
+        return { problem: null };
+      } catch (error) {
+        return { problem: inWords(error, "Couldn't reach the server.") };
+      }
+    }),
+    // A password change ends every other sign-in for the account (the server
+    // can't tell who else had the old one), so the owner signs straight back
+    // in with the new password rather than leave every window to be signed
+    // out when its token runs out. The passwords are never kept or logged.
+    answer<PasswordQuestion, Outcome>(bus, PASSWORD, async ({ server, current, next }) => {
+      const api = sessions().get(server);
+      const username = serverState(server).me?.username;
+      if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
+      try {
+        await api.changePassword(passwordRequest(current, next));
+      } catch (error) {
+        return { problem: inWords(error, "Couldn't change your password.") };
+      }
+      try {
+        const auth = await new PublicApi(server).login({ username, password: next });
+        await accounts?.reauthenticate(server, auth);
+        return { problem: null };
+      } catch {
+        return { problem: "Password changed. Sign out and back in with the new one." };
+      }
+    }),
     answer<TokenQuestion, Lent>(bus, TOKEN, async ({ server, stale }) => {
       const api = sessions().get(server);
       if (!api) throw new Error(`not signed in to ${server}`);
@@ -241,6 +319,15 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           return;
         case "tabs":
           if (sessions().has(intent.server)) opener?.chat(intent.server, intent.roomId);
+          return;
+        case "settings":
+          opener?.settings(typeof intent.section === "string" ? intent.section : undefined);
+          return;
+        case "away":
+          if (sessions().has(intent.server)) setAway(intent.server, typeof intent.message === "string" ? intent.message : null);
+          return;
+        case "signout":
+          if (sessions().has(intent.server)) void accounts?.signOut(intent.server).catch(() => undefined);
           return;
         case "conversations": {
           if (!isMode(intent.mode)) return;

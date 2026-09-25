@@ -96,6 +96,26 @@ fn chat_url(server: &str, room: &str) -> Result<String, String> {
     ))
 }
 
+/// The Settings window's label: one, whichever window asked for it.
+const SETTINGS: &str = "settings";
+
+/// The page for the Settings window, opened on a section when one is named.
+/// A section is a short lowercase key (`profile`, `invites`); anything else
+/// is refused rather than put into the address.
+fn settings_url(section: Option<&str>) -> Result<String, String> {
+    match section {
+        None => Ok("next.html?window=settings".into()),
+        Some(key)
+            if !key.is_empty()
+                && key.len() <= 24
+                && key.bytes().all(|b| b.is_ascii_lowercase() || b == b'-') =>
+        {
+            Ok(format!("next.html?window=settings&section={key}"))
+        }
+        Some(_) => Err("not a settings section".into()),
+    }
+}
+
 /// The page for one conversation in a window of its own: popped out of the
 /// tabs, or every conversation in windows mode.
 fn conversation_url(server: &str, room: &str) -> Result<String, String> {
@@ -233,6 +253,36 @@ pub fn next_open_conversation(
         .map_err(|e| e.to_string())
 }
 
+/// Open the Settings window, on a section if one is named, or bring it
+/// forward and tell it to show that section. Only the list window may ask; a
+/// chat window asks the list window (an intent).
+#[tauri::command]
+pub fn next_open_settings(
+    app: AppHandle,
+    window: WebviewWindow,
+    section: Option<String>,
+) -> Result<(), String> {
+    if window.label() != OWNER {
+        return Err("only the list window opens windows".into());
+    }
+    let url = settings_url(section.as_deref())?;
+    if let Some(open) = app.get_webview_window(SETTINGS) {
+        let _ = open.unminimize();
+        let _ = open.set_focus();
+        return app
+            .emit_to(SETTINGS, "next:section", section)
+            .map_err(|e| e.to_string());
+    }
+    WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into()))
+        .title("Linger Settings")
+        .inner_size(720.0, 640.0)
+        .min_inner_size(560.0, 480.0)
+        .decorations(false)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Tell the owner a Buddy list window has gone, however it went: its own close
 /// button, the desktop's, or a crash. A window that closes cleanly says so
 /// itself first; this covers the ones that can't, so the owner never keeps
@@ -249,7 +299,7 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 /// The Buddy list client's windows other than the owner: the chat window,
 /// conversations popped out of it, and Settings.
 fn is_viewer(label: &str) -> bool {
-    label == CHAT || label == "settings" || label.starts_with("chat-")
+    label == CHAT || label == SETTINGS || label.starts_with("chat-")
 }
 
 /// Hyprland exports its instance signature to every client it starts;
@@ -276,7 +326,7 @@ fn on_hyprland(
 mod tests {
     use super::{
         buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
-        conversation_url, escape, is_origin, is_viewer, on_hyprland, Client,
+        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, Client,
     };
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
@@ -404,5 +454,26 @@ mod tests {
         assert_eq!(conversation_size("room"), Ok((560.0, 760.0)));
         assert_eq!(conversation_size("dm"), Ok((460.0, 500.0)));
         assert!(conversation_size("settings").is_err());
+    }
+
+    #[test]
+    fn settings_opens_only_on_a_section_key() {
+        assert_eq!(
+            settings_url(None).as_deref(),
+            Ok("next.html?window=settings")
+        );
+        assert_eq!(
+            settings_url(Some("invites")).as_deref(),
+            Ok("next.html?window=settings&section=invites")
+        );
+        for junk in [
+            "",
+            "Profile",
+            "a&window=chat",
+            "../x",
+            "x".repeat(25).as_str(),
+        ] {
+            assert!(settings_url(Some(junk)).is_err(), "{junk}");
+        }
     }
 }

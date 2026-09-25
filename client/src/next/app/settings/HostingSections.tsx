@@ -451,8 +451,13 @@ export function ServerSection({ name: savedName, accent: savedAccent, save: save
   const save = useSave();
   const dirty = name.trim() !== savedName || accent !== savedAccent;
   useEffect(() => {
-    setName(savedName);
-    setAccent(savedAccent);
+    // Follow what's saved only while you haven't changed anything since: a
+    // save that lands while you're choosing again must not undo your choice.
+    if (!dirty) {
+      setName(savedName);
+      setAccent(savedAccent);
+    }
+    // `dirty` is left out on purpose: this follows the saved values, not the form.
   }, [savedName, savedAccent]);
   const ready = dirty && name.trim() !== "" && save.phase.kind !== "saving";
   const submit = () => {

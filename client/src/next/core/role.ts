@@ -7,7 +7,7 @@
  */
 import { OWNER } from "./bus";
 
-export type WindowRole = "list" | "chat" | "none";
+export type WindowRole = "list" | "chat" | "settings" | "none";
 
 /**
  * `label` is the desktop window's label, or null outside the desktop app (a
@@ -16,6 +16,7 @@ export type WindowRole = "list" | "chat" | "none";
 export function windowRole(search: string, label: string | null): WindowRole {
   const role = new URLSearchParams(search).get("window");
   if (role === "chat") return label === OWNER ? "none" : "chat";
+  if (role === "settings") return label === null || label === "settings" ? "settings" : "none";
   if (role === null && (label === null || label === OWNER)) return "list";
   return "none";
 }

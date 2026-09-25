@@ -45,13 +45,14 @@ import { leaveDraft, takeDraft } from "../../core/handoff";
 import { added, type Drafts, filesIn, NO_DRAFTS, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
 import { voiceStrip } from "../../core/chat/voice";
-import { tabCommand } from "../../core/keys";
-import { type Following, followOwner } from "../../core/mirror";
+import { isSettingsKey, tabCommand } from "../../core/keys";
+import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { markerOf, Spinner, type TabItem } from "../../kit";
+import { useFollowing } from "../useFollowing";
 import { WindowMessage } from "../WindowMessage";
 import { type ChatPane, ChatView } from "./ChatView";
 
@@ -65,34 +66,13 @@ const NO_MESSAGES: readonly Message[] = [];
 const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
 
 /**
- * One follow per page. The window lives as long as the page, and following
- * twice (React's StrictMode runs effects twice) would register the same
- * server twice in the store.
- */
-let started: Promise<Following> | null = null;
-function followOnce(): Promise<Following> {
-  started ??= followOwner(tauriBus());
-  return started;
-}
-
-/**
  * The chat window: a viewer (docs/design/architecture.md, "Windows and their
  * roles"). It catches up with the list window's connection and follows it,
  * shows conversations in tabs, and asks the list window for what only the
  * owner may do: marking read, placing you in a room, and voice.
  */
 export function ChatWindow() {
-  const [held, setHeld] = useState<{ kind: "waiting" } | { kind: "lost" } | { kind: "ready"; following: Following }>({ kind: "waiting" });
-  useEffect(() => {
-    let alive = true;
-    followOnce().then(
-      (following) => alive && setHeld({ kind: "ready", following }),
-      () => alive && setHeld({ kind: "lost" }),
-    );
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const held = useFollowing();
 
   if (held.kind === "waiting") {
     return (
@@ -160,6 +140,8 @@ function Conversations({ following }: { following: Following }) {
   draftsNow.current = drafts;
   const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
   const reporter = useRef<Reporter | null>(null);
+  const intendNow = useRef(intend);
+  intendNow.current = intend;
   // What each conversation's box holds, so a draft can go with it to another window.
   const typed = useRef(new Map<string, string>());
   const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
@@ -305,6 +287,11 @@ function Conversations({ following }: { following: Following }) {
   // so they work from the message box too.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (isSettingsKey(event)) {
+        event.preventDefault();
+        void intendNow.current({ kind: "settings" }).catch(() => undefined);
+        return;
+      }
       const command = tabCommand(event);
       if (command === null) return;
       event.preventDefault();

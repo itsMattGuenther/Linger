@@ -23,6 +23,11 @@ export type TabCommand =
   /** A tab by its place, from 0; `last` for the ninth key, as browsers do. */
   | { kind: "jump"; to: number | "last" };
 
+/** Ctrl+, opens Settings from any window (docs/design/buddy-list.md, "Settings"). */
+export function isSettingsKey(press: KeyPress): boolean {
+  return press.ctrlKey && !press.altKey && !press.metaKey && !press.shiftKey && press.key === ",";
+}
+
 /**
  * Ctrl+Tab and Ctrl+PageDown: the next tab; with Shift, or Ctrl+PageUp, the
  * one before. Ctrl+Shift+PageDown and PageUp move the showing tab along the

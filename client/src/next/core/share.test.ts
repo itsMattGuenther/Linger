@@ -10,7 +10,8 @@ import type { Message } from "../../generated/Message";
 import type { Room } from "../../generated/Room";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
-import { CLOSED } from "./share";
+import { ask } from "./bus";
+import { CLOSED, NOTIFY, type Outcome, PASSWORD } from "./share";
 
 // What the Rust core's `app.emit` reaches in the owner: the store's own
 // listeners (today's client's path, unchanged).
@@ -115,6 +116,8 @@ function fakeOwnerApi(tokens: string[]) {
       return { token: tokens[issued] ?? "exhausted", expiresAt: Date.now() + 600_000 };
     }),
     put: vi.fn(async () => undefined),
+    delete: vi.fn(async () => undefined),
+    changePassword: vi.fn(async (_request: { current_password: string }) => undefined),
     post: vi.fn(async () => undefined),
     get: vi.fn(async () => []),
   };
@@ -129,6 +132,8 @@ async function windows(viewerLabel = "chat") {
   vi.resetModules();
   const owner = {
     gateway: await import("../../lib/gateway"),
+    // The owner's own copy, so a refusal built here is one it recognises.
+    api: await import("../../lib/api"),
     share: await import("./share"),
     presence: await import("../../lib/watchPresence"),
     bus: hub.bus("main"),
@@ -282,6 +287,82 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("does what Settings asks of the owner: rules, a password change, Settings itself and signing out", async () => {
+    const { owner, viewer, core } = await windows("settings");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const done: string[] = [];
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      opener: { chat: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`) },
+      accounts: {
+        reauthenticate: async (server, auth) => void done.push(`signed back in to ${server} as ${auth.user.username}`),
+        signOut: async (server) => void done.push(`signed out of ${server}`),
+      },
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    /** The error the real API throws for a refusal, with the server's words. */
+    const refusal = (status: number, message: string) => new owner.api.ApiError(status, { code: "UNAUTHENTICATED", message, retry_after_ms: null });
+    api.changePassword.mockImplementation(async (request) => {
+      if (request.current_password !== "old-secret") throw refusal(401, "That isn't your current password.");
+    });
+
+    // A rule: saved by the owner, and every window learns it.
+    const rule = { target_user_id: "u-eli", room_id: null };
+    const on = await ask<Outcome>(viewer.bus, "main", NOTIFY, { server: HOME, rule, on: true });
+    expect(on).toEqual({ problem: null });
+    expect(api.put).toHaveBeenCalledWith("/me/notify-rules", rule);
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).notifyRules).toEqual([rule]));
+    api.delete.mockRejectedValueOnce(refusal(500, "The server is busy."));
+    expect(await ask<Outcome>(viewer.bus, "main", NOTIFY, { server: HOME, rule, on: false })).toEqual({ problem: "The server is busy." });
+
+    // A password change, then signing straight back in with the new one.
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      fetched.push(`${init.method} ${url} ${String(init.body)}`);
+      const user = { ...owner.gateway.serverState(HOME).me };
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 600, user }), { status: 200 });
+    });
+    const wrong = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "nope", next: "new-secret-1" });
+    expect(wrong).toEqual({ problem: "That isn't your current password." });
+    expect(fetched).toEqual([]);
+    const right = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "old-secret", next: "new-secret-1" });
+    expect(right).toEqual({ problem: null });
+    expect(fetched).toEqual([`POST ${HOME}/api/v1/auth/login {"username":"matt","password":"new-secret-1"}`]);
+    vi.unstubAllGlobals();
+
+    await follower.intend({ kind: "settings", section: "invites" });
+    await follower.intend({ kind: "signout", server: HOME });
+    await follower.intend({ kind: "signout", server: "https://elsewhere.example" });
+    await vi.waitFor(() =>
+      expect(done).toEqual([`signed back in to ${HOME} as matt`, "settings invites", `signed out of ${HOME}`]),
+    );
+    sharing.stop();
+    follower.stop();
+  });
+
+  it("going away from Settings goes through the owner's presence, and so does coming back", async () => {
+    const { owner, viewer, core } = await windows("settings");
+    const presence = owner.presence;
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    const stopPresence = presence.startPresence();
+    evening().slice(0, 3).forEach(core);
+    presence.setPresenceLive(HOME, true);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+
+    await follower.intend({ kind: "away", server: HOME, message: "walking the dog" });
+    await vi.waitFor(() => expect(JSON.stringify(sentFrames().at(-1))).toContain("walking the dog"));
+    await follower.intend({ kind: "away", server: "https://elsewhere.example", message: "not here" });
+    await follower.intend({ kind: "away", server: HOME, message: null });
+    await vi.waitFor(() => expect(JSON.stringify(sentFrames().at(-1))).not.toContain("walking the dog"));
+    expect(JSON.stringify(sentFrames())).not.toContain("not here");
+    stopPresence();
+    sharing.stop();
+    follower.stop();
+  });
+
   it("takes you out of the room when the chat window goes, even if it never said so", async () => {
     const { owner, viewer, core } = await windows();
     const presence = owner.presence;
@@ -313,6 +394,7 @@ describe("a viewer window sharing the owner's connection", () => {
       opener: {
         chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
         conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
+        settings: (section) => opened.push(`settings ${section ?? ""}`),
       },
     });
     evening().slice(0, 3).forEach(core);
@@ -354,6 +436,7 @@ describe("a viewer window sharing the owner's connection", () => {
       opener: {
         chat: (_server, roomId) => opened.push(`chat ${roomId}`),
         conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
+        settings: () => undefined,
       },
       store,
     });

@@ -322,10 +322,25 @@ test.describe("hosting", () => {
     await page.getByRole("group", { name: "Accent color" }).getByRole("button", { name: "teal" }).click();
     await expect(page.locator(".nx-set-accent-name")).toHaveText("teal");
     await save.click();
+    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "No accent" }).click();
     await page.getByRole("textbox", { name: "Server name" }).fill("The Good Co.");
     await save.click();
-    expect(await did(page)).toEqual(expect.arrayContaining(["server:The Good Company:teal", "server:The Good Co.:none"]));
+    await expect.poll(() => did(page)).toEqual(expect.arrayContaining(["server:The Good Company:teal", "server:The Good Co.:none"]));
+  });
+
+  test("a save that lands while you're choosing again doesn't undo your new choice", async ({ page }) => {
+    await page.clock.install();
+    await open(page, "?section=server");
+    await page.getByRole("group", { name: "Accent color" }).getByRole("button", { name: "teal" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    // Still saving: you change your mind.
+    await page.getByRole("button", { name: "No accent" }).click();
+    await expect(page.locator(".nx-set-accent-name")).toHaveText("No accent");
+    // The first save lands.
+    await page.clock.fastForward(500);
+    await expect(page.locator(".nx-set-accent-name")).toHaveText("No accent");
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   });
 });
 

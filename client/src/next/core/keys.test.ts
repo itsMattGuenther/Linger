@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { type KeyPress, tabCommand } from "./keys";
+import { isSettingsKey, type KeyPress, tabCommand } from "./keys";
 
 function press(key: string, held: Partial<Omit<KeyPress, "key">> = {}): KeyPress {
   return { key, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...held };
 }
+
+describe("the Settings shortcut", () => {
+  it("is Ctrl+comma, and nothing else", () => {
+    expect(isSettingsKey(press(",", { ctrlKey: true }))).toBe(true);
+    for (const other of [press(","), press(",", { ctrlKey: true, shiftKey: true }), press(",", { ctrlKey: true, altKey: true }), press(".", { ctrlKey: true })]) {
+      expect(isSettingsKey(other)).toBe(false);
+    }
+    // And it is never mistaken for a tab command.
+    expect(tabCommand(press(",", { ctrlKey: true }))).toBeNull();
+  });
+});
 
 describe("the chat window's tab shortcuts", () => {
   it("steps through tabs with Ctrl+Tab and Ctrl+PageDown, backwards with Shift or PageUp", () => {

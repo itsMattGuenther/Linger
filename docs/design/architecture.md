@@ -175,7 +175,23 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window;
 - `popout` and `tabs`: move a conversation into a window of its own, or back
   into the chat window's tabs (only the owner opens windows);
-- `conversations`: tabs or windows, from Settings.
+- `conversations`: tabs or windows, from Settings;
+- `settings`: open Settings (Ctrl+, in any window), on a section;
+- `away`: you went away or came back from Settings (presence is the owner's);
+- `signout`: sign out of a server on this computer.
+
+Two things Settings needs an answer to go through the owner as questions
+(`ask`), not intents: turning a notification rule on or off (`next:notify`),
+and changing your password (`next:password`), which the owner follows by
+signing straight back in with the new password, since a change ends every
+other sign-in.
+
+**How it looks is the same in every window.** Plain names and interface size
+are kept on this computer; Settings saves a change and announces it
+(`next:appearance`), and every window applies it (`core/appearance.ts`).
+Interface size zooms the page and grows the window by the same ratio, because
+the new client's sizes are fixed pixels and a larger base font would grow
+nothing.
 
 Anything else a viewer can do with REST it does itself, with its borrowed
 token: send, edit, delete, load history, upload, knock, and typing through the
@@ -194,7 +210,8 @@ today's client.
 ## Window management
 
 - **Opening windows.** The owner asks Rust to open or focus a window through a
-  command: `next_open_chat { server, room }` for the tabs, and
+  command: `next_open_chat { server, room }` for the tabs,
+  `next_open_settings { section }` for Settings, and
   `next_open_conversation { server, room, kind }` for a conversation in its
   own window, labelled from the conversation so asking again brings the same
   window forward. Opening a conversation from the list shows it in its own

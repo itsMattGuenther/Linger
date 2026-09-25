@@ -8,13 +8,14 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
-import { applyInterfaceScale } from "../lib/interface";
+import { followAppearance } from "./core/appearance";
 import { unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
-// The reader's interface size, kept under the same key as today's client, so
-// switching clients keeps it.
-applyInterfaceScale();
+// Plain names and interface size, kept under the same keys as today's client
+// so switching clients keeps them, and the same in every window
+// (core/appearance.ts).
+followAppearance();
 
 // WebKitGTK leaves an AudioContext suspended until a gesture, and live chimes
 // arrive from the gateway rather than from a click. The first pointer or key
