@@ -1,3 +1,4 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 // The twelve bundled faces, subset and committed by `scripts/fetch-fonts.sh`.
@@ -33,3 +34,16 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+// Tell the desktop shell this window is drawing (#169, `src-tauri/src/graphics.rs`).
+// On Linux a launch may be trying WebKit's GPU path, which aborts on some
+// computers before anything is drawn; hearing this is how the next launch
+// knows this one got through. Two frames, because the first callback runs
+// before the first paint.
+if (isTauri()) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      void invoke("graphics_started").catch(() => undefined);
+    }),
+  );
+}
