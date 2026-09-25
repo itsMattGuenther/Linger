@@ -3,6 +3,7 @@
 //! has no others.
 
 pub mod gateway;
+pub mod graphics;
 mod notifications;
 mod secrets;
 mod updates;
@@ -495,7 +496,8 @@ pub fn run() {
             notifications::show_notification,
             updates::app_version,
             updates::update_check,
-            updates::update_install
+            updates::update_install,
+            graphics::graphics_started
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

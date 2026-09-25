@@ -131,9 +131,17 @@ On Omarchy, run `omarchy pkg add fuse2`; on Arch, run
 substitute for this library; do not uninstall it. For other distributions,
 see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
-**`Could not create GBM EGL display` and the app aborts:** Linux v0.3.3 and
-newer set WebKit’s narrow GBM workaround automatically, for every package
-format. An explicit `WEBKIT_DMABUF_RENDERER_DISABLE_GBM=0` still enables GBM.
+**`Could not create GBM EGL display` and the app aborts:** open Linger again.
+Newer versions notice that the last launch stopped before it drew anything and
+turn WebKit's GPU path (GBM) off on that computer from then on. To try the GPU
+path again later, delete `~/.local/state/linger/gbm-off`. Setting
+`WEBKIT_DMABUF_RENDERER_DISABLE_GBM` yourself (`1` off, `0` on) always wins.
+
+**Typing or scrolling feels a beat behind:** v0.3.3 and v0.3.4 turned the GPU
+path off on every Linux computer, which delays every frame. Newer versions only
+do that where it is needed. After updating, the first launch may still feel
+slow; the one after it will not.
+
 For **v0.3.2 and earlier**, use this exact command with your downloaded filename:
 
 ```bash
