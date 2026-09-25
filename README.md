@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/logo/linger_logo.png" width="600px">
+<img src="assets/logo/linger_v2.png" width="600px" alt="Linger">
 </div>
 
 # Linger
