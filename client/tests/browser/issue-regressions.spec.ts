@@ -714,7 +714,6 @@ test("hovering a message shows its actions button and changes nothing else (#139
   await expect(messages.last()).toContainText("trail map");
   // One of each kind the issue names, so a new hover rule on any of them fails here.
   await expect(page.locator(".msg-reply").first()).toBeVisible();
-  await expect(page.locator(".reaction").first()).toBeVisible();
   await expect(page.locator(".msg-edited").first()).toBeVisible();
   await expect(page.locator(".msg .md-link").first()).toBeVisible();
   await expect(page.locator(".msg .card").first()).toBeVisible();
@@ -752,9 +751,9 @@ test("hovering a message shows its actions button and changes nothing else (#139
     await message.scrollIntoViewIfNeeded();
     const before = await snapshot(message);
     const trigger = message.locator(".msg-actions-trigger");
-    // Hover each part of the message, not just its edge: a link, a reply line,
-    // a reaction and a name each had a hover style of their own.
-    const parts = message.locator(".msg-body, .msg-reply, .reaction, .md-link, .msg-author, .card, .att-image, .att-get");
+    // Hover each part of the message, not just its edge: a link, a reply line
+    // and a name each had a hover style of their own.
+    const parts = message.locator(".msg-body, .msg-reply, .md-link, .msg-author, .card, .att-image, .att-get");
     for (let part = 0; part < await parts.count(); part++) {
       await parts.nth(part).hover();
       // Shown in the same frame, not faded in. An opacity fade puts the button

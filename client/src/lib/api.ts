@@ -384,7 +384,7 @@ export class AuthedApi {
     );
   }
 
-  /** For the endpoints that answer 204 and say nothing, like reactions. */
+  /** For the endpoints that answer 204 and say nothing, like starring media. */
   put(path: string, body?: unknown): Promise<void> {
     return this.#withAuth((accessToken) =>
       requestVoid(this.baseUrl, "PUT", path, { accessToken, body }),

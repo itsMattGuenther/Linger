@@ -8,11 +8,11 @@
  * to iterate over, and a key this build has never heard of still falls back to
  * the UI face rather than reaching for a font nobody bundled.
  *
- * What each key *looks like* is a client concern — the same way the glyph for a
- * reaction key is — so the family stacks live in `styles/tokens.css` as
- * `--font-<key>`. T-604 fetches, subsets and `@font-face`s the actual files; a
- * key whose face is not installed falls through its stack to the generic at the
- * end, which is why a name is never invisible while that task is open.
+ * What each key *looks like* is a client concern, so the family stacks live in
+ * `styles/tokens.css` as `--font-<key>`. T-604 fetches, subsets and
+ * `@font-face`s the actual files; a key whose face is not installed falls
+ * through its stack to the generic at the end, which is why a name is never
+ * invisible while that task is open.
  */
 export const FONT_KEYS = [
   "geist-sans",
@@ -56,8 +56,7 @@ export function messageFontVar(key: string | null | undefined): string {
  *
  * A label and not a derivation: "ibm-plex-sans" does not title-case into "IBM
  * Plex Sans", and a picker that offers you "Ibm Plex Sans" looks like nobody
- * checked. Same category as a reaction key's glyph — the key is the contract,
- * the label is ours.
+ * checked. The key is the contract; the label is ours.
  */
 export const FONT_LABELS: Record<FontKey, string> = {
   "geist-sans": "Geist Sans",

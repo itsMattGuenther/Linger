@@ -189,3 +189,24 @@ rule 13.
 Kept here only so nobody restores the deleted sections thinking they were lost.
 Adding an AI feature is still Matt's call rather than a maintenance decision;
 there is just no need to explain that at length.
+
+---
+
+## Decided — reactions come out, as a trial
+
+**Matt, 2026-09-24 (#168).** Emoji reactions on messages clutter the
+conversation. The app no longer shows them or offers a way to add one. People
+answer by replying or saying something, and the composer's emoji selector still
+puts emoji into that text. This goes against the original design (SPEC §4.8,
+V1 feature 11) on purpose. It is a trial to see how people take it.
+
+**Taken out of the client only.** The server keeps the twelve keys, the
+endpoints, the stored reactions, export and the `reaction.update` frame. So
+bringing reactions back is a client change, nothing anybody already added is
+lost, and an older client keeps working. The cost: somebody on 0.3.4 or earlier
+can still add reactions and still sees them, and the new client does not.
+
+If the trial sticks, removing the server side is a separate decision. It is a
+protocol change that breaks older clients, and its migration deletes every
+stored reaction.
+

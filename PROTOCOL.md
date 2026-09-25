@@ -246,6 +246,11 @@ Reaction `key` is one of 12 fixed values defined in `linger-core::REACTIONS`. Th
 rejects anything else. `count` is sent but the client renders weight, not the number
 (SPEC §4.8) — it is present for accessibility labels and hover.
 
+The current client uses none of this: reactions are out of the app as a trial (SPEC
+§4.8, #168). It neither calls the reaction endpoints nor applies `reaction.update`, and
+it ignores the `reactions` field. The server keeps all of it, unchanged, so older clients
+still work and the trial can end either way without a migration.
+
 Edits are only permitted by the author. Deletes are permitted by the author or the host.
 Deleted messages become tombstones; they are not removed, so reply chains survive.
 

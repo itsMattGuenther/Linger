@@ -360,6 +360,22 @@ sunset. Subtle enough that most people never consciously notice. User-disableabl
 
 ### 4.8 Reactions
 
+**Taken out of the app, as a trial (Matt, 2026-09-24, #168).** The client shows
+no reactions and offers no way to add one. People answer a message by saying
+something — a reply or a new message — and the composer's small emoji selector
+puts ordinary Unicode emoji into that text. Marks collecting under messages
+cluttered the conversation; the trial is whether it reads better without them,
+and whether people miss them. This goes against the original design on
+purpose. See `docs/decisions.md`.
+
+The server side is unchanged while the trial runs: the fixed palette of 12
+(`linger-core::REACTIONS`), the endpoints, stored reactions, export and the
+`reaction.update` frame all remain (PROTOCOL §4, §5). An older client still
+shows and adds them, and nothing stored is lost. Removing the server side is a
+protocol change and gets its own decision if the trial sticks.
+
+If reactions return, they return as designed below.
+
 Fixed palette of 12. No custom emoji in V1. Reactions are those twelve keys —
 there is no picker of arbitrary marks. The composer can insert ordinary Unicode
 emoji into a message body from a small selector; that is typing, not a reaction.
@@ -485,7 +501,7 @@ of eight), and a group DM that wants to be bigger is a room. You cannot DM yours
 a note to yourself is a text file, and every messaging app that added one did it
 because it had somewhere to put a feature, not because anybody asked.
 
-**A DM is a room everywhere it can be.** It holds messages, files and reactions the way
+**A DM is a room everywhere it can be.** It holds messages and files the way
 a room does; typing and presence work inside it the way they do in a room. What differs
 is who it is fanned out to, and that is the whole of the implementation.
 
@@ -812,7 +828,7 @@ first two are the system defaults.
 | 7 | Roster-forward layout | §3 |
 | 9 | Name styling + optional message font | §4.5 |
 | 10 | Statuses and away messages | §4.6 |
-| 11 | Reactions by weight | §4.8 |
+| 11 | Reactions by weight — taken out of the client as a trial (#168) | §4.8 |
 | 12 | File upload 500 MB, EXIF stripped | §4.10 |
 | 13 | Media collection | §4.4 |
 | 14 | Readable, responsive message layout | §4.7 |

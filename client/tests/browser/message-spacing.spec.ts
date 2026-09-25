@@ -83,7 +83,7 @@ for (const scale of [100, 200]) {
   });
 }
 
-test("message menu keeps reply, editing, reactions and confirmed deletion reachable", async ({ page }) => {
+test("message menu keeps reply, editing and confirmed deletion reachable", async ({ page }) => {
   await page.goto("/tests/fixtures/console.html?spacing");
   const message = page.locator(".msg").last();
   const trigger = message.getByRole("button", { name: "Actions for Matt's message" });
@@ -107,13 +107,6 @@ test("message menu keeps reply, editing, reactions and confirmed deletion reacha
   await expect(editor).toHaveValue("Another short line.");
   await expect(editor).toBeFocused();
   await editor.press("Escape");
-
-  await open();
-  await menu.getByRole("menuitem", { name: "react to Matt's message" }).click();
-  await menu.getByRole("menuitem", { name: /^react with/ }).first().click();
-  await expect(menu).toHaveCount(0);
-  await expect(message.getByRole("status")).toHaveText("Reaction added.");
-  await expect(trigger).toBeFocused();
 
   // A dismissed confirmation must not survive when the menu reopens.
   await open();

@@ -255,15 +255,16 @@ them — that is the one thing that will interrupt them.
 Hover over a message or use Tab to reveal its **⋯** button. Click it or press
 Enter to open the message actions; Escape closes the menu and returns focus.
 
-- **react** — twelve reactions, the same twelve for everybody. No custom emoji.
 - **reply** — quotes what you are answering. **Escape** cancels it.
 - **edit** — your own messages only. **Shortcut: press Up arrow in an empty box**
   to edit the last thing you said.
 - **delete** — asks once, then it is gone
 
 The **smile** on the right of the box opens a small set of ordinary emoji to
-drop into what you are typing. Hover it for **Emoji**. This is not the twelve
-reactions on a message, and there are no custom emoji.
+drop into what you are typing. Hover it for **Emoji**. There are no custom emoji.
+
+There are no reactions on messages, for now. They are out as a trial: to answer
+something, reply to it, emoji and all.
 
 ## Sharing files
 

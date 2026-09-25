@@ -17,9 +17,9 @@
  * node kinds and drawn as React elements (`markdown.ts`, `MarkdownBody.tsx`), so a
  * body that looks like markup is text that looks like markup.
  *
- * **Reactions are weight, never numbers** (SPEC §4.8). The count comes down the
- * wire and determines the mark's weight. Hover or keyboard focus names the
- * people who reacted without turning their reaction into a score.
+ * **No reactions are drawn** (SPEC §4.8). They were taken out as a trial
+ * (#168): people answer by saying something. The server still stores and
+ * sends them; this view shows none of it and offers no way to add one.
  *
  * **Nothing here counts anything** (SPEC §4.2). Where you left off is a line in
  * the stream, not a number beside a room name. Opening a room returns to
@@ -32,7 +32,6 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -48,7 +47,6 @@ import { ApiError, type AuthedApi } from "../lib/api";
 import { ActionIcon } from "../lib/icons";
 import IconButton from "../lib/IconButton";
 import ContextPanel from "../lib/ContextPanel";
-import Tooltip from "../lib/Tooltip";
 import { useNow } from "../lib/clock";
 import { dmLabel } from "../dm/dm";
 import { emptyRoom } from "../settings/copy";
@@ -65,7 +63,6 @@ import {
   openRoom,
   sendMessage,
   startedTyping,
-  toggleReaction,
   typistsIn,
   useGateway,
 } from "../lib/gateway";
@@ -78,7 +75,6 @@ import VoiceBar from "../voice/VoiceBar";
 import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
 import { uploadFile } from "../lib/upload";
 import { linkTargets, mentionHandles, plainText } from "./markdown";
-import { REACTIONS, reactionOf, reactionTitle, reactionWeight } from "./reactions";
 import { COMPOSER_EMOJI, insertGlyph } from "./composerEmoji";
 import { useAutoGrow } from "./autoGrow";
 import { buildRows, type StreamRow } from "./rows";
@@ -149,7 +145,6 @@ const JUMP_MAX_FRAMES = 90;
 interface Actions {
   reply: (message: Message) => void;
   edit: (message: Message) => void;
-  react: (message: Message, key: string) => Promise<void>;
   remove: (message: Message) => Promise<void>;
   jumpTo: (id: MessageId) => void;
 }
@@ -460,7 +455,6 @@ export default function Stream({
         setReplyTo(null);
         setEditing(message.id);
       },
-      react: (message, key) => toggleReaction(api, message, key),
       remove: (message) => deleteMessage(api, message),
       jumpTo: (id) => {
         if (rowOfNow.current.get(id) === undefined) return;
@@ -740,8 +734,8 @@ function MessageRow({
   now: number;
   editing: boolean;
   flashing: boolean;
-  /** Sent, but not yet confirmed by the server (issue #128) — no actions or
-   *  reactions until it is a real message with a real id. */
+  /** Sent, but not yet confirmed by the server (issue #128) — no actions
+   *  until it is a real message with a real id. */
   pending: boolean;
   onEditDone: () => void;
   actions: Actions;
@@ -756,59 +750,16 @@ function MessageRow({
     () => me !== null && !deleted && mentionHandles(message.body).includes(me.username),
     [message.body, me, deleted],
   );
-  const [picking, setPicking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLButtonElement | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const closeMenu = () => {
     setMenuAnchor(null);
-    setPicking(false);
     setConfirming(false);
   };
 
-  // Only a successful local gesture earns feedback. History and gateway
-  // replays render the same marks, but must never replay the little motion.
-  const reacting = useRef(false);
-  const live = useRef(true);
-  const [reactionPending, setReactionPending] = useState(false);
-  const [confirmedReaction, setConfirmedReaction] = useState<string | null>(null);
-  const [reactionNotice, setReactionNotice] = useState("");
-  useEffect(() => {
-    live.current = true;
-    return () => { live.current = false; };
-  }, []);
-  useEffect(() => {
-    if (confirmedReaction === null) return;
-    const timer = setTimeout(() => setConfirmedReaction(null), 200);
-    return () => clearTimeout(timer);
-  }, [confirmedReaction]);
-
-  const react = async (target: Message, key: string): Promise<void> => {
-    if (reacting.current) return;
-    reacting.current = true;
-    setReactionPending(true);
-    setConfirmedReaction(null);
-    setReactionNotice("");
-    setProblem(null);
-    const removing = me !== null && target.reactions.some(
-      (group) => group.key === key && group.user_ids.includes(me.id),
-    );
-    try {
-      await actions.react(target, key);
-      if (live.current) {
-        setConfirmedReaction(removing ? null : key);
-        setReactionNotice(removing ? "Reaction removed." : "Reaction added.");
-      }
-    } catch (error) {
-      if (live.current) setProblem(error instanceof ApiError ? error.message : "Couldn't reach the server.");
-    } finally {
-      reacting.current = false;
-      if (live.current) setReactionPending(false);
-    }
-  };
-
-  // A delete the server refuses, or a reaction that didn't land, has to say so
-  // next to the message it was aimed at. Anywhere else and it reads as being
+  // A delete the server refuses has to say so next to the message it was
+  // aimed at. Anywhere else and it reads as being
   // about something you are not looking at.
   const run = (work: Promise<void>): void => {
     setProblem(null);
@@ -894,93 +845,64 @@ function MessageRow({
           variant="menu"
           onClose={closeMenu}
         >
-          <div className={`context-actions${picking ? " msg-reaction-choices" : ""}`}>
-            {picking ? (
-              REACTIONS.map((reaction) => (
-                <button
-                  key={reaction.key}
-                  type="button"
-                  role="menuitem"
-                  autoFocus={reaction === REACTIONS[0]}
-                  title={reaction.label}
-                  aria-label={`react with ${reaction.label}`}
-                  disabled={reactionPending}
-                  onClick={() => {
-                    void react(message, reaction.key);
-                    closeMenu();
-                  }}
-                >
-                  {reaction.glyph}
-                </button>
-              ))
-            ) : (
-              <>
-                {/* Twelve fixed marks, not an arbitrary emoji picker (SPEC §4.8). */}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => setPicking(true)}
-                  aria-label={`react to ${name}'s message`}
-                >
-                  react
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    actions.reply(message);
-                  }}
-                  aria-label={`reply to ${name}`}
-                >
-                  reply
-                </button>
-                {mine ? (
+          <div className="context-actions">
+            {/* No "react": reactions were taken out as a trial (#168). An
+                answer is a reply, and a reply can carry emoji. */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                closeMenu();
+                actions.reply(message);
+              }}
+              aria-label={`reply to ${name}`}
+            >
+              reply
+            </button>
+            {mine ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  actions.edit(message);
+                }}
+              >
+                edit
+              </button>
+            ) : null}
+            {mine || me?.is_host === true ? (
+              confirming ? (
+                <>
                   <button
                     type="button"
                     role="menuitem"
+                    autoFocus
                     onClick={() => {
                       closeMenu();
-                      actions.edit(message);
+                      run(actions.remove(message));
                     }}
                   >
-                    edit
+                    delete for good
                   </button>
-                ) : null}
-                {mine || me?.is_host === true ? (
-                  confirming ? (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        autoFocus
-                        onClick={() => {
-                          closeMenu();
-                          run(actions.remove(message));
-                        }}
-                      >
-                        delete for good
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => setConfirming(false)}
-                      >
-                        keep
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => setConfirming(true)}
-                    >
-                      delete
-                    </button>
-                  )
-                ) : null}
-              </>
-            )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => setConfirming(false)}
+                  >
+                    keep
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setConfirming(true)}
+                >
+                  delete
+                </button>
+              )
+            ) : null}
           </div>
         </ContextPanel>
       ) : null}
@@ -990,18 +912,6 @@ function MessageRow({
       {extras}
 
       {problem ? <p className="msg-problem meta" role="alert">{problem}</p> : null}
-      <span className="sr-only" role="status">{reactionNotice}</span>
-
-      {message.reactions.length === 0 ? null : (
-        <Reactions
-          message={message}
-          me={me}
-          people={people}
-          confirmedKey={confirmedReaction}
-          pending={reactionPending}
-          onReact={(target, key) => void react(target, key)}
-        />
-      )}
     </div>
   );
 }
@@ -1046,111 +956,6 @@ function ReplyLine({
 
 function shorten(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit).trimEnd()}…`;
-}
-
-/**
- * The marks on a message.
- *
- * Each one's `--weight` runs 0 to 1 and CSS turns it into size and density. No
- * numeral appears. Hover and keyboard focus name the people behind the mark,
- * which is where SPEC §4.8 puts that detail.
- */
-function Reactions({
-  message,
-  me,
-  people,
-  onReact,
-  confirmedKey,
-  pending,
-}: {
-  message: Message;
-  me: User | null;
-  people: Map<string, User>;
-  onReact: (message: Message, key: string) => void;
-  confirmedKey: string | null;
-  pending: boolean;
-}) {
-  return (
-    <div className="reactions">
-      {message.reactions.map((group) => {
-        // A key this build has never heard of is skipped rather than guessed
-        // at, so a newer server adding a thirteenth mark doesn't draw a blank.
-        const reaction = reactionOf(group.key);
-        if (!reaction) return null;
-        const names = group.user_ids.map((id) => people.get(id)?.display_name ?? "someone");
-        const mine = me !== null && group.user_ids.includes(me.id);
-        return (
-          <ReactionMark
-            key={group.key}
-            label={reaction.label}
-            glyph={reaction.glyph}
-            names={names}
-            mine={mine}
-            confirmed={mine && confirmedKey === group.key}
-            pending={pending}
-            weight={reactionWeight(group.count)}
-            onClick={() => onReact(message, group.key)}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function ReactionMark({
-  label,
-  glyph,
-  names,
-  mine,
-  confirmed,
-  pending,
-  weight,
-  onClick,
-}: {
-  label: string;
-  glyph: string;
-  names: string[];
-  mine: boolean;
-  confirmed: boolean;
-  pending: boolean;
-  weight: number;
-  onClick: () => void;
-}) {
-  const anchor = useRef<HTMLButtonElement | null>(null);
-  const tooltipId = useId();
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const open = hovered || focused;
-  const title = reactionTitle(names, label);
-
-  return (
-    <>
-      <button
-        ref={anchor}
-        type="button"
-        className="reaction"
-        data-mine={mine ? "true" : undefined}
-        data-confirmed={confirmed ? "true" : undefined}
-        disabled={pending}
-        aria-busy={pending}
-        style={{ "--weight": weight }}
-        aria-pressed={mine}
-        aria-label={`${label} reaction`}
-        aria-describedby={open ? tooltipId : undefined}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onClick={onClick}
-      >
-        <span className="reaction-glyph" aria-hidden="true">{glyph}</span>
-        {mine ? <span className="reaction-own" aria-hidden="true">✓</span> : null}
-      </button>
-      {open && anchor.current ? (
-        <Tooltip anchor={anchor.current} id={tooltipId}>{title}</Tooltip>
-      ) : null}
-    </>
-  );
 }
 
 /** Editing in place. Enter saves, Escape gives up, the text survives a refusal. */
