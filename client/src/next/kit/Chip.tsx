@@ -12,6 +12,7 @@ export function Chip({
   children,
   label,
   marker,
+  active = false,
   onRemove,
 }: {
   /** What the chip shows: a `Name`, or words. */
@@ -19,6 +20,8 @@ export function Chip({
   /** The words for it, used in "Remove …". */
   label: string;
   marker?: MarkerPerson;
+  /** Lit in the lamp: the person is talking right now. */
+  active?: boolean;
   onRemove?: () => void;
 }) {
   const inner = (
@@ -29,11 +32,11 @@ export function Chip({
     </>
   );
   return onRemove ? (
-    <button type="button" className="k-chip" data-kit="Chip" data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
+    <button type="button" className="k-chip" data-kit="Chip" data-active={active ? "yes" : undefined} data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
       {inner}
     </button>
   ) : (
-    <span className="k-chip" data-kit="Chip">
+    <span className="k-chip" data-kit="Chip" data-active={active ? "yes" : undefined}>
       {inner}
     </span>
   );

@@ -6,10 +6,14 @@ import {
   connect,
   disconnect,
   type GatewayState,
+  leaveVoice,
   loadNotifyRules,
   loadReadMarkers,
+  setVoiceDeafened,
+  setVoiceMuted,
   useGateway,
 } from "../../../lib/gateway";
+import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
 import { forgetNotifications, resetNotifications } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
@@ -17,10 +21,12 @@ import { dropPresence, setPresenceLive, setPresenceRoom, startPresence } from ".
 import type { RoomId } from "../../../generated/RoomId";
 import { tauriBus } from "../../core/bus";
 import { listModel } from "../../core/list";
+import { talkingNow, voiceModel } from "../../core/voice";
 import { shareAsOwner } from "../../core/share";
 import { Spinner, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import { ListView } from "./ListView";
+import type { VoiceDockProps } from "./VoiceDock";
 import "./ListWindow.css";
 
 /** How often the server's name is asked for again. It changes about once ever. */
@@ -127,12 +133,37 @@ function ServerList({ session }: { session: ServerSession }) {
 
   const model = useMemo(() => listModel(gateway, now), [gateway, now]);
   const speaking = useMemo(() => talkingNow(gateway), [gateway]);
+  const pushToTalk = gateway.myVoice?.pushToTalk ?? false;
+
+  // Push-to-talk while the list has focus, as today's client does; a chat
+  // window reports its own key presses (core/share.ts, "voice.talk").
+  useEffect(() => {
+    if (!pushToTalk) return;
+    const down = (event: KeyboardEvent) => {
+      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(baseUrl, false).catch(() => undefined);
+    };
+    const release = () => void setVoiceMuted(baseUrl, true).catch(() => undefined);
+    const up = (event: KeyboardEvent) => {
+      if (event.key === PUSH_TO_TALK_KEY) release();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", release);
+    };
+  }, [baseUrl, pushToTalk]);
+
+  const voice = useMemo(() => voiceDock(gateway, speaking, baseUrl), [gateway, speaking, baseUrl]);
 
   return (
     <ListView
       serverName={serverName ?? hostOf(baseUrl)}
       model={model}
       speaking={speaking}
+      voice={voice}
       onOpenRoom={(room) => openChat(baseUrl, room)}
       onOpenDm={(room) => openChat(baseUrl, room)}
       onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
@@ -152,19 +183,19 @@ function openChat(server: string, room: RoomId): void {
 }
 
 /**
- * Who is talking, by user id. Only known while you are in voice yourself:
- * speaking comes from the audio you are hearing, never from the server.
+ * The voice bar: what it shows comes from the store (core/voice.ts); its
+ * controls act here, in the owner, which keeps the voice seat.
  */
-function talkingNow(state: GatewayState): ReadonlySet<string> {
-  const mine = state.myVoice;
-  if (mine === null) return new Set();
-  const peers = state.voice[mine.roomId] ?? [];
-  const bySession = new Map(peers.map((peer) => [peer.session_id, peer.user_id]));
-  const ids = Object.entries(mine.speaking)
-    .filter(([, on]) => on)
-    .map(([session]) => bySession.get(session))
-    .filter((id): id is string => id !== undefined);
-  return new Set(ids);
+function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string): VoiceDockProps | undefined {
+  const model = voiceModel(state, speaking);
+  if (model === null) return undefined;
+  return {
+    ...model,
+    onGoToRoom: () => openChat(server, model.roomId),
+    onMute: (muted) => void setVoiceMuted(server, muted).catch(() => undefined),
+    onDeafen: (deafened) => void setVoiceDeafened(server, deafened).catch(() => undefined),
+    onLeave: () => void leaveVoice(server).catch(() => undefined),
+  };
 }
 
 function hostOf(baseUrl: string): string {

@@ -1,13 +1,10 @@
 import { useState } from "react";
-import type { PresenceState } from "../../../generated/PresenceState";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
-import { paletteKey } from "../../../lib/names";
 import type { ListModel, PersonRow } from "../../core/list";
 import {
   Marker,
   MarkerCluster,
-  type MarkerPerson,
   markerStateOf,
   MARKER_WORDS,
   Name,
@@ -18,12 +15,9 @@ import {
   VoiceGlyph,
 } from "../../kit";
 import { LogoMark } from "../LogoMark";
+import { markerFor } from "../markers";
 import "./ListView.css";
-
-/** A person's marker: their palette color and their presence. */
-export function markerFor(user: User, state: PresenceState): MarkerPerson {
-  return { color: paletteKey(user) ?? "slate", state: markerStateOf(state) };
-}
+import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 
 export interface ListViewProps {
   serverName: string;
@@ -35,6 +29,8 @@ export interface ListViewProps {
   onOpenPerson?: (user: User) => void;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
+  /** You're in voice: the voice bar at the bottom. */
+  voice?: VoiceDockProps;
 }
 
 type Fold = "rooms" | "dms" | "people" | "away" | "offline";
@@ -44,7 +40,7 @@ type Fold = "rooms" | "dms" | "people" | "away" | "offline";
  * with who's in them, your DMs, and everyone else. Drawn only from the model
  * and the kit, so the same view serves the real window and the fixture page.
  */
-export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onOpenPerson, onClose }: ListViewProps) {
+export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onOpenPerson, onClose, voice }: ListViewProps) {
   // Offline starts folded (the design); everything else starts open.
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
   const toggle = (fold: Fold) =>
@@ -182,6 +178,8 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
           </div>
         ) : null}
       </div>
+
+      {voice ? <VoiceDock {...voice} /> : null}
     </div>
   );
 }

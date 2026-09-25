@@ -106,3 +106,41 @@ test("says in words what the markers show", async ({ page }) => {
   await expect(page.getByRole("button", { name: "#general, 3 people in it, voice on" })).toBeVisible();
   await expect(page.getByRole("button", { name: "#listening-room, one person in it" })).toBeVisible();
 });
+
+test.describe("in voice", () => {
+  test("the voice bar names the room, lights who is talking, and offers the three controls", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await expect(bar).toContainText("In voice");
+    await expect(bar.getByRole("list", { name: "Who's in voice" }).locator("li")).toHaveText(["you", "Eli", "Jules"]);
+    const lit = await bar.locator("[data-kit='Chip']").evaluateAll((chips) => chips.map((chip) => chip.getAttribute("data-active")));
+    expect(lit).toEqual([null, "yes", null]);
+    for (const name of ["Mute", "Deafen", "Leave"]) await expect(bar.getByRole("button", { name })).toBeVisible();
+    const heights = await bar.locator("button").evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+    expect(new Set(heights)).toEqual(new Set([24]));
+  });
+
+  test("its controls do what they say", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await bar.getByRole("button", { name: "Mute" }).click();
+    await bar.getByRole("button", { name: "Deafen" }).click();
+    await bar.getByRole("button", { name: "Leave" }).click();
+    await bar.getByRole("button", { name: "Go to #general" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "mute:true,deafen:true,leave,go:r-general");
+  });
+
+  test("with push-to-talk there is no Mute button, and it says how to talk", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice&ptt");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await expect(bar.getByRole("button", { name: /^Mute/ })).toHaveCount(0);
+    await expect(bar.getByRole("status")).toHaveText("hold control to talk");
+  });
+
+  test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const scroll = await page.locator(".nx-list-scroll").boundingBox();
+    const bar = await page.getByRole("region", { name: "In voice in #general" }).boundingBox();
+    expect(scroll && bar && scroll.y + scroll.height <= bar.y + 0.5).toBe(true);
+  });
+});

@@ -13,6 +13,13 @@
   font-size: var(--text-control);
 }
 
+/* Talking: the lamp, as on the tab of the room you're in voice in. */
+.k-chip[data-active="yes"] {
+  border-color: var(--accent-edge);
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+
 button.k-chip {
   padding-right: var(--space-1-5);
 }
