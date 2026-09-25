@@ -132,15 +132,18 @@ substitute for this library; do not uninstall it. For other distributions,
 see [AppImage's FUSE instructions](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
 **`Could not create GBM EGL display` and the app aborts:** open Linger again.
-Newer versions notice that the last launch stopped before it drew anything and
-turn WebKit's GPU path (GBM) off on that computer from then on. To try the GPU
-path again later, delete `~/.local/state/linger/gbm-off`. Setting
+Linger notices that the last launch stopped before it drew anything and turns
+WebKit's GPU path (GBM) off while that WebKit is installed. To try the GPU path
+again later, delete the `gbm-off-…` file in `~/.local/state/linger/`. Setting
 `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` yourself (`1` off, `0` on) always wins.
+v0.3.5's AppImage hit this once after updating on NVIDIA + Wayland machines;
+newer AppImages don't try the GPU path at all.
 
-**Typing or scrolling feels a beat behind:** v0.3.3 and v0.3.4 turned the GPU
-path off on every Linux computer, which delays every frame. Newer versions only
-do that where it is needed. After updating, the first launch may still feel
-slow; the one after it will not.
+**Typing or scrolling feels a beat behind:** the AppImage keeps WebKit's GPU
+path off, because the WebKit it carries can't use it on some graphics setups,
+and without it every frame arrives a beat late. The `.deb` and `.rpm` packages
+use your system's WebKit and keep it on. On Omarchy or Arch, install the Arch
+package instead of the AppImage for the same result.
 
 For **v0.3.2 and earlier**, use this exact command with your downloaded filename:
 

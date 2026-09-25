@@ -12,7 +12,7 @@ use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use linger_client_lib::graphics::{self, OFF, PROBE};
+use linger_client_lib::graphics::{self, LEGACY_OFF, OFF_PREFIX, PROBE};
 
 const MENU_ID: &str = "com.linger.desktop";
 
@@ -51,43 +51,87 @@ enum Gbm {
     Off,
 }
 
+/// How this process was started, as far as the GPU path is concerned.
+struct Launch<'a> {
+    native_wayland: bool,
+    /// Running from the AppImage, with its own bundled WebKitGTK.
+    appimage: bool,
+    /// The WebKitGTK version this process will run, e.g. `2.52.6`.
+    webkit: &'a str,
+}
+
 /// Decide the GPU path for a launch nobody chose it for, and leave the probe
 /// that lets the next launch know how this one went (see `graphics.rs`).
 ///
-/// Off under X11: that is where the abort was seen (2026-09-16, the 0.1.0
-/// AppImage on an RTX 4090 + AMD Raphael machine, before native Wayland was the
-/// default), and nothing has shown it is safe there since. On under native
-/// Wayland, where the same machine runs it fine and typing keeps up (#169).
-/// Off, too, when there is nowhere to keep the probe, because then a computer
-/// that aborts would abort on every launch with nothing to stop it.
-fn choose_gbm(native_wayland: bool, state: Option<&Path>) -> Gbm {
-    if !native_wayland {
+/// Off in the AppImage (#187). It bundles WebKitGTK 2.50.4 from Ubuntu 22.04,
+/// which cannot create a GBM display on the RTX 4090 + AMD Raphael Omarchy
+/// machine at all: 11 launches out of 11 aborted on 2026-09-25, on either GPU.
+/// Every AppImage user on hardware like that would pay a crashed launch for
+/// nothing. Packages that run the system's WebKit (`.deb`, `.rpm`, the Arch
+/// package, dev builds) are where the GPU path works, and the reason #169's
+/// typing lag has a fix.
+///
+/// Off under X11, where the abort was first seen and nothing has shown it is
+/// safe since. Off, too, when there is nowhere to keep the probe: a computer
+/// that aborts would then abort on every launch with nothing to stop it.
+///
+/// Otherwise on, unless this very WebKit version has aborted here before. A
+/// probe left by a launch that died is recorded against the WebKit *that*
+/// launch ran, so a WebKit update gets a fresh try.
+fn choose_gbm(launch: &Launch, state: Option<&Path>) -> Gbm {
+    if launch.appimage || !launch.native_wayland {
         return Gbm::Off;
     }
     let Some(state) = state else {
         return Gbm::Off;
     };
-    if state.join(OFF).exists() {
-        return Gbm::Off;
-    }
-    if state.join(PROBE).exists() {
+    let _ = fs::remove_file(state.join(LEGACY_OFF));
+    if let Ok(crashed) = fs::read_to_string(state.join(PROBE)) {
         // The last launch tried the GPU path and never drew a frame.
-        let note = "The last launch that tried WebKit's GPU path (GBM) stopped before \
-                    drawing anything, so Linger keeps it off on this computer. Delete \
-                    this file to try again.\n";
-        let _ = fs::write(state.join(OFF), note);
+        let crashed = match crashed.trim() {
+            "" => launch.webkit,
+            version => version,
+        };
+        let off = state.join(format!("{OFF_PREFIX}{crashed}"));
+        let note = format!(
+            "The last launch that tried WebKit's GPU path (GBM) with WebKitGTK {crashed} \
+             stopped before drawing anything, so Linger keeps it off while this WebKit is \
+             installed. Delete this file to try again.\n"
+        );
+        let _ = fs::write(&off, note);
         let _ = fs::remove_file(state.join(PROBE));
         eprintln!(
             "Linger: the last launch stopped during graphics startup, so WebKit's GPU path \
-             stays off on this computer. Delete {} to try it again.",
-            state.join(OFF).display()
+             stays off with WebKitGTK {crashed}. Delete {} to try it again.",
+            off.display()
         );
+    }
+    if state
+        .join(format!("{OFF_PREFIX}{}", launch.webkit))
+        .exists()
+    {
         return Gbm::Off;
     }
-    match fs::create_dir_all(state).and_then(|()| fs::write(state.join(PROBE), b"")) {
+    match fs::create_dir_all(state).and_then(|()| fs::write(state.join(PROBE), launch.webkit)) {
         Ok(()) => Gbm::On,
         Err(_) => Gbm::Off,
     }
+}
+
+/// The WebKitGTK this process is about to run, as `major.minor.micro`. In the
+/// AppImage that is the bundled copy, elsewhere the system's.
+fn webkit_version() -> String {
+    // SAFETY: three argument-free getters that report the loaded library's
+    // version; they touch no GTK or WebKit state, so calling them before GTK
+    // starts is fine.
+    let (major, minor, micro) = unsafe {
+        (
+            webkit2gtk_sys::webkit_get_major_version(),
+            webkit2gtk_sys::webkit_get_minor_version(),
+            webkit2gtk_sys::webkit_get_micro_version(),
+        )
+    };
+    format!("{major}.{minor}.{micro}")
 }
 
 /// What somebody set before this process touched anything. The menu entry is
@@ -129,8 +173,13 @@ pub fn configure() -> Result<(), &'static str> {
     // Somebody's own `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins; WebKit
     // reads it straight from the environment.
     if chosen.gbm.is_none() {
-        let state = graphics::state_dir();
-        if choose_gbm(selected == Some("wayland"), state.as_deref()) == Gbm::Off {
+        let webkit = webkit_version();
+        let launch = Launch {
+            native_wayland: selected == Some("wayland"),
+            appimage: std::env::var_os("APPIMAGE").is_some(),
+            webkit: &webkit,
+        };
+        if choose_gbm(&launch, graphics::state_dir().as_deref()) == Gbm::Off {
             std::env::set_var(GBM, "1");
         }
     }
@@ -448,11 +497,36 @@ mod tests {
         root
     }
 
+    const SYSTEM: Launch = Launch {
+        native_wayland: true,
+        appimage: false,
+        webkit: "2.52.6",
+    };
+
     #[test]
     fn x11_stays_off_the_gpu_path_and_leaves_no_probe() {
         let root = scratch("gbm-x11");
         let state = root.join("state");
-        assert_eq!(choose_gbm(false, Some(&state)), Gbm::Off);
+        let x11 = Launch {
+            native_wayland: false,
+            ..SYSTEM
+        };
+        assert_eq!(choose_gbm(&x11, Some(&state)), Gbm::Off);
+        assert!(!state.join(PROBE).exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_appimage_never_tries_the_gpu_path() {
+        // Its bundled WebKitGTK 2.50.4 aborted 11 times out of 11 (#187).
+        let root = scratch("gbm-appimage");
+        let state = root.join("state");
+        let appimage = Launch {
+            appimage: true,
+            webkit: "2.50.4",
+            ..SYSTEM
+        };
+        assert_eq!(choose_gbm(&appimage, Some(&state)), Gbm::Off);
         assert!(!state.join(PROBE).exists());
         fs::remove_dir_all(&root).unwrap();
     }
@@ -462,38 +536,74 @@ mod tests {
         let root = scratch("gbm-wayland");
         let state = root.join("state");
 
-        // First launch: tries it, and says so.
-        assert_eq!(choose_gbm(true, Some(&state)), Gbm::On);
-        assert!(state.join(PROBE).exists());
+        // First launch: tries it, and says with which WebKit.
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
+        assert_eq!(fs::read_to_string(state.join(PROBE)).unwrap(), "2.52.6");
 
         // It drew frames (`graphics_started`), so the next launch tries again.
         fs::remove_file(state.join(PROBE)).unwrap();
-        assert_eq!(choose_gbm(true, Some(&state)), Gbm::On);
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
 
         // This one aborted before drawing: the probe is still there.
-        assert_eq!(choose_gbm(true, Some(&state)), Gbm::Off);
-        assert!(state.join(OFF).exists());
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::Off);
+        assert!(state.join("gbm-off-2.52.6").exists());
         assert!(!state.join(PROBE).exists());
 
         // And it stays off, rather than aborting every other launch.
-        assert_eq!(choose_gbm(true, Some(&state)), Gbm::Off);
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::Off);
         assert!(!state.join(PROBE).exists());
 
         // Deleting the file is how somebody asks to try again.
-        fs::remove_file(state.join(OFF)).unwrap();
-        assert_eq!(choose_gbm(true, Some(&state)), Gbm::On);
+        fs::remove_file(state.join("gbm-off-2.52.6")).unwrap();
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_crash_is_held_against_the_webkit_that_crashed() {
+        let root = scratch("gbm-versions");
+        let state = root.join("state");
+        // A launch with an older WebKit tried and died...
+        fs::create_dir_all(&state).unwrap();
+        fs::write(state.join(PROBE), "2.50.4").unwrap();
+        // ...and WebKit has been updated since: the new one still gets its try.
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
+        assert!(state.join("gbm-off-2.50.4").exists());
+        assert!(!state.join("gbm-off-2.52.6").exists());
+        assert_eq!(fs::read_to_string(state.join(PROBE)).unwrap(), "2.52.6");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_unversioned_record_from_0_3_5_is_dropped() {
+        // 0.3.5 wrote `gbm-off` without saying which WebKit crashed; on the
+        // Omarchy machine it was the AppImage's, and it must not keep the
+        // system's WebKit off the GPU path.
+        let root = scratch("gbm-legacy");
+        let state = root.join("state");
+        fs::create_dir_all(&state).unwrap();
+        fs::write(state.join(LEGACY_OFF), "old note").unwrap();
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
+        assert!(!state.join(LEGACY_OFF).exists());
         fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
     fn no_safety_net_means_no_gpu_path() {
-        assert_eq!(choose_gbm(true, None), Gbm::Off);
+        assert_eq!(choose_gbm(&SYSTEM, None), Gbm::Off);
         // A state "directory" that is really a file cannot hold the probe.
         let root = scratch("gbm-unwritable");
         let blocked = root.join("state");
         fs::write(&blocked, b"not a directory").unwrap();
-        assert_eq!(choose_gbm(true, Some(&blocked)), Gbm::Off);
+        assert_eq!(choose_gbm(&SYSTEM, Some(&blocked)), Gbm::Off);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn webkit_reports_a_version() {
+        let version = webkit_version();
+        assert_eq!(version.split('.').count(), 3, "{version}");
+        assert!(version.starts_with("2."), "{version}");
     }
 
     #[test]
