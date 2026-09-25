@@ -84,10 +84,20 @@ Linux startup accepts an explicit `LINGER_LINUX_BACKEND=wayland` or `x11`
 before initializing GTK. This app-specific choice overrides an AppImage
 launcher's `GDK_BACKEND` assignment. Without an explicit choice, a nonempty
 `WAYLAND_DISPLAY` selects native Wayland; other desktops keep the packaging
-fallback. Startup also defaults `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` to `1`,
-preserving an explicit value, including `0`. Invalid values fail clearly. It is a per-launch option,
-not a global desktop change. See
-`docs/linux-input-checks.md` for packaged evidence and hardware limits.
+fallback. Invalid values fail clearly. It is a per-launch option, not a global
+desktop change. See `docs/linux-input-checks.md` for packaged evidence and
+hardware limits.
+
+WebKit's GPU display path (GBM) is decided per launch unless
+`WEBKIT_DMABUF_RENDERER_DISABLE_GBM` is set explicitly. It is on under native
+Wayland for builds that run the system's WebKitGTK, because without it every
+frame is copied through memory and typing runs a frame behind (#169). It is off
+in the AppImage, whose bundled WebKitGTK 2.50.4 aborts creating a GBM display
+on NVIDIA + Wayland machines (#187), and off under X11. A launch that tries it
+leaves a probe in `$XDG_STATE_HOME/linger` naming its WebKit version; the page
+clears it after drawing two frames. A probe still there at the next launch
+means that launch died, so `gbm-off-<version>` keeps that WebKit off the GPU
+path (`client/src-tauri/src/graphics.rs`, `linux_startup.rs`).
 
 The same startup path ignores `SIGHUP` so closing the launching terminal does
 not kill the window, and an AppImage writes a user menu entry

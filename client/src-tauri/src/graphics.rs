@@ -10,8 +10,9 @@
 //! launch tries the GPU path. A launch that tries it leaves `PROBE` behind in
 //! [`state_dir`], and the page removes it through [`graphics_started`] once it
 //! has drawn frames. A probe still there at the next launch means that launch
-//! died before drawing anything, so `OFF` is written and every later launch
-//! on this computer stays off the GPU path.
+//! died before drawing anything, so an `OFF_PREFIX` record is written for the
+//! WebKit it was running, and later launches with that WebKit stay off the GPU
+//! path.
 //!
 //! This lives in the library rather than beside `linux_startup` because the
 //! command that clears the probe has to be registered with the Tauri builder.
@@ -19,9 +20,16 @@
 use std::path::PathBuf;
 
 /// Left behind by a launch that is trying the GPU path; removed once it draws.
+/// It holds the WebKitGTK version that launch was running.
 pub const PROBE: &str = "gbm-probe";
-/// This computer aborted on the GPU path once. Delete it to try again.
-pub const OFF: &str = "gbm-off";
+/// `gbm-off-<webkit version>`: that WebKitGTK aborted on the GPU path on this
+/// computer, so launches running it stay off it. Keyed by version (#187): the
+/// AppImage's bundled WebKit and the system's are different libraries, and a
+/// WebKit update deserves a fresh try. Delete the file to try again.
+pub const OFF_PREFIX: &str = "gbm-off-";
+/// 0.3.5's record, written without saying which WebKit crashed. Ignored and
+/// removed: it was usually the AppImage's WebKit, which never tries GBM now.
+pub const LEGACY_OFF: &str = "gbm-off";
 
 /// `$XDG_STATE_HOME/linger`, else `~/.local/state/linger`. `None` without a
 /// home to put it in, which the caller treats as "no safety net".

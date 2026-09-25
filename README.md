@@ -324,11 +324,13 @@ desktops keep their existing backend. `LINGER_LINUX_BACKEND=x11` or `wayland`
 remains an explicit per-launch override. Linux startup also sets
 `__NV_DISABLE_EXPLICIT_SYNC=1` unless already set, which stops NVIDIA +
 Wayland machines closing on launch with `Error 71`, so `pnpm tauri dev` needs
-no prefix. WebKit's GPU display path (GBM) stays on under native Wayland,
-because turning it off puts every frame a beat behind the keyboard (#169). It is
-off under X11, where it once aborted startup, and off for good on any computer
-where a launch that tried it died before drawing: the next launch notices and
-writes `~/.local/state/linger/gbm-off` (delete it to try again). An explicit
+no prefix. WebKit's GPU display path (GBM) is on under native Wayland for
+packages that use the system's WebKit, because turning it off puts every frame
+a beat behind the keyboard (#169). It is off in the AppImage, whose bundled
+WebKitGTK 2.50.4 aborts creating a GBM display on NVIDIA + Wayland machines
+(#187), and off under X11. If a launch that tried it dies before drawing, the
+next launch notices and writes `~/.local/state/linger/gbm-off-<webkit version>`,
+keeping that WebKit off it (delete the file to try again). An explicit
 `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins. These choices happen before
 GTK and change no desktop settings.
 See [Linux input checks](docs/linux-input-checks.md) for evidence and limits.
