@@ -177,8 +177,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | ID | Capability | Today | Buddy list | Proof |
 |---|---|---|---|---|
 | CONV-1 | The message list is virtualized: only rows on screen exist, with stable keys, so a measured row stays measured when history loads above it. | `stream/Stream.tsx`, AGENTS | Same, in every tab and window | F + D (10k-message room) |
-| CONV-2 | The view hangs from the bottom: new messages follow when you're at the end, and history loading above never moves what you read. | `Stream.tsx` `anchorTo: "end"`, `stream/resize.ts` | Same | F |
-| CONV-3 | Sessions: a 3-hour gap inserts a divider in natural words ("late Tuesday night", "tonight"). | `stream/time.ts`, `stream/rows.ts`, SPEC §4.7 | Same (the prototype shows "TONIGHT") | U (exists) + F |
+| CONV-2 | The view hangs from the bottom: new messages follow when you're at the end, and history loading above never moves what you read. | `Stream.tsx` `anchorTo: "end"`, `lib/resize.ts` | Same | F |
+| CONV-3 | Sessions: a 3-hour gap inserts a divider in natural words ("late Tuesday night", "tonight"). | `lib/time.ts`, `lib/rows.ts`, SPEC §4.7 | Same (the prototype shows "TONIGHT") | U (exists) + F |
 | CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | Names inline; **decision 9** | U + F |
 | CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G |
 | CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) |
@@ -210,9 +210,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | COMP-2 | Optimistic send: the message appears at once as pending, several can be in flight, and confirmation merges by id (#128). | `lib/gateway.ts` pending, `Stream.tsx` | Same | C + F |
 | COMP-3 | A failed send restores its text if the box is empty, or keeps a separate "Retry unsent message" if a newer draft exists. Neither erases the newer draft. | `Stream.tsx` | Same | F |
 | COMP-4 | Requests that never answer time out visibly. An unconfirmed request isn't reported as definitely lost (#118). | SPEC §4.7, `lib/api.ts` | Same; every request has a deadline | U + F |
-| COMP-5 | The box grows with its content without laying out the page on every keystroke (#127, measured on a hidden copy). | `stream/autoGrow.ts` | Same | U + D (typing latency) |
+| COMP-5 | The box grows with its content without laying out the page on every keystroke (#127, measured on a hidden copy). | `lib/autoGrow.ts` | Same | U + D (typing latency) |
 | COMP-6 | Up arrow in an empty box edits your last message (only at the live end). | `Stream.tsx` | Same | F |
-| COMP-7 | Emoji selector: ordinary Unicode, a short set, inserted at the cursor. | `stream/composerEmoji.ts` | Same | F |
+| COMP-7 | Emoji selector: ordinary Unicode, a short set, inserted at the cursor. | `lib/composerEmoji.ts` | Same | F |
 | COMP-8 | Limits mirrored before the round trip: 8,000 characters and 10 attachments. | `Stream.tsx`, `linger-core::limits` | Same | U |
 | COMP-9 | Switching rooms doesn't carry a half-typed line; files already uploading go with the composer. | `Stream.tsx` | Each tab keeps its own composer; persistence is **decision 11** | F |
 | COMP-10 | Typing announces itself with `typing.start`; the server accepts one per 4 seconds per room. | `lib/gateway.ts` `startedTyping`, PROTOCOL §8 | Same | C |
@@ -341,7 +341,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-14 | The voice controls stay reachable wherever you are. | `VoiceAway.tsx` | The voice bar in the list; with the list hidden, **decision 5** | F |
 | VOICE-15 | Join, leave, move and peer cues follow the voice and controls switches, not quiet hours. | `sound.ts`, `sound-events.ts` | Same | U |
 | VOICE-16 | Voice audio never passes through the webview; the Rust engine owns devices, Opus and peers. Frames go to it from **one** window. | `src-tauri/src/voice/`, `voice_frame` | The owner forwards frames (architecture) | U + D |
-| VOICE-17 | Join and leave draw the final layout from the first frame: no half-built bar, and the conversation doesn't blink (#141, #142). | `VoiceBar.tsx`, `stream/resize.ts` | Same | F (frame-by-frame) |
+| VOICE-17 | Join and leave draw the final layout from the first frame: no half-built bar, and the conversation doesn't blink (#141, #142). | `VoiceBar.tsx`, `lib/resize.ts` | Same | F (frame-by-frame) |
 
 ## LOOK — appearance and reading comfort
 

@@ -27,7 +27,7 @@ import {
   type SoundPrefs,
 } from "../lib/sound";
 import { useNow } from "../lib/clock";
-import { clockTime } from "../stream/time";
+import { clockTime } from "../lib/time";
 import { type ThemePref } from "../lib/theme";
 import {
   appVersion,

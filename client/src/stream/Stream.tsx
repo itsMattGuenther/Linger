@@ -79,11 +79,11 @@ import VoiceBar from "../voice/VoiceBar";
 import MarkdownBody, { type MentionLookup } from "./MarkdownBody";
 import { uploadFile } from "../lib/upload";
 import { linkTargets, mentionHandles, plainText } from "../lib/markdown";
-import { COMPOSER_EMOJI, insertGlyph } from "./composerEmoji";
-import { useAutoGrow } from "./autoGrow";
-import { buildRows, type StreamRow } from "./rows";
-import { useResizeAnchor } from "./resize";
-import { ageOpacity, clockTime, fullTime, sessionLabel } from "./time";
+import { COMPOSER_EMOJI, insertGlyph } from "../lib/composerEmoji";
+import { useAutoGrow } from "../lib/autoGrow";
+import { buildRows, type StreamRow } from "../lib/rows";
+import { useResizeAnchor } from "../lib/resize";
+import { ageOpacity, clockTime, fullTime, sessionLabel } from "../lib/time";
 import "./stream.css";
 
 /**

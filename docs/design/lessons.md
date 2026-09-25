@@ -253,7 +253,7 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
   frame through memory.
 - **Rule:**
   - Nothing measures or lays out the page on a keystroke. Growing text boxes
-    measure a detached copy (reuse `stream/autoGrow.ts`).
+    measure a detached copy (reuse `lib/autoGrow.ts`).
   - Typing latency has a budget in `system.md`, measured in real WebKitGTK.
 - **Check:** desktop check. The key-to-next-frame probe from #169 runs in the
   real app, and fails over the budget.

@@ -33,7 +33,7 @@ import { personStyle } from "../lib/names";
 import EmptyState from "../lib/EmptyState";
 import DestinationHeader from "../lib/DestinationHeader";
 import Button from "../lib/Button";
-import { fullTime } from "../stream/time";
+import { fullTime } from "../lib/time";
 import {
   dayEnd,
   dayStart,
