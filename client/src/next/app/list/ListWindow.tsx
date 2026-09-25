@@ -8,6 +8,7 @@ import {
   type GatewayState,
   leaveVoice,
   loadNotifyRules,
+  noteDm,
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
@@ -26,7 +27,10 @@ import { shareAsOwner } from "../../core/share";
 import { Spinner, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import { ListView } from "./ListView";
+import type { KnockResult } from "./PersonCard";
 import type { VoiceDockProps } from "./VoiceDock";
+import { ApiError, TransportError } from "../../../lib/api";
+import type { User } from "../../../generated/User";
 import "./ListWindow.css";
 
 /** How often the server's name is asked for again. It changes about once ever. */
@@ -166,9 +170,41 @@ function ServerList({ session }: { session: ServerSession }) {
       voice={voice}
       onOpenRoom={(room) => openChat(baseUrl, room)}
       onOpenDm={(room) => openChat(baseUrl, room)}
+      onMessage={(user) => void messageWith(api, user)}
+      onKnock={(user) => knock(api, user)}
       onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
     />
   );
+}
+
+/**
+ * Open a DM with somebody: the server finds the one you already have, or makes
+ * it (SPEC §4.13), and the chat window shows it.
+ */
+async function messageWith(api: ServerSession["api"], user: User): Promise<void> {
+  try {
+    const dm = await api.openDm([user.id]);
+    noteDm(api.baseUrl, dm);
+    openChat(api.baseUrl, dm.id);
+  } catch (error: unknown) {
+    console.error("could not open a DM", error);
+  }
+}
+
+/** Knock, and say plainly what happened (SPEC §4.9), in today's client's words. */
+async function knock(api: ServerSession["api"], user: User): Promise<KnockResult> {
+  try {
+    await api.knock(user.id);
+    return { ok: true };
+  } catch (error: unknown) {
+    const problem =
+      error instanceof ApiError && error.code === "RATE_LIMITED"
+        ? "That's three this hour. Give them a bit."
+        : error instanceof ApiError || error instanceof TransportError
+          ? error.message
+          : "Couldn't knock.";
+    return { ok: false, problem };
+  }
 }
 
 /**

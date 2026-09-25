@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { ListModel, PersonRow } from "../../core/list";
@@ -17,6 +17,7 @@ import {
 import { LogoMark } from "../LogoMark";
 import { markerFor } from "../markers";
 import "./ListView.css";
+import { type KnockResult, PersonCard } from "./PersonCard";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 
 export interface ListViewProps {
@@ -26,7 +27,10 @@ export interface ListViewProps {
   speaking?: ReadonlySet<string>;
   onOpenRoom?: (id: RoomId) => void;
   onOpenDm?: (id: RoomId) => void;
-  onOpenPerson?: (user: User) => void;
+  /** From a person's card: open a DM with them (finding the one you already have). */
+  onMessage?: (user: User) => void;
+  /** From a person's card: knock (SPEC §4.9). */
+  onKnock?: (user: User) => Promise<KnockResult>;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
   /** You're in voice: the voice bar at the bottom. */
@@ -40,7 +44,7 @@ type Fold = "rooms" | "dms" | "people" | "away" | "offline";
  * with who's in them, your DMs, and everyone else. Drawn only from the model
  * and the kit, so the same view serves the real window and the fixture page.
  */
-export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onOpenPerson, onClose, voice }: ListViewProps) {
+export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, onMessage, onKnock, onClose, voice }: ListViewProps) {
   // Offline starts folded (the design); everything else starts open.
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
   const toggle = (fold: Fold) =>
@@ -53,6 +57,15 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
   const open = (fold: Fold) => !folded.has(fold);
   const talking = (user: User) => speaking?.has(user.id) ?? false;
 
+  // The card that is open, the row it came from, and where that row was.
+  const [card, setCard] = useState<{ row: PersonRow; anchor: { top: number; bottom: number } } | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const closeCard = () => {
+    setCard(null);
+    // Focus goes back to the row that opened it.
+    opener.current?.focus();
+  };
+
   const person = (row: PersonRow) => (
     <Row
       key={row.user.id}
@@ -64,7 +77,12 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
       note={row.note}
       detail={row.line ?? undefined}
       away={row.state === "away"}
-      onActivate={onOpenPerson ? () => onOpenPerson(row.user) : undefined}
+      selected={card?.row.user.id === row.user.id}
+      onActivate={(event) => {
+        opener.current = event.currentTarget;
+        const box = event.currentTarget.getBoundingClientRect();
+        setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
+      }}
     />
   );
 
@@ -180,6 +198,22 @@ export function ListView({ serverName, model, speaking, onOpenRoom, onOpenDm, on
       </div>
 
       {voice ? <VoiceDock {...voice} /> : null}
+
+      {card ? (
+        <PersonCard
+          key={card.row.user.id}
+          user={card.row.user}
+          state={card.row.state}
+          note={card.row.note}
+          anchor={card.anchor}
+          onMessage={() => {
+            onMessage?.(card.row.user);
+            setCard(null);
+          }}
+          onKnock={() => onKnock?.(card.row.user) ?? Promise.resolve({ ok: false, problem: "Knocking isn't available here." })}
+          onClose={closeCard}
+        />
+      ) : null}
     </div>
   );
 }

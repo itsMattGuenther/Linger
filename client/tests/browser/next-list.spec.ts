@@ -91,15 +91,83 @@ test("starts every name at the same place, whatever leads the row", async ({ pag
   expect(new Set(starts).size).toBe(1);
 });
 
-test("opens a room, a DM or a person by click and by keyboard", async ({ page }) => {
+test("opens a room or a DM by click and by keyboard", async ({ page }) => {
   await rows(page, "Rooms").first().getByRole("button").first().click();
   await expect(page.locator("body")).toHaveAttribute("data-opened", "room:r-general");
   await rows(page, "DMs").first().getByRole("button").first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("body")).toHaveAttribute("data-opened", "room:r-general,dm:d-jules");
-  await rows(page, "Away").first().getByRole("button").first().focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator("body")).toHaveAttribute("data-opened", /person:u-sam$/);
+});
+
+test.describe("a person's card", () => {
+  test("opens from their row with their status, and focus goes in and comes back", async ({ page }) => {
+    const row = rows(page, "Away").first().getByRole("button").first();
+    await row.focus();
+    await page.keyboard.press("Enter");
+    const card = page.getByRole("dialog", { name: "Sam" });
+    await expect(card).toContainText("back after work");
+    await expect(card.getByRole("button", { name: "Message" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(row).toBeFocused();
+  });
+
+  test("shows what somebody is listening to, reading or working on", async ({ page }) => {
+    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    const card = page.getByRole("dialog", { name: "Jules" });
+    await expect(card).toContainText("speakers: finally set up");
+    await expect(card).toContainText("Listening to");
+    await expect(card).toContainText("Khruangbin — Con Todo El Mundo");
+  });
+
+  test("Message starts the DM and closes the card", async ({ page }) => {
+    await rows(page, "Away").first().getByRole("button").first().click();
+    await page.getByRole("dialog", { name: "Sam" }).getByRole("button", { name: "Message" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-sam");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("Knock says Knocked for three seconds, then is ready again", async ({ page }) => {
+    await page.clock.install();
+    await page.reload();
+    await rows(page, "Away").first().getByRole("button").first().click();
+    const card = page.getByRole("dialog", { name: "Sam" });
+    await card.getByRole("button", { name: "Knock" }).click();
+    await expect(card.getByRole("button", { name: "Knocked" })).toBeDisabled();
+    await page.clock.fastForward(3_100);
+    await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "knock:u-sam");
+  });
+
+  test("a knock refused for the hour says so in words", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?limit");
+    await rows(page, "Away").first().getByRole("button").first().click();
+    const card = page.getByRole("dialog", { name: "Sam" });
+    await card.getByRole("button", { name: "Knock" }).click();
+    await expect(card.getByRole("status")).toHaveText("That's three this hour. Give them a bit.");
+    await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+  });
+
+  test("nobody offline can be knocked", async ({ page }) => {
+    await page.getByRole("button", { name: /Offline/ }).click();
+    await rows(page, "Offline").first().getByRole("button").first().click();
+    await expect(page.getByRole("dialog", { name: "Jen" }).getByRole("button", { name: "Knock" })).toBeDisabled();
+  });
+
+  test("always fits inside the list window, above the row when there is no room below", async ({ page }) => {
+    await page.getByRole("button", { name: /Offline/ }).click();
+    const row = rows(page, "Offline").first().getByRole("button").first();
+    await row.click();
+    const card = await page.getByRole("dialog", { name: "Jen" }).boundingBox();
+    const opened = await row.boundingBox();
+    const size = page.viewportSize();
+    expect(card && opened && size).toBeTruthy();
+    if (!card || !opened || !size) return;
+    expect(card.x).toBeGreaterThanOrEqual(8);
+    expect(card.x + card.width).toBeLessThanOrEqual(size.width - 8);
+    expect(card.y).toBeGreaterThanOrEqual(8);
+    expect(card.y + card.height).toBeLessThanOrEqual(size.height - 8);
+  });
 });
 
 test("says in words what the markers show", async ({ page }) => {

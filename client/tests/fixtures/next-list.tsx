@@ -68,7 +68,12 @@ createRoot(root).render(
       }
       onOpenRoom={(id) => note(`room:${id}`)}
       onOpenDm={(id) => note(`dm:${id}`)}
-      onOpenPerson={(user) => note(`person:${user.id}`)}
+      onMessage={(user) => note(`message:${user.id}`)}
+      onKnock={async (user) => {
+        note(`knock:${user.id}`);
+        // `?limit`: the fourth knock inside an hour (SPEC §4.9).
+        return query.has("limit") ? { ok: false, problem: "That's three this hour. Give them a bit." } : { ok: true };
+      }}
     />
   </StrictMode>,
 );

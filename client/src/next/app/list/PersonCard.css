@@ -1,0 +1,86 @@
+/* A person's card. Layout only; tokens only. */
+.nx-person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  padding-right: var(--space-6);
+}
+
+.nx-person-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.nx-person-where {
+  display: flex;
+  align-items: center;
+  gap: var(--marker-gap);
+  min-width: 0;
+  height: var(--line-meta);
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+  color: var(--text-muted);
+}
+
+.nx-person-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-person-status {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-style: italic;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.nx-person-status[data-away="yes"] {
+  color: var(--text-away);
+}
+
+.nx-person-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.nx-person-field {
+  display: grid;
+  grid-template-columns: calc(var(--space-8) * 3) 1fr;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.nx-person-field dt {
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-person-field dd {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.nx-person-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.nx-person-problem {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-danger);
+}
