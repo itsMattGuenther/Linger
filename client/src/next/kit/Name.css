@@ -1,0 +1,160 @@
+/*
+ * How a styled name is painted. The values come from `lib/names.ts` as custom
+ * properties and data attributes; these rules are the new client's copy of
+ * `src/styles/names.css`, with the same behavior:
+ *
+ *   - the 92° gradient angle is fixed and lives only here;
+ *   - "plain names" (`:root[data-normalize="true"]`) flattens every name at
+ *     once, and nothing that draws a name has to know about it;
+ *   - reduced motion stops the shimmer band rather than freezing it.
+ *
+ * `.k-name` adds the one thing the old client never had: a fixed line box per
+ * size, so no face can change a row's height.
+ */
+
+.k-name {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--line-name);
+  /* Italic faces lean past their box; a little room at the end keeps the
+     last letter whole. */
+  padding-inline-end: var(--space-0-5);
+  font-size: var(--text-name);
+  line-height: var(--line-name);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.k-name[data-size="meta"] {
+  height: var(--line-meta);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.k-name[data-size="control"] {
+  font-size: var(--text-control);
+}
+
+.k-name[data-size="body"] {
+  font-size: var(--text-body);
+}
+
+.k-name[data-size="display"] {
+  height: var(--line-display);
+  font-size: var(--text-display);
+  line-height: var(--line-display);
+}
+
+.name {
+  color: var(--person-name, var(--text-primary));
+  font-family: var(--person-font, var(--font-ui));
+  font-weight: var(--person-weight, 500);
+  font-style: var(--person-slant, normal);
+  --person-paint: linear-gradient(
+    92deg,
+    var(--person-name, var(--text-primary)),
+    var(--person-name, var(--text-primary))
+  );
+}
+
+.name[data-name-fill="gradient"] {
+  --person-paint: linear-gradient(
+    92deg,
+    var(--person-name, var(--text-primary)),
+    var(--person-to, var(--person-name, var(--text-primary)))
+  );
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .name[data-name-fill="gradient"],
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
+    background-image: var(--person-paint);
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
+    background-image:
+      linear-gradient(92deg, transparent 46%, var(--name-shimmer) 50%, transparent 54%),
+      var(--person-paint);
+    background-size:
+      300% 100%,
+      100% 100%;
+    animation: k-name-shimmer 4s linear infinite;
+  }
+
+  @keyframes k-name-shimmer {
+    from {
+      background-position:
+        100% 0,
+        0 0;
+    }
+
+    to {
+      background-position:
+        0% 0,
+        0 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
+      background-image: var(--person-paint);
+      background-size: 100% 100%;
+      animation: none;
+    }
+  }
+}
+
+/* Glow: the one text shadow, on the one expressive element (SPEC §4.5). */
+:root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
+  text-shadow: 0 0 var(--space-2) var(--person-name, var(--text-primary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .name[data-name-effect="glow"] {
+    text-shadow: none;
+  }
+}
+
+/* Plain names: every name in the reader's own default. */
+:root[data-normalize="true"] .name {
+  color: var(--text-primary);
+  -webkit-text-fill-color: currentcolor;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-style: normal;
+  background-image: none;
+  text-shadow: none;
+  animation: none;
+}
+
+/* The style picker's preview draws the person's own style regardless. */
+:root .name.name-raw {
+  color: var(--person-name, var(--text-primary));
+  font-family: var(--person-font, var(--font-ui));
+  font-weight: var(--person-weight, 500);
+  font-style: var(--person-slant, normal);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  :root .name.name-raw[data-name-fill="gradient"],
+  :root .name.name-raw[data-name-effect="shimmer"] {
+    background-image: var(--person-paint);
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+:root .name.name-raw[data-name-effect="glow"] {
+  text-shadow: 0 0 var(--space-2) var(--person-name, var(--text-primary));
+}

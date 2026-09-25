@@ -1,0 +1,287 @@
+/*
+ * Design tokens for the Buddy list client (docs/design/system.md).
+ *
+ * This is the only file under `src/next/` allowed to contain a color literal or
+ * a raw pixel value; `kit/discipline.test.ts` fails the build otherwise. Values
+ * come from the approved prototype (`client/prototypes/buddy-list/style.css`),
+ * adjusted only where `styles/contrast.test.ts` required it.
+ *
+ * Three layers, in order:
+ *
+ *   1. Primitives: named colors, no meaning. Nothing outside this file uses them.
+ *   2. Semantic roles: what a color is *for*. Components use only these.
+ *   3. Scales: spacing, control heights, icon boxes, rows, radii, type, motion.
+ *
+ * Dark only for now. A light theme is an open decision (#198). When it comes,
+ * it is one `[data-theme="light"]` block that redefines layer 2 and nothing
+ * else, which is why components never touch layer 1.
+ *
+ * Names are not colored here. A person's color is a palette key on the wire
+ * (AGENTS rules 8 and 12) and becomes a color only in
+ * `src/generated/palette.generated.css`.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- 1. primitives ------------------------------------------------------ */
+
+  /* The night, from the logo: darkest to lightest. */
+  --night-0: #0a101d; /* behind everything */
+  --night-1: #0f1522; /* sunken: inputs, sidebars, footers */
+  --night-2: #131a28; /* a window */
+  --night-3: #161e2f; /* title bar, bottom */
+  --night-4: #182135; /* popovers and menus */
+  --night-5: #1b2438; /* title bar, top */
+  --night-6: #1b2436; /* raised */
+  --night-7: #1f2a40; /* hover */
+  --night-8: #2a3550; /* filled controls */
+  --night-9: #364465; /* filled control edge */
+
+  /* Ink, lightest to darkest. `--ink-4` is the prototype's faintest grey,
+     nudged from #667087 so it keeps 3:1 on a hovered row; it is for icons and
+     carets only. Text that dim fails 4.5:1 and is not allowed. */
+  --ink-1: #f1ebe0;
+  --ink-2: #c0c6d2;
+  --ink-3: #8d96a9;
+  --ink-4: #69738a;
+  --ink-warm: #e9dcc4; /* away messages */
+
+  /* Hairlines. */
+  --hair-1: #222d44;
+  --hair-2: #2e3b54;
+  --hair-3: #43527a;
+
+  /* The porch lamp, the cyan sign, and the two status colors. */
+  --lamp-1: #f3b55c;
+  --lamp-2: #ffc674;
+  --lamp-ink: #1c1206;
+  --sign-1: #2ec5f2;
+  --red-1: #f06e6e;
+  --red-ink: #ffc9c4;
+  --green-1: #7cc98f;
+
+  /* Translucent layers, written once here so components never need `rgb()`. */
+  --lamp-a06: rgb(243 181 92 / 0.06);
+  --lamp-a08: rgb(243 181 92 / 0.08);
+  --lamp-a12: rgb(243 181 92 / 0.12);
+  --lamp-a16: rgb(243 181 92 / 0.16);
+  --lamp-a28: rgb(243 181 92 / 0.28);
+  --lamp-a45: rgb(243 181 92 / 0.45);
+  --red-a16: rgb(240 110 110 / 0.16);
+  --red-a42: rgb(240 110 110 / 0.42);
+  --sign-a10: rgb(46 197 242 / 0.1);
+  --sign-a28: rgb(46 197 242 / 0.28);
+  --sign-a38: rgb(46 197 242 / 0.38);
+  --white-a02: rgb(255 255 255 / 0.02);
+  --white-a04: rgb(255 255 255 / 0.04);
+  --white-a06: rgb(255 255 255 / 0.06);
+  --white-a07: rgb(255 255 255 / 0.07);
+  --white-a09: rgb(255 255 255 / 0.09);
+  --white-a10: rgb(255 255 255 / 0.1);
+  --black-a45: rgb(0 0 0 / 0.45);
+  --black-a60: rgb(0 0 0 / 0.6);
+  --black-a70: rgb(0 0 0 / 0.7);
+  /* Masks read only alpha; this is "fully shown". */
+  --mask-solid: rgb(0 0 0);
+
+  /* --- 2. semantic roles -------------------------------------------------- */
+
+  /* Surfaces text can sit on. `contrast.test.ts` checks every text role and
+     all 16 name colors against each of these. */
+  --surface-backdrop: var(--night-0);
+  --surface-sunken: var(--night-1);
+  --surface-window: var(--night-2);
+  --surface-popover: var(--night-4);
+  --surface-raised: var(--night-6);
+  --surface-hover: var(--night-7);
+  --surface-titlebar: var(--night-5);
+  --surface-titlebar-end: var(--night-3);
+  /* Filled controls carry icons, not text. */
+  --surface-control: var(--night-8);
+  --surface-control-hover: var(--night-9);
+  --surface-control-edge: var(--night-9);
+  --surface-subtle: var(--white-a04);
+  --surface-subtle-hover: var(--white-a07);
+
+  /* Text. Three tiers and nothing dimmer (see `--ink-4`). */
+  --text-primary: var(--ink-1);
+  --text-secondary: var(--ink-2);
+  --text-muted: var(--ink-3);
+  --text-away: var(--ink-warm);
+  --text-accent: var(--lamp-1);
+  --text-on-accent: var(--lamp-ink);
+  --text-danger: var(--red-1);
+  --text-on-danger: var(--red-ink);
+  --text-success: var(--green-1);
+
+  /* Icons and other marks that are not text: 3:1 is their floor. */
+  --icon-default: var(--ink-2);
+  --icon-muted: var(--ink-3);
+  --icon-faint: var(--ink-4);
+
+  /* Edges. Hairlines are decoration; interactive things are also told apart by
+     their label, fill or position, never by a hairline alone. */
+  --hairline: var(--hair-1);
+  --hairline-strong: var(--hair-2);
+  --edge-hover: var(--hair-3);
+
+  /* The lamp: the one accent. The primary action, "you left off here", the
+     voice you're in, the selected choice. */
+  --accent: var(--lamp-1);
+  --accent-hover: var(--lamp-2);
+  --accent-wash: var(--lamp-a08);
+  --accent-wash-strong: var(--lamp-a12);
+  --accent-wash-stronger: var(--lamp-a16);
+  --accent-edge: var(--lamp-a45);
+  --accent-edge-soft: var(--lamp-a28);
+
+  --danger: var(--red-1);
+  --danger-wash: var(--red-a16);
+  --danger-edge: var(--red-a42);
+  --success: var(--green-1);
+
+  /* Keyboard focus: the lamp, 2px, offset 2px. Every focusable thing. */
+  --focus: var(--lamp-1);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* The focused window's edge, from the logo's sign. */
+  --window-focus-edge: var(--sign-a38);
+  --window-edge: var(--white-a07);
+
+  /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
+     and `kit/Name.css` read it. */
+  --name-shimmer: rgb(255 255 255 / 0.6);
+
+  /* --- 3. scales ------------------------------------------------------------ */
+
+  /* Spacing: a 4px base, with half steps for the tight places. */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  /* Controls come in exactly three heights. `kit.spec.ts` fails on any other. */
+  --control-sm: 24px;
+  --control-md: 32px;
+  --control-lg: 40px;
+
+  /* Icons are drawn in fixed square boxes and centered. */
+  --icon-sm: 12px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+
+  /* Every list row's lead column: a room's #, a person's marker, a group's
+     markers. Fixed, so names line up whatever sits in it. */
+  --marker-slot: 14px;
+  --marker-gap: 8px;
+  --marker-md: 8px; /* even, so it centers on whole pixels in the slot */
+  --marker-sm: 6px;
+
+  /* Rows: fixed heights, and fixed line boxes inside them, so no name face or
+     size can change a row's height. */
+  --row-1: 32px;
+  --row-2: 48px;
+  --line-name: 20px;
+  --line-meta: 16px;
+  --line-display: 28px;
+
+  /* Chrome. */
+  --titlebar: 40px;
+  --tab: 32px;
+  --tab-min: 136px;
+  --tab-max: 232px;
+  --switch-w: 36px;
+  --switch-h: 20px;
+  --switch-thumb: 14px;
+  --swatch: 24px;
+
+  /* Radii. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+
+  /* Shadows: windows and floating things only. Never on a row or a control. */
+  --shadow-window:
+    0 30px 70px -20px var(--black-a60),
+    0 10px 24px -8px var(--black-a45),
+    inset 0 1px 0 var(--white-a04);
+  --shadow-window-focused:
+    0 0 0 1px var(--sign-a10),
+    0 0 28px -6px var(--sign-a28),
+    0 34px 80px -20px var(--black-a70),
+    0 10px 24px -8px var(--black-a45),
+    inset 0 1px 0 var(--white-a04);
+  --shadow-popover: 0 24px 60px -16px var(--black-a70);
+  --shadow-notice: 0 16px 40px -12px var(--black-a60);
+
+  /* Type. Sans for everything people read; mono for times and small metadata;
+     Departure Mono for labels; Silkscreen only for the small mark. */
+  --font-ui: "Geist Sans", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: var(--font-ui);
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-label: "Departure Mono", ui-monospace, monospace;
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+
+  /* The twelve curated faces, one variable per `linger-core::FONTS` key.
+     `lib/fonts.ts` builds `var(--font-<key>)` from a person's style, so these
+     names are a contract with it. */
+  --font-geist-sans: "Geist Sans", system-ui, sans-serif;
+  --font-geist-mono: "Geist Mono", ui-monospace, monospace;
+  --font-ibm-plex-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-ibm-plex-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-jetbrains-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-inter: "Inter", system-ui, sans-serif;
+  --font-space-grotesk: "Space Grotesk", system-ui, sans-serif;
+  --font-commit-mono: "Commit Mono", ui-monospace, monospace;
+  --font-newsreader: "Newsreader", Georgia, serif;
+  --font-instrument-serif: "Instrument Serif", Georgia, serif;
+  --font-departure-mono: "Departure Mono", ui-monospace, monospace;
+  --font-silkscreen: "Silkscreen", ui-monospace, monospace;
+
+  /* Seven sizes. */
+  --text-label: 11px; /* Departure Mono labels, uppercase */
+  --text-meta: 12.5px; /* second lines, notes, help */
+  --text-control: 13.5px; /* buttons, tabs, fields */
+  --text-body: 14.5px; /* messages and rows */
+  --text-name: 15.5px; /* names in lists */
+  --text-title: 20px;
+  --text-display: 22px;
+  --leading-tight: 1.2;
+  --leading-body: 1.42;
+  --tracking-label: 0.08em;
+
+  /* Motion. Short, and only on transform, opacity and colors. */
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 260ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: ease-in-out;
+
+  /* Layers. */
+  --z-raised: 10;
+  --z-sticky: 20;
+  --z-popover: 100;
+  --z-notice: 200;
+  --z-tooltip: 300;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+  }
+}

@@ -1,0 +1,99 @@
+.k-choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.k-choices-legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  color: var(--text-accent);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.k-choices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-8) * 6), 1fr));
+  gap: var(--space-2-5);
+}
+
+.k-choice {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.k-choice:hover {
+  background: var(--surface-hover);
+}
+
+.k-choice:has(.k-choice-input:checked) {
+  background: var(--accent-wash);
+  border-color: var(--accent-edge);
+}
+
+.k-choice:has(.k-choice-input:focus-visible) {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.k-choice-input {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.k-choice-input:focus-visible {
+  outline: none;
+}
+
+.k-choice-art {
+  display: grid;
+  place-items: center;
+  color: var(--icon-faint);
+}
+
+.k-choice:has(.k-choice-input:checked) .k-choice-art {
+  color: var(--accent);
+}
+
+.k-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding-right: var(--space-6);
+}
+
+.k-choice-title {
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  font-weight: 500;
+}
+
+.k-choice-description {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-body);
+}
+
+.k-choices-note {
+  margin: var(--space-2-5) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-body);
+}

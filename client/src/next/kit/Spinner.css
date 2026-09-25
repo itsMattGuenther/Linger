@@ -1,0 +1,16 @@
+.k-spinner {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  border-radius: var(--radius-pill);
+  border: var(--focus-width) solid currentcolor;
+  border-right-color: transparent;
+  animation: k-spin 700ms linear infinite;
+}
+
+@keyframes k-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}

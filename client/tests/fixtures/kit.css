@@ -1,0 +1,157 @@
+/* Layout for the kit gallery only. The kit itself never depends on this. */
+body {
+  background: var(--surface-backdrop);
+}
+
+.g-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+}
+
+.g-page > header h1 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-title);
+  font-weight: 600;
+}
+
+.g-page > header p {
+  margin: 0 0 var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-control);
+}
+
+.g-section {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--window-edge);
+  background: var(--surface-window);
+}
+
+.g-section > h2 {
+  margin: 0 0 var(--space-3);
+  color: var(--text-accent);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.g-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2-5);
+  margin: var(--space-2) 0;
+}
+
+.g-label {
+  width: 120px;
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+}
+
+.g-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+/* A buddy list's width, so rows are tested at the width they live at. */
+.g-list {
+  width: 300px;
+  padding: var(--space-1-5) 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hairline);
+  background: var(--surface-window);
+}
+
+.g-narrow {
+  width: 180px;
+}
+
+.g-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.g-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--icon-default);
+  font: 400 var(--text-label) / 1 var(--font-label);
+}
+
+.g-window {
+  width: 560px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--window-edge);
+  overflow: hidden;
+  background: var(--surface-window);
+  box-shadow: var(--shadow-window);
+}
+
+.g-window + .g-window {
+  margin-top: var(--space-4);
+}
+
+.g-window-body {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-control);
+}
+
+.g-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.g-settings {
+  max-width: 560px;
+}
+
+.g-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.g-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-width: 0;
+  padding-right: var(--space-8);
+}
+
+.g-card-status {
+  margin: 0;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  font-size: var(--text-body);
+}
+
+.g-card-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.g-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, var(--swatch));
+  gap: var(--space-1-5);
+}
+
+.g-settings + .k-choices {
+  margin-top: var(--space-5);
+}
+
+.g-narrow .g-list {
+  width: 100%;
+}
