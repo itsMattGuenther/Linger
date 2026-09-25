@@ -24,12 +24,20 @@ default.
 
 ## How to run a task
 
-**0.3.5 release — ⏳ Matt, 2026-09-25.** Issues #168–#174 and #181 are fixed and
-merged (PRs #175–#180, #182, #183), with each issue linked and closed. A
-client-only release: no server change since 0.3.4. Version bumped in all four
-files; notes in `docs/releases/0.3.5.md`. Tag, check the signed packages, server
-image and updater manifest, then publish. #81, #101 and #147 remain deferred
-(#101 has an R&D branch, `feat/101-design-lab`). M12 remains current.
+**0.3.6 release — ⏳ Matt, 2026-09-25.** #147, #169 and #185–#188 are fixed and
+merged (PRs #189–#195), with each issue linked and closed. New: the Omarchy/Arch
+package and its pacman repository (`packaging/arch/`, published on release by
+`arch-repo.yml`), and the agent skills (`agents/`). A client-only release: no
+server change since 0.3.5. Version bumped in all four files; notes in
+`docs/releases/0.3.6.md`. Tag, check the signed packages, server image and
+updater manifest, publish, then check the `arch` repository got the package.
+#81 and #101 remain deferred (#101 has an R&D branch, `feat/101-design-lab`).
+M12 remains current.
+
+**0.3.5 release — ✅ Matt, 2026-09-25.** Issues #168–#174 and #181 are fixed and
+merged (PRs #175–#180, #182, #183). Notes in `docs/releases/0.3.5.md`. Tagged,
+packages and server image built, and the release published; the updater served
+0.3.5.
 
 **0.3.4 release — ✅ Matt, 2026-09-24.** Bugs #127–#130, #135, #137–#146,
 #151–#153 and #164 are fixed and merged (PRs #132–#165), with each issue linked

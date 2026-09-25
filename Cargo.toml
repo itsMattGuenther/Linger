@@ -9,7 +9,7 @@ members = [
 # Build it through `pnpm tauri` inside client/.
 
 [workspace.package]
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 license = "AGPL-3.0-only"
 authors = ["Matt Guenther"]
