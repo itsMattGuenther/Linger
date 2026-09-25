@@ -393,7 +393,15 @@ mockIPC(
         default_input: null,
         default_output: null,
       };
-    if (cmd === "check_for_update") return { kind: "current" };
+    // `?update` has a newer version waiting, with the long release body the
+    // updater really hands over, so a test can see it is not reprinted (#174).
+    if (cmd === "update_check")
+      return query.has("update")
+        ? { kind: "ready", version: "0.3.5", notes: "# Linger 0.3.5\n\n## Messaging\n\n- A very long list of changes" }
+        : { kind: "current" };
+    if (cmd === "app_version") return "0.3.4";
+    if (cmd === "plugin:opener|open_url" && args && "url" in args && typeof args.url === "string")
+      document.documentElement.dataset.openedUrl = args.url;
     return true;
   },
   { shouldMockEvents: true },
