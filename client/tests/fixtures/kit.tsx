@@ -226,6 +226,14 @@ function Tabs() {
           activeId={active}
           onSelect={setActive}
           onClose={(id) => setTabs((all) => all.filter((tab) => tab.id !== id))}
+          onMove={(id, to) =>
+            setTabs((all) => {
+              const moving = all.find((tab) => tab.id === id);
+              if (!moving) return all;
+              const rest = all.filter((tab) => tab.id !== id);
+              return [...rest.slice(0, to), moving, ...rest.slice(to)];
+            })
+          }
         />
       </TitleBar>
       <div className="g-window-body">The showing tab: {active}</div>

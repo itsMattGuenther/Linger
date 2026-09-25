@@ -44,9 +44,10 @@ import {
 import { added, type Drafts, filesIn, NO_DRAFTS, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
 import { voiceStrip } from "../../core/chat/voice";
+import { tabCommand } from "../../core/keys";
 import { type Following, followOwner } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
-import { closeTab, keepOnly, keyOf, loadTabs, openTab, saveTabs, selectTab, type TabKey, type Tabs } from "../../core/tabs";
+import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { markerOf, Spinner, type TabItem } from "../../kit";
 import { WindowMessage } from "../WindowMessage";
@@ -210,6 +211,28 @@ function Conversations({ following }: { following: Following }) {
     if (empty) closeWindow();
   }, [empty, closeWindow]);
 
+  // Tab shortcuts (core/keys.ts). Taken before the focused control sees them,
+  // so they work from the message box too.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const command = tabCommand(event);
+      if (command === null) return;
+      event.preventDefault();
+      setTabs((held) => {
+        if (command.kind === "step") return stepTab(held, command.by);
+        if (command.kind === "move") {
+          const at = held.open.findIndex((tab) => same(tab, held.active));
+          return held.active && at >= 0 ? moveTab(held, held.active, at + command.by) : held;
+        }
+        if (command.kind === "close") return held.active ? closeTab(held, held.active) : held;
+        const tab = command.to === "last" ? held.open.at(-1) : held.open[command.to];
+        return tab ? selectTab(held, tab) : held;
+      });
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
   // Push-to-talk works in this window too; the owner holds the microphone.
   const pushToTalk = Object.values(servers).some((state) => state.myVoice?.pushToTalk === true);
   useEffect(() => {
@@ -244,7 +267,7 @@ function Conversations({ following }: { following: Following }) {
     () =>
       tabs.open.flatMap((tab): TabItem[] => {
         const state = servers[tab.server];
-        const model = state ? tabModel(tab, state, sameTab(tab, tabs.active), talkingNow(state)) : null;
+        const model = state ? tabModel(tab, state, same(tab, tabs.active), talkingNow(state)) : null;
         if (!model) return [];
         return [
           {
@@ -453,14 +476,14 @@ function Conversations({ following }: { following: Following }) {
         const tab = find(id);
         if (tab) setTabs((held) => closeTab(held, tab));
       }}
+      onMoveTab={(id, to) => {
+        const tab = find(id);
+        if (tab) setTabs((held) => moveTab(held, tab, to));
+      }}
       onCloseWindow={isTauri() ? closeWindow : undefined}
       pane={pane}
     />
   );
-}
-
-function sameTab(a: TabKey, b: TabKey | null): boolean {
-  return b !== null && a.server === b.server && a.roomId === b.roomId;
 }
 
 /** A store or network failure, as a sentence for the message it was about. */

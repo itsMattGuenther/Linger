@@ -297,6 +297,44 @@ test("tabs move with the arrow keys, Home and End, and close with Delete", async
   await expect(strip.locator('[role="tab"]')).toHaveCount(before - 1);
 });
 
+test("a tab dragged along the row lands where it's dropped, and a small wobble is still a click", async ({ page }) => {
+  const window = page.getByTestId("tabbed-window");
+  const names = () => window.getByRole("tab").evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("aria-label")));
+  const center = async (name: string) => {
+    const box = await window.getByRole("tab", { name, exact: true }).boundingBox();
+    if (!box) throw new Error(`no tab ${name}`);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const before = await names();
+
+  // A press that moves two pixels selects, and moves nothing.
+  const general = await center("#general");
+  await page.mouse.move(general.x, general.y);
+  await page.mouse.down();
+  await page.mouse.move(general.x + 2, general.y);
+  await page.mouse.up();
+  expect(await names()).toEqual(before);
+  await expect(window.getByRole("tab", { name: "#general", exact: true })).toHaveAttribute("aria-selected", "true");
+
+  // Dragged past two tabs' middles: it lands after them, and shows.
+  const target = await center("DM with Jules");
+  await page.mouse.move(general.x, general.y);
+  await page.mouse.down();
+  await page.mouse.move(general.x + 20, general.y, { steps: 4 });
+  // While dragging, the tab follows the pointer and the ones it passes slide aside.
+  await page.mouse.move(target.x + 8, target.y, { steps: 8 });
+  await expect(window.locator("[data-dragged='yes']")).toHaveCount(1);
+  const slid = (name: string) =>
+    window.getByRole("tab", { name, exact: true }).evaluate((tab) => new DOMMatrix(getComputedStyle(tab.parentElement ?? tab).transform).m41);
+  await expect.poll(() => slid("#listening-room")).toBeLessThan(0);
+  await expect.poll(() => slid("DM with Jules")).toBeLessThan(0);
+  expect(await slid("#weekend-plans")).toBe(0);
+  await page.mouse.up();
+  expect(await names()).toEqual(["#listening-room", "DM with Jules", "#general", ...before.slice(3)]);
+  await expect(window.getByRole("tab", { name: "#general", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(window.locator("[data-dragged='yes']")).toHaveCount(0);
+});
+
 test("a menu opens on its first item, moves with the arrows, and gives focus back when it closes", async ({ page }) => {
   const trigger = page.getByTestId("menu-trigger").getByRole("button", { name: "Actions for Eli's message" });
   const menu = page.getByRole("menu", { name: "Actions for Eli's message" });

@@ -111,6 +111,34 @@ test("a conversation opened from the list gets a tab, and the cursor", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(2);
 });
 
+test("moves between tabs and closes them from the keyboard, even while typing", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.owner?.open("d-jules");
+    window.owner?.open("r-plans");
+  });
+  const showing = page.getByRole("tab", { selected: true });
+  await expect(showing).toHaveAccessibleName("#weekend-plans");
+  await box(page).click();
+  await page.keyboard.press("Control+Tab");
+  await expect(showing).toHaveAccessibleName("#general");
+  await page.keyboard.press("Control+Shift+Tab");
+  await expect(showing).toHaveAccessibleName("#weekend-plans");
+  await page.keyboard.press("Control+PageUp");
+  await expect(showing).toHaveAccessibleName("DM with Jules");
+  await page.keyboard.press("Alt+1");
+  await expect(showing).toHaveAccessibleName("#general");
+  await page.keyboard.press("Alt+9");
+  await expect(showing).toHaveAccessibleName("#weekend-plans");
+  await page.keyboard.press("Control+Shift+PageUp");
+  await expect(page.getByRole("tab")).toHaveText([/general/, /weekend-plans/, /Jules/]);
+  await page.keyboard.press("Control+Shift+PageDown");
+  await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
+  await page.keyboard.press("Control+w");
+  await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
+  await expect(showing).toHaveAccessibleName("DM with Jules");
+});
+
 test("remembers open tabs across a restart", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.owner?.open("d-jules"));

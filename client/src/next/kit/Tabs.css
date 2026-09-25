@@ -125,3 +125,15 @@
     transparent
   );
 }
+
+/* Dragging a tab: it follows the pointer above the others, which slide aside
+   to show where it will land. Only transforms move, so nothing reflows. */
+.k-tabs[data-dragging="yes"] .k-tab {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.k-tabs[data-dragging="yes"] .k-tab[data-dragged="yes"] {
+  z-index: var(--z-sticky);
+  transition: none;
+  cursor: grabbing;
+}

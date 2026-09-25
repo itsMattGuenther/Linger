@@ -68,6 +68,8 @@ export interface ChatViewProps {
   activeId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  /** A tab dragged to a new place along the row. */
+  onMoveTab?: (id: string, to: number) => void;
   /** Move the showing tab into a window of its own. Leave out for no button. */
   onPopOut?: (id: string) => void;
   /** Draws Linger's own close button, where the desktop draws none. */
@@ -93,7 +95,7 @@ function titleOf(header: PaneHeaderProps): string {
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onPopOut, onCloseWindow, focused = true, pane }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, focused = true, pane }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -155,7 +157,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onPopOut, on
   return (
     <div className="nx-chat" data-screen="chat">
       <TitleBar focused={focused} actions={popOut} onClose={onCloseWindow}>
-        <TabStrip label="Conversations" tabs={tabs} activeId={activeId ?? ""} onSelect={onSelectTab} onClose={onCloseTab} panelIdPrefix="nx-pane-" />
+        <TabStrip label="Conversations" tabs={tabs} activeId={activeId ?? ""} onSelect={onSelectTab} onClose={onCloseTab} onMove={onMoveTab} panelIdPrefix="nx-pane-" />
       </TitleBar>
 
       {pane && actions ? (

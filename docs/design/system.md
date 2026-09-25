@@ -295,6 +295,10 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   value) draws a 2px stripe along the tab's top, dim until the tab shows.
 - **Keyboard:** only the showing tab is in the tab order. Arrow keys move and
   show, Home and End jump, and Delete closes.
+- **`onMove`:** a tab can be dragged along the row. It follows the pointer and
+  the tabs it passes slide aside (transforms only, so nothing reflows); a
+  press that travels under 4px is still a click. The chat window adds the
+  keyboard way, Ctrl+Shift+PageUp and PageDown (`core/keys.ts`).
 - **Overflow:** more tabs than fit scroll sideways, the showing tab stays in
   view, and the edge with more beyond it fades.
 
@@ -462,6 +466,7 @@ reading exactly where it is.
 | Everything the keyboard reaches shows the focus ring | `kit.spec.ts` › the focus ring shows on everything the keyboard reaches |
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |
 | Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
+| A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
