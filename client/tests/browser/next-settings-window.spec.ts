@@ -108,8 +108,14 @@ test("asked for a section while it's open, it shows that section", async ({ page
   await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Invites");
 });
 
-test("Escape closes Settings, and it says it's going", async ({ page }) => {
+test("Escape in a text box only leaves the box; Escape again closes Settings, which says it's going", async ({ page }) => {
   await open(page);
+  const name = page.getByRole("textbox", { name: "Display name" });
+  await name.fill("Matthe");
+  await page.keyboard.press("Escape");
+  await expect(name).not.toBeFocused();
+  await expect(name).toHaveValue("Matthe");
+  expect(await did(page)).not.toContain("window:close");
   await page.keyboard.press("Escape");
   await expect.poll(() => did(page)).toContain("window:close");
   expect(intents(await did(page)).at(-1)).toEqual({ kind: "closing" });

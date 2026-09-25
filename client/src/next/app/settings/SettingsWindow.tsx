@@ -134,11 +134,20 @@ function Settings({ following }: { following: Following }) {
   }, []);
 
   // Escape closes Settings when nothing inside it wanted Escape first, and
-  // Ctrl+, (which opens it) does nothing more here.
+  // never from inside a text box, where it means "never mind this edit" and
+  // closing would throw away what you typed. Ctrl+, (which opens it) does
+  // nothing more here.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isSettingsKey(event)) event.preventDefault();
-      if (event.key === "Escape" && !event.defaultPrevented) closeWindow();
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const focused = document.activeElement;
+      const typing = focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement || (focused instanceof HTMLElement && focused.isContentEditable);
+      if (typing) {
+        focused.blur();
+        return;
+      }
+      closeWindow();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
