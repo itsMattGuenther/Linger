@@ -342,16 +342,6 @@
    Updates (T-701).
    --------------------------------------------------------------------------- */
 
-/* Whatever the release said about itself. Body text, not mono: mono is
-   metadata-only (SPEC §5.2) and this is prose somebody wrote. */
-.settings-notes {
-  color: var(--text-secondary);
-  max-width: 60ch;
-  white-space: pre-wrap;
-  border-left: 2px solid var(--hairline);
-  padding-left: 8px;
-}
-
 /* Two controls side by side, left-aligned — `.settings-actions` pushes to the
    right because it belongs under a form, and these sit under a sentence. */
 .settings-update-actions {

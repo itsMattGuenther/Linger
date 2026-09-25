@@ -53,6 +53,21 @@ export async function installUpdate(): Promise<UpdateInstall> {
 }
 
 /**
+ * Where a version's release notes are published. Settings links there rather
+ * than reprinting the notes (#174): they run to thousands of characters of
+ * Markdown, which read as raw `#` and `-` in a settings panel and are
+ * formatted and complete on the release page. When the notes move to a
+ * website, this is the one line that changes.
+ */
+const RELEASE_NOTES_BASE = "https://github.com/itsMattGuenther/Linger/releases/tag/";
+
+/** The release page for one version. Tags are `v`-prefixed; versions are not. */
+export function releaseNotesUrl(version: string): string {
+  const tag = version.startsWith("v") ? version : `v${version}`;
+  return `${RELEASE_NOTES_BASE}${encodeURIComponent(tag)}`;
+}
+
+/**
  * The sentence the settings panel shows. Pure, so the wording is testable
  * without a shell: every state a reader can land in has a line, and none of
  * them is a raw error code.
