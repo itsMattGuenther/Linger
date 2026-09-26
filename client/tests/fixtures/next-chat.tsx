@@ -318,6 +318,11 @@ function Fixture() {
   const onRestoreFiles = useCallback(() => undefined, []);
   const onTyping = useCallback(() => undefined, []);
   const onJoin = useCallback(() => note("join"), []);
+  // Your controls in the room you're in voice in (#216), as the chat window passes them.
+  const controls = useMemo(
+    () => ({ muted: false, deafened: false, pushToTalk: false, onMute: () => note("mute"), onDeafen: () => note("deafen"), onLeave: () => note("leave") }),
+    [],
+  );
 
   const pane = ((): ChatPane | null => {
     if (!tabs.active || activeRoom === null) return null;
@@ -337,7 +342,7 @@ function Fixture() {
               onKnock: dmPeople(room).length === 1 ? () => note("knock") : undefined,
             }
           : { kind: "room", name: room.name, topic: room.topic, people: (IN_ROOM[room.id] ?? []).flatMap((one) => everyone.get(one) ?? []) },
-      voice: room.kind === "dm" ? null : { strip: voiceStrip(id, voice, me.id, myVoice), onJoin },
+      voice: room.kind === "dm" ? null : { strip: voiceStrip(id, voice, me.id, myVoice), onJoin, controls: myVoice === id ? controls : undefined },
       people: everyone,
       me,
       speaking: SPEAKING,

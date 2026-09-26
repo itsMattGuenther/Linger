@@ -54,3 +54,11 @@
   font: var(--text-label) / var(--line-meta) var(--font-label);
   letter-spacing: var(--tracking-label);
 }
+
+/* Your controls, at the end of the line (#216). */
+.nx-strip-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
