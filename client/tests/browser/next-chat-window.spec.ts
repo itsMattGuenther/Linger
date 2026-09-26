@@ -287,8 +287,12 @@ test("a conversation in its own window: its header is the title bar, and Back to
   // It doesn't take over the tabs remembered for the chat window.
   expect(await page.evaluate(() => window.localStorage.getItem("linger.next.tabs"))).toBeNull();
 
+  // The pop-out button's mirror: a symbol named Back to tabs, with no words showing (#214).
+  const back = page.getByRole("button", { name: "Back to tabs" });
+  await expect(back).toHaveAttribute("data-kit", "IconButton");
+  await expect(back).toHaveText("");
   await page.keyboard.type(", and more");
-  await page.getByRole("button", { name: "Back to tabs" }).click();
+  await back.click();
   await expect.poll(() => did(page)).toContain("window:close");
   expect(intents(await did(page))).toContainEqual({ kind: "tabs", server: SERVER, roomId: "r-general" });
   const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#r-general`);
