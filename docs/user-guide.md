@@ -312,6 +312,8 @@ color).
 ## Saying things
 
 Type and press **Enter**. **Shift+Enter** starts a new line instead of sending.
+Something half-typed stays in its conversation's box, even if you close the
+tab or quit Linger, until you send it.
 
 A little formatting works, the kind you already type:
 

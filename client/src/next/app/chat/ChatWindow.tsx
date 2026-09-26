@@ -26,6 +26,7 @@ import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey } from "../../core/talkKey";
+import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
@@ -156,6 +157,16 @@ function Conversations({ following }: { following: Following }) {
   // What each conversation's box holds, so a draft can go with it to another window.
   const typed = useRef(new Map<string, string>());
   const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
+  // Half-typed lines outlast their tab and a restart (decision 11).
+  const keep = useMemo(() => {
+    const store = handoffStore();
+    return store
+      ? {
+          load: (conversation: string) => keptDraft(store, conversation, Date.now()),
+          save: (conversation: string, text: string) => keepDraft(store, conversation, text, Date.now()),
+        }
+      : undefined;
+  }, []);
   // A draft that came with a conversation from another window.
   const [seed, setSeed] = useState<{ conversation: string; text: string } | null>(() => {
     const store = handoffStore();
@@ -539,8 +550,8 @@ function Conversations({ following }: { following: Following }) {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
   );
 
   const knock = useCallback(

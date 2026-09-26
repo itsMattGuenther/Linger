@@ -418,7 +418,7 @@ Rules for this milestone:
 - ✅ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
   key" picker in Settings → Sound & Voice, Right Ctrl by default, so the Ctrl
   shortcuts never open the microphone. Push-to-talk stays off by default.
-- ⬜ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
+- ✅ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
   line is kept on this computer across closing its tab and restarting Linger,
   and cleared when sent.
 - ⬜ **T-1815 · A banner opens its conversation** — decision 20. Clicking a

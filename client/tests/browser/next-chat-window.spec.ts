@@ -419,6 +419,25 @@ test("remembers open tabs across a restart", async ({ page }) => {
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
 });
 
+test("a half-typed line outlasts its tab and a restart, and goes once it's sent (decision 11)", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.owner?.open("d-jules"));
+  await page.getByRole("tab", { name: "#general" }).click();
+  await box(page).fill("see you at the");
+  await page.getByRole("button", { name: "Close #general" }).click();
+  await expect(page.getByRole("tab", { name: "#general" })).toHaveCount(0);
+  await page.evaluate(() => window.owner?.open("r-general"));
+  await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
+  await expect(box(page)).toHaveValue("see you at the");
+  // A restart.
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general");
+  await expect(box(page)).toHaveValue("see you at the");
+  await box(page).fill("see you at the porch");
+  await box(page).press("Enter");
+  await expect(box(page)).toHaveValue("");
+  expect(await page.evaluate(() => localStorage.getItem("linger.next.drafts"))).toBeNull();
+});
+
 test("a knock from a DM says Knocked, unless the server refused it", async ({ page }) => {
   await open(page, "room=d-jules");
   await page.getByRole("button", { name: "Knock" }).click();
