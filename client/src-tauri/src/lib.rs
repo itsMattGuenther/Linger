@@ -2,6 +2,8 @@
 //! every native capability it has is one narrow command in this crate, and it
 //! has no others.
 
+#[cfg(test)]
+mod acl;
 pub mod gateway;
 pub mod graphics;
 mod notifications;

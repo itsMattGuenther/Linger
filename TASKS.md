@@ -851,6 +851,11 @@ Rules for this milestone:
   and a server in its own window. Folding sections, your order and Quiet are
   built, with the list window connecting to every server; "the time there"
   waits on decision 3, and a server in its own window isn't built.
+- ⬜ **T-1811 · Frames on a private channel** — the Rust core hands the list
+  window its gateway frames on a Tauri `Channel` rather than a broadcast
+  event, so no other window can make one up (architecture.md, "Still open").
+  The app's own commands are already limited per window (`build.rs`,
+  `capabilities/`, `src-tauri/src/acl.rs`).
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
   new client becomes the default, the old one stays one release as a fallback,
   then is deleted. SPEC §3/§5 are rewritten from `system.md`.

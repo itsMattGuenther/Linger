@@ -257,6 +257,19 @@ one.
   an arbitrary URL, and only `main` may call the command. That is least privilege, as ARCHITECTURE §7 asks. The
   capability file lists each window's permissions. Viewers get what they need
   to read events and open links, and nothing more.
+- **The app's own commands are checked too.** `build.rs` declares every
+  command, which turns on Tauri's access checks for them: a window may call
+  only what its capability file grants. `owner.json` gives `main` all of them.
+  The chat windows get `gateway_send` (typing) and `graphics_started`; Settings
+  gets `graphics_started`, `voice_devices` and the three update commands. The
+  keyring, the connections, voice, notifications and window opening stay the
+  owner's, and `src-tauri/src/acl.rs` fails the build's tests if a capability
+  ever hands one to another window.
+- **Still open:** any window may send any event, and the owner can't tell a
+  `gateway:frame` the Rust core sent from one a viewer made up. A viewer that
+  renders a hostile message can't reach this without a way to run script,
+  but the fix is for Rust to hand the owner its frames on a private channel
+  (a Tauri `Channel`) instead of a broadcast event (T-1811).
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
   tab or shows it. When the window is already open, Rust hands it the
   conversation as an event (`next:open`), which a window still catching up
