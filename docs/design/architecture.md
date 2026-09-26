@@ -289,7 +289,13 @@ one.
   conversation as an event (`next:open`), which a window still catching up
   isn't listening for yet. So the owner also keeps every conversation it sends
   the tabs until the window asks what it missed (`next:opens`), once it is
-  listening, and forgets them when the window closes. A tab can be popped out into its own window, and put back.
+  listening, and forgets them when the window closes. It keeps them ten
+  seconds at most, so a tabs window that never came up doesn't open old
+  rooms whenever the next one does, and a tabs window starting again (its
+  snapshot for every server) counts as not listening until it asks.
+  One narrow case is still open: the tabs window is always labelled `chat`,
+  so if the desktop's "closed" notice for an old one reached the owner after
+  a new one had started, the owner would take the new one for gone. A tab can be popped out into its own window, and put back.
   A half-typed message goes along, through this computer's storage, taken
   once and thrown away after a minute (`core/handoff.ts`). Files waiting to
   be sent stay behind.

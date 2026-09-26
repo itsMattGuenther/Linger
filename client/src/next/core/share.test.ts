@@ -732,6 +732,22 @@ describe("a viewer window sharing the owner's connection", () => {
     hub.broadcast(owner.share.CLOSED, "chat");
     sharing.open(HOME, "r-weekend");
     await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-weekend" }] });
+
+    // A tabs window starting again (a reload, say) isn't listening until it says so...
+    await ask(viewer.bus, "main", owner.share.SNAPSHOT, {});
+    sharing.open(HOME, "r-general");
+    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-general" }] });
+    // ...though one catching up on a single new server still is.
+    await ask(viewer.bus, "main", owner.share.SNAPSHOT, { only: HOME });
+    sharing.open(HOME, "r-listening");
+    await expect(opens()).resolves.toEqual({ opens: [] });
+
+    // Kept only a little while: a window that never came up doesn't open old rooms later.
+    hub.broadcast(owner.share.CLOSED, "chat");
+    sharing.open(HOME, "r-weekend");
+    vi.setSystemTime(Date.now() + owner.share.MISSED_KEEP_MS + 1_000);
+    sharing.open(HOME, "r-general");
+    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-general" }] });
     sharing.stop();
     follower.stop();
   });

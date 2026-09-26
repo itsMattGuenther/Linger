@@ -33,6 +33,7 @@ import {
   type SignedOutMessage,
   SNAPSHOT,
   type SnapshotAnswer,
+  type SnapshotQuestion,
   TOKEN,
   type TokenQuestion,
 } from "./share";
@@ -115,7 +116,8 @@ export async function followOwner(bus: Bus): Promise<Following> {
       return;
     }
     try {
-      const answer = await ask<SnapshotAnswer>(bus, OWNER, SNAPSHOT, {});
+      const question: SnapshotQuestion = { only: server };
+      const answer = await ask<SnapshotAnswer>(bus, OWNER, SNAPSHOT, question);
       const share = answer.servers.find((one) => one.server === server);
       // Signed out again meanwhile (letGo took it off the list), or the owner no longer has it.
       if (!catching.has(server) || !share) return;

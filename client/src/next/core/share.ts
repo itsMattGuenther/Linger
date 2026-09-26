@@ -107,6 +107,14 @@ export function leftOut(before: readonly string[], after: readonly string[]): st
   return before.filter((server) => !still.has(server));
 }
 
+/** A window's question for the owner's state: every server, or only one it has just heard was signed in to. */
+export interface SnapshotQuestion {
+  only?: string;
+}
+
+/** How long the owner keeps a conversation sent to a tabs window that isn't listening yet. */
+export const MISSED_KEEP_MS = 10_000;
+
 /** What the tabs window was sent to open before it was listening, oldest first. */
 export interface OpensAnswer {
   opens: { server: string; roomId: RoomId }[];
@@ -306,10 +314,12 @@ export async function shareAsOwner(
   // into the tabs at once, would lose all but the first. So every open is
   // also kept here until the tabs window says it's listening (OPENS), and it
   // is handed what it missed.
+  // Kept only a little while: a tabs window that never came up shouldn't
+  // open old rooms whenever the next one does.
   let tabsListening = false;
-  let missed: OpensAnswer["opens"] = [];
+  let missed: (OpensAnswer["opens"][number] & { at: number })[] = [];
   const toTabs = (server: string, roomId: RoomId) => {
-    if (!tabsListening) missed.push({ server, roomId });
+    if (!tabsListening) missed.push({ server, roomId, at: Date.now() });
     opener?.chat(server, roomId);
   };
 
@@ -352,16 +362,22 @@ export async function shareAsOwner(
   };
 
   const stops = await Promise.all([
-    answer<Record<string, never>, SnapshotAnswer>(bus, SNAPSHOT, async () => ({
-      servers: await Promise.all(
-        [...sessions()].map(async ([server, api]): Promise<ServerShare> => {
-          // Read the state and its position together, before any await, so
-          // they describe the same moment.
-          const { state, position } = snapshotOf(server);
-          return { server, state, position, lent: await lendOnOpen(api) };
-        }),
-      ),
-    })),
+    answer<SnapshotQuestion, SnapshotAnswer>(bus, SNAPSHOT, async ({ from, only }) => {
+      // The tabs window starting (or starting again) isn't listening for opens
+      // until it says so; one catching up on a single new server still is.
+      if (from === CHAT && only === undefined) tabsListening = false;
+      const wanted = [...sessions()].filter(([server]) => only === undefined || server === only);
+      return {
+        servers: await Promise.all(
+          wanted.map(async ([server, api]): Promise<ServerShare> => {
+            // Read the state and its position together, before any await, so
+            // they describe the same moment.
+            const { state, position } = snapshotOf(server);
+            return { server, state, position, lent: await lendOnOpen(api) };
+          }),
+        ),
+      };
+    }),
     answer<NotifyQuestion, Outcome>(bus, NOTIFY, async ({ server, rule, on }) => {
       const api = sessions().get(server);
       if (!api) return { problem: "You're not signed in to that server any more." };
@@ -396,7 +412,8 @@ export async function shareAsOwner(
     answer<Record<string, never>, OpensAnswer>(bus, OPENS, async ({ from }) => {
       if (from !== CHAT) return { opens: [] };
       tabsListening = true;
-      const opens = missed;
+      const fresh = Date.now() - MISSED_KEEP_MS;
+      const opens = missed.filter((open) => open.at >= fresh).map(({ server, roomId }) => ({ server, roomId }));
       missed = [];
       return { opens };
     }),
