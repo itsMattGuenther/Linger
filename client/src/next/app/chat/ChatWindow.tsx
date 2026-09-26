@@ -9,7 +9,7 @@ import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
 import { openExternal } from "../../../lib/external";
-import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
+import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, serverState, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
@@ -135,6 +135,11 @@ function Conversations({ following }: { following: Following }) {
     return first && text !== null ? { conversation: keyOf(first), text } : null;
   });
 
+  // Conversations opened while this window is open that it hasn't seen yet: a
+  // brand new DM reaches this window as its own frame, after the list asked
+  // for it. Such a tab waits for it rather than being taken for gone.
+  const waiting = useRef(new Set<string>());
+
   // Opened from the list while this window is already open (window.rs,
   // `next_open_chat`). Once listening, the tabs window asks the list window
   // for anything it was sent before it was (OPENS in core/share.ts).
@@ -145,6 +150,8 @@ function Conversations({ following }: { following: Following }) {
     const opened = (server: string, roomId: string) => {
       if (!apis.has(server)) return;
       const tab = { server, roomId };
+      const state = serverState(server);
+      if (conversationIn(state, roomId) === null) waiting.current.add(keyOf(tab));
       setTabs((held) => openTab(held, tab));
       setFocusAsk((ask) => ask + 1);
       // Back from a window of its own, perhaps with a draft.
@@ -181,12 +188,16 @@ function Conversations({ following }: { following: Following }) {
   useEffect(() => following.onSignedOut((server) => setTabs((held) => keepOnly(held, (tab) => tab.server !== server))), [following]);
 
   // A conversation that's gone (a room archived, a DM you were taken out of)
-  // loses its tab, once its server has told this window what exists.
+  // loses its tab, once its server has told this window what exists. One
+  // still on its way keeps its tab until it has been seen.
   useEffect(() => {
     setTabs((held) =>
       keepOnly(held, (tab) => {
         const state = servers[tab.server];
-        return state === undefined || state.me === null || conversationIn(state, tab.roomId) !== null;
+        if (state === undefined || state.me === null) return true;
+        if (conversationIn(state, tab.roomId) === null) return waiting.current.has(keyOf(tab));
+        waiting.current.delete(keyOf(tab));
+        return true;
       }),
     );
   }, [servers]);

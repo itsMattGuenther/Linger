@@ -119,6 +119,24 @@ test("a conversation opened from the list gets a tab, and the cursor", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(2);
 });
 
+test("a brand new DM opened into the tabs waits for its conversation rather than vanishing", async ({ page }) => {
+  await open(page);
+  // The list opened a DM the server has only just made: this window hears of it after.
+  await page.evaluate(() => window.owner?.open("d-dave"));
+  // Something else changes first.
+  await page.evaluate(() =>
+    window.owner?.frame({ op: "presence.update", d: { user_id: "u-eli", state: "away", room_id: null, away_message: "back soon" } }),
+  );
+  await page.evaluate(() =>
+    window.owner?.frame({
+      op: "room.create",
+      d: { id: "d-dave", slug: "d-dave", name: "", topic: null, kind: "dm", member_ids: ["u-matt", "u-dave"], position: 0, archived_at: null, last_message_id: null },
+    }),
+  );
+  await expect(page.getByRole("tab", { name: "DM with Dave" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab")).toHaveCount(2);
+});
+
 test("moves between tabs and closes them from the keyboard, even while typing", async ({ page }) => {
   await open(page);
   await page.evaluate(() => {
