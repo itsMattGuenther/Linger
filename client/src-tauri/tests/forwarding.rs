@@ -260,6 +260,110 @@ async fn a_tone_crosses_the_forwarding_server() {
     );
 }
 
+/// Heard frames with when they arrived, to find gaps.
+#[derive(Default)]
+struct Clock(Mutex<Vec<(String, std::time::Instant)>>);
+
+#[async_trait]
+impl Sink for Clock {
+    async fn play(&self, peer: &str, _samples: &[i16]) {
+        self.0
+            .lock()
+            .unwrap()
+            .push((peer.to_string(), std::time::Instant::now()));
+    }
+}
+
+/// The longest silence from `peer` in what `clock` heard, and when it last
+/// heard them.
+fn longest_gap(clock: &Clock, peer: &str) -> (Duration, Option<std::time::Instant>) {
+    let heard: Vec<std::time::Instant> = clock
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(from, _)| from == peer)
+        .map(|(_, at)| *at)
+        .collect();
+    let gap = heard
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .max()
+        .unwrap_or(Duration::MAX);
+    (gap, heard.last().copied())
+}
+
+/// Two people talking at once for half a minute stay connected (#210). The
+/// server used to be an ICE-lite agent, which counts a connection alive only
+/// while the app sends it STUN checks; the app's WebRTC stack sends those only
+/// when the line goes quiet, so with voice both ways the server dropped each
+/// connection about 15 seconds in, and the app took half a minute to come back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_conversation_through_the_server_holds_for_half_a_minute() {
+    let (sender, offers) = std_mpsc::channel();
+    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let sfu = Sfu::start(local, local, move |offer: Offer| {
+        let _ = sender.send(offer);
+    })
+    .expect("the forwarding server starts");
+
+    let room = RoomId::new();
+    let (a, mut a_rx, a_log) = engine(A).await;
+    let (b, mut b_rx, b_log) = engine(B).await;
+    let a_ears = Arc::new(Clock::default());
+    let b_ears = Arc::new(Clock::default());
+    for (engine, ears) in [(&a, &a_ears), (&b, &b_ears)] {
+        engine
+            .join(
+                room,
+                Devices {
+                    source: Arc::new(Tone::default()),
+                    sink: Arc::clone(ears) as Arc<dyn Sink>,
+                },
+                Vec::new(),
+            )
+            .await;
+    }
+    let state = forwarded(&[A, B]);
+    a.on_state(room, &state).await;
+    b.on_state(room, &state).await;
+
+    let started = std::time::Instant::now();
+    while started.elapsed() < Duration::from_secs(30) {
+        route(
+            &sfu,
+            &offers,
+            room,
+            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
+        )
+        .await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+
+    let now = std::time::Instant::now();
+    for (who, ears, from, log) in [("B", &b_ears, A, &b_log), ("A", &a_ears, B, &a_log)] {
+        let (gap, last) = longest_gap(ears, from);
+        let quiet_for = last.map_or(Duration::MAX, |at| now - at);
+        assert!(
+            gap < Duration::from_secs(1) && quiet_for < Duration::from_secs(1),
+            "{who} lost the other for {gap:?}, and last heard them {quiet_for:?} ago.\nlog: {:?}",
+            log.0.lock().unwrap()
+        );
+        let trouble: Vec<(String, String)> = log
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, state)| state == "disconnected" || state == "failed")
+            .cloned()
+            .collect();
+        assert!(
+            trouble.is_empty(),
+            "{who}'s connection dropped: {trouble:?}"
+        );
+    }
+}
+
 /// The room goes back to the mesh when an older app joins it: the engine lets
 /// its forwarding connection go and builds the mesh instead, and the next
 /// forwarded state drops the mesh again.
