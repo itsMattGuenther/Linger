@@ -88,17 +88,20 @@ test.describe("what a message says", () => {
       const mono = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
       return { words: face(".nx-text-p"), code: face(".nx-text-inline-code"), name: face("[data-kit='Name']"), mono };
     });
-    const monoFace = faces.mono.split(",")[0]?.trim() ?? "";
+    // Engines differ on quoting family names (Chromium keeps them, WebKit
+    // drops them), so every name is compared without its quotes.
+    const unquoted = (families: string) => families.replace(/["']/g, "");
+    const monoFace = unquoted(faces.mono.split(",")[0]?.trim() ?? "");
     expect(monoFace).not.toBe("");
-    expect(faces.words).not.toContain(monoFace);
-    expect(faces.code).toContain(monoFace);
+    expect(unquoted(faces.words)).not.toContain(monoFace);
+    expect(unquoted(faces.code)).toContain(monoFace);
     // Jules chose Instrument Serif.
-    expect(faces.name).toContain("Instrument Serif");
+    expect(unquoted(faces.name)).toContain("Instrument Serif");
     // Nothing else in a message body is mono.
     const monoElsewhere = await log(page).evaluate((node, face) => {
       return [...node.querySelectorAll(".nx-text *, .nx-text")]
         .filter((element) => !element.closest("code, pre"))
-        .filter((element) => getComputedStyle(element).fontFamily.includes(face))
+        .filter((element) => getComputedStyle(element).fontFamily.replace(/["']/g, "").includes(face))
         .map((element) => element.tagName);
     }, monoFace);
     expect(monoElsewhere).toEqual([]);
@@ -136,7 +139,8 @@ test.describe("what a message says", () => {
       reactions: [{ key: "❤️", user_ids: ["u-jules", "u-dave"], count: 2 }],
     });
     await expect(row(page, id)).not.toContainText("❤️");
-    await expect(row(page, id)).not.toContainText("2");
+    // The count isn't drawn: in the message itself, not the time beside it.
+    await expect(row(page, id).locator(".nx-msg-body")).toHaveText("this deserves a heart");
     await row(page, id).hover();
     await row(page, id).getByRole("button", { name: /^Actions for/ }).click();
     await expect(page.getByRole("menu")).toBeVisible();
