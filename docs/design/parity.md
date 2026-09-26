@@ -104,6 +104,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    you're in voice? *(VOICE-14, WIN-7)*
    **Decided (2026-09-25): a tray menu** with Mute (or Unmute) and Leave
    voice, next to Show Linger and Quit.
+   **Added (2026-09-26, #216):** the same controls in the chat window of the
+   room you're in voice in, from real use: muting shouldn't need the list.
 6. **Push-to-talk key.** Today it is fixed to Ctrl (`lib/voice.ts`). The
    design's Settings shows "push to talk with its key", which suggests
    choosing it. Ctrl also starts the new shortcuts (Ctrl+Tab, Ctrl+W, Ctrl+K,
@@ -425,7 +427,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-11 | Devices that change mid-call recover within a second or two (hotplug, default change, sample rate). | `src-tauri/src/voice/device.rs` (T-1405) | Same | C + M | 🟡 unchanged Rust; needs a real-device check |
 | VOICE-12 | The relay (TURN) password is fetched fresh at each join. With no relay, a join still works on one network. | `lib/gateway.ts`, `GET /voice/ice` | Same | C | ✅ (lib/gateway.voice.test.ts, share.test.ts) |
 | VOICE-13 | A full voice room (8 people) refuses a join and says so in words. | server `MAX_VOICE_PEERS` | Words, never a number ("room for one more") | F | 🟡 "room for one more" (servers.test.ts); a refused join isn't shown |
-| VOICE-14 | The voice controls stay reachable wherever you are. | `VoiceAway.tsx` | The voice bar in the list; with the list hidden, the tray menu (decision 5) | F | ✅ (next-list-window.spec.ts "the tray menu's Mute and Leave follow voice") |
+| VOICE-14 | The voice controls stay reachable wherever you are. | `VoiceAway.tsx` | The voice bar in the list; with the list hidden, the tray menu (decision 5); and in the room you're in voice in, its chat window's voice line, as symbols (#216) | F | ✅ (next-list-window.spec.ts "the tray menu's Mute and Leave follow voice"; next-chat-window.spec.ts: the strip's Mute, Deafen and Leave act through the list window, no Mute with push-to-talk, none in other rooms) |
 | VOICE-15 | Join, leave, move and peer cues follow the voice and controls switches, not quiet hours. | `sound.ts`, `sound-events.ts` | Same | U | ✅ (lib/sound.test.ts) |
 | VOICE-16 | Voice audio never passes through the webview; the Rust engine owns devices, Opus and peers. Frames go to it from **one** window. | `src-tauri/src/voice/`, `voice_frame` | The owner forwards frames (architecture) | U + D | 🟡 the list forwards frames; needs a desktop check |
 | VOICE-17 | Join and leave draw the final layout from the first frame: no half-built bar, and the conversation doesn't blink (#141, #142). | `VoiceBar.tsx`, `lib/resize.ts` | Same | F (frame-by-frame) | 🟡 the strip keeps its height (next-chat.spec.ts); no frame-by-frame test |

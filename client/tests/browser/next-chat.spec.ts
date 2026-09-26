@@ -417,12 +417,14 @@ test.describe("a send the server refuses", () => {
 });
 
 test.describe("voice here", () => {
-  test("in voice here: says so, with no button", async ({ page }) => {
+  test("in voice here: your mute, deafen and leave, as symbols, and nothing to join (#216)", async ({ page }) => {
     await open(page, "?voice=mine");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });
-    await expect(strip).toContainText("You're in voice here");
     await expect(strip.getByRole("listitem")).toHaveText(["you", "Eli", "Jules"]);
-    await expect(strip.getByRole("button")).toHaveCount(0);
+    await expect(strip.getByRole("group", { name: "Your voice" }).getByRole("button")).toHaveText(["", "", ""]);
+    await expect(strip.getByRole("button", { name: /Join|Move|Start/ })).toHaveCount(0);
+    await strip.getByRole("button", { name: "Mute" }).click();
+    expect(await did(page)).toEqual(["mute"]);
   });
 
   test("in voice elsewhere: offers to move, in words", async ({ page }) => {

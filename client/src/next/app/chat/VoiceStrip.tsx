@@ -2,7 +2,7 @@ import { memo } from "react";
 import type { User } from "../../../generated/User";
 import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
-import { Button, Chip, markerOf, Name, VoiceGlyph } from "../../kit";
+import { Button, Chip, IconButton, markerOf, Name, VoiceGlyph } from "../../kit";
 import "./VoiceStrip.css";
 
 /** Chips that fit on the strip's one line; past this it says "and others". */
@@ -11,10 +11,22 @@ const MAX_CHIPS = 4;
 /**
  * A conversation's voice, in one line under its header (docs/design/
  * buddy-list.md, "Voice belongs to the room"). It says who's talking here
- * and offers one way in; mute, deafen and leave live in the list's voice bar.
- * It is one height in every state, so a change in voice never moves the
- * conversation (VOICE-17).
+ * and offers one way in. In the room you're in voice in, it has your controls
+ * too (#216): mute, deafen and leave, as symbols, the same ones as the list's
+ * voice bar, which stays. It is one height in every state, so a change in
+ * voice never moves the conversation (VOICE-17).
  */
+
+/** Your voice controls, in the room you're in voice in (#216). The list window acts on them. */
+export interface StripControls {
+  muted: boolean;
+  deafened: boolean;
+  /** Push-to-talk has no Mute: you're quiet until you hold the key, as in the voice bar. */
+  pushToTalk: boolean;
+  onMute: (muted: boolean) => void;
+  onDeafen: (deafened: boolean) => void;
+  onLeave: () => void;
+}
 export const VoiceStrip = memo(function VoiceStrip({
   strip,
   people,
@@ -22,6 +34,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   speaking,
   mics,
   onJoin,
+  controls,
 }: {
   strip: Strip;
   /** Everyone the strip names, by id. */
@@ -34,6 +47,8 @@ export const VoiceStrip = memo(function VoiceStrip({
   mics?: ReadonlyMap<string, "muted" | "deafened">;
   /** Join, move here, or start: the window knows which from `strip`. */
   onJoin: () => void;
+  /** Yours, when you're in voice here. */
+  controls?: StripControls;
 }) {
   if (strip.kind === "quiet") {
     return (
@@ -71,10 +86,28 @@ export const VoiceStrip = memo(function VoiceStrip({
         {here.length > shown.length ? "and others " : ""}
         {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}
       </p>
-      {strip.kind === "mine" ? (
-        <span className="nx-strip-here" title="Mute, deafen and leave are in the voice bar in your list">
-          You're in voice here
-        </span>
+      {strip.kind === "mine" && controls ? (
+        <div className="nx-strip-controls" role="group" aria-label="Your voice">
+          {controls.pushToTalk ? null : (
+            <IconButton
+              icon={controls.muted ? "micOff" : "mic"}
+              label={controls.muted ? "Muted" : "Mute"}
+              size="sm"
+              pressed={controls.muted}
+              onClick={() => controls.onMute(!controls.muted)}
+            />
+          )}
+          <IconButton
+            icon={controls.deafened ? "headOff" : "head"}
+            label={controls.deafened ? "Deafened" : "Deafen"}
+            size="sm"
+            pressed={controls.deafened}
+            onClick={() => controls.onDeafen(!controls.deafened)}
+          />
+          <IconButton icon="leave" label="Leave voice" size="sm" onClick={controls.onLeave} />
+        </div>
+      ) : strip.kind === "mine" ? (
+        <span className="nx-strip-here">You're in voice here</span>
       ) : (
         <Button size="sm" variant={strip.action === "join" ? "primary" : "secondary"} icon="mic" onClick={onJoin}>
           {VOICE_ACTION_WORDS[strip.action]}

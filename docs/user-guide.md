@@ -386,7 +386,9 @@ on in that room. Already talking in another room? **Move voice here** (or
 **Talk here instead**) takes you there.
 
 While you're in, the **voice bar** at the bottom of your list shows the room,
-who's in it (whoever is speaking lights up), and your controls:
+who's in it (whoever is speaking lights up), and your controls. The same
+three controls sit at the end of the room's voice line in its chat window, as
+symbols (hover one for its name), so you don't need the list in front to mute:
 
 - **Mute** stops sending, instantly, and nobody else can change it. Nobody can
   mute you either, and nobody can turn your microphone on.

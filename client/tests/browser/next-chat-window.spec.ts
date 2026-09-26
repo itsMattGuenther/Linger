@@ -173,6 +173,37 @@ test("you light up in the voice strip while you talk, as others do (#215)", asyn
   await expect(page.locator(".nx-strip [data-kit='VoiceGlyph']")).toHaveAttribute("data-speaking", "yes");
 });
 
+test("in the room you're in voice in, the voice strip has your mute, deafen and leave, and the list window acts on them (#216)", async ({ page }) => {
+  await open(page, "room=r-general&talking");
+  const yours = page.getByRole("group", { name: "Your voice" });
+  await expect(yours.getByRole("button")).toHaveCount(3);
+  for (const name of ["Mute", "Deafen", "Leave voice"]) {
+    const button = yours.getByRole("button", { name });
+    await expect(button).toHaveAttribute("data-kit", "IconButton");
+    await expect(button).toHaveText("");
+  }
+  await yours.getByRole("button", { name: "Mute" }).click();
+  await yours.getByRole("button", { name: "Deafen" }).click();
+  await yours.getByRole("button", { name: "Leave voice" }).click();
+  await expect.poll(async () => intents(await did(page)).filter((intent) => String(intent.kind).startsWith("voice."))).toEqual([
+    { kind: "voice.mute", muted: true },
+    { kind: "voice.deafen", deafened: true },
+    { kind: "voice.leave" },
+  ]);
+});
+
+test("with push-to-talk the voice strip has no Mute, as the voice bar hasn't; a room you're not in voice in has no controls (#216)", async ({ page }) => {
+  await open(page, "room=r-general&ptt");
+  const yours = page.getByRole("group", { name: "Your voice" });
+  await expect(yours.getByRole("button", { name: "Mute" })).toHaveCount(0);
+  await expect(yours.getByRole("button", { name: "Deafen" })).toBeVisible();
+  await expect(yours.getByRole("button", { name: "Leave voice" })).toBeVisible();
+
+  await open(page, "room=r-listening&talking");
+  await expect(page.getByRole("group", { name: "Voice in this conversation" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Your voice" })).toHaveCount(0);
+});
+
 test("a message is drawn in its sender's message face, and only ever a sans one", async ({ page }) => {
   await open(page);
   const text = page.locator(".nx-msg").filter({ hasText: "A bit of Khruangbin" }).locator(".nx-text");

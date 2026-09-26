@@ -582,6 +582,11 @@ function Conversations({ following }: { following: Following }) {
   const onJoin = useCallback(() => {
     if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
   }, [active, intend]);
+  // Your voice controls in the room you're in voice in (#216): the list
+  // window owns the seat and acts, as it does for its own voice bar.
+  const onMute = useCallback((muted: boolean) => void intend({ kind: "voice.mute", muted }).catch(() => undefined), [intend]);
+  const onDeafen = useCallback((deafened: boolean) => void intend({ kind: "voice.deafen", deafened }).catch(() => undefined), [intend]);
+  const onLeave = useCallback(() => void intend({ kind: "voice.leave" }).catch(() => undefined), [intend]);
 
   const pane = ((): ChatPane | null => {
     if (!active || !state || !room || paneId === null) return null;
@@ -601,7 +606,15 @@ function Conversations({ following }: { following: Following }) {
     return {
       id: paneId,
       header,
-      voice: { strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab), onJoin, mics: micsHere(state, room.id) },
+      voice: {
+        strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab),
+        onJoin,
+        mics: micsHere(state, room.id),
+        controls:
+          state.myVoice?.roomId === room.id
+            ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, pushToTalk: state.myVoice.pushToTalk, onMute, onDeafen, onLeave }
+            : undefined,
+      },
       people,
       me: state.me,
       speaking: talking,
