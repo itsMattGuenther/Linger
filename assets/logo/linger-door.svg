@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Linger's small mark: the porch door with the light on. The title bar
+       draws the same shapes from tokens (client/src/next/app/LogoMark.tsx);
+       the tray icon is this file at 64px (client/src-tauri/icons/tray.png). -->
+  <path d="M5.2 21.2 V8.6 A6.8 6.8 0 0 1 18.8 8.6 V21.2 Z" fill="#2a3550" stroke="#2ec5f2" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M8.4 13 V9.4 A3.6 3.6 0 0 1 15.6 9.4 V13 Z" fill="#ffc674"/>
+  <circle cx="15.4" cy="16.6" r="1.15" fill="#f3b55c"/>
+  <rect x="2.6" y="21" width="18.8" height="1.9" rx=".95" fill="#f3b55c"/>
+</svg>

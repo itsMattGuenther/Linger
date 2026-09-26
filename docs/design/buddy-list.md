@@ -111,17 +111,14 @@ a person's marker. So names line up down the whole list. A group DM's people
 share that column too, arranged inside it. Rows have a fixed line height, so a
 name set in a big serif or a small pixel face never changes the spacing.
 
-**The small mark is a placeholder.** The porch picture could not be read at the
-16–20px it gets beside the server name, so four pixel-drawn options were tried:
-
-- a pixel "L" on the logo's night panel, with a cyan border (the default);
-- the logo's three dots;
-- the porch lamp;
-- the word "Linger" in the logo's pixel face.
-
-Matt didn't like any of them (2026-09-25), and the small logo gets redesigned
-later. The "L" stays in as a stand-in, and `?mark=` still switches between the
-four.
+**The small mark** is the porch door with the light on
+(`assets/logo/linger-door.svg`, chosen 2026-09-25): an arched door in the
+sign's cyan, its window lit amber, and the lamp-lit step under it. The porch
+picture can't be read at the 16–20px the mark gets; its door can. The title
+bar draws it from tokens (`app/LogoMark.tsx`), and the tray icon is the same
+drawing (`src-tauri/icons/tray.png`). Four earlier pixel-drawn tries (a pixel
+"L", the logo's three dots, the lamp, the word) were turned down. The app
+icon is still the porch picture the friend group chose.
 
 ## The buddy list
 
@@ -353,11 +350,10 @@ The principles don't change:
 
 ## Open questions
 
-- **The small logo.** The mark beside the server name is a placeholder. Matt
-  didn't like the options tried (2026-09-25), and the small logo gets
-  redesigned later.
-- **Closing the list.** Should it keep Linger running in the tray by default,
-  as the prototype does, or quit?
+- **The small logo.** Now the lit door (above, 2026-09-25). Matt can still
+  change it.
+- **Closing the list.** Decided on 2026-09-25: it keeps Linger running in the
+  tray, and Settings → Windows can make it quit instead.
 - **New DMs.** A new DM only turns its row bold. AIM popped a window open, which
   is the kind of obligation Linger avoids, but some people will miss it.
 - **Many rooms.** The narrow list suits three to six rooms per server, not

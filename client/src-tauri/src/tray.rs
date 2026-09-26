@@ -100,9 +100,9 @@ fn build(app: &App) -> tauri::Result<()> {
                 show_list(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
-    }
+    // The small mark (assets/logo/linger-door.svg), not the app icon: the
+    // porch picture turns to mush at a tray's 16 to 24 pixels.
+    tray = tray.icon(tauri::include_image!("icons/tray.png"));
     tray.build(app)?;
     Ok(())
 }

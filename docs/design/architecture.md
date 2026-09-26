@@ -389,6 +389,5 @@ real-app check before the next step leans on it.
   version before the switch?
 - **The host time zone** for "4:52 AM there". It needs one small server
   setting. Build it in M15.8, or drop the line?
-- **The small logo mark.** A placeholder until it is redesigned.
-- **Closing the list.** The tray is the proposed default; quitting is the other
-  option.
+- The rest are listed, with what each blocks, in `parity.md` ("Decisions
+  still needed").

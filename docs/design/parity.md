@@ -504,7 +504,7 @@ there or where the design puts it.
 | NEW-4 | Settings → Windows (tabs or windows; tray or quit). | new | Design | F | ✅ (next-settings-window.spec.ts) |
 | NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ⏸ decision 13 |
 | NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ⏸ decision 12 |
-| NEW-7 | The small title-bar logo mark (a placeholder "L" until the redesign). | `lib/PorchMark.tsx` (the porch picture) | Design (open question) | — | 🟡 placeholder mark (`app/LogoMark.tsx`) |
+| NEW-7 | The small title-bar logo mark: the porch door with the light on, also the tray icon. | `lib/PorchMark.tsx` (the porch picture) | Design | — | ✅ (`app/LogoMark.tsx`, `assets/logo/linger-door.svg`) |
 
 ## KEY — keyboard
 
