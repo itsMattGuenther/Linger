@@ -144,7 +144,9 @@ and open any of these pages:
   send refused;
 - `/tests/fixtures/next-list-window.html` (`?one` for a single server): the
   real list window, restoring sign-ins and connecting to three faked
-  servers;
+  servers. `?one&signedout` opens it on the sign-in screen (the password
+  `wrong` is refused, invite `DEAD` and setup token `used` are spent);
+  `?revoked` and `?nokeyring` show its two warnings;
 - `/tests/fixtures/next-knocks.html` (`?voice`): knocks landing on the list;
 - `/tests/fixtures/next-chat-window.html?room=r-general` and
   `/tests/fixtures/next-settings-window.html`: the real chat and Settings

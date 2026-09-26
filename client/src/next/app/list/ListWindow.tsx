@@ -32,7 +32,9 @@ import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
 import { type Accounts, type Sharing, shareAsOwner, type WindowOpener } from "../../core/share";
+import { signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
+import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
@@ -40,7 +42,7 @@ import type { AwayEverywhere } from "./YouEverywhere";
 import { type KnockCard, KnockCards } from "./KnockCards";
 import type { KnockResult } from "./PersonCard";
 import type { VoiceDockProps } from "./VoiceDock";
-import { ApiError, TransportError } from "../../../lib/api";
+import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 
@@ -54,6 +56,8 @@ const INFO_REFRESH_MS = 120_000;
  */
 export function ListWindow() {
   const sessions = useSessions();
+  const { addServer } = sessions;
+  const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
 
   if (sessions.state.status === "restoring") {
     return (
@@ -65,12 +69,14 @@ export function ListWindow() {
   }
 
   if (sessions.state.servers.length === 0) {
-    // The new client's sign-in comes later (docs/design/parity.md, SIGN-*).
+    // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
-      <WindowMessage>
-        <span>You're not signed in to a server here yet.</span>
-        <span className="nx-window-hint">Sign in with today's Linger first, then open this one again.</span>
-      </WindowMessage>
+      <SignInView
+        actions={signIn}
+        notice={sessions.notice}
+        keyringNotice={sessions.keyringNotice}
+        onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
+      />
     );
   }
 

@@ -821,9 +821,12 @@ Rules for this milestone:
 
 - 🟡 **T-1801 · Foundations** — the design docs, tokens, the kit, the gallery
   (`tests/fixtures/kit.html`), and the discipline, contrast and geometry tests.
-- ⬜ **T-1802 · The switch and the owner window** — `LINGER_NEXT=1` opens
+- 🟡 **T-1802 · The switch and the owner window** — `LINGER_NEXT=1` opens
   `next.html` as `main`. It signs in with the existing sessions and shows real
-  rooms, DMs and people from the kit.
+  rooms, DMs and people from the kit. Signed in nowhere, it opens on its own
+  sign-in screen (paste box, sign in, join from an invite, first-run setup;
+  decision 16's default). Tested against faked servers; not yet tried in the
+  desktop app. Adding a second server isn't built.
 - 🟡 **T-1803 · The chat window** — the `chat` window with tabs, the catch-up
   protocol, borrowed tokens, and reading, sending and history in a tab. Built
   and tested against a faked owner and server; not yet tried in the desktop

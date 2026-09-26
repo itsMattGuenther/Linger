@@ -12,9 +12,16 @@
  *   each server's name.
  *
  * Open it at /tests/fixtures/next-list-window.html. `?one` signs in to The
- * Good Company only. `window.core.frame(server, frame)` delivers a gateway
- * frame; `window.core.ask(event, question)` asks the owner something as
- * another window would. What the window asked for is in `body[data-did]`.
+ * Good Company only. Signing in: `?signedout` has nothing saved, so the
+ * window opens on the sign-in screen; `?nokeyring` has no keyring to save
+ * to; `?revoked` has The Good Company refuse its saved sign-in (with `?one`,
+ * that leaves nothing signed in). The sign-in routes take any username;
+ * the password `wrong` is refused, invite `DEAD` and setup token `used` are
+ * spent, and `nowhere.example` doesn't answer.
+ *
+ * `window.core.frame(server, frame)` delivers a gateway frame;
+ * `window.core.ask(event, question)` asks the owner something as another
+ * window would. What the window asked for is in `body[data-did]`.
  */
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
@@ -39,6 +46,7 @@ const states: Record<string, GatewayState> = {
   [SERVER]: evening(serverState(SERVER)),
   ...(query.has("one") ? {} : { [GUILD]: guild(serverState(GUILD)), [LISBON]: lisbon(serverState(LISBON)) }),
 };
+const NO_KEYRING = "No usable keyring on this computer (no secret service).";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
 
 function ready(server: string): ServerFrame {
@@ -97,9 +105,14 @@ mockIPC((cmd, args) => {
       return null;
     }
     case "sessions_load":
+      if (query.has("nokeyring")) return { kind: "unavailable", reason: NO_KEYRING };
+      if (query.has("signedout")) return { kind: "empty" };
       return { kind: "found", sessions: Object.keys(states).map((base_url) => ({ base_url, refresh_token: `refresh-${base_url}` })) };
     case "session_save":
+      note(`save ${String((a.session as { base_url?: string }).base_url)}`);
+      return query.has("nokeyring") ? { kind: "unavailable", reason: NO_KEYRING } : { kind: "done" };
     case "session_forget":
+      note(`forget ${String(a.baseUrl)}`);
       return { kind: "done" };
     case "gateway_connect": {
       const server = String(a.baseUrl);
@@ -151,6 +164,7 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const server = url.origin;
+  if (url.hostname === "nowhere.example") throw new TypeError("Failed to fetch");
   const state = states[server];
   if (!state || !url.pathname.startsWith("/api/v1")) return realFetch(input, init);
   const path = url.pathname.slice("/api/v1".length);
@@ -158,7 +172,21 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   note(`${method} ${server}${path}`);
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
   await new Promise((settle) => window.setTimeout(settle, 10));
-  if (path === "/auth/refresh") return json({ access_token: `token-${server}`, refresh_token: `refresh-2-${server}`, expires_in: 600, user: state.me });
+  const refuse = (status: number, code: string, message: string) => json({ error: { code, message, retry_after_ms: null } }, status);
+  const signedIn = () => json({ access_token: `token-${server}`, refresh_token: `refresh-2-${server}`, expires_in: 600, user: state.me });
+  if (path === "/auth/refresh") {
+    return query.has("revoked") && server === SERVER ? refuse(401, "UNAUTHENTICATED", "That sign-in has ended.") : signedIn();
+  }
+  if (path === "/health") return new Response(null, { status: 204 });
+  const invite = /^\/auth\/invite\/(.+)$/.exec(path);
+  if (invite) return json({ valid: invite[1] !== "DEAD", server_name: names[server]?.name ?? null, expires_at: null });
+  const setup = /^\/setup\/(.+)$/.exec(path);
+  if (setup && method === "GET") return json({ valid: setup[1] !== "used" });
+  if ((path === "/auth/login" || path === "/auth/register" || path === "/setup") && method === "POST") {
+    note(`signin ${JSON.stringify(body)}`);
+    if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
+    return signedIn();
+  }
   if (path === "/read") return json(state.read);
   if (path === "/me/notify-rules") return json([]);
   if (path === "/server") return json({ name: names[server]?.name ?? server, accent_key: names[server]?.accent ?? null, icon_key: null, member_count: state.users.length, created_at: 0 });

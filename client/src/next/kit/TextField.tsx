@@ -18,6 +18,8 @@ export interface TextFieldProps {
   italic?: boolean;
   /** Codes and addresses. */
   mono?: boolean;
+  /** Typed exactly, like a username or an address: no spelling check, no automatic capital. */
+  literal?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
   /** Help under the field. */
@@ -44,6 +46,7 @@ export function TextField({
   icon,
   italic = false,
   mono = false,
+  literal = false,
   readOnly = false,
   disabled = false,
   hint,
@@ -91,6 +94,9 @@ export function TextField({
           aria-describedby={helpId}
           data-italic={italic ? "yes" : undefined}
           data-mono={mono ? "yes" : undefined}
+          autoCapitalize={literal ? "none" : undefined}
+          autoCorrect={literal ? "off" : undefined}
+          spellCheck={literal ? false : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && onEnter) {

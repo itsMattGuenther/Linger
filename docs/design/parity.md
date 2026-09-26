@@ -52,9 +52,10 @@ or a unit test.
 
 What's left, biggest first:
 
-- **The new client can't sign you in.** It only picks up sign-ins made in
-  today's Linger. There's no paste box, sign-in, invite or first-run screen
-  (SIGN-1 to SIGN-6, SIGN-11), and no way to add a server (SIGN-8).
+- **Signing in is built; adding a second server isn't.** The list window
+  opens on the paste box when you're signed in nowhere (SIGN-1 to SIGN-6,
+  SIGN-11). There's still no way to add a server once you're in one
+  (SIGN-8, decision 16).
 - **Signing out of one server isn't connected.** Settings has a Servers
   section, but the real Settings window never shows it. So signing out takes
   every server with it, even though Account's text says each server signs out
@@ -155,7 +156,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     window, or a panel of the list? *(MEDIA-1, SRCH-1)*
 16. **Sign-in and first run in the new shell.** The design shows only the
     signed-in list. Is the paste box a small list-sized window, and where does
-    "+ Add a server" open? *(SIGN-1, SIGN-8)*
+    "+ Add a server" open? *(SIGN-1, SIGN-8)* Built for now as the list
+    window itself: signed in nowhere, it opens on the paste box, in the
+    list's size and look (`app/signin/SignInView.tsx`).
 17. **Empty states:** no rooms yet, no DMs, a quiet server, an empty search,
     an empty media collection. Today each has copy and the porch mark (SPEC
     §5.6 "quiet delight"). The design doesn't show them. *(LIST-9)*
@@ -185,17 +188,17 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| SIGN-1 | One box to paste into. What was pasted decides the next form: sign in, accept an invite, or first-run setup. | `auth/AuthScreens.tsx`, `lib/link.ts`, PROTOCOL §2.2 | Same flow; its window and look are **silent** (decision 16). | U (`link.ts` exists) + F | ⏸ decision 16; no sign-in screen yet |
-| SIGN-2 | Understands `https://host/setup?token=…`, `https://host/invite/CODE` (and `?code=`), and a bare host. | `lib/link.ts` | Same | C + U | ⬜ `lib/link.ts` is ready; nothing uses it yet |
-| SIGN-3 | Sign in with username and password. The username is trimmed and lowercased. | `AuthScreens.tsx` `Login`, `POST /auth/login` | Same | F | ⬜ |
-| SIGN-4 | Register from an invite: username, display name, password (8 characters minimum, no other rules). The button is greyed until valid. | `AuthScreens.tsx`, `POST /auth/register`, `GET /auth/invite/:code` | Same | F | ⬜ |
-| SIGN-5 | First-run setup: the server's name, username, display name, password. Needs a valid setup token. "Setting up a new server?" help. | `AuthScreens.tsx`, PROTOCOL §2.1 | Same | F | ⬜ |
-| SIGN-6 | Server errors shown as sentences, in the server's own words when it has them. | `messageFor`, PROTOCOL §1 | Same | U + F | ⬜ |
+| SIGN-1 | One box to paste into. What was pasted decides the next form: sign in, accept an invite, or first-run setup. | `auth/AuthScreens.tsx`, `lib/link.ts`, PROTOCOL §2.2 | Same flow; its window and look are **silent** (decision 16). | U (`link.ts` exists) + F | ✅ in the list window, the default until decision 16 (next-signin.spec.ts) |
+| SIGN-2 | Understands `https://host/setup?token=…`, `https://host/invite/CODE` (and `?code=`), and a bare host. | `lib/link.ts` | Same | C + U | ✅ (lib/link.test.ts, core/signin.test.ts, next-signin.spec.ts); a sentence is no longer read as an address |
+| SIGN-3 | Sign in with username and password. The username is trimmed and lowercased. | `AuthScreens.tsx` `Login`, `POST /auth/login` | Same | F | ✅ (next-signin.spec.ts, core/signin.test.ts) |
+| SIGN-4 | Register from an invite: username, display name, password (8 characters minimum, no other rules). The button is greyed until valid. | `AuthScreens.tsx`, `POST /auth/register`, `GET /auth/invite/:code` | Same | F | ✅ (next-signin.spec.ts, core/signin.test.ts) |
+| SIGN-5 | First-run setup: the server's name, username, display name, password. Needs a valid setup token. "Setting up a new server?" help. | `AuthScreens.tsx`, PROTOCOL §2.1 | Same | F | ✅ (next-signin.spec.ts) |
+| SIGN-6 | Server errors shown as sentences, in the server's own words when it has them. | `messageFor`, PROTOCOL §1 | Same | U + F | ✅ (core/signin.test.ts, next-signin.spec.ts) |
 | SIGN-7 | Sign-ins survive restarts. Refresh tokens live in the OS keyring, one entry per server; nothing about the account is cached. | `lib/session.ts`, `src-tauri/src/secrets.rs` | Same, **owner window only** (architecture: refresh tokens never leave the owner). | C + U (borrowed tokens) | ✅ (next-list-window.spec.ts, share.test.ts) |
 | SIGN-8 | Several servers at once. Signing out of one leaves the rest alone. Signing back in keeps the server's place in the order. | `lib/session.ts` | Same; order shown as sections, and adding a server is **silent** (decision 16). | C + F | 🟡 several servers work (next-list-window.spec.ts); adding one isn't built (decision 16) |
-| SIGN-9 | "Not remembered" warning when the keyring can't store a sign-in, shown before anyone is surprised by it. | `App.tsx` status bar, `session.ts` `keyringNotice` | **Silent** (decision 1) | F | ⏸ decision 1 |
+| SIGN-9 | "Not remembered" warning when the keyring can't store a sign-in, shown before anyone is surprised by it. | `App.tsx` status bar, `session.ts` `keyringNotice` | **Silent** (decision 1) | F | 🟡 said on the sign-in screen (next-signin.spec.ts); once signed in, waits on decision 1 |
 | SIGN-10 | Only an authentication rejection ends a sign-in. A server outage, rate limit or network failure keeps the saved token (T-906, PROTOCOL §2). | `lib/api.ts`, `session.ts` | Same | C | ✅ (lib/api.test.ts, next-chat-window.spec.ts) |
-| SIGN-11 | A sign-in that ended on its own says why on the next screen. | `AuthScreens.tsx` `notice` | Same | F | ⬜ |
+| SIGN-11 | A sign-in that ended on its own says why on the next screen. | `AuthScreens.tsx` `notice` | Same | F | ✅ (next-signin.spec.ts) |
 | SIGN-12 | Restore happens exactly once per launch; the StrictMode double mount can't spend a refresh token twice. | `session.ts` module-scope promise | Same, plus viewers never refresh. | C + U | ✅ (next-list-window.spec.ts, lib/api.test.ts) |
 | SIGN-13 | Signing out forgets the server on this computer and revokes the token family. It doesn't delete the account. | Settings → Account & App, `POST /auth/logout` | Settings → Account & App, and Settings → Servers per server | F | 🟡 signing out of everything works (next-settings-window.spec.ts); one server at a time isn't wired |
 
