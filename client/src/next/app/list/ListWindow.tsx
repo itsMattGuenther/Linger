@@ -46,7 +46,7 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { knockOn } from "../../core/knock";
-import { signInActions } from "../../core/signin";
+import { readPasted, type SignInActions, signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
@@ -54,7 +54,7 @@ import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type KnockCard, KnockCards } from "./KnockCards";
-import type { VoiceDockProps } from "./VoiceDock";
+import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
@@ -196,17 +196,28 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
   // Adding a server (Settings → Servers, or Account & App with one): the
   // sign-in takes the list's place, and every server stays connected.
   const [adding, setAdding] = useState(false);
-  const addingActions = useMemo(
-    () =>
-      signInActions(
-        (baseUrl) => new PublicApi(baseUrl),
-        async (baseUrl, auth) => {
-          await accounts.reauthenticate(baseUrl, auth);
-          setAdding(false);
-        },
-      ),
-    [accounts],
-  );
+  // A server you're already on isn't signed in to again: that would restart
+  // its connection, and your voice seat with it.
+  const alreadyOn = useRef<(baseUrl: string) => string | null>(() => null);
+  alreadyOn.current = (baseUrl) =>
+    signedIn.some((session) => session.baseUrl === baseUrl) ? `You're already signed in to ${infos[baseUrl]?.name ?? hostOf(baseUrl)}.` : null;
+  const addingActions = useMemo((): SignInActions => {
+    const actions = signInActions(
+      (baseUrl) => new PublicApi(baseUrl),
+      async (baseUrl, auth) => {
+        await accounts.reauthenticate(baseUrl, auth);
+        setAdding(false);
+      },
+    );
+    return {
+      ...actions,
+      check: async (pasted) => {
+        const read = readPasted(pasted);
+        const problem = "link" in read ? alreadyOn.current(read.link.baseUrl) : null;
+        return problem === null ? actions.check(pasted) : { problem };
+      },
+    };
+  }, [accounts]);
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
   listNow.current = {
     addServer: () => {
@@ -425,6 +436,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
           actions={addingActions}
           keyringNotice={keyringNotice}
           adding
+          below={voice ? <VoiceDock {...voice} /> : undefined}
           onCancel={() => setAdding(false)}
           onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
         />

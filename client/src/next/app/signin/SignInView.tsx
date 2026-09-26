@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
 import { loginReady, MIN_PASSWORD_CHARS, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
 import { Button, TextField, TitleBar } from "../../kit";
@@ -15,6 +15,8 @@ export interface SignInViewProps {
   onCancel?: () => void;
   /** Adding a server to the ones you're on, rather than signing in for the first time. */
   adding?: boolean;
+  /** Kept in reach at the bottom while you sign in: the voice bar, when you're in voice. */
+  below?: ReactNode;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
 }
@@ -25,7 +27,7 @@ export interface SignInViewProps {
  * another server, with a way back to the list. Where it lives is decision 16;
  * the list window is the default until that's decided.
  */
-export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, adding = false }: SignInViewProps) {
+export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, adding = false, below }: SignInViewProps) {
   const [step, setStep] = useState<SignInStep>({ kind: "paste" });
   const back = () => setStep({ kind: "paste" });
 
@@ -50,6 +52,7 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
           </p>
         ) : null}
       </div>
+      {below}
     </div>
   );
 }

@@ -166,3 +166,31 @@ test.describe("adding a server", () => {
     expect(told).toBe(`emit next:serverprefs:${JSON.stringify({ v: 1, prefs: { order: [LISBON, GUILD, HOME], quiet: [GUILD] } })}`);
   });
 });
+
+test.describe("adding a server you're already on", () => {
+  test("says so, and asks nothing of it", async ({ page }) => {
+    await open(page, "?one");
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    const box = page.getByRole("textbox", { name: "Server or link" });
+    await box.fill("good-company.example");
+    await box.press("Enter");
+    await expect(page.getByText("You're already signed in to The Good Company.")).toBeVisible();
+    expect((await did(page)).filter((line) => line === `GET ${HOME}/health`)).toEqual([]);
+  });
+
+  test("the voice bar stays in reach under the sign-in", async ({ page }) => {
+    await open(page, "?one");
+    const bar = page.getByRole("region", { name: /In voice/ });
+    // Asked until the list window is listening; joining the same room again does nothing.
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        return bar.count();
+      })
+      .toBe(1);
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    await expect(bar).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Leave" })).toBeVisible();
+  });
+});
