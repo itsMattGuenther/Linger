@@ -37,12 +37,15 @@ export interface DesktopOptions {
   commands?: Record<string, (args: Record<string, unknown>) => unknown>;
 }
 
+/** A gateway frame before it's numbered: `s` left out of whichever kind it is. */
+export type Unnumbered = ServerFrame extends infer Frame ? (Frame extends { op: string } ? Omit<Frame, "s"> & { s?: number } : never) : never;
+
 export interface Desktop {
   note: (what: string) => void;
   /** Run this page's listeners for an event, as the shell would deliver it. */
   deliver: (event: string, payload: unknown) => void;
   /** A gateway frame, numbered after the owner's snapshot. */
-  frame: (frame: Omit<ServerFrame, "s"> & { s?: number }) => void;
+  frame: (frame: Unnumbered) => void;
   /** A new message on the server, not yet announced. */
   newMessage: (room: string, author: string, body: string) => Message;
   /** What the server holds for a room, newest last. */

@@ -26,7 +26,7 @@ import type { ServerFrame } from "../../src/generated/ServerFrame";
 import { serverState } from "../../src/lib/gateway";
 import { ChatWindow } from "../../src/next/app/chat/ChatWindow";
 import "../../src/next/styles/app.css";
-import { fakeDesktop } from "./next/desktop";
+import { fakeDesktop, type Unnumbered } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening } from "./next/evening";
 import { GUILD, guild, serverInfo } from "./next/servers";
 
@@ -74,7 +74,7 @@ declare global {
   interface Window {
     owner?: {
       /** A gateway frame reaches every window, as the core sends it. */
-      frame: (frame: Omit<ServerFrame, "s"> & { s?: number }) => void;
+      frame: (frame: Unnumbered) => void;
       /** The list window opens a conversation while this window is open, on a server (the main one if left out). */
       open: (room: string, server?: string) => void;
       /** Somebody says something in a room, arriving as a frame. */
