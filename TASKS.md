@@ -314,7 +314,7 @@ where it still makes sense, and is otherwise closed with a note.
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
 
-- ⬜ **T-921 · Show a private room's occupants as around to outsiders** — effort:
+- ✅ **T-921 · Show a private room's occupants as around to outsiders** — effort:
   **medium**
   T-918's third native client receives the documented `in_room` presence with
   `room_id: null`, but renders “in a room” instead of HC-7's “around”. The
@@ -328,6 +328,10 @@ where it still makes sense, and is otherwise closed with a note.
   in a DM shows as "around" to **everybody**, the DM's own people included, so
   nobody sees that you're DMing, let alone with whom (the old client named
   them). Your own card can still say where you are.
+  **Done 2026-09-26:** the server rewrites presence for anybody in a DM to
+  `around` with no room, for every receiver, and sends no enter, leave or
+  occupancy for DMs; the list shows an older server's in-a-DM entry as around
+  too.
 
 ---
 

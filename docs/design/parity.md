@@ -347,7 +347,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | DM-1 | Create-or-find: the same set of people always gets the same DM. Two to eight people, you included. You can't DM yourself. | `App.tsx` `openDm`, `POST /dms` | New-message picker (NEW-2); the person card's Message button | F | ✅ (newDm.test.ts, next-list.spec.ts) |
 | DM-2 | A DM is named by the others in it, differently for each viewer. A removed member leaves a gap, not "unknown". | `lib/dm.ts` | Same | C (dm tests) | ✅ (lib/dm.test.ts, list.test.ts) |
 | DM-3 | A new DM appears in the other people's lists without them doing anything (`room.create` to members only). | `lib/gateway.ts` | Same | C + F | ✅ (lib/gateway.test.ts, list.test.ts) |
-| DM-4 | Presence never leaks a DM: outsiders see you as around, not in a room. **Outsiders currently see "in a room" (T-921).** | server fan-out, SPEC §4.13 | **Decision 21** | F | ⬜ to build: a DM shows as "around" to everybody, its own people included (decision 21, T-921) |
+| DM-4 | Presence never leaks a DM: outsiders see you as around, not in a room. **Outsiders currently see "in a room" (T-921).** | server fan-out, SPEC §4.13 | **Decision 21** | F | ✅ a DM reads as "around" to everybody, its own people included, and says no enter, leave or occupancy (dms.rs "being_in_a_dm_reads_as_around_to_everybody", list.test.ts; decision 21, T-921) |
 | DM-5 | Voice in a DM is as private as the DM. | server fan-out | Same | C (server) | ✅ (server tests) |
 
 ## PPL — people, presence and status

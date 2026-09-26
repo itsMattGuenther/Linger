@@ -527,8 +527,12 @@ async fn a_non_members_socket_never_receives_a_dm_frame() {
     );
 }
 
+/// Being in a DM is being **around**, to everybody, the DM's own people
+/// included (Matt, 2026-09-26): nobody learns that somebody is DMing, let alone
+/// with whom. The old client named them. And the person is not hidden: they
+/// are still there, just not anywhere in particular.
 #[tokio::test]
-async fn presence_in_a_dm_is_redacted_rather_than_withheld() {
+async fn being_in_a_dm_reads_as_around_to_everybody() {
     let (server, host, _room) = common::server_with_room("garage").await;
     let (callie, dave) = three_people(&server, &host).await;
     let dm = dm_with(&server, &host.access_token, &[&callie.user.id.to_string()]).await;
@@ -546,35 +550,30 @@ async fn presence_in_a_dm_is_redacted_rather_than_withheld() {
     )
     .await;
 
-    // Callie is in it, so she is told where he is.
-    let hers = drain(&mut callie_ws, SETTLE).await;
-    let seen = hers
-        .iter()
-        .find(|f| {
-            f["op"] == "presence.update" && f["d"]["user_id"] == json!(host.user.id.to_string())
-        })
-        .expect("a member is told where somebody is");
-    assert_eq!(seen["d"]["room_id"], json!(dm.id.to_string()));
-
-    // Dave is told he is *around* and not told where. Both halves matter: the
-    // room is gone, and the person is not.
-    let his = drain(&mut dave_ws, SETTLE).await;
-    let redacted = his
-        .iter()
-        .find(|f| {
-            f["op"] == "presence.update" && f["d"]["user_id"] == json!(host.user.id.to_string())
-        })
-        .expect("a stranger still hears that somebody is around");
-    assert_eq!(
-        redacted["d"]["room_id"],
-        Value::Null,
-        "a stranger was told which DM somebody is in"
-    );
-    assert!(
-        !his.iter()
-            .any(|f| f["op"] == "room.occupancy" || f["op"] == "room.enter"),
-        "a stranger was told who is standing in a DM"
-    );
+    for (who, ws) in [("a member", &mut callie_ws), ("a stranger", &mut dave_ws)] {
+        let frames = drain(ws, SETTLE).await;
+        let seen = frames
+            .iter()
+            .find(|f| {
+                f["op"] == "presence.update" && f["d"]["user_id"] == json!(host.user.id.to_string())
+            })
+            .unwrap_or_else(|| panic!("{who} still hears that somebody is around"));
+        assert_eq!(
+            seen["d"]["state"], "around",
+            "{who} was told somebody is in a room"
+        );
+        assert_eq!(
+            seen["d"]["room_id"],
+            Value::Null,
+            "{who} was told which DM somebody is in"
+        );
+        assert!(
+            !frames.iter().any(|f| f["op"] == "room.occupancy"
+                || f["op"] == "room.enter"
+                || f["op"] == "room.leave"),
+            "{who} was told who is standing in a DM: {frames:?}"
+        );
+    }
 }
 
 /// The `ready` frame is a frame like any other, and it was not being filtered
@@ -614,8 +613,10 @@ async fn the_ready_snapshot_is_redacted_like_every_other_frame() {
         "the ready snapshot handed a stranger a DM's id"
     );
 
-    // A member's snapshot still says where, so this is a filter and not a
-    // blanket blanking.
+    assert_eq!(host_entry["state"], "around");
+
+    // A member's snapshot says the same: being in a DM is being around, to
+    // everybody (see above).
     let (_callie_ws, callie_ready) = connect_ready(&server, &callie.access_token).await;
     let seen = callie_ready["presence"]
         .as_array()
@@ -623,7 +624,8 @@ async fn the_ready_snapshot_is_redacted_like_every_other_frame() {
         .iter()
         .find(|e| e["user_id"] == json!(host.user.id.to_string()))
         .expect("a member sees the host");
-    assert_eq!(seen["room_id"], json!(dm.id.to_string()));
+    assert_eq!(seen["room_id"], Value::Null);
+    assert_eq!(seen["state"], "around");
 }
 
 #[tokio::test]

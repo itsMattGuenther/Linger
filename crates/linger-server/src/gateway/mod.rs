@@ -590,7 +590,7 @@ impl Gateway {
         self.presence
             .iter()
             .map(|e| {
-                let mut entry = e.value().clone();
+                let mut entry = self.outward(e.value().clone());
                 if let Some(room_id) = entry.room_id {
                     if !self.can_see_room(receiver, room_id) {
                         entry.room_id = None;
@@ -599,6 +599,25 @@ impl Gateway {
                 entry
             })
             .collect()
+    }
+
+    /// Whether a room is a DM.
+    fn is_dm(&self, room_id: RoomId) -> bool {
+        self.dm_members.contains_key(&room_id)
+    }
+
+    /// What anybody is told about where a person is (SPEC §4.13, Matt
+    /// 2026-09-26): being in a DM is being **around**, to everybody, the DM's
+    /// own people included. Nobody learns that somebody is DMing, let alone
+    /// with whom. The server still knows, for the things that need it.
+    fn outward(&self, mut entry: PresenceEntry) -> PresenceEntry {
+        if entry.room_id.is_some_and(|room_id| self.is_dm(room_id)) {
+            entry.room_id = None;
+            if entry.state == PresenceState::InRoom {
+                entry.state = PresenceState::Around;
+            }
+        }
+        entry
     }
 
     /// Who is in a room right now.
@@ -660,6 +679,10 @@ impl Gateway {
             entry
         };
 
+        // Standing in a DM is nobody's business (see `outward`): no leave,
+        // enter or occupancy is said about one, even to its own people.
+        let prev_room = prev_room.filter(|room| !self.is_dm(*room));
+        let room_id = room_id.filter(|room| !self.is_dm(*room));
         if let Some(prev) = prev_room {
             self.publish(ServerEvent::RoomLeave {
                 room_id: prev,
@@ -757,13 +780,13 @@ impl Gateway {
         }
 
         if let ServerEvent::PresenceUpdate(entry) = &fanout.event {
-            if let Some(room_id) = entry.room_id {
+            let mut told = self.outward(entry.clone());
+            if let Some(room_id) = told.room_id {
                 if !self.can_see_room(receiver, room_id) {
-                    let mut redacted = entry.clone();
-                    redacted.room_id = None;
-                    return Some(ServerEvent::PresenceUpdate(redacted));
+                    told.room_id = None;
                 }
             }
+            return Some(ServerEvent::PresenceUpdate(told));
         }
 
         Some(fanout.event.clone())

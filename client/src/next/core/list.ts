@@ -143,14 +143,15 @@ export function listModel(state: GatewayState, now: number): ListModel {
 }
 
 /**
- * Where somebody is, in the fewest plain words. A private room they are in
- * never reaches us (SPEC §4.13), so "in a room" without a name is what an
- * in-room entry with no room we hold says.
+ * Where somebody is, in the fewest plain words. Being in a DM is being
+ * around (SPEC §4.13, decided 2026-09-26): a server from 0.4.1 on says so
+ * itself, and an older one's in-room entry with no room we hold (or a DM we
+ * are in) reads the same way here, never "in a room".
  */
 function noteFor(entry: RosterEntry, now: number): string {
   switch (entry.state) {
     case "in_room":
-      return entry.room === null ? "in a room" : `in #${entry.room.name}`;
+      return entry.room === null ? "around" : `in #${entry.room.name}`;
     case "around":
       return "around";
     case "idle":

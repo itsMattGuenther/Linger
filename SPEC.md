@@ -529,10 +529,12 @@ browser that carries no session and so cannot be filtered at all; what keeps a D
 files private is that no list hands a non-member the URL, and an object key is not
 guessable.
 
-**Presence does not leak a DM's existence.** Somebody in a DM is *in a room* — but a
-person who cannot see that DM is told only that they are around, never which room. The
-alternative, dropping the presence update entirely, would make them look offline to
-everybody they are not currently talking to.
+**Presence does not leak a DM's existence.** Somebody in a DM is **around**, to
+everybody, the DM's own people included: nobody is told that somebody is DMing, let
+alone with whom (decided 2026-09-26; the old client named the people). No enter, leave
+or occupancy is said about a DM at all. The alternative, dropping the presence update
+entirely, would make them look offline to everybody, which is both wrong and a slower
+way of leaking the same thing.
 
 **No unread counts, still** (§4.2). A DM holding something new gets the same weight
 change a room gets, and no number appears anywhere. Feeling more urgent is not an

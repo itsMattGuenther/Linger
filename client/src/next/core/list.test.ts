@@ -151,10 +151,12 @@ describe("the buddy list for one server", () => {
     expect(julesRow?.inVoice).toBe(false);
   });
 
-  it("says 'in a room' for somebody in a room this list can't see", () => {
-    const state = { ...evening(), presence: [presence("u-eli", "in_room", "r-private")] };
-    const eliRow = listModel(state, NOW).people.here.find((row) => row.user.id === "u-eli");
-    expect(eliRow?.note).toBe("in a room");
+  it("says 'around' for somebody in a DM, even one we're in, as an older server reports it (decision 21)", () => {
+    for (const where of ["r-private", "d-jules"]) {
+      const state = { ...evening(), presence: [presence("u-eli", "in_room", where)] };
+      const eliRow = listModel(state, NOW).people.here.find((row) => row.user.id === "u-eli");
+      expect(eliRow?.note).toBe("around");
+    }
   });
 
   it("is empty but well-formed before the server has said anything", () => {
