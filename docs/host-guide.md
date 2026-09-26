@@ -243,7 +243,7 @@ know straight away.
 
 ## Voice for bigger groups
 
-*Not in a release yet: this is on the `feat/197-voice-forwarding` branch.*
+*New in 0.4.1.*
 
 Out of the box, everybody in a voice room sends their voice straight to
 everybody else. That's fine for a handful of people and stops working past
@@ -252,10 +252,23 @@ on to the others, up to 25 in a room:
 
 1. Find the server's public IP address: `curl -4 https://api.ipify.org`.
 2. In `compose.yaml`, remove the `#` before `LINGER_VOICE_ADDRESS` and put that
-   address after it.
+   address after it. A `compose.yaml` from before 0.4.1 has neither that line
+   nor the port, so add both to the `linger` service:
+
+   ```yaml
+       environment:
+         # ...what's there already...
+         LINGER_VOICE_ADDRESS: 203.0.113.7
+       ports:
+         - "3479:3479/udp"
+   ```
 3. Allow **UDP 3479** in the cloud firewall (and the machine's own, if it has
-   one).
-4. `docker compose up -d`. The log says `voice forwarding is on`.
+   one: `sudo ufw allow 3479/udp`).
+4. `docker compose pull && docker compose up -d` (with `--profile voice` if you
+   run the relay). `docker compose logs linger` says `voice forwarding is on`.
+
+The address is an IP address, not a name, so there's nothing to change in
+your DNS.
 
 Your server then passes voice along. It keeps none of it and plays none of it,
 but it is on your machine, so you *could* listen, the same way you could read
