@@ -276,11 +276,21 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     opener?.chat(server, roomId);
   };
 
+  // The windows holding the push-to-talk key down right now. A window that
+  // closes with it held (Ctrl+W, with Ctrl being the key) never says it let
+  // go, so its going closes the microphone.
+  const holdingTalk = new Set<string>();
+  const letGoOfTalk = () => {
+    const server = voiceServer(sessions().keys());
+    if (server !== null && serverState(server).myVoice?.pushToTalk) void setVoiceMuted(server, true).catch(() => undefined);
+  };
+
   const gone = (label: string) => {
     if (label === CHAT) {
       tabsListening = false;
       missed = [];
     }
+    if (holdingTalk.delete(label)) letGoOfTalk();
     forgetWindow(label);
     showing = close(showing, label);
     place();
@@ -430,7 +440,9 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
             case "voice.talk":
               // Push-to-talk only means something when it is on: the key
               // opens the microphone while held and closes it on release.
-              if (mine?.pushToTalk) void setVoiceMuted(server, !intent.down).catch(() => undefined);
+              if (intent.down === true) holdingTalk.add(intent.from);
+              else holdingTalk.delete(intent.from);
+              if (mine?.pushToTalk) void setVoiceMuted(server, intent.down !== true).catch(() => undefined);
               return;
           }
         }

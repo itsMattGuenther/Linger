@@ -631,6 +631,37 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a window that closes with the push-to-talk key still held closes the microphone", async () => {
+    const saved = new Map([["linger.voice.pushToTalk", "true"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { hub, owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+
+    // Ctrl down, then Ctrl+W: the window is gone before the key comes up.
+    await follower.intend({ kind: "voice.talk", down: true });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    hub.broadcast(owner.share.CLOSED, "chat");
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+
+    // A window that let go before it closed changes nothing when it goes.
+    await follower.intend({ kind: "voice.talk", down: true });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    await follower.intend({ kind: "voice.talk", down: false });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    const said = invoked.length;
+    hub.broadcast(owner.share.CLOSED, "chat");
+    await new Promise((settle) => setTimeout(settle, 20));
+    expect(invoked.slice(said)).toEqual([]);
+    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true);
+    follower.stop();
+  });
+
   it("a server that isn't answering holds up neither the other servers nor the window", async () => {
     const { owner, viewer, core } = await windows();
     const AWAY = "https://away.example";

@@ -182,7 +182,10 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `window`, `room`, `closing`: for presence, this window's focus, the person
   moving in it, the conversation it shows, and that it is going;
 - `voice.join` (which also moves voice), `voice.leave`, `voice.mute`,
-  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window;
+  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window.
+  The owner remembers which windows hold the key down, and closes the
+  microphone if one of them goes without letting go (Ctrl+W, with Ctrl as the
+  key);
 - `popout` and `tabs`: move a conversation into a window of its own, or back
   into the chat window's tabs (only the owner opens windows);
 - `conversations`: tabs or windows, from Settings;
