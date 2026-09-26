@@ -199,6 +199,20 @@ test("a brand new DM opened into the tabs waits for its conversation rather than
   await expect(page.getByRole("tab")).toHaveCount(2);
 });
 
+test("a window opened on a DM it hasn't heard of yet waits for it rather than closing", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-chat-window.html?room=d-dave");
+  await page.waitForTimeout(300);
+  expect(await did(page)).not.toContain("window:close");
+  await page.evaluate(() =>
+    window.owner?.frame({
+      op: "room.create",
+      d: { id: "d-dave", slug: "d-dave", name: "", topic: null, kind: "dm", member_ids: ["u-matt", "u-dave"], position: 0, archived_at: null, last_message_id: null },
+    }),
+  );
+  await expect(page.getByRole("tab", { name: "DM with Dave" })).toHaveAttribute("aria-selected", "true");
+  expect(await did(page)).not.toContain("window:close");
+});
+
 test("moves between tabs and closes them from the keyboard, even while typing", async ({ page }) => {
   await open(page);
   await page.evaluate(() => {

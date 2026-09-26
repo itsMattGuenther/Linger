@@ -111,6 +111,18 @@ function firstTabs(apis: ReadonlyMap<string, AuthedApi>): Tabs {
   return tabs;
 }
 
+/** The conversation this window was opened on, if this window hasn't heard of it yet. */
+function unseenAtOpen(apis: ReadonlyMap<string, AuthedApi>): Set<string> {
+  const query = new URLSearchParams(window.location.search);
+  const server = query.get("server");
+  const room = query.get("room");
+  const unseen = new Set<string>();
+  if (server !== null && room !== null && apis.has(server) && conversationIn(serverState(server), room) === null) {
+    unseen.add(keyOf({ server, roomId: room }));
+  }
+  return unseen;
+}
+
 function Conversations({ following }: { following: Following }) {
   const { apis, intend } = following;
   const servers = useServers();
@@ -139,10 +151,10 @@ function Conversations({ following }: { following: Following }) {
     return first && text !== null ? { conversation: keyOf(first), text } : null;
   });
 
-  // Conversations opened while this window is open that it hasn't seen yet: a
-  // brand new DM reaches this window as its own frame, after the list asked
+  // Conversations opened (or this window opened on) that it hasn't seen yet:
+  // a brand new DM reaches this window as its own frame, after the list asked
   // for it. Such a tab waits for it rather than being taken for gone.
-  const waiting = useRef(new Set<string>());
+  const [waiting] = useState(() => unseenAtOpen(apis));
 
   // Opened from the list while this window is already open (window.rs,
   // `next_open_chat`). Once listening, the tabs window asks the list window
@@ -152,7 +164,7 @@ function Conversations({ following }: { following: Following }) {
       if (!apis.has(server)) return;
       const tab = { server, roomId };
       const state = serverState(server);
-      if (conversationIn(state, roomId) === null) waiting.current.add(keyOf(tab));
+      if (conversationIn(state, roomId) === null) waiting.add(keyOf(tab));
       setTabs((held) => openTab(held, tab));
       setFocusAsk((ask) => ask + 1);
       // Back from a window of its own, perhaps with a draft.
@@ -160,7 +172,7 @@ function Conversations({ following }: { following: Following }) {
       const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
       if (text !== null) setSeed({ conversation: keyOf(tab), text });
     },
-    [apis],
+    [apis, waiting],
   );
   useEffect(() => {
     if (!isTauri()) return;
@@ -202,8 +214,8 @@ function Conversations({ following }: { following: Following }) {
       keepOnly(held, (tab) => {
         const state = servers[tab.server];
         if (state === undefined || state.me === null) return true;
-        if (conversationIn(state, tab.roomId) === null) return waiting.current.has(keyOf(tab));
-        waiting.current.delete(keyOf(tab));
+        if (conversationIn(state, tab.roomId) === null) return waiting.has(keyOf(tab));
+        waiting.delete(keyOf(tab));
         return true;
       }),
     );
