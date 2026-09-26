@@ -462,6 +462,48 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("keeps what the tabs window was sent before it was listening, and hands it over once", async () => {
+    const { hub, owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const opened: string[] = [];
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      opener: { chat: (_server, roomId) => opened.push(roomId), conversation: () => undefined, settings: () => undefined },
+    });
+    evening().slice(0, 3).forEach(core);
+    const opens = (label = "chat") => ask<{ opens: unknown[] }>(label === "chat" ? viewer.bus : hub.bus(label), "main", owner.share.OPENS, {});
+
+    // Two rooms clicked while the tabs window is still catching up, and one
+    // coming back from a window of its own.
+    sharing.open(HOME, "r-general");
+    sharing.open(HOME, "r-weekend");
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "tabs", server: HOME, roomId: "r-listening" });
+    await vi.waitFor(() => expect(opened).toEqual(["r-general", "r-weekend", "r-listening"]));
+
+    // Another window asking is told nothing, and takes nothing.
+    await expect(opens("settings")).resolves.toEqual({ opens: [] });
+    // Listening now: every one of them, in order, and only once.
+    await expect(opens()).resolves.toEqual({
+      opens: [
+        { server: HOME, roomId: "r-general" },
+        { server: HOME, roomId: "r-weekend" },
+        { server: HOME, roomId: "r-listening" },
+      ],
+    });
+    await expect(opens()).resolves.toEqual({ opens: [] });
+    // While it listens, the shell's own delivery is enough.
+    sharing.open(HOME, "r-general");
+    await expect(opens()).resolves.toEqual({ opens: [] });
+
+    // Closed: a new tabs window starts from nothing, and missed opens are kept again.
+    hub.broadcast(owner.share.CLOSED, "chat");
+    sharing.open(HOME, "r-weekend");
+    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-weekend" }] });
+    sharing.stop();
+    follower.stop();
+  });
+
   it("joins, talks and leaves voice through the owner, and every window sees the seat", async () => {
     const { owner, viewer, core } = await windows();
     const api = fakeOwnerApi(["token-1"]);

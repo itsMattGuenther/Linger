@@ -58,6 +58,8 @@ export const SHARED = "next:shared";
 export const CLOSED = "next:closed";
 /** The owner tells every window how conversations open now (core/conversations.ts). */
 export const MODE = "next:mode";
+/** The tabs window, now listening, asks what it was sent to open before it was. */
+export const OPENS = "next:opens";
 /** Settings asks the owner to turn a notification rule on or off (the owner keeps them). */
 export const NOTIFY = "next:notify";
 /** Settings asks the owner to change your password and sign back in with the new one. */
@@ -78,6 +80,11 @@ export interface PasswordQuestion {
 /** How a request to the owner went: the problem in words, or null. */
 export interface Outcome {
   problem: string | null;
+}
+
+/** What the tabs window was sent to open before it was listening, oldest first. */
+export interface OpensAnswer {
+  opens: { server: string; roomId: RoomId }[];
 }
 
 export interface ModeMessage {
@@ -243,7 +250,24 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     looked = key;
     setViewing(now);
   };
+  // The shell hands an open tabs window each conversation as an event
+  // (window.rs, `next_open_chat`), and a window still catching up isn't
+  // listening yet: two rooms clicked quickly, or several windows going back
+  // into the tabs at once, would lose all but the first. So every open is
+  // also kept here until the tabs window says it's listening (OPENS), and it
+  // is handed what it missed.
+  let tabsListening = false;
+  let missed: OpensAnswer["opens"] = [];
+  const toTabs = (server: string, roomId: RoomId) => {
+    if (!tabsListening) missed.push({ server, roomId });
+    opener?.chat(server, roomId);
+  };
+
   const gone = (label: string) => {
+    if (label === CHAT) {
+      tabsListening = false;
+      missed = [];
+    }
     forgetWindow(label);
     showing = close(showing, label);
     place();
@@ -264,7 +288,7 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
   };
   const open = (server: string, roomId: RoomId) => {
     if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId);
-    else opener?.chat(server, roomId);
+    else toTabs(server, roomId);
   };
 
   const stops = await Promise.all([
@@ -309,6 +333,13 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
         return { problem: "Password changed. Sign out and back in with the new one." };
       }
     }),
+    answer<Record<string, never>, OpensAnswer>(bus, OPENS, async ({ from }) => {
+      if (from !== CHAT) return { opens: [] };
+      tabsListening = true;
+      const opens = missed;
+      missed = [];
+      return { opens };
+    }),
     answer<TokenQuestion, Lent>(bus, TOKEN, async ({ server, stale }) => {
       const api = sessions().get(server);
       if (!api) throw new Error(`not signed in to ${server}`);
@@ -341,7 +372,7 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           if (sessions().has(intent.server)) inOwnWindow(intent.server, intent.roomId);
           return;
         case "tabs":
-          if (sessions().has(intent.server)) opener?.chat(intent.server, intent.roomId);
+          if (sessions().has(intent.server)) toTabs(intent.server, intent.roomId);
           return;
         case "settings":
           opener?.settings(typeof intent.section === "string" ? intent.section : undefined);

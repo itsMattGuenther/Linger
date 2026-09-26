@@ -95,6 +95,14 @@ test("a send the server refuses says why and keeps the words", async ({ page }) 
   await expect(box(page)).toHaveValue("is this thing on");
 });
 
+test("rooms sent while it was still opening aren't lost: each gets a tab, the last one showing", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&missed=r-listening,r-plans");
+  await expect(page.getByRole("tab", { name: "#weekend-plans" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab")).toHaveText([/#general/, /#listening-room/, /#weekend-plans/]);
+  // Asked once, after it was listening.
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("ask:next:opens"))).toHaveLength(1);
+});
+
 test("a conversation opened from the list gets a tab, and the cursor", async ({ page }) => {
   await open(page);
   // The cursor is somewhere else, as it would be after reading for a while.

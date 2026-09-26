@@ -10,7 +10,9 @@
  * `?expired` has the server refuse the first lent token, as if it ran out;
  * `?ptt` puts you in voice in #general with push-to-talk on; `?limit`
  * refuses knocks, as the fourth in an hour; `&single=1` is the conversation
- * in a window of its own; `?servers` signs in to the guild too. The photo
+ * in a window of its own; `?servers` signs in to the guild too;
+ * `?missed=r-listening,…` has the list window hand over rooms it sent
+ * before this window was listening. The photo
  * loads only where something serves
  * `PHOTO_PATH` (the spec does).
  *
@@ -33,9 +35,19 @@ if (!query.has("server")) query.set("server", SERVER);
 history.replaceState(null, "", `${location.pathname}?${query.toString()}`);
 
 const night = evening(serverState(SERVER));
+// Rooms the list window sent before this window was listening (`?missed=`),
+// handed over when it asks, once.
+let missed = (query.get("missed") ?? "").split(",").filter((room) => room !== "");
 const desktop = fakeDesktop({
   label: query.get("single") === "1" ? "chat-5f1e" : "chat",
   query,
+  asks: {
+    "next:opens": () => {
+      const opens = missed.map((roomId) => ({ server: SERVER, roomId }));
+      missed = [];
+      return { opens };
+    },
+  },
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)) } : {},
   infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" }, [GUILD]: serverInfo[GUILD] },
   ownerState: {

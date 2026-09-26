@@ -240,7 +240,11 @@ one.
   capability file lists each window's permissions. Viewers get what they need
   to read events and open links, and nothing more.
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
-  tab or shows it. A tab can be popped out into its own window, and put back.
+  tab or shows it. When the window is already open, Rust hands it the
+  conversation as an event (`next:open`), which a window still catching up
+  isn't listening for yet. So the owner also keeps every conversation it sends
+  the tabs until the window asks what it missed (`next:opens`), once it is
+  listening, and forgets them when the window closes. A tab can be popped out into its own window, and put back.
   A half-typed message goes along, through this computer's storage, taken
   once and thrown away after a minute (`core/handoff.ts`). Files waiting to
   be sent stay behind.

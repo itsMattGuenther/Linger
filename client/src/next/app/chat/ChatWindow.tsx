@@ -13,7 +13,7 @@ import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, startedT
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
-import { PROTOCOL, tauriBus } from "../../core/bus";
+import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
   dmPeople,
@@ -27,7 +27,7 @@ import { voiceStrip } from "../../core/chat/voice";
 import { isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
-import { MODE, type ModeMessage } from "../../core/share";
+import { MODE, type ModeMessage, OPENS, type OpensAnswer } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { Button, markerOf, Spinner, type TabItem } from "../../kit";
@@ -135,25 +135,40 @@ function Conversations({ following }: { following: Following }) {
     return first && text !== null ? { conversation: keyOf(first), text } : null;
   });
 
-  // Opened from the list while this window is already open (window.rs, `next_open_chat`).
+  // Opened from the list while this window is already open (window.rs,
+  // `next_open_chat`). Once listening, the tabs window asks the list window
+  // for anything it was sent before it was (OPENS in core/share.ts).
   useEffect(() => {
     if (!isTauri()) return;
     let stop: (() => void) | null = null;
     let gone = false;
-    void tauriBus()
-      .listen<{ server: string; room: string }>("next:open", ({ server, room }) => {
-        if (!apis.has(server)) return;
-        const tab = { server, roomId: room };
-        setTabs((held) => openTab(held, tab));
-        setFocusAsk((ask) => ask + 1);
-        // Back from a window of its own, perhaps with a draft.
-        const store = handoffStore();
-        const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
-        if (text !== null) setSeed({ conversation: keyOf(tab), text });
-      })
+    const opened = (server: string, roomId: string) => {
+      if (!apis.has(server)) return;
+      const tab = { server, roomId };
+      setTabs((held) => openTab(held, tab));
+      setFocusAsk((ask) => ask + 1);
+      // Back from a window of its own, perhaps with a draft.
+      const store = handoffStore();
+      const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
+      if (text !== null) setSeed({ conversation: keyOf(tab), text });
+    };
+    const bus = tauriBus();
+    void bus
+      .listen<{ server: string; room: string }>("next:open", ({ server, room }) => opened(server, room))
       .then((unlisten) => {
-        if (gone) unlisten();
-        else stop = unlisten;
+        if (gone) {
+          unlisten();
+          return;
+        }
+        stop = unlisten;
+        if (SINGLE) return;
+        // What was missed is handed over once, so it's opened even if this
+        // effect is already being cleaned up.
+        void ask<OpensAnswer>(bus, OWNER, OPENS, {})
+          .then(({ opens }) => {
+            for (const { server, roomId } of opens) opened(server, roomId);
+          })
+          .catch(() => undefined);
       });
     return () => {
       gone = true;
