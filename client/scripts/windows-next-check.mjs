@@ -61,7 +61,9 @@ try {
   await page.waitForLoadState("domcontentloaded");
   const probe = fileURLToPath(new URL("./next-smoke-probe.js", import.meta.url));
   await page.evaluate(await readFile(probe, "utf8"));
-  await page.locator("#linger-audio-probe").click();
+  // The probe's button is hidden, as it should be in a person's app: it is
+  // pressed from inside the page, the way the Linux module presses it.
+  await page.evaluate(() => document.getElementById("linger-audio-probe")?.click());
   await page.waitForFunction(() => window.__lingerAudioResult?.status !== "pending", undefined, { timeout: 60000 });
   const result = await page.evaluate(() => window.__lingerAudioResult);
   await page.screenshot({ path: resolve(output, "buddy-list-signin.png") });
