@@ -216,6 +216,12 @@ token, state and frames at once, and never takes it up from a snapshot that
 was already on its way. The chat window closes that server's tabs, and closes
 when none are left; Settings closes when no server is left.
 
+**So does signing in.** A server signed in to while windows are open (Add a
+server, or back after a sign-out) is announced too (`next:signedin`). Each open
+window catches up with that one server the way it caught up when it opened:
+it buffers the server's frames from then, asks the owner for a snapshot, takes
+that server's share and replays what the snapshot lacks.
+
 Two things Settings needs an answer to go through the owner as questions
 (`ask`), not intents: turning a notification rule on or off (`next:notify`),
 and changing your password (`next:password`), which the owner follows by

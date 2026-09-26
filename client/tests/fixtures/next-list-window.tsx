@@ -101,7 +101,7 @@ mockIPC((cmd, args) => {
       );
       return null;
     case "plugin:event|emit":
-      if (String(a.event) === "next:signedout" || String(a.event) === "next:serverprefs") note(`emit ${String(a.event)}:${JSON.stringify(a.payload)}`);
+      if (["next:signedout", "next:signedin", "next:serverprefs"].includes(String(a.event))) note(`emit ${String(a.event)}:${JSON.stringify(a.payload)}`);
       deliver(String(a.event), a.payload);
       return null;
     case "plugin:event|emit_to": {

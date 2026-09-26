@@ -515,6 +515,70 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a server signed in to after a window opened is taken up there, frames and all", async () => {
+    const { hub, owner, viewer, core } = await windows();
+    const AWAY = "https://away.example";
+    const home = fakeOwnerApi(["token-1"]);
+    // Once gated, the owner's answer about the new server waits on its token.
+    const lent = { token: "away-1", expiresAt: Date.now() + 600_000 };
+    let gated = false;
+    let lendNow: () => void = () => undefined;
+    const away = {
+      ...fakeOwnerApi(["away-1"]),
+      baseUrl: AWAY,
+      accessToken: vi.fn(() => (gated ? new Promise<typeof lent>((settle) => (lendNow = () => settle(lent))) : Promise.resolve(lent))),
+      heldToken: () => lent,
+    };
+    await owner.gateway.connect(home as never);
+    const signedIn = new Map<string, unknown>([[HOME, home]]);
+    await owner.share.shareAsOwner(owner.bus, () => signedIn as never);
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const heard: string[] = [];
+    follower.onSignedIn((server) => heard.push(server));
+    expect(follower.apis.has(AWAY)).toBe(false);
+
+    // The list window signs in to another server, and says so.
+    await owner.gateway.connect(away as never);
+    signedIn.set(AWAY, away);
+    const awayFrame = (frame: ServerFrame) => {
+      ownerCore.get("gateway:frame")?.({ payload: { server: AWAY, frame } });
+      hub.broadcast("gateway:frame", { server: AWAY, frame });
+    };
+    const [ready, ...rest] = evening();
+    if (!ready) return;
+    awayFrame(ready);
+    gated = true;
+    const asked = away.accessToken.mock.calls.length;
+    hub.broadcast(owner.share.SIGNED_IN, { v: 1, server: AWAY });
+    // Something happens there while the window is catching up with it.
+    await vi.waitFor(() => expect(away.accessToken.mock.calls.length).toBeGreaterThan(asked));
+    const [meanwhile, ...later] = rest;
+    if (meanwhile) awayFrame(meanwhile);
+    gated = false;
+    lendNow();
+    await vi.waitFor(() => expect(heard).toEqual([AWAY]));
+    expect(viewer.gateway.serverState(AWAY)).toEqual(owner.gateway.serverState(AWAY));
+    expect(follower.apis.has(AWAY)).toBe(true);
+    expect(viewer.gateway.serverState(AWAY).me?.id).toBe("u-matt");
+    await expect(follower.apis.get(AWAY)?.accessToken()).resolves.toMatchObject({ token: "away-1" });
+    // What it says from now on reaches this window, once.
+    later.slice(0, 2).forEach(awayFrame);
+    expect(viewer.gateway.serverState(AWAY)).toEqual(owner.gateway.serverState(AWAY));
+    // Heard again, nothing changes.
+    hub.broadcast(owner.share.SIGNED_IN, { v: 1, server: AWAY });
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(heard).toEqual([AWAY]);
+
+    // Signed out, then back in: taken up again.
+    hub.broadcast(owner.share.SIGNED_OUT, { v: 1, server: AWAY });
+    expect(follower.apis.has(AWAY)).toBe(false);
+    hub.broadcast(owner.share.SIGNED_IN, { v: 1, server: AWAY });
+    await vi.waitFor(() => expect(heard).toEqual([AWAY, AWAY]));
+    expect(follower.apis.has(AWAY)).toBe(true);
+    follower.stop();
+  });
+
   it("a server signed out of while the window was catching up is never taken up", async () => {
     const { hub, owner, viewer, core } = await windows();
     const lent = { token: "token-1", expiresAt: Date.now() + 600_000 };

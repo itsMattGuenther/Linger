@@ -63,6 +63,8 @@ export const MODE = "next:mode";
 export const OPENS = "next:opens";
 /** A server was signed out of, however it happened: every window lets it go. */
 export const SIGNED_OUT = "next:signedout";
+/** A server was signed in to (added, or back after a sign-out): every open window takes it up. */
+export const SIGNED_IN = "next:signedin";
 /** Your servers' order and Quiet changed, wherever it was changed: Settings shows it. */
 export const SERVER_PREFS = "next:serverprefs";
 
@@ -97,7 +99,9 @@ export interface SignedOutMessage {
   server: string;
 }
 
-/** The servers in `before` that aren't in `after`: signed out of since. */
+export type SignedInMessage = SignedOutMessage;
+
+/** The servers in `before` that aren't in `after`: signed out of since (and, turned round, signed in to). */
 export function leftOut(before: readonly string[], after: readonly string[]): string[] {
   const still = new Set(after);
   return before.filter((server) => !still.has(server));

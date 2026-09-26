@@ -54,6 +54,8 @@ export interface Desktop {
   held: (room: string) => Message[];
   /** An owner that wasn't answering (`?noowner`) answers from now on. */
   wake: () => void;
+  /** The list window signs in to another server, and says so. */
+  signIn: (server: string, state: GatewayState) => void;
 }
 
 export function json(body: unknown, status = 200): Response {
@@ -315,6 +317,10 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     held: (room) => store[room] ?? [],
     wake: () => {
       asleep = false;
+    },
+    signIn: (server, state) => {
+      shared[server] = { ...state, sessionId: `${EPOCH}-${new URL(server).hostname}` };
+      deliver("next:signedin", { v: 1, server });
     },
   };
 }

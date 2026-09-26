@@ -148,6 +148,8 @@ test.describe("adding a server", () => {
     await expect(page.locator(".nx-srv").first()).toHaveAccessibleName("The Good Company");
     const asked = await did(page);
     expect(asked).toContain(`save ${GUILD}`);
+    // Every open window hears, so it can open the new server's rooms.
+    expect(asked.filter((line) => line.startsWith("emit next:signedin"))).toEqual([`emit next:signedin:${JSON.stringify({ v: 1, server: GUILD })}`]);
     expect(asked.filter((line) => line === `disconnect ${HOME}`).length).toBe(before);
   });
 

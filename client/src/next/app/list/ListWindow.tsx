@@ -38,7 +38,9 @@ import {
   SERVER_PREFS,
   type ServerPrefsMessage,
   type Sharing,
+  SIGNED_IN,
   SIGNED_OUT,
+  type SignedInMessage,
   type SignedOutMessage,
   shareAsOwner,
   type WindowOpener,
@@ -72,7 +74,8 @@ export function ListWindow() {
 
   // Every window hears when a server is signed out of, however it happened
   // (Settings, a sign-in that ran out, all of them at once), so none goes on
-  // working as you there (SIGNED_OUT in core/share.ts).
+  // working as you there, and when one is signed in to, so each can open it
+  // (SIGNED_OUT and SIGNED_IN in core/share.ts).
   const signedIn = sessions.state.status === "ready" ? sessions.state.servers.map((session) => session.baseUrl) : null;
   const signedInKey = signedIn === null ? null : signedIn.join(" ");
   const wasSignedIn = useRef<string[] | null>(null);
@@ -86,6 +89,11 @@ export function ListWindow() {
     for (const server of leftOut(before, now)) {
       const message: SignedOutMessage = { v: PROTOCOL, server };
       void bus.broadcast(SIGNED_OUT, message);
+    }
+    // And when one is signed in to, open windows take it up (SIGNED_IN).
+    for (const server of leftOut(now, before)) {
+      const message: SignedInMessage = { v: PROTOCOL, server };
+      void bus.broadcast(SIGNED_IN, message);
     }
   }, [signedInKey]);
 

@@ -93,6 +93,8 @@ declare global {
       signedOut: (server: string) => void;
       /** Somebody picks a message face in their Profile, arriving as a frame. */
       messageFont: (userId: string, key: string | null) => void;
+      /** The list window signs in to the guild while this window is open. */
+      signInGuild: () => void;
     };
   }
 }
@@ -109,6 +111,7 @@ window.owner = {
   mode: (mode) => desktop.deliver("next:mode", { v: 1, mode }),
   wake: desktop.wake,
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
+  signInGuild: () => desktop.signIn(GUILD, guild(serverState(GUILD))),
   messageFont: (userId, key) => {
     const user = night.users.find((one) => one.id === userId);
     if (user) desktop.frame({ op: "user.update", d: { ...user, style: { ...user.style, msg_font_key: key } } });

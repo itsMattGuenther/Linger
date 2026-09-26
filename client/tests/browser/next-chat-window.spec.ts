@@ -337,6 +337,19 @@ test("a server signed out of takes its tabs with it, and with nothing left the w
   await expect.poll(() => did(page)).toContain("window:close");
 });
 
+test("a server signed in to while the window is open can be opened in it", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.owner?.signInGuild());
+  // Once this window has caught up with it, a room there opens as a tab.
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
+      return page.getByRole("tab", { name: /#raid-night/ }).count();
+    })
+    .toBe(1);
+  await expect(page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" })).toHaveAttribute("aria-selected", "true");
+});
+
 test("with one server, tabs and headers say nothing about servers", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("tab", { name: "#general" })).toBeVisible();

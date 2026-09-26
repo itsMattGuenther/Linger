@@ -14,6 +14,9 @@ export interface ServerTagInfo {
  */
 export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<Record<string, ServerTagInfo>> {
   const [infos, setInfos] = useState<Readonly<Record<string, ServerTagInfo>>>({});
+  // A window's servers change in place (signed in to, or out of, while it's
+  // open), so which ones it has is read afresh on every draw.
+  const which = [...apis.keys()].join(" ");
   useEffect(() => {
     const abort = new AbortController();
     for (const [server, api] of apis) {
@@ -23,7 +26,7 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
         .catch(() => undefined);
     }
     return () => abort.abort();
-  }, [apis]);
+  }, [apis, which]);
   return infos;
 }
 

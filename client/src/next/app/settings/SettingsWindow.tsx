@@ -96,7 +96,7 @@ function Settings({ following }: { following: Following }) {
   const { apis, intend } = following;
   const servers = useServers();
   const now = useNow();
-  // Bumped when a server is signed out of, so what's shown is worked out again.
+  // Bumped when a server is signed out of or in to, so what's shown is worked out again.
   const [signedOuts, setSignedOuts] = useState(0);
   // One server for now: several, each with its own you, come with T-1809.
   const [server, api] = useMemo((): [string, AuthedApi] | [null, null] => {
@@ -123,15 +123,19 @@ function Settings({ following }: { following: Following }) {
     if (isTauri()) void getCurrentWindow().close();
   }, []);
 
-  // Signed out of a server: Settings shows what's left, or closes with nothing left.
-  useEffect(
-    () =>
-      following.onSignedOut(() => {
-        if (following.apis.size === 0) closeWindow();
-        else setSignedOuts((count) => count + 1);
-      }),
-    [following, closeWindow],
-  );
+  // Signed out of a server: Settings shows what's left, or closes with nothing
+  // left. Signed in to one: it shows that one too.
+  useEffect(() => {
+    const out = following.onSignedOut(() => {
+      if (following.apis.size === 0) closeWindow();
+      else setSignedOuts((count) => count + 1);
+    });
+    const joined = following.onSignedIn(() => setSignedOuts((count) => count + 1));
+    return () => {
+      out();
+      joined();
+    };
+  }, [following, closeWindow]);
 
   // Asked for again while open: show that section (window.rs emits `next:section`).
   useEffect(() => {
