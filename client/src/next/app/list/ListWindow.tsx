@@ -31,7 +31,18 @@ import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
-import { type Accounts, leftOut, type Sharing, SIGNED_OUT, type SignedOutMessage, shareAsOwner, type WindowOpener } from "../../core/share";
+import {
+  type Accounts,
+  leftOut,
+  type ListControls,
+  SERVER_PREFS,
+  type ServerPrefsMessage,
+  type Sharing,
+  SIGNED_OUT,
+  type SignedOutMessage,
+  shareAsOwner,
+  type WindowOpener,
+} from "../../core/share";
 import { signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
@@ -103,7 +114,7 @@ export function ListWindow() {
     reauthenticate: (server, auth) => sessions.addServer(server, auth),
     signOut: (server) => sessions.signOut(server),
   };
-  return <Servers signedIn={sessions.state.servers} accounts={accounts} />;
+  return <Servers signedIn={sessions.state.servers} accounts={accounts} keyringNotice={sessions.keyringNotice} />;
 }
 
 /**
@@ -152,7 +163,7 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
   return null;
 }
 
-function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: Accounts }) {
+function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSession[]; accounts: Accounts; keyringNotice: string | null }) {
   const states = useServers();
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
@@ -165,6 +176,42 @@ function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: 
   const changePrefs = (next: ServerPrefs) => {
     setPrefs(next);
     saveServerPrefs(localStore(), next);
+  };
+
+  // Settings shows your servers' order and Quiet, whichever window changed them.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const message: ServerPrefsMessage = { v: PROTOCOL, prefs };
+    void tauriBus().broadcast(SERVER_PREFS, message);
+  }, [prefs]);
+
+  // Adding a server (Settings → Servers, or Account & App with one): the
+  // sign-in takes the list's place, and every server stays connected.
+  const [adding, setAdding] = useState(false);
+  const addingActions = useMemo(
+    () =>
+      signInActions(
+        (baseUrl) => new PublicApi(baseUrl),
+        async (baseUrl, auth) => {
+          await accounts.reauthenticate(baseUrl, auth);
+          setAdding(false);
+        },
+      ),
+    [accounts],
+  );
+  const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
+  listNow.current = {
+    addServer: () => {
+      setAdding(true);
+      if (isTauri()) {
+        const current = getCurrentWindow();
+        void current
+          .unminimize()
+          .then(() => current.setFocus())
+          .catch(() => undefined);
+      }
+    },
+    setPrefs: changePrefs,
   };
 
   // One presence watcher for the window, for as long as it is open.
@@ -194,7 +241,11 @@ function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: 
     };
     let held: Sharing | null = null;
     let gone = false;
-    void shareAsOwner(tauriBus(), () => apisRef.current, { opener: shell, store: localStore(), accounts: accountsNow }).then((started) => {
+    const list: ListControls = {
+      addServer: () => listNow.current.addServer(),
+      setPrefs: (next) => listNow.current.setPrefs(next),
+    };
+    void shareAsOwner(tauriBus(), () => apisRef.current, { opener: shell, store: localStore(), accounts: accountsNow, list }).then((started) => {
       if (gone) started.stop();
       else held = sharing = started;
     });
@@ -361,7 +412,16 @@ function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: 
       {signedIn.map((session) => (
         <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
       ))}
-      <ListView
+      {adding ? (
+        <SignInView
+          actions={addingActions}
+          keyringNotice={keyringNotice}
+          adding
+          onCancel={() => setAdding(false)}
+          onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
+        />
+      ) : (
+        <ListView
         servers={listings}
         voice={voice}
         you={you}
@@ -372,6 +432,7 @@ function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: 
         notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />
+      )}
     </>
   );
 }

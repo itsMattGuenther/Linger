@@ -569,6 +569,30 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("adding a server and your servers' order go to the list window, checked on the way", async () => {
+    const { owner, viewer, core } = await windows("settings");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const asked: unknown[] = [];
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      list: { addServer: () => asked.push("add"), setPrefs: (prefs) => asked.push(prefs) },
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "addserver" });
+    await follower.intend({ kind: "serverprefs", order: [HOME, "https://b.example"], quiet: ["https://b.example"] });
+    // Whatever else arrives in a message is dropped, not trusted.
+    await follower.intend({ kind: "serverprefs", order: [HOME, 7, null] as never, quiet: "all" as never });
+    await vi.waitFor(() =>
+      expect(asked).toEqual([
+        "add",
+        { order: [HOME, "https://b.example"], quiet: ["https://b.example"] },
+        { order: [HOME], quiet: [] },
+      ]),
+    );
+    follower.stop();
+  });
+
   it("tells which servers were signed out of between two lists", () => {
     return import("./share").then(({ leftOut }) => {
       expect(leftOut(["a", "b", "c"], ["c", "a"])).toEqual(["b"]);

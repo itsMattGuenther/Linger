@@ -7,7 +7,10 @@
  *
  * Open it at /tests/fixtures/next-settings-window.html. Options:
  * `?section=invites` opens on a section; `?member` is you as a member, not
- * the host; `?refuse` has the list window refuse a rule or a password.
+ * the host; `?refuse` has the list window refuse a rule or a password;
+ * `?servers` signs in to the guild and Lisbon too, so Servers shows.
+ * `window.shell.prefs(prefs)` is the list window saying your servers'
+ * order or Quiet changed.
  * What the window asked for is written to `body[data-did]`, `|`-separated.
  */
 import { StrictMode } from "react";
@@ -20,6 +23,7 @@ import { SettingsWindow } from "../../src/next/app/settings/SettingsWindow";
 import "../../src/next/styles/app.css";
 import { fakeDesktop, json } from "./next/desktop";
 import { NOW, SERVER, SERVER_NAME, evening, people } from "./next/evening";
+import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
 const night = evening(serverState(SERVER));
@@ -31,6 +35,8 @@ let rules: NotifyRule[] = [];
 const desktop = fakeDesktop({
   label: "settings",
   query,
+  others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)), [LISBON]: lisbon(serverState(LISBON)) } : {},
+  infos: query.has("servers") ? serverInfo : {},
   ownerState: { ...night, me, users: night.users.map((user) => (user.id === me.id ? me : user)) },
   asks: {
     "next:notify": (asked) => {
@@ -52,7 +58,9 @@ const desktop = fakeDesktop({
     update_check: () => ({ kind: "current" }),
     voice_devices: () => ({ inputs: ["Built-in microphone"], outputs: ["Headphones"], default_input: "Built-in microphone", default_output: "Headphones" }),
   },
-  routes: (method, path, _url, body) => {
+  routes: (method, path, url, body) => {
+    // The other servers answer from the shared fake: their names, and nothing else.
+    if (url.origin !== SERVER) return null;
     if (path === "/server" && method === "GET") return json(info);
     if (path === "/server" && method === "PATCH") {
       info = { ...info, name: String(body.name ?? info.name), accent_key: (body.accent_key ?? null) as ServerInfo["accent_key"] };
@@ -73,12 +81,15 @@ declare global {
       section: (key: string) => void;
       /** The list window says a server was signed out of. */
       signedOut: (server: string) => void;
+      /** The list window says your servers' order or Quiet changed. */
+      prefs: (prefs: { order: string[]; quiet: string[] }) => void;
     };
   }
 }
 window.shell = {
   section: (key) => desktop.deliver("next:section", key),
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
+  prefs: (prefs) => desktop.deliver("next:serverprefs", { v: 1, prefs }),
 };
 
 const root = document.getElementById("root");

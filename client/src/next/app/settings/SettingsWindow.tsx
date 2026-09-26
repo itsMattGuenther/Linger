@@ -20,18 +20,22 @@ import { appVersion, checkForUpdate, installUpdate, releaseNotesUrl, type Update
 import { uploadFile } from "../../../lib/upload";
 import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
-import { ask, OWNER, tauriBus } from "../../core/bus";
+import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { loadMode } from "../../core/conversations";
 import { isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
-import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion } from "../../core/share";
+import { inOrder, loadServerPrefs, prefsFrom, type ServerPrefs } from "../../core/serverPrefs";
+import { moveServer } from "../../core/servers";
+import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion, SERVER_PREFS, type ServerPrefsMessage } from "../../core/share";
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
 import { announceAppearance, loadScale, saveNormalize, saveScale } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
+import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
+import type { ServerEntry } from "./ServersSection";
 import { SettingsView } from "./SettingsView";
 
 /** A scope with every section in it, to check a section key against. */
@@ -168,6 +172,45 @@ function Settings({ following }: { following: Following }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [closeWindow]);
+
+  // Your servers' order and Quiet are the list window's: Settings asks it to
+  // change them, and it says whenever they have changed (SERVER_PREFS).
+  const [serverPrefs, setServerPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<ServerPrefsMessage>(SERVER_PREFS, (message) => {
+        if (message.v === PROTOCOL) setServerPrefs(prefsFrom(message.prefs));
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
+  const askServerPrefs = (next: ServerPrefs) => {
+    setServerPrefs(next);
+    void intend({ kind: "serverprefs", order: next.order, quiet: next.quiet }).catch(() => undefined);
+  };
+  const infos = useServerInfos(apis);
+  const addServer = () => {
+    void intend({ kind: "addserver" }).catch(() => undefined);
+    closeWindow();
+  };
+  const signedInTo = inOrder(
+    [...apis.keys()].map((baseUrl) => ({ baseUrl })),
+    serverPrefs.order,
+  ).flatMap(({ baseUrl }): ServerEntry[] => {
+    const me = servers[baseUrl]?.me;
+    if (!me) return [];
+    const info = infos[baseUrl];
+    return [{ id: baseUrl, name: info?.name ?? hostOf(baseUrl), accent: info?.accent ?? null, me, quiet: serverPrefs.quiet.includes(baseUrl) }];
+  });
 
   // This computer's preferences: read once, saved as they change.
   const [sound, setSound] = useState<SoundPrefs>(loadSoundPrefs);
@@ -369,6 +412,15 @@ function Settings({ following }: { following: Following }) {
           closeWindow();
         },
         severalServers: apis.size > 1,
+        addServer,
+      }}
+      servers={{
+        servers: signedInTo,
+        onMove: (id, delta) => askServerPrefs({ ...serverPrefs, order: moveServer(signedInTo.map((entry) => entry.id), id, delta) }),
+        onQuiet: (id, quiet) =>
+          askServerPrefs({ ...serverPrefs, quiet: quiet ? [...serverPrefs.quiet.filter((one) => one !== id), id] : serverPrefs.quiet.filter((one) => one !== id) }),
+        onSignOut: (id) => void intend({ kind: "signout", server: id }).catch(() => undefined),
+        onAddServer: addServer,
       }}
       hosting={
         host

@@ -33,10 +33,12 @@ export interface AccountProps {
   /** Sign out on this computer (SIGN-13). With several servers this is all of them. */
   signOut: () => void;
   severalServers: boolean;
+  /** Add a server (SIGN-8). Offered here with one server; with several it's in Servers. */
+  addServer?: () => void;
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, signOut, severalServers }: AccountProps) {
+export function AccountSection({ serverName, changePassword, archive, updates, signOut, severalServers, addServer }: AccountProps) {
   return (
     <>
       <Password serverName={serverName} changePassword={changePassword} />
@@ -99,6 +101,11 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
         }
       >
         <Actions start>
+          {addServer && !severalServers ? (
+            <Button icon="plus" onClick={addServer}>
+              Add a server
+            </Button>
+          ) : null}
           <Button variant="danger" icon="leave" onClick={signOut}>
             {severalServers ? "Sign out of everything" : "Sign out"}
           </Button>

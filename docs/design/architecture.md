@@ -197,7 +197,12 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `conversations`: tabs or windows, from Settings;
 - `settings`: open Settings (Ctrl+, in any window), on a section;
 - `away`: you went away or came back from Settings (presence is the owner's);
-- `signout`: sign out of a server on this computer.
+- `signout`: sign out of a server on this computer;
+- `addserver`: show the sign-in for another server in the list window, which
+  keeps every other server connected meanwhile;
+- `serverprefs`: your servers' order and which are Quiet, from Settings →
+  Servers. The list window keeps them, and tells every window whenever they
+  change (`next:serverprefs`), so Settings shows the same order as the list.
 
 **Signing out reaches every window.** The server doesn't cancel access tokens
 when you sign out, so a window still holding one could go on working as you

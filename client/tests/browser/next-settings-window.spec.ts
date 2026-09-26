@@ -135,3 +135,49 @@ test("signing out asks the list window, and Settings closes", async ({ page }) =
   await expect.poll(() => did(page)).toContain("window:close");
   expect(intents(await did(page))).toContainEqual({ kind: "signout", server: SERVER });
 });
+
+test.describe("your servers", () => {
+  const GUILD = "https://ashen-lanterns.example";
+  const LISBON = "https://casa-da-ribeira.example";
+
+  test("with one server, Account & App offers to add another, in the list window", async ({ page }) => {
+    await open(page, "?section=account");
+    await expect(page.getByRole("tab", { name: "Servers" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Add a server" }).click();
+    await expect.poll(() => did(page)).toContain("window:close");
+    expect(intents(await did(page))).toContainEqual({ kind: "addserver" });
+  });
+
+  test("with several, Servers lists each in your order, and moves, quiets and signs out through the list window", async ({ page }) => {
+    await open(page, "?section=servers&servers");
+    const list = page.getByRole("list", { name: "Your servers, in order" });
+    await expect(list.getByRole("heading")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
+    // Account says where each server signs out, and it's there.
+    await list.getByRole("button", { name: "Move The Good Company down" }).click();
+    await expect(list.getByRole("heading")).toHaveText(["Ashen Lanterns", "The Good Company", "Casa da Ribeira"]);
+    await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "serverprefs").at(-1)).toEqual({
+      kind: "serverprefs",
+      order: [GUILD, SERVER, LISBON],
+      quiet: [],
+    });
+    await page.getByRole("switch", { name: "Quiet, for Casa da Ribeira" }).click();
+    await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "serverprefs").at(-1)).toEqual({
+      kind: "serverprefs",
+      order: [GUILD, SERVER, LISBON],
+      quiet: [LISBON],
+    });
+    await page.getByRole("button", { name: "Sign out of Ashen Lanterns" }).click();
+    await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "signout", server: GUILD });
+    await page.getByRole("button", { name: "Add a server" }).click();
+    await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "addserver" });
+  });
+
+  test("shows the order the list window says, however it was changed", async ({ page }) => {
+    await open(page, "?section=servers&servers");
+    const list = page.getByRole("list", { name: "Your servers, in order" });
+    await expect(list.getByRole("heading")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
+    await page.evaluate(({ first, second }) => window.shell?.prefs({ order: [first, second], quiet: [first] }), { first: LISBON, second: GUILD });
+    await expect(list.getByRole("heading")).toHaveText(["Casa da Ribeira", "Ashen Lanterns", "The Good Company"]);
+    await expect(page.getByRole("switch", { name: "Quiet, for Casa da Ribeira" })).toBeChecked();
+  });
+});

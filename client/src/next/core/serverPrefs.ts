@@ -25,11 +25,15 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+/** Prefs from anything: what's kept on this computer, or what another window sent. Anything else is none. */
+export function prefsFrom(value: unknown): ServerPrefs {
+  if (typeof value !== "object" || value === null) return NONE;
+  return { order: strings("order" in value ? value.order : []), quiet: strings("quiet" in value ? value.quiet : []) };
+}
+
 export function loadServerPrefs(store: PrefsStore | null): ServerPrefs {
   try {
-    const parsed: unknown = JSON.parse(store?.getItem(KEY) ?? "null");
-    if (typeof parsed !== "object" || parsed === null) return NONE;
-    return { order: strings("order" in parsed ? parsed.order : []), quiet: strings("quiet" in parsed ? parsed.quiet : []) };
+    return prefsFrom(JSON.parse(store?.getItem(KEY) ?? "null"));
   } catch {
     return NONE;
   }

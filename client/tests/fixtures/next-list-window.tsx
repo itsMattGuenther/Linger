@@ -42,11 +42,14 @@ const note = (what: string) => {
   document.body.dataset.did = did.join("|");
 };
 
-/** Each server as its store state, from the fixtures. */
+/** Each server as its store state, from the fixtures: every one answers, signed in or not. */
 const states: Record<string, GatewayState> = {
   [SERVER]: evening(serverState(SERVER)),
-  ...(query.has("one") ? {} : { [GUILD]: guild(serverState(GUILD)), [LISBON]: lisbon(serverState(LISBON)) }),
+  [GUILD]: guild(serverState(GUILD)),
+  [LISBON]: lisbon(serverState(LISBON)),
 };
+/** The sign-ins saved on this computer: all three, or with `?one` The Good Company alone. */
+const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
 const NO_KEYRING = "No usable keyring on this computer (no secret service).";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
 
@@ -97,7 +100,7 @@ mockIPC((cmd, args) => {
       );
       return null;
     case "plugin:event|emit":
-      if (String(a.event) === "next:signedout") note(`emit next:signedout:${JSON.stringify(a.payload)}`);
+      if (String(a.event) === "next:signedout" || String(a.event) === "next:serverprefs") note(`emit ${String(a.event)}:${JSON.stringify(a.payload)}`);
       deliver(String(a.event), a.payload);
       return null;
     case "plugin:event|emit_to": {
@@ -109,7 +112,7 @@ mockIPC((cmd, args) => {
     case "sessions_load":
       if (query.has("nokeyring")) return { kind: "unavailable", reason: NO_KEYRING };
       if (query.has("signedout")) return { kind: "empty" };
-      return { kind: "found", sessions: Object.keys(states).map((base_url) => ({ base_url, refresh_token: `refresh-${base_url}` })) };
+      return { kind: "found", sessions: saved.map((base_url) => ({ base_url, refresh_token: `refresh-${base_url}` })) };
     case "session_save":
       note(`save ${String((a.session as { base_url?: string }).base_url)}`);
       return query.has("nokeyring") ? { kind: "unavailable", reason: NO_KEYRING } : { kind: "done" };

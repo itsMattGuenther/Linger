@@ -117,3 +117,50 @@ test("signing out of the last server tells every window, and the list goes back 
   await expect(page.locator("[data-screen='signin']")).toBeVisible();
   expect((await did(page)).filter((line) => line.startsWith("emit next:signedout"))).toEqual([`emit next:signedout:${JSON.stringify({ v: 1, server: HOME })}`]);
 });
+
+test.describe("adding a server", () => {
+  test("Settings asks, and the list window shows the sign-in with a way back, keeping every server connected", async ({ page }) => {
+    await open(page, "?one");
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("connect ")).length).toBeGreaterThan(0);
+    const before = (await did(page)).filter((line) => line.includes("connect ")).length;
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Server or link" })).toBeFocused();
+    await page.getByRole("button", { name: "Back to the list" }).click();
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await expect(page.getByRole("banner")).toContainText("The Good Company");
+    // Never disconnected, or connected again, along the way.
+    expect((await did(page)).filter((line) => line.includes("connect ")).length).toBe(before);
+  });
+
+  test("signing in to another server adds it to the list, below the ones you have", async ({ page }) => {
+    await open(page, "?one");
+    const before = (await did(page)).filter((line) => line === `disconnect ${HOME}`).length;
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    const box = page.getByRole("textbox", { name: "Server or link" });
+    await box.fill("ashen-lanterns.example");
+    await box.press("Enter");
+    const form = page.getByRole("form", { name: "Sign in" });
+    await form.getByRole("textbox", { name: "Username" }).fill("lamplighter");
+    await form.getByLabel("Password").fill("porch light");
+    await form.getByLabel("Password").press("Enter");
+    await expect(section(page, "Ashen Lanterns")).toBeVisible();
+    await expect(page.locator(".nx-srv").first()).toHaveAccessibleName("The Good Company");
+    const asked = await did(page);
+    expect(asked).toContain(`save ${GUILD}`);
+    expect(asked.filter((line) => line === `disconnect ${HOME}`).length).toBe(before);
+  });
+
+  test("Settings' order and Quiet reach the list, and the list says what it now is", async ({ page }) => {
+    await open(page);
+    await page.evaluate(([guild, home, lisbon]) => window.core?.ask("next:intent", { kind: "serverprefs", order: [lisbon, guild, home], quiet: [guild] }), [GUILD, HOME, LISBON]);
+    await expect.poll(async () => page.locator(".nx-srv").evaluateAll((regions) => regions.map((region) => region.getAttribute("aria-label")))).toEqual([
+      "Casa da Ribeira",
+      "Ashen Lanterns",
+      "The Good Company",
+    ]);
+    await expect(section(page, "Ashen Lanterns")).toHaveAttribute("data-quiet", "yes");
+    const told = (await did(page)).filter((line) => line.startsWith("emit next:serverprefs")).at(-1);
+    expect(told).toBe(`emit next:serverprefs:${JSON.stringify({ v: 1, prefs: { order: [LISBON, GUILD, HOME], quiet: [GUILD] } })}`);
+  });
+});

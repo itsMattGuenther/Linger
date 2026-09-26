@@ -33,6 +33,9 @@ import { loadVoicePrefs } from "../../lib/voice";
 import { setViewing } from "../../lib/notify";
 import { forgetWindow, reportWindow, setAway, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
+import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
+import { prefsFrom, type ServerPrefs } from "./serverPrefs";
+import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
 
 /** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
 const CHAT = "chat";
@@ -43,8 +46,6 @@ const CHAT = "chat";
  * whole answer (bus.ts `ask`).
  */
 export const LEND_WAIT_MS = 1_500;
-import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
-import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
 
 /** A late window asks for the owner's state. */
 export const SNAPSHOT = "next:snapshot";
@@ -62,6 +63,13 @@ export const MODE = "next:mode";
 export const OPENS = "next:opens";
 /** A server was signed out of, however it happened: every window lets it go. */
 export const SIGNED_OUT = "next:signedout";
+/** Your servers' order and Quiet changed, wherever it was changed: Settings shows it. */
+export const SERVER_PREFS = "next:serverprefs";
+
+export interface ServerPrefsMessage {
+  v: number;
+  prefs: ServerPrefs;
+}
 /** Settings asks the owner to turn a notification rule on or off (the owner keeps them). */
 export const NOTIFY = "next:notify";
 /** Settings asks the owner to change your password and sign back in with the new one. */
@@ -153,7 +161,19 @@ export type Intent =
   /** Sign out of a server on this computer. */
   | { kind: "signout"; server: string }
   /** You went away (with the message) or came back (null), from Settings: presence is the owner's. */
-  | { kind: "away"; server: string; message: string | null };
+  | { kind: "away"; server: string; message: string | null }
+  /** Add a server, from Settings: the list window shows its sign-in. */
+  | { kind: "addserver" }
+  /** Settings changed your servers' order or which are Quiet (Settings → Servers). */
+  | { kind: "serverprefs"; order: string[]; quiet: string[] };
+
+/** The list window's own choices another window may ask it to make. */
+export interface ListControls {
+  /** Show the sign-in for another server, keeping the rest connected. */
+  addServer(): void;
+  /** Your servers' order and which are Quiet, as Settings last left them. */
+  setPrefs(prefs: ServerPrefs): void;
+}
 
 /**
  * How the owner opens windows: the desktop shell's commands in the app
@@ -217,6 +237,8 @@ export interface ShareOptions {
   store?: ModeStore | null;
   /** The sign-ins, for a password change and signing out. */
   accounts?: Accounts;
+  /** Adding a server and your servers' order, which the list window shows. */
+  list?: ListControls;
 }
 
 /** An error from a request, as a sentence for the person. */
@@ -224,7 +246,11 @@ function inWords(error: unknown, fallback: string): string {
   return error instanceof ApiError || error instanceof TransportError ? error.message : fallback;
 }
 
-export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string, AuthedApi>, { opener, store = null, accounts }: ShareOptions = {}): Promise<Sharing> {
+export async function shareAsOwner(
+  bus: Bus,
+  sessions: () => ReadonlyMap<string, AuthedApi>,
+  { opener, store = null, accounts, list }: ShareOptions = {},
+): Promise<Sharing> {
   const lend = async (api: AuthedApi, stale?: string): Promise<Lent> => {
     const current = await api.accessToken();
     if (stale === undefined || current.token !== stale) return current;
@@ -410,6 +436,12 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           return;
         case "signout":
           if (sessions().has(intent.server)) void accounts?.signOut(intent.server).catch(() => undefined);
+          return;
+        case "addserver":
+          list?.addServer();
+          return;
+        case "serverprefs":
+          list?.setPrefs(prefsFrom(intent));
           return;
         case "conversations": {
           if (!isMode(intent.mode)) return;

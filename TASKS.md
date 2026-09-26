@@ -825,8 +825,9 @@ Rules for this milestone:
   `next.html` as `main`. It signs in with the existing sessions and shows real
   rooms, DMs and people from the kit. Signed in nowhere, it opens on its own
   sign-in screen (paste box, sign in, join from an invite, first-run setup;
-  decision 16's default). Tested against faked servers; not yet tried in the
-  desktop app. Adding a second server isn't built.
+  decision 16's default). "Add a server" in Settings shows the same screen in
+  the list window. Tested against faked servers; not yet tried in the
+  desktop app.
 - 🟡 **T-1803 · The chat window** — the `chat` window with tabs, the catch-up
   protocol, borrowed tokens, and reading, sending and history in a tab. Built
   and tested against a faked owner and server; not yet tried in the desktop

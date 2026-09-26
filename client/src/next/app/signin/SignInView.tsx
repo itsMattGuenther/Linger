@@ -13,6 +13,8 @@ export interface SignInViewProps {
   keyringNotice?: string | null;
   /** Adding another server: the way back to the list. Left out when there's nothing to go back to. */
   onCancel?: () => void;
+  /** Adding a server to the ones you're on, rather than signing in for the first time. */
+  adding?: boolean;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
 }
@@ -23,7 +25,7 @@ export interface SignInViewProps {
  * another server, with a way back to the list. Where it lives is decision 16;
  * the list window is the default until that's decided.
  */
-export function SignInView({ actions, notice, keyringNotice, onCancel, onClose }: SignInViewProps) {
+export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, adding = false }: SignInViewProps) {
   const [step, setStep] = useState<SignInStep>({ kind: "paste" });
   const back = () => setStep({ kind: "paste" });
 
@@ -38,7 +40,7 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose }
             {notice}
           </p>
         ) : null}
-        {step.kind === "paste" ? <Paste check={actions.check} onStep={setStep} onCancel={onCancel} /> : null}
+        {step.kind === "paste" ? <Paste check={actions.check} onStep={setStep} onCancel={onCancel} adding={adding} /> : null}
         {step.kind === "login" ? <Login step={step} login={actions.login} onBack={back} /> : null}
         {step.kind === "register" ? <Register step={step} register={actions.register} onBack={back} /> : null}
         {step.kind === "setup" ? <Setup step={step} setup={actions.setup} onBack={back} /> : null}
@@ -73,10 +75,12 @@ function Paste({
   check,
   onStep,
   onCancel,
+  adding,
 }: {
   check: SignInActions["check"];
   onStep: (step: SignInStep) => void;
   onCancel?: () => void;
+  adding: boolean;
 }) {
   const [pasted, setPasted] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,8 +98,8 @@ function Paste({
   return (
     <form className="nx-signin-form" onSubmit={(event) => void submit(event)} aria-label="Where to go">
       <div className="nx-signin-intro">
-        <h1 className="nx-signin-title">Join your people.</h1>
-        <p className="nx-signin-lead">Your invite is the way in.</p>
+        <h1 className="nx-signin-title">{adding ? "Add a server." : "Join your people."}</h1>
+        <p className="nx-signin-lead">{adding ? "An invite, or the address of one you're on." : "Your invite is the way in."}</p>
       </div>
       <TextField
         label="Server or link"
