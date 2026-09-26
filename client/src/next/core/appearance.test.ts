@@ -89,6 +89,22 @@ describe("how the new client looks, in every window", () => {
     expect(shell.size).toEqual({ width: 340, height: 820 });
   });
 
+  it("two changes at once grow the window once, to the size last asked for", async () => {
+    vi.resetModules();
+    const { applyAppearance, saveScale } = await import("./appearance");
+    saveScale(150);
+    // Settings applies it itself and hears its own announcement: two at once.
+    await Promise.all([applyAppearance(), applyAppearance()]);
+    expect(shell.size).toEqual({ width: 510, height: 1230 });
+    // Two quick changes: it ends at the last one, from where it was.
+    saveScale(125);
+    const first = applyAppearance();
+    saveScale(200);
+    await Promise.all([first, applyAppearance()]);
+    expect(shell.size).toEqual({ width: 680, height: 1640 });
+    expect(shell.zoom).toBe(2);
+  });
+
   it("saves only sizes on the list, and 100 for anything else", async () => {
     vi.resetModules();
     const { loadScale, saveScale } = await import("./appearance");

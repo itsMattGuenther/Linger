@@ -67,8 +67,33 @@ function sizedForKey(label: string): string {
   return `linger.next.windowScale.${label}`;
 }
 
-/** Apply what's saved to this window. */
-export async function applyAppearance(): Promise<void> {
+/**
+ * Apply what's saved to this window, one run at a time. Two at once (Settings
+ * applies a change and also hears its own announcement) would each read the
+ * window's size before the other had grown it, and grow it twice. A call made
+ * during a run waits for it, and one more run then applies what's saved by
+ * then.
+ */
+let running: Promise<void> | null = null;
+let again = false;
+export function applyAppearance(): Promise<void> {
+  if (running) {
+    again = true;
+    return running;
+  }
+  const run = (async () => {
+    do {
+      again = false;
+      await applyOnce();
+    } while (again);
+  })();
+  running = run.finally(() => {
+    running = null;
+  });
+  return running;
+}
+
+async function applyOnce(): Promise<void> {
   applyNormalize(loadNormalize());
   const scale = loadScale();
   if (!isTauri()) return;
