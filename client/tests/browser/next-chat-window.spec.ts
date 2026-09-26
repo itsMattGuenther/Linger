@@ -119,6 +119,21 @@ test("a conversation opened from the list gets a tab, and the cursor", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(2);
 });
 
+test("a message is drawn in its sender's message face, and only ever a sans one", async ({ page }) => {
+  await open(page);
+  const text = page.locator(".nx-msg").filter({ hasText: "A bit of Khruangbin" }).locator(".nx-text");
+  const face = () => text.evaluate((node) => getComputedStyle(node).fontFamily.toLowerCase());
+  const body = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-body").toLowerCase());
+  const firstOf = (families: string) => families.split(",")[0]?.trim().replaceAll('"', "") ?? "";
+  expect(firstOf(await face())).toBe(firstOf(body));
+  await page.evaluate(() => window.owner?.messageFont("u-eli", "space-grotesk"));
+  await expect.poll(face).toContain("space grotesk");
+  // A face kept for names (mono here) draws in the body face instead.
+  await page.evaluate(() => window.owner?.messageFont("u-eli", "jetbrains-mono"));
+  await expect.poll(async () => firstOf(await face())).toBe(firstOf(body));
+  expect(await face()).not.toContain("mono");
+});
+
 test("a brand new DM opened into the tabs waits for its conversation rather than vanishing", async ({ page }) => {
   await open(page);
   // The list opened a DM the server has only just made: this window hears of it after.

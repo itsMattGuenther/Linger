@@ -3,6 +3,9 @@
   min-width: 0;
   max-width: var(--measure);
   color: var(--text-primary);
+  /* The sender's message face (NAME-3): one of the four sans faces, set on the
+     row by lib/fonts.ts messageFontVar; anything else draws in the body face. */
+  font-family: var(--msg-font, var(--font-body));
   font-size: var(--text-body);
   line-height: var(--line-body);
   overflow-wrap: anywhere;

@@ -66,8 +66,7 @@ What's left, biggest first:
   letting go of old history, drag-and-drop and paste. They count once they
   have a test.
 - **Smaller pieces still missing:** a name in a conversation doesn't open the
-  person card (PPL-6). Messages don't draw in the sender's message font
-  (NAME-3). The voice bar doesn't show who else is muted, or whose connection
+  person card (PPL-6). The voice bar doesn't show who else is muted, or whose connection
   is struggling (VOICE-6, VOICE-7). Also missing: a per-server own window
   (MULTI-7), forced-colors mode (A11Y-6), evening warmth (LOOK-2), the update
   check at launch (UPD-1), a download that says where it went and offers a
@@ -342,7 +341,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | NAME-1 | Your name's face (12 bundled), weight (400/500/700), italic, one palette color or a 92° gradient of two, and an effect (none/shimmer/glow), with a live preview through the stream's own code. | `settings/StylePicker.tsx`, `lib/nameStyle.ts`, `lib/names.ts` | Settings → Profile "Make yourself at home" | C + F | ✅ (next-settings.spec.ts) |
 | NAME-2 | Colors are palette keys, validated by the server. No hex anywhere. An unknown key falls back to something drawable. | `lib/palette.ts`, `generated/palette.generated.css`, AGENTS rules 8 and 12 | Same | C + U (discipline) | ✅ (discipline.test.ts, contrast.test.ts) |
-| NAME-3 | Your message font: one of the four sans faces. Other saved choices draw in the default body face. | SPEC §4.5 | Same | F | 🟡 chosen in Profile; messages don't draw in it yet |
+| NAME-3 | Your message font: one of the four sans faces. Other saved choices draw in the default body face. | SPEC §4.5 | Same | F | ✅ chosen in Profile, and each message draws in its sender's face; a name-only face draws in the body face (next-chat-window.spec.ts) |
 | NAME-4 | "Use plain names and message fonts" flattens every name and message font on your screen, with one attribute on `<html>`. | `lib/normalize.ts`, `styles/names.css` | Same, in every window at once | F | ✅ (appearance.test.ts, next-settings-window.spec.ts) |
 | NAME-5 | Shimmer and glow stop under reduced motion. | `names.css` | Same | F | 🟡 built; untested |
 | NAME-6 | Every palette color passes 4.5:1 on every surface it's drawn on. | `linger-core` palette test | New surfaces added to the test | U (`contrast.test.ts`) | ✅ (contrast.test.ts) |

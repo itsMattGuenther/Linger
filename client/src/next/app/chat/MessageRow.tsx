@@ -1,9 +1,10 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { type CSSProperties, memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
+import { messageFontVar } from "../../../lib/fonts";
 import { linkTargets, mentionHandles } from "../../../lib/markdown";
 import { ageOpacity, clockTime, fullTime } from "../../../lib/time";
 import { cardOnly, excerpt } from "../../core/chat/words";
@@ -166,7 +167,7 @@ export const MessageRow = memo(function MessageRow({
         <span className="nx-msg-colon">:</span>
       </span>
 
-      <div className="nx-msg-body" style={{ opacity: ageOpacity(message.created_at, now) }}>
+      <div className="nx-msg-body" style={bodyStyle(ageOpacity(message.created_at, now), author)}>
         {deleted ? (
           <p className="nx-msg-gone">deleted</p>
         ) : editing ? (
@@ -255,4 +256,13 @@ function Quote({ target, author, onJump }: { target: Message | undefined; author
       </span>
     </button>
   );
+}
+
+/**
+ * A message body's look: how far it has faded with age, and the sender's
+ * message face (NAME-3), which is only ever one of the four sans faces
+ * (`messageFontVar`); nothing else about a message is styleable (SPEC §4.5).
+ */
+function bodyStyle(opacity: number, author: User | undefined): CSSProperties {
+  return { opacity, "--msg-font": messageFontVar(author?.style.msg_font_key) } as CSSProperties;
 }
