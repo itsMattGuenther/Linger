@@ -419,6 +419,40 @@ test("remembers open tabs across a restart", async ({ page }) => {
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
 });
 
+test("a half-typed line outlasts its tab and a restart, and goes once it's sent (decision 11)", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.owner?.open("d-jules"));
+  await page.getByRole("tab", { name: "#general" }).click();
+  await box(page).fill("see you at the");
+  await page.getByRole("button", { name: "Close #general" }).click();
+  await expect(page.getByRole("tab", { name: "#general" })).toHaveCount(0);
+  await page.evaluate(() => window.owner?.open("r-general"));
+  await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
+  await expect(box(page)).toHaveValue("see you at the");
+  // A restart.
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general");
+  await expect(box(page)).toHaveValue("see you at the");
+  await box(page).fill("see you at the porch");
+  await box(page).press("Enter");
+  await expect(box(page)).toHaveValue("");
+  expect(await page.evaluate(() => localStorage.getItem("linger.next.drafts"))).toBeNull();
+});
+
+test("a message is pinned and unpinned from its menu, and shows its pin (T-908)", async ({ page }) => {
+  await open(page);
+  const row = page.locator("[data-message]").filter({ hasText: "Khruangbin" }).first();
+  await row.hover();
+  await row.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Pin" }).click();
+  await expect.poll(async () => (await did(page)).some((line) => /^POST \/messages\/[^/]+\/pin/.test(line))).toBe(true);
+  await expect(row.locator(".nx-msg-pinned")).toHaveAttribute("title", "Pinned");
+  await row.hover();
+  await row.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Unpin" }).click();
+  await expect.poll(async () => (await did(page)).some((line) => /^DELETE \/messages\/[^/]+\/pin/.test(line))).toBe(true);
+  await expect(row.locator(".nx-msg-pinned")).toHaveCount(0);
+});
+
 test("a knock from a DM says Knocked, unless the server refused it", async ({ page }) => {
   await open(page, "room=d-jules");
   await page.getByRole("button", { name: "Knock" }).click();
@@ -437,17 +471,26 @@ test("Join asks the list window to join voice here", async ({ page }) => {
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "voice.join", server: SERVER, roomId: "r-general" });
 });
 
-test("with push-to-talk on, holding Control in this window talks through the list window", async ({ page }) => {
+test("with push-to-talk on, holding the talk key in this window talks through the list window, and the shortcuts' Ctrl doesn't", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   // The window has set itself up (it reports the room in the same pass that
-  // starts listening for the key) before anyone could reach for Control.
+  // starts listening for the key) before anyone could reach for the key.
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });
-  await page.keyboard.down("Control");
-  await page.keyboard.up("Control");
+  // Left Ctrl is the shortcuts' Ctrl (decision 6): no microphone.
+  await page.keyboard.down("ControlLeft");
+  await page.keyboard.up("ControlLeft");
+  // Right Ctrl is the talk key unless somebody picked another.
+  await page.keyboard.down("ControlRight");
+  await page.keyboard.up("ControlRight");
   await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk")).toEqual([
     { kind: "voice.talk", down: true },
     { kind: "voice.talk", down: false },
   ]);
+  // A key picked in Settings, in another window, is the one from then on.
+  await page.evaluate(() => localStorage.setItem("linger.voice.pushToTalkKey", "AltRight"));
+  await page.keyboard.down("AltRight");
+  await page.keyboard.up("AltRight");
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk")).toHaveLength(4);
 });
 
 test("closing the last tab closes the window and tells the list window", async ({ page }) => {

@@ -12,6 +12,7 @@ import { openExternal, openExternalChecked } from "../../../lib/external";
 import {
   deleteMessage,
   editMessage,
+  pinMessage,
   leaveWindow,
   loadNewer,
   loadOlder,
@@ -24,7 +25,9 @@ import {
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
-import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
+import { loadVoicePrefs } from "../../../lib/voice";
+import { isTalkKey } from "../../core/talkKey";
+import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
@@ -155,6 +158,16 @@ function Conversations({ following }: { following: Following }) {
   // What each conversation's box holds, so a draft can go with it to another window.
   const typed = useRef(new Map<string, string>());
   const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
+  // Half-typed lines outlast their tab and a restart (decision 11).
+  const keep = useMemo(() => {
+    const store = handoffStore();
+    return store
+      ? {
+          load: (conversation: string) => keptDraft(store, conversation, Date.now()),
+          save: (conversation: string, text: string) => keepDraft(store, conversation, text, Date.now()),
+        }
+      : undefined;
+  }, []);
   // A draft that came with a conversation from another window.
   const [seed, setSeed] = useState<{ conversation: string; text: string } | null>(() => {
     const store = handoffStore();
@@ -399,10 +412,10 @@ function Conversations({ following }: { following: Following }) {
     if (!pushToTalk) return;
     const say = (down: boolean) => void intend({ kind: "voice.talk", down }).catch(() => undefined);
     const down = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) say(true);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) say(true);
     };
     const up = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY) say(false);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) say(false);
     };
     const release = () => say(false);
     window.addEventListener("keydown", down);
@@ -506,6 +519,13 @@ function Conversations({ following }: { following: Following }) {
     },
     [api],
   );
+  const pin = useCallback(
+    async (message: Message, pinned: boolean) => {
+      if (!api) throw new Error("This conversation isn't connected.");
+      await pinMessage(api, message, pinned).catch(rethrowInWords(pinned ? "Couldn't pin it." : "Couldn't take the pin off."));
+    },
+    [api],
+  );
   const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
   const wantCards = useCallback(
     (urls: readonly string[]) => {
@@ -529,8 +549,8 @@ function Conversations({ following }: { following: Following }) {
     if (cardOpener.current?.isConnected) cardOpener.current.focus();
   }, []);
   const actions = useMemo(
-    () => ({ save, remove, openLink: openExternal, download, wantCards, openPerson }),
-    [save, remove, download, wantCards, openPerson],
+    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson }),
+    [save, remove, pin, download, wantCards, openPerson],
   );
 
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
@@ -538,8 +558,8 @@ function Conversations({ following }: { following: Following }) {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
   );
 
   const knock = useCallback(

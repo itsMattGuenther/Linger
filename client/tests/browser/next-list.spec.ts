@@ -69,6 +69,42 @@ test("with no DMs yet, the heading and its New message button are still there", 
   await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
 });
 
+test("a brand-new server says so in each empty place, and the host gets a way to fill it (decision 17)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?bare");
+  await expect(page.locator("#nx-rooms .nx-list-empty")).toHaveText("No rooms yet.");
+  await expect(page.locator("#nx-dms .nx-list-empty")).toHaveText("No DMs yet.");
+  await expect(page.locator("#nx-people .nx-list-empty")).toHaveText("Nobody else is here yet.");
+  await page.getByRole("button", { name: "Make the first room" }).click();
+  await page.getByRole("button", { name: "Invite people" }).click();
+  expect(await page.evaluate(() => document.body.dataset.opened)).toBe("host:rooms,host:invites");
+  // The button starts on the same edge as the words above it.
+  const words = await page.locator("#nx-rooms .nx-list-empty").evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return range.getBoundingClientRect().left;
+  });
+  const button = await page.getByRole("button", { name: "Make the first room" }).boundingBox();
+  expect(Math.abs((button?.x ?? 0) - words)).toBeLessThan(1);
+  // Somebody who isn't the host just reads the lines.
+  await page.goto("/tests/fixtures/next-list.html?bare&member");
+  await expect(page.locator("#nx-rooms .nx-list-empty")).toHaveText("No rooms yet.");
+  await expect(page.getByRole("button", { name: "Make the first room" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Invite people" })).toHaveCount(0);
+});
+
+test("past eight rooms, the quiet ones fold under More rooms, with no number (decision 22)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?many");
+  const shown = rows(page, "Rooms");
+  await expect(shown).toHaveCount(8);
+  await expect(shown.first()).toContainText("general");
+  const more = page.getByRole("button", { name: /More rooms/ });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await expect(more).not.toHaveText(/\d/);
+  await more.click();
+  await expect(rows(page, "More rooms")).toHaveCount(7);
+  await expect(rows(page, "More rooms").first()).toContainText("quiet-room");
+});
+
 test("groups people into here, away and a folded offline", async ({ page }) => {
   await expect(rows(page, "People here")).toHaveText([/Dave.*in #listening-room/, /Eli.*in #general/, /Jules.*in #general/, /Callie.*around/]);
   await expect(rows(page, "Away")).toHaveText([/Sam.*back after work/]);
@@ -397,11 +433,11 @@ test.describe("in voice", () => {
     await expect(page.locator("body")).toHaveAttribute("data-opened", "mute:true,deafen:true,leave,go:r-general");
   });
 
-  test("with push-to-talk there is no Mute button, and it says how to talk", async ({ page }) => {
+  test("with push-to-talk there is no Mute button, and it names the key to hold", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice&ptt");
     const bar = page.getByRole("region", { name: "In voice in #general" });
     await expect(bar.getByRole("button", { name: /^Mute/ })).toHaveCount(0);
-    await expect(bar.getByRole("status")).toHaveText("hold control to talk");
+    await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
   });
 
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {

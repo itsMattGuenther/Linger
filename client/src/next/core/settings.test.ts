@@ -77,9 +77,10 @@ describe("the Settings copy", () => {
     }
   });
 
-  it("names every chime, room messages last-but-one and off by default, as today", () => {
-    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks"]);
+  it("names every chime, with room messages and the door chime off by default", () => {
+    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks", "door"]);
     expect(CHIMES.find((chime) => chime.category === "rooms")?.hint).toMatch(/off by default/i);
+    expect(CHIMES.find((chime) => chime.category === "door")?.hint).toMatch(/off by default/i);
   });
 
   it("offers invites for one, five or anyone, lasting a day, a week or for good (HOST-5)", () => {

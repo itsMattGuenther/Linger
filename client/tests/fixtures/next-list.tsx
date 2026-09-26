@@ -75,7 +75,23 @@ const crowd = ["Ada", "Bo", "Kit", "Noor"].map((name) => ({
 }));
 const crowded = query.has("crowd") ? { ...state, users: [...state.users, ...crowd] } : state;
 // `?nodms`: nobody has started a DM yet.
-const shown = query.has("nodms") ? { ...crowded, dms: [] } : crowded;
+const noDms = query.has("nodms") ? { ...crowded, dms: [] } : crowded;
+// `?bare`: a brand-new server: no rooms, no DMs, nobody else, and you're the
+// host (`&member` for somebody who isn't). `?many`: fifteen rooms, three of
+// them busy (decision 22).
+const hostMe = (me: typeof noDms.me) => (me ? { ...me, is_host: !query.has("member") } : me);
+const bare = query.has("bare")
+  ? { ...noDms, rooms: [], dms: [], me: hostMe(noDms.me), users: noDms.users.filter((user) => user.id === noDms.me?.id).map((user) => ({ ...user, is_host: !query.has("member") })), presence: noDms.presence.filter((entry) => entry.user_id === noDms.me?.id) }
+  : noDms;
+const shown = query.has("many")
+  ? {
+      ...bare,
+      rooms: [
+        ...bare.rooms,
+        ...Array.from({ length: 15 - bare.rooms.length }, (_, n) => ({ ...(bare.rooms[0] ?? ({} as never)), id: `r-extra-${n}`, slug: `extra-${n}`, name: `quiet-room-${n + 1}`, position: 10 + n, last_message_id: null })),
+      ],
+    }
+  : bare;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
@@ -106,6 +122,7 @@ function OneServer() {
       // `?dmfail`: the server refuses, and the picker says so and stays open.
       return query.has("dmfail") ? "The server didn't answer." : null;
     },
+    onHost: (section) => note(`host:${section}`),
     onKnock: async (user) => {
       note(`knock:${user.id}`);
       // `?limit`: the fourth knock inside an hour (SPEC §4.9).

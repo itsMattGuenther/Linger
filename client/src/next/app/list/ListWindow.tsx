@@ -18,11 +18,13 @@ import {
   useGateway,
   useServers,
 } from "../../../lib/gateway";
-import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
+import { loadVoicePrefs } from "../../../lib/voice";
+import { isTalkKey, talkKeyName } from "../../core/talkKey";
 import { forgetNotifications, resetNotifications, setQuietServers } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
-import { type ServerSession, useSessions } from "../../../lib/session";
+import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { PROTOCOL, tauriBus } from "../../core/bus";
 import { isSearchKey, isSettingsKey } from "../../core/keys";
@@ -52,13 +54,15 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
-import { Spinner } from "../../kit";
+import { Button, Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
-import { type KnockCard, KnockCards } from "./KnockCards";
+import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
+import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadArrivalCards, whereAll, type WhereAll } from "../../core/arrivals";
+import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { ServerInfo } from "../../../generated/ServerInfo";
@@ -75,6 +79,9 @@ const INFO_REFRESH_MS = 120_000;
 export function ListWindow() {
   const sessions = useSessions();
   const { addServer } = sessions;
+  // Nothing signed in has answered yet, and the person would rather sign in
+  // somewhere now than wait (T-907).
+  const [signInAnyway, setSignInAnyway] = useState(false);
   const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
 
   // Every window hears when a server is signed out of, however it happened
@@ -111,6 +118,10 @@ export function ListWindow() {
     );
   }
 
+  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && !signInAnyway) {
+    return <NotReached waiting={sessions.state.waiting} onRetry={sessions.retry} onSignIn={() => setSignInAnyway(true)} />;
+  }
+
   if (sessions.state.servers.length === 0) {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
@@ -127,7 +138,41 @@ export function ListWindow() {
     reauthenticate: (server, auth) => sessions.addServer(server, auth),
     signOut: (server) => sessions.signOut(server),
   };
-  return <Servers signedIn={sessions.state.servers} accounts={accounts} keyringNotice={sessions.keyringNotice} />;
+  return (
+    <Servers
+      signedIn={sessions.state.servers}
+      waiting={sessions.state.waiting}
+      onRetry={sessions.retry}
+      accounts={accounts}
+      keyringNotice={sessions.keyringNotice}
+    />
+  );
+}
+
+/**
+ * Saved servers, none of which has answered yet (T-907): the sign-ins are
+ * kept and Linger keeps trying, so this is a wait, not a sign-in screen. The
+ * list opens by itself when one answers.
+ */
+function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingServer[]; onRetry: (server: string) => void; onSignIn: () => void }) {
+  const trying = waiting.some((one) => one.why === null);
+  const names = waiting.map((one) => hostOf(one.baseUrl));
+  const detail = waiting.flatMap((one) => (one.why === null ? [] : [one.why])).join(" ");
+  return (
+    <WindowMessage>
+      <Spinner />
+      <span title={detail || undefined}>Can't reach {names.join(" or ")} yet.</span>
+      <span className="nx-window-hint">Your sign-in is kept, and Linger keeps trying.</span>
+      <span className="nx-window-actions">
+        <Button size="sm" disabled={trying} onClick={() => waiting.forEach((one) => onRetry(one.baseUrl))}>
+          {trying ? "Trying…" : "Try now"}
+        </Button>
+        <Button size="sm" variant="quiet" onClick={onSignIn}>
+          Sign in to another server
+        </Button>
+      </span>
+    </WindowMessage>
+  );
 }
 
 /**
@@ -176,7 +221,19 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
   return null;
 }
 
-function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSession[]; accounts: Accounts; keyringNotice: string | null }) {
+function Servers({
+  signedIn,
+  waiting,
+  onRetry,
+  accounts,
+  keyringNotice,
+}: {
+  signedIn: ServerSession[];
+  waiting: readonly WaitingServer[];
+  onRetry: (server: string) => void;
+  accounts: Accounts;
+  keyringNotice: string | null;
+}) {
   const states = useServers();
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
@@ -315,11 +372,13 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
   useEffect(() => {
     if (!pushToTalk || voiceServer === null) return;
     const down = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
+      // The chosen key (decision 6), read as it's pressed: Settings may have
+      // just changed it, in another window.
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
     };
     const release = () => void setVoiceMuted(voiceServer, true).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY) release();
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) release();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -350,6 +409,28 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     let gone = false;
     void tauriBus()
       .listen<string>("next:tray", (action) => trayVoice.current(action))
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
+
+  // A desktop banner clicked (decision 20): the shell hands back where it
+  // leads (lib/notify.ts), and the conversation opens there, at the message.
+  // Only for a server still signed in.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<unknown>("next:banner", (payload) => {
+        const target = bannerTarget(payload);
+        if (target && apisRef.current.has(target.server)) openChat(target.server, target.room, target.message);
+      })
       .then((unlisten) => {
         if (gone) unlisten();
         else stop = unlisten;
@@ -392,6 +473,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
             onMessage: (user) => void messageWith(api, user),
             onKnock: (user) => knockOn(api, user.id),
             onStartDm: (people) => startDm(api, people),
+            onHost: (section) => shell.settings(section),
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
           },
         ];
@@ -485,6 +567,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     keyringNotice,
     update,
     drawnAt,
+    waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
   );
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
@@ -495,6 +578,55 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     const timer = window.setTimeout(() => wake((n) => n + 1), Math.min(...due) + 50);
     return () => window.clearTimeout(timer);
   });
+
+  // Arrivals (decisions 12 and 13): somebody came into a room. Worked out by
+  // comparing where everybody is with where they were, per server, from the
+  // server's first word on: a new session (connecting, reconnecting) starts
+  // afresh rather than reading as everybody arriving at once. None from a
+  // Quiet server, and no cards in quiet hours.
+  const [arrivals, setArrivals] = useState<ArrivalCard[]>([]);
+  const where = useRef(new Map<string, { session: string; where: WhereAll }>());
+  const lastCard = useRef(new Map<string, number>());
+  const lastChime = useRef(new Map<string, number>());
+  useEffect(() => {
+    const now = Date.now();
+    const cardsOn = loadArrivalCards(localStore()) && !cardsHushed(loadSoundPrefs(), new Date(now));
+    const fresh: ArrivalCard[] = [];
+    let chime = false;
+    for (const session of ordered) {
+      const state = states[session.baseUrl];
+      if (!state?.me || state.sessionId === null) continue;
+      const before = where.current.get(session.baseUrl);
+      const nowWhere = whereAll(state.presence);
+      where.current.set(session.baseUrl, { session: state.sessionId, where: nowWhere });
+      if (!before || before.session !== state.sessionId || quiet.has(session.baseUrl)) continue;
+      // Rooms only: a server from before 0.4.1 still says who is in which DM.
+      const rooms = new Map(state.rooms.filter((room) => room.kind === "room").map((room) => [room.id as string, room.name]));
+      for (const { userId, roomId } of arrivalsBetween(before.where, nowWhere, state.me.id, new Set(rooms.keys()))) {
+        const key = `${session.baseUrl} ${userId}`;
+        if (cardsOn && due(lastCard.current.get(key), now, CARD_EVERY_MS)) {
+          lastCard.current.set(key, now);
+          fresh.push({
+            server: session.baseUrl,
+            id: `${key} ${now}`,
+            at: now,
+            who: state.users.find((user) => user.id === userId) ?? null,
+            room: rooms.get(roomId) ?? "a room",
+            serverName: several ? (infos[session.baseUrl]?.name ?? hostOf(session.baseUrl)) : null,
+          });
+        }
+        if (due(lastChime.current.get(key), now, CHIME_EVERY_MS)) {
+          lastChime.current.set(key, now);
+          chime = true;
+        }
+      }
+    }
+    // At most three at a time: the newest.
+    if (fresh.length > 0) setArrivals((held) => [...held, ...fresh].slice(-3));
+    // The door chime is off unless somebody turned it on, and quiet hours hold it (lib/sound.ts).
+    if (chime) void playSound("door").catch(() => undefined);
+  }, [states, ordered, quiet, several, infos]);
+  const arrivalGone = useCallback((id: string) => setArrivals((held) => held.filter((card) => card.id !== id)), []);
 
   // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
   const knocks = useMemo(
@@ -538,8 +670,8 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
         onSettings={() => shell.settings()}
         onMedia={() => shell.tool("media")}
         onSearch={() => shell.tool("search")}
-        notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
-        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} />}
+        notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
+        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />
       )}
@@ -653,9 +785,19 @@ let sharing: Sharing | null = null;
  * Show a conversation: in its own window if it was popped out into one,
  * otherwise as a tab in the chat window (core/share.ts, `open`).
  */
-function openChat(server: string, room: RoomId): void {
-  if (sharing) sharing.open(server, room);
-  else shell.chat(server, room);
+function openChat(server: string, room: RoomId, messageId?: MessageId): void {
+  if (sharing) sharing.open(server, room, messageId);
+  else shell.chat(server, room, messageId);
+}
+
+/** What a clicked banner says it leads to, if it says it properly (`src-tauri/src/notifications.rs`). */
+function bannerTarget(payload: unknown): { server: string; room: RoomId; message: MessageId } | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const server: unknown = Reflect.get(payload, "server");
+  const room: unknown = Reflect.get(payload, "room");
+  const message: unknown = Reflect.get(payload, "message");
+  if (typeof server !== "string" || typeof room !== "string" || typeof message !== "string") return null;
+  return { server, room, message };
 }
 
 /**
@@ -663,7 +805,7 @@ function openChat(server: string, room: RoomId): void {
  * controls act here, in the owner, which keeps the voice seat.
  */
 function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string): VoiceDockProps | undefined {
-  const model = voiceModel(state, speaking);
+  const model = voiceModel(state, speaking, talkKeyName(loadVoicePrefs().pushToTalkKey));
   if (model === null) return undefined;
   return {
     ...model,

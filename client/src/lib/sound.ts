@@ -38,15 +38,16 @@ const QUIET_FROM_KEY = "linger.sound.quietFrom";
 const QUIET_UNTIL_KEY = "linger.sound.quietUntil";
 const CATEGORY_KEY = "linger.sound.categories";
 
-export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks"] as const;
+export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks", "door"] as const;
 export type SoundCategory = typeof SOUND_CATEGORIES[number];
 export type SoundCue = "voice-join" | "voice-leave" | "voice-move" | "peer-join" | "peer-leave"
-  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock";
+  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock" | "door";
 
 export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   muted: false, quietHours: false,
   quietFrom: DEFAULT_QUIET_FROM, quietUntil: DEFAULT_QUIET_UNTIL,
-  categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true },
+  // The door chime (decision 12) starts off: an arrival is a card first.
+  categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true, door: false },
 };
 let fallbackPrefs = DEFAULT_SOUND_PREFS;
 let storageUnavailable = false;
@@ -204,10 +205,11 @@ export function playKnock(now: Date = new Date()): Promise<boolean> {
  * those at night only makes the controls feel broken (#186). Mute and each
  * category's own switch still silence them.
  */
-export const QUIET_HOURS_SILENCE: readonly SoundCategory[] = ["dms", "rooms", "knocks"];
+export const QUIET_HOURS_SILENCE: readonly SoundCategory[] = ["dms", "rooms", "knocks", "door"];
 
 export function categoryOf(cue: SoundCue): SoundCategory {
   if (cue === "knock") return "knocks";
+  if (cue === "door") return "door";
   if (cue === "dm") return "dms";
   if (cue === "room") return "rooms";
   if (cue.startsWith("voice-") || cue.startsWith("peer-")) return "voice";

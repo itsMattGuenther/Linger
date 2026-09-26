@@ -18,6 +18,7 @@ const INPUT_KEY = "linger.voice.input";
 const OUTPUT_KEY = "linger.voice.output";
 const PTT_KEY = "linger.voice.pushToTalk";
 const FORWARDING_KEY = "linger.voice.forwarding";
+const TALK_KEY = "linger.voice.pushToTalkKey";
 
 /**
  * The key you hold to talk, when push-to-talk is on. `Control` because it
@@ -38,12 +39,18 @@ export interface VoicePrefs {
    * the old way, straight to each person, and puts the whole room on it.
    */
   forwarding: boolean;
+  /**
+   * The key held to talk, as a `KeyboardEvent.code` (decision 6). The
+   * Buddy list client reads it; today's client keeps Ctrl.
+   */
+  pushToTalkKey: string;
 }
 
 export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   devices: { input: null, output: null },
   pushToTalk: false,
   forwarding: true,
+  pushToTalkKey: "ControlRight",
 };
 
 /** Read the preferences, tolerating storage that is absent or refuses. */
@@ -59,6 +66,7 @@ export function loadVoicePrefs(): VoicePrefs {
       },
       pushToTalk: ptt === "true",
       forwarding: window.localStorage.getItem(FORWARDING_KEY) !== "false",
+      pushToTalkKey: window.localStorage.getItem(TALK_KEY) || DEFAULT_VOICE_PREFS.pushToTalkKey,
     };
   } catch {
     return DEFAULT_VOICE_PREFS;
@@ -74,6 +82,7 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
     else store.setItem(OUTPUT_KEY, prefs.devices.output);
     store.setItem(PTT_KEY, prefs.pushToTalk ? "true" : "false");
     store.setItem(FORWARDING_KEY, prefs.forwarding ? "true" : "false");
+    store.setItem(TALK_KEY, prefs.pushToTalkKey);
   } catch {
     // Storage refused; the preference lasts for this run and no longer.
   }
@@ -157,12 +166,12 @@ export function usersInVoice(voice: Readonly<Record<string, VoicePeer[]>>): Set<
  * is nothing worth a word. The mute button already says "muted"; this is for
  * the states a button cannot carry.
  */
-export function microphoneLine(audio: string, pushToTalk: boolean, muted: boolean): string | null {
+export function microphoneLine(audio: string, pushToTalk: boolean, muted: boolean, talkKey = PUSH_TO_TALK_KEY.toLowerCase()): string | null {
   switch (audio) {
     case "opening":
       return "opening the microphone…";
     case "sending":
-      return pushToTalk && muted ? `hold ${PUSH_TO_TALK_KEY.toLowerCase()} to talk` : null;
+      return pushToTalk && muted ? `hold ${talkKey} to talk` : null;
     case "stopped":
       return "the microphone stopped — leave and join again";
     default:

@@ -45,6 +45,55 @@ test("restores every saved sign-in and leaves one live connection to each server
   await expect(toggle(page, "Casa da Ribeira")).toHaveAttribute("aria-expanded", "false");
 });
 
+test("a server that can't be reached holds up none of the others, keeps its sign-in, and comes back without a restart (T-907)", async ({ page }) => {
+  await open(page, "?down");
+  // The others open well inside the longest wait (RESTORE_WAIT_MS, 5 s).
+  await expect(section(page, "The Good Company")).toBeVisible({ timeout: 2_000 });
+  await expect(section(page, "Casa da Ribeira")).toBeVisible();
+  const notes = page.locator("[data-screen='list-notes']");
+  await expect(notes).toContainText("Can't reach ashen-lanterns.example. Still trying.");
+  expect(await did(page)).not.toContain(`forget ${GUILD}`);
+  // Back up, and Try now brings it in: no restart, no password.
+  await page.evaluate(() => window.core?.up());
+  await notes.getByRole("button", { name: "Try now" }).click();
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  await expect(page.locator(".nx-srv-name")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
+  await expect(notes).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("reuse"))).toEqual([]);
+});
+
+test("a stalled server: the rest open, it joins when it answers, and its token is spent once (T-907)", async ({ page }) => {
+  await open(page, "?stall");
+  await expect(section(page, "The Good Company")).toBeVisible({ timeout: 2_000 });
+  const notes = page.locator("[data-screen='list-notes']");
+  await expect(notes).toContainText("Connecting to ashen-lanterns.example…");
+  // While a try is under way there's nothing to press: a second try would spend the token twice.
+  await expect(notes.getByRole("button", { name: "Try now" })).toHaveCount(0);
+  await page.evaluate(() => window.core?.unstall());
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  const asked = await did(page);
+  expect(asked.filter((line) => line === `POST ${GUILD}/auth/refresh`)).toHaveLength(1);
+  expect(asked.filter((line) => line.startsWith("reuse"))).toEqual([]);
+});
+
+test("nothing reached yet is a wait, not the sign-in screen, and it opens when the server answers (T-907)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&down=good-company.example");
+  const wait = page.getByRole("status");
+  await expect(wait).toContainText("Can't reach good-company.example yet.", { timeout: 8_000 });
+  await expect(wait).toContainText("Your sign-in is kept, and Linger keeps trying.");
+  await expect(page.getByRole("textbox", { name: "Server or link" })).toHaveCount(0);
+  await page.evaluate(() => window.core?.up());
+  await wait.getByRole("button", { name: "Try now" }).click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  expect(await did(page)).not.toContain(`forget ${HOME}`);
+  expect((await did(page)).filter((line) => line.startsWith("reuse"))).toEqual([]);
+
+  // Or sign in somewhere else meanwhile.
+  await page.goto("/tests/fixtures/next-list-window.html?one&down=good-company.example");
+  await page.getByRole("button", { name: "Sign in to another server" }).click({ timeout: 8_000 });
+  await expect(page.getByRole("textbox", { name: "Server or link" })).toBeVisible();
+});
+
 test("with one server it's that server's list, as before", async ({ page }) => {
   await open(page, "?one");
   await expect(page.locator(".k-titlebar")).toContainText("The Good Company");
@@ -240,6 +289,24 @@ test("a search hit asked for from another window opens the chat window at that m
   );
 });
 
+test("a clicked desktop banner opens its conversation at the message; one from a server you've left does nothing (decision 20)", async ({ page }) => {
+  await open(page, "?one");
+  // Nonsense and a server not signed in are ignored.
+  await page.evaluate(() => {
+    window.core?.banner({ server: "https://good-company.example", room: 7 });
+    window.core?.banner({ server: "https://elsewhere.example", room: "r-general", message: "m000001" });
+  });
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => window.core?.banner({ server: "https://good-company.example", room: "r-general", message: "m000005" }));
+      return (await did(page)).filter((line) => line.startsWith("next_open_chat"));
+    })
+    .not.toEqual([]);
+  expect(new Set((await did(page)).filter((line) => line.startsWith("next_open_chat")))).toEqual(
+    new Set([`next_open_chat:${JSON.stringify({ server: HOME, room: "r-general", message: "m000005" })}`]),
+  );
+});
+
 test("the list tells the desktop what closing it does: the tray by default, and what Settings changes it to", async ({ page }) => {
   await open(page, "?one");
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_close_to_tray")).at(0)).toBe(
@@ -430,4 +497,65 @@ test("the volume card sits over its chip, inside the window, with nothing clippe
   await page.waitForTimeout(300);
   const [after, chipAfter] = [await card.boundingBox(), await chip.boundingBox()];
   expect(after && chipAfter && after.y + after.height <= chipAfter.y).toBe(true);
+});
+
+// Arrivals (decisions 12 and 13): "Callie came into #general".
+const arrive = (page: Page, server: string, user: string, room: string | null) =>
+  page.evaluate(
+    ([server, user, room]) =>
+      window.core?.frame(server, { op: "presence.update", d: { user_id: user, state: room ? "in_room" : "around", room_id: room, away_message: null } } as never),
+    [server, user, room] as const,
+  );
+
+test("somebody coming into a room gets a card that goes by itself; nothing on connecting", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one");
+  await page.clock.runFor(1_000);
+  // Everybody already there when the list connected is not arriving.
+  await expect(page.locator("[data-screen='knocks']")).toHaveCount(0);
+  await arrive(page, HOME, "u-callie", "r-general");
+  const card = page.locator("[data-screen='knocks'] .k-notice");
+  await expect(card).toHaveText("Callie came into #general.");
+  await expect(card).toHaveAttribute("role", "status");
+  // It never takes the cursor.
+  expect(await page.evaluate(() => document.activeElement === document.body || document.activeElement === null)).toBe(true);
+  // A minute before the same person gets another.
+  await arrive(page, HOME, "u-callie", null);
+  await arrive(page, HOME, "u-callie", "r-listening");
+  await expect(card).toHaveCount(1);
+  await page.clock.runFor(6_500);
+  await expect(card).toHaveCount(0);
+});
+
+test("no arrival cards from a Quiet server, in quiet hours, or with them turned off", async ({ page }) => {
+  await page.clock.install();
+  await open(page);
+  await page.clock.runFor(1_000);
+  // Not quiet yet: Vesper coming in is said.
+  await arrive(page, GUILD, "a-vesper", "a-general");
+  await expect(page.locator("[data-screen='knocks'] .k-notice")).toContainText("Vesper came into #general.");
+  await page.clock.runFor(7_000);
+  await menuButton(page, "Ashen Lanterns").click();
+  await page.getByRole("menuitemcheckbox", { name: "Quiet" }).click();
+  await arrive(page, GUILD, "a-halden", "a-general");
+  await page.clock.runFor(500);
+  await expect(page.locator("[data-screen='knocks']")).toHaveCount(0);
+  // Quiet hours, set to the hour starting now, hold them.
+  await page.evaluate(() => {
+    const minute = new Date().getHours() * 60 + new Date().getMinutes();
+    localStorage.setItem("linger.sound.quietHours", "true");
+    localStorage.setItem("linger.sound.quietFrom", String(minute));
+    localStorage.setItem("linger.sound.quietUntil", String((minute + 60) % 1440));
+  });
+  await arrive(page, HOME, "u-callie", "r-general");
+  await page.clock.runFor(500);
+  await expect(page.locator("[data-screen='knocks']")).toHaveCount(0);
+  // Turned off in Settings, on this computer.
+  await page.evaluate(() => {
+    localStorage.setItem("linger.sound.quietHours", "false");
+    localStorage.setItem("linger.next.arrivalCards", "false");
+  });
+  await arrive(page, HOME, "u-callie", "r-listening");
+  await page.clock.runFor(500);
+  await expect(page.locator("[data-screen='knocks']")).toHaveCount(0);
 });

@@ -73,7 +73,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(held) });
     const sound = await import("./sound");
     const prefs = sound.loadSoundPrefs();
-    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } });
+    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: false } });
     held.set("linger.sound.quietHours", "true");
     expect(sound.loadSoundPrefs().quietHours).toBe(true);
     sound.saveSoundPrefs({ ...prefs, muted: false, categories: { ...prefs.categories, rooms: false } });
@@ -108,8 +108,8 @@ describe("notification sound policy", () => {
 
   it("master mute wins over every category", async () => {
     const sound = await import("./sound");
-    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock"] as const) {
-      const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } };
+    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock", "door"] as const) {
+      const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true } };
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(false);
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 3))).toBe(false);
     }
@@ -117,9 +117,9 @@ describe("notification sound policy", () => {
 
   it("quiet hours silence notifications, not the controls of a call you are in (#186)", async () => {
     const sound = await import("./sound");
-    const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true } };
+    const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true } };
     const night = new Date(2026, 8, 17, 3);
-    for (const cue of ["dm", "room", "knock"] as const) {
+    for (const cue of ["dm", "room", "knock", "door"] as const) {
       expect(sound.cueAllowed(cue, prefs, night)).toBe(false);
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(true);
     }

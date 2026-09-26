@@ -1579,6 +1579,21 @@ export async function editMessage(
 }
 
 /**
+ * Pin a message, or take its pin off (T-908): any member, no hierarchy
+ * (PROTOCOL §4). Folded in at once; everybody else hears it as a
+ * `message.update`.
+ */
+export async function pinMessage(api: AuthedApi, message: Message, pinned: boolean): Promise<void> {
+  const changed = await api.pinMessage(message.id, pinned);
+  const stream = stateOf(api.baseUrl).streams[changed.room_id];
+  if (linkFor(api) === null || !stream) return;
+  putStream(api.baseUrl, changed.room_id, {
+    ...stream,
+    messages: mergeMessage(stream.messages, changed),
+  });
+}
+
+/**
  * Delete a message. Author or host (PROTOCOL §4).
  *
  * The row stays: a delete is a tombstone, so reply chains still point at

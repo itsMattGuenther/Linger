@@ -254,7 +254,8 @@ Linger is one tall window: your **list**. From the top:
 - **You**: your name, where you are, and your status. Click the status to
   change it. **Away** sets an away message (more below).
 - **Rooms**: each with the dots of who's in it, and a speaker when people are
-  talking there. A room's name turns bold when something new is said.
+  talking there. A room's name turns bold when something new is said. On a
+  server with more than eight rooms, the quiet ones fold under **More rooms**.
 - **DMs**: your direct messages, named by who's in them. The pencil starts a
   new one.
 - **People**: everyone on the server, with where they are and their status.
@@ -279,11 +280,18 @@ Linux desktop with no tray, closing the list always quits.
 
 Several servers? Each is a section of the list with its own rooms, DMs and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
-or banners from it) and to move it up or down.
+or arrival cards from it, though somebody naming you still gets a banner) and
+to move it up or down.
 
 The list may also show a line at its foot, only while it's true: a server it
 can't reach, a computer that can't remember your sign-in, or a new version of
 Linger with **Update…**.
+
+If one of your servers is down when Linger starts, the others open anyway. The
+one that's down stays signed in and shows as "Can't reach … Still trying." at
+the foot of the list, with **Try now**; it joins the list by itself when it
+answers. If none of your servers answers, Linger says so rather than asking you
+to sign in again.
 
 ## Settings, and where they are
 
@@ -312,6 +320,8 @@ color).
 ## Saying things
 
 Type and press **Enter**. **Shift+Enter** starts a new line instead of sending.
+Something half-typed stays in its conversation's box, even if you close the
+tab or quit Linger, until you send it.
 
 A little formatting works, the kind you already type:
 
@@ -330,6 +340,9 @@ Enter to open the message actions; Escape closes the menu and returns focus.
 - **Reply**: quotes what you're answering. The **×** beside the quote cancels it.
 - **Edit**: your own messages only. **Shortcut: press Up arrow in an empty box**
   to edit the last thing you said.
+- **Pin** (or **Unpin**): anyone can pin a message, and it gets a small pin
+  after its words. Media's **Pinned** filter collects them, and a file on a
+  pinned message never expires.
 - **Delete**: asks once, then it's gone.
 
 Click anybody's name in a conversation to open their card, with **Message**
@@ -392,10 +405,12 @@ With the list tucked away in the tray, the tray icon's menu has **Mute** and
 **Leave voice**.
 
 **Push to talk** is in **Settings → Sound & Voice**. With it on, every call
-starts muted and the microphone is open only while you hold **Ctrl**. Switching
-away from Linger releases a held key; press it again to speak. It's off by
-default, because a room you leave running is the point, and a key you have to
-hold is the opposite of that.
+starts muted and the microphone is open only while you hold the **talk key**:
+**Right Ctrl** unless you pick another under **Talk key** (press **Change**,
+then the key). The shortcuts use the left Ctrl, so they never open your
+microphone. Switching away from Linger releases a held key; press it again to
+speak. It's off by default, because a room you leave running is the point,
+and a key you have to hold is the opposite of that.
 
 Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
 change applies the next time you join. If a device you picked isn't plugged in,
@@ -517,7 +532,11 @@ versions come back once the new look has versions of its own.
 Desktop banners appear for **somebody naming you**, or a person you've
 specifically asked to hear about. Open **Settings → Notifications** to choose
 those people, either everywhere or in selected rooms. A server you've made
-**Quiet** sends no banners or sounds.
+**Quiet** makes no sounds and no arrival cards, but somebody naming you there
+still gets a banner, and knocks still come through. Clicking a banner opens
+that conversation at the message. On Windows that works while the banner is on
+screen; once it has moved to the notification center, clicking it just brings
+Linger up.
 
 For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
 moves, mute/deafen changes, DMs and knocks have sounds by default. Ordinary
@@ -525,11 +544,20 @@ room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
 hear what you are choosing. Quiet hours, when you turn them on, silence
-DM, room-message and knock chimes between 22:00 and 08:00 on your computer's
+DM, room-message, knock and door chimes between 22:00 and 08:00 on your computer's
 clock. Once they're on, **Quiet from** and **Quiet until** move the window in
 half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
 sleep late. Voice and mute/deafen sounds still play during quiet hours, because
 they answer something you just did, and voice chat itself is never affected.
+
+When somebody comes into a room, a small **arrival card** says so ("Callie
+came into #general") at the top of the list and goes by itself after a few
+seconds. It never takes the cursor, so whatever you're typing keeps going.
+There are none from a Quiet server or during quiet hours, and at most one a
+minute for each person. Turn them off in **Settings → Notifications →
+Arrivals**. The **door chime** is their sound: a soft ding-dong, off until you turn
+it on in **Settings → Sound & Voice**, at most once every five minutes for each
+person, and quiet during quiet hours.
 
 Messages you are already reading, your own messages, reconnect replay and
 push-to-talk presses do not chime. These switches do not silence voice chat;

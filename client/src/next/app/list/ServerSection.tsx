@@ -149,6 +149,7 @@ export function ServerSection({
             onMessage={listing.onMessage}
             onKnock={listing.onKnock}
             onStartDm={listing.onStartDm}
+            onHost={listing.onHost}
           />
         </div>
       )}

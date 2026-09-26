@@ -284,7 +284,7 @@ where it still makes sense, and is otherwise closed with a note.
   affected-installation listening remain required before closing #94/#95. See
   [capture method and limits](docs/packaged-audio-checks.md).
 
-- ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
+- ✅ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
   deadline. Failed servers disappear for that launch. Restore each server
@@ -294,9 +294,13 @@ where it still makes sense, and is otherwise closed with a note.
   becomes usable within a bounded time. The other can recover without restart
   or re-entering credentials. Test token rotation and React StrictMode so no
   saved token is spent twice. **Decided 2026-09-26 (parity decision 21):**
-  fix it, in the Buddy list client's list window.
+  fix it, in the Buddy list client's list window. **Done:** every request
+  already had a 30-second deadline (#118); the wait was `Promise.all`. Each
+  server now restores on its own, the list opens when the first is in (5 s at
+  most), and one that can't be reached stays as a line with Try now and
+  retries on its own (5, 15, 30, then every 60 s).
 
-- ⬜ **T-908 · Pin a message from the conversation** — effort: **medium**
+- ✅ **T-908 · Pin a message from the conversation** — effort: **medium**
   Use the existing pin/unpin endpoints and message action strip; indicate the
   saved state and report failures without losing it. No new wire fields.
   *Accept:* pinning in one client appears in another and in media's pinned
@@ -314,7 +318,7 @@ where it still makes sense, and is otherwise closed with a note.
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
 
-- ⬜ **T-921 · Show a private room's occupants as around to outsiders** — effort:
+- ✅ **T-921 · Show a private room's occupants as around to outsiders** — effort:
   **medium**
   T-918's third native client receives the documented `in_room` presence with
   `room_id: null`, but renders “in a room” instead of HC-7's “around”. The
@@ -328,6 +332,10 @@ where it still makes sense, and is otherwise closed with a note.
   in a DM shows as "around" to **everybody**, the DM's own people included, so
   nobody sees that you're DMing, let alone with whom (the old client named
   them). Your own card can still say where you are.
+  **Done 2026-09-26:** the server rewrites presence for anybody in a DM to
+  `around` with no room, for every receiver, and sends no enter, leave or
+  occupancy for DMs; the list shows an older server's in-a-DM entry as around
+  too.
 
 ---
 
@@ -411,25 +419,27 @@ Rules for this milestone:
   stylesheet, fonts and mark, at every interface size, and keeps a Windows
   screenshot. Still to do before today's client is deleted: the list, chat and
   Settings windows signed in, against a throwaway server.
-- ⬜ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
+- ✅ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
   key" picker in Settings → Sound & Voice, Right Ctrl by default, so the Ctrl
   shortcuts never open the microphone. Push-to-talk stays off by default.
-- ⬜ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
+- ✅ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
   line is kept on this computer across closing its tab and restarting Linger,
   and cleared when sent.
-- ⬜ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
+- ✅ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
   desktop notification opens that room or DM in the chat window, at the message.
-- ⬜ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
+  Built and tested up to the desktop; clicking a real banner on Linux and
+  Windows is still to be checked by hand.
+- ✅ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
   no rooms (with "Make the first room" for the host), nobody else here, an
   empty search and an empty media collection.
-- ⬜ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
-  default: never takes focus, silent in quiet hours and on a Quiet server,
+- ✅ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
+  default: never takes focus, held in quiet hours and on a Quiet server,
   announced politely to screen readers, fades on its own.
-- ⬜ **T-1818 · The door chime** — decision 12. One shared soft chime when
+- ✅ **T-1818 · The door chime** — decision 12. One shared soft chime when
   somebody arrives, off by default, at most once per 5 minutes per listener and
   quiet in quiet hours: the first step toward personal entrance sounds
   (T-901…T-903), which later replace it.
-- ⬜ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
+- ✅ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
   the ones with nobody in them and nothing new fold under "More rooms", in the
   host's order, with no number.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The

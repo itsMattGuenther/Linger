@@ -286,6 +286,20 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       return refuse(404, "NOT_FOUND", "That message is gone.");
     }
     if (one && method === "DELETE") return new Response(null, { status: 204 });
+    const pinOf = /^\/messages\/([^/]+)\/pin$/.exec(path);
+    if (pinOf && (method === "POST" || method === "DELETE")) {
+      const id = decodeURIComponent(pinOf[1] ?? "");
+      for (const list of Object.values(store)) {
+        const at = list.findIndex((message) => message.id === id);
+        const found = list[at];
+        if (found) {
+          const changed = { ...found, pinned_at: method === "POST" ? Date.now() : null };
+          list[at] = changed;
+          return json(changed);
+        }
+      }
+      return refuse(404, "NOT_FOUND", "That message is gone.");
+    }
     if (path === "/dms" && method === "POST") {
       // The DM you already have with exactly these people, or a new one.
       const wanted = [people.matt.id, ...(Array.isArray(body.user_ids) ? body.user_ids.map(String) : [])].sort();

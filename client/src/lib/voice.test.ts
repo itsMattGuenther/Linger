@@ -162,17 +162,19 @@ describe("preferences", () => {
   });
 
   it("round-trip, and forget a device set back to the default", () => {
-    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, pushToTalk: true, forwarding: true });
+    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, pushToTalk: true, forwarding: true, pushToTalkKey: "AltRight" });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: "USB Mic", output: null },
       pushToTalk: true,
       forwarding: true,
+      pushToTalkKey: "AltRight",
     });
-    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, pushToTalk: false, forwarding: false });
+    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, pushToTalk: false, forwarding: false, pushToTalkKey: "ControlRight" });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: null, output: "Headphones" },
       pushToTalk: false,
       forwarding: false,
+      pushToTalkKey: "ControlRight",
     });
   });
 

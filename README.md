@@ -15,7 +15,7 @@ dinner party of eight, not a stadium of fifty thousand strangers.
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
 </div>
 
-**Status: 0.4.0, testing with friends.** It works day to day; voice across
+**Status: 0.4.1, testing with friends.** It works day to day; voice across
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
@@ -31,8 +31,9 @@ computers. [SPEC.md](SPEC.md) is the full product description.
   away messages.
 - **Files and media.** 500 MB uploads, EXIF always stripped. The Media window
   keeps everything ever shared; star things to keep them forever.
-- **Voice rooms** with mute, deafen, push-to-talk and per-person volume, plus a
-  relay the host can run for friends on different networks.
+- **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The
+  host's server can pass voice along so up to 25 can talk at once, and a relay
+  the host can run helps friends on different networks.
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.

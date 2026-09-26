@@ -57,6 +57,11 @@ export interface ComposerProps {
   seed?: { conversation: string; text: string } | null;
   /** The box's text changed, for a window that has to carry it elsewhere. Called often: keep it cheap. */
   onDraft?: (conversation: string, text: string) => void;
+  /**
+   * Where half-typed lines are kept between tabs and restarts (decision 11,
+   * core/chat/keptDrafts.ts). Left out, a draft lasts as long as the box.
+   */
+  keep?: { load: (conversation: string) => string; save: (conversation: string, text: string) => void };
 }
 
 /**
@@ -87,6 +92,7 @@ export const Composer = memo(function Composer({
   focusRequest,
   seed,
   onDraft,
+  keep,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -97,7 +103,7 @@ export const Composer = memo(function Composer({
   const box = useRef<HTMLTextAreaElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
 
-  const draft = drafts.get(conversation) ?? "";
+  const draft = drafts.get(conversation) ?? keep?.load(conversation) ?? "";
   const problem = problems.get(conversation) ?? null;
 
   // What the box holds right now, for deciding what a late failure may touch.
@@ -138,14 +144,16 @@ export const Composer = memo(function Composer({
     setDrafts((held) => new Map(held).set(where, next));
     if (where === now.current.conversation) now.current = { ...now.current, draft: next };
     onDraft?.(where, next);
+    keep?.save(where, next);
   };
 
   // A draft that travelled here from another window, into an empty box only.
   useEffect(() => {
     if (!seed) return;
     setDrafts((held) => {
-      if ((held.get(seed.conversation) ?? "") !== "") return held;
+      if ((held.get(seed.conversation) ?? keep?.load(seed.conversation) ?? "") !== "") return held;
       onDraft?.(seed.conversation, seed.text);
+      keep?.save(seed.conversation, seed.text);
       return new Map(held).set(seed.conversation, seed.text);
     });
   }, [seed]);

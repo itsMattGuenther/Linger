@@ -143,14 +143,15 @@ export function listModel(state: GatewayState, now: number): ListModel {
 }
 
 /**
- * Where somebody is, in the fewest plain words. A private room they are in
- * never reaches us (SPEC §4.13), so "in a room" without a name is what an
- * in-room entry with no room we hold says.
+ * Where somebody is, in the fewest plain words. Being in a DM is being
+ * around (SPEC §4.13, decided 2026-09-26): a server from 0.4.1 on says so
+ * itself, and an older one's in-room entry with no room we hold (or a DM we
+ * are in) reads the same way here, never "in a room".
  */
 function noteFor(entry: RosterEntry, now: number): string {
   switch (entry.state) {
     case "in_room":
-      return entry.room === null ? "in a room" : `in #${entry.room.name}`;
+      return entry.room === null ? "around" : `in #${entry.room.name}`;
     case "around":
       return "around";
     case "idle":
@@ -171,3 +172,29 @@ export function personRow(state: GatewayState, userId: string, now: number): Per
   const { people } = listModel(state, now);
   return [...people.here, ...people.away, ...people.offline].find((row) => row.user.id === userId) ?? null;
 }
+
+/** How many rooms a server's list shows before the quiet ones fold away (decision 22). */
+export const ROOMS_SHOWN = 8;
+
+/**
+ * A long room list, split (decision 22): past eight rooms, the ones with
+ * nobody in them, no voice and nothing new fold under "More rooms". Rooms
+ * with something going on always show, and quiet ones fill the list up to
+ * eight in the host's order. Both halves keep the host's order.
+ */
+export function splitRooms(rooms: readonly RoomRow[], limit = ROOMS_SHOWN): { shown: RoomRow[]; more: RoomRow[] } {
+  if (rooms.length <= limit) return { shown: [...rooms], more: [] };
+  const busy = (room: RoomRow) => room.fresh || room.voice || room.people.length > 0;
+  let roomForQuiet = Math.max(0, limit - rooms.filter(busy).length);
+  const shown: RoomRow[] = [];
+  const more: RoomRow[] = [];
+  for (const room of rooms) {
+    if (busy(room)) shown.push(room);
+    else if (roomForQuiet > 0) {
+      shown.push(room);
+      roomForQuiet -= 1;
+    } else more.push(room);
+  }
+  return { shown, more };
+}
+

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
-import type { ListModel, PersonRow } from "../../core/list";
-import { IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
+import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
@@ -22,9 +22,11 @@ export interface ServerBodyActions {
   onKnock?: (user: User) => Promise<KnockResult>;
   /** From the new-message picker: open the DM with exactly these people; resolves to a problem in words, or null. */
   onStartDm?: (people: User[]) => Promise<string | null>;
+  /** The host's way from an empty place to Settings → Hosting (decision 17). */
+  onHost?: (section: "rooms" | "invites") => void;
 }
 
-type Fold = "rooms" | "dms" | "people" | "away" | "offline";
+type Fold = "rooms" | "more" | "dms" | "people" | "away" | "offline";
 
 /**
  * One server's rooms, DMs and people (docs/design/buddy-list.md): the whole
@@ -46,6 +48,7 @@ export function ServerBody({
   onMessage,
   onKnock,
   onStartDm,
+  onHost,
 }: ServerBodyActions & {
   model: ListModel;
   /** Who is talking right now, for the voice glyphs. */
@@ -53,8 +56,10 @@ export function ServerBody({
   idPrefix?: string;
   serverName?: string;
 }) {
-  // Offline starts folded (the design); everything else starts open.
-  const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
+  // Offline and the quiet rooms past eight start folded (the design,
+  // decision 22); everything else starts open.
+  const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline", "more"]));
+  const host = model.me?.user.is_host === true;
   const toggle = (fold: Fold) =>
     setFolded((current) => {
       const next = new Set(current);
@@ -152,32 +157,48 @@ export function ServerBody({
     />
   );
 
+  const rooms = splitRooms(model.rooms);
+  const roomRow = (room: RoomRow) => (
+    <Row
+      key={room.id}
+      lead={{ kind: "room" }}
+      lines="one"
+      title={room.name}
+      fresh={room.fresh}
+      label={roomLabel(room.name, room.people.length, room.voice)}
+      end={
+        room.people.length > 0 || room.voice ? (
+          <span className="nx-list-room-end">
+            {room.voice ? <VoiceGlyph speaking={room.people.some(talking)} /> : null}
+            <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} />
+          </span>
+        ) : undefined
+      }
+      onActivate={onOpenRoom ? () => onOpenRoom(room.id) : undefined}
+    />
+  );
+  const nobodyElse = model.people.here.length + model.people.away.length + model.people.offline.length === 0;
+
   return (
     <>
       <SectionLabel label="Rooms" open={open("rooms")} onToggle={() => toggle("rooms")} controls={id("rooms")} />
       {open("rooms") ? (
         <div id={id("rooms")}>
-          <RowList label={on("Rooms")}>
-            {model.rooms.map((room) => (
-              <Row
-                key={room.id}
-                lead={{ kind: "room" }}
-                lines="one"
-                title={room.name}
-                fresh={room.fresh}
-                label={roomLabel(room.name, room.people.length, room.voice)}
-                end={
-                  room.people.length > 0 || room.voice ? (
-                    <span className="nx-list-room-end">
-                      {room.voice ? <VoiceGlyph speaking={room.people.some(talking)} /> : null}
-                      <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} />
-                    </span>
-                  ) : undefined
-                }
-                onActivate={onOpenRoom ? () => onOpenRoom(room.id) : undefined}
-              />
-            ))}
-          </RowList>
+          {model.rooms.length === 0 ? (
+            <Empty words="No rooms yet." action={host && onHost ? { label: "Make the first room", run: () => onHost("rooms") } : undefined} />
+          ) : (
+            <RowList label={on("Rooms")}>{rooms.shown.map(roomRow)}</RowList>
+          )}
+          {rooms.more.length > 0 ? (
+            <>
+              <SectionLabel label="More rooms" level="group" open={open("more")} onToggle={() => toggle("more")} controls={id("more")} />
+              {open("more") ? (
+                <div id={id("more")}>
+                  <RowList label={on("More rooms")}>{rooms.more.map(roomRow)}</RowList>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -203,7 +224,7 @@ export function ServerBody({
       {open("dms") ? (
         <div id={id("dms")}>
           {model.dms.length === 0 ? (
-            <p className="nx-list-empty">No DMs yet.</p>
+            <Empty words="No DMs yet." />
           ) : (
             <RowList label={on("DMs")}>
               {model.dms.map((dm) => (
@@ -228,7 +249,11 @@ export function ServerBody({
       <SectionLabel label="People" open={open("people")} onToggle={() => toggle("people")} controls={id("people")} />
       {open("people") ? (
         <div id={id("people")}>
-          <RowList label={on("People here")}>{model.people.here.map(person)}</RowList>
+          {nobodyElse ? (
+            <Empty words="Nobody else is here yet." action={host && onHost ? { label: "Invite people", run: () => onHost("invites") } : undefined} />
+          ) : (
+            <RowList label={on("People here")}>{model.people.here.map(person)}</RowList>
+          )}
           {model.people.away.length > 0 ? (
             <>
               <SectionLabel label="Away" level="group" open={open("away")} onToggle={() => toggle("away")} controls={id("away")} />
@@ -302,3 +327,23 @@ function roomLabel(name: string, people: number, voice: boolean): string {
   if (voice) parts.push("voice on");
   return parts.join(", ");
 }
+
+/**
+ * An empty place, said in one quiet line (decision 17), with the host's way
+ * to fill it where there is one: "Make the first room", "Invite people".
+ */
+function Empty({ words, action }: { words: string; action?: { label: string; run: () => void } }) {
+  return (
+    <div className="nx-list-empty-place">
+      <p className="nx-list-empty">{words}</p>
+      {action ? (
+        <span className="nx-list-empty-action">
+          <Button size="sm" variant="secondary" onClick={action.run}>
+            {action.label}
+          </Button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+

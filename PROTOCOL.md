@@ -889,11 +889,14 @@ told the thing.
   frame to room is exhaustive in `linger-server`, so a frame added later does not
   compile until its author has said whether it names a room. Defaulting the other way is
   how a leak gets added by somebody who was not thinking about DMs at all.
-- **`presence.update` is redacted, not withheld.** Somebody in a DM is in a room, and
-  a receiver who cannot see that room is sent the same entry with `room_id: null` — so
-  they still see the person is around, and are not told where. Dropping the frame would
-  make that person appear offline to everybody outside the conversation, which is a
-  worse answer and a slower leak.
+- **Being in a DM is being `around`, to everybody.** A `presence.update` (and the
+  `ready` snapshot) for somebody standing in a DM says `state: "around"`,
+  `room_id: null` to every receiver, the DM's own members included, and no
+  `room.enter`, `room.leave` or `room.occupancy` is sent for a DM at all (SPEC §4.13).
+  It is rewritten, not withheld: dropping the frame would make that person appear
+  offline, which is a worse answer and a slower leak. Servers before 0.4.1 sent members
+  the DM's id and outsiders `in_room` with `room_id: null`; a 0.4.1 client shows either
+  as around.
 - `room.enter` is sent only to clients currently in that room, *and* only to members
   of it. The receiving client applies its own mute rules and quiet hours before playing
   anything (SPEC §4.1).

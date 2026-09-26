@@ -127,6 +127,7 @@ export function ListView(props: ListViewProps) {
               onMessage={only.onMessage}
               onKnock={only.onKnock}
               onStartDm={only.onStartDm}
+              onHost={only.onHost}
             />
           ) : null}
         </div>

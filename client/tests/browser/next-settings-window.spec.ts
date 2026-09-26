@@ -58,6 +58,15 @@ test("going away from Settings tells the list window, which keeps your presence"
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "away", server: SERVER, message: "walking the dog" });
 });
 
+test("arrival cards are on unless turned off, kept on this computer (decision 13)", async ({ page }) => {
+  await open(page, "?section=notifications");
+  const cards = page.getByRole("switch", { name: "Arrival cards" });
+  await expect(cards).toHaveAttribute("aria-checked", "true");
+  await cards.click();
+  await expect(cards).toHaveAttribute("aria-checked", "false");
+  expect(await page.evaluate(() => localStorage.getItem("linger.next.arrivalCards"))).toBe("false");
+});
+
 test("a notification rule is the list window's to change, and its answer shows", async ({ page }) => {
   await open(page, "?section=notifications");
   await page.getByRole("button", { name: /^Eli:/ }).click();

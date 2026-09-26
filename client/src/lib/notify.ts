@@ -30,6 +30,7 @@ import {
   requestPermission,
 } from "@tauri-apps/plugin-notification";
 
+import type { MessageId } from "../generated/MessageId";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { GatewayState } from "./gateway";
@@ -67,6 +68,10 @@ export function setQuietServers(servers: ReadonlySet<string>): void {
 }
 
 interface Batch {
+  server: string;
+  roomId: RoomId;
+  /** The latest message in it: where clicking the banner lands (decision 20). */
+  messageId: MessageId;
   slug: string;
   /** Distinct, in the order they first spoke. */
   names: string[];
@@ -118,10 +123,11 @@ export function considerFrame(
   const key = batchKey(server, message.room_id);
   const held = batches.get(key);
   if (held === undefined) {
-    batches.set(key, { slug, names: [name], excerpt: plainText(message.body) });
+    batches.set(key, { server, roomId: message.room_id, messageId: message.id, slug, names: [name], excerpt: plainText(message.body) });
   } else {
     if (!held.names.includes(name)) held.names.push(name);
     held.excerpt = plainText(message.body);
+    held.messageId = message.id;
   }
   if (flushIn === null) flushIn = window.setTimeout(flush, BATCH_MS);
 }
@@ -132,7 +138,7 @@ function flush(): void {
   batches.clear();
   for (const batch of pending) {
     const { title, body } = notificationText(batch.slug, batch.names, batch.excerpt);
-    void show(title, body);
+    void show(title, body, { server: batch.server, room: batch.roomId, message: batch.messageId });
   }
 }
 
@@ -146,14 +152,25 @@ function flush(): void {
  */
 let allowed: boolean | null = null;
 
-async function show(title: string, body: string): Promise<void> {
+/**
+ * Where a banner leads. The desktop shell hands it back to the list window
+ * when the banner is clicked (`src-tauri/src/notifications.rs`), which opens
+ * the conversation at the message (decision 20).
+ */
+export interface BannerTarget {
+  server: string;
+  room: RoomId;
+  message: MessageId;
+}
+
+async function show(title: string, body: string, open: BannerTarget): Promise<void> {
   if (!isTauri()) return;
   try {
     if (allowed === null) {
       allowed = (await isPermissionGranted()) || (await requestPermission()) === "granted";
     }
     if (!allowed) return;
-    await invoke("show_notification", { title, body });
+    await invoke("show_notification", { title, body, open });
   } catch {
     // No notification daemon, a sandbox with no portal, a headless session.
     // The stream still shows the message; there is nothing to tell anyone.
