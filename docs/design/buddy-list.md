@@ -1,12 +1,12 @@
 # The Buddy list design
 
-**Status: chosen, not built.** On 2026-09-25 Matt picked this as the design
-Linger will move to. It is parked on the `design/buddy-list` branch until the
-build starts. Nothing here is in the app, and the app still follows SPEC §5
-("Console") until this design replaces it.
+**Status: built, and the app from 0.4.0.** Matt picked this design on
+2026-09-25, and it was built the same week as M15 (#198) in
+`client/src/next/`. `system.md` is how it's built; this page is what it is and
+why.
 
 It came out of #101's design exploration. Seven other directions were tried and
-dropped. This page and the prototype in `client/prototypes/` are what is left.
+dropped. The prototype it started from is on the `design/buddy-list` branch.
 
 ![The list and two conversations](buddy-list/buddy-list-1-desktop.webp)
 
@@ -58,32 +58,12 @@ friends, and conversations open beside it.
 It fits either way of working. Keep it minimal, with one slim list at the edge
 of the screen, or fill the screen with rooms side by side.
 
-## Try the prototype
+## The prototype
 
-```sh
-git switch design/buddy-list
-cd client
-pnpm exec vite --port 1421
-```
-
-Open <http://localhost:1421/prototypes/buddy-list/>. The prototype is plain
-HTML and JavaScript. Nothing talks to a server. It is alive, though: friends
-arrive, type and talk in voice, and if you send a message somebody answers.
-
-Add these to the address to change how it starts:
-
-| Address | What it shows |
-|---|---|
-| `?tabs` | conversations as tabs in one window |
-| `?servers` | the list for somebody on three servers |
-| `?tabs&servers` | both |
-| `?mark=l`, `dots`, `lamp`, `word` | the placeholder small-logo options (below) |
-| `?still` | one frozen moment, for screenshots |
-
-The gear at the top of the list opens Settings (Ctrl+, does too). The bar
-across the top of the page stands in for your desktop's own bar, such as
-Waybar. Its dashed group holds the prototype-only controls: one server or
-three, and Tile.
+The clickable prototype (plain HTML and JavaScript, no server) lives on the
+`design/buddy-list` branch under `client/prototypes/buddy-list/`, with its
+switches (`?tabs`, `?servers`, `?still`) described there. The real client
+replaced it on `main`; the screenshots on this page are from it.
 
 ## The look
 

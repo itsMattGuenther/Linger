@@ -182,7 +182,7 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
   - Nothing invisible reserves height.
   - One comfortable presentation, with no density modes. Compact and IRC
     multiplied the test matrix and were removed
-    (`docs/console-ui-review.md`).
+    (the Console review, removed in 0.4.0).
 - **Check:** geometry tests measure the gaps between consecutive messages,
   groups and sessions against `system.md`'s values.
 

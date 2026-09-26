@@ -1,7 +1,7 @@
 /**
  * The prototype's Friday evening as real store state (GatewayState), for the
  * new client's fixture pages and tests. The same friends, rooms and moment as
- * `client/prototypes/buddy-list/`, so a screen can be compared with the
+ * `client/prototypes/buddy-list/` (on the `design/buddy-list` branch), so a screen can be compared with the
  * prototype it was built from.
  */
 import type { Attachment } from "../../../src/generated/Attachment";

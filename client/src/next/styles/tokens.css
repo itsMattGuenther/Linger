@@ -3,7 +3,8 @@
  *
  * This is the only file under `src/next/` allowed to contain a color literal or
  * a raw pixel value; `kit/discipline.test.ts` fails the build otherwise. Values
- * come from the approved prototype (`client/prototypes/buddy-list/style.css`),
+ * come from the approved prototype (`client/prototypes/buddy-list/style.css` on the
+ * `design/buddy-list` branch),
  * adjusted only where `styles/contrast.test.ts` required it.
  *
  * Three layers, in order:

@@ -1,10 +1,27 @@
 # Developing Linger
 
-The [README](../README.md)'s Development section has the repository layout, the
-three everyday commands and the system libraries the desktop app needs. This is
-everything else: the checks beyond `scripts/check.sh`, how the desktop app
-starts on Linux, packaging details, and the things that catch people out.
-Cutting a release is in [releasing.md](releasing.md).
+The [README](../README.md)'s Development section has the repository layout and
+the three everyday commands. This is everything else: the system packages,
+the checks beyond `scripts/check.sh`, how the desktop app starts on Linux,
+packaging details, and the things that catch people out. Cutting a release is
+in [releasing.md](releasing.md).
+
+## System packages
+
+Only the desktop app needs system libraries: a webview, ALSA headers for the
+microphone, cmake for the bundled Opus codec, the GStreamer plugins for sound,
+and the appindicator library for the tray icon (without it the app runs, but
+closing the list quits instead of hiding it in the tray).
+
+```bash
+# Debian/Ubuntu
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
+                 libayatana-appindicator3-dev librsvg2-dev libasound2-dev cmake \
+                 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio
+# Arch
+sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-plugins-good \
+               libayatana-appindicator
+```
 
 ## Checks
 
@@ -21,38 +38,16 @@ in CI. Separate checks need additional services or browser engines:
   opening host ports or using your server data. CI runs this too; it does not
   replace the voice checks on separate networks.
 - In `client`, run `pnpm exec playwright install --with-deps chromium webkit`
-  once, then `pnpm test:browser` for Console layout, panel resizing, interface
-  scaling, keyboard use, voice controls, image previews, file downloads and
-  temporary knock feedback. Download tests simulate browser
-  handoff success and refusal; installed-app downloads still need a real
-  desktop check.
-  Composer tests also cover ordinary typing and Unicode/multiline insertion;
-  browser automation does not exercise Linux dictation drivers. See
-  [Linux input checks](linux-input-checks.md) for the isolated native
-  comparison (`scripts/linux-input-check.sh`) and its optional developer
-  tools. The current AppImage's simulated-typing limitation has a
-  [clipboard workaround](user-guide.md#appimage-troubleshooting).
-  Playwright is a development-only dependency; its browsers are not shipped
-  in Linger. CI tests Chromium and WebKit. These component checks do not replace
-  testing a packaged desktop client. The installer may request administrator
-  access for system libraries on supported Linux distributions. To use an
-  existing Chromium without installing browsers, run
+  once, then `pnpm test:browser` for the browser tests: layout at every
+  interface size, keyboard use, the list, chat, Settings, Search and Media
+  windows, voice controls, downloads and knocks, on fixture pages with the
+  desktop shell and the servers faked. They don't exercise Linux dictation
+  drivers; see [Linux input checks](linux-input-checks.md) for the native
+  comparison (`scripts/linux-input-check.sh`). Playwright is a
+  development-only dependency; its browsers are not shipped in Linger. CI
+  tests Chromium and WebKit. To use an existing Chromium, run
   `LINGER_CHROMIUM_PATH=/usr/bin/chromium pnpm test:browser --project=chromium`.
-- To refresh the [Console screenshots](../screenshots/README.md), run
-  `node scripts/console-screenshots.mjs` from `client`. It starts and stops its
-  own local preview and writes to the root `screenshots/` directory. Set
-  `LINGER_CHROMIUM_PATH=/usr/bin/chromium` to use an existing browser. These
-  captures use the real UI with fictional people and local test responses,
-  not saved accounts or a live server. They do not validate a packaged app.
-  Pass an output folder to retain earlier reviews, for example
-  `node scripts/console-screenshots.mjs ../screenshots/review-04`. The capture
-  also writes `sounds/index.html` and playable WAV samples of the notification
-  cues. Open that page to listen; it never autoplays. Samples are rendered
-  locally from the app's synthesizer, not downloaded sound assets.
-- The [control style guide](style-guide.md) records the approved Console
-  controls and their usage. Run `pnpm dev` from `client`
-  and open `http://localhost:1420/tests/fixtures/styleguide.html` to try its
-  shared buttons and switches in both themes.
+  None of this replaces trying a packaged app on a real desktop.
 
 For a **documentation-only** change, run `scripts/lint-rules.sh` and
 `scripts/version-check.sh`. CI still runs those quick checks, but skips the
@@ -67,9 +62,9 @@ scope; a green last commit must not conceal an untested earlier change.
 For real desktop interaction, `python3 scripts/desktop-check.py` runs three
 isolated Linux clients through live styling, private messages, uploads and a
 browser-downloaded export. It needs additional test tools and built debug
-binaries; see [desktop checks](desktop-checks.md) for setup and the
-[dated results](desktop-check-results.md). It does not replace checks on
-separate computers and networks.
+binaries; see [desktop checks](desktop-checks.md) for setup. Its steps drive
+the previous client (it sets `LINGER_CLASSIC=1`) until the Buddy list gets its
+own (T-1812). It does not replace checks on separate computers and networks.
 
 ## Packaged audio
 
@@ -82,8 +77,8 @@ the media runtime. See [packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
 bundles the current sound player before running it inside each package. The same
-isolated run checks navigation overflow with real Console components and the
-package's shipped CSS, in both themes at all six interface sizes. No test code
+isolated run checks the previous client's layout against the package's shipped
+CSS at all six interface sizes (with `LINGER_CLASSIC=1`, until T-1812). No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
 ## How the desktop app starts on Linux

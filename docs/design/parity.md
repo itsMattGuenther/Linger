@@ -11,7 +11,8 @@ mean "looks right". A PR that proves an item cites its ID (for example
 Sources: SPEC §3–§5, PROTOCOL, ARCHITECTURE, TASKS and `docs/tasks/`, the user
 and host guides, and the old client's code in `client/src/**` and
 `client/src-tauri/src/**`. The design is [`buddy-list.md`](buddy-list.md) plus
-the prototype in `client/prototypes/buddy-list/`. The architecture and test
+the prototype (`client/prototypes/buddy-list/` on the `design/buddy-list`
+branch). The architecture and test
 layers are in [`architecture.md`](architecture.md), and the lessons every item
 must respect are in [`lessons.md`](lessons.md).
 
@@ -523,7 +524,7 @@ there or where the design puts it.
 | A11Y-4 | States said in words for screen readers: new activity, presence, talking, muted, "knocked". Color and shape are never the only signal. | throughout | Kit rule | F | ✅ (next-list.spec.ts, next-knocks.spec.ts, next-chat.spec.ts) |
 | A11Y-5 | Hit targets of at least 24px. | style guide | Kit rule | G | ✅ (kit.spec.ts) |
 | A11Y-6 | Forced colors: speaking and selection use system colors. | `voice.css` | Kit rule | F (emulated) | ✅ presence, the selected row, the showing tab and section, a switch that's on and who's talking keep system colors (kit.spec.ts, emulated) |
-| A11Y-7 | Enlarged text (200%) removes no content or function. | `console-ui-review.md` | Same | G (every scale) | 🟡 scale works; nothing checked at 200% |
+| A11Y-7 | Enlarged text (200%) removes no content or function. | T-909 (Console review) | Same | G (every scale) | 🟡 scale works; nothing checked at 200% |
 
 ## DESK — desktop and packaging
 

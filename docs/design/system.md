@@ -1,12 +1,13 @@
 # The design system for the Buddy list client
 
-This is the design system of the new client being built toward the Buddy list
-design (#198). The design itself is in [`buddy-list.md`](buddy-list.md). This
-page covers the parts it is built from, the values they use, and the rules that
-keep them consistent.
+This is Linger's design system: the Buddy list client (#198), the app from
+0.4.0. The design itself is in [`buddy-list.md`](buddy-list.md). This page
+covers the parts it is built from, the values they use, and the rules that keep
+them consistent. SPEC §5 keeps only the rules that are product decisions and
+points here for the rest.
 
-It applies to code under `client/src/next/`. The current client still follows
-SPEC §5 ("Console") until the switch.
+It applies to code under `client/src/next/`. The previous client, kept one
+release behind `LINGER_CLASSIC=1`, followed the old "Console" rules.
 
 ## Where it lives
 

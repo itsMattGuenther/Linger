@@ -67,6 +67,6 @@ Use [the 0.3.6 checklist](releases/0.3.6.md#checks-on-installed-clients) for thi
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
 
-The separate-computer/network and physical-audio checks in
-[release readiness](release-readiness.md) remain open until their stated evidence
-exists. Passing these automated checks does not close them.
+The real-world checks in [release-checks.md](tasks/release-checks.md) are
+closed only by people using the published app on real computers and networks.
+Passing these automated checks does not close them.

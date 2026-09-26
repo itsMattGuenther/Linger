@@ -1,6 +1,6 @@
 /**
  * The icon set: every glyph the new client draws, from the approved prototype
- * (`client/prototypes/buddy-list/app.js`), on a 16×16 grid in `currentColor`.
+ * (`client/prototypes/buddy-list/app.js` on the `design/buddy-list` branch), on a 16×16 grid in `currentColor`.
  *
  * Generated once from the prototype and then owned here. Add a glyph by drawing
  * it on the same grid with the same stroke weights (1.3–1.6), then list it in

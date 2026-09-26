@@ -1,15 +1,14 @@
 # The Buddy list client: architecture
 
-**Status:** accepted plan for M15 (#198), written 2026-09-25. The design is
-`buddy-list.md`, the visual rules are `system.md`, the gate for switching is
+**Status:** built as M15 (#198), and the app from 0.4.0. The design is
+`buddy-list.md`, the visual rules are `system.md`, what it had to match is
 `parity.md`, and the lessons it must not repeat are `lessons.md`, all in this
 folder.
 
-The Buddy list client replaces today's client (SPEC §3, §5 "Console"). It is
-built next to it, in the same repository, and ships hidden until it can do
-everything the old one does. This document says where the code goes, how the
-windows share one connection, how the pieces are tested, and in what order they
-are built.
+The Buddy list client replaced the previous client (the "Console" design),
+which stays one release behind `LINGER_CLASSIC=1` and is then deleted. This
+document says where the code goes, how the windows share one connection, and
+how the pieces are tested.
 
 ## Goals
 
@@ -37,8 +36,7 @@ Not in M15:
 | `client/src/next/core/` | New logic with no UI: window roles, the catch-up protocol, borrowed tokens, intents, view models. Pure where possible, and unit-tested. |
 | `client/src/next/app/` | Screens: the list window, the chat window (tabs), Settings, the person card, the new-message picker. |
 | `client/src/lib/`, `client/src/generated/`, `client/src/fonts/` | **The shared core, reused rather than copied:** the REST client, sessions, the gateway store and its pure `apply`, IPC, sounds, updates, name styling, the palette, and the wire types from `linger-core`. |
-| Everything else in `client/src/` | The old client. Frozen: bug fixes only until the switch, then deleted. |
-| `client/prototypes/buddy-list/` | The prototype. Reference only, never imported. |
+| Everything else in `client/src/` | The previous client, kept one release behind `LINGER_CLASSIC=1`: bug fixes only, then deleted. |
 
 `client/src/next/kit/discipline.test.ts` fails the build if new-client code
 imports the old client's UI, or if its CSS uses raw colors or magic sizes.
