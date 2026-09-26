@@ -166,6 +166,13 @@ test("the voice strip shows whose microphone is off, as its glyph", async ({ pag
   await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveCount(0);
 });
 
+test("you light up in the voice strip while you talk, as others do (#215)", async ({ page }) => {
+  await open(page, "room=r-general&talking");
+  const here = page.getByRole("list", { name: "In voice here" });
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator("[data-kit='Chip']")).toHaveAttribute("data-active", "yes");
+  await expect(page.locator(".nx-strip [data-kit='VoiceGlyph']")).toHaveAttribute("data-speaking", "yes");
+});
+
 test("a message is drawn in its sender's message face, and only ever a sans one", async ({ page }) => {
   await open(page);
   const text = page.locator(".nx-msg").filter({ hasText: "A bit of Khruangbin" }).locator(".nx-text");

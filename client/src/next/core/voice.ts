@@ -83,7 +83,12 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
   };
 }
 
-/** Who is talking, by user id: known only while you're in voice, from the audio you hear. */
+/**
+ * Who is talking, by user id: known only while you're in voice, from the
+ * audio you hear, and you while your microphone hears you (it goes quiet when
+ * you mute). Every place that shows who's talking reads this, so you light up
+ * in the chat window as in the voice bar (#215).
+ */
 export function talkingNow(state: GatewayState): ReadonlySet<string> {
   const mine = state.myVoice;
   if (mine === null) return new Set();
@@ -93,6 +98,7 @@ export function talkingNow(state: GatewayState): ReadonlySet<string> {
     .filter(([, on]) => on)
     .map(([session]) => bySession.get(session))
     .filter((id): id is string => id !== undefined);
+  if (mine.talking && state.me) ids.push(state.me.id);
   return new Set(ids);
 }
 
