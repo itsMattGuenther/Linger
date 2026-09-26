@@ -51,6 +51,11 @@ interface ListShared {
    */
   notices?: ReactNode;
   /**
+   * Knocks on your door so far (#211): each new one rocks the whole list,
+   * title bar and all, as the prototype's window did. 0 or none: still.
+   */
+  rock?: number;
+  /**
    * Standing lines that stay while they're true (decision 1): connection
    * trouble, the keyring, a new version. Between the list and the voice bar.
    */
@@ -76,7 +81,9 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, notes, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch } = props;
+  const { onClose, onSettings, notices, notes, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock } = props;
+  // Two names for one rock, taken in turn, so a knock during a rock starts it over.
+  const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
   const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
   const bottom = (
     <>
@@ -110,7 +117,7 @@ export function ListView(props: ListViewProps) {
     const only: (OneServer | ServerListing) | undefined = servers === undefined ? props : servers[0];
     const name = only === undefined ? "Linger" : "serverName" in only ? only.serverName : only.name;
     return (
-      <div className="nx-list" data-screen="list">
+      <div className="nx-list" data-screen="list" data-rock={rocking}>
         <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
           {name}
         </TitleBar>
@@ -144,7 +151,7 @@ export function ListView(props: ListViewProps) {
     setChosen((held) => new Map(held).set(id, !(held.get(id) ?? (folded ? folded.includes(id) : index > 0))));
 
   return (
-    <div className="nx-list" data-screen="list" data-servers="several">
+    <div className="nx-list" data-screen="list" data-servers="several" data-rock={rocking}>
       <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
         Linger
       </TitleBar>

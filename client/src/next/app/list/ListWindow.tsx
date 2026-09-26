@@ -645,6 +645,17 @@ function Servers({
     [ordered, states, several, infos],
   );
 
+  // Each knock that arrives while the list is open rocks it once (#211). The
+  // ones already here when it opened are old news.
+  const [rock, setRock] = useState(0);
+  const knocksSeen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const keys = knocks.map((card) => `${card.server} ${card.id}`);
+    const seen = knocksSeen.current;
+    knocksSeen.current = new Set(keys);
+    if (seen !== null && keys.some((key) => !seen.has(key))) setRock((count) => count + 1);
+  }, [knocks]);
+
   return (
     <>
       {signedIn.map((session) => (
@@ -671,6 +682,7 @@ function Servers({
         onMedia={() => shell.tool("media")}
         onSearch={() => shell.tool("search")}
         notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
+        rock={rock}
         notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />

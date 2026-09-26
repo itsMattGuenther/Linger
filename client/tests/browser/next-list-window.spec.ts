@@ -125,6 +125,38 @@ test("a knock from any server lands above the list's bottom and names the server
   await expect(card).toContainText("Ashen Lanterns");
 });
 
+test("a knock on your door rocks the whole list, a second starts it over, and reduced motion keeps it still (#211)", async ({ page }) => {
+  await open(page);
+  const list = page.locator("[data-screen='list']");
+  await expect(list).not.toHaveAttribute("data-rock");
+  const knock = (from: string) =>
+    page.evaluate(([server, who]) => window.core?.frame(server, { op: "knock", d: { from_user_id: who } } as never), [GUILD, from] as const);
+  await knock("g-rui");
+  await expect(list).toHaveAttribute("data-rock", "a");
+  expect(await list.evaluate((node) => getComputedStyle(node).animationName)).toBe("nx-list-rock-a");
+  // It moves: a tenth of the way in, the list is off to the left.
+  const leftAt = (ms: number) =>
+    list.evaluate((node, at) => {
+      const [rock] = node.getAnimations();
+      if (!rock) return null;
+      rock.pause();
+      rock.currentTime = at;
+      return new DOMMatrix(getComputedStyle(node).transform).m41;
+    }, ms);
+  expect(await leftAt(70)).toBeLessThan(-2);
+  await knock("g-rui");
+  await expect(list).toHaveAttribute("data-rock", "b");
+  expect(await list.evaluate((node) => getComputedStyle(node).animationName)).toBe("nx-list-rock-b");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await knock("g-rui");
+  await expect(list).toHaveAttribute("data-rock", "a");
+  expect(await list.evaluate((node) => getComputedStyle(node).animationDuration)).toBe("0.001s");
+  expect(await leftAt(0.1) ?? 0).toBe(0);
+  // The card still says who knocked.
+  await expect(page.locator("[data-screen='knocks'] [data-kit='Notice']").first()).toContainText("knocked.");
+});
+
 test("opening a room asks the shell for the chat window, on that server", async ({ page }) => {
   await open(page);
   await toggle(page, "Casa da Ribeira").click();
