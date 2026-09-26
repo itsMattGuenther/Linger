@@ -211,6 +211,9 @@
   --menu-w: 200px;
   --emoji-grid: 8; /* columns in the composer's emoji panel */
 
+  /* Search and media (docs/design/system.md, "Search and media"). */
+  --media-tile: 152px; /* the narrowest a media tile gets; the grid fits as many as it can */
+
   /* Chrome. */
   --titlebar: 40px;
   --tab: 32px;

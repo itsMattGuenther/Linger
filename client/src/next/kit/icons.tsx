@@ -54,6 +54,7 @@ export const ICON_NAMES = [
   "go",
   "intoTabs",
   "smile",
+  "download",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -285,6 +286,12 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
       <path d="M5.4 9.4c.6 1 1.5 1.6 2.6 1.6s2-.6 2.6-1.6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
       <circle cx="6" cy="6.6" r=".9" fill="currentColor" />
       <circle cx="10" cy="6.6" r=".9" fill="currentColor" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M8 2.5v7.5M4.8 7l3.2 3.2L11.2 7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 12.8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </>
   ),
 };

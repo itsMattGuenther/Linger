@@ -11,7 +11,11 @@ export interface TextFieldProps {
   onChange: (value: string) => void;
   placeholder?: string;
   size?: ControlSize;
-  type?: "text" | "search" | "password";
+  /** `date` is the system's own day picker, giving back `YYYY-MM-DD` (or "" for none). */
+  type?: "text" | "search" | "password" | "date";
+  /** For a date: the earliest and latest days it takes, as `YYYY-MM-DD`. */
+  min?: string;
+  max?: string;
   /** A glyph before the text, like the search lens. */
   icon?: IconName;
   /** Statuses and away messages are written in italic. */
@@ -52,6 +56,8 @@ export function TextField({
   hint,
   error,
   maxLength,
+  min,
+  max,
   autoFocus,
   onEnter,
 }: TextFieldProps) {
@@ -89,10 +95,13 @@ export function TextField({
           readOnly={readOnly}
           disabled={disabled}
           maxLength={maxLength}
+          min={min}
+          max={max}
           autoFocus={autoFocus}
           aria-invalid={error ? true : undefined}
           aria-describedby={helpId}
           data-italic={italic ? "yes" : undefined}
+          data-empty={value === "" ? "yes" : undefined}
           data-mono={mono ? "yes" : undefined}
           autoCapitalize={literal ? "none" : undefined}
           autoCorrect={literal ? "off" : undefined}

@@ -41,7 +41,7 @@ import {
   PAGE,
   snippetText,
   TYPING_PAUSE_MS,
-} from "./search";
+} from "../lib/search";
 import "./search.css";
 
 export default function SearchPanel({

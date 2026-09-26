@@ -111,3 +111,25 @@
 .k-field-help[data-error="yes"] {
   color: var(--text-danger);
 }
+
+/* A date field: the system's own day picker, its digits even, its button a
+   quiet icon at the end of the box. */
+.k-field-input[type="date"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* An empty date shows its format (mm/dd/yyyy) as the system draws it: in
+   the placeholder's color, so it doesn't read as a date that's been set. */
+.k-field-input[type="date"][data-empty="yes"]::-webkit-datetime-edit {
+  color: var(--text-muted);
+}
+
+.k-field-input::-webkit-calendar-picker-indicator {
+  margin: 0;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.k-field-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}

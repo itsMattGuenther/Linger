@@ -842,7 +842,11 @@ Rules for this milestone:
   window. Built and wired (Ctrl+, opens it) and tested against a faked owner
   and server; not yet tried in the desktop app. Evening warmth waits for an
   evening version of the new colors; a light theme waits on decision 2.
-- ⬜ **T-1807 · Media, search and uploads.**
+- 🟡 **T-1807 · Media, search and uploads.** The search and media views are
+  built as panes, from kit parts, with their own fixture pages and specs
+  (`app/search/`, `app/media/`), including "Every server", which merges all
+  your servers' results. They aren't in a window yet: where they open waits
+  on decision 15.
 - 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
   remembered, and the tray. Pop-out and back are built (with the draft going
   along), and so is switching between tabs and windows (Settings → Windows).

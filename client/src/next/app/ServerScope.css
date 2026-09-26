@@ -1,0 +1,32 @@
+/* The server picker: the bars in the lead column, then the drop-down. */
+.nx-scope {
+  display: grid;
+  grid-template-columns: var(--marker-slot) minmax(0, 1fr);
+  column-gap: var(--marker-gap);
+  align-items: center;
+  min-width: 0;
+}
+
+.nx-scope-marks {
+  display: flex;
+  justify-content: center;
+  gap: 1px;
+}
+
+.nx-scope-marks i,
+.nx-scope-mark {
+  flex: none;
+  width: var(--space-1);
+  height: var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--server);
+}
+
+.nx-scope-mark {
+  display: inline-block;
+}
+
+.nx-scope-pick {
+  display: block;
+  min-width: 0;
+}

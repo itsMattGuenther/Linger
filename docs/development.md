@@ -156,10 +156,19 @@ and open any of these pages:
 - `/tests/fixtures/next-settings.html`: the Settings window on the same
   evening. Add `?section=invites` (any section) to open on it, `?member` to
   lose Hosting, `?servers` for three servers, `?fail` to have every save
-  refused, `?away`, `?long`, and `?devices=none` or `?devices=looking`.
+  refused, `?away`, `?long`, and `?devices=none` or `?devices=looking`;
+- `/tests/fixtures/next-search.html` and `/tests/fixtures/next-media.html`:
+  search and the media collection on the same evening, each a pane in a box
+  the page gives it (`?w=340` for a narrow one), with a fake server in the
+  page (`tests/fixtures/next/finds.ts`). Add `?servers` for three servers
+  (`&start=guild` to open from one), `?loading`, `?fail`, `?failsecond`,
+  `?many` for paging and `?long`. Search also takes `?slow`, `?failguild` and
+  `?archived`; media takes `?empty`, `?starfail`, `?slowstar` and `?lazy`.
+  The full lists are at the top of each page's `.tsx`.
 
 Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
-`next-servers.spec.ts`, `next-chat.spec.ts`, `next-settings.spec.ts`) measure the rules in
+`next-servers.spec.ts`, `next-chat.spec.ts`, `next-settings.spec.ts`,
+`next-search.spec.ts`, `next-media.spec.ts`) measure the rules in
 `docs/design/system.md`;
 `next-chat-window.spec.ts` checks what the chat window asks of the list window
 and the server.

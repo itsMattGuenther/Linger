@@ -249,6 +249,7 @@ function Gallery() {
   const [shownOn, setShownOn] = useState({ home: true, guild: false });
   const [mode, setMode] = useState<"tabs" | "windows">("tabs");
   const [field, setField] = useState("");
+  const [day, setDay] = useState("2026-09-01");
   const [status, setStatus] = useState("fixing the porch light (the real one)");
   const [open, setOpen] = useState({ offline: false, away: true, rooms: true });
   const [swatch, setSwatch] = useState<string>("azure");
@@ -564,6 +565,7 @@ function Gallery() {
           <TextField label="Invite link" value="https://linger.example/invite/7f3k" onChange={() => {}} readOnly mono />
           <TextField label="Password" value="short" onChange={() => {}} type="password" error="At least 12 characters." />
           <TextField label="Say something" hideLabel value="" onChange={() => {}} placeholder="Say something in #general" />
+          <TextField label="Shared since" value={day} onChange={setDay} type="date" max="2026-09-25" />
         </div>
       </Section>
 

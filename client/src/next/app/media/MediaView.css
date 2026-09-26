@@ -1,0 +1,315 @@
+/*
+ * The media collection, as a pane that fills whatever holds it (340 to 780
+ * wide and more): the server, the kinds and the other filters at the top, a
+ * line that says how things are going, then the grid, which scrolls.
+ */
+.nx-media {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-window);
+  color: var(--text-secondary);
+  container-type: inline-size;
+}
+
+.nx-media-top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  padding: var(--space-3) var(--space-4) var(--space-1);
+}
+
+.nx-media-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* Who and when, on one row while there's room: the person, then the dates. */
+.nx-media-narrow {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 3fr);
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.nx-media-who {
+  min-width: 0;
+}
+
+/* Every server at once: one plain sentence in the person's place, as tall. */
+.nx-media-who-off {
+  height: var(--control-md);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--control-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-width: 34em) {
+  .nx-media-narrow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-media-who {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Always there and as tall as a small button, so a line coming and going,
+   or Clear filters, never moves the grid. */
+.nx-media-status {
+  position: relative;
+  z-index: var(--z-raised);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  padding: 0 var(--space-4);
+}
+
+.nx-media-line {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-media-line[data-problem] {
+  color: var(--text-danger);
+}
+
+/* Tiles scrolled up under the line fade rather than being cut mid-letter. */
+.nx-media-status::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: var(--space-2-5);
+  background: linear-gradient(180deg, var(--surface-window), transparent);
+  pointer-events: none;
+}
+
+.nx-media-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2-5) var(--space-2-5) var(--space-4);
+}
+
+.nx-media-empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.nx-media-empty-title {
+  margin: 0 0 var(--space-1-5);
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+
+.nx-media-empty-line {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-control);
+  line-height: var(--leading-body);
+}
+
+.nx-media-more {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-3);
+}
+
+/* --- the grid --------------------------------------------------------------
+
+   Tiles of one size: a 4:3 face, then a 24px name line with the tile's
+   buttons at its end, then 16px lines for who and where, when and how big,
+   and the server when several are mixed. Every line is fixed, so the buttons
+   sit on the name line by arithmetic, not by measuring. */
+.nx-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--media-tile), 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  --tile-lines: 2;
+}
+
+.nx-media-grid[data-mixed] {
+  --tile-lines: 3;
+}
+
+.nx-tile {
+  position: relative;
+  min-width: 0;
+}
+
+.nx-tile[data-actions="1"] {
+  --tile-reserve: calc(var(--control-sm) + var(--space-1));
+}
+
+.nx-tile[data-actions="2"] {
+  --tile-reserve: calc(2 * var(--control-sm) + 2 * var(--space-1));
+}
+
+.nx-tile-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--space-1-5);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.nx-tile-open:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.nx-tile-open:disabled {
+  opacity: 0.5;
+}
+
+.nx-tile-face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--icon-muted);
+}
+
+/* A picture shows whole, never cropped, in a box that had its size before
+   the bytes arrived. */
+.nx-tile-face > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nx-tile-face > .nx-tile-favicon {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+}
+
+.nx-tile-length {
+  position: absolute;
+  right: var(--space-1-5);
+  bottom: var(--space-1-5);
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-xs);
+  background: var(--surface-popover);
+  color: var(--text-secondary);
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+}
+
+.nx-tile-domain,
+.nx-tile-word {
+  display: block;
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-tile-domain {
+  font-family: var(--font-mono);
+}
+
+.nx-tile-title {
+  display: block;
+  height: var(--control-sm);
+  margin-top: var(--space-1-5);
+  padding-right: var(--tile-reserve, 0);
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  line-height: var(--control-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--line-meta);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  white-space: nowrap;
+}
+
+/* The name gives way last, after the room. */
+.nx-tile-who {
+  display: block;
+  flex: none;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-tile-where,
+.nx-tile-date,
+.nx-tile-server {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-tile-where::before,
+.nx-tile-size::before {
+  content: "· ";
+  color: var(--icon-faint);
+}
+
+.nx-tile-size {
+  flex: none;
+}
+
+/* A DM is named by its people; a message mark says it's a DM. */
+.nx-tile-dm {
+  display: inline-flex;
+  margin-right: var(--space-1);
+  color: var(--icon-muted);
+  vertical-align: middle;
+}
+
+/* The buttons sit on the name line: up from the tile's bottom by its
+   padding and the lines under the name. */
+.nx-tile-actions {
+  position: absolute;
+  right: var(--space-1-5);
+  bottom: calc(var(--space-1-5) + var(--tile-lines) * var(--line-meta));
+  display: flex;
+  gap: var(--space-1);
+}

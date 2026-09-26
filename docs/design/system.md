@@ -117,6 +117,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
 | Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) · `--status-image-w` 400 · `--status-image-h` 200 (a status picture) |
+| Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
@@ -149,7 +150,7 @@ Each component takes typed props for its states, sizes itself, and exposes a
 
 ### Icon
 
-One glyph (43 of them, typed as `IconName`) in a fixed square box of 12, 16 or
+One glyph (46 of them, typed as `IconName`) in a fixed square box of 12, 16 or
 20px, centered, in `currentColor`. Icons are decoration (`aria-hidden`); the
 control around them carries the name. **Don't** size an icon by hand; pick a
 box.
@@ -341,6 +342,9 @@ or an error in words underneath.
 
 - **Options:** a leading icon; `italic` for statuses; `mono` for codes;
   `readOnly` (dashed); `error`, which marks the field invalid and says why.
+- **`type="date"`** is the system's own day picker, with `min` and `max`. It
+  gives back `YYYY-MM-DD`, or nothing. Empty, its format (mm/dd/yyyy) is drawn
+  in the placeholder's color, so it doesn't read as a date that's been set.
 - **Focus:** the whole box is the target and draws the focus: the lamp edge
   plus a soft ring.
 - **`onEnter`** submits on Enter.
