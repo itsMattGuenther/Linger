@@ -54,24 +54,31 @@ const desktop = fakeDesktop({
   ownerState: {
     ...night,
     // In voice, the server lists your own seat too.
-    voice: query.has("ptt")
-      ? { ...night.voice, "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: true, deafened: false } }] }
-      : night.voice,
-    myVoice: query.has("ptt")
-      ? {
-          roomId: "r-general",
-          muted: true,
-          deafened: false,
-          mutedBeforeDeafen: false,
-          pushToTalk: true,
-          moved: false,
-          audio: "sending" as const,
-          peers: {},
-          speaking: {},
-          talking: false,
-          volumes: {},
-        }
-      : null,
+    // `?ptt`: in voice in #general with push-to-talk, held quiet. `?talking`:
+    // in voice there with an open microphone, and talking.
+    voice:
+      query.has("ptt") || query.has("talking")
+        ? {
+            ...night.voice,
+            "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: query.has("ptt"), deafened: false } }],
+          }
+        : night.voice,
+    myVoice:
+      query.has("ptt") || query.has("talking")
+        ? {
+            roomId: "r-general",
+            muted: query.has("ptt"),
+            deafened: false,
+            mutedBeforeDeafen: false,
+            pushToTalk: query.has("ptt"),
+            moved: false,
+            audio: "sending" as const,
+            peers: {},
+            speaking: {},
+            talking: query.has("talking"),
+            volumes: {},
+          }
+        : null,
   },
 });
 

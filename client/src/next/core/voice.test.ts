@@ -114,6 +114,12 @@ describe("the voice bar's contents", () => {
     expect(voiceModel(inVoice(), new Set())?.line).toBeNull();
   });
 
+  it("counts you as talking while your microphone hears you, for every place that shows it (#215)", () => {
+    const state = inVoice({ talking: true, speaking: { "s-eli": true } });
+    expect(talkingNow(state)).toEqual(new Set([state.me?.id, "u-eli"]));
+    expect(talkingNow(inVoice({ talking: false, speaking: { "s-eli": true } }))).toEqual(new Set(["u-eli"]));
+  });
+
   it("knows who's talking only while you're in voice", () => {
     expect(talkingNow(evening(serverState(SERVER)))).toEqual(new Set());
   });
