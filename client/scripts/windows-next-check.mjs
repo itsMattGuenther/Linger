@@ -70,6 +70,25 @@ try {
   await writeFile(resolve(output, "result.json"), JSON.stringify(result, null, 2));
   assert.equal(result.status, "passed", JSON.stringify(result));
   console.log("PASS the Buddy list starts in packaged WebView2:", JSON.stringify(result.checks));
+
+  // The windows the list opens must come up and draw. 0.4.0 built them from
+  // synchronous commands, which deadlocks WebView2: a white window that never
+  // answers. Asked for exactly as the list asks, then looked at.
+  for (const [name, command, args, marker] of [
+    ["Settings", "next_open_settings", { section: null }, "window=settings"],
+    ["the chat window", "next_open_chat", { server: "https://linger.invalid", room: "r-general", message: null }, "window=chat"],
+  ]) {
+    await page.evaluate(([cmd, payload]) => window.__TAURI_INTERNALS__.invoke(cmd, payload), [command, args]);
+    let opened;
+    for (let attempt = 0; attempt < 80 && !opened; attempt++) {
+      opened = context.pages().find((candidate) => candidate.url().includes(marker));
+      if (!opened) await new Promise((settle) => setTimeout(settle, 250));
+    }
+    assert(opened, `${name} never opened a page`);
+    await opened.waitForFunction(() => document.readyState === "complete" && (document.body?.innerText ?? "").trim().length > 0, undefined, { timeout: 20000 });
+    await opened.screenshot({ path: resolve(output, `${command}.png`) });
+    console.log(`PASS ${name} opens and draws: ${(await opened.evaluate(() => document.body.innerText)).slice(0, 60).replace(/\s+/g, " ")}`);
+  }
 } finally {
   if (browser) await browser.close();
   if (app?.pid) {
