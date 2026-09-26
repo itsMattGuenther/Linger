@@ -835,11 +835,13 @@ A server with `LINGER_VOICE_ADDRESS` set **forwards voice**: each client sends i
 once, to the server, and the server passes it on to everyone else in the room. The mesh
 above stays for clients and servers that don't.
 
-- **Who is forwarded.** A client that sends `forwarding: true` in `voice.join`, on a
-  server that forwards, is forwarded; `voice.state` marks it `forwarded: true`. Anybody
-  else is on the mesh. The two can't hear each other, so a mesh client skips forwarded
-  peers and a forwarded client builds no mesh at all. Old clients never say they can
-  forward, and old servers never mark anybody, so both read as the mesh.
+- **Who is forwarded.** A room is forwarded while everybody in voice there sent
+  `forwarding: true` in `voice.join`, on a server that forwards; `voice.state` marks each
+  of them `forwarded: true`. One client that didn't (an older app) puts the whole room on
+  the mesh, and when it leaves, forwarding comes back with a fresh `voice.offer` each. A
+  forwarded client and a mesh client can't hear each other, so a room is never both. Old
+  clients never say they can forward, and old servers never mark anybody, so both read
+  as the mesh.
 - **The server makes every offer; the client only answers.** On joining, the server
   sends `voice.offer`: one m-line for the client to send its microphone on, and one
   receiving m-line per other forwarded person in the room. `tracks` names whose voice each

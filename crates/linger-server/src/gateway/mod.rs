@@ -70,7 +70,10 @@ struct VoiceSeat {
     room_id: RoomId,
     user_id: UserId,
     controls: Option<VoiceControls>,
-    /// Its voice goes through the forwarding server rather than the mesh.
+    /// Its client can take voice through the forwarding server (#197).
+    can_forward: bool,
+    /// Its voice goes through the forwarding server rather than the mesh:
+    /// true while everybody in the room can forward. See `settle_forwarding`.
     forwarded: bool,
 }
 
@@ -423,9 +426,7 @@ impl Gateway {
         forwarding: bool,
     ) -> bool {
         let controls = controls.map(VoiceControls::normalized);
-        // A client that can forward, on a server that does: its voice goes
-        // through the server. Anybody else stays on the mesh.
-        let forwarded = forwarding && self.forwards_voice();
+        let can_forward = forwarding && self.forwards_voice();
         if let Some(mut seat) = self.voice.get_mut(session_id) {
             if seat.value().room_id == room_id {
                 let changed = controls.is_some() && controls != seat.controls;
@@ -442,7 +443,15 @@ impl Gateway {
         // Counted before the seat is taken, and only for a room this session is
         // not already in — otherwise re-joining the room you are in could be
         // refused by your own seat.
-        let ceiling = if forwarded {
+        // Forwarded rooms hold more; a room with an older client in it is a
+        // mesh, and holds what a mesh does.
+        let all_forward = can_forward
+            && self
+                .voice
+                .iter()
+                .filter(|seat| seat.value().room_id == room_id)
+                .all(|seat| seat.value().can_forward);
+        let ceiling = if all_forward {
             MAX_FORWARDED_VOICE_PEERS
         } else {
             MAX_VOICE_PEERS
@@ -457,17 +466,49 @@ impl Gateway {
                 room_id,
                 user_id,
                 controls,
-                forwarded,
+                can_forward,
+                forwarded: false,
             },
         );
-        if let (true, Some(sfu)) = (forwarded, self.forwarding.get()) {
-            sfu.join(session_id, &room_id.to_string());
-        }
+        self.settle_forwarding(room_id);
         if let Some(previous) = left {
+            self.settle_forwarding(previous);
             self.announce_voice(previous);
         }
         self.announce_voice(room_id);
         true
+    }
+
+    /// Forward a room's voice while everybody in it can, and put it all on the
+    /// mesh while anybody can't (#197). A forwarded client and a mesh client
+    /// can't hear each other, so a room is one or the other, never both: an
+    /// older app joining turns the room to the mesh for everybody, and its
+    /// leaving turns forwarding back on. Called before announcing, so the
+    /// `voice.state` that follows says who is forwarded now.
+    fn settle_forwarding(&self, room_id: RoomId) {
+        let Some(sfu) = self.forwarding.get() else {
+            return;
+        };
+        let all = self
+            .voice
+            .iter()
+            .filter(|seat| seat.value().room_id == room_id)
+            .all(|seat| seat.value().can_forward);
+        let mut changed = Vec::new();
+        for mut seat in self.voice.iter_mut() {
+            if seat.room_id == room_id && seat.forwarded != all {
+                seat.forwarded = all;
+                changed.push(seat.key().clone());
+            }
+        }
+        let room = room_id.to_string();
+        for session in changed {
+            if all {
+                sfu.join(&session, &room);
+            } else {
+                sfu.leave(&session);
+            }
+        }
     }
 
     /// A session's answer to the forwarding server's latest offer (#197).
@@ -499,6 +540,7 @@ impl Gateway {
     /// Leave voice and tell the room. The ordinary way out.
     pub fn voice_part(&self, session_id: &str) {
         if let Some(room_id) = self.voice_leave(session_id) {
+            self.settle_forwarding(room_id);
             self.announce_voice(room_id);
         }
     }

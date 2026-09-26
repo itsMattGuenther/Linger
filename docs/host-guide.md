@@ -259,8 +259,8 @@ on to the others, up to 25 in a room:
 
 Your server then passes voice along. It keeps none of it and plays none of it,
 but it is on your machine, so you *could* listen, the same way you could read
-messages. People on older versions of the app stay on the old way and can't
-hear people on the new one until they update.
+messages. While anybody in a voice room is on an older version of the app,
+that room uses the old way, so everybody can still hear everybody.
 
 ## Voice between different networks
 

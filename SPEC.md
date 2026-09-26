@@ -559,7 +559,8 @@ the host's server, which passes it on to everyone else in the room. It is part o
 server a host already runs (one UDP port more), so there is nothing new to install, and
 it is what lets a raid night of twenty people talk at once: a full mesh, where every
 laptop sends to every other, stops working somewhere past ten. A server that doesn't
-forward, and anybody on a client from before forwarding, stays on the mesh, up to eight.
+forward stays on the mesh, up to eight, and so does a room while anybody in it is on an
+app from before forwarding: everybody in a room can always hear everybody.
 
 **Voice follows the room's membership.** A voice room inside a DM is as private as the
 DM (§4.13) — who is in voice is a fact about a room, so it reaches the room's members

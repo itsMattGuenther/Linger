@@ -313,24 +313,39 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
 
     /// The server's picture of who is in voice. Reconcile ours with it.
     pub async fn on_state(&self, room_id: RoomId, peers: &[VoicePeer]) {
-        let (me, plan) = {
+        // Forwarded or mesh first (#197): the server forwards a room's voice
+        // while everybody in it can, and puts it all on the mesh otherwise.
+        let (forwarded_now, was_forwarded) = {
             let inner = self.inner.lock().await;
             // A state for a room we are not in is somebody else's business —
             // we are told about every room we can see, not only ours.
             if inner.room != Some(room_id) {
                 return;
             }
-            let Some(me) = inner.me.clone() else { return };
-            // The server forwards our voice: no mesh at all, and any we held
-            // from before it said so goes (#197).
-            if peers
-                .iter()
-                .any(|peer| peer.session_id == me && peer.forwarded == Some(true))
-            {
-                drop(inner);
-                self.become_forwarded().await;
+            let Some(me) = inner.me.as_deref() else {
                 return;
-            }
+            };
+            (
+                peers
+                    .iter()
+                    .any(|peer| peer.session_id == me && peer.forwarded == Some(true)),
+                inner.forwarded || inner.forward.is_some(),
+            )
+        };
+        if forwarded_now {
+            // No mesh at all, and any we held from before it said so goes.
+            self.become_forwarded().await;
+            return;
+        }
+        if was_forwarded {
+            // Back on the mesh (an older app joined): the forwarding
+            // connection goes first.
+            self.become_mesh().await;
+        }
+
+        let (me, plan) = {
+            let inner = self.inner.lock().await;
+            let Some(me) = inner.me.clone() else { return };
             // On the mesh, a forwarded peer is out of reach: its voice goes
             // through the server, which isn't passing ours.
             let reachable: Vec<VoicePeer> = peers
@@ -386,6 +401,29 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
                 sink.forget(&id).await;
             }
             self.watcher.peer_state(&id, "closed");
+        }
+    }
+
+    /// The room went back to the mesh: close the connection to the
+    /// forwarding server and forget whose voice it carried.
+    async fn become_mesh(&self) {
+        let (forward, tracks, sink) = {
+            let mut inner = self.inner.lock().await;
+            inner.forwarded = false;
+            (
+                inner.forward.take(),
+                std::mem::take(&mut inner.tracks),
+                inner.devices.as_ref().map(|d| Arc::clone(&d.sink)),
+            )
+        };
+        if let Some(forward) = forward {
+            let _ = forward.conn.close().await;
+        }
+        for session in tracks.into_values() {
+            if let Some(sink) = &sink {
+                sink.forget(&session).await;
+            }
+            self.watcher.peer_state(&session, "closed");
         }
     }
 

@@ -257,3 +257,65 @@ async fn a_tone_crosses_the_forwarding_server() {
         b_log.0.lock().unwrap()
     );
 }
+
+/// The room goes back to the mesh when an older app joins it: the engine lets
+/// its forwarding connection go and builds the mesh instead, and the next
+/// forwarded state drops the mesh again.
+#[tokio::test(flavor = "multi_thread")]
+async fn back_to_the_mesh_and_forwarded_again() {
+    let (sender, offers) = std_mpsc::channel();
+    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let sfu = Sfu::start(local, local, move |offer: Offer| {
+        let _ = sender.send(offer);
+    })
+    .expect("the forwarding server starts");
+    let room = RoomId::new();
+    let (a, mut a_rx, a_log) = engine(A).await;
+    a.join(
+        room,
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::new(Discard),
+        },
+        Vec::new(),
+    )
+    .await;
+    a.on_state(room, &forwarded(&[A])).await;
+    for _ in 0..40 {
+        route(&sfu, &offers, room, &mut [(A, &a, &mut a_rx)]).await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(a.is_forwarded().await);
+
+    // An older app, "ccc", joins: everybody is on the mesh now.
+    let mut mesh = forwarded(&[A, "ccc-session"]);
+    for peer in &mut mesh {
+        peer.forwarded = None;
+    }
+    a.on_state(room, &mesh).await;
+    assert!(!a.is_forwarded().await, "still forwarded in a mesh room");
+    assert!(
+        !a.is_forward_connected().await,
+        "the forwarding connection stayed open"
+    );
+    assert_eq!(
+        a.peer_count().await,
+        1,
+        "no mesh connection to the older app"
+    );
+
+    // It leaves: forwarded again, and the mesh goes.
+    a.on_state(room, &forwarded(&[A])).await;
+    assert!(a.is_forwarded().await);
+    assert_eq!(
+        a.peer_count().await,
+        0,
+        "the mesh stayed up while forwarded"
+    );
+    let log = a_log.0.lock().unwrap().clone();
+    assert!(
+        log.iter()
+            .any(|(peer, state)| peer == "ccc-session" && state == "closed"),
+        "{log:?}"
+    );
+}

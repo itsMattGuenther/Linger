@@ -193,17 +193,10 @@ async fn somebody_leaving_is_taken_out_of_the_next_offer() {
 }
 
 #[tokio::test]
-async fn an_older_client_stays_on_the_mesh_beside_forwarded_ones() {
+async fn an_older_client_puts_the_room_on_the_mesh_and_forwarding_returns_when_it_goes() {
     let (server, host, callie, room) = forwarding_server(true).await;
     let (mut old, old_id) = connect(&server, &host).await;
     let (mut new, new_id) = connect(&server, &callie).await;
-    send_json(&mut old, json!({"op":"voice.join","d":{"room_id":room}})).await;
-    let frames = drain(&mut old, SETTLE).await;
-    assert!(
-        offers(&frames).is_empty(),
-        "an older client was offered forwarding"
-    );
-    assert_eq!(forwarded_in(&frames, &old_id), Some(Value::Null));
 
     send_json(
         &mut new,
@@ -211,11 +204,40 @@ async fn an_older_client_stays_on_the_mesh_beside_forwarded_ones() {
     )
     .await;
     let frames = drain(&mut new, SETTLE).await;
-    // The forwarded client isn't offered the mesh client's voice: there's none to pass on.
-    assert!(offers(&frames)
-        .iter()
-        .all(|offer| track_sessions(offer).is_empty()));
+    assert_eq!(offers(&frames).len(), 1);
     assert_eq!(forwarded_in(&frames, &new_id), Some(json!(true)));
+
+    // An older app arrives: the whole room goes to the mesh, so everybody can
+    // still hear everybody.
+    send_json(&mut old, json!({"op":"voice.join","d":{"room_id":room}})).await;
+    let to_old = drain(&mut old, SETTLE).await;
+    let to_new = drain(&mut new, SETTLE).await;
+    assert!(
+        offers(&to_old).is_empty(),
+        "an older client was offered forwarding"
+    );
+    for frames in [&to_old, &to_new] {
+        assert_eq!(forwarded_in(frames, &old_id), Some(Value::Null));
+        assert_eq!(
+            forwarded_in(frames, &new_id),
+            Some(Value::Null),
+            "the newer client stayed forwarded beside a mesh one"
+        );
+    }
+    assert!(
+        offers(&to_new).is_empty(),
+        "the newer client was offered forwarding in a mesh room"
+    );
+
+    // It leaves: forwarding comes back, with a fresh offer.
+    send_json(&mut old, json!({"op":"voice.leave"})).await;
+    let to_new = drain(&mut new, SETTLE).await;
+    assert_eq!(forwarded_in(&to_new, &new_id), Some(json!(true)));
+    assert_eq!(
+        offers(&to_new).len(),
+        1,
+        "no fresh offer when forwarding came back: {to_new:?}"
+    );
 }
 
 #[tokio::test]
