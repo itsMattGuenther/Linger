@@ -36,6 +36,13 @@ import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 
 /** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
 const CHAT = "chat";
+
+/**
+ * How long a window that's opening waits for a server's token to be renewed
+ * before it's lent the one held. Well inside the 5 seconds it waits for the
+ * whole answer (bus.ts `ask`).
+ */
+export const LEND_WAIT_MS = 1_500;
 import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
 import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
 
@@ -197,6 +204,22 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
     if (stale === undefined || current.token !== stale) return current;
     return api.accessToken(true);
   };
+  // A window that's opening gets each server's token on its own: renewed if
+  // it's about to run out, but a server that isn't answering never holds up
+  // the others, or the window. What it's lent then may be out of date, and it
+  // asks for a new one (TOKEN) once it finds out.
+  const lendOnOpen = async (api: AuthedApi): Promise<Lent> => {
+    const held = api.heldToken();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<Lent>((settle) => {
+      timer = setTimeout(() => settle(held), LEND_WAIT_MS);
+    });
+    try {
+      return await Promise.race([lend(api).catch(() => held), waited]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
   // What each window shows, so presence puts you in the room of the window
   // you were last in (core/showing.ts), and nowhere once they have all gone.
@@ -251,7 +274,7 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
           // Read the state and its position together, before any await, so
           // they describe the same moment.
           const { state, position } = snapshotOf(server);
-          return { server, state, position, lent: await lend(api) };
+          return { server, state, position, lent: await lendOnOpen(api) };
         }),
       ),
     })),

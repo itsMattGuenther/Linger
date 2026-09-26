@@ -71,6 +71,8 @@ declare global {
       held: (room: string) => Message[];
       /** Settings changed how conversations open, as the owner tells every window. */
       mode: (mode: "tabs" | "windows") => void;
+      /** With `?noowner`: the list window starts answering. */
+      wake: () => void;
     };
   }
 }
@@ -85,6 +87,7 @@ window.owner = {
   },
   held: desktop.held,
   mode: (mode) => desktop.deliver("next:mode", { v: 1, mode }),
+  wake: desktop.wake,
 };
 
 const root = document.getElementById("root");

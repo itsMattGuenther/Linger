@@ -30,7 +30,7 @@ import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
-import { markerOf, Spinner, type TabItem } from "../../kit";
+import { Button, markerOf, Spinner, type TabItem } from "../../kit";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
@@ -69,6 +69,9 @@ export function ChatWindow() {
       <WindowMessage>
         <span>The list window didn't answer.</span>
         <span className="nx-window-hint">Close this window and open the conversation from the list again.</span>
+        <Button size="sm" onClick={held.retry}>
+          Try again
+        </Button>
       </WindowMessage>
     );
   }

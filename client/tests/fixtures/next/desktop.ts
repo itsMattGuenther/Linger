@@ -47,6 +47,8 @@ export interface Desktop {
   newMessage: (room: string, author: string, body: string) => Message;
   /** What the server holds for a room, newest last. */
   held: (room: string) => Message[];
+  /** An owner that wasn't answering (`?noowner`) answers from now on. */
+  wake: () => void;
 }
 
 export function json(body: unknown, status = 200): Response {
@@ -131,6 +133,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     ...Object.fromEntries(Object.entries(others).map(([server, state]) => [server, { ...state, sessionId: `${EPOCH}-${new URL(server).hostname}` }])),
   };
   let tokens = 1;
+  let asleep = query.has("noowner");
 
   function ownerHears(event: string, payload: unknown): void {
     const question = payload as { v: number; id: string; from: string } & Record<string, unknown>;
@@ -138,7 +141,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       window.setTimeout(() => deliver(`${event}:answer`, { v: 1, id: question.id, from: "main", answer }), 5);
     switch (event) {
       case "next:snapshot":
-        if (query.has("noowner")) return;
+        if (asleep) return;
         reply({
           servers: Object.entries(shared).map(([server, state]) => ({
             server,
@@ -275,5 +278,8 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     },
     newMessage,
     held: (room) => store[room] ?? [],
+    wake: () => {
+      asleep = false;
+    },
   };
 }

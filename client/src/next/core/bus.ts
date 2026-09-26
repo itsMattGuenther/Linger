@@ -56,8 +56,10 @@ export async function ask<A>(bus: Bus, target: string, event: string, body: obje
     return await new Promise<A>((resolve, reject) => {
       held.timer = setTimeout(() => reject(new Error(`no answer to ${event} from ${target}`)), timeoutMs);
       void bus
-        .listen<Envelope & { answer: A }>(`${event}:answer`, (reply) => {
-          if (reply.id === id) resolve(reply.answer);
+        .listen<Envelope & ({ answer: A } | { problem: string })>(`${event}:answer`, (reply) => {
+          if (reply.id !== id) return;
+          if ("problem" in reply) reject(new Error(`${target} couldn't answer ${event}: ${reply.problem}`));
+          else resolve(reply.answer);
         })
         .then((unlisten) => {
           held.stop = unlisten;
@@ -74,13 +76,20 @@ export async function ask<A>(bus: Bus, target: string, event: string, body: obje
 
 /**
  * Answer questions sent to this window. A question from a window speaking a
- * different protocol version is refused rather than half-understood.
+ * different protocol version is refused rather than half-understood. A
+ * handler that fails says so, so the asker hears at once rather than waiting
+ * out its timeout.
  */
 export function answer<Q, A>(bus: Bus, event: string, handler: (question: Q & Envelope) => Promise<A>): Promise<() => void> {
   return bus.listen<Q & Envelope>(event, (question) => {
     if (question.v !== PROTOCOL) return;
+    const reply = (body: { answer: A } | { problem: string }) =>
+      bus.send(question.from, `${event}:answer`, { v: PROTOCOL, id: question.id, from: bus.label, ...body });
     void handler(question)
-      .then((result) => bus.send(question.from, `${event}:answer`, { v: PROTOCOL, id: question.id, from: bus.label, answer: result }))
+      .then(
+        (result) => reply({ answer: result }),
+        (error: unknown) => reply({ problem: error instanceof Error && error.message !== "" ? error.message : "something went wrong" }),
+      )
       .catch(() => undefined);
   });
 }

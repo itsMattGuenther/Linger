@@ -115,6 +115,7 @@ function fakeOwnerApi(tokens: string[]) {
       if (force) issued += 1;
       return { token: tokens[issued] ?? "exhausted", expiresAt: Date.now() + 600_000 };
     }),
+    heldToken: () => ({ token: tokens[issued] ?? "exhausted", expiresAt: Date.now() + 600_000 }),
     put: vi.fn(async () => undefined),
     delete: vi.fn(async () => undefined),
     changePassword: vi.fn(async (_request: { current_password: string }) => undefined),
@@ -524,6 +525,50 @@ describe("a viewer window sharing the owner's connection", () => {
     await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
     await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(true));
     follower.stop();
+  });
+
+  it("a server that isn't answering holds up neither the other servers nor the window", async () => {
+    const { owner, viewer, core } = await windows();
+    const AWAY = "https://away.example";
+    const home = fakeOwnerApi(["token-1"]);
+    // Its token has run out and renewing it never comes back.
+    const away = {
+      ...fakeOwnerApi([]),
+      baseUrl: AWAY,
+      accessToken: vi.fn(() => new Promise<never>(() => undefined)),
+      heldToken: () => ({ token: "away-held", expiresAt: Date.now() - 1_000 }),
+    };
+    await owner.gateway.connect(home as never);
+    await owner.share.shareAsOwner(
+      owner.bus,
+      () =>
+        new Map([
+          [HOME, home as never],
+          [AWAY, away as never],
+        ]),
+    );
+    evening().slice(0, 3).forEach(core);
+    vi.useRealTimers();
+    const opened = Date.now();
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    // It waited for the renewal only so long, and got both servers.
+    expect(Date.now() - opened).toBeLessThan(owner.share.LEND_WAIT_MS + 1_000);
+    await expect(follower.apis.get(HOME)?.accessToken()).resolves.toMatchObject({ token: "token-1" });
+    expect(follower.apis.get(AWAY)?.heldToken()).toMatchObject({ token: "away-held" });
+    expect(viewer.gateway.serverState(HOME).me?.id).toBe("u-matt");
+    follower.stop();
+  }, 6_000);
+
+  it("a list window that can't answer says so at once, rather than leaving the window to time out", async () => {
+    const { hub } = await windows();
+    const { answer } = await import("./bus");
+    await answer(hub.bus("main"), "next:test", async () => {
+      throw new Error("the keyring is locked");
+    });
+    vi.useRealTimers();
+    const asked = Date.now();
+    await expect(ask(hub.bus("chat-2"), "main", "next:test", {})).rejects.toThrow("main couldn't answer next:test: the keyring is locked");
+    expect(Date.now() - asked).toBeLessThan(1_000);
   });
 
   it("gives up clearly when there is no owner to answer", async () => {

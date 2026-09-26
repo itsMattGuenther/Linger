@@ -157,6 +157,16 @@ shared state equals the owner's.
 - **A viewer's source borrows.** It holds the current *access* token, which the
   owner sends on start and after every refresh. When a call is refused as
   expired, it asks the owner to refresh and retries once.
+- **Each server is lent on its own.** A window that's opening gets every
+  server's token in the snapshot, renewed first if it is about to run out.
+  The owner waits at most `LEND_WAIT_MS` (1.5 s) for a renewal, then lends
+  the token it holds, so one server that isn't answering never holds up the
+  others or the window. A window lent an out-of-date token asks for a new one
+  the first time a call is refused, like any other.
+
+A question the owner can't answer gets a reply saying why (`answer` in
+`core/bus.ts`), rather than silence the asking window would wait out. A
+window that still can't catch up says so and offers **Try again**.
 
 **Refresh tokens never leave the owner window**, or the keyring. The old client
 uses the owner source, so its behavior does not change, and `api.test.ts`

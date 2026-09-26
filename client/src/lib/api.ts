@@ -497,6 +497,15 @@ export class AuthedApi {
    * `force` is for the case where the server refused a token that had not
    * expired yet, which happens when a server comes back with new signing keys.
    */
+  /**
+   * The access token as it is right now, without renewing it: for handing to
+   * a window that's opening when renewing can't be waited for. That window
+   * asks again if it has stopped working.
+   */
+  heldToken(): { token: string; expiresAt: number } {
+    return { token: this.#source.accessToken, expiresAt: this.#source.expiresAt };
+  }
+
   async accessToken(force = false): Promise<{ token: string; expiresAt: number }> {
     const soon = Date.now() + 60_000;
     if (force || this.#source.expiresAt <= soon) await this.#source.renew();

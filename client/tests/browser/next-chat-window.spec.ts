@@ -290,9 +290,13 @@ test("closing the last tab closes the window and tells the list window", async (
   expect(intents(await did(page)).at(-1)).toEqual({ kind: "closing" });
 });
 
-test("says so when the list window doesn't answer", async ({ page }) => {
+test("says so when the list window doesn't answer, and asks again when told to", async ({ page }) => {
   await page.clock.install();
   await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&noowner");
   await page.clock.fastForward(6_000);
   await expect(page.getByRole("status")).toContainText("The list window didn't answer.");
+  // It was only busy.
+  await page.evaluate(() => window.owner?.wake());
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("tab", { name: /#general/ })).toBeVisible();
 });

@@ -27,7 +27,7 @@ import type { Following } from "../../core/mirror";
 import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion } from "../../core/share";
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
-import { Spinner } from "../../kit";
+import { Button, Spinner } from "../../kit";
 import { announceAppearance, loadScale, saveNormalize, saveScale } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
@@ -64,6 +64,9 @@ export function SettingsWindow() {
       <WindowMessage>
         <span>The list window didn't answer.</span>
         <span className="nx-window-hint">Close Settings and open it again from the list.</span>
+        <Button size="sm" onClick={held.retry}>
+          Try again
+        </Button>
       </WindowMessage>
     );
   }
