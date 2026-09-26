@@ -10,7 +10,7 @@ vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => fal
 
 const { serverState } = await import("../../lib/gateway");
 const { listModel } = await import("./list");
-const { awayOn, foldedText, moveServer, namesText, openText, seatsWords, serverHeader, serverNames } = await import("./servers");
+const { awayOn, foldedText, moveServer, moveShown, namesText, openText, seatsWords, serverHeader, serverNames } = await import("./servers");
 
 const NOW = Date.parse("2026-09-25T22:52:00Z");
 
@@ -199,6 +199,10 @@ describe("your servers", () => {
     const order = ["good", "ash", "rib"];
     expect(moveServer(order, "ash", -1)).toEqual(["ash", "good", "rib"]);
     expect(moveServer(order, "ash", 1)).toEqual(["good", "rib", "ash"]);
+    // With one left out of what's shown, it keeps its place.
+    expect(moveShown(["good", "ash", "rib"], ["good", "rib"], "rib", -1)).toEqual(["rib", "ash", "good"]);
+    expect(moveShown(["good", "ash", "rib"], ["good", "rib"], "good", -1)).toEqual(["good", "ash", "rib"]);
+    expect(moveShown(["good", "ash", "rib"], ["good", "rib"], "ash", 1)).toEqual(["good", "ash", "rib"]);
     expect(moveServer(order, "good", -1)).toEqual(order);
     expect(moveServer(order, "rib", 1)).toEqual(order);
     expect(moveServer(order, "nope", 1)).toEqual(order);

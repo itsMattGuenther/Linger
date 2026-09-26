@@ -161,6 +161,22 @@ export function serverNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 }
 
+/**
+ * Move a server past the next one shown, up or down, when only some of your
+ * servers are shown (Settings leaves out one it can't draw yet): the two swap
+ * places in your whole order, and the rest stay exactly where they were.
+ */
+export function moveShown(order: readonly string[], shown: readonly string[], id: string, by: -1 | 1): string[] {
+  const other = shown[shown.indexOf(id) + by];
+  const at = order.indexOf(id);
+  const to = other === undefined ? -1 : order.indexOf(other);
+  if (!shown.includes(id) || at === -1 || to === -1 || other === undefined) return [...order];
+  const next = [...order];
+  next[at] = other;
+  next[to] = id;
+  return next;
+}
+
 /** Move a server one place up or down in your order. Nothing moves past an end. */
 export function moveServer(order: readonly string[], id: string, by: -1 | 1): string[] {
   const at = order.indexOf(id);

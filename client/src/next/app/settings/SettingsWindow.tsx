@@ -25,7 +25,7 @@ import { loadMode } from "../../core/conversations";
 import { isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { inOrder, loadServerPrefs, prefsFrom, type ServerPrefs } from "../../core/serverPrefs";
-import { moveServer } from "../../core/servers";
+import { moveShown } from "../../core/servers";
 import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion, SERVER_PREFS, type ServerPrefsMessage } from "../../core/share";
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
@@ -420,7 +420,21 @@ function Settings({ following }: { following: Following }) {
       }}
       servers={{
         servers: signedInTo,
-        onMove: (id, delta) => askServerPrefs({ ...serverPrefs, order: moveServer(signedInTo.map((entry) => entry.id), id, delta) }),
+        // Within every server you're on, not just the ones shown: one Settings
+        // can't draw yet keeps its place.
+        onMove: (id, delta) =>
+          askServerPrefs({
+            ...serverPrefs,
+            order: moveShown(
+              inOrder(
+                [...apis.keys()].map((baseUrl) => ({ baseUrl })),
+                serverPrefs.order,
+              ).map(({ baseUrl }) => baseUrl),
+              signedInTo.map((entry) => entry.id),
+              id,
+              delta,
+            ),
+          }),
         onQuiet: (id, quiet) =>
           askServerPrefs({ ...serverPrefs, quiet: quiet ? [...serverPrefs.quiet.filter((one) => one !== id), id] : serverPrefs.quiet.filter((one) => one !== id) }),
         onSignOut: (id) => void intend({ kind: "signout", server: id }).catch(() => undefined),
