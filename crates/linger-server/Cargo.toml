@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 linger-core = { workspace = true }
+linger-sfu = { workspace = true }
 
 anyhow = { workspace = true }
 argon2 = { workspace = true }

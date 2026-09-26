@@ -1,0 +1,15 @@
+[package]
+name = "linger-sfu"
+description = "Linger's voice forwarding server: each person sends their voice once, and the server passes it to everyone else in the room (#197)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+# WebRTC in sans-IO style: it never touches a socket, so this crate owns the
+# one UDP socket every voice connection shares. The pure-Rust crypto backend
+# keeps the server image free of OpenSSL and C toolchains.
+str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }
+tracing = { workspace = true }

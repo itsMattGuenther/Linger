@@ -282,3 +282,35 @@ pacman installs as Linger.
 **Not the AUR, yet.** AUR registration was closed on 2026-09-25. The same
 recipe can be published there as `linger-bin` when it reopens.
 
+## Decided — voice goes through a forwarding server built into Linger
+
+**Matt, 2026-09-25 (#197); built on `feat/197-voice-forwarding`, not yet
+shipped.** Every voice room goes through a forwarding server (an SFU) rather
+than a full mesh, small rooms included: one install for every host, one voice
+path to test, and room for a raid night of twenty. #197 left open whether that
+server is LiveKit beside Linger or part of Linger itself.
+
+**Part of Linger.** `crates/linger-sfu` forwards audio with `str0m`, a sans-IO
+WebRTC library, inside `linger-server`:
+
+- **Nothing new to run.** A host adds one UDP port (3479) and their public IP
+  (`LINGER_VOICE_ADDRESS`); there is no second service with its own keys,
+  config and upgrades. LiveKit would be a container that has to be kept in
+  step with Linger, and a protocol the desktop engine would have to speak
+  through LiveKit's own client library, which brings Google's C++ WebRTC.
+- **Audio only is small.** No video, no simulcast, no bandwidth estimation
+  worth the name: the server passes Opus packets on without decoding them.
+  The desktop engine keeps `webrtc-rs`, its devices, Opus and speaking
+  detection; only the mesh gives way to one connection to the server.
+- **The server drives negotiation,** so the client only answers and two
+  offers never cross.
+
+**What it costs.** The server now carries voice, so a host could listen
+(SPEC §4.14 says so; #200 is the layer that stops it), and the server image
+grows by `str0m` and its pure-Rust crypto. Mesh stays for old clients and for
+servers that don't set `LINGER_VOICE_ADDRESS`, until every client forwards.
+
+**Before it ships:** the real-network check (four people, four networks, an
+hour), a server restart mid-call, and a client that loses UDP and has to come
+back through TURN.
+

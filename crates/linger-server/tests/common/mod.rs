@@ -50,6 +50,7 @@ pub async fn spawn_tuned(tune: impl FnOnce(&mut Config)) -> TestServer {
         pool_bytes: DEFAULT_POOL_BYTES,
         file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
         turn: None,
+        voice_forwarding: None,
     };
     tune(&mut config);
     spawn_with(dir, config).await
@@ -69,6 +70,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         pool_bytes: DEFAULT_POOL_BYTES,
         file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
         turn: None,
+        voice_forwarding: None,
     };
     spawn_with(dir, config).await
 }
@@ -111,6 +113,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         pool_bytes: DEFAULT_POOL_BYTES,
         file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
         turn: None,
+        voice_forwarding: None,
     };
     Some(spawn_with(dir, config).await)
 }

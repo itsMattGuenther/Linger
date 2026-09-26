@@ -458,6 +458,9 @@ async fn voice_frame(app: AppHandle, base_url: String, frame: ServerFrame) {
         } => {
             engine.on_signal(&from, kind, &payload).await;
         }
+        linger_core::gateway::ServerEvent::VoiceOffer { sdp, tracks } => {
+            engine.on_offer(&sdp, &tracks).await;
+        }
         // Everything else is the frontend's business, not the engine's.
         _ => {}
     }

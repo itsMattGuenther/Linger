@@ -554,25 +554,35 @@ joined. People already in that voice session may hear a quiet join/leave cue,
 controlled by their notification sound settings (§4.2). Muting or unmuting
 someone else's microphone never makes a sound on your computer.
 
-**Full mesh, up to eight.** Every pair of clients connects directly to each other. At
-eight people that is 28 connections and a laptop does not notice; a selective forwarding
-server would be a second piece of infrastructure for every host to run and the scale
-that needs one is a scale this product refuses. The ceiling is the same one everything
-else has (§2).
+**Through the host's server, up to 25** (#197). Each person sends their voice once, to
+the host's server, which passes it on to everyone else in the room. It is part of the
+server a host already runs (one UDP port more), so there is nothing new to install, and
+it is what lets a raid night of twenty people talk at once: a full mesh, where every
+laptop sends to every other, stops working somewhere past ten. A server that doesn't
+forward, and anybody on a client from before forwarding, stays on the mesh, up to eight.
 
 **Voice follows the room's membership.** A voice room inside a DM is as private as the
 DM (§4.13) — who is in voice is a fact about a room, so it reaches the room's members
 and nobody else. Nothing about voice is a way to find out a conversation exists.
 
 **Nothing is recorded, ever.** Not by the server, not by a client, not "for
-transcription", not opt-in. Audio passes between clients and the server never sees it —
-the server's whole part in voice is introducing two clients to each other. There is no
-feature here to add later; a room where the microphone might be being recorded is a
-different product.
+transcription", not opt-in. There is no feature here to add later; a room where the
+microphone might be being recorded is a different product.
 
-**Two people behind two home routers need a relay.** Most pairs connect directly once
-each has learned its own public address (STUN); the rest — carrier-grade NAT, a strict
-office network — cannot, and a relay (TURN) carries the packets between them. The host
+**The host's server passes voice along, so the host could listen.** Voice is encrypted
+on the wire, but each hop ends at the server, which forwards the packets without decoding
+or keeping them. Nothing in Linger stores or plays them there, and nothing ever will; but
+a host who changed the server could listen, the same way they can read every message
+(§7). Linger says so plainly rather than implying otherwise, and never calls it
+end-to-end encryption. A layer that would stop even the host is #200. On the mesh, audio
+never touches the server at all.
+
+**A network that blocks UDP needs a relay.** With forwarding, every client connects to
+the server's one voice address, which works from behind almost any home router; a strict
+office network that blocks UDP goes through the relay (TURN) instead. On the mesh, most
+pairs connect directly once each has learned its own public address (STUN); the rest,
+carrier-grade NAT or a strict office network, cannot, and the relay carries the packets
+between them. The host
 runs one beside the server, and it is the host's, not a third party's. What it carries is
 the encrypted stream, which it cannot read, and the server's only part is handing a
 member a short-lived password for it at the moment they join. A host who runs no relay

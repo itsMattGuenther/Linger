@@ -992,10 +992,11 @@ async function attachListeners(): Promise<void> {
         if (cue !== null) void playSound(cue);
       }
       // Voice is the core's business, not this page's (ARCHITECTURE §2). These
-      // two frames are handed straight over — the fold above ignores them, and
+      // frames are handed straight over — the fold above ignores them, and
       // deliberately: nothing the store holds changes because a peer connection
       // did, and the voice surface (T-1404) will read the core's own events.
-      if (frame.op === "voice.state" || frame.op === "voice.signal") {
+      // `voice.offer` is the forwarding server's (#197): the core answers it.
+      if (frame.op === "voice.state" || frame.op === "voice.signal" || frame.op === "voice.offer") {
         void voiceFrame(server, frame).then(() => {
           if (frame.op === "voice.state") applySavedVoiceVolumes(server);
         });

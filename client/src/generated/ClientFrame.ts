@@ -19,8 +19,14 @@ s: number, } } | { "op": "heartbeat", "d": {
 /**
  * Last sequence number seen, for the server's replay bookkeeping.
  */
-s: number | null, } } | { "op": "presence.update", "d": { state: PresenceState, away_message: string | null, } } | { "op": "room.focus", "d": { room_id: RoomId | null, } } | { "op": "typing.start", "d": { room_id: RoomId, } } | { "op": "voice.join", "d": { room_id: RoomId, controls?: VoiceControls, } } | { "op": "voice.leave" } | { "op": "voice.signal", "d": { 
+s: number | null, } } | { "op": "presence.update", "d": { state: PresenceState, away_message: string | null, } } | { "op": "room.focus", "d": { room_id: RoomId | null, } } | { "op": "typing.start", "d": { room_id: RoomId, } } | { "op": "voice.join", "d": { room_id: RoomId, controls?: VoiceControls, 
+/**
+ * This client can take its voice through the server's forwarding
+ * (#197) rather than the mesh. Absent from older clients, which the
+ * server keeps on the mesh.
+ */
+forwarding?: boolean, } } | { "op": "voice.leave" } | { "op": "voice.signal", "d": { 
 /**
  * The peer's session id, from `voice.state`.
  */
-to: string, kind: VoiceSignalKind, payload: string, } };
+to: string, kind: VoiceSignalKind, payload: string, } } | { "op": "voice.answer", "d": { sdp: string, } };

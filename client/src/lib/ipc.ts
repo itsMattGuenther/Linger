@@ -133,7 +133,7 @@ export async function voiceDevices(): Promise<VoiceDeviceList | null> {
 }
 
 /**
- * Hand the core a `voice.state` or `voice.signal` that arrived on the gateway.
+ * Hand the core a `voice.state`, `voice.signal` or `voice.offer` that arrived on the gateway.
  *
  * Routed through the frontend rather than straight from the gateway client,
  * for the same reason every other frame is: the store is the one place that

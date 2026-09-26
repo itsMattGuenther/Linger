@@ -59,6 +59,12 @@ pub enum ClientFrame {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         controls: Option<VoiceControls>,
+        /// This client can take its voice through the server's forwarding
+        /// (#197) rather than the mesh. Absent from older clients, which the
+        /// server keeps on the mesh.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        forwarding: Option<bool>,
     },
     /// No room id: you are in voice in at most one room, so there is only one
     /// thing this could mean.
@@ -76,6 +82,11 @@ pub enum ClientFrame {
         kind: VoiceSignalKind,
         payload: String,
     },
+    /// The answer to the server's latest `voice.offer` (#197). With
+    /// forwarding, the server makes every offer and the client only answers,
+    /// so two offers can never cross.
+    #[serde(rename = "voice.answer")]
+    VoiceAnswer { sdp: String },
 }
 
 /// What a `voice.signal` is carrying. The server routes on the frame and never
@@ -106,6 +117,19 @@ pub struct VoicePeer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub controls: Option<VoiceControls>,
+    /// Their voice goes through the server's forwarding (#197), not the mesh.
+    /// A mesh client can't reach them, and doesn't try.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub forwarded: Option<bool>,
+}
+
+/// One receiving m-line in a `voice.offer`, and whose voice it carries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct VoiceTrack {
+    pub mid: String,
+    pub session_id: String,
 }
 
 /// Self-reported voice controls, visible only to the room's members.
@@ -260,6 +284,16 @@ pub enum ServerEvent {
         kind: VoiceSignalKind,
         payload: String,
     },
+    /// The server's offer for this session's one connection to its voice
+    /// forwarding (#197): an m-line to send the microphone on, and one per
+    /// other person in the room. `tracks` says whose voice each receiving
+    /// m-line carries; the one it doesn't name is the microphone's. Sent again,
+    /// whole, whenever somebody joins or leaves.
+    #[serde(rename = "voice.offer")]
+    VoiceOffer {
+        sdp: String,
+        tracks: Vec<VoiceTrack>,
+    },
     /// A nudge from one person to one person (SPEC §4.9, T-1101).
     ///
     /// Sent to the target's sessions and nobody else's — the only frame on the
@@ -329,10 +363,50 @@ mod tests {
                 muted: true,
                 deafened: true,
             }),
+            forwarding: Some(true),
         };
         let wire = serde_json::to_value(modern).unwrap();
         let decoded: LegacyJoin = serde_json::from_value(wire["d"].clone()).unwrap();
         assert_eq!(decoded.room_id, room_id);
+        // An older client never says it can forward, and an older server
+        // never says anybody is forwarded: both read as the mesh.
+        assert!(matches!(
+            serde_json::from_value::<ClientFrame>(
+                serde_json::json!({"op":"voice.join", "d":{"room_id":room_id}})
+            )
+            .unwrap(),
+            ClientFrame::VoiceJoin {
+                forwarding: None,
+                ..
+            }
+        ));
+        assert_eq!(peer_forwarded_default(), None);
+    }
+
+    fn peer_forwarded_default() -> Option<bool> {
+        let peer: VoicePeer = serde_json::from_value(
+            serde_json::json!({"session_id":"old", "user_id":UserId::new()}),
+        )
+        .unwrap();
+        peer.forwarded
+    }
+
+    #[test]
+    fn a_voice_offer_and_answer_travel_as_named_frames() {
+        let offer = ServerFrame::control(ServerEvent::VoiceOffer {
+            sdp: "v=0".into(),
+            tracks: vec![VoiceTrack {
+                mid: "1".into(),
+                session_id: "s-eli".into(),
+            }],
+        });
+        let wire = serde_json::to_value(&offer).unwrap();
+        assert_eq!(wire["op"], "voice.offer");
+        assert_eq!(wire["d"]["tracks"][0]["session_id"], "s-eli");
+        let answer: ClientFrame =
+            serde_json::from_value(serde_json::json!({"op":"voice.answer","d":{"sdp":"v=0"}}))
+                .unwrap();
+        assert!(matches!(answer, ClientFrame::VoiceAnswer { sdp } if sdp == "v=0"));
     }
 
     #[test]

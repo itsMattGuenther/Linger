@@ -63,6 +63,17 @@ services:
       # list the URIs in LINGER_TURN_URLS, separated by commas.
       LINGER_TURN_SECRET: ${LINGER_TURN_SECRET:-}
       # LINGER_TURN_URLS: turn:relay.example.com:3478?transport=udp,stun:relay.example.com:3478
+      # Voice through this server (#197): everybody sends their voice once,
+      # here, and the server passes it to everyone else in the room, up to 25
+      # people. Set this to the machine's public IP address (not a name) and
+      # open UDP 3479 on the firewall. Unset, voice stays peer to peer, up to 8.
+      # The server passes voice along without keeping it; SPEC §4.14 says what
+      # that means for privacy.
+      # LINGER_VOICE_ADDRESS: 203.0.113.7
+    ports:
+      # Voice forwarding's one UDP port. Nothing listens on it unless
+      # LINGER_VOICE_ADDRESS is set.
+      - "3479:3479/udp"
 
   caddy:
     image: caddy:2
