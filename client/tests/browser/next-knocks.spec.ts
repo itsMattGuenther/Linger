@@ -5,10 +5,15 @@ import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 340, height: 820 } });
 
+// The page's clock stands still between steps: left running, a slow machine
+// spends real seconds between two checks and a card goes before it's looked at.
+const OPENED = new Date("2026-09-25T20:00:00");
+
 test.beforeEach(async ({ page }) => {
-  await page.clock.install();
+  await page.clock.install({ time: OPENED });
   await page.goto("/tests/fixtures/next-knocks.html");
   await page.evaluate(() => document.fonts.ready);
+  await page.clock.pauseAt(new Date(OPENED.getTime() + 600_000));
 });
 
 const cards = (page: import("@playwright/test").Page) => page.locator("[data-screen='knocks'] [data-kit='Notice']");

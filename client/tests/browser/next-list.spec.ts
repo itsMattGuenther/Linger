@@ -134,8 +134,11 @@ test.describe("a person's card", () => {
   });
 
   test("Knock says Knocked for three seconds, then is ready again", async ({ page }) => {
-    await page.clock.install();
+    const opened = new Date("2026-09-25T20:00:00");
+    await page.clock.install({ time: opened });
     await page.reload();
+    // Standing still, so "Knocked" is still up when it's looked at on a slow machine.
+    await page.clock.pauseAt(new Date(opened.getTime() + 600_000));
     await rows(page, "Away").first().getByRole("button").first().click();
     const card = page.getByRole("dialog", { name: "Sam" });
     await card.getByRole("button", { name: "Knock" }).click();
