@@ -183,6 +183,12 @@ export interface Sharing {
    * otherwise in the chat window's tabs.
    */
   open(server: string, roomId: RoomId): void;
+  /**
+   * The sign-ins changed (a server added, or signed back into after a
+   * password change, which starts its presence afresh): put you back in the
+   * room you're in.
+   */
+  signInsChanged(): void;
 }
 
 /**
@@ -243,13 +249,12 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
 
   // What each window shows, so presence puts you in the room of the window
   // you were last in (core/showing.ts), and nowhere once they have all gone.
+  // Presence skips a room it already holds (lib/watchPresence.ts), so this
+  // keeps no copy of its own: a copy went stale when a server's presence was
+  // started afresh (signing back in after a password change).
   let showing: Showing = NOTHING_SHOWN;
-  let placed: string | null = null;
   const place = () => {
     const room = presenceRoom(showing, new Set(sessions().keys()));
-    const key = room ? `${room.server} ${room.roomId}` : "";
-    if (key === placed) return;
-    placed = key;
     if (room) setPresenceRoom(room.server, room.roomId);
     else for (const server of sessions().keys()) setPresenceRoom(server, null);
   };
@@ -474,5 +479,6 @@ export async function shareAsOwner(bus: Bus, sessions: () => ReadonlyMap<string,
       for (const stop of stops) stop();
     },
     open,
+    signInsChanged: place,
   };
 }

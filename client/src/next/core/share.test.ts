@@ -264,6 +264,30 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("signing back in (after a password change) puts you back in the room you're in", async () => {
+    const { owner, viewer, core } = await windows();
+    const presence = owner.presence;
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    const stopPresence = presence.startPresence();
+    evening().slice(0, 3).forEach(core);
+    presence.setPresenceLive(HOME, true);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "window", focused: true, input: true });
+    await follower.intend({ kind: "room", server: HOME, roomId: "r-general" });
+    const focused = () => sentFrames().filter((frame) => JSON.stringify(frame) === JSON.stringify({ op: "room.focus", d: { room_id: "r-general" } })).length;
+    await vi.waitFor(() => expect(focused()).toBe(1));
+
+    // The list window's link to the server starts over: presence with it.
+    presence.dropPresence(HOME);
+    presence.setPresenceLive(HOME, true);
+    sharing.signInsChanged();
+    await vi.waitFor(() => expect(focused()).toBe(2));
+    stopPresence();
+    follower.stop();
+  });
+
   it("tells the notifier what you're reading only while its window has focus", async () => {
     const { owner, viewer, core } = await windows();
     const api = fakeOwnerApi(["token-1"]);

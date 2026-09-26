@@ -205,6 +205,12 @@ function Servers({ signedIn, accounts }: { signedIn: ServerSession[]; accounts: 
     };
   }, []);
 
+  // A server signed back into starts its presence afresh (ServerLink):
+  // sharing puts you back in the room you're in.
+  useEffect(() => {
+    sharing?.signInsChanged();
+  }, [signedIn]);
+
   // Ctrl+, opens Settings from the list too.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
