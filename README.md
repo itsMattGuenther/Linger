@@ -15,7 +15,7 @@ dinner party of eight, not a stadium of fifty thousand strangers.
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
 </div>
 
-**Status: 0.4.1, testing with friends.** It works day to day; voice across
+**Status: 0.4.2, testing with friends.** It works day to day; voice across
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
