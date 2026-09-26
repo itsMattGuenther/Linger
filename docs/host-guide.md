@@ -134,8 +134,8 @@ yours). If it does not return a short JSON response, use
 ## 6. Make your host account
 
 [Install and open the app](user-guide.md#installing-linger) on your own computer.
-Paste the **whole setup link** into the *server or link* box and press
-**continue**. Choose a server name, username, display name and password (at
+Paste the **whole setup link** into the **Server or link** box and press
+**Continue**. Choose a server name, username, display name and password (at
 least eight characters). The new account is the host account.
 
 If the app says it cannot reach the server, check
@@ -145,15 +145,15 @@ open it from your application menu, or the same way you installed it.
 
 ## 7. Invite people
 
-In the left panel, press **⋯** beside the selected server, then **Invite people →
-make a link**. Only the host sees this server menu. You choose how many people the invite
-is good for and when it expires; the link
-is copied for you the moment it is made. Send it however you normally talk to
-your friends.
+Open Settings (the gear at the top of your list, or **Ctrl+,**). As the host
+you have a **Hosting** group there that nobody else sees.
 
-Before that, make a room: use **make the first room** on the empty screen, or
-the **+** beside *Rooms* in the left rail. A room needs a short name for after the `#` and, if you
-like, a topic.
+First make a room: **Hosting → Rooms → New Room**. A room needs a short name
+for after the `#` and, if you like, a topic.
+
+Then **Hosting → Invites → New Invite**. You choose how many people the invite
+is good for and when it expires; the link is copied for you the moment it is
+made. Send it however you normally talk to your friends.
 
 An invite link is the only way to get an account. There is no public sign-up.
 Text chat is ready. For voice with friends on other networks, also complete
@@ -197,16 +197,20 @@ blocks. Do not assume the provider lets you add `cdn.` in front of a free name.
 ## Running it day to day
 
 Almost everything is done inside the app, not in a config file. The host
-controls are in the **⋯** menu beside the selected server in the left panel.
+controls are in Settings, under **Hosting**:
 
-- **Rooms** — **⋯ → Manage rooms**. Create, rename, set a topic, reorder,
-  archive.
-- **The server's name and accent color** — **⋯ → Server settings**. The name is
-  what the rail shows and what an invite link tells a stranger.
-- **Removing someone** — **⋯ → Manage members**. Choose the member, then
-  confirm removal. They disappear from the roster and lose access; messages stay.
-- **Letting them back in** — **⋯ → Manage members**. Removals are reversible;
-  that is the point.
+- **Rooms**: create, rename, set a topic, reorder, archive.
+- **Invites**: make a link, and see or **Revoke** the ones still open.
+- **People**: remove someone (it asks first; they lose access, and their
+  messages stay), and let them back in. Removals are reversible; that is the
+  point.
+- **Server**: its name and color. The name is what everybody's list shows and
+  what an invite link tells a stranger; the color is the server's stripe in
+  everybody's list.
+
+Newcomers start on the name color the fewest people on the server wear, so a
+big group isn't a list of gray names. Anyone can change theirs in **Settings →
+Profile**.
 
 Two things worth knowing. There is **no way to hand the host role to somebody
 else**, on purpose. And there are no permissions to configure — if a group needs

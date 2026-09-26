@@ -124,7 +124,7 @@ reopen it. Then go to [Getting in](#getting-in).
 For a **new member**:
 
 1. Ask the host for an invite, such as `https://linger.example.com/invite/CODE`.
-2. Paste the **whole invite link** into **server or link** and press **continue**.
+2. Paste the **whole invite link** into **Server or link** and press **Continue**.
    Do not remove the invite code or anything after `?`.
 3. Choose a username, display name, and password of at least eight characters,
    then join the server. These are new credentials for this server, not your
@@ -148,9 +148,10 @@ password store — the same place your browser keeps passwords — so you do not
 type it again. If your computer has no password store, the app says so and asks
 you to sign in next time.
 
-You can be on **more than one server**. They stack up in the far-left rail and
-each one is completely separate: separate account, separate friends, separate
-everything.
+You can be on **more than one server**: open Settings (the gear), then **Account
+& App → Add a server** (with several servers, it's under **Servers**). Each
+server becomes a folding section of your list, and each one is completely
+separate: separate account, separate friends, separate everything.
 
 You can stop reading and use the app now. The rest of this guide explains
 features as you need them.
@@ -246,41 +247,67 @@ from v0.3.3. No desktop-wide setting needs to change.
 
 ---
 
-## The window
+## The list
 
-Three parts.
+Linger is one tall window: your **list**. From the top:
 
-- **The rail**, on the left: your servers at the top, then the rooms on this
-  server. A room shows who is in it.
-- **The stream**, in the middle: the conversation, and the box you type in.
-- **The roster**, on the right: everyone on the server and what they are up to.
-  On a narrow window, click **People** to open it. If the window cannot fit the
-  left panel either, **Navigation** opens your servers, rooms and settings.
-  Widening the window brings the side panels back automatically.
+- **You**: your name, where you are, and your status. Click the status to
+  change it. **Away** sets an away message (more below).
+- **Rooms**: each with the dots of who's in it, and a speaker when people are
+  talking there. A room's name turns bold when something new is said.
+- **DMs**: your direct messages, named by who's in them. The pencil starts a
+  new one.
+- **People**: everyone on the server, with where they are and their status.
+  **Away** and **Offline** fold up under them.
+
+Click a room or a DM and it opens in the **chat window**. Each conversation
+gets a tab there; **Ctrl+Tab** moves between them and **Ctrl+W** closes one.
+The ⧉ button pops a tab out into a window of its own, and **Back to tabs**
+puts it back. If you'd rather every conversation had its own window, choose
+that in **Settings → Windows**.
+
+At the foot of the list are **Media** and **Search**, each in a window of its
+own. When you're in voice, the voice bar sits just above them.
+
+**Closing the list doesn't quit Linger.** It keeps running in the tray (the
+little door icon near your clock), so voice, knocks and notifications carry
+on. To bring the list back, choose **Show Linger** from the tray icon's menu
+(on Windows, a click on the icon does it too), or just open Linger again. The
+same menu has **Mute**, **Leave voice** and **Quit Linger**. To make closing the list
+quit instead, open **Settings → Windows → When You Close Your List**. On a
+Linux desktop with no tray, closing the list always quits.
+
+Several servers? Each is a section of the list with its own rooms, DMs and
+people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
+or banners from it) and to move it up or down.
+
+The list may also show a line at its foot, only while it's true: a server it
+can't reach, a computer that can't remember your sign-in, or a new version of
+Linger with **Update…**.
 
 ## Settings, and where they are
 
-Click the **Settings gear** beside your name at the bottom of the left panel. The panel
-has four sections:
+Click the **gear** at the top of the list, or press **Ctrl+,** in any window.
+Settings opens in its own window:
 
-- **Profile** — your display name, name styling and status
-- **Appearance** — interface size, theme, evening warmth and name styling preferences
-- **Sound & Voice** — notification chimes and quiet hours; microphone, speakers,
+- **Profile**: your display name, your status, and how your name looks
+- **Appearance**: interface size, and plain names (below)
+- **Windows**: tabs or a window per conversation, and what closing the list does
+- **Sound & Voice**: notification chimes and quiet hours; microphone, speakers,
   push to talk
-- **Account & App** — password, export, updates and sign out
+- **Notifications**: desktop banners, and whose messages you want them for
+- **Account & App**: password, export, updates, adding a server, and signing out
+- **Servers** (with more than one): their order, Quiet, and signing out of one
 
-Everything this guide calls *settings → something* is on one of those. **Close**
-at the top right puts the room back.
+Everything this guide calls *Settings → something* is one of those.
 
-**Too small?** Open **Appearance → Interface Size** and choose a larger scale,
-up to 200%. Your saved choice applies throughout the app, including sign-in.
-Drag a side panel's inner edge to change its width. Double-click the edge to
-reset it. With a keyboard, Tab to the edge and use Left/Right; Home/End choose
-the smallest/largest width. These choices are saved only on this computer.
+**Too small?** Open **Appearance → Interface Size** and choose a larger size,
+up to 200%. Every window follows, including the sign-in screen. It's saved
+only on this computer.
 
-Hosts have a **⋯** menu beside the selected server. Use **⋯ → Manage members** for
-member removal and re-admission; ordinary member cards are for chatting and
-knocking, not managing access.
+**Hosts** also see a **Hosting** group in Settings: **Rooms**, **Invites**,
+**People** (removing and re-admitting members) and **Server** (its name and
+color).
 
 ## Saying things
 
@@ -300,10 +327,13 @@ them — that is the one thing that will interrupt them.
 Hover over a message or use Tab to reveal its **⋯** button. Click it or press
 Enter to open the message actions; Escape closes the menu and returns focus.
 
-- **reply** — quotes what you are answering. **Escape** cancels it.
-- **edit** — your own messages only. **Shortcut: press Up arrow in an empty box**
+- **Reply**: quotes what you're answering. The **×** beside the quote cancels it.
+- **Edit**: your own messages only. **Shortcut: press Up arrow in an empty box**
   to edit the last thing you said.
-- **delete** — asks once, then it is gone
+- **Delete**: asks once, then it's gone.
+
+Click anybody's name in a conversation to open their card, with **Message**
+and **Knock**.
 
 The **smile** on the right of the box opens a small set of ordinary emoji to
 drop into what you are typing. Hover it for **Emoji**. There are no custom emoji.
@@ -313,19 +343,16 @@ something, reply to it, emoji and all.
 
 ## Sharing files
 
-Three ways, all the same thing: the **+** on the left of the box, then
-**Add file…**, drag a file onto the box, or paste one from your clipboard.
-Hover **+** for **Add**.
+Three ways, all the same thing: the **+** in the message box, drag a file onto
+the box, or paste one from your clipboard.
 
 Click a posted image to expand it. It stays centered and fits the window, even
-when you resize it. Press **Escape**, click the preview, or choose **close** to
-return to the conversation.
+when you resize it. Press **Escape** or click it to go back.
 
-For other files, **download in browser** opens your system browser. It may save
-straight to Downloads rather than ask where to save. Check its downloads list.
-If nothing happens or Linger reports a failure, retry or copy the displayed
-link into your browser. A file may have expired; a browser error is not a
-successful save. Treat download links as private, especially for DM files.
+For other files, **Download** hands the file to your browser, which may save
+it straight to Downloads without asking; Linger says so when it has. If it
+fails, **Try again**. A file may have expired. Treat download links as
+private, especially for DM files.
 
 - Up to 500 MB per file.
 - **Location data is stripped from every photo, always.** Phone cameras record
@@ -337,73 +364,63 @@ successful save. Treat download links as private, especially for DM files.
 ## Talking
 
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
-invite: you are already in the room, and **Join Voice** under the room's name
-turns your microphone on there. The line under the header then says who is in
-voice. Names stay readable; whoever is speaking has their name turned over,
-drawn on a small block of their own color. Your own name comes first, without a visible
-“you” label; screen readers still identify it.
+invite. In a room's tab, the line under its name says who's talking there:
+press **Join** (or **Start talking** when nobody is) to turn your microphone
+on in that room. Already talking in another room? **Move voice here** (or
+**Talk here instead**) takes you there.
 
-While you are in:
+While you're in, the **voice bar** at the bottom of your list shows the room,
+who's in it (whoever is speaking lights up), and your controls:
 
-- **mute** stops sending, instantly, and nobody else can change it. Nobody can
+- **Mute** stops sending, instantly, and nobody else can change it. Nobody can
   mute you either, and nobody can turn your microphone on.
-- **deafen** silences incoming voice and mutes your microphone together.
-  **undeafen** restores your previous mic choice; with push-to-talk, press
-  `ctrl` again to speak. Deafen does not change notification sounds.
+- **Deafen** silences incoming voice and mutes your microphone together.
+  Pressing it again restores your previous mic choice. Deafen doesn't change
+  notification sounds.
 - A crossed-out microphone beside a name means that person is muted, and
-  crossed-out headphones mean they are deafened, when they share their state.
-  Hover the symbol for the word.
-  **mic state unknown** means their client or the server needs an update.
-  An unmuted microphone is not a guarantee somebody is listening.
-- Click a voice participant's name to adjust **how loud they are for you**.
-  This computer remembers the level for that person on this server, across
-  restarts and reconnects. Their other sessions use the same level.
-  Right-click or keyboard activation works too. This never leaves your computer.
-- The **chevron beside Voice** collapses the participant strip without hiding
-  your voice controls. It does not hide the People sidebar.
-- **leave voice** turns the microphone off. Closing the app does too.
+  crossed-out headphones mean they're deafened, when they share it. Hover
+  the symbol for the word. An unmuted microphone is not a guarantee somebody
+  is listening.
+- **Leave** turns the microphone off. Quitting Linger does too; closing the
+  list doesn't, since Linger keeps running in the tray.
+- The arrow beside the room's name opens its conversation.
 
-Opening Settings, Media or another room does not end voice. A small strip keeps
-your voice controls visible and names the room; click its name to return.
+With the list tucked away in the tray, the tray icon's menu has **Mute** and
+**Leave voice**.
 
-Moving voice to another room keeps your mute/deafen choices. Leaving and
-joining starts a fresh session. Your per-person volume settings are unaffected
-by deafen, and missed speech is discarded rather than played when you return.
+**Push to talk** is in **Settings → Sound & Voice**. With it on, every call
+starts muted and the microphone is open only while you hold **Ctrl**. Switching
+away from Linger releases a held key; press it again to speak. It's off by
+default, because a room you leave running is the point, and a key you have to
+hold is the opposite of that.
 
-**Push to talk** is in Settings → Sound & Voice. With it on, every call starts muted and
-the microphone is open only while you hold `ctrl`, including in Settings.
-Leaving the room view or switching away from the app releases a held key;
-press it again to speak. It is off by default because
-a room you leave running is the point, and a key you have to hold is the
-opposite of that.
-
-Which microphone and speakers to use is also in Settings → Sound & Voice. A change
-applies the next time you join. If a device you picked is not plugged in, the
-system default is used and the picker says so.
+Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
+change applies the next time you join. If a device you picked isn't plugged in,
+the system default is used and the picker says so.
 
 **Nothing is recorded.** Not by the server, not by anybody's app, not "for
 transcription". Audio goes between the people in the room, and the server's
 whole part is introducing them.
 
-Two things to know today: voice between computers on **different networks**
-needs the host to run the relay (the host guide says how), and if your
-headphones come unplugged mid-sentence, Linger moves to whatever your computer
-now uses within a second or two. If nothing comes back for twenty seconds the
-line under the room's name says the microphone stopped, and you join again.
+Two things to know: voice between computers on **different networks** needs
+the host to run the relay (the host guide says how), and if your headphones
+come unplugged mid-sentence, Linger moves to whatever your computer now uses
+within a second or two. If nothing comes back for twenty seconds, the voice bar
+says the microphone stopped, and you join again.
 
 ## Talking to one person
 
-**Direct messages.** Open somebody's name in the roster and press **message**. A
-*direct* section appears in the rail with their name in it, and the conversation
-works exactly like a room — except only the two of you can see it, anywhere:
-not in media, not in search, not in anybody else's export. There is no way to
-add a third person later; a different set of people is a different
-conversation.
+**Direct messages.** Click somebody in **People** and press **Message** on
+their card (or double-click them, the old AIM way). The pencil beside **DMs**
+starts one with several people. The conversation works exactly like a room,
+except only the people in it can see it, anywhere: not in media, not in search,
+not in anybody else's export. There's no way to add someone later; a different
+set of people is a different conversation.
 
-**Knocking.** On the same card, **knock** is a tap on the shoulder: the other
-person sees a small card for eight seconds, then it is gone. Your button says
-**knocked** for three seconds, then returns to **knock**; that confirms the
-request, not that they saw it. There is no message and nothing for them to
+**Knocking.** On the same card, **Knock** is a tap on the shoulder: the other
+person sees a small card for eight seconds, then it's gone, and their row in
+your list gives a little shake. That confirms the knock went, not that they
+saw it. There is no message and nothing for them to
 answer. Three an hour per person, so it stays a tap. A soft sound accompanies
 the card unless sounds are muted or quiet hours are on (22:00–08:00 on this
 computer's clock unless you move them). Quiet hours are off until you turn them
@@ -411,24 +428,26 @@ on. They silence the sound, not the card.
 
 ## Finding things again
 
-Open **search** from the rail (or press **Ctrl+K**, **Cmd+K** on a Mac). Type a
-word; you get the messages that contain it and the files whose names do, newest
-first, and you can narrow to a room or a person. Pressing a result takes you to
-that message in its room, however far back it is, with a **back to the newest**
-link in the header to come home again.
+Open **Search** from the foot of the list, or press **Ctrl+K** in any window.
+Type a word; you get the messages that contain it and the files whose names do,
+newest first, and you can narrow to a room or a person. Pressing a result opens
+that message in its conversation, however far back it is, with **Back to the
+newest** to come home again.
 
-Open **Media** from the rail. It collects things shared in conversations you
-can access — pictures, video, audio, files and links — newest first, filterable by type and
-by person. Every item links back to the moment it was posted.
+Open **Media** from the foot of the list. It collects things shared in
+conversations you can see (pictures, video, audio, files and links), filterable
+by type, person and date. Every item links back to the moment it was posted,
+and the line above the grid says how long the server keeps files and how full
+it is.
 
 The star does two jobs: it sorts things to the top, and it stops a file from
 expiring automatically. Choose **Star** to keep a file; Linger confirms when
 the server accepts it. Images keep their full shape in the collection. Click
 an item to return to its conversation.
 
-## What the roster is telling you
+## What the list is telling you
 
-Next to each person:
+Next to each person, a dot (a small moon when they're away) and a few words:
 
 - **in a room** — they are in that room right now
 - **around** — the app is in front of them, but not in a room
@@ -436,21 +455,20 @@ Next to each person:
 - **away** — they set an away message on purpose
 - **offline** — the app is closed
 
-Click or right-click a name in the People sidebar to open their profile and
-status. Message and Knock sit together at the bottom of that panel. Press
-Escape or click outside it to close it.
+Click someone to open their card, with their status and **Message** and
+**Knock**. Press Escape or click outside it to close it.
 
 ## Your status
 
-Click your own name in the roster, then **Edit status**. There is a line in your own
-words, plus three optional fields: *reading*, *listening to*, *working on*. You
-can put one image on it.
+Click your status at the top of the list to change the line in your own words.
+**Settings → Profile → Your Status** has the rest: three optional fields
+(*reading*, *listening to*, *working on*) and one image. Other people see a
+change only when you save it.
 
-Open **Preview your status** to check the draft. Other people see the change
-only when you press **save**.
-
-There is also an **away message**. Setting one is what makes you away, and it
-shows instead of your status. Clearing it brings you back.
+There's also an **away message**: **Away** at the top of the list. Pick a
+recent one or write your own; setting one is what makes you away, and it shows
+instead of your status. With several servers, tick where it shows. **I'm
+back** clears it.
 
 ## Making your name yours
 
@@ -472,22 +490,23 @@ changes** returns to your saved look; **Save your look** publishes it.
 
 Also in settings:
 
-- **Interface Size** — enlarge text and controls from 100% to 200%. The default
+- **Interface Size**: enlarge text and controls from 100% to 200%. The default
   layout is comfortable; there are no density modes to choose between.
-- **Theme** — dark, light, or follow your desktop.
-- **Evening warmth** — after about 7pm the colors go slightly warmer, the way a
-  room does when the lamps come on. It is subtle. You can switch it off.
-- **Normalize everyone** — turns off other people's name styling and message
-  fonts, for you only. Nobody is told. Use it if a room is too loud to read.
+- **Use plain names and message fonts**: turns off other people's name styling
+  and message fonts, for you only. Nobody is told. Use it if a room is too loud
+  to read.
+
+Linger is dark only for now. The light theme and evening warmth of earlier
+versions come back once the new look has versions of its own.
 
 ## Being interrupted, or not
 
-Desktop banners appear for **somebody naming you** — or a
-person you have specifically asked to hear about. Open **Settings → Sound &
-Voice → Desktop Notifications** to choose those people, either everywhere or
-in selected rooms.
+Desktop banners appear for **somebody naming you**, or a person you've
+specifically asked to hear about. Open **Settings → Notifications** to choose
+those people, either everywhere or in selected rooms. A server you've made
+**Quiet** sends no banners or sounds.
 
-For chimes, open **settings → sound & voice**. Voice-session joins, leaves and
+For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
 moves, mute/deafen changes, DMs and knocks have sounds by default. Ordinary
 room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
@@ -505,10 +524,9 @@ use **deafen** for that. Muting chimes keeps visual notifications visible.
 
 There are **no unread badges and no counters** anywhere in Linger. That is
 deliberate. Nothing is keeping score of what you have not read, so nothing can
-make you feel behind. When you come back, the stream shows a **go to where you
-left off** marker. Opening a room or DM with new messages returns to that
-line automatically. Caught-up rooms open at the bottom. There is no catch-up
-button or band; **back to the newest** skips ahead. Search results still open
+make you feel behind. A room with something new just has a bolder name. Opening
+it lands on a **you left off here** line; caught-up rooms open at the bottom.
+**Back to the newest** skips ahead. Search results still open
 on the message you selected, and new arrivals do not pull you away from
 earlier messages you are reading. If you scroll a long way back, the header
 offers **back to the newest** too — Linger has put down the newest messages
@@ -526,8 +544,8 @@ index listing who shared what and when. It opens with an ordinary text editor
 and an ordinary file browser. **You do not need Linger, or an account, or the
 server to still exist**, which is the entire point.
 
-**Settings → Account & App → Take Everything With You.** Press the button, wait — it takes a
-moment on a busy server — then press *download it*. The file opens in your
+**Settings → Account & App → Take Everything with You.** Press **Export
+everything**, wait (it takes a moment on a busy server), then download it. The file opens in your
 normal browser's downloads, like anything else you download.
 
 You can ask for one an hour. If you ask again too soon the app tells you when
@@ -536,10 +554,11 @@ you can come back.
 ## Updates
 
 1. Open **Settings → Account & App → Updates**.
-2. Press **check again**. The panel shows your version and whether a newer
-   release is available.
-3. When you are ready to close the app, choose **install and restart** if
-   offered. Nothing downloads or installs until you choose it.
+2. Linger looks when you open it, and says so at the foot of your list when
+   there's a new version (**Update…** brings you here). **Check again** looks
+   now.
+3. When you're ready, choose **Install and restart**. Nothing downloads or
+   installs until you choose it.
 
 **Arch and Omarchy package:** there is nothing to do in the app. New versions
 arrive with your system updates, and the Updates panel says so.
@@ -556,8 +575,9 @@ server: the host follows the [server update steps](host-guide.md#updating-the-se
 
 ## Signing out
 
-**Settings → Account & App → sign out.** That forgets the server on this
-computer. Your account and everything in it stays exactly where it is.
+**Settings → Account & App → Sign out.** That forgets the server on this
+computer. With several servers, **Settings → Servers** signs out of one, and
+**Sign out of everything** out of all of them. Your account and everything in it stays exactly where it is.
 
 To change your password, use **Settings → Account & App → Password**. If you have forgotten it,
 ask whoever runs the server — they can set you a new one.
