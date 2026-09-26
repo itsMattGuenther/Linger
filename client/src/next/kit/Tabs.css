@@ -137,3 +137,12 @@
   transition: none;
   cursor: grabbing;
 }
+
+/* High contrast: the showing tab is outlined in the system's highlight, since
+   its surface is repainted like every other tab's. */
+@media (forced-colors: active) {
+  .k-tab[data-active="yes"] {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}

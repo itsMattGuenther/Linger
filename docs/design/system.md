@@ -401,6 +401,16 @@ place, in groups, the showing one lit by the lamp with a bar along its edge.
   above it.
 - A long label or second line ends in "…".
 
+### High contrast
+
+Windows' high-contrast mode (forced colors) repaints backgrounds and borders
+in the system's colors, so a state shown only by a color would vanish. Each
+part that has one keeps it with a system color, in its own stylesheet:
+presence dots are drawn in the text color; the selected row, the showing tab
+and the showing Settings section are outlined in `Highlight`; a switch that's
+on, a ticked box and whoever's talking are filled with it. `kit.spec.ts`
+checks each with high contrast emulated.
+
 ### Chip
 
 A 24px pill for a picked person or thing. With `onRemove` the whole chip is

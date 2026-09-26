@@ -94,3 +94,17 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* High contrast: the showing section is outlined, and its lamp drawn, in the
+   system's highlight. */
+@media (forced-colors: active) {
+  .k-nav-item[aria-selected="true"] {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .k-nav-item[aria-selected="true"]::before {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

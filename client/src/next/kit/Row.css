@@ -192,3 +192,12 @@
 .k-row[data-actions]:is(:hover, :focus-within) .k-row-end {
   display: none;
 }
+
+/* High contrast: a selected row's wash is repainted away, so it's outlined
+   in the system's highlight instead. */
+@media (forced-colors: active) {
+  .k-row[data-selected="yes"] .k-row-main {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}

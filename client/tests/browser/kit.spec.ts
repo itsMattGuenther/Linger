@@ -459,3 +459,55 @@ test("review sheets: one screenshot per gallery section, for people to look at",
     await section.screenshot({ path: `test-results/kit/${test.info().project.name}-${id}.png` });
   }
 });
+
+// High contrast (Windows' forced colors): the system repaints backgrounds and
+// borders, so every state that was only a color gets a system color (A11Y-6).
+test.describe("in high contrast", () => {
+  test.use({ viewport: { width: 1100, height: 900 } });
+
+  test("presence dots stay, and every lit state still shows", async ({ page }) => {
+    await page.emulateMedia({ forcedColors: "active", colorScheme: "dark" });
+    await page.goto("/tests/fixtures/kit.html");
+    const seen = await page.evaluate(() => {
+      const style = (selector: string) => {
+        const node = document.querySelector(selector);
+        return node ? getComputedStyle(node) : null;
+      };
+      const canvas = getComputedStyle(document.body).backgroundColor;
+      // The system's own highlight, as this page would be given it.
+      const probe = document.createElement("div");
+      probe.style.cssText = "forced-color-adjust: none; background: Highlight";
+      document.body.append(probe);
+      const highlight = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const dot = style('.k-marker[data-state="here"]');
+      const trackOn = style('.k-switch[aria-checked="true"] .k-switch-track');
+      const trackOff = style('.k-switch[aria-checked="false"] .k-switch-track');
+      const thumbOff = style('.k-switch[aria-checked="false"] .k-switch-thumb');
+      return {
+        canvas,
+        dot: dot?.backgroundColor,
+        rowSelected: style('.k-row[data-selected="yes"] .k-row-main')?.outlineStyle,
+        rowPlain: style('.k-row:not([data-selected]) .k-row-main')?.outlineStyle,
+        tabShowing: style('.k-tab[data-active="yes"]')?.outlineStyle,
+        tabOther: style('.k-tab:not([data-active])')?.outlineStyle,
+        sectionShowing: style('.k-nav-item[aria-selected="true"]')?.outlineStyle,
+        trackOn: trackOn?.backgroundColor,
+        trackOff: trackOff?.backgroundColor,
+        thumbOff: thumbOff?.backgroundColor,
+        talking: style('[data-testid="voice-chips"] .k-chip[data-active="yes"]')?.backgroundColor,
+        highlight,
+      };
+    });
+    // A dot isn't the page's own color.
+    expect(seen.dot).not.toBe(seen.canvas);
+    expect(seen.rowSelected).toBe("solid");
+    expect(seen.rowPlain).toBe("none");
+    expect(seen.tabShowing).toBe("solid");
+    expect(seen.tabOther).toBe("none");
+    expect(seen.sectionShowing).toBe("solid");
+    expect(seen.trackOn).not.toBe(seen.trackOff);
+    expect(seen.thumbOff).not.toBe(seen.trackOff);
+    expect(seen.talking).toBe(seen.highlight);
+  });
+});

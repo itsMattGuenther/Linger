@@ -69,3 +69,13 @@
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* High contrast: a ticked box is filled with the system's highlight. */
+@media (forced-colors: active) {
+  .k-check-input:checked + .k-check-box {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

@@ -44,3 +44,21 @@
 .k-switch:disabled {
   opacity: 0.45;
 }
+
+/* High contrast: the thumb and an "on" track are painted in system colors,
+   or both would be repainted into the background. */
+@media (forced-colors: active) {
+  .k-switch-thumb {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .k-switch[aria-checked="true"] .k-switch-track {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .k-switch[aria-checked="true"] .k-switch-thumb {
+    background: HighlightText;
+  }
+}

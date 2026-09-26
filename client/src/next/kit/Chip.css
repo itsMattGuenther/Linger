@@ -63,3 +63,24 @@ button.k-chip:hover .k-icon {
   font-size: var(--text-meta);
   white-space: nowrap;
 }
+
+/* High contrast: whoever's talking is lit in the system's highlight, their
+   name in its text color (a name's own paint would be unreadable on it). */
+@media (forced-colors: active) {
+  .k-chip[data-active="yes"] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .k-chip[data-active="yes"] .name {
+    background: none;
+    color: HighlightText;
+    -webkit-text-fill-color: HighlightText;
+  }
+
+  .k-chip[data-active="yes"] .k-marker {
+    background: HighlightText;
+  }
+}

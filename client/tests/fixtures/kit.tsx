@@ -681,6 +681,16 @@ function Gallery() {
           ))}
           <Chip label="Ashen Lanterns">Ashen Lanterns</Chip>
         </div>
+        <div className="g-row" data-testid="voice-chips">
+          {picked.slice(0, 1).map((user) => (
+            <Chip key={user.id} label={user.display_name} marker={{ color: "amber", state: "here" }} active>
+              <Name person={user} size="control" />
+            </Chip>
+          ))}
+          <Chip label="Jules" marker={{ color: "fern", state: "here" }} state={{ icon: "headOff", word: "Deafened" }} note="can't reach">
+            Jules
+          </Chip>
+        </div>
         <div className="g-row g-narrow" data-testid="narrow-things">
           <Chip label="A server whose name is much too long for this">A server whose name is much too long for this</Chip>
           <Notice icon="knock">Somebody with a long name knocked, just saying hi</Notice>

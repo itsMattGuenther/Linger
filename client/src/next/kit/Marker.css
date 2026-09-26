@@ -136,3 +136,18 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* High contrast (forced colors): the system repaints backgrounds, and the
+   dots would go with them. There every dot is drawn in the text color; the
+   shapes and the dimming still tell the states apart. */
+@media (forced-colors: active) {
+  .k-marker {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .k-marker[data-state="away"] {
+    background: none;
+    color: CanvasText;
+  }
+}
