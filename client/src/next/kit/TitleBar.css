@@ -1,0 +1,53 @@
+.k-titlebar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--titlebar);
+  padding: 0 var(--space-1) 0 var(--space-3);
+  background: linear-gradient(180deg, var(--surface-titlebar), var(--surface-titlebar-end));
+  border-bottom: 1px solid var(--hairline);
+  user-select: none;
+}
+
+.k-titlebar[data-focused="no"] {
+  background: var(--surface-titlebar-end);
+}
+
+.k-titlebar-lead {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.k-titlebar-title {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.k-titlebar[data-focused="no"] .k-titlebar-title {
+  color: var(--text-secondary);
+}
+
+.k-titlebar-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.k-titlebar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

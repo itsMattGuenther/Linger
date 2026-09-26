@@ -1,0 +1,77 @@
+/* Mirrors the row's geometry (margin, padding, slot, gap) so the caret sits
+   in the lead column and the label starts where names start. */
+.k-section {
+  display: flex;
+  align-items: center;
+  margin: var(--space-2) var(--space-1-5) 0;
+}
+
+.k-section[data-level="group"] {
+  margin-top: var(--space-1);
+}
+
+.k-section-toggle {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--marker-slot) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--marker-gap);
+  min-width: 0;
+  height: var(--control-sm);
+  margin: 0;
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.k-section-slot {
+  display: grid;
+  place-items: center;
+  width: var(--marker-slot);
+  color: var(--icon-faint);
+}
+
+.k-section-slot .k-icon {
+  transition: transform var(--duration-fast);
+}
+
+.k-section[data-open="no"] .k-section-slot .k-icon {
+  transform: rotate(-90deg);
+}
+
+.k-section-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.k-section-hint {
+  visibility: hidden;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+button.k-section-toggle:hover {
+  color: var(--text-primary);
+}
+
+button.k-section-toggle:hover .k-section-hint {
+  color: var(--text-accent);
+}
+
+.k-section[data-open="no"] .k-section-hint,
+button.k-section-toggle:is(:hover, :focus-visible) .k-section-hint {
+  visibility: visible;
+}
+
+.k-section-action {
+  display: inline-flex;
+  flex: none;
+  margin-left: var(--space-1);
+}

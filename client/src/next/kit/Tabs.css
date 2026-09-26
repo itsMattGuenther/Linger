@@ -1,0 +1,148 @@
+/* A row of tabs sitting on the title bar's bottom edge. */
+.k-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-0-5);
+  flex: 1;
+  min-width: 0;
+  height: var(--titlebar);
+  padding-top: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.k-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.k-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: var(--tab-min);
+  max-width: var(--tab-max);
+  height: var(--tab);
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  color: var(--text-muted);
+}
+
+.k-tab:hover {
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.k-tab[data-active="yes"] {
+  z-index: var(--z-raised);
+  background: var(--surface-window);
+  border-color: var(--hairline);
+  color: var(--text-primary);
+}
+
+/* The server this tab belongs to, when there are several. */
+.k-tab[data-stripe="yes"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 var(--space-2) auto;
+  height: var(--rule-strong);
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
+  background: var(--tab-stripe);
+  opacity: 0.7;
+}
+
+.k-tab[data-stripe="yes"][data-active="yes"]::before {
+  opacity: 1;
+}
+
+.k-tab-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--tab);
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  font-size: var(--text-control);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.k-tab-main:focus-visible {
+  outline-offset: calc(-1 * var(--focus-offset) - var(--focus-width));
+}
+
+.k-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A room's #: the same faint ink as everywhere, against the name. */
+.k-tab-hash {
+  margin-right: var(--space-0-5);
+  color: var(--icon-faint);
+  font-weight: 400;
+}
+
+.k-tab[data-fresh="yes"] .k-tab-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.k-tab-close {
+  display: inline-flex;
+  flex: none;
+  margin-right: var(--space-1);
+  visibility: hidden;
+}
+
+.k-tab:is(:hover, :focus-within) .k-tab-close,
+.k-tab[data-active="yes"] .k-tab-close {
+  visibility: visible;
+}
+
+/* More tabs than fit: fade the edge that has more beyond it. */
+.k-tabs[data-overflow="end"] {
+  mask-image: linear-gradient(90deg, var(--mask-solid) calc(100% - var(--space-8)), transparent);
+}
+
+.k-tabs[data-overflow="start"] {
+  mask-image: linear-gradient(90deg, transparent, var(--mask-solid) var(--space-8));
+}
+
+.k-tabs[data-overflow="both"] {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--mask-solid) var(--space-8),
+    var(--mask-solid) calc(100% - var(--space-8)),
+    transparent
+  );
+}
+
+/* Dragging a tab: it follows the pointer above the others, which slide aside
+   to show where it will land. Only transforms move, so nothing reflows. */
+.k-tabs[data-dragging="yes"] .k-tab {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.k-tabs[data-dragging="yes"] .k-tab[data-dragged="yes"] {
+  z-index: var(--z-sticky);
+  transition: none;
+  cursor: grabbing;
+}
+
+/* High contrast: the showing tab is outlined in the system's highlight, since
+   its surface is repainted like every other tab's. */
+@media (forced-colors: active) {
+  .k-tab[data-active="yes"] {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}

@@ -1,0 +1,70 @@
+/* A short list of actions, floating by its trigger. */
+.k-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--menu-w);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--white-a10);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-popover);
+}
+
+/* Measured before it is placed; invisible for that one frame. */
+.k-menu[data-placed="no"] {
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}
+
+.k-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-control);
+  font-weight: 500;
+}
+
+.k-menu-item:hover,
+.k-menu-item:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.k-menu-item:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.k-menu-item[data-tone="danger"] {
+  color: var(--text-danger);
+}
+
+.k-menu-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.k-menu-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An on/off item that's on: a tick at the end, in the lamp. */
+.k-menu-tick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-left: auto;
+  color: var(--text-accent);
+}

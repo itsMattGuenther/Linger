@@ -1,0 +1,97 @@
+/* The voice bar. Layout only; every control is a kit piece. Tokens only. */
+.nx-voice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--accent-edge-soft);
+  border-radius: var(--radius-lg);
+  background: var(--accent-wash);
+}
+
+.nx-voice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-sm);
+}
+
+.nx-voice-label {
+  flex: none;
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-accent);
+}
+
+.nx-voice-where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-control);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nx-voice-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-voice-line {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+}
+
+.nx-voice-controls {
+  display: flex;
+  gap: var(--space-1-5);
+}
+
+/* With several servers: which server this voice room is on. */
+.nx-voice-server {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  height: var(--line-meta);
+  margin: calc(-1 * var(--space-1)) 0 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.nx-voice-server-mark {
+  flex: none;
+  width: var(--space-1);
+  height: var(--space-2-5);
+  border-radius: var(--radius-xs);
+  background: var(--server);
+}
+
+.nx-voice-server-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+
+.nx-voice-server-sep {
+  flex: none;
+  color: var(--icon-faint);
+}
+
+.nx-voice-server-seats {
+  flex: none;
+}

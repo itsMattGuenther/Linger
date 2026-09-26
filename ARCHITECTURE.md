@@ -43,7 +43,7 @@ Deployment is one binary plus one data directory, or one Docker image.
 |---|---|---|
 | **Rust server (axum + tokio)** | A single static binary is a dramatically better self-host story than "install Node, install pnpm, run migrations." Also lets client and server share types. | Never for V1. |
 | **SQLite (WAL), not Postgres** | 20 friends, a few hundred messages a day. Postgres is ceremony at this scale. One file to back up. | Only if a server exceeds ~2k users or needs multi-node. A `Repository` trait keeps the swap cheap. |
-| **Tauri 2, not Electron** | Uses the OS WebView rather than bundling a browser; the gateway, keyring and audio live in Rust. Installed size, startup time and memory use need release measurements ([review](docs/release-readiness.md)). | Only if WebKitGTK rendering on Linux becomes untenable. |
+| **Tauri 2, not Electron** | Uses the OS WebView rather than bundling a browser; the gateway, keyring and audio live in Rust. Installed size, startup time and memory use still need release measurements (T-910). | Only if WebKitGTK rendering on Linux becomes untenable. |
 | **TypeScript + React frontend** | Largest ecosystem for virtualized lists and rich text; fastest to iterate. | — |
 | **Object store adapter, not blobs in DB** | 500 MB files must never traverse the app server. | — |
 
@@ -737,6 +737,7 @@ large rooms and reruns every voice check.
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
 | **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
+| **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **in progress on `feat/198-buddy-list`**; plan in `docs/design/architecture.md` |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
 **A mobile client is not in this sequence** (Matt, 2026-08-28). It was going to

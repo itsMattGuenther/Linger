@@ -1,0 +1,135 @@
+.k-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.k-field-label {
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.k-field-label[data-hidden="yes"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The box is the control: it takes the height and draws the focus. */
+.k-field-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--icon-muted);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+.k-field-box[data-size="sm"] {
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.k-field-box[data-size="lg"] {
+  height: var(--control-lg);
+  padding: 0 var(--space-3);
+}
+
+.k-field-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-width) var(--accent-wash-stronger);
+}
+
+.k-field-box[data-invalid="yes"] {
+  border-color: var(--danger);
+}
+
+.k-field-box[data-readonly="yes"] {
+  background: transparent;
+  border-style: dashed;
+}
+
+.k-field-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  text-overflow: ellipsis;
+}
+
+/* The box shows focus with its edge; the lamp on the input inside would double it. */
+.k-field-input:focus-visible {
+  outline: none;
+}
+
+.k-field-box[data-size="sm"] .k-field-input {
+  font-size: var(--text-control);
+}
+
+.k-field-input::placeholder {
+  color: var(--text-muted);
+}
+
+.k-field-input[data-italic="yes"] {
+  font-style: italic;
+}
+
+.k-field-input[data-mono="yes"] {
+  font-family: var(--font-mono);
+  font-size: var(--text-control);
+}
+
+.k-field-box[data-readonly="yes"] .k-field-input {
+  color: var(--text-muted);
+}
+
+.k-field-help {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-body);
+}
+
+.k-field-help[data-error="yes"] {
+  color: var(--text-danger);
+}
+
+/* A date field: the system's own day picker, its digits even, its button a
+   quiet icon at the end of the box. */
+.k-field-input[type="date"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* An empty date shows its format (mm/dd/yyyy) as the system draws it: in
+   the placeholder's color, so it doesn't read as a date that's been set. */
+.k-field-input[type="date"][data-empty="yes"]::-webkit-datetime-edit {
+  color: var(--text-muted);
+}
+
+.k-field-input::-webkit-calendar-picker-indicator {
+  margin: 0;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.k-field-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}

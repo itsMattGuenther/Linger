@@ -1,0 +1,40 @@
+/* A person's volume, over their chip in the voice bar. Layout only; the
+   slider, name and button are kit pieces. Tokens only. */
+.nx-volume {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: calc(var(--space-8) * 7);
+  max-width: calc(100vw - var(--space-8));
+}
+
+.nx-volume-who {
+  display: flex;
+  max-width: 100%;
+  margin: 0;
+  padding-right: var(--control-sm);
+}
+
+.nx-volume-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  width: 100%;
+}
+
+.nx-volume-value {
+  flex: none;
+  min-width: calc(var(--space-8) + var(--space-2));
+  text-align: right;
+  font: var(--text-meta) / var(--line-meta) var(--font-label);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-volume-note {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-muted);
+}

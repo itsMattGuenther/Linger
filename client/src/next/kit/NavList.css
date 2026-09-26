@@ -1,0 +1,110 @@
+/* A column of places: groups of 32px items, the showing one lit by the lamp. */
+.k-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.k-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-2-5) var(--space-1-5);
+}
+
+.k-nav-group:first-child {
+  padding-top: var(--space-1);
+}
+
+/* A group with a second line starts a new part of the list: a rule above it. */
+.k-nav-group[data-sub="yes"] {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3-5);
+  border-top: 1px solid var(--hairline);
+}
+
+.k-nav-group-label {
+  color: var(--text-muted);
+  font: 400 var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.k-nav-group-sub {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.k-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-control);
+  text-align: left;
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.k-nav-item .k-icon {
+  flex: none;
+  color: var(--icon-faint);
+}
+
+.k-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.k-nav-item[aria-selected="true"] {
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+
+/* The showing item's lamp: a bar along its start edge. */
+.k-nav-item[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  inset: var(--space-1-5) auto var(--space-1-5) 0;
+  width: var(--rule-strong);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.k-nav-item[aria-selected="true"] .k-icon {
+  color: var(--accent);
+}
+
+.k-nav-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* High contrast: the showing section is outlined, and its lamp drawn, in the
+   system's highlight. */
+@media (forced-colors: active) {
+  .k-nav-item[aria-selected="true"] {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .k-nav-item[aria-selected="true"]::before {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

@@ -1,0 +1,13 @@
+/* Search's and Media's windows: a title bar, and the view filling the rest. */
+.nx-tool {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-secondary);
+}
+
+.nx-tool-body {
+  flex: 1;
+  min-height: 0;
+}

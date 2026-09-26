@@ -35,7 +35,7 @@ Separate computers, production domains, independent networks, physical audio
 devices and listening still need the evidence each check names. Several
 clients on one machine must be reported as such. The first five are ordered
 so that doing the first one also covers parts of the second and third.
-The [2026-09-08 evidence record](../desktop-check-results.md) distinguishes
+The 2026-09-08 evidence record (removed in 0.4.0) distinguishes
 completed checks from useful partial results.
 
 ---
@@ -170,7 +170,7 @@ name is the first thing to check — see the host guide's troubleshooting.
 exchanged messages showing the selected gradient, font and shimmer. Screenshots
 cover both themes, normalization, compact, IRC and a controlled evening hour.
 The separate-machine/VM step below remains open; the names have now been seen
-in a real room. [Evidence](../desktop-check-results.md).
+in a real room. Evidence (removed in 0.4.0).
 
 1. Two computers (or one computer and a virtual machine), signed in as two
    different people.
@@ -199,7 +199,7 @@ built the archive and handed it to an isolated Chromium profile through the
 native opener. An independent ZIP reader opened the room Markdown and image;
 the recipient's DM was present and the outsider's archive omitted it. A second
 click displayed the hour's cooldown. T-920 fixed the local URL failure found
-on the first attempt. [Evidence and repeatable command](../desktop-check-results.md).
+on the first attempt. Evidence and repeatable command (removed in 0.4.0).
 
 1. In the app: **settings → take everything with you**.
 2. Press **export everything**. Watch the line underneath — it should count up.

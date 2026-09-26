@@ -1,0 +1,55 @@
+/* The buddy list's layout. Sizes, colors and type come from tokens only
+   (docs/design/system.md); every row, label and marker is a kit piece. */
+
+.nx-list {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-primary);
+}
+
+/* Everything below you scrolls; you and the title bar stay put. */
+.nx-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2) var(--space-4);
+}
+
+/* Where notices land: a line with no height between the list and the voice
+   bar. What's in it is laid over the bottom of the list, just above the bar,
+   whatever the bar's height. */
+.nx-list-notices {
+  position: relative;
+  flex: none;
+  height: 0;
+}
+
+/* A room row's end: the voice mark, then who's in it. */
+.nx-list-room-end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+/* A section with nothing in it yet says so, quietly, in the row's place. */
+.nx-list-empty {
+  margin: 0;
+  /* Where a row's title starts: the row's margin and padding, then the marker slot. */
+  padding: 0 var(--space-2) 0 calc(var(--space-1-5) + var(--space-2-5) + var(--marker-slot) + var(--marker-gap));
+  height: var(--row-1);
+  line-height: var(--row-1);
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+
+/* The foot: Media and Search, side by side under everything else. */
+.nx-list-foot {
+  display: grid;
+  flex: none;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--hairline);
+}

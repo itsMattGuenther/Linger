@@ -74,7 +74,7 @@ try {
     $bitmap.Dispose()
     Write-Output 'PASS running window supplies an icon; inspect running-window-icon.png for appearance'
 } finally {
-    if (!$app.HasExited) { Stop-Process -Id $app.Id }
+    if (!$app.HasExited) { Stop-Process -Id $app.Id; $app.WaitForExit(10000) | Out-Null }
 }
 
 # Both installer formats must run Web Audio in their actual WebView2 engine.

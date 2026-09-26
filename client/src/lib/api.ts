@@ -76,6 +76,17 @@ export class TransportError extends Error {
 }
 
 /**
+ * A request that went out and was never answered within its deadline: it may
+ * or may not have arrived (#118), so it is never reported as lost.
+ */
+export class UnconfirmedError extends TransportError {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnconfirmedError";
+  }
+}
+
+/**
  * Every error code the client recognises. This list exists so a code coming off
  * the network can be *checked* rather than assumed, which is what keeps this
  * file free of casts. The `satisfies` clause makes TypeScript fail the build if
@@ -180,7 +191,7 @@ async function withDeadline<T>(
   try {
     return await request({ ...options, signal: controller.signal });
   } catch (error) {
-    if (expired) throw new TransportError(
+    if (expired) throw new UnconfirmedError(
       "The server did not confirm the request. Check whether it arrived before trying again.",
     );
     throw error;
@@ -316,42 +327,179 @@ export function expiryOf(expiresIn: number): number {
 }
 
 /**
- * A signed-in connection to one server.
+ * Where an `AuthedApi` gets its access token, and how it gets a new one
+ * (docs/design/architecture.md, "Tokens across windows").
  *
- * Access tokens last 15 minutes, so expiry during normal use is routine rather
- * than exceptional. When a call comes back `UNAUTHENTICATED` this trades the
- * refresh token for a new pair and runs the call again, once. Refresh tokens
- * rotate and reusing a spent one revokes the whole family (PROTOCOL §2), so two
- * calls refreshing at the same time would log the user out — hence the single
- * in-flight refresh that every caller waits on.
+ * Two kinds exist. The window that owns a sign-in holds its refresh token and
+ * renews by rotating it (`RotatingTokens`). Every other window of the Buddy
+ * list client *borrows* (`BorrowedTokens`): it holds only an access token and
+ * asks the owner when that runs out. Refresh tokens rotate and a spent one
+ * revokes the whole sign-in (PROTOCOL §2), so exactly one party may ever
+ * spend one; this seam is what keeps it that way across windows.
  */
-export class AuthedApi {
-  readonly baseUrl: string;
+export interface TokenSource {
+  readonly accessToken: string;
+  /** When the access token dies, in Unix milliseconds. */
+  readonly expiresAt: number;
+  /**
+   * Get a working access token. One renewal at a time: every caller waits on
+   * the same one. Rejects when it could not renew, and ends the sign-in only
+   * when the server says the sign-in is over.
+   */
+  renew(): Promise<void>;
+  /** The refresh token, which only the owning source holds. */
+  readonly refreshToken: string | null;
+}
+
+interface SignInHandlers {
+  onTokens: (tokens: Tokens) => void;
+  onSignedOut: (reason: string) => void;
+}
+
+/**
+ * The owner's source: rotates the refresh token, one renewal in flight at a
+ * time, and reports new tokens so they can be saved to the keyring.
+ */
+class RotatingTokens implements TokenSource {
+  readonly #baseUrl: string;
   #tokens: Tokens;
   #refreshing: Promise<void> | null = null;
-  #onTokens: (tokens: Tokens) => void;
-  #onSignedOut: (reason: string) => void;
+  readonly #handlers: SignInHandlers;
 
-  constructor(
-    baseUrl: string,
-    tokens: Tokens,
-    handlers: {
-      onTokens: (tokens: Tokens) => void;
-      onSignedOut: (reason: string) => void;
-    },
-  ) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl: string, tokens: Tokens, handlers: SignInHandlers) {
+    this.#baseUrl = baseUrl;
     this.#tokens = tokens;
-    this.#onTokens = handlers.onTokens;
-    this.#onSignedOut = handlers.onSignedOut;
+    this.#handlers = handlers;
+  }
+
+  get accessToken(): string {
+    return this.#tokens.accessToken;
+  }
+
+  get expiresAt(): number {
+    return this.#tokens.expiresAt;
   }
 
   get refreshToken(): string {
     return this.#tokens.refreshToken;
   }
 
+  renew(): Promise<void> {
+    if (this.#refreshing) return this.#refreshing;
+    const attempt = (async () => {
+      const previous = this.#tokens.refreshToken;
+      try {
+        const fresh = await new PublicApi(this.#baseUrl).refresh({
+          refresh_token: previous,
+        });
+        this.#tokens = {
+          accessToken: fresh.access_token,
+          refreshToken: fresh.refresh_token,
+          expiresAt: expiryOf(fresh.expires_in),
+        };
+        this.#handlers.onTokens(this.#tokens);
+      } catch (error) {
+        // A refused refresh is the end of this sign-in: the token expired, or
+        // it was already spent and the family got revoked. Either way the only
+        // way back is signing in again. A temporary server error or rate limit
+        // says nothing about the token, just like a network failure. Keep the
+        // sign-in so a later request can try again (also used by restoreOne).
+        if (
+          error instanceof ApiError &&
+          (error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN")
+        ) {
+          this.#handlers.onSignedOut("Your sign-in expired. Please sign in again.");
+        }
+        throw error;
+      } finally {
+        this.#refreshing = null;
+      }
+    })();
+    this.#refreshing = attempt;
+    return attempt;
+  }
+}
+
+/** An access token lent by the owner window, and until when it works. */
+export interface Lent {
+  token: string;
+  expiresAt: number;
+}
+
+/**
+ * A viewer window's source: an access token lent by the owner. It never
+ * holds or spends a refresh token. When its token stops working it asks the
+ * owner, saying which token failed, so an owner that has already renewed can
+ * simply lend the newer one instead of renewing again.
+ */
+export class BorrowedTokens implements TokenSource {
+  #lent: Lent;
+  #asking: Promise<void> | null = null;
+  readonly #ask: (stale: string) => Promise<Lent>;
+  readonly refreshToken = null;
+
+  constructor(lent: Lent, ask: (stale: string) => Promise<Lent>) {
+    this.#lent = lent;
+    this.#ask = ask;
+  }
+
+  get accessToken(): string {
+    return this.#lent.token;
+  }
+
+  get expiresAt(): number {
+    return this.#lent.expiresAt;
+  }
+
+  /** The owner renewed and sent the new token to every window. */
+  lend(lent: Lent): void {
+    this.#lent = lent;
+  }
+
+  renew(): Promise<void> {
+    this.#asking ??= this.#ask(this.#lent.token)
+      .then((lent) => this.lend(lent))
+      .finally(() => {
+        this.#asking = null;
+      });
+    return this.#asking;
+  }
+}
+
+/**
+ * A signed-in connection to one server.
+ *
+ * Access tokens last 15 minutes, so expiry during normal use is routine rather
+ * than exceptional. When a call comes back `UNAUTHENTICATED` this renews the
+ * token through its source and runs the call again, once. The source is what
+ * makes renewal safe: the owning window rotates the refresh token one renewal
+ * at a time, and every other window borrows (see `TokenSource`).
+ */
+export class AuthedApi {
+  readonly baseUrl: string;
+  readonly #source: TokenSource;
+
+  constructor(baseUrl: string, tokens: Tokens, handlers: SignInHandlers);
+  constructor(baseUrl: string, source: TokenSource);
+  constructor(baseUrl: string, tokens: Tokens | TokenSource, handlers?: SignInHandlers) {
+    this.baseUrl = baseUrl;
+    if ("renew" in tokens) {
+      this.#source = tokens;
+    } else {
+      if (!handlers) throw new Error("an owned sign-in needs its handlers");
+      this.#source = new RotatingTokens(baseUrl, tokens, handlers);
+    }
+  }
+
+  /** The refresh token, for signing out. Only the owning window has one. */
+  get refreshToken(): string {
+    const token = this.#source.refreshToken;
+    if (token === null) throw new Error("a borrowed sign-in has no refresh token");
+    return token;
+  }
+
   /**
-   * An access token good enough to hand to the gateway, refreshed first if it
+   * An access token good enough to hand to the gateway, renewed first if it
    * is about to expire. The gateway connection lives in the Tauri core and has
    * no refresh token of its own — on purpose, since two parties spending a
    * rotating refresh token revokes the family (PROTOCOL §2). This is the one
@@ -360,10 +508,19 @@ export class AuthedApi {
    * `force` is for the case where the server refused a token that had not
    * expired yet, which happens when a server comes back with new signing keys.
    */
+  /**
+   * The access token as it is right now, without renewing it: for handing to
+   * a window that's opening when renewing can't be waited for. That window
+   * asks again if it has stopped working.
+   */
+  heldToken(): { token: string; expiresAt: number } {
+    return { token: this.#source.accessToken, expiresAt: this.#source.expiresAt };
+  }
+
   async accessToken(force = false): Promise<{ token: string; expiresAt: number }> {
     const soon = Date.now() + 60_000;
-    if (force || this.#tokens.expiresAt <= soon) await this.#refresh();
-    return { token: this.#tokens.accessToken, expiresAt: this.#tokens.expiresAt };
+    if (force || this.#source.expiresAt <= soon) await this.#source.renew();
+    return { token: this.#source.accessToken, expiresAt: this.#source.expiresAt };
   }
 
   get<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -598,46 +755,11 @@ export class AuthedApi {
 
   async #withAuth<T>(call: (accessToken: string) => Promise<T>): Promise<T> {
     try {
-      return await call(this.#tokens.accessToken);
+      return await call(this.#source.accessToken);
     } catch (error) {
       if (!(error instanceof ApiError) || error.code !== "UNAUTHENTICATED") throw error;
-      await this.#refresh();
-      return await call(this.#tokens.accessToken);
+      await this.#source.renew();
+      return await call(this.#source.accessToken);
     }
-  }
-
-  #refresh(): Promise<void> {
-    if (this.#refreshing) return this.#refreshing;
-    const attempt = (async () => {
-      const previous = this.#tokens.refreshToken;
-      try {
-        const fresh = await new PublicApi(this.baseUrl).refresh({
-          refresh_token: previous,
-        });
-        this.#tokens = {
-          accessToken: fresh.access_token,
-          refreshToken: fresh.refresh_token,
-          expiresAt: expiryOf(fresh.expires_in),
-        };
-        this.#onTokens(this.#tokens);
-      } catch (error) {
-        // A refused refresh is the end of this sign-in: the token expired, or
-        // it was already spent and the family got revoked. Either way the only
-        // way back is signing in again. A temporary server error or rate limit
-        // says nothing about the token, just like a network failure. Keep the
-        // sign-in so a later request can try again (also used by restoreOne).
-        if (
-          error instanceof ApiError &&
-          (error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN")
-        ) {
-          this.#onSignedOut("Your sign-in expired. Please sign in again.");
-        }
-        throw error;
-      } finally {
-        this.#refreshing = null;
-      }
-    })();
-    this.#refreshing = attempt;
-    return attempt;
   }
 }

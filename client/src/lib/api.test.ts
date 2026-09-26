@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ErrorCode } from "../generated/ErrorCode";
 import type { ErrorEnvelope } from "../generated/ErrorEnvelope";
 import type { RefreshResponse } from "../generated/RefreshResponse";
-import { ApiError, AuthedApi, TransportError } from "./api";
+import { ApiError, AuthedApi, BorrowedTokens, type Lent, TransportError } from "./api";
 
 const BASE_URL = "https://linger.example";
 const FRESH: RefreshResponse = {
@@ -182,5 +182,84 @@ describe("request deadlines (#118)", () => {
     const result = Promise.allSettled([api.get("/rooms")]);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(await result).toEqual([{ status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("did not confirm") }) }]);
+  });
+});
+
+describe("a borrowed sign-in (the Buddy list client's other windows)", () => {
+  function borrower(lent: Lent = { token: "lent-1", expiresAt: Date.now() + 600_000 }) {
+    const ask = vi.fn<(stale: string) => Promise<Lent>>();
+    const source = new BorrowedTokens(lent, ask);
+    const api = new AuthedApi(BASE_URL, source);
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    return { api, source, ask, fetcher };
+  }
+
+  function authorization(fetcher: ReturnType<typeof vi.fn<typeof fetch>>, call: number): string | null {
+    const init = fetcher.mock.calls[call]?.[1];
+    return new Headers(init?.headers).get("authorization");
+  }
+
+  it("asks the owner instead of spending a refresh token, and retries once with what it lends", async () => {
+    const { api, ask, fetcher } = borrower();
+    ask.mockResolvedValueOnce({ token: "lent-2", expiresAt: Date.now() + 600_000 });
+    fetcher.mockResolvedValueOnce(refusal(401, "UNAUTHENTICATED")).mockResolvedValueOnce(Response.json([]));
+
+    await expect(api.dms()).resolves.toEqual([]);
+    expect(ask).toHaveBeenCalledExactlyOnceWith("lent-1");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(authorization(fetcher, 0)).toBe("Bearer lent-1");
+    expect(authorization(fetcher, 1)).toBe("Bearer lent-2");
+    const urls = fetcher.mock.calls.map(([input]) => String(input));
+    expect(urls.some((url) => url.includes("/auth/refresh"))).toBe(false);
+  });
+
+  it("shares one request to the owner between callers refused at the same time", async () => {
+    const { api, ask, fetcher } = borrower();
+    let answer: (lent: Lent) => void = () => undefined;
+    ask.mockReturnValueOnce(new Promise<Lent>((resolve) => { answer = resolve; }));
+    fetcher
+      .mockResolvedValueOnce(refusal(401, "UNAUTHENTICATED"))
+      .mockResolvedValueOnce(refusal(401, "UNAUTHENTICATED"))
+      .mockImplementation(async () => Response.json([]));
+
+    const both = Promise.all([api.dms(), api.dms()]);
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    answer({ token: "lent-2", expiresAt: Date.now() + 600_000 });
+    await expect(both).resolves.toEqual([[], []]);
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a token the owner lends after renewing, without asking", async () => {
+    const { api, source, ask, fetcher } = borrower();
+    source.lend({ token: "lent-9", expiresAt: Date.now() + 600_000 });
+    fetcher.mockResolvedValueOnce(Response.json([]));
+
+    await api.dms();
+    expect(authorization(fetcher, 0)).toBe("Bearer lent-9");
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("asks before handing out a token that is about to run out", async () => {
+    const { api, ask } = borrower({ token: "lent-1", expiresAt: Date.now() + 5_000 });
+    ask.mockResolvedValueOnce({ token: "lent-2", expiresAt: Date.now() + 600_000 });
+    await expect(api.accessToken()).resolves.toMatchObject({ token: "lent-2" });
+  });
+
+  it("lets a later request ask again after the owner could not help", async () => {
+    const { api, ask, fetcher } = borrower();
+    ask.mockRejectedValueOnce(new Error("the owner window is gone"));
+    fetcher.mockResolvedValueOnce(refusal(401, "UNAUTHENTICATED"));
+    await expect(api.dms()).rejects.toThrow("the owner window is gone");
+
+    ask.mockResolvedValueOnce({ token: "lent-2", expiresAt: Date.now() + 600_000 });
+    fetcher.mockResolvedValueOnce(refusal(401, "UNAUTHENTICATED")).mockResolvedValueOnce(Response.json([]));
+    await expect(api.dms()).resolves.toEqual([]);
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+
+  it("has no refresh token to spend", () => {
+    const { api } = borrower();
+    expect(() => api.refreshToken).toThrow("a borrowed sign-in has no refresh token");
   });
 });

@@ -54,9 +54,11 @@ pass.
 10. **No scope creep.** If a change requires a feature from the V2 or V3 lists, or from
     the anti-goals list, stop and ask. Do not build roles, threads, federation, or a
     permission matrix.
-11. **Design system is "Console" (SPEC §5).** No chat bubbles. No avatars. No shadows
-    except focus rings. No gradients on surfaces. No rounded panels. No colored icon
-    squares in the rail. Monospace is metadata-only — mono in a message body is a defect.
+11. **The design system is `docs/design/system.md` (SPEC §5).** No chat bubbles. No
+    avatars. Screens are built from the kit (`client/src/next/kit/`), and a color,
+    size or radius is a token, never a literal; the kit's tests enforce it. New
+    activity is weight, never a count. Monospace is for labels and metadata — mono
+    in a message body is a defect.
 12. **Colors are palette keys, never hex or OKLCH literals**, on the wire and in the
     database. The 16-color palette is defined once in `linger-core::PALETTE`.
 13. **The product has no AI features.** Nothing to build here — no participants, no
@@ -139,7 +141,6 @@ Update it **in the same commit** as the change whenever you touch:
 - **The repo layout** — a new crate or top-level directory, or one that moved.
 - **What the product does or refuses to do** — the V1 feature list, the "never" list,
   the privacy claims, the roadmap phases.
-- **The vocabulary table**, which must match `SPEC.md` §1 exactly.
 - **Anything a reader would now find wrong** if they followed the README as written.
 
 You do not need to touch it for internal refactors, test changes, or anything invisible
@@ -163,7 +164,7 @@ there. The pieces:
 cargo test --workspace          # core + server; also regenerates TS bindings
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cd client && pnpm check         # typecheck frontend
-cd client && pnpm tauri dev     # needs the GUI system deps listed in the README
+cd client && pnpm tauri dev     # needs the GUI system deps in docs/development.md
 cd client/src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
 scripts/minio-test.sh           # the S3 backend, against a throwaway MinIO
 ```
@@ -294,17 +295,27 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M11 DMs                                                          ← V2, built
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                                ← V2, planned
+  → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
   → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
 ```
 
-V1 is built, and so are **M9 (knock), M10 (search), M11 (DMs) and M12
-(voice)**. M10's notes are in `docs/tasks/m10.md`, and its second half changed
-how the client holds history, so read it before touching message loading.
-**All nine release checks closed on 2026-09-25** from real use of the published
-app; the steps are kept in `docs/tasks/release-checks.md` for re-running when
-their area changes. No milestone is in progress: M13 is planned and not
-started, a client rebuild around the Buddy list design is proposed (#198), and
-larger groups are #197. Close a milestone's checks before starting the next.
+V1 is built, and so are **M9 (knock), M10 (search), M11 (DMs), M12 (voice)
+and M15 (the Buddy list client)**. M10's notes are in `docs/tasks/m10.md`, and
+its second half changed how the client holds history, so read it before
+touching message loading. **All nine release checks closed on 2026-09-25**
+from real use of the published app; the steps are kept in
+`docs/tasks/release-checks.md` for re-running when their area changes. M13 is
+planned and not started, and larger groups and the voice rework (a forwarding
+server) are #197. Close a milestone's checks before starting the next.
+
+**The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read
+`docs/design/architecture.md` before touching it; what's left of M15 is in
+`TASKS.md`.
+- **Visual rules:** `docs/design/system.md` governs, and the kit's tests
+  enforce it.
+- **The previous client** (the rest of `client/src/`) stays one release behind
+  `LINGER_CLASSIC=1` as a fallback. It gets bug fixes only, and new-client code
+  never imports its UI.
 
 ---
 

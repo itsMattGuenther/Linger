@@ -1,0 +1,125 @@
+/* Buttons with a label. Pill-shaped, three heights, four variants. */
+.k-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  flex: none;
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-3-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-size: var(--text-control);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.k-button[data-size="sm"] {
+  height: var(--control-sm);
+  padding: 0 var(--space-2-5);
+  gap: var(--space-1);
+  font-size: var(--text-meta);
+}
+
+.k-button[data-size="lg"] {
+  height: var(--control-lg);
+  padding: 0 var(--space-5);
+  gap: var(--space-2);
+}
+
+/* Fill: the full width of a column, or the rest of a row it shares. */
+.k-button[data-fill="yes"] {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.k-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Busy: the label keeps the button's width and the spinner sits over it.
+   The label is only see-through, not hidden, so it's still the button's
+   name: "Continue, busy", not an unnamed button. */
+.k-button[data-busy="yes"] {
+  cursor: progress;
+}
+
+.k-button[data-busy="yes"] .k-button-label {
+  opacity: 0;
+}
+
+.k-button-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* primary: the lamp. One per surface. */
+.k-button[data-variant="primary"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.k-button[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* secondary: a quiet outline. */
+.k-button[data-variant="secondary"],
+.k-button[data-variant="danger"] {
+  background: var(--white-a02);
+  border-color: var(--hairline-strong);
+  color: var(--text-secondary);
+}
+
+.k-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: var(--surface-subtle-hover);
+  border-color: var(--edge-hover);
+  color: var(--text-primary);
+}
+
+/* quiet: no edge until you point at it. */
+.k-button[data-variant="quiet"] {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.k-button[data-variant="quiet"]:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* danger: says so in its color, and warms on hover. */
+.k-button[data-variant="danger"] {
+  color: var(--text-danger);
+}
+
+.k-button[data-variant="danger"]:hover:not(:disabled) {
+  background: var(--danger-wash);
+  border-color: var(--danger-edge);
+  color: var(--text-on-danger);
+}
+
+/* A toggle that is on. */
+.k-button[aria-pressed="true"] {
+  background: var(--accent-wash-strong);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.k-button:disabled {
+  opacity: 0.45;
+}

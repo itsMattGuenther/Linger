@@ -478,3 +478,68 @@ async fn remove_and_restore_answer_not_found_for_a_stranger() {
         assert_eq!(resp.status(), 404, "{path}");
     }
 }
+
+/// Where a person's dot takes its color from: the first color of their name.
+fn dot(user: &User) -> String {
+    match &user.style.fill {
+        linger_core::wire::Fill::Solid { color } => color.0.clone(),
+        linger_core::wire::Fill::Gradient { from, .. } => from.0.clone(),
+    }
+}
+
+#[tokio::test]
+async fn newcomers_start_on_the_least_worn_color_not_everyone_gray() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    // The host sets the server up and starts on the first color in line.
+    assert_eq!(dot(&host.user), "ember");
+    // Everyone after gets a color nobody wears yet, far from the last one's.
+    let mut seen = vec![dot(&host.user)];
+    for name in ["eli", "jules", "dave", "callie"] {
+        let member = common::join_member(&server, &host.access_token, name).await;
+        seen.push(dot(&member.user));
+    }
+    assert_eq!(seen, ["ember", "teal", "rose", "mint", "orchid"]);
+    // Only the color is chosen; the rest of the name is the default.
+    let fresh = common::join_member(&server, &host.access_token, "sam").await;
+    assert_eq!(fresh.user.style.font_key, "geist-sans");
+    assert_eq!(fresh.user.style.weight, 500);
+    assert!(!fresh.user.style.italic);
+}
+
+#[tokio::test]
+async fn a_color_somebody_chose_counts_and_somebody_removed_doesnt() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let client = reqwest::Client::new();
+    // The host moves off ember onto teal, the next color in line.
+    let resp = client
+        .patch(server.url("/me"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({
+            "style": {
+                "font_key": "geist-sans", "weight": 500, "italic": false,
+                "fill": { "kind": "solid", "color": "teal" },
+                "effect": "none", "msg_font_key": null
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    // So the first newcomer gets ember back, and teal is skipped.
+    let eli = common::join_member(&server, &host.access_token, "eli").await;
+    assert_eq!(dot(&eli.user), "ember");
+    let jules = common::join_member(&server, &host.access_token, "jules").await;
+    assert_eq!(dot(&jules.user), "rose");
+    // Somebody removed no longer wears their color.
+    let resp = client
+        .post(server.url(&format!("/users/{}/remove", jules.user.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success(), "remove: {}", resp.status());
+    let dave = common::join_member(&server, &host.access_token, "dave").await;
+    assert_eq!(dot(&dave.user), "rose");
+}

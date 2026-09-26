@@ -1,0 +1,64 @@
+/* A 36×24 hit box holding a 36×20 track. */
+.k-switch {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--switch-w);
+  height: var(--control-sm);
+  border-radius: var(--radius-pill);
+}
+
+.k-switch-track {
+  position: relative;
+  width: var(--switch-w);
+  height: var(--switch-h);
+  border-radius: var(--radius-pill);
+  background: var(--surface-control);
+  box-shadow: inset 0 0 0 1px var(--surface-control-edge);
+  transition: background-color var(--duration-fast);
+}
+
+.k-switch-thumb {
+  position: absolute;
+  top: calc((var(--switch-h) - var(--switch-thumb)) / 2);
+  left: calc((var(--switch-h) - var(--switch-thumb)) / 2);
+  width: var(--switch-thumb);
+  height: var(--switch-thumb);
+  border-radius: var(--radius-pill);
+  background: var(--text-secondary);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast);
+}
+
+.k-switch[aria-checked="true"] .k-switch-track {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.k-switch[aria-checked="true"] .k-switch-thumb {
+  background: var(--text-on-accent);
+  transform: translateX(calc(var(--switch-w) - var(--switch-h)));
+}
+
+.k-switch:disabled {
+  opacity: 0.45;
+}
+
+/* High contrast: the thumb and an "on" track are painted in system colors,
+   or both would be repainted into the background. */
+@media (forced-colors: active) {
+  .k-switch-thumb {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .k-switch[aria-checked="true"] .k-switch-track {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .k-switch[aria-checked="true"] .k-switch-thumb {
+    background: HighlightText;
+  }
+}

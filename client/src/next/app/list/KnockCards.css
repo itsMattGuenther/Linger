@@ -1,0 +1,31 @@
+/* Knocks land in a band over the bottom of the list, just above the voice
+   bar (ListView's notices), so they never cover its controls. The band is
+   solid, so nothing peeks between two cards. Clicks go straight through. */
+.nx-knocks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-notice);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-top: 1px solid var(--hairline);
+  background: var(--surface-window);
+  pointer-events: none;
+}
+
+.nx-knocks .k-notice {
+  max-width: none;
+}
+
+.nx-knock-hi {
+  color: var(--text-muted);
+}
+
+.nx-knock-server {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+}

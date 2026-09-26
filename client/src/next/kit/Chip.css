@@ -1,0 +1,94 @@
+.k-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex: none;
+  max-width: 100%;
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-control);
+}
+
+/* Talking: the lamp, as on the tab of the room you're in voice in. */
+.k-chip[data-active="yes"] {
+  border-color: var(--accent-edge);
+  background: var(--accent-wash);
+  color: var(--text-primary);
+}
+
+button.k-chip[data-remove] {
+  padding-right: var(--space-1-5);
+}
+
+button.k-chip {
+  cursor: pointer;
+}
+
+button.k-chip[aria-expanded="true"] {
+  border-color: var(--accent-edge);
+}
+
+button.k-chip .k-icon {
+  color: var(--icon-muted);
+}
+
+button.k-chip:hover {
+  border-color: var(--edge-hover);
+}
+
+button.k-chip:hover .k-icon {
+  color: var(--text-primary);
+}
+
+.k-chip-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.k-chip .k-name {
+  height: var(--control-sm);
+  font-size: var(--text-control);
+  line-height: var(--control-sm);
+}
+
+/* A shared state, as its control's glyph: muted, deafened. */
+.k-chip-state {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-muted);
+}
+
+.k-chip-note {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  white-space: nowrap;
+}
+
+/* High contrast: whoever's talking is lit in the system's highlight, their
+   name in its text color (a name's own paint would be unreadable on it). */
+@media (forced-colors: active) {
+  .k-chip[data-active="yes"] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .k-chip[data-active="yes"] .name {
+    background: none;
+    color: HighlightText;
+    -webkit-text-fill-color: HighlightText;
+  }
+
+  .k-chip[data-active="yes"] .k-marker {
+    background: HighlightText;
+  }
+}

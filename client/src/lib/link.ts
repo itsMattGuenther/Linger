@@ -19,17 +19,26 @@ export type PastedLink =
   | { kind: "server"; baseUrl: string };
 
 /**
+ * A hostname as the URL parser leaves it: letters, digits, dots, dashes and
+ * underscores (international names arrive as `xn--`), or a bracketed IPv6
+ * address. Parsers differ on the rest, so the rest is refused.
+ */
+const HOST = /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*|\[[0-9a-f:.]+\])$/i;
+
+/**
  * Bare hostnames get `https://`. Anything already carrying a scheme keeps it,
  * so `http://localhost:8080` still works for a server on your own machine.
  */
 function toUrl(raw: string): URL | null {
   const text = raw.trim();
-  if (!text) return null;
+  // A link never has a space in it; a sentence does. Chromium (and so
+  // WebView2) would otherwise read "not a link" as the host `not%20a%20link`.
+  if (!text || /\s/.test(text)) return null;
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
   try {
     const url = new URL(withScheme);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    if (!url.hostname) return null;
+    if (!HOST.test(url.hostname)) return null;
     return url;
   } catch {
     return null;

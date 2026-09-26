@@ -1,0 +1,68 @@
+/* A square button, the icon centered by the grid rather than by nudging. */
+.k-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  color: var(--icon-muted);
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.k-icon-button[data-size="sm"] {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+}
+
+.k-icon-button[data-size="lg"] {
+  width: var(--control-lg);
+  height: var(--control-lg);
+  border-radius: var(--radius-lg);
+}
+
+.k-icon-button[data-tone="plain"]:hover:not(:disabled),
+.k-icon-button[data-tone="plain"][aria-expanded="true"] {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.k-icon-button[data-tone="filled"] {
+  background: var(--surface-control);
+  border-color: var(--surface-control-edge);
+  color: var(--icon-default);
+}
+
+.k-icon-button[data-tone="filled"]:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  color: var(--text-primary);
+}
+
+.k-icon-button[data-tone="accent"] {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.k-icon-button[data-tone="accent"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.k-icon-button[data-tone="danger"]:hover:not(:disabled) {
+  background: var(--danger-wash);
+  color: var(--text-on-danger);
+}
+
+.k-icon-button[aria-pressed="true"] {
+  background: var(--accent-wash-stronger);
+  border-color: var(--accent-edge);
+  color: var(--text-accent);
+}
+
+.k-icon-button:disabled {
+  opacity: 0.35;
+}

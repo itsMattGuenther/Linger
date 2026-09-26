@@ -1,0 +1,304 @@
+import { useEffect, useRef, useState } from "react";
+import type { RoomId } from "../../../generated/RoomId";
+import type { User } from "../../../generated/User";
+import type { ListModel, PersonRow } from "../../core/list";
+import { IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { markerFor } from "../markers";
+import "./ListView.css";
+import { NewDmPicker } from "./NewDmPicker";
+import type { KnockResult } from "../../core/knock";
+import { PersonCard } from "./PersonCard";
+
+/** How long a knocked row rests before it can knock again (SPEC §4.9). */
+const KNOCKED_MS = 3_000;
+
+/** What one server's part of the list can do. */
+export interface ServerBodyActions {
+  onOpenRoom?: (id: RoomId) => void;
+  onOpenDm?: (id: RoomId) => void;
+  /** From a person's card: open a DM with them (finding the one you already have). */
+  onMessage?: (user: User) => void;
+  /** From a person's card: knock (SPEC §4.9). */
+  onKnock?: (user: User) => Promise<KnockResult>;
+  /** From the new-message picker: open the DM with exactly these people; resolves to a problem in words, or null. */
+  onStartDm?: (people: User[]) => Promise<string | null>;
+}
+
+type Fold = "rooms" | "dms" | "people" | "away" | "offline";
+
+/**
+ * One server's rooms, DMs and people (docs/design/buddy-list.md): the whole
+ * list with one server, a server's section with several. The person card and
+ * the new-message picker it opens are its own, so each server's are about
+ * that server's people.
+ *
+ * `idPrefix` keeps the ids inside unique when several servers share a window
+ * (empty with one server); `serverName`, with several, says which server a
+ * list or button belongs to, for assistive technology.
+ */
+export function ServerBody({
+  model,
+  speaking,
+  idPrefix = "",
+  serverName,
+  onOpenRoom,
+  onOpenDm,
+  onMessage,
+  onKnock,
+  onStartDm,
+}: ServerBodyActions & {
+  model: ListModel;
+  /** Who is talking right now, for the voice glyphs. */
+  speaking?: ReadonlySet<string>;
+  idPrefix?: string;
+  serverName?: string;
+}) {
+  // Offline starts folded (the design); everything else starts open.
+  const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline"]));
+  const toggle = (fold: Fold) =>
+    setFolded((current) => {
+      const next = new Set(current);
+      if (next.has(fold)) next.delete(fold);
+      else next.add(fold);
+      return next;
+    });
+  const open = (fold: Fold) => !folded.has(fold);
+  const talking = (user: User) => speaking?.has(user.id) ?? false;
+  const id = (fold: Fold) => `nx-${idPrefix}${fold}`;
+  const on = (words: string) => (serverName ? `${words} on ${serverName}` : words);
+
+  // The card that is open, the row it came from, and where that row was.
+  const [card, setCard] = useState<{ row: PersonRow; anchor: { top: number; bottom: number }; problem?: string } | null>(null);
+  // Who was just knocked, for three seconds: their row gives a shake, and its
+  // Knock button rests (SPEC §4.9: an acknowledgement, not a record).
+  const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
+  const timers = useRef(new Set<number>());
+  useEffect(() => {
+    const held = timers.current;
+    return () => {
+      for (const timer of held) window.clearTimeout(timer);
+    };
+  }, []);
+  const knockedOn = (userId: string) => {
+    setKnocked((held) => new Set(held).add(userId));
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer);
+      setKnocked((held) => {
+        const next = new Set(held);
+        next.delete(userId);
+        return next;
+      });
+    }, KNOCKED_MS);
+    timers.current.add(timer);
+  };
+  const knock = async (user: User): Promise<KnockResult> => {
+    const result = (await onKnock?.(user)) ?? { ok: false, problem: "Knocking isn't available here." };
+    if (result.ok) knockedOn(user.id);
+    return result;
+  };
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const [picking, setPicking] = useState<{ bottom: number } | null>(null);
+  const pickerOpener = useRef<HTMLButtonElement | null>(null);
+  const everyone = [...model.people.here, ...model.people.away, ...model.people.offline];
+  const closeCard = () => {
+    setCard(null);
+    // Focus goes back to the row that opened it.
+    opener.current?.focus();
+  };
+
+  const person = (row: PersonRow) => (
+    <Row
+      key={row.user.id}
+      lead={{ kind: "person", person: markerFor(row.user, row.state) }}
+      lines="two"
+      title={<Name person={row.user} />}
+      label={`${row.user.display_name}, ${row.note}`}
+      trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
+      note={row.note}
+      detail={row.line ?? undefined}
+      away={row.state === "away"}
+      selected={card?.row.user.id === row.user.id}
+      knocked={knocked.has(row.user.id)}
+      actions={[
+        <IconButton key="message" icon="message" size="sm" label={`Message ${row.user.display_name}`} onClick={() => onMessage?.(row.user)} />,
+        <IconButton
+          key="knock"
+          icon="knock"
+          size="sm"
+          label={knocked.has(row.user.id) ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
+          disabled={row.state === "offline" || knocked.has(row.user.id)}
+          onClick={(event) => {
+            const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
+            void knock(row.user).then((result) => {
+              // A knock that didn't go says why, on their card.
+              if (result.ok || !rowButton) return;
+              opener.current = rowButton;
+              const box = rowButton.getBoundingClientRect();
+              setCard({ row, anchor: { top: box.top, bottom: box.bottom }, problem: result.problem });
+            });
+          }}
+        />,
+      ]}
+      onActivate={(event) => {
+        opener.current = event.currentTarget;
+        const box = event.currentTarget.getBoundingClientRect();
+        setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
+      }}
+      onDoubleActivate={() => {
+        // The old AIM habit: a double-click goes straight to the DM.
+        setCard(null);
+        onMessage?.(row.user);
+      }}
+    />
+  );
+
+  return (
+    <>
+      <SectionLabel label="Rooms" open={open("rooms")} onToggle={() => toggle("rooms")} controls={id("rooms")} />
+      {open("rooms") ? (
+        <div id={id("rooms")}>
+          <RowList label={on("Rooms")}>
+            {model.rooms.map((room) => (
+              <Row
+                key={room.id}
+                lead={{ kind: "room" }}
+                lines="one"
+                title={room.name}
+                fresh={room.fresh}
+                label={roomLabel(room.name, room.people.length, room.voice)}
+                end={
+                  room.people.length > 0 || room.voice ? (
+                    <span className="nx-list-room-end">
+                      {room.voice ? <VoiceGlyph speaking={room.people.some(talking)} /> : null}
+                      <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} />
+                    </span>
+                  ) : undefined
+                }
+                onActivate={onOpenRoom ? () => onOpenRoom(room.id) : undefined}
+              />
+            ))}
+          </RowList>
+        </div>
+      ) : null}
+
+      <SectionLabel
+        label="DMs"
+        open={open("dms")}
+        onToggle={() => toggle("dms")}
+        controls={id("dms")}
+        action={
+          onStartDm ? (
+            <IconButton
+              icon="compose"
+              label={on("New message")}
+              size="sm"
+              onClick={(event) => {
+                pickerOpener.current = event.currentTarget;
+                setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
+              }}
+            />
+          ) : undefined
+        }
+      />
+      {open("dms") ? (
+        <div id={id("dms")}>
+          {model.dms.length === 0 ? (
+            <p className="nx-list-empty">No DMs yet.</p>
+          ) : (
+            <RowList label={on("DMs")}>
+              {model.dms.map((dm) => (
+                <Row
+                  key={dm.id}
+                  lead={
+                    dm.people.length === 1 && dm.people[0]
+                      ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
+                      : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
+                  }
+                  lines="one"
+                  title={dm.label}
+                  fresh={dm.fresh}
+                  onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
+                />
+              ))}
+            </RowList>
+          )}
+        </div>
+      ) : null}
+
+      <SectionLabel label="People" open={open("people")} onToggle={() => toggle("people")} controls={id("people")} />
+      {open("people") ? (
+        <div id={id("people")}>
+          <RowList label={on("People here")}>{model.people.here.map(person)}</RowList>
+          {model.people.away.length > 0 ? (
+            <>
+              <SectionLabel label="Away" level="group" open={open("away")} onToggle={() => toggle("away")} controls={id("away")} />
+              {open("away") ? (
+                <div id={id("away")}>
+                  <RowList label={on("Away")}>{model.people.away.map(person)}</RowList>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {model.people.offline.length > 0 ? (
+            <>
+              <SectionLabel label="Offline" level="group" open={open("offline")} onToggle={() => toggle("offline")} controls={id("offline")} />
+              {open("offline") ? (
+                <div id={id("offline")}>
+                  <RowList label={on("Offline")}>{model.people.offline.map(person)}</RowList>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {picking && onStartDm ? (
+        <NewDmPicker
+          people={everyone}
+          meId={model.me?.user.id ?? null}
+          dms={model.dms.map((dm) => ({ id: dm.id, member_ids: dm.memberIds }))}
+          anchor={picking}
+          onStart={async (people) => {
+            const problem = await onStartDm(people);
+            if (problem === null) setPicking(null);
+            return problem;
+          }}
+          onCancel={() => {
+            setPicking(null);
+            pickerOpener.current?.focus();
+          }}
+        />
+      ) : null}
+
+      {card ? (
+        <PersonCard
+          key={card.row.user.id}
+          user={card.row.user}
+          state={card.row.state}
+          note={card.row.note}
+          anchor={card.anchor}
+          onMessage={() => {
+            onMessage?.(card.row.user);
+            setCard(null);
+          }}
+          onKnock={() => knock(card.row.user)}
+          onClose={closeCard}
+          problem={card.problem ?? null}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * A room row's accessible name. The markers are decoration, so the words say
+ * who is in it and whether voice is on, without a number on screen (a count
+ * spoken to a screen reader is allowed, AGENTS rule 3).
+ */
+function roomLabel(name: string, people: number, voice: boolean): string {
+  const parts = [`#${name}`];
+  if (people === 1) parts.push("one person in it");
+  else if (people > 1) parts.push(`${people} people in it`);
+  if (voice) parts.push("voice on");
+  return parts.join(", ");
+}

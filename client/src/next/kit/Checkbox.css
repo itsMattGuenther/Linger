@@ -1,0 +1,81 @@
+/* A checkbox row: a 16px box in the row's lead, then its words. Tokens only. */
+.k-check {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+
+.k-check:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.k-check[data-disabled="yes"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The real input stays for keyboards and screen readers; the box is what's drawn. */
+.k-check-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+/* The one ring, around the row, the way a field draws its focus. */
+.k-check:has(.k-check-input:focus-visible) {
+  box-shadow: 0 0 0 var(--focus-width) var(--focus);
+}
+
+.k-check-input:focus-visible {
+  outline: none;
+}
+
+.k-check-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--text-on-accent);
+}
+
+.k-check-input:checked + .k-check-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.k-check-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* High contrast: a ticked box is filled with the system's highlight. */
+@media (forced-colors: active) {
+  .k-check-input:checked + .k-check-box {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

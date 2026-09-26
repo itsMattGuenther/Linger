@@ -1,0 +1,112 @@
+/* A labelled drop-down, drawn like a TextField: the box takes the height and
+   draws the focus; the system's own list opens under it. */
+.k-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.k-select-label {
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.k-select-label[data-hidden="yes"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.k-select-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--control-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+.k-select-box[data-size="sm"] {
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+}
+
+.k-select-box[data-size="lg"] {
+  height: var(--control-lg);
+}
+
+.k-select-box:hover:not([data-disabled="yes"]) {
+  border-color: var(--edge-hover);
+}
+
+.k-select-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-width) var(--accent-wash-stronger);
+}
+
+.k-select-box[data-disabled="yes"] {
+  opacity: 0.45;
+}
+
+/* The select fills the box, so the whole box opens it; the caret is drawn
+   over its end and lets clicks through. */
+.k-select-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 calc(var(--space-2-5) + var(--icon-sm) + var(--space-2)) 0 var(--space-2-5);
+  border: 0;
+  outline: none;
+  appearance: none;
+  background: none;
+  color: inherit;
+  font-size: var(--text-body);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.k-select-box[data-size="sm"] .k-select-input {
+  padding-left: var(--space-2);
+  font-size: var(--text-control);
+}
+
+.k-select-input:disabled {
+  cursor: default;
+}
+
+/* The box shows focus with its edge; the lamp on the select inside would double it. */
+.k-select-input:focus-visible {
+  outline: none;
+}
+
+.k-select-input option {
+  background: var(--surface-popover);
+  color: var(--text-primary);
+}
+
+.k-select-caret {
+  position: absolute;
+  right: var(--space-2-5);
+  display: grid;
+  place-items: center;
+  color: var(--icon-muted);
+  pointer-events: none;
+}
+
+.k-select-help {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-body);
+}

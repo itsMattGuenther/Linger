@@ -1,0 +1,31 @@
+.nx-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: var(--measure);
+}
+
+.nx-edit-box {
+  width: 100%;
+  min-height: var(--control-md);
+  max-height: var(--composer-max);
+  padding: var(--space-1-5) var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent-edge);
+  background: var(--surface-sunken);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  resize: none;
+  overflow-y: auto;
+}
+
+.nx-edit-box:focus-visible {
+  outline-offset: 0;
+}
+
+.nx-edit-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}

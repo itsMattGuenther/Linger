@@ -26,7 +26,7 @@ import type { UserId } from "../generated/UserId";
 import { ApiError, TransportError, type AuthedApi } from "../lib/api";
 import { useNow } from "../lib/clock";
 import { useGateway } from "../lib/gateway";
-import { dmWhere } from "../dm/dm";
+import { dmWhere } from "../lib/dm";
 import { nameProps, personStyle } from "../lib/names";
 import StatusCard from "../status/StatusCard";
 import StatusEditor from "../status/StatusEditor";
@@ -37,8 +37,8 @@ import {
   type RosterEntry,
   shortAgo,
   stateWord,
-} from "./roster";
-import { usersInVoice } from "../voice/voice";
+} from "../lib/roster";
+import { usersInVoice } from "../lib/voice";
 import ContextPanel from "../lib/ContextPanel";
 import { ActionIcon } from "../lib/icons";
 import Button from "../lib/Button";

@@ -1,7 +1,7 @@
 # Linger — Product Specification
 
-**Version:** 0.1 (pre-implementation)
-**Status:** Draft for V1 build
+**Version:** 0.4
+**Status:** V1 built; V2's knock, search, DMs and voice built
 **Author:** Matt Guenther
 **License:** AGPL-3.0
 
@@ -96,52 +96,46 @@ Every feature decision resolves against these, in order.
 ## 3. Layout
 
 Discord's layout is `[server rail] [channel list] [messages] [member list]`. Linger
-inverts the priority. **People are the primary surface, not a gutter.**
+inverts the priority. **People are the primary surface, not a gutter.** The app is a
+buddy list, like AIM's, with conversations in windows of their own
+(`docs/design/buddy-list.md` is the design).
 
 ```
-┌──────────┬────────────────────────────────────┬─────────────────┐
-│ SERVERS  │  #garage                           │  WHO'S AROUND   │
-│          │  Matt, Callie in the room          │                 │
-│  ● home  │                                    │ ┌─────────────┐ │
-│  ○ work  │                                    │ │● Callie     │ │
-│  + add   │  ─── Saturday morning ───          │ │ in #garage  │ │
-│          │                                    │ │ Elden Ring  │ │
-├──────────┤  Callie   9:14                     │ │ 40m         │ │
-│ ROOMS    │  │ did the drive get here          │ └─────────────┘ │
-│          │  │ yet                             │ ┌─────────────┐ │
-│  #porch  │                                    │ │● Dave       │ │
-│  #garage │  Matt     9:31                     │ │ Blender     │ │
-│  #shop   │  │ yeah, mounting it now           │ │ ♪ Bill Evans│ │
-│          │  │ [img]                           │ └─────────────┘ │
-│ DMs      │                                    │ ┌─────────────┐ │
-│  Callie  │                                    │ │○ Jen        │ │
-│  Dave,   │  ┌──────────────────────────────┐  │ │ 2h · "back  │ │
-│   Jen    │  │ say something                │  │ │ after work" │ │
-│          │  └──────────────────────────────┘  │ └─────────────┘ │
-│  media   │                                    │                 │
-│  search  │                                    │                 │
-└──────────┴────────────────────────────────────┴─────────────────┘
+┌─ The Good Company ─ ⚙ ×┐   ┌─ #general × │ Jules × ─────────────── ⧉ × ┐
+│ Matt           ☾ Away  │   │ #general ●●● Good company. No hurry.       │
+│ ● in #general          │   │ ◂)) Eli, Jules are talking         Join    │
+│ ✎ fixing the porch …   │   │                                            │
+├────────────────────────┤   │ ───────────── TONIGHT ─────────────        │
+│ ROOMS                  │   │ Eli: A bit of Khruangbin.         10:34 PM │
+│ # general    ◂)) ●●●   │   │ Matt: This is exactly what I…     10:37 PM │
+│ # listening-room   ●   │   │ you left off here ─────────────────        │
+│ DMS                  ✎ │   │ Jules: Saturday walk?             10:43 PM │
+│ ● Jules                │   │                                            │
+│ PEOPLE                 │   │ ┌────────────────────────────────────────┐ │
+│ ● Dave  in #listening… │   │ │ › Say something in #general       + → │ │
+│   side two. nobody…    │   │ └────────────────────────────────────────┘ │
+├────────────────────────┤   └────────────────────────────────────────────┘
+│ Media        Search    │
+└────────────────────────┘
 ```
 
-**`media` and `search` are destinations, not rooms.** They sit under the room list
-and open in place of the message stream. Anything that is a place but is not a room
-goes there; nothing floats over the stream.
+**The list window** is the app. From the top: you (your name, where you are, your
+status, and Away); then **Rooms**, each with the dots of who is in it and bold when
+something new arrives; **DMs**, named by who is in them; and **People**, everyone on
+the server with their marker, where they are, and their status. Offline people show
+when they were last here and their away message. With several servers, each is a
+folding section of the list. When you are in voice, the voice bar sits at the bottom,
+and under everything are **Media** and **Search**, each opening a window of its own.
+This list is what makes an empty server feel like a house with the lights on.
 
-**`DMs` is your DMs** (§4.13), between the rooms and the destinations. It is a
-different list for every person on the server, and each one is named by who is in it
-rather than by a slug — a DM has no name of its own. A DM holding something new gets
-the same weight change a room gets and nothing else (§4.2).
+**Conversations open in the chat window**, a tab each, or each in a window of its own
+(Settings → Windows). A tab can be popped out into its own window and put back.
+Closing the list keeps Linger running in the tray, with its sounds and voice; a
+setting makes closing it quit instead. **Settings** is a window too.
 
-**The roster (right) is a card stack, not a name list.** Each card shows: name in the
-user's own styling, presence dot, which room they are in, and their status. Offline
-users show last-seen and their away message.
-This panel is what makes an empty server feel like a house with the lights on.
-
-On wide windows the roster stays visible. When three readable columns will not
-fit, a labelled **People** button opens the same cards in an edge panel. At still
-narrower effective widths, **Navigation** opens the server and room list the same
-way. These panels close with Escape or their labelled close button and return
-keyboard focus. The conversation stays usable without reducing text size.
+Every window draws its own title bar and is an ordinary window to the desktop: it
+snaps, tiles and resizes as the desktop does it. Window sizes and places are
+remembered on this computer.
 
 ---
 
@@ -152,8 +146,8 @@ keyboard focus. The conversation stays usable without reducing text size.
 A room is a place, not a filing cabinet.
 
 - Focusing the app on a room means you are **in the room**. Others see this.
-- Sidebar rooms show a small stack of who is in them, and Who's Around says which
-  room each person is in. That is where occupancy lives; the room header shows the
+- The list's rooms show the dots of who is in them, and People says which room
+  each person is in. That is where occupancy lives; the room header shows the
   room's name and topic and no names (#145 — in a DM the list only repeated the
   title).
 - Backgrounding the app or idling >90 seconds takes you out of the room.
@@ -263,7 +257,7 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
-- First-class sidebar destination, not a search result.
+- A window of its own, opened from the foot of the list, not a search result.
 
 This fixes the deepest wound: you shared something great eight months ago and it is
 gone. For a friend group, that collection *is* the relationship.
@@ -295,6 +289,10 @@ Each user controls the rendering of their own display name:
 4. **Shimmer and glow respect `prefers-reduced-motion`.**
 5. **A global "Use plain names and message fonts" toggle** renders all names in the reader's default
    style. Some people will want this. Give it to them without friction.
+6. **Newcomers start in different colors.** A new account starts on the palette color the
+   fewest active people on that server wear (never slate, which reads as "not chosen"),
+   so a big server doesn't start as a room of identical gray names. It is only a start:
+   anyone changes it in Profile.
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
 hot-pink-Comic-Sans-on-black was funny for a week and unreadable forever. Users get:
@@ -317,8 +315,8 @@ A user's **status** is a small card, not a bio field:
 - Optional: one image, max 512 KB, displayed at 400×200
 - Optional: an away message that supersedes the status when set
 
-The roster previews the status line. The full status appears in the member
-popout opened from their name; expanding it does not rearrange the roster.
+The list previews the status line under each person. The full status appears in
+the person card opened from their name; opening it does not rearrange the list.
 
 ### 4.7 Text presentation
 
@@ -333,14 +331,12 @@ group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts rea
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
 `Saturday morning`, `yesterday afternoon`.
 
-**No avatar column or per-message colored bars.** Styled sender names in group
-headers and indented text underneath establish grouping. A reply’s short,
-clickable quote sits under its sender’s name and above its own text, aligned
-with that text. The quote sits tight against its own text, a neutral hairline
-bracket in the gutter joins the two, and a reply inside a group gets space
-above it, so a quote never reads as the tail of the message before. Deleting a
-reply hides its quote as well as its body; the
-original message and other replies remain unchanged. Consecutive messages
+**No avatar column or per-message colored bars.** The styled sender name starts the
+first line of a run of messages, inline (`Eli: text`), once per run. A reply’s
+short, clickable quote sits just above its own line, joined to it by a neutral
+hairline bracket in the gutter, so a quote never reads as the tail of the message
+before. Deleting a reply hides its quote as well as its body; the original message
+and other replies remain unchanged. Consecutive messages
 do not reserve a hidden action row. A compact action button beside the text opens
 the message menu by pointer or keyboard, without moving the conversation on hover.
 
@@ -369,6 +365,7 @@ their larger spacing.
 
 **Time-of-day warmth.** Background and text colors shift ~200K warmer after local
 sunset. Subtle enough that most people never consciously notice. User-disableable.
+Not in the Buddy list client yet: it waits for an evening version of its colors.
 
 ### 4.8 Reactions
 
@@ -451,11 +448,11 @@ Search exists because principle 3 — keep the artifact — is a promise that a 
 two years ago is still *reachable*, and scrollback alone is not reachable. It is the
 smallest feature that makes the archive worth having.
 
-**Where it lives: a destination in the rail, under the rooms, next to `media`** (§3).
-It opens in place of the message stream, the way the media collection does, so there is
-one pattern for a place that is not a room and nothing floats over the conversation.
-`Ctrl`/`Cmd`+`K` opens that same destination with the box focused — a shortcut *into*
-the rail item, never a second surface with its own behavior.
+**Where it lives: a window of its own, opened from the foot of the list next to
+`Media`** (§3), the way the media collection opens, so there is one pattern for a place
+that is not a room and nothing floats over a conversation. `Ctrl`/`Cmd`+`K` opens that
+same window with the box focused — a shortcut into it, never a second surface with its
+own behavior. A hit opens its conversation at that message.
 
 **What it covers: what people typed, and the names of the files they shared.** A photo
 is findable by its filename, because "the invoice pdf" is how people remember files.
@@ -606,66 +603,44 @@ most one room at a time, for the same reason you are in one room at a time.
 
 ---
 
-## 5. Design system — "Console"
+## 5. Design system
 
-The aesthetic is **a refined instrument, not a terminal and not a document.** It takes
-mIRC's *structure* (hairline panel separation, density, the aligned nick column, the
-live status bar) and AIM's *personalization*, and renders both with modern craft.
+The look is **a lamp-lit porch at night**, taken from the logo: night-blue surfaces,
+lamp amber for the few things that matter (the primary action, "you left off here"),
+and the sign's cyan for focus. It takes AIM's buddy list and personalization and
+renders them with modern craft. **`docs/design/system.md` is the design system**: the
+tokens, the kit of components, and the rules its tests enforce. This section keeps
+only the rules that are product decisions.
 
-Reference class: Zed, Bitwig Studio, Raycast, well-made audio software. Braun and Swiss
-typographic discipline underneath.
-
-**Explicitly not:** terminal cosplay (green phosphor, everything monospace, 11px
-everything), neon gamer, enterprise Slack-gray, warm paper/newspaper, or a dark-mode
-Discord reskin.
+**Explicitly not:** terminal cosplay, neon gamer, enterprise Slack-gray, or a
+dark-mode Discord reskin.
 
 ### 5.1 Hard visual rules
 
 | Rule | Reason |
 |---|---|
 | **No chat bubbles.** Messages are text on the surface. | Bubbles are the iMessage/Discord signature |
-| **No avatars.** Identity is carried by styled names and color. | The whole personalization thesis |
-| **No shadows** except 1px focus rings. | Shadows imply floating cards; panels don't float |
-| **No gradients on surfaces.** Gradients exist only in user name fills. | Keeps the one expressive element expressive |
-| **No rounded panels.** Radius: 4px buttons/inputs, pill switches, 6px inline media, **0 on panels.** | Panels butt against each other via hairlines |
-| **No colored icon squares in the rail.** | Discord's signature; instant clone read |
-| Panel separation is **1px hairlines, full-bleed.** | The mIRC structural inheritance |
+| **No avatars.** Identity is carried by styled names, color and a presence marker. | The whole personalization thesis |
+| **No counts of anything new.** New activity is weight, never a number or a badge. | §4.2 |
+| **One marker per presence state:** a dot here, a crescent away, a dimmed dot offline. | Nothing relies on shape or color alone: the words are in the row and its label |
+| **Mono is for labels and metadata.** A message body is never mono. | Mono in a body was the failure of an earlier direction |
+| **Screens are built from the kit.** A color, size or radius is a token, never a literal. | Most polish bugs came from screens sizing their own controls |
+| **Text never hard-clips.** Anything that can run long ends in "…" or wraps. | |
 
 ### 5.2 Typography
 
-| Role | Face | Size | Notes |
-|---|---|---|---|
-| Message body | Geist Sans (or IBM Plex Sans) | 16px / 1.3 | **Sans, not mono** |
-| UI labels, room names | same | 14–18px / 500 | Actions use sans too |
-| Timestamps, status bar, all numerals, file sizes, code | Geist Mono (or JetBrains Mono) | 12px | **Mono is metadata-only** |
-| Time dividers | mono, uppercase, `0.1em` tracking | 12px | `SATURDAY MORNING` |
-
-Mono appearing in a message body is a defect. That was the failure mode of the earlier
-direction.
+| Role | Face | Notes |
+|---|---|---|
+| Message body | Geist Sans (or the sender's message face) | **Never mono** |
+| Names | the person's own chosen face | from §5.7 |
+| Section labels, times, metadata | Departure Mono | uppercase labels, tracked |
 
 ### 5.3 Color
 
-Cool neutral gray. **Not green-shifted, not blue-black, not warm.**
-
-```
-                    DARK (primary)      LIGHT
-surface-0  app bg   #16181C             #F7F8F9
-surface-1  rails    #1A1D22             #FFFFFF
-surface-2  raised   #21252B             #FFFFFF
-hairline            #2A2E35             #E3E5E9
-hairline-strong     #363B44             #CFD3DA
-text-primary        #E4E7EC             #16181C
-text-secondary      #ADB4C0             #505967
-text-muted          #969DAA             #626C7A
-text-faint          same as muted      same as muted
-accent              #6E9BFF             #2563C9
-```
-
-Accent marks the "you left off here" line, the active-room rule, and primary
-actions such as joining voice, continuing setup and sending. Selected preferences
-may use it with a separate shape or state label. It never decorates entire panels,
-ordinary body text or arbitrary rail icons. Keyboard location uses a restrained
-1px `text-secondary` ring, independent of the server accent.
+Dark only for now (a light version is an open decision). Every color is a token in
+`client/src/next/styles/tokens.css`; `system.md` lists them with their contrast. Text
+meets 4.5:1 on every background it sits on, icons 3:1, and the test suite checks it.
+Evening warmth waits for an evening version of these colors.
 
 ### 5.4 The 16-color name palette
 
@@ -701,118 +676,27 @@ Why this is better than a color wheel:
 **Gradients** are "pick two of the sixteen." Angle is fixed at 92°, not user-configurable
 — one less control, and it guarantees every gradient name reads consistently.
 
-### 5.5 Layout metrics
+### 5.5 Sizes
 
-```
-rail (servers + rooms)     232px default, adjustable
-roster (who's around)      264px default, adjustable
-message stream             flex, min 420px
-panel gutters              20px
-gap between message groups 8px
-hairlines                  1px
-radius                     4px buttons + inputs / pill switches / 6px media / 0 panels
-```
+Every control is one of three heights (24, 32 or 40px at 100%), every list row has a
+fixed height and one lead column, so names line up whatever face or marker a row
+holds. The values are tokens (`system.md`, "Scales"); the geometry tests measure them.
 
 ### 5.6 Behavior
 
-**Control hierarchy.** Actions have visible control
-boundaries at rest, not only on hover. A primary action uses a solid accent
-fill; secondary actions use a contrasting border and surface. Navigation uses
-full-row targets with a distinct selected state. Immediate on/off preferences
-use labelled switches, not ambiguous text buttons. Familiar toolbar actions
-(add, settings, close, collapse) may be icon-only, with accessible names and
-hover/focus tooltips. Less familiar actions keep visible labels. A person's
-name is not drawn as a selector. Buttons and inputs keep Console's 4px radius;
-switches use a pill track and circular thumb. Panels stay square and shadow-free.
-The single-line composer input and Send button share an outer height; Send
-keeps that height when the input grows. Add centers on that height beside them,
-with the same 8px on either side of it as between the input and Send. The attachment action opens a compact
-menu above Add, focuses its first action and dismisses with Escape, outside
-click or its trigger. A pointer-opened contextual panel takes focus on the panel
-itself, so no control inside it is highlighted and no tooltip shows until
-keyboard navigation begins; a pointer-opened menu keeps focus on its first item,
-drawn quietly. Keyboard-opened panels focus their close button (or first item)
-and show the focus ring immediately. Settings headings and navigation labels use title case.
-The shared control language covers chat, settings and welcome; see
-`docs/style-guide.md` for the reference and verification limits.
-
-**Quiet delight (2026-09-17).** Use the final pixel-porch icon on welcome, centered
-and sized to fit, without a duplicate wordmark. Small static porch illustrations
-may accompany genuinely empty conversations/collections; never animate idle
-surfaces. Control presses and contextual panels use short, consistent feedback.
-Reduced motion removes movement without removing state or confirmation.
-Name styling previews include a sample message; status drafts preview locally
-before Save, without publishing keystrokes. Media thumbnails preserve the image,
-expanded previews remain fitted, and starring confirms only after acceptance.
-Existing notification cues share a soft musical family, with distinct rising/
-falling patterns and a quieter peer/message register. Keep all current sound
-gates and defaults; no sound for reactions, typing, saves or browsing.
-
-**Reader controls.** Interface scale is 100–200%, available in Settings →
-Appearance, not on the server/link screen. Saved scale also applies to sign-in
-screens; first-run typography must be readable without configuration.
-Text and controls grow together. Scale and panel
-widths stay on this computer, never on the wire. Resize either panel by dragging
-its boundary or focusing it and using arrow keys; Home/End choose the limits,
-double-click resets. Navigation ranges 200–360px, people 232–400px before scale.
-Narrow windows fit the panels without replacing the saved widths. Below 960px
-of effective width People becomes an on-demand panel; below 640px Navigation
-does too. Effective width accounts for the reader's interface scale. Widening
-the window restores the side panels automatically.
-
-**Navigation.** Show the selected server once in the server list, not again
-under a `SERVER` label. `DMs` has the empty state `empty`. Personal Settings lives
-beside your name in the navigation footer as a gear. Media and Search are
-anchored immediately above that footer. Host controls open from the selected
-server's options, under Server Settings; member removal lives in its People
-section with confirmation, never in an ordinary member's action panel.
-Clicking or right-clicking a roster name opens a compact, dismissible person
-panel with their status and a spaced row of Message / Knock actions. Escape
-and outside click close it and return focus. No roles or permission matrix
-are introduced.
-Desktop notification rules and notification chimes both live in Settings →
-Sound & Voice, in separately labelled sections. The people panel stays about people.
-
-**Voice.** A typographic participant strip stays under the room header. Names
-remain legible when not speaking. A speaking name turns over: its letters are
-drawn in the app background color on a square block of the person's own color
-(a gradient name's block is its gradient; with names normalized, the reader's
-text color; under forced colors, the system highlight). That pair is the
-palette's contrast guarantee, so every key reads in both themes. The block is a
-shape, so speech does not depend on telling colors apart. No bold, underline,
-glow or motion; a name's shimmer or glow rests while its block is up.
-A person who shares that they are muted or deafened shows the mute or deafen
-control's own glyph just right of their name, in metadata color; the word is
-only for screen readers and the tooltip.
-Starting or stopping speech, or muting, moves and resizes nothing: each name
-keeps the block's inset at rest, and the glyph hangs off the name's edge in the
-gap between seats rather than taking space. Each name is centered in its own seat, over any state
-line, and the first name's letters line up with the bar's heading. Click, right-click
-or keyboard-activate a participant to open their local volume controls. Names
-have no selector borders or dropdown arrows. A chevron on the bar collapses
-only the participants; joining and session controls align to the right. Hiding
-the participants leaves join/leave, mute and deafen available. No avatars.
-In a short window, participants start collapsed unless the reader chose otherwise;
-the bar's expand control reveals them. This never changes the voice connection or audio.
-When reading another room/server or opening a destination such as Settings,
-a compact strip names the ongoing voice room and keeps mute, deafen, leave
-and a return-to-room action available. Only one set of active controls is drawn.
-Push-to-talk works while these controls are visible, including in Settings;
-leaving the room view releases a held key, as does losing window focus.
-
-- **Message aging** applies to the message *body only* — never the name or timestamp.
-  Steps: <1h 100%, <1d 88%, older 78%. Floor at 78%; do not go lower.
-- **System messages** (joins, leaves, pins, "dave stood up") are hairline rules with
-  centered mono small-caps text. Never chat lines.
-- **Status bar** is permanent, mono, 12px: connection state, latency in ms, storage
-  used. This is the cheapest "real tool" signal available and no competitor has it.
-- **Connection states show protocol text, not spinners:**
-  `connecting… tls ok… identify… ready (28ms)`
-- **Motion:** 120–160ms, ease-out. No spring, no bounce. The only slow animation in the
-  app is name shimmer (4s linear).
-- **Message presentation:** 16px/1.3 sans body, consecutive messages grouped.
-  One comfortable default, with no density modes. Message bodies are limited
-  to 80ch on wide windows; extra window width must not produce page-wide prose.
+- **Message aging** applies to the message *body only*, never the name or time.
+  Steps: under an hour 100%, under a day 88%, older 78%. Do not go lower.
+- **Message presentation:** a comfortable sans body, names inline once per run of
+  messages from one person, and bodies limited to 80ch on wide windows. One layout,
+  no density modes.
+- **Connection trouble** is said in words at the foot of the list, only while it is
+  true and only after a few seconds: "Can't reach Pinecone. Still trying." Never
+  protocol text, never a permanent status bar.
+- **Motion:** short and ease-out, no spring or bounce. Reduced motion stops anything
+  that moves or loops, without hiding a state or a confirmation.
+- **Reader controls:** interface scale 100–200%, in Settings → Appearance, applied
+  to every window before it draws. It stays on this computer, never on the wire.
+- **Voice:** who is talking is shown without moving or resizing anything.
 
 ### 5.7 Bundled fonts
 

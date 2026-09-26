@@ -80,7 +80,9 @@ class Desktop:
         self.run = run
         self.area = run.output / name
         self.area.mkdir(mode=0o700)
-        env = dict(os.environ, GDK_BACKEND="x11", LIBGL_ALWAYS_SOFTWARE="1",
+        # Its steps drive the previous client's screens, kept one release
+        # behind LINGER_CLASSIC=1 (0.4.0); the Buddy list needs its own (T-1812).
+        env = dict(os.environ, LINGER_CLASSIC="1", GDK_BACKEND="x11", LIBGL_ALWAYS_SOFTWARE="1",
                    XDG_CURRENT_DESKTOP="GNOME", GTK_USE_PORTAL="0", NO_AT_BRIDGE="1")
         for key in ("WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "AT_SPI_BUS_ADDRESS"):
             env.pop(key, None)

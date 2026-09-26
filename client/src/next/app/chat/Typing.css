@@ -1,0 +1,53 @@
+.nx-typing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: var(--control-sm);
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  font-style: italic;
+}
+
+.nx-typing-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-typing-dots {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-0-5);
+}
+
+.nx-typing-dots i {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+  animation: nx-typing calc(1.1s * var(--motion)) var(--ease-in-out) var(--loop);
+}
+
+.nx-typing-dots i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.nx-typing-dots i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes nx-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+
+  30% {
+    opacity: 1;
+  }
+}

@@ -7,7 +7,8 @@ export default defineConfig({
   retries: 0,
   // Stop well inside the CI job's own limit, so a hung run fails here — naming
   // the test still running and uploading evidence — rather than being killed
-  // with its log. A normal CI run takes about five minutes.
+  // with its log. CI runs each engine in a job of its own; one takes about
+  // six minutes.
   globalTimeout: process.env.CI ? 12 * 60_000 : undefined,
   workers: process.env.CI ? 2 : undefined,
   reporter: "list",

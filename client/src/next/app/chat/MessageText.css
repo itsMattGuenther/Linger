@@ -1,0 +1,82 @@
+/* A message body. Sans for everything people wrote; mono only for code. */
+.nx-text {
+  min-width: 0;
+  max-width: var(--measure);
+  color: var(--text-primary);
+  /* The sender's message face (NAME-3): one of the four sans faces, set on the
+     row by lib/fonts.ts messageFontVar; anything else draws in the body face. */
+  font-family: var(--msg-font, var(--font-body));
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
+}
+
+.nx-text-p {
+  margin: 0;
+}
+
+.nx-text-p + .nx-text-p,
+.nx-text > * + * {
+  margin-top: var(--space-1);
+}
+
+.nx-text-quote {
+  margin: 0;
+  padding-left: var(--space-2-5);
+  border-left: var(--rule-strong) solid var(--hairline-strong);
+  color: var(--text-secondary);
+}
+
+.nx-text-code {
+  margin: 0;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.nx-text-inline-code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+}
+
+.nx-text-list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.nx-text-list:is(ul) {
+  list-style: disc;
+}
+
+.nx-text-list:is(ol) {
+  list-style: decimal;
+}
+
+.nx-text-link {
+  color: var(--text-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-edge);
+  text-underline-offset: var(--space-0-5);
+}
+
+.nx-text-link:hover {
+  text-decoration-color: var(--accent);
+}
+
+.nx-mention {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.nx-mention[data-me="yes"] {
+  color: var(--text-accent);
+}

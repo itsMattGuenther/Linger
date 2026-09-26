@@ -63,10 +63,10 @@ and both Rust lockfiles together. Tag once, wait for signed packages and the
 server image, inspect the draft and updater manifest, then publish. Never move a
 published version tag to fix a failed release; use the next patch version.
 
-Use [the 0.3.6 checklist](releases/0.3.6.md#checks-on-installed-clients) for this patch. Record OS,
+Use [the 0.4.0 checklist](releases/0.4.0.md#checks-on-installed-clients) for this release. Record OS,
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
 
-The separate-computer/network and physical-audio checks in
-[release readiness](release-readiness.md) remain open until their stated evidence
-exists. Passing these automated checks does not close them.
+The real-world checks in [release-checks.md](tasks/release-checks.md) are
+closed only by people using the published app on real computers and networks.
+Passing these automated checks does not close them.

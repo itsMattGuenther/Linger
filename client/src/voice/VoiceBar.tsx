@@ -30,7 +30,7 @@ import {
   seatsOf,
   volumeLabel,
   withMySeat,
-} from "./voice";
+} from "../lib/voice";
 import "./voice.css";
 import { useWindowHeight } from "../lib/layout";
 import { useInterfaceScale } from "../lib/interface";

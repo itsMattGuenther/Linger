@@ -48,6 +48,11 @@ POST /auth/logout       { refresh_token }              → 204
 GET  /auth/invite/:code → { valid, server_name, expires_at }  # unauthenticated preview
 ```
 
+A new account (from `POST /auth/register` or `POST /setup`) starts with a
+name style whose fill is the hued palette color the fewest active people on
+the server wear, ties going around the color wheel in steps of seven (SPEC
+§4.5). Slate is never handed out. Everything else in the style is the default.
+
 `POST /auth/register` announces the new account on the gateway: it fans out
 `user.update` carrying the new `User`, which is "here is this person, whether or not
 you had them" (§8). Without it a client that is already connected has no card to draw

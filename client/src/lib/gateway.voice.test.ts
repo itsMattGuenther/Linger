@@ -36,7 +36,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
-vi.mock("../notify/notify", () => ({ considerFrame: () => undefined }));
+vi.mock("./notify", () => ({ considerFrame: () => undefined }));
 const played: string[] = [];
 vi.mock("./sound", () => ({ playKnock: () => false, playSound: (cue: string) => { played.push(cue); return true; } }));
 

@@ -16,7 +16,7 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 import { openExternal } from "../lib/external";
-import { type Block, type Inline, parseMarkdown } from "./markdown";
+import { type Block, type Inline, parseMarkdown } from "../lib/markdown";
 
 /**
  * Turning `@handle` into a person, or not.

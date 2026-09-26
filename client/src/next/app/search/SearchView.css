@@ -1,0 +1,246 @@
+/*
+ * Search, as a pane that fills whatever holds it (340 to 780 wide and more):
+ * the server, the box and the filters at the top, a line that says how the
+ * search is going, then the hits, which scroll.
+ */
+.nx-find {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-window);
+  color: var(--text-secondary);
+  container-type: inline-size;
+}
+
+.nx-find-top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-1);
+}
+
+.nx-find-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+/* Every server at once: one plain sentence in the filters' place, as tall. */
+.nx-find-filters-off {
+  height: var(--control-md);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--control-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Always there, so "Searching…" coming and going never moves the hits. A
+   problem can take a second line. */
+.nx-find-status {
+  position: relative;
+  z-index: var(--z-raised);
+  flex: none;
+  min-height: var(--line-meta);
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-find-status[data-problem] {
+  color: var(--text-danger);
+}
+
+/* Hits scrolled up under the line fade rather than being cut mid-letter. */
+.nx-find-status::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: var(--space-2-5);
+  background: linear-gradient(180deg, var(--surface-window), transparent);
+  pointer-events: none;
+}
+
+.nx-find-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2-5) 0 var(--space-4);
+}
+
+.nx-find-empty {
+  max-width: var(--measure);
+  margin: 0;
+  padding: var(--space-6) var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-control);
+  line-height: var(--leading-body);
+  text-align: center;
+}
+
+.nx-find-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+/* --- a hit -----------------------------------------------------------------
+
+   The list row's geometry: two fixed lines in a 48px row, the words starting
+   on the box's edge. With several servers mixed, a lead column holds each
+   hit's server bar, where the picker's bars are. */
+.nx-hits {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-hit {
+  margin: 0 var(--space-1-5);
+}
+
+.nx-hit-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--marker-gap);
+  width: 100%;
+  height: var(--row-2);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.nx-hits[data-mixed] .nx-hit-main {
+  grid-template-columns: var(--marker-slot) minmax(0, 1fr);
+}
+
+.nx-hit-main:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.nx-hit-main:disabled {
+  opacity: 0.5;
+}
+
+.nx-hit-lead {
+  display: flex;
+  justify-content: center;
+}
+
+.nx-hit-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nx-hit-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--line-name);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+}
+
+/* The name gives way last, after the room and the server. */
+.nx-hit-who {
+  display: block;
+  flex: none;
+  min-width: 0;
+  max-width: 50%;
+  height: var(--line-name);
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  line-height: var(--line-name);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-hit-where,
+.nx-hit-server {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  line-height: var(--line-name);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-hit-where::before,
+.nx-hit-server::before {
+  content: "· ";
+  color: var(--icon-faint);
+}
+
+/* A DM is named by its people; a message mark says it's a DM. */
+.nx-hit-dm {
+  display: inline-flex;
+  margin-right: var(--space-1);
+  color: var(--icon-muted);
+  vertical-align: middle;
+}
+
+.nx-hit-when {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--space-1);
+  font-family: var(--font-mono);
+  line-height: var(--line-name);
+  white-space: nowrap;
+}
+
+/* Narrow, the server's bar says which server; its name is in the hit's
+   sentence for a screen reader, and shows again when there's room. */
+@container (max-width: 34em) {
+  .nx-hit-server {
+    display: none;
+  }
+}
+
+.nx-hit-words {
+  display: block;
+  min-width: 0;
+  height: var(--line-body);
+  color: var(--text-secondary);
+  font-size: var(--text-control);
+  line-height: var(--line-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-hit-words mark {
+  padding: 0 var(--space-0-5);
+  border-radius: var(--radius-xs);
+  background: var(--accent-wash-strong);
+  color: var(--text-primary);
+}
+
+.nx-hit-file {
+  display: inline-flex;
+  margin-right: var(--space-1-5);
+  color: var(--icon-muted);
+  vertical-align: middle;
+}
+
+.nx-hit-also {
+  margin-left: var(--space-1-5);
+  color: var(--text-muted);
+}

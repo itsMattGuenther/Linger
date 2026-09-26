@@ -28,10 +28,10 @@ import type { SearchHit } from "../generated/SearchHit";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
-import { conversationLabel } from "../dm/dm";
+import { conversationLabel } from "../lib/dm";
 import { personStyle } from "../lib/names";
 import DestinationHeader from "../lib/DestinationHeader";
-import { hitTime } from "../stream/time";
+import { hitTime } from "../lib/time";
 import {
   emptyLine,
   fileLine,
@@ -41,7 +41,7 @@ import {
   PAGE,
   snippetText,
   TYPING_PAUSE_MS,
-} from "./search";
+} from "../lib/search";
 import "./search.css";
 
 export default function SearchPanel({

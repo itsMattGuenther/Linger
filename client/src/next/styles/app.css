@@ -1,0 +1,9 @@
+/*
+ * Everything a page of the new client loads, in order: the twelve bundled
+ * faces, the 16 name colors generated from `linger-core::PALETTE`, the tokens,
+ * then the base. An entry point imports this one file.
+ */
+@import "../../fonts/fonts.css";
+@import "../../generated/palette.generated.css";
+@import "./tokens.css";
+@import "./base.css";

@@ -43,7 +43,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 // The notifier reaches for a notification plugin and a markdown parser, and
 // neither has anything to do with which snapshot a frame lands in.
-vi.mock("../notify/notify", () => ({ considerFrame: () => undefined }));
+vi.mock("./notify", () => ({ considerFrame: () => undefined }));
 
 // The sound player reaches for an `AudioContext` that a test runner does not
 // have. Whether a knock makes a noise is `sound.test.ts`'s question; this file

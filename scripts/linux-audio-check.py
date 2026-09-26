@@ -57,7 +57,11 @@ def check(program, output, appimage):
         env[f"XDG_{kind.upper()}_HOME" if kind != "runtime" else "XDG_RUNTIME_DIR"] = str(path)
     env.update(GDK_BACKEND="x11", LINGER_LINUX_BACKEND="x11", NO_AT_BRIDGE="1", XDG_CURRENT_DESKTOP="GNOME",
                GTK_OVERLAY_SCROLLING="0",
-               WEBKIT_DISABLE_DMABUF_RENDERER="1", WEBKIT_DISABLE_COMPOSITING_MODE="1")
+               WEBKIT_DISABLE_DMABUF_RENDERER="1", WEBKIT_DISABLE_COMPOSITING_MODE="1",
+               # The layout probe measures today's client against its own
+               # stylesheet, so it runs in the fallback that still ships it
+               # (0.4.0). The audio it plays is the same in either client.
+               LINGER_CLASSIC="1")
     script = output / "probe.js"
     subprocess.run(["node", str(ROOT / "client/scripts/build-audio-probe.mjs"), str(script)], check=True)
     module = output / "probe.so"

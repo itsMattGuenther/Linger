@@ -1,0 +1,203 @@
+/*
+ * The list row. Its geometry is fixed so it cannot drift:
+ *
+ *   margin | padding | lead slot | gap | text column ... | actions
+ *
+ * The lead slot is the same width in every row, so every name starts at the
+ * same x. The row's height is fixed, and so are the line boxes inside it, so
+ * every name face gives the same height.
+ */
+.k-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.k-row {
+  position: relative;
+  margin: 0 var(--space-1-5);
+  border-radius: var(--radius-md);
+}
+
+/* A knock went out: one small shake, over in about half a second. The
+   durations collapse for reduced motion (tokens.css), so it doesn't move. */
+.k-row[data-knocked="yes"] .k-row-main {
+  animation: k-row-nudge calc(var(--duration-slow) * 2) var(--ease-in-out) 1;
+}
+
+@keyframes k-row-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(calc(var(--nudge) * -1));
+  }
+  40% {
+    transform: translateX(var(--nudge));
+  }
+  60% {
+    transform: translateX(calc(var(--nudge) / -2));
+  }
+  80% {
+    transform: translateX(calc(var(--nudge) / 2));
+  }
+}
+
+.k-row-main {
+  display: grid;
+  grid-template-columns: var(--marker-slot) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--marker-gap);
+  width: 100%;
+  height: var(--row-1);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  text-align: left;
+}
+
+.k-row[data-row-kind="two"] .k-row-main {
+  height: var(--row-2);
+}
+
+/* Half strength, not the icon buttons' third: a row still has words to read. */
+.k-row-main:disabled {
+  opacity: 0.5;
+}
+
+.k-row-main:hover:not(:disabled),
+.k-row[data-selected="yes"] .k-row-main {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.k-row[data-selected="yes"] .k-row-main {
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+.k-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.k-row-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--line-name);
+}
+
+.k-row-title {
+  display: block;
+  min-width: 0;
+  height: var(--line-name);
+  line-height: var(--line-name);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.k-row[data-fresh="yes"] .k-row-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.k-row-trailing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.k-row-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding-left: var(--space-1);
+  color: var(--text-muted);
+  font: 400 var(--text-label) / var(--line-name) var(--font-label);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.k-row-detail {
+  height: var(--line-meta);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  font-style: italic;
+  line-height: var(--line-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.k-row-detail[data-away="yes"] {
+  color: var(--text-away);
+}
+
+/* Actions sit at the end of the row and appear on hover or keyboard focus.
+   While they show, the text column gives them room instead of running under
+   them, and the note steps aside. */
+.k-row-actions {
+  position: absolute;
+  top: 0;
+  right: var(--space-2);
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.k-row:is(:hover, :focus-within) .k-row-actions {
+  display: flex;
+}
+
+.k-row[data-actions="1"] {
+  --row-reserve: calc(var(--control-md) + var(--space-2));
+}
+
+.k-row[data-actions="2"] {
+  --row-reserve: calc(2 * var(--control-md) + var(--space-1) + var(--space-2));
+}
+
+.k-row[data-actions="3"] {
+  --row-reserve: calc(3 * var(--control-md) + 2 * var(--space-1) + var(--space-2));
+}
+
+.k-row[data-actions]:is(:hover, :focus-within) .k-row-text {
+  padding-right: var(--row-reserve);
+}
+
+.k-row[data-actions]:is(:hover, :focus-within) .k-row-note {
+  display: none;
+}
+
+.k-row-end {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-left: auto;
+}
+
+.k-row-note + .k-row-end {
+  margin-left: var(--space-2);
+}
+
+.k-row[data-actions]:is(:hover, :focus-within) .k-row-end {
+  display: none;
+}
+
+/* High contrast: a selected row's wash is repainted away, so it's outlined
+   in the system's highlight instead. */
+@media (forced-colors: active) {
+  .k-row[data-selected="yes"] .k-row-main {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}

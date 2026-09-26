@@ -1,0 +1,87 @@
+/* Signing in, in the list window. Layout only; tokens only. */
+.nx-signin {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-window);
+  color: var(--text-secondary);
+}
+
+.nx-signin-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+}
+
+.nx-signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.nx-signin-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+}
+
+.nx-signin-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-display);
+  line-height: var(--line-display);
+  font-weight: 600;
+}
+
+.nx-signin-lead,
+.nx-signin-help,
+.nx-signin-notice,
+.nx-signin-keyring {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-signin-lead {
+  color: var(--text-secondary);
+}
+
+.nx-signin-help {
+  color: var(--text-muted);
+}
+
+/* Both are warnings, read before anybody is caught out by them. */
+.nx-signin-notice,
+.nx-signin-keyring {
+  color: var(--text-away);
+}
+
+.nx-signin-where {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.nx-signin-server {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  font-weight: 600;
+}
+
+.nx-signin-problem {
+  margin: 0;
+  color: var(--text-danger);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}

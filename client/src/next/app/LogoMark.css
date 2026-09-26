@@ -1,0 +1,33 @@
+.nx-logomark {
+  display: block;
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+}
+
+.nx-logomark-door {
+  fill: var(--night-8);
+  stroke: var(--sign-1);
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+.nx-logomark-window {
+  fill: var(--lamp-2);
+}
+
+.nx-logomark-lamp {
+  fill: var(--lamp-1);
+}
+
+/* High contrast: the door in the system's text color, the light in its highlight. */
+@media (forced-colors: active) {
+  .nx-logomark-door {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .nx-logomark-window,
+  .nx-logomark-lamp {
+    fill: Highlight;
+  }
+}

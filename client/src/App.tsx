@@ -37,7 +37,7 @@ import HostPanel, { type HostSection } from "./host/HostPanel";
 import KnockCards from "./knock/KnockCards";
 import type { MessageId } from "./generated/MessageId";
 import MediaPanel from "./media/MediaPanel";
-import { storageDetail, storageLine } from "./media/media";
+import { storageDetail, storageLine } from "./lib/media";
 import { useNow } from "./lib/clock";
 import { applyNormalize, loadNormalize } from "./lib/normalize";
 import {
@@ -63,7 +63,7 @@ import {
   useGateway,
   useServers,
 } from "./lib/gateway";
-import { dmLabel, noDms, orderDms } from "./dm/dm";
+import { dmLabel, noDms, orderDms } from "./lib/dm";
 import { frameLayout, useWindowWidth } from "./lib/layout";
 import {
   applyInterfaceScale,
@@ -90,7 +90,7 @@ import {
   forgetNotifications,
   resetNotifications,
   setViewing,
-} from "./notify/notify";
+} from "./lib/notify";
 import RosterPanel from "./roster/RosterPanel";
 import SearchPanel from "./search/SearchPanel";
 import Stream from "./stream/Stream";

@@ -27,7 +27,7 @@ import {
   type SoundPrefs,
 } from "../lib/sound";
 import { useNow } from "../lib/clock";
-import { clockTime } from "../stream/time";
+import { clockTime } from "../lib/time";
 import { type ThemePref } from "../lib/theme";
 import {
   appVersion,
@@ -37,7 +37,7 @@ import {
   updateLine,
   type UpdateCheck,
 } from "../lib/updates";
-import { exportLine, type ExportPhase, runExport } from "./export";
+import { exportLine, type ExportPhase, runExport } from "../lib/export";
 import StylePicker from "./StylePicker";
 import { saveDisplayName, useGateway } from "../lib/gateway";
 import {
@@ -47,14 +47,14 @@ import {
   MIN_PASSWORD_CHARS,
   passwordReady,
   passwordRequest,
-} from "./settings";
+} from "../lib/account";
 import { type VoiceDeviceList, voiceDevices } from "../lib/ipc";
 import {
   loadVoicePrefs,
   PUSH_TO_TALK_KEY,
   saveVoicePrefs,
   type VoicePrefs,
-} from "../voice/voice";
+} from "../lib/voice";
 import "./settings.css";
 import AppearanceSettings from "./AppearanceSettings";
 import PreferenceSwitch from "./PreferenceSwitch";

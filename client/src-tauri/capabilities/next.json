@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "next-windows",
+  "description": "The Buddy list client (M15, docs/design/architecture.md) draws its own title bars, so its windows may move, minimize, maximize and close themselves: the drag region needs start-dragging, and the title bar's buttons need the rest. Nothing else is added. The list window keeps the label `main` in both clients, so today's client is granted these too; it never calls them. The chat and Settings windows have their own files (next-chat.json, next-settings.json); the app's own commands are in owner.json. Settings can ask the list window to show the sign-in for another server, so it may bring itself forward: unminimize and set-focus. Interface size zooms the page and grows the window to match (core/appearance.ts), which needs set-webview-zoom and set-size.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize"
+  ]
+}

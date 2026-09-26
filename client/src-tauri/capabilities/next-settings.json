@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "next-settings",
+  "description": "The Buddy list client's Settings window (M15, docs/design/architecture.md). It draws its own title bar, so it may move, minimize, maximize and close itself, and it opens links (release notes, the archive download) in the person's browser, like the main window. It does not get notifications: only the list window (the owner) notifies. Events between windows are covered by core:default. Interface size zooms the page and grows the window to match (core/appearance.ts), which needs set-webview-zoom and set-size. Of the app's own commands (build.rs) it may call graphics_started (the start-up check every window runs), voice_devices (to list microphones and speakers), and app_version, update_check and update_install (Account & App). The keyring, the connections, voice and notifications stay the list window's.",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "https://*"
+        }
+      ]
+    },
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-size",
+    "allow-graphics-started",
+    "allow-voice-devices",
+    "allow-app-version",
+    "allow-update-check",
+    "allow-update-install"
+  ]
+}

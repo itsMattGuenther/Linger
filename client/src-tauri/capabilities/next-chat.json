@@ -1,0 +1,31 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "next-chat",
+  "description": "The Buddy list client's chat windows (M15, docs/design/architecture.md): `chat` holds the tabs; `chat-*` are conversations popped out into their own windows. They draw their own title bars, so they may move, minimize, maximize and close themselves, and they open links in the person's browser, like the main window. They do not get notifications: only the list window (the owner) notifies. Events between windows are covered by core:default. Interface size zooms the page and grows the window to match (core/appearance.ts), which needs set-webview-zoom and set-size. Of the app's own commands (build.rs) they may call only two: gateway_send, for typing through the list window's connection, and graphics_started, the start-up check every window runs. The keyring, the connections, voice and notifications stay the list window's.",
+  "windows": [
+    "chat",
+    "chat-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "https://*"
+        }
+      ]
+    },
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-size",
+    "allow-gateway-send",
+    "allow-graphics-started"
+  ]
+}

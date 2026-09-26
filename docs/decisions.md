@@ -212,6 +212,48 @@ stored reaction.
 
 ---
 
+## Decided — the client is rebuilt around the Buddy list design
+
+**Matt, 2026-09-25 (#198).** Out of the #101 design exploration, Matt chose the
+Buddy list:
+- a tall list of friends as the app's own window;
+- conversations as tabs in one chat window by default, or each in its own
+  window as an opt-in setting;
+- voice that belongs to the room, not the tab or window;
+- several servers as folding sections.
+
+The look comes from the logo: night blue, lamp amber, pixel labels. Linger
+draws its own title bars, and there are no avatars.
+
+**Rebuilt, not reskinned.** The first client grew by accretion. Its recurring
+bugs were one-off sizes and alignments (#88, #144, #146, #164, #172) and
+spacing (#92, #93, #181). The new client is built from a kit of parts whose
+sizes are fixed by tokens and checked by geometry tests, so those bugs can't be
+written. Matt asked for "intentionally crafted software": long-term stability,
+maintenance and thorough tests.
+
+**Next to the old one, not instead of it:**
+- **Same repository.** A new repository would strand installed copies: they
+  update from this repository's releases.
+- **Not a long-lived branch.** It would drift from main and end in one risky
+  merge.
+- **Where it lives:** `client/src/next/`, reusing the tested core (REST client,
+  sessions, gateway store, voice engine, updater), opened only behind a hidden
+  switch until it passes `docs/design/parity.md`.
+
+**One owner window.** The buddy list window alone:
+- refreshes tokens;
+- connects gateways;
+- plays sounds and shows notifications;
+- drives voice.
+
+Other windows keep their own copy of the state with the same pure `apply`, and
+catch up from the owner's snapshot. `docs/design/architecture.md` has the
+reasons: rotating refresh tokens, `gateway_connect` replacing connections,
+and events reaching every window.
+
+**Scope:** Linux and Windows. No macOS build (see the decision above).
+
 ## Decided — Omarchy and Arch get a package, from our own repository
 
 **Matt, 2026-09-25 (#188).** The AppImage bundles an older WebKitGTK (2.50.4,

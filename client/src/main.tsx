@@ -12,6 +12,7 @@ import "./generated/palette.generated.css";
 import "./styles/base.css";
 import "./styles/names.css";
 import App from "./App";
+import { refuseStrayDrops } from "./lib/drops";
 import { applyInterfaceScale } from "./lib/interface";
 import { unlockAudio } from "./lib/sound";
 
@@ -25,6 +26,10 @@ const armAudio = (): void => {
 };
 window.addEventListener("pointerdown", armAudio);
 window.addEventListener("keydown", armAudio);
+
+// A file dropped outside the message box is refused, not opened in place of
+// the app (lib/drops.ts).
+refuseStrayDrops(window);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

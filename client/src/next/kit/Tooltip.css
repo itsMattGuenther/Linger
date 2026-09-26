@@ -1,0 +1,21 @@
+.k-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: calc(var(--space-8) * 8);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-popover);
+  border: 1px solid var(--white-a10);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font: 500 var(--text-meta) / var(--line-meta) var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Measured before it is placed; invisible for that one frame. */
+.k-tooltip[data-placed="no"] {
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}

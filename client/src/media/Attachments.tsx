@@ -19,7 +19,7 @@ import type { Attachment } from "../generated/Attachment";
 import DownloadFile from "./DownloadFile";
 import { absoluteUrl } from "../lib/url";
 import { ActionIcon } from "../lib/icons";
-import { durationText, fileSize, inlineBox, renderAs } from "./media";
+import { durationText, fileSize, inlineBox, renderAs } from "../lib/media";
 import "./media.css";
 
 export default function Attachments({ files, baseUrl }: { files: Attachment[]; baseUrl: string }) {

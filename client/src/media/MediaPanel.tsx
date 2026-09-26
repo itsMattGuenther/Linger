@@ -28,12 +28,12 @@ import type { UserId } from "../generated/UserId";
 import { ApiError, type AuthedApi } from "../lib/api";
 import { openExternal } from "../lib/external";
 import { absoluteUrl } from "../lib/url";
-import { conversationLabel } from "../dm/dm";
+import { conversationLabel } from "../lib/dm";
 import { personStyle } from "../lib/names";
 import EmptyState from "../lib/EmptyState";
 import DestinationHeader from "../lib/DestinationHeader";
 import Button from "../lib/Button";
-import { fullTime } from "../stream/time";
+import { fullTime } from "../lib/time";
 import {
   dayEnd,
   dayStart,
@@ -43,7 +43,7 @@ import {
   itemDescription,
   itemLabel,
   KIND_FILTERS,
-} from "./media";
+} from "../lib/media";
 import "./media.css";
 import DownloadFile from "./DownloadFile";
 

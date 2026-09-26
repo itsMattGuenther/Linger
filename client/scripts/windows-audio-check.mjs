@@ -35,7 +35,9 @@ try {
     assert.equal(changed.status, 0, changed.stderr);
     policyKeys.push(key);
   }
-  app = spawn(resolve(exe), [], { stdio: "ignore" });
+  // Today's client, the fallback that still ships (0.4.0): the layout probe
+  // measures it against its own stylesheet. The audio is the same in either.
+  app = spawn(resolve(exe), [], { stdio: "ignore", env: { ...process.env, LINGER_CLASSIC: "1" } });
   let launchError;
   app.on("error", (error) => { launchError = error; });
   let connectionError;
@@ -65,7 +67,11 @@ try {
   console.log("PASS packaged WebView2 realtime audio:", JSON.stringify(result));
 } finally {
   if (browser) await browser.close();
-  if (app?.pid) spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { stdio: "ignore" });
+  if (app?.pid) {
+    spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { stdio: "ignore" });
+    // Only one Linger runs at a time: the next launch must not find this one.
+    if (app.exitCode === null) await new Promise((settle) => { app.once("exit", settle); setTimeout(settle, 10000); });
+  }
   for (const key of policyKeys) {
     const removed = spawnSync("reg", ["delete", key, "/v", appName, "/f"], { encoding: "utf8" });
     assert.equal(removed.status, 0, `Could not remove test policy: ${removed.stderr}`);
