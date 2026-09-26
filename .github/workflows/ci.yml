@@ -158,10 +158,10 @@ jobs:
         run: pnpm check
       - name: test
         run: pnpm test
-      - name: browser engines
-        run: pnpm exec playwright install --with-deps chromium webkit
-      - name: browser layout and keyboard checks
-        run: pnpm test:browser
+      - name: browser engine
+        run: pnpm exec playwright install --with-deps chromium
+      - name: browser layout and keyboard checks (Chromium, and so WebView2)
+        run: pnpm test:browser --project=chromium
       - name: build
         run: pnpm exec vite build
       - name: browser failure evidence
@@ -169,6 +169,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: browser-failures
+          path: client/test-results
+          retention-days: 7
+
+  web-webkit:
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
+    # The same browser checks in WebKit (the engine under WebKitGTK), in a job
+    # of their own so the two engines run side by side: together in one job
+    # they outgrew its time limit.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: enable pnpm
+        run: corepack enable
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: browser engine
+        run: pnpm exec playwright install --with-deps webkit
+      - name: browser layout and keyboard checks (WebKit)
+        run: pnpm test:browser --project=webkit
+      - name: browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures-webkit
           path: client/test-results
           retention-days: 7
 
