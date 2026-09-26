@@ -462,6 +462,68 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a server signed out of is let go by every open window: its sign-in, its state, its frames", async () => {
+    const { hub, owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    const frames = evening();
+    frames.slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const heard: string[] = [];
+    follower.onSignedOut((server) => heard.push(server));
+    expect(viewer.gateway.serverState(HOME).me?.id).toBe("u-matt");
+
+    // Somebody else's server going is nothing to this window.
+    hub.broadcast(owner.share.SIGNED_OUT, { v: 1, server: "https://elsewhere.example" });
+    expect(heard).toEqual([]);
+
+    hub.broadcast(owner.share.SIGNED_OUT, { v: 1, server: HOME });
+    expect(heard).toEqual([HOME]);
+    expect(follower.apis.has(HOME)).toBe(false);
+    expect(viewer.gateway.serverState(HOME).me).toBeNull();
+    // What the server says after is no longer this window's business.
+    frames.slice(3, 6).forEach(core);
+    expect(viewer.gateway.serverState(HOME).me).toBeNull();
+    // Heard once, however often it's said.
+    hub.broadcast(owner.share.SIGNED_OUT, { v: 1, server: HOME });
+    expect(heard).toEqual([HOME]);
+    follower.stop();
+  });
+
+  it("a server signed out of while the window was catching up is never taken up", async () => {
+    const { hub, owner, viewer, core } = await windows();
+    const lent = { token: "token-1", expiresAt: Date.now() + 600_000 };
+    let gated = false;
+    let lendNow: () => void = () => undefined;
+    const api = {
+      ...fakeOwnerApi(["token-1"]),
+      // Once gated, the owner's answer waits on this token.
+      accessToken: vi.fn(() => (gated ? new Promise<typeof lent>((settle) => (lendNow = () => settle(lent))) : Promise.resolve(lent))),
+    };
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    gated = true;
+    const asked = api.accessToken.mock.calls.length;
+    const following = viewer.mirror.followOwner(viewer.bus);
+    await vi.waitFor(() => expect(api.accessToken.mock.calls.length).toBeGreaterThan(asked));
+    hub.broadcast(owner.share.SIGNED_OUT, { v: 1, server: HOME });
+    lendNow();
+    const follower = await following;
+    expect(follower.apis.has(HOME)).toBe(false);
+    expect(viewer.gateway.serverState(HOME).me).toBeNull();
+    follower.stop();
+  });
+
+  it("tells which servers were signed out of between two lists", () => {
+    return import("./share").then(({ leftOut }) => {
+      expect(leftOut(["a", "b", "c"], ["c", "a"])).toEqual(["b"]);
+      expect(leftOut(["a"], [])).toEqual(["a"]);
+      expect(leftOut([], ["a"])).toEqual([]);
+    });
+  });
+
   it("keeps what the tabs window was sent before it was listening, and hands it over once", async () => {
     const { hub, owner, viewer, core } = await windows();
     const api = fakeOwnerApi(["token-1"]);

@@ -245,6 +245,18 @@ test("with several servers, a tab carries its server's stripe and name, and the 
   await expect(page.locator(".nx-pane-server")).toHaveText("Ashen Lanterns");
 });
 
+test("a server signed out of takes its tabs with it, and with nothing left the window closes", async ({ page }) => {
+  await open(page, "room=r-general&servers");
+  await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
+  await expect(page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" })).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(() => window.owner?.signedOut("https://ashen-lanterns.example"));
+  await expect(page.getByRole("tab")).toHaveCount(1);
+  await expect(page.getByRole("tab", { name: /#general/ })).toHaveAttribute("aria-selected", "true");
+  expect(await did(page)).not.toContain("window:close");
+  await page.evaluate((server) => window.owner?.signedOut(server), SERVER);
+  await expect.poll(() => did(page)).toContain("window:close");
+});
+
 test("with one server, tabs and headers say nothing about servers", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("tab", { name: "#general" })).toBeVisible();

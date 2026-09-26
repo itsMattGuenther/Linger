@@ -85,6 +85,8 @@ declare global {
       mode: (mode: "tabs" | "windows") => void;
       /** With `?noowner`: the list window starts answering. */
       wake: () => void;
+      /** The list window says a server was signed out of. */
+      signedOut: (server: string) => void;
     };
   }
 }
@@ -100,6 +102,7 @@ window.owner = {
   held: desktop.held,
   mode: (mode) => desktop.deliver("next:mode", { v: 1, mode }),
   wake: desktop.wake,
+  signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
 };
 
 const root = document.getElementById("root");

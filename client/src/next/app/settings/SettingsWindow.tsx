@@ -92,11 +92,14 @@ function Settings({ following }: { following: Following }) {
   const { apis, intend } = following;
   const servers = useServers();
   const now = useNow();
+  // Bumped when a server is signed out of, so what's shown is worked out again.
+  const [signedOuts, setSignedOuts] = useState(0);
   // One server for now: several, each with its own you, come with T-1809.
   const [server, api] = useMemo((): [string, AuthedApi] | [null, null] => {
+    void signedOuts;
     const [first] = apis;
     return first ?? [null, null];
-  }, [apis]);
+  }, [apis, signedOuts]);
   const state: GatewayState | undefined = server === null ? undefined : servers[server];
   const [section, setSection] = useState<{ key: SettingsKey | undefined; asked: number }>({ key: sectionOf(window.location.search), asked: 0 });
 
@@ -115,6 +118,16 @@ function Settings({ following }: { following: Following }) {
     reporter.current?.stop();
     if (isTauri()) void getCurrentWindow().close();
   }, []);
+
+  // Signed out of a server: Settings shows what's left, or closes with nothing left.
+  useEffect(
+    () =>
+      following.onSignedOut(() => {
+        if (following.apis.size === 0) closeWindow();
+        else setSignedOuts((count) => count + 1);
+      }),
+    [following, closeWindow],
+  );
 
   // Asked for again while open: show that section (window.rs emits `next:section`).
   useEffect(() => {

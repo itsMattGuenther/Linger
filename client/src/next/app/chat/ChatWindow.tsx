@@ -176,6 +176,10 @@ function Conversations({ following }: { following: Following }) {
     };
   }, [apis]);
 
+  // A server signed out of takes its tabs with it; with none left, the
+  // window closes.
+  useEffect(() => following.onSignedOut((server) => setTabs((held) => keepOnly(held, (tab) => tab.server !== server))), [following]);
+
   // A conversation that's gone (a room archived, a DM you were taken out of)
   // loses its tab, once its server has told this window what exists.
   useEffect(() => {

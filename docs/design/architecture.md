@@ -190,6 +190,15 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `away`: you went away or came back from Settings (presence is the owner's);
 - `signout`: sign out of a server on this computer.
 
+**Signing out reaches every window.** The server doesn't cancel access tokens
+when you sign out, so a window still holding one could go on working as you
+for up to fifteen minutes. Whenever a server leaves the owner's signed-in list
+(Settings, a sign-in that ran out, signing out of everything), the owner
+tells every window (`next:signedout`). Each drops that server's borrowed
+token, state and frames at once, and never takes it up from a snapshot that
+was already on its way. The chat window closes that server's tabs, and closes
+when none are left; Settings closes when no server is left.
+
 Two things Settings needs an answer to go through the owner as questions
 (`ask`), not intents: turning a notification rule on or off (`next:notify`),
 and changing your password (`next:password`), which the owner follows by

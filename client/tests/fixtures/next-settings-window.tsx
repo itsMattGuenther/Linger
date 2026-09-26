@@ -69,10 +69,17 @@ const desktop = fakeDesktop({
 
 declare global {
   interface Window {
-    shell?: { section: (key: string) => void };
+    shell?: {
+      section: (key: string) => void;
+      /** The list window says a server was signed out of. */
+      signedOut: (server: string) => void;
+    };
   }
 }
-window.shell = { section: (key) => desktop.deliver("next:section", key) };
+window.shell = {
+  section: (key) => desktop.deliver("next:section", key),
+  signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
+};
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

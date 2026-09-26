@@ -100,3 +100,20 @@ test("a window that asks for a snapshot gets every server, each with a lent toke
   expect(payload.answer.servers.map((one) => one.server).sort()).toEqual([GUILD, HOME, LISBON].sort());
   for (const one of payload.answer.servers) expect(one.lent.token).toBe(`token-${one.server}`);
 });
+
+test("signing out of a server tells every window, and the rest stay signed in", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "signout", server: "https://ashen-lanterns.example" }));
+  await expect(section(page, "Ashen Lanterns")).toHaveCount(0);
+  await expect(section(page, "The Good Company")).toBeVisible();
+  const asked = await did(page);
+  expect(asked).toContain(`forget ${GUILD}`);
+  expect(asked.filter((line) => line.startsWith("emit next:signedout"))).toEqual([`emit next:signedout:${JSON.stringify({ v: 1, server: GUILD })}`]);
+});
+
+test("signing out of the last server tells every window, and the list goes back to signing in", async ({ page }) => {
+  await open(page, "?one");
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "signout", server: "https://good-company.example" }));
+  await expect(page.locator("[data-screen='signin']")).toBeVisible();
+  expect((await did(page)).filter((line) => line.startsWith("emit next:signedout"))).toEqual([`emit next:signedout:${JSON.stringify({ v: 1, server: HOME })}`]);
+});

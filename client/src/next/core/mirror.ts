@@ -22,13 +22,26 @@ import {
   unfollow,
 } from "../../lib/gateway";
 import { ask, type Bus, OWNER, PROTOCOL } from "./bus";
-import { INTENT, type Intent, SHARED, type SharedMessage, SNAPSHOT, type SnapshotAnswer, TOKEN, type TokenQuestion } from "./share";
+import {
+  INTENT,
+  type Intent,
+  SHARED,
+  type SharedMessage,
+  SIGNED_OUT,
+  type SignedOutMessage,
+  SNAPSHOT,
+  type SnapshotAnswer,
+  TOKEN,
+  type TokenQuestion,
+} from "./share";
 
 export interface Following {
-  /** One borrowed sign-in per server the owner is connected to. */
+  /** One borrowed sign-in per server the owner is connected to; a server signed out of leaves it. */
   apis: ReadonlyMap<string, AuthedApi>;
   /** Ask the owner to do something only it may do. */
   intend(intent: Intent): Promise<void>;
+  /** Hear when a server is signed out of, after this window has let it go. */
+  onSignedOut(heard: (server: string) => void): () => void;
   stop(): void;
 }
 
@@ -45,6 +58,21 @@ export async function followOwner(bus: Bus): Promise<Following> {
   // copy to go into, so it is dropped rather than buffered forever.
   let settled = false;
 
+  // A server signed out of is let go at once: its borrowed sign-in, its
+  // state, its frames. One signed out of while the owner's answer was on its
+  // way is never taken up.
+  const apis = new Map<string, AuthedApi>();
+  const signedOut = new Set<string>();
+  const hearing = new Set<(server: string) => void>();
+  const letGo = (server: string) => {
+    signedOut.add(server);
+    if (!apis.has(server)) return;
+    apis.delete(server);
+    live.delete(server);
+    unfollow(server);
+    for (const heard of hearing) heard(server);
+  };
+
   const stops = await Promise.all([
     bus.listen<{ server: string; frame: ServerFrame }>("gateway:frame", ({ server, frame }) => {
       if (live.has(server)) {
@@ -60,7 +88,10 @@ export async function followOwner(bus: Bus): Promise<Following> {
       followStatus(server, status);
     }),
     bus.listen<SharedMessage>(SHARED, (message) => {
-      if (message.v === PROTOCOL) adoptShared(message.server, message.shared);
+      if (message.v === PROTOCOL && !signedOut.has(message.server)) adoptShared(message.server, message.shared);
+    }),
+    bus.listen<SignedOutMessage>(SIGNED_OUT, (message) => {
+      if (message.v === PROTOCOL) letGo(message.server);
     }),
   ]);
 
@@ -72,9 +103,9 @@ export async function followOwner(bus: Bus): Promise<Following> {
     throw error;
   }
 
-  const apis = new Map<string, AuthedApi>();
   for (const share of answered.servers) {
     const server = share.server;
+    if (signedOut.has(server)) continue;
     const tokens = new BorrowedTokens(share.lent, (stale) => {
       const question: TokenQuestion = { server, stale };
       return ask<Lent>(bus, OWNER, TOKEN, question);
@@ -94,6 +125,10 @@ export async function followOwner(bus: Bus): Promise<Following> {
   return {
     apis,
     intend: (intent) => bus.send(OWNER, INTENT, { ...intent, v: PROTOCOL, id: crypto.randomUUID(), from: bus.label }),
+    onSignedOut(heard) {
+      hearing.add(heard);
+      return () => void hearing.delete(heard);
+    },
     stop() {
       for (const stop of stops) stop();
       for (const server of apis.keys()) unfollow(server);

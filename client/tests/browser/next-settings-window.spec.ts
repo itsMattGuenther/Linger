@@ -121,6 +121,14 @@ test("Escape in a text box only leaves the box; Escape again closes Settings, wh
   expect(intents(await did(page)).at(-1)).toEqual({ kind: "closing" });
 });
 
+test("signed out of from anywhere else, Settings closes too", async ({ page }) => {
+  await open(page, "?section=account");
+  await page.evaluate((server) => window.shell?.signedOut(server), SERVER);
+  await expect.poll(() => did(page)).toContain("window:close");
+  // It wasn't Settings that asked.
+  expect(intents(await did(page))).not.toContainEqual({ kind: "signout", server: SERVER });
+});
+
 test("signing out asks the list window, and Settings closes", async ({ page }) => {
   await open(page, "?section=account");
   await page.getByRole("button", { name: "Sign out" }).click();

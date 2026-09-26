@@ -60,6 +60,8 @@ export const CLOSED = "next:closed";
 export const MODE = "next:mode";
 /** The tabs window, now listening, asks what it was sent to open before it was. */
 export const OPENS = "next:opens";
+/** A server was signed out of, however it happened: every window lets it go. */
+export const SIGNED_OUT = "next:signedout";
 /** Settings asks the owner to turn a notification rule on or off (the owner keeps them). */
 export const NOTIFY = "next:notify";
 /** Settings asks the owner to change your password and sign back in with the new one. */
@@ -80,6 +82,17 @@ export interface PasswordQuestion {
 /** How a request to the owner went: the problem in words, or null. */
 export interface Outcome {
   problem: string | null;
+}
+
+export interface SignedOutMessage {
+  v: number;
+  server: string;
+}
+
+/** The servers in `before` that aren't in `after`: signed out of since. */
+export function leftOut(before: readonly string[], after: readonly string[]): string[] {
+  const still = new Set(after);
+  return before.filter((server) => !still.has(server));
 }
 
 /** What the tabs window was sent to open before it was listening, oldest first. */

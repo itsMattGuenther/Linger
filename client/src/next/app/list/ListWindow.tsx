@@ -23,7 +23,7 @@ import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { RoomId } from "../../../generated/RoomId";
-import { tauriBus } from "../../core/bus";
+import { PROTOCOL, tauriBus } from "../../core/bus";
 import { isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
@@ -31,7 +31,7 @@ import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
-import { type Accounts, type Sharing, shareAsOwner, type WindowOpener } from "../../core/share";
+import { type Accounts, leftOut, type Sharing, SIGNED_OUT, type SignedOutMessage, shareAsOwner, type WindowOpener } from "../../core/share";
 import { signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
@@ -58,6 +58,25 @@ export function ListWindow() {
   const sessions = useSessions();
   const { addServer } = sessions;
   const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
+
+  // Every window hears when a server is signed out of, however it happened
+  // (Settings, a sign-in that ran out, all of them at once), so none goes on
+  // working as you there (SIGNED_OUT in core/share.ts).
+  const signedIn = sessions.state.status === "ready" ? sessions.state.servers.map((session) => session.baseUrl) : null;
+  const signedInKey = signedIn === null ? null : signedIn.join(" ");
+  const wasSignedIn = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (signedInKey === null) return;
+    const now = signedInKey === "" ? [] : signedInKey.split(" ");
+    const before = wasSignedIn.current;
+    wasSignedIn.current = now;
+    if (before === null || !isTauri()) return;
+    const bus = tauriBus();
+    for (const server of leftOut(before, now)) {
+      const message: SignedOutMessage = { v: PROTOCOL, server };
+      void bus.broadcast(SIGNED_OUT, message);
+    }
+  }, [signedInKey]);
 
   if (sessions.state.status === "restoring") {
     return (
