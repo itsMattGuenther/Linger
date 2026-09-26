@@ -9,6 +9,53 @@
   color: var(--text-primary);
 }
 
+/* Somebody knocked on your door (#211): the whole list, title bar and all,
+   rocks side to side twice, as the prototype's window did. Only what's drawn
+   moves; the window itself stays where it is. Reduced motion stills it
+   (tokens.css). Two identical rocks, taken in turn, so a second knock starts
+   the rock over. */
+.nx-list[data-rock="a"] {
+  animation: nx-list-rock-a var(--duration-rock) var(--ease-in-out) 1;
+}
+
+.nx-list[data-rock="b"] {
+  animation: nx-list-rock-b var(--duration-rock) var(--ease-in-out) 1;
+}
+
+@keyframes nx-list-rock-a {
+  0%,
+  30%,
+  60%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  40% {
+    transform: translateX(calc(var(--rock) * -1)) rotate(calc(var(--rock-tilt) * -1));
+  }
+  20%,
+  50% {
+    transform: translateX(calc(var(--rock) * 2 / 3));
+  }
+}
+
+@keyframes nx-list-rock-b {
+  0%,
+  30%,
+  60%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  40% {
+    transform: translateX(calc(var(--rock) * -1)) rotate(calc(var(--rock-tilt) * -1));
+  }
+  20%,
+  50% {
+    transform: translateX(calc(var(--rock) * 2 / 3));
+  }
+}
+
 /* Everything below you scrolls; you and the title bar stay put. */
 .nx-list-scroll {
   flex: 1;
