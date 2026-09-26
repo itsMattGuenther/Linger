@@ -75,3 +75,23 @@
   width: 100%;
   height: var(--control-md);
 }
+
+/* Where a download went, and its address to copy: a line of its own under the card's row. */
+.nx-att-download {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.nx-att-download-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-att-card[data-download="failed"] .nx-att-download-note {
+  color: var(--text-danger);
+}

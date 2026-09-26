@@ -13,6 +13,8 @@
  * - `?big`: #general holds 5,000 messages, all at once. `&paged`: loaded
  *   150 at a time from the newest, as the store pages them.
  * - `?fail`: every send is refused.
+ * - `?file`: Sam shares a PDF in #general; `&downloadfail` has the desktop
+ *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
@@ -98,7 +100,43 @@ function bigRoom(): Message[] {
   return out;
 }
 
-const ALL: Record<string, Message[]> = { ...evening, ...(BIG ? { "r-general": bigRoom() } : {}) };
+/** `?file`: Sam shares the trail map, a file that isn't a picture, in #general. */
+function withFile(list: Message[]): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const map: Message = {
+    ...last,
+    id: "m000099",
+    author_id: people.sam.id,
+    body: "the map for saturday",
+    reply_to: null,
+    reactions: [],
+    created_at: last.created_at + 60_000,
+    attachments: [
+      {
+        id: "a-map",
+        filename: "river-loop-trail-map.pdf",
+        mime: "application/pdf",
+        size_bytes: 2_100_000,
+        url: "/media/river-loop-trail-map.pdf",
+        width: null,
+        height: null,
+        duration_ms: null,
+        blurhash: null,
+        poster_url: null,
+        starred_at: null,
+        uploader_id: people.sam.id,
+        created_at: last.created_at + 60_000,
+      },
+    ],
+  };
+  return [...list, map];
+}
+
+const ALL: Record<string, Message[]> = {
+  ...evening,
+  ...(BIG ? { "r-general": bigRoom() } : query.has("file") ? { "r-general": withFile(evening["r-general"] ?? []) } : {}),
+};
 
 declare global {
   interface Window {
@@ -206,7 +244,11 @@ function Fixture() {
     setHeld((all) => edit(all, message, { body: "", deleted_at: NOW }));
   }, []);
   const openLink = useCallback((href: string) => note(`link:${href}`), []);
-  const download = useCallback((file: { filename: string }) => note(`download:${file.filename}`), []);
+  // `?downloadfail`: the desktop couldn't open a browser.
+  const download = useCallback(async (file: { filename: string }) => {
+    note(`download:${file.filename}`);
+    if (query.has("downloadfail")) throw new Error("no browser to hand it to");
+  }, []);
   const actions = useMemo(() => ({ save, remove, openLink, download }), [save, remove, openLink, download]);
 
   const onNearStart = useCallback(() => {

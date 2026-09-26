@@ -8,7 +8,7 @@ import type { User } from "../../../generated/User";
 import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
-import { openExternal } from "../../../lib/external";
+import { openExternal, openExternalChecked } from "../../../lib/external";
 import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, noteDm, serverState, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
@@ -442,7 +442,7 @@ function Conversations({ following }: { following: Following }) {
     },
     [api],
   );
-  const download = useCallback((file: Attachment) => openExternal(mediaUrl(file.url)), [mediaUrl]);
+  const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
   const wantCards = useCallback(
     (urls: readonly string[]) => {
       if (api) wantPreviews(api, [...urls]);

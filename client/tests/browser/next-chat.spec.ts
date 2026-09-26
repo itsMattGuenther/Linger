@@ -488,3 +488,28 @@ test.describe("reading and arriving", () => {
     expect(Math.abs((await offsetIn(page, reading)) - before)).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe("a file to download", () => {
+  const card = (page: Page) => page.locator(".nx-att-card", { hasText: "river-loop-trail-map.pdf" });
+
+  test("goes to the browser, and says so without claiming it was saved; the address is there to copy", async ({ page }) => {
+    await open(page, "?file");
+    await expect(card(page)).toContainText("2.0 MB");
+    await card(page).getByRole("button", { name: "Download" }).click();
+    await expect.poll(() => did(page)).toContain("download:river-loop-trail-map.pdf");
+    await expect(card(page).getByRole("status")).toHaveText("Your browser has it: look in its downloads. If nothing opened, copy this address into it.");
+    await expect(card(page).getByRole("textbox", { name: "Address of river-loop-trail-map.pdf" })).toHaveValue(/\/media\/river-loop-trail-map\.pdf$/);
+    await expect(card(page)).not.toContainText("saved");
+  });
+
+  test("a browser that won't open says so, offers another go, and the address", async ({ page }) => {
+    await open(page, "?file&downloadfail");
+    await card(page).getByRole("button", { name: "Download" }).click();
+    await expect(card(page).getByRole("alert")).toHaveText("Couldn't open your browser. Try again, or copy this address into it.");
+    const again = card(page).getByRole("button", { name: "Try again" });
+    await expect(again).toBeEnabled();
+    await expect(card(page).getByRole("textbox", { name: "Address of river-loop-trail-map.pdf" })).toBeVisible();
+    await again.click();
+    await expect(card(page).getByRole("alert")).toBeVisible();
+  });
+});

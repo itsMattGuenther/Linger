@@ -67,8 +67,7 @@ What's left, biggest first:
   have a test.
 - **Smaller pieces still missing:** a per-server own window
   (MULTI-7), forced-colors mode (A11Y-6), evening warmth (LOOK-2), the update
-  check at launch (UPD-1), a download that says where it went and offers a
-  retry (FILE-6).
+  check at launch (UPD-1).
 - **19 items wait on Matt**, mostly decisions 1 (the status bar's jobs),
   4 and 5 (the tray), 10 (message aging) and 21 (old gaps).
 
@@ -283,7 +282,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | FILE-3 | Images inline at true aspect ratio, capped at 400px tall. The box is sized before the bytes arrive, so rows don't jump. Lazy loaded. | `media/Attachments.tsx`, `lib/media.ts` | Same | U + G | 🟡 sized before loading; no geometry test |
 | FILE-4 | Click to expand: centered in the window, fitted without cropping or upscaling, refits on resize. Escape, a click or close dismisses it and returns focus. | `Attachments.tsx`, SPEC §4.10 | Same, per window | F | ✅ (next-chat.spec.ts) |
 | FILE-5 | Video: poster frame and player. Audio: player. Anything else: one line and a download. | `Attachments.tsx` | Same | F | 🟡 built; untested |
-| FILE-6 | Downloads go to the system browser and say so. A failed handoff offers a retry and a selectable URL, and never claims the file was saved. | `media/DownloadFile.tsx`, SPEC §4.10 | Same | F + D | 🟡 hands off to the browser; no note, retry or copyable address |
+| FILE-6 | Downloads go to the system browser and say so. A failed handoff offers a retry and a selectable URL, and never claims the file was saved. | `media/DownloadFile.tsx`, SPEC §4.10 | Same | F + D | 🟡 hands off to the browser, says so without claiming it's saved, and a failed handoff offers Try again; the address is there to copy either way (next-chat.spec.ts). Needs a check that the browser really opens in the desktop app |
 | FILE-7 | Local media paths resolve against the server that supplied them, never the webview (T-920). | `Attachments.tsx`, `lib/url.ts` | Same | U + D | 🟡 built; needs a desktop check |
 | FILE-8 | Link cards: one line with favicon, title and domain. Favicons arrive as `data:` URIs; the client never contacts a linked site. Fetched in batches per server. | `media/LinkCards.tsx`, `lib/previews.ts`, `POST /links/preview` | Same | C + F | ✅ (next-chat.spec.ts, words.test.ts) |
 

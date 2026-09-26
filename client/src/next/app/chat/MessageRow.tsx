@@ -27,7 +27,8 @@ export interface MessageActions {
   jumpTo: (id: MessageId) => void;
   openLink: (href: string) => void;
   openImage: (file: Attachment) => void;
-  download: (file: Attachment) => void;
+  /** Hand a file to the browser to download; rejects when the browser couldn't be opened. */
+  download: (file: Attachment) => Promise<void>;
   /** This row's links are on screen: ask the server about them, for their cards. */
   wantCards?: (urls: readonly string[]) => void;
   /** Open the card of whoever a name belongs to, beside the name (PPL-6). */
