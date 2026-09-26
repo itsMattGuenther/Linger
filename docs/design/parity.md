@@ -293,7 +293,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
 | MEDIA-1 | A grid of everything shared: images, video, audio, links, files, pinned. | `media/MediaPanel.tsx`, SPEC §4.4 | Media at the bottom of the list; where it opens is **decision 15** | F | ⬜ being built, not committed; decision 15 |
-| MEDIA-2 | Filter by person, type and date range. | `MediaPanel.tsx`, `GET /media` | Same | F | ⬜ |
+| MEDIA-2 | Filter by person, type and date range. | `MediaPanel.tsx`, `GET /media` | Same | F + D | 🟡 built and tested in the media view (next-media.spec.ts), not yet in a window (decision 15); typing a date digit by digit is proved in Chromium only, so it needs a check in the Linux app (WebKitGTK) |
 | MEDIA-3 | Anyone can star an item; starred items sort first and never expire. A star confirms only after the server accepts it. | `MediaPanel.tsx`, `PUT/DELETE /media/:id/star` | Same | F | ⬜ |
 | MEDIA-4 | Every item links back to its message and moment. | `MediaPanel.tsx` → CONV-17 | Same; opens the room's tab at the message | F | ⬜ |
 | MEDIA-5 | DM files are visible only to the DM's members. | server `visible_rooms`, SPEC §4.13 | Same (server-enforced) | C (server tests) + F | ⬜ (the server part holds already) |

@@ -131,7 +131,12 @@ test.describe("filters", () => {
     await expect(page.getByLabel("From", { exact: true })).toHaveValue("");
   });
 
-  test("a date typed a digit at a time asks once, after a pause", async ({ page }) => {
+  test("a date typed a digit at a time asks once, after a pause", async ({ page, browserName }) => {
+    // Chromium (and so WebView2) fills a date field digit by digit; the
+    // WebKit that CI runs leaves it empty. Whether WebKitGTK takes typed
+    // digits is a check on the real Linux app (parity MEDIA-2). Picking a
+    // day works everywhere, and is covered above.
+    test.skip(browserName === "webkit", "WebKit's date field doesn't take typed digits here");
     await open(page);
     await loaded(page, 7);
     const before = (await asks(page)).length;
