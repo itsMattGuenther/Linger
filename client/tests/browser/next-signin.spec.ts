@@ -31,6 +31,8 @@ test("opens on one box to paste into, ready to type, with nothing to press until
   await expect(pasteBox(page)).toBeFocused();
   await expect(go(page)).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Join your people." })).toBeVisible();
+  // A member signs in with the address: the screen mustn't say only an invite will do (#208).
+  await expect(page.getByText("Your invite, or the address of a server you're on.")).toBeVisible();
   await pasteBox(page).fill("   ");
   await expect(go(page)).toBeDisabled();
   await pasteBox(page).fill("good-company.example");
@@ -77,6 +79,14 @@ test("a bare address asks the server it's there, then signs in with the username
   // Kept for next time, and connected.
   expect(asked).toContain(`save ${HOME}`);
   expect(asked.filter((line) => line === `connect ${HOME}` || line === `disconnect ${HOME}`).at(-1)).toBe(`connect ${HOME}`);
+});
+
+test("an address typed with http:// reaches the server over https (#208)", async ({ page }) => {
+  await open(page);
+  await paste(page, "http://good-company.example");
+  await expect(page.getByRole("form", { name: "Sign in" })).toBeVisible();
+  const asked = (await did(page)).filter((line) => line.startsWith("GET"));
+  expect(asked).toEqual([`GET ${HOME}/health`]);
 });
 
 test("an invite leads to joining, named for its server, and Join waits for eight characters", async ({ page }) => {

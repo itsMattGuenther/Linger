@@ -131,8 +131,10 @@ For a **new member**:
    Windows, Linux or GitHub password.
 
 **Already have an account?** Enter the server address, such as
-`https://linger.example.com`, then sign in with that server's existing
-username and password.
+`linger.example.com`, then sign in with that server's existing username and
+password. You don't need a new invite: an invite makes a new account.
+Linger always connects securely, so `http://` or `https://` in front of the
+address makes no difference.
 
 **Making the host account?** Paste the entire private `/setup?token=…` link
 from the server log. Follow [host guide step 6](host-guide.md#6-make-your-host-account).
