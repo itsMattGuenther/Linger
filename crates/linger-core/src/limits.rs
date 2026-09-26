@@ -105,6 +105,11 @@ pub const MAX_VOICE_PAYLOAD_BYTES: usize = 16 * 1024;
 /// people is 28 connections, which a laptop does not notice.
 pub const MAX_VOICE_PEERS: usize = 8;
 
+/// How many people can be in one voice room when the server forwards voice
+/// (#197). Each person sends once and hears everybody else, so the ceiling is
+/// what one laptop can decode and mix, not a mesh's connection count.
+pub const MAX_FORWARDED_VOICE_PEERS: usize = 25;
+
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
 pub const RESUME_BUFFER_FRAMES: usize = 500;

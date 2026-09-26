@@ -196,6 +196,15 @@ test.describe("this app", () => {
     expect(JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}")).toMatchObject({ pushToTalk: true });
   });
 
+  test("voice goes through the server by default, and the old way is one switch away (#197)", async ({ page }) => {
+    await open(page, "?section=sound");
+    const through = page.getByRole("switch", { name: "Voice through the server" });
+    await expect(through).toHaveAttribute("aria-checked", "true");
+    await through.click();
+    const voice = (await did(page)).filter((line) => line.startsWith("voice:"));
+    expect(JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}")).toMatchObject({ forwarding: false });
+  });
+
   test("a person's notification rules open, change, and fold again with Escape", async ({ page }) => {
     await open(page, "?section=notifications");
     const jules = page.getByRole("button", { name: /^Jules: #general$/ });

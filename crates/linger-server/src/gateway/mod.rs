@@ -13,12 +13,16 @@
 mod socket;
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use linger_core::gateway::{ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState};
-use linger_core::limits::{MAX_VOICE_PEERS, RESUME_BUFFER_FRAMES, RESUME_WINDOW_MS};
+use linger_core::gateway::{
+    ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState, VoiceTrack,
+};
+use linger_core::limits::{
+    MAX_FORWARDED_VOICE_PEERS, MAX_VOICE_PEERS, RESUME_BUFFER_FRAMES, RESUME_WINDOW_MS,
+};
 use linger_core::wire::{PresenceEntry, PresenceState};
 use linger_core::{RoomId, UserId};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -56,6 +60,9 @@ pub struct Gateway {
     /// connected right now, so a restart ending every call is correct rather
     /// than a gap, in the same way presence is (ARCHITECTURE §5).
     voice: DashMap<String, VoiceSeat>,
+    /// The voice forwarding server, when this server runs one (#197). Set
+    /// once at startup by [`Gateway::start_forwarding`].
+    forwarding: OnceLock<linger_sfu::Sfu>,
 }
 
 /// One session's place in a voice room.
@@ -63,6 +70,11 @@ struct VoiceSeat {
     room_id: RoomId,
     user_id: UserId,
     controls: Option<VoiceControls>,
+    /// Its client can take voice through the forwarding server (#197).
+    can_forward: bool,
+    /// Its voice goes through the forwarding server rather than the mesh:
+    /// true while everybody in the room can forward. See `settle_forwarding`.
+    forwarded: bool,
 }
 
 /// One event on the bus, plus who it is for.
@@ -119,6 +131,8 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
         // could be: the routing already decided both peers are in the same
         // voice room, and this frame goes to exactly one of them.
         ServerEvent::VoiceSignal { .. } => None,
+        // The same: the forwarding server's offer to one session (#197).
+        ServerEvent::VoiceOffer { .. } => None,
 
         // About a person, not a place.
         ServerEvent::PresenceUpdate(_)
@@ -177,7 +191,54 @@ impl Gateway {
             conn_count: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
+            forwarding: OnceLock::new(),
         }
+    }
+
+    /// Start forwarding voice (#197): bind `bind` for UDP, and tell clients to
+    /// reach it at `public`. Every offer it makes goes to its session over
+    /// this gateway, as a `voice.offer`.
+    ///
+    /// # Errors
+    ///
+    /// When the socket can't be bound, which `main` treats as fatal: a server
+    /// configured to forward voice that silently doesn't is a call nobody can
+    /// hear.
+    pub fn start_forwarding(
+        self: &Arc<Self>,
+        bind: std::net::SocketAddr,
+        public: std::net::SocketAddr,
+    ) -> std::io::Result<std::net::SocketAddr> {
+        let gateway = Arc::downgrade(self);
+        let sfu = linger_sfu::Sfu::start(bind, public, move |offer: linger_sfu::Offer| {
+            let Some(gateway) = gateway.upgrade() else {
+                return;
+            };
+            let tracks = offer
+                .tracks
+                .into_iter()
+                .map(|track| VoiceTrack {
+                    mid: track.mid,
+                    session_id: track.session,
+                })
+                .collect();
+            gateway.publish_to_session(
+                &offer.session,
+                ServerEvent::VoiceOffer {
+                    sdp: offer.sdp,
+                    tracks,
+                },
+            );
+        })?;
+        let address = sfu.address();
+        let _ = self.forwarding.set(sfu);
+        Ok(address)
+    }
+
+    /// Whether this server forwards voice.
+    #[must_use]
+    pub fn forwards_voice(&self) -> bool {
+        self.forwarding.get().is_some()
     }
 
     /// Fan an event out, to whoever the event says it is for.
@@ -319,6 +380,7 @@ impl Gateway {
                 session_id: seat.key().clone(),
                 user_id: seat.value().user_id,
                 controls: seat.value().controls,
+                forwarded: seat.value().forwarded.then_some(true),
             })
             .collect();
         peers.sort_by(|a, b| a.session_id.cmp(&b.session_id));
@@ -361,8 +423,10 @@ impl Gateway {
         user_id: UserId,
         room_id: RoomId,
         controls: Option<VoiceControls>,
+        forwarding: bool,
     ) -> bool {
         let controls = controls.map(VoiceControls::normalized);
+        let can_forward = forwarding && self.forwards_voice();
         if let Some(mut seat) = self.voice.get_mut(session_id) {
             if seat.value().room_id == room_id {
                 let changed = controls.is_some() && controls != seat.controls;
@@ -379,7 +443,20 @@ impl Gateway {
         // Counted before the seat is taken, and only for a room this session is
         // not already in — otherwise re-joining the room you are in could be
         // refused by your own seat.
-        if self.voice_peers(room_id).len() >= MAX_VOICE_PEERS {
+        // Forwarded rooms hold more; a room with an older client in it is a
+        // mesh, and holds what a mesh does.
+        let all_forward = can_forward
+            && self
+                .voice
+                .iter()
+                .filter(|seat| seat.value().room_id == room_id)
+                .all(|seat| seat.value().can_forward);
+        let ceiling = if all_forward {
+            MAX_FORWARDED_VOICE_PEERS
+        } else {
+            MAX_VOICE_PEERS
+        };
+        if self.voice_peers(room_id).len() >= ceiling {
             return false;
         }
         let left = self.voice_leave(session_id);
@@ -389,13 +466,78 @@ impl Gateway {
                 room_id,
                 user_id,
                 controls,
+                can_forward,
+                forwarded: false,
             },
         );
+        self.settle_forwarding(room_id);
         if let Some(previous) = left {
+            self.settle_forwarding(previous);
             self.announce_voice(previous);
         }
         self.announce_voice(room_id);
         true
+    }
+
+    /// Forward a room's voice while everybody in it can, and put it all on the
+    /// mesh while anybody can't (#197). A forwarded client and a mesh client
+    /// can't hear each other, so a room is one or the other, never both: an
+    /// older app joining turns the room to the mesh for everybody, and its
+    /// leaving turns forwarding back on. Called before announcing, so the
+    /// `voice.state` that follows says who is forwarded now.
+    fn settle_forwarding(&self, room_id: RoomId) {
+        let Some(sfu) = self.forwarding.get() else {
+            return;
+        };
+        let all = self
+            .voice
+            .iter()
+            .filter(|seat| seat.value().room_id == room_id)
+            .all(|seat| seat.value().can_forward);
+        let mut changed = Vec::new();
+        for mut seat in self.voice.iter_mut() {
+            if seat.room_id == room_id && seat.forwarded != all {
+                seat.forwarded = all;
+                changed.push(seat.key().clone());
+            }
+        }
+        let room = room_id.to_string();
+        for session in changed {
+            if all {
+                sfu.join(&session, &room);
+            } else {
+                sfu.leave(&session);
+            }
+        }
+    }
+
+    /// A session's answer to the forwarding server's latest offer (#197).
+    /// Ignored from a session that isn't forwarded, like any voice frame that
+    /// doesn't fit.
+    pub fn voice_answer(&self, session_id: &str, sdp: &str) {
+        let forwarded = self
+            .voice
+            .get(session_id)
+            .is_some_and(|seat| seat.forwarded);
+        if let (true, Some(sfu)) = (forwarded, self.forwarding.get()) {
+            sfu.answer(session_id, sdp);
+        }
+    }
+
+    /// Start a forwarded session's connection to the forwarding server afresh
+    /// (#197), when its client says the last one failed. Its seat, and what the
+    /// room sees, don't change; it gets a new offer.
+    pub fn voice_restart(&self, session_id: &str) {
+        let Some((room_id, forwarded)) = self
+            .voice
+            .get(session_id)
+            .map(|seat| (seat.room_id, seat.forwarded))
+        else {
+            return;
+        };
+        if let (true, Some(sfu)) = (forwarded, self.forwarding.get()) {
+            sfu.join(session_id, &room_id.to_string());
+        }
     }
 
     /// Take a session out of voice. Answers which room it left, if any.
@@ -404,12 +546,17 @@ impl Gateway {
     /// themselves; `voice_join` needs to move the seat before announcing
     /// either room, or a client can see itself in two rooms at once.
     fn voice_leave(&self, session_id: &str) -> Option<RoomId> {
-        self.voice.remove(session_id).map(|(_, seat)| seat.room_id)
+        let (_, seat) = self.voice.remove(session_id)?;
+        if let (true, Some(sfu)) = (seat.forwarded, self.forwarding.get()) {
+            sfu.leave(session_id);
+        }
+        Some(seat.room_id)
     }
 
     /// Leave voice and tell the room. The ordinary way out.
     pub fn voice_part(&self, session_id: &str) {
         if let Some(room_id) = self.voice_leave(session_id) {
+            self.settle_forwarding(room_id);
             self.announce_voice(room_id);
         }
     }

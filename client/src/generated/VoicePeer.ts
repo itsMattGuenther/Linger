@@ -14,4 +14,9 @@ export type VoicePeer = { session_id: string, user_id: UserId,
 /**
  * Absent on legacy clients/servers: unknown, never evidence of a live mic.
  */
-controls?: VoiceControls, };
+controls?: VoiceControls, 
+/**
+ * Their voice goes through the server's forwarding (#197), not the mesh.
+ * A mesh client can't reach them, and doesn't try.
+ */
+forwarded?: boolean, };

@@ -48,8 +48,9 @@ is the product.
 
 ## Privacy
 
-**The person running the server can read everything on it.** There is no
-end-to-end encryption. Traffic goes over TLS; files and the database are not
+**The person running the server can read everything on it**, and when their
+server forwards voice, it passes through there too. There is no end-to-end
+encryption. Traffic goes over TLS; files and the database are not
 encrypted on the host's disk. Run your own server, or trust the person who
 runs yours. If you need guarantees against your host, use Signal.
 

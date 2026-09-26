@@ -17,6 +17,7 @@ import type { VoiceDeviceChoice } from "./ipc";
 const INPUT_KEY = "linger.voice.input";
 const OUTPUT_KEY = "linger.voice.output";
 const PTT_KEY = "linger.voice.pushToTalk";
+const FORWARDING_KEY = "linger.voice.forwarding";
 
 /**
  * The key you hold to talk, when push-to-talk is on. `Control` because it
@@ -32,11 +33,17 @@ export interface VoicePrefs {
   devices: VoiceDeviceChoice;
   /** Start every call muted and open the microphone only while the key is held. */
   pushToTalk: boolean;
+  /**
+   * Voice through the server, on a server that forwards it (#197). Off is
+   * the old way, straight to each person, and puts the whole room on it.
+   */
+  forwarding: boolean;
 }
 
 export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   devices: { input: null, output: null },
   pushToTalk: false,
+  forwarding: true,
 };
 
 /** Read the preferences, tolerating storage that is absent or refuses. */
@@ -51,6 +58,7 @@ export function loadVoicePrefs(): VoicePrefs {
         output: output === null || output === "" ? null : output,
       },
       pushToTalk: ptt === "true",
+      forwarding: window.localStorage.getItem(FORWARDING_KEY) !== "false",
     };
   } catch {
     return DEFAULT_VOICE_PREFS;
@@ -65,6 +73,7 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
     if (prefs.devices.output === null) store.removeItem(OUTPUT_KEY);
     else store.setItem(OUTPUT_KEY, prefs.devices.output);
     store.setItem(PTT_KEY, prefs.pushToTalk ? "true" : "false");
+    store.setItem(FORWARDING_KEY, prefs.forwarding ? "true" : "false");
   } catch {
     // Storage refused; the preference lasts for this run and no longer.
   }

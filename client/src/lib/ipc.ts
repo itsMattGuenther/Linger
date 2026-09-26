@@ -20,6 +20,7 @@ import type { IceServer } from "../generated/IceServer";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { VoiceControls } from "../generated/VoiceControls";
+import { loadVoicePrefs } from "./voice";
 
 export interface StoredSession {
   /** Origin of the server, e.g. `https://linger.example`. No trailing slash. */
@@ -95,6 +96,8 @@ export async function voiceJoin(
     input: devices.input,
     output: devices.output,
     ice,
+    // Voice through the server unless Settings says the old way (#197).
+    forwarding: loadVoicePrefs().forwarding,
   });
 }
 
@@ -133,7 +136,7 @@ export async function voiceDevices(): Promise<VoiceDeviceList | null> {
 }
 
 /**
- * Hand the core a `voice.state` or `voice.signal` that arrived on the gateway.
+ * Hand the core a `voice.state`, `voice.signal` or `voice.offer` that arrived on the gateway.
  *
  * Routed through the frontend rather than straight from the gateway client,
  * for the same reason every other frame is: the store is the one place that

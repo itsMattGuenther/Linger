@@ -162,15 +162,25 @@ describe("preferences", () => {
   });
 
   it("round-trip, and forget a device set back to the default", () => {
-    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, pushToTalk: true });
+    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, pushToTalk: true, forwarding: true });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: "USB Mic", output: null },
       pushToTalk: true,
+      forwarding: true,
     });
-    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, pushToTalk: false });
+    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, pushToTalk: false, forwarding: false });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: null, output: "Headphones" },
       pushToTalk: false,
+      forwarding: false,
     });
+  });
+
+  it("go through the server unless somebody chose the old way (#197)", () => {
+    expect(loadVoicePrefs().forwarding).toBe(true);
+    window.localStorage.setItem("linger.voice.forwarding", "false");
+    expect(loadVoicePrefs().forwarding).toBe(false);
+    window.localStorage.setItem("linger.voice.forwarding", "anything else");
+    expect(loadVoicePrefs().forwarding).toBe(true);
   });
 });

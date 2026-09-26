@@ -220,6 +220,8 @@ describe("voice in the store", () => {
       // The fake server has no `/voice/ice`, which is what a host with no
       // relay looks like: the join goes ahead with no servers.
       ice: [],
+      // Through the server unless Settings says the old way (#197).
+      forwarding: true,
     });
     expect(serverState(HOME).myVoice).toMatchObject({
       roomId: "r-garage",

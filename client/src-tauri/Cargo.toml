@@ -105,6 +105,8 @@ tauri-plugin-updater = { version = "2.10.1", default-features = false, features 
 #   no-wallet case the client is required to handle honestly.
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+# The real forwarding server, in-process, for the end-to-end voice test (#197).
+linger-sfu = { path = "../../crates/linger-sfu" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["async-secret-service", "crypto-rust", "tokio"] }

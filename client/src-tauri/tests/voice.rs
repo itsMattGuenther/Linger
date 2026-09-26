@@ -140,6 +140,7 @@ fn peers(ids: &[&str]) -> Vec<VoicePeer> {
             session_id: (*id).to_string(),
             user_id: UserId::new(),
             controls: None,
+            forwarded: None,
         })
         .collect()
 }

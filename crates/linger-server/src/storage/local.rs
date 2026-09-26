@@ -344,6 +344,7 @@ mod tests {
             pool_bytes: linger_core::limits::DEFAULT_POOL_BYTES,
             file_expiry_days: Some(linger_core::limits::DEFAULT_FILE_EXPIRY_DAYS),
             turn: None,
+            voice_forwarding: None,
         }))
         .unwrap()
     }

@@ -83,7 +83,24 @@ pub struct Config {
     /// means no relay: voice works between machines on one network and nowhere
     /// else, and the server says so at startup (SPEC §4.14, T-1403).
     pub turn: Option<TurnConfig>,
+    /// `LINGER_VOICE_ADDRESS` (+ `LINGER_VOICE_BIND`): voice forwarding
+    /// (#197). `None` keeps every voice room on the mesh.
+    pub voice_forwarding: Option<VoiceForwarding>,
 }
+
+/// Where the voice forwarding server listens, and where clients are told to
+/// reach it (#197). One UDP port carries every voice connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VoiceForwarding {
+    /// `LINGER_VOICE_BIND`, default `0.0.0.0:3479`.
+    pub bind: SocketAddr,
+    /// `LINGER_VOICE_ADDRESS`: this server's public IP, with the port if it
+    /// isn't the bound one (a router forwarding 3479 to another port, say).
+    pub public: SocketAddr,
+}
+
+/// The UDP port voice forwarding binds when `LINGER_VOICE_BIND` isn't set.
+pub const DEFAULT_VOICE_PORT: u16 = 3479;
 
 /// The relay that lets two people on different networks hear each other
 /// (SPEC §4.14, T-1403).
@@ -143,6 +160,10 @@ pub struct SetupOrigin {
 pub enum ConfigError {
     #[error("LINGER_BIND is not a valid socket address: {0}")]
     Bind(String),
+    #[error("LINGER_VOICE_BIND is not a valid socket address: {0}")]
+    VoiceBind(String),
+    #[error("LINGER_VOICE_ADDRESS must be this server's public IP address, optionally with a port, got {0:?}")]
+    VoiceAddress(String),
     #[error("LINGER_STORAGE must be 'local' or 's3', got {0:?}")]
     Storage(String),
     #[error("LINGER_STORAGE=s3 needs {0} set")]
@@ -232,6 +253,10 @@ impl Config {
             pool_bytes: pool_bytes(std::env::var("LINGER_POOL_BYTES").ok())?,
             file_expiry_days: file_expiry_days(std::env::var("LINGER_FILE_EXPIRY_DAYS").ok())?,
             turn,
+            voice_forwarding: voice_forwarding(
+                std::env::var("LINGER_VOICE_ADDRESS").ok(),
+                std::env::var("LINGER_VOICE_BIND").ok(),
+            )?,
         })
     }
 
@@ -469,6 +494,37 @@ fn media_domain(
 /// server's own name, on the standard port, over UDP and TCP, plus STUN on
 /// the same. TCP is there for the networks that eat UDP; it is slower and
 /// ICE will not pick it unless it has to.
+/// `LINGER_VOICE_ADDRESS` and `LINGER_VOICE_BIND` into a [`VoiceForwarding`],
+/// or `None` when no public address is set. The address has to be an IP:
+/// it goes into every offer as the one place clients send voice, and a name
+/// would need resolving on every client in a way SDP doesn't allow.
+fn voice_forwarding(
+    address: Option<String>,
+    bind: Option<String>,
+) -> Result<Option<VoiceForwarding>, ConfigError> {
+    let Some(address) = address.filter(|value| !value.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let bind = match bind.filter(|value| !value.trim().is_empty()) {
+        Some(raw) => raw
+            .parse()
+            .map_err(|_| ConfigError::VoiceBind(raw.clone()))?,
+        None => SocketAddr::from(([0, 0, 0, 0], DEFAULT_VOICE_PORT)),
+    };
+    let address = address.trim();
+    let public = match address.parse::<SocketAddr>() {
+        Ok(public) => public,
+        Err(_) => match address.parse::<std::net::IpAddr>() {
+            Ok(ip) => SocketAddr::new(ip, bind.port()),
+            Err(_) => return Err(ConfigError::VoiceAddress(address.to_string())),
+        },
+    };
+    if public.ip().is_unspecified() {
+        return Err(ConfigError::VoiceAddress(address.to_string()));
+    }
+    Ok(Some(VoiceForwarding { bind, public }))
+}
+
 fn default_turn_urls(domain: &str) -> Vec<String> {
     vec![
         format!("stun:{domain}:3478"),
@@ -619,6 +675,7 @@ mod tests {
             pool_bytes: DEFAULT_POOL_BYTES,
             file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
             turn: None,
+            voice_forwarding: None,
         }
     }
 

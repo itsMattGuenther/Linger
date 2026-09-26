@@ -736,9 +736,11 @@ Beyond that, the client must re-identify and refetch.
 | `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). |
 | `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
 | `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room |
-| `voice.join` | `{ room_id, controls?: { muted, deafened } }` | join or update your own controls; moving leaves the old room |
+| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding?: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client can take voice through the server (#197) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
-| `voice.signal` | `{ to, kind, payload }` | pass one WebRTC message to one peer |
+| `voice.signal` | `{ to, kind, payload }` | pass one WebRTC message to one peer (the mesh) |
+| `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` (forwarding) |
+| `voice.restart` | `{}` | start this session's forwarding connection afresh; the server sends a new `voice.offer` (forwarding) |
 
 ### Server → client
 
@@ -757,8 +759,9 @@ Beyond that, the client must re-identify and refetch.
 | `room.create` / `room.update` | `Room` — a DM's `room.create` reaches its members and nobody else, which is how the other members find out it exists |
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
-| `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls? }] }` — who is in voice in that room, whole every time |
+| `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.signal` | `{ from, kind, payload }` — one peer's WebRTC message, **addressed to one session** |
+| `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
 
 ```ts
 type PresenceEntry = {
@@ -826,6 +829,43 @@ it was in and the other peers are told — as are the peers of a session whose r
 window lapses, which is what stops a dead client sitting in the list looking connected.
 A session that *resumes* keeps its place: it is the same client, its peers are still
 connected to it, and it replays whatever it missed.
+
+### Voice forwarding (#197)
+
+A server with `LINGER_VOICE_ADDRESS` set **forwards voice**: each client sends its voice
+once, to the server, and the server passes it on to everyone else in the room. The mesh
+above stays for clients and servers that don't.
+
+- **Who is forwarded.** A room is forwarded while everybody in voice there sent
+  `forwarding: true` in `voice.join`, on a server that forwards; `voice.state` marks each
+  of them `forwarded: true`. One client that didn't (an older app) puts the whole room on
+  the mesh, and when it leaves, forwarding comes back with a fresh `voice.offer` each. A
+  forwarded client and a mesh client can't hear each other, so a room is never both. Old
+  clients never say they can forward, and old servers never mark anybody, so both read
+  as the mesh.
+- **The server makes every offer; the client only answers.** On joining, the server
+  sends `voice.offer`: one m-line for the client to send its microphone on, and one
+  receiving m-line per other forwarded person in the room. `tracks` names whose voice each
+  receiving m-line carries, by `mid`; the one m-line it doesn't name is the microphone's.
+  When somebody joins or leaves, everybody else gets a new offer, whole. Only one offer
+  is out per session at a time: a change while one is out waits for its `voice.answer`.
+  Two offers can never cross.
+- **ICE-lite, one address.** The server's offer carries one host candidate, the public
+  address in `LINGER_VOICE_ADDRESS`, on one UDP port (3479 by default) that carries every
+  voice connection. The client needs no candidates from the server and sends none; a
+  client that can't reach UDP goes through the TURN relay to that address.
+- **What the server sees.** Voice is encrypted on the wire (DTLS-SRTP) but each hop ends
+  at the server, which forwards packets without decoding them. It stores nothing. It
+  could, in principle, listen: SPEC §4.14 says so, and #200 is the layer that would stop it.
+- **A failed connection is restarted, not left.** A client whose connection to the
+  server fails sends `voice.restart` a few seconds later: the server starts that
+  session's connection afresh and sends a new `voice.offer`. Its seat, and what the room
+  sees, don't change. A client that isn't forwarded is ignored.
+- **The old way, by choice.** A person can turn forwarding off in Settings; their client
+  then joins without `forwarding`, and the room goes to the mesh as it would for an
+  older app.
+- **Limits.** `voice.answer` and `voice.restart` share `voice.signal`'s size cap and rate limit. A room of
+  forwarded people holds `MAX_FORWARDED_VOICE_PEERS` (25).
 
 **Limits.** `payload` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything larger is not an
 SDP this server needs to carry. Signals are rate-limited per session

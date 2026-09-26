@@ -241,6 +241,27 @@ comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
 
+## Voice for bigger groups
+
+*Not in a release yet: this is on the `feat/197-voice-forwarding` branch.*
+
+Out of the box, everybody in a voice room sends their voice straight to
+everybody else. That's fine for a handful of people and stops working past
+about ten. Your server can instead take each person's voice once and pass it
+on to the others, up to 25 in a room:
+
+1. Find the server's public IP address: `curl -4 https://api.ipify.org`.
+2. In `compose.yaml`, remove the `#` before `LINGER_VOICE_ADDRESS` and put that
+   address after it.
+3. Allow **UDP 3479** in the cloud firewall (and the machine's own, if it has
+   one).
+4. `docker compose up -d`. The log says `voice forwarding is on`.
+
+Your server then passes voice along. It keeps none of it and plays none of it,
+but it is on your machine, so you *could* listen, the same way you could read
+messages. While anybody in a voice room is on an older version of the app,
+that room uses the old way, so everybody can still hear everybody.
+
 ## Voice between different networks
 
 Two people on the same wifi can talk without any of this. Two people in two
