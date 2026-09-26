@@ -444,6 +444,24 @@ test("a drop-down is named by its label, keeps the choice picked, and a disabled
   await expect(page.getByRole("combobox", { name: "Microphone" })).toHaveAccessibleDescription("A change applies the next time you join voice.");
 });
 
+test("a slider moves with the keys, says its value in words, and lights the part before the thumb", async ({ page }) => {
+  const slider = page.getByRole("slider", { name: "How loud Eli is for you" });
+  await expect(slider).toHaveAttribute("aria-valuetext", "150%");
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(slider).toHaveAttribute("aria-valuetext", "155%");
+  await page.keyboard.press("Home");
+  await expect(slider).toHaveAttribute("aria-valuetext", "0%");
+  await page.keyboard.press("End");
+  await expect(slider).toHaveAttribute("aria-valuetext", "200%");
+  expect(await slider.evaluate((input) => (input as HTMLElement).style.getPropertyValue("--k-slider-lit"))).toBe("100%");
+  // As tall as a small control, and as wide as what holds it.
+  const box = await slider.boundingBox();
+  const holder = await page.getByTestId("slider").boundingBox();
+  expect(box?.height).toBe(24);
+  expect(box?.width).toBeGreaterThan((holder?.width ?? 0) - 1);
+});
+
 test("compact choice cards sit side by side with their titles on one line", async ({ page }) => {
   const titles = await page
     .getByRole("group", { name: "Color theme" })

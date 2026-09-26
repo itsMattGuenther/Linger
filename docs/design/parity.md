@@ -120,6 +120,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 8. **Per-person volume.** Today it's a click or right-click on a voice seat.
    The design doesn't say where it lives: the voice bar's chips, or the person
    card. *(VOICE-10)*
+   **Decided (2026-09-25): the voice bar's chips.** A chip opens a small card
+   over it with a slider from 0% to 200% and Back to 100%.
 9. **Names inline versus group heads.** The design writes `Eli: text` inline.
    SPEC §4.7 groups consecutive messages under one name with a 10-minute break,
    and puts a reply's quote under the name. Decide: does every message repeat
@@ -398,7 +400,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-7 | Per-peer connection trouble: "connecting…" and "can't reach", one phrase centered on its person (#124). | `VoiceBar.tsx` | Same | G | 🟡 "connecting…" and "can't reach" beside the person in the voice bar (next-list.spec.ts, voice.test.ts); needs a real network that fails to prove |
 | VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `lib/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F | ✅ (share.test.ts, next-list.spec.ts, next-chat-window.spec.ts); the key is decision 6 |
 | VOICE-9 | Microphone and speakers chosen per computer, with the system default first. A missing remembered device is shown, marked, and falls back to the default. | Settings → Sound & Voice, `voice_devices` | Same | F + D | 🟡 Settings part done (next-settings.spec.ts); needs a desktop check |
-| VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `lib/voice.ts`, `VoiceBar.tsx` | Where it lives: **decision 8** | U + F | ⏸ decision 8 |
+| VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `lib/voice.ts`, `VoiceBar.tsx` | The voice bar's chips (decision 8) | U + F | ✅ (core/voice.test.ts; next-list-window.spec.ts "a voice chip opens that person's volume"; kit.spec.ts slider) |
 | VOICE-11 | Devices that change mid-call recover within a second or two (hotplug, default change, sample rate). | `src-tauri/src/voice/device.rs` (T-1405) | Same | C + M | 🟡 unchanged Rust; needs a real-device check |
 | VOICE-12 | The relay (TURN) password is fetched fresh at each join. With no relay, a join still works on one network. | `lib/gateway.ts`, `GET /voice/ice` | Same | C | ✅ (lib/gateway.voice.test.ts, share.test.ts) |
 | VOICE-13 | A full voice room (8 people) refuses a join and says so in words. | server `MAX_VOICE_PEERS` | Words, never a number ("room for one more") | F | 🟡 "room for one more" (servers.test.ts); a refused join isn't shown |

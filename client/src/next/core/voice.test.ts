@@ -87,6 +87,15 @@ describe("the voice bar's contents", () => {
     ]);
   });
 
+  it("carries how loud each person is for you and the session that sets it, and nothing for you (VOICE-10)", () => {
+    const model = voiceModel(inVoice({ volumes: { "s-eli": 1.5 } }), new Set());
+    expect(model?.people.map(({ user, volume, session }) => [user.display_name, volume, session])).toEqual([
+      ["Matt", 1, null],
+      ["Eli", 1.5, "s-eli"],
+      ["Jules", 1, "s-jules"],
+    ]);
+  });
+
   it("names a DM by who's in it", () => {
     const model = voiceModel({ ...inVoice(), myVoice: seat({ roomId: "d-jules" }) }, new Set());
     expect(model?.where).toBe("Jules");

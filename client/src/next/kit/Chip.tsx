@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 import { Marker, type MarkerPerson } from "./Marker";
 import "./Chip.css";
@@ -16,6 +16,9 @@ export function Chip({
   state,
   note,
   onRemove,
+  onActivate,
+  actionLabel,
+  expanded = false,
 }: {
   /** What the chip shows: a `Name`, or words. */
   children: ReactNode;
@@ -33,6 +36,14 @@ export function Chip({
   /** A short faint note at the end, like "connecting…". */
   note?: string;
   onRemove?: () => void;
+  /**
+   * Makes the whole chip a button that opens something about it, like a
+   * voice chip's volume. `actionLabel` is its name ("Eli's volume, 100%").
+   */
+  onActivate?: (event: MouseEvent<HTMLButtonElement>) => void;
+  actionLabel?: string;
+  /** Whether what it opens is open now. */
+  expanded?: boolean;
 }) {
   const inner = (
     <>
@@ -48,8 +59,25 @@ export function Chip({
       {onRemove ? <Icon name="close" size="sm" /> : null}
     </>
   );
+  if (onActivate && !onRemove) {
+    return (
+      <button
+        type="button"
+        className="k-chip"
+        data-kit="Chip"
+        data-active={active ? "yes" : undefined}
+        data-kit-control=""
+        aria-label={actionLabel ?? label}
+        aria-haspopup="dialog"
+        aria-expanded={expanded}
+        onClick={onActivate}
+      >
+        {inner}
+      </button>
+    );
+  }
   return onRemove ? (
-    <button type="button" className="k-chip" data-kit="Chip" data-active={active ? "yes" : undefined} data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
+    <button type="button" className="k-chip" data-kit="Chip" data-remove="" data-active={active ? "yes" : undefined} data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
       {inner}
     </button>
   ) : (

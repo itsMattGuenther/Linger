@@ -147,6 +147,7 @@ mockIPC((cmd, args) => {
     case "next_open_tool":
     case "next_close_to_tray":
     case "next_tray_voice":
+    case "voice_volume":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:

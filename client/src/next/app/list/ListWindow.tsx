@@ -14,6 +14,7 @@ import {
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoiceVolume,
   useGateway,
   useServers,
 } from "../../../lib/gateway";
@@ -670,6 +671,10 @@ function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: s
     onMute: (muted) => void setVoiceMuted(server, muted).catch(() => undefined),
     onDeafen: (deafened) => void setVoiceDeafened(server, deafened).catch(() => undefined),
     onLeave: () => void leaveVoice(server).catch(() => undefined),
+    onVolume: (person, volume) => {
+      const session = model.people.find((one) => one.user.id === person.user.id)?.session;
+      if (session) setVoiceVolume(server, session, volume);
+    },
   };
 }
 

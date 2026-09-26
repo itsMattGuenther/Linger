@@ -352,3 +352,82 @@ test("the foot's lines fit the list: nothing clipped or sideways, the words line
   expect(measured.every((line) => line.inside && !line.cut)).toBe(true);
   expect(new Set(measured.map((line) => line.left)).size).toBe(1);
 });
+
+test("a voice chip opens that person's volume: it's heard at once, kept on this computer, and Escape gives the chip back", async ({ page }) => {
+  await open(page, "?one");
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  // Your own chip opens nothing.
+  await expect(bar.getByRole("button", { name: /^you/ })).toHaveCount(0);
+  const eli = bar.getByRole("button", { name: "Eli's volume, 100%" });
+  await eli.click();
+  const card = page.getByRole("dialog", { name: "Eli's volume" });
+  const slider = card.getByRole("slider", { name: "How loud Eli is for you" });
+  await expect(slider).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(slider).toHaveAttribute("aria-valuetext", "110%");
+  const volumes = async () => (await did(page)).filter((line) => line.startsWith("voice_volume"));
+  await expect.poll(async () => (await volumes()).at(-1)).toMatch(/"volume":1\.1/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("linger.voice.volumes:https://good-company.example") ?? "{}"))).toEqual({ "u-eli": 1.1 });
+  await card.getByRole("button", { name: "Back to 100%" }).click();
+  await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+  await expect(card.getByRole("button", { name: "Back to 100%" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "Eli's volume, 100%" })).toBeFocused();
+});
+
+test("the volume card sits over its chip, inside the window, with nothing clipped", async ({ page }) => {
+  await open(page, "?one");
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  const chip = bar.getByRole("button", { name: /^Jules's volume/ });
+  await chip.click();
+  const card = page.getByRole("dialog", { name: "Jules's volume" });
+  await expect(card).toBeVisible();
+  await page.waitForTimeout(400);
+  const [cardBox, chipBox] = [await card.boundingBox(), await chip.boundingBox()];
+  const width = page.viewportSize()?.width ?? 0;
+  expect(cardBox && chipBox && cardBox.y + cardBox.height <= chipBox.y).toBe(true);
+  expect(cardBox && cardBox.x >= 0 && cardBox.x + cardBox.width <= width).toBe(true);
+  const cut = await card.evaluate((node) => [...node.querySelectorAll<HTMLElement>(".nx-volume-note, .nx-volume-value")].some((one) => one.scrollWidth > one.clientWidth));
+  expect(cut).toBe(false);
+  // The bar grows under it (two more people join, and the chips wrap): the card follows the chip up.
+  await page.evaluate(() =>
+    window.core?.frame("https://good-company.example", {
+      op: "voice.state",
+      d: {
+        room_id: "r-general",
+        peers: [
+          { session_id: "s-good-company.example", user_id: "u-matt" },
+          { session_id: "s-dave", user_id: "u-dave" },
+          { session_id: "s-callie", user_id: "u-callie" },
+          { session_id: "s-eli", user_id: "u-eli" },
+          { session_id: "s-jules", user_id: "u-jules" },
+        ],
+      },
+    } as never),
+  );
+  await page.waitForTimeout(300);
+  const [after, chipAfter] = [await card.boundingBox(), await chip.boundingBox()];
+  expect(after && chipAfter && after.y + after.height <= chipAfter.y).toBe(true);
+});

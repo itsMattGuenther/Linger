@@ -423,6 +423,18 @@ chip. The text ends in "…".
   deafened, with the word for screen readers. It comes after the name, so it
   never moves it.
 - `note` is a faint word or two at the end: "connecting…", "can't reach".
+- `onActivate` makes the whole chip a button that opens something about it,
+  named by `actionLabel` ("Eli's volume, 100%"), with `expanded` while it's
+  open: a voice chip opens that person's volume.
+
+### Slider
+
+A value along a line: a native range input, 24px tall and as wide as what
+holds it, with a 4px track (`--slider-track`) and a 14px thumb
+(`--slider-thumb`). The part before the thumb is lit in the lamp. The keys
+work as they do on any slider, and `valueText` is what a screen reader hears
+("150%"). Its first use is a person's volume, over their chip in the voice
+bar (`app/list/VolumeCard.tsx`).
 
 ### Card and Popover
 

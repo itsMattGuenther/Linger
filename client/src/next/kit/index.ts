@@ -22,6 +22,7 @@ export { Select, type SelectOption, type SelectProps } from "./Select";
 export { SettingRow } from "./SettingRow";
 export { Spinner } from "./Spinner";
 export { Swatch } from "./Swatch";
+export { Slider } from "./Slider";
 export { Switch } from "./Switch";
 export { TabStrip, type TabItem, type TabLead, type TabStripProps } from "./Tabs";
 export { TextField, type TextFieldProps } from "./TextField";

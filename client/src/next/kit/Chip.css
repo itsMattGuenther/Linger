@@ -20,8 +20,16 @@
   color: var(--text-primary);
 }
 
-button.k-chip {
+button.k-chip[data-remove] {
   padding-right: var(--space-1-5);
+}
+
+button.k-chip {
+  cursor: pointer;
+}
+
+button.k-chip[aria-expanded="true"] {
+  border-color: var(--accent-edge);
 }
 
 button.k-chip .k-icon {

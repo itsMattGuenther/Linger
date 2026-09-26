@@ -1,8 +1,11 @@
+import { useRef, useState } from "react";
 import type { User } from "../../../generated/User";
+import { volumeLabel } from "../../../lib/voice";
 import { Button, Chip, IconButton, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
+import { VolumeCard } from "./VolumeCard";
 
 export interface VoiceDockPerson {
   user: User;
@@ -12,6 +15,8 @@ export interface VoiceDockPerson {
   controls?: "muted" | "deafened" | "unknown" | null;
   /** Trouble reaching them from here (VOICE-7). */
   link?: "connecting" | "unreachable" | null;
+  /** How loud they play for you, 0 to 2 (VOICE-10). */
+  volume?: number;
 }
 
 /** A person's shared microphone state as their chip's glyph, in today's client's words. */
@@ -47,6 +52,8 @@ export interface VoiceDockProps {
   onMute: (muted: boolean) => void;
   onDeafen: (deafened: boolean) => void;
   onLeave: () => void;
+  /** How loud somebody plays for you, from their chip (decision 8). Left out: chips open nothing. */
+  onVolume?: (person: VoiceDockPerson, volume: number) => void;
 }
 
 /**
@@ -55,7 +62,15 @@ export interface VoiceDockProps {
  * Mute, Deafen and Leave: the list is always open, so they're always in
  * reach, and closing a chat tab or window never ends voice.
  */
-export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, server, onGoToRoom, onMute, onDeafen, onLeave }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume }: VoiceDockProps) {
+  // Whose volume is open, and the chip it opened from.
+  const [volumeOf, setVolumeOf] = useState<{ id: string } | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const open = volumeOf ? people.find((person) => person.user.id === volumeOf.id && !person.you) : undefined;
+  const closeVolume = () => {
+    setVolumeOf(null);
+    opener.current?.focus();
+  };
   const anyone = people.some((person) => person.speaking);
   return (
     <section className="nx-voice" aria-label={server ? `In voice in ${where} on ${server.name}` : `In voice in ${where}`}>
@@ -88,6 +103,20 @@ export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, se
               active={person.speaking}
               state={stateOf(person)}
               note={noteOf(person)}
+              {...(onVolume && !person.you
+                ? {
+                    actionLabel: `${person.user.display_name}'s volume, ${volumeLabel(person.volume ?? 1)}`,
+                    expanded: volumeOf?.id === person.user.id,
+                    onActivate: (event) => {
+                      if (volumeOf?.id === person.user.id) {
+                        closeVolume();
+                        return;
+                      }
+                      opener.current = event.currentTarget;
+                      setVolumeOf({ id: person.user.id });
+                    },
+                  }
+                : {})}
             >
               {person.you ? "you" : <Name person={person.user} size="control" />}
             </Chip>
@@ -98,6 +127,9 @@ export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, se
         <p className="nx-voice-line" role="status">
           {line}
         </p>
+      ) : null}
+      {open && onVolume && volumeOf ? (
+        <VolumeCard user={open.user} volume={open.volume ?? 1} anchor={opener} onVolume={(volume) => onVolume(open, volume)} onClose={closeVolume} />
       ) : null}
       <div className="nx-voice-controls">
         {pushToTalk ? null : (

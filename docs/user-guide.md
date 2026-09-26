@@ -383,6 +383,9 @@ who's in it (whoever is speaking lights up), and your controls:
   is listening.
 - **Leave** turns the microphone off. Quitting Linger does too; closing the
   list doesn't, since Linger keeps running in the tray.
+- Click someone's name in the voice bar to set **how loud they are for you**,
+  from silent to twice as loud. Linger remembers it for that person on this
+  server, on this computer only; nobody else hears or sees the change.
 - The arrow beside the room's name opens its conversation.
 
 With the list tucked away in the tray, the tray icon's menu has **Mute** and

@@ -223,6 +223,9 @@
   --switch-w: 36px;
   --switch-h: 20px;
   --switch-thumb: 14px;
+  /* Slider: a 4px track and a 14px thumb, in a 24px-tall hit box. */
+  --slider-track: 4px;
+  --slider-thumb: 14px;
   --swatch: 24px;
 
   /* Settings (docs/design/buddy-list.md, "Settings"). */

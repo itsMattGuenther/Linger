@@ -21,6 +21,12 @@ export interface VoicePerson {
   controls: "muted" | "deafened" | "unknown" | null;
   /** Trouble reaching them from here (VOICE-7), while you're both in voice. */
   link: "connecting" | "unreachable" | null;
+  /**
+   * How loud they play for you, 0 to 2 (1 is as sent), and the session that
+   * sets it (VOICE-10). Kept on this computer only; null for you.
+   */
+  volume: number;
+  session: string | null;
 }
 
 export interface VoiceModel {
@@ -62,6 +68,8 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>): 
         speaking: you ? mine.talking : speaking.has(user.id),
         controls: you ? controlsOf(mine) : peer?.controls === undefined ? "unknown" : controlsOf(peer.controls),
         link: you || !peer ? null : linkOf(mine.peers[peer.session_id]),
+        volume: you || !peer ? 1 : (mine.volumes[peer.session_id] ?? 1),
+        session: you || !peer ? null : peer.session_id,
       };
     });
   return {
