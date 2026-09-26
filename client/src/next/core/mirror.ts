@@ -62,6 +62,7 @@ export async function followOwner(bus: Bus): Promise<Following> {
   // state, its frames. One signed out of while the owner's answer was on its
   // way is never taken up.
   const apis = new Map<string, AuthedApi>();
+  const sharedMeanwhile = new Map<string, SharedMessage["shared"]>();
   const signedOut = new Set<string>();
   const hearing = new Set<(server: string) => void>();
   const letGo = (server: string) => {
@@ -88,7 +89,12 @@ export async function followOwner(bus: Bus): Promise<Following> {
       followStatus(server, status);
     }),
     bus.listen<SharedMessage>(SHARED, (message) => {
-      if (message.v === PROTOCOL && !signedOut.has(message.server)) adoptShared(message.server, message.shared);
+      if (message.v !== PROTOCOL || signedOut.has(message.server)) return;
+      if (live.has(message.server)) adoptShared(message.server, message.shared);
+      // Still catching up: the newest is kept, and applied over the snapshot
+      // once it's adopted. The owner sends one whenever a value changes, so
+      // the newest is never older than the snapshot.
+      else if (!settled) sharedMeanwhile.set(message.server, message.shared);
     }),
     bus.listen<SignedOutMessage>(SIGNED_OUT, (message) => {
       if (message.v === PROTOCOL) letGo(message.server);
@@ -116,11 +122,14 @@ export async function followOwner(bus: Bus): Promise<Following> {
     adopt(server, { state: share.state, position: share.position });
     const { apply } = catchUp(share.position, buffers.get(server) ?? []);
     for (const frame of apply) applyFollowed(server, frame);
+    const meanwhile = sharedMeanwhile.get(server);
+    if (meanwhile) adoptShared(server, meanwhile);
     buffers.delete(server);
     live.add(server);
   }
   settled = true;
   buffers.clear();
+  sharedMeanwhile.clear();
 
   return {
     apis,

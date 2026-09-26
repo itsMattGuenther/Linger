@@ -516,6 +516,35 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("what the owner changes while a window is catching up still reaches it", async () => {
+    const { owner, viewer, core } = await windows();
+    const lent = { token: "token-1", expiresAt: Date.now() + 600_000 };
+    let gated = false;
+    let lendNow: () => void = () => undefined;
+    const api = {
+      ...fakeOwnerApi(["token-1"]),
+      get: vi.fn(async () => ({ "r-general": "m000012" })),
+      accessToken: vi.fn(() => (gated ? new Promise<typeof lent>((settle) => (lendNow = () => settle(lent))) : Promise.resolve(lent))),
+    };
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    expect(owner.gateway.serverState(HOME).readLoaded).toBe(false);
+    gated = true;
+    const asked = api.accessToken.mock.calls.length;
+    const following = viewer.mirror.followOwner(viewer.bus);
+    // The owner has read its state for the answer, and waits on the token...
+    await vi.waitFor(() => expect(api.accessToken.mock.calls.length).toBeGreaterThan(asked));
+    // ...when where you'd read up to arrives.
+    await owner.gateway.loadReadMarkers(api as never);
+    expect(owner.gateway.serverState(HOME).readLoaded).toBe(true);
+    lendNow();
+    const follower = await following;
+    expect(viewer.gateway.serverState(HOME).readLoaded).toBe(true);
+    expect(viewer.gateway.serverState(HOME).read["r-general"]).toBe("m000012");
+    follower.stop();
+  });
+
   it("tells which servers were signed out of between two lists", () => {
     return import("./share").then(({ leftOut }) => {
       expect(leftOut(["a", "b", "c"], ["c", "a"])).toEqual(["b"]);

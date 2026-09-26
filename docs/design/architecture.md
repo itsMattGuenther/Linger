@@ -121,6 +121,12 @@ order give the same state, so no window needs to be told what another knows.
    - after a `ready`, every frame applies.
 4. From then on it applies frames as they arrive.
 
+The few values that change without a frame (read positions, your voice seat,
+notification rules; `sharedLocalOf` in `lib/gateway.ts`) come from the owner
+as `next:shared` whenever one changes. A viewer still catching up keeps the
+newest of those per server and applies it over the snapshot. The owner sends
+one on every change, so the newest is never older than the snapshot.
+
 **What is not shared through frames:**
 
 - **Loaded history.** Each window loads the conversations it shows, over REST
