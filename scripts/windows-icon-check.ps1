@@ -85,3 +85,9 @@ foreach ($package in @(@{Name='nsis'; Exe=$exe}, @{Name='msi'; Exe=$msiExe.FullN
     node client/scripts/windows-audio-check.mjs $package.Exe $probeDir 2>&1 | Tee-Object -FilePath (Join-Path $probeDir 'result.log')
     if ($LASTEXITCODE -ne 0) { throw "Packaged $($package.Name) WebView2 audio failed" }
 }
+
+# The Buddy list client starts in the installed app's WebView2 (T-1812), and
+# a screenshot of it is kept with the evidence.
+$nextDir = Join-Path $Output 'next'
+node client/scripts/windows-next-check.mjs $exe $nextDir 2>&1 | Tee-Object -FilePath (Join-Path $Output 'next-result.log')
+if ($LASTEXITCODE -ne 0) { throw "The Buddy list didn't start in packaged WebView2" }
