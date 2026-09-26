@@ -1,0 +1,38 @@
+/* The foot's standing lines: one quiet line each, above the voice bar. Layout
+   only; the marks and the button are kit pieces. Tokens only. */
+.nx-notes {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1-5) var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.nx-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+}
+
+/* The mark sits in the icon slot a row's marker would, so the words line up
+   with nothing jumping as a spinner becomes an icon. */
+.nx-note-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--icon-md);
+  color: var(--text-muted);
+}
+
+/* A long server name wraps rather than being cut off. */
+.nx-note-words {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

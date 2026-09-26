@@ -7,6 +7,8 @@ export interface ServerTagInfo {
   accent: string | null;
   /** How many days it keeps a file, or null for good (the media view says so). */
   fileExpiryDays?: number | null;
+  /** How much its files take up, and how much it allows, in bytes. */
+  storage?: { used: number; limit: number };
 }
 
 /**
@@ -25,7 +27,12 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
       void api
         .serverInfo(abort.signal)
         .then((info) =>
-          setInfos((held) => ({ ...held, [server]: { name: info.name, accent: info.accent_key ?? null, fileExpiryDays: info.file_expiry_days } })),
+          setInfos((held) => ({ ...held, [server]: {
+            name: info.name,
+            accent: info.accent_key ?? null,
+            fileExpiryDays: info.file_expiry_days,
+            storage: { used: info.storage_used_bytes, limit: info.storage_limit_bytes },
+          } })),
         )
         .catch(() => undefined);
     }

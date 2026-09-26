@@ -46,6 +46,9 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { loadCloseList } from "../../core/closing";
+import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
+import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
+import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
@@ -442,6 +445,51 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     };
   }, [several, signedIn, states]);
 
+  // The foot's standing lines (decision 1): a server that isn't connected
+  // after a few seconds, a keyring that can't keep sign-ins, a new version.
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let live = true;
+    const look = () =>
+      void checkForUpdate()
+        .then((check) => {
+          if (live) setUpdate(check);
+        })
+        .catch(() => undefined);
+    look();
+    const timer = window.setInterval(look, UPDATE_EVERY_MS);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+  // When each server stopped being connected. Worked out afresh on every
+  // draw from the last one: a second draw of the same moment changes nothing.
+  const trouble = useRef<ReadonlyMap<string, number>>(new Map());
+  const drawnAt = Date.now();
+  trouble.current = troubleSince(trouble.current, new Map(ordered.map((session) => [session.baseUrl, states[session.baseUrl]?.status.kind ?? "offline"])), drawnAt);
+  const notes = listNotes(
+    ordered.map((session) => ({
+      server: session.baseUrl,
+      name: infos[session.baseUrl]?.name ?? hostOf(session.baseUrl),
+      status: states[session.baseUrl]?.status ?? { kind: "offline" },
+      troubleSince: trouble.current.get(session.baseUrl) ?? null,
+    })),
+    keyringNotice,
+    update,
+    drawnAt,
+  );
+  // Nothing else draws the list when a connection's grace runs out, so a
+  // timer does, once, at the first one due.
+  const [, wake] = useState(0);
+  useEffect(() => {
+    const due = [...trouble.current.values()].map((since) => since + TROUBLE_GRACE_MS - Date.now()).filter((ms) => ms > 0);
+    if (due.length === 0) return;
+    const timer = window.setTimeout(() => wake((n) => n + 1), Math.min(...due) + 50);
+    return () => window.clearTimeout(timer);
+  });
+
   // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
   const knocks = useMemo(
     (): KnockCard[] =>
@@ -485,6 +533,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
         onMedia={() => shell.tool("media")}
         onSearch={() => shell.tool("search")}
         notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
+        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />
       )}

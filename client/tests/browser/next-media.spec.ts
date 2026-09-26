@@ -294,10 +294,18 @@ test.describe("states", () => {
     await expect(tiles(page)).toHaveCount(7);
   });
 
-  test("says how long this server keeps files", async ({ page }) => {
+  test("says how long this server keeps files, and how full it is, with the whole sentence on hover", async ({ page }) => {
     await open(page);
     await loaded(page, 7);
     await expect(line(page)).toHaveText("Files go after a year here. Starred ones stay.");
+    const storage = page.locator(".nx-media-storage");
+    await expect(storage).toHaveText("812 MB / 10 GB");
+    await expect(storage).toHaveAttribute("title", "812 MB of 10 GB used. Files are removed after a year unless they are starred or on a pinned message.");
+    // A filter makes room for Clear filters; the figure comes back without one.
+    await page.getByRole("button", { name: "Images", exact: true }).click();
+    await expect(storage).toHaveCount(0);
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(storage).toHaveText("812 MB / 10 GB");
   });
 
   test("pages older things on, asking after the last one", async ({ page }) => {
@@ -335,6 +343,8 @@ test.describe("several servers", () => {
     await expect(page.getByRole("combobox", { name: "Shared by" })).toHaveCount(0);
     await expect(page.locator(".nx-media-who-off")).toHaveText("Pick one server to choose a person.");
     await expect(line(page)).toHaveText("Starred files don’t expire.");
+    // How full is a question about one server.
+    await expect(page.locator(".nx-media-storage")).toHaveCount(0);
     await tile(page, "raid-wipe.png").locator(".nx-tile-open").click();
     expect(await did(page)).toContain(`open ${GUILD} a-raid-night m000913`);
     await tile(page, "loot-council.xlsx").getByRole("button", { name: "Star loot-council.xlsx" }).click();
@@ -349,6 +359,7 @@ test.describe("several servers", () => {
     await loaded(page, 2);
     await expect(page.locator(".nx-tile .nx-scope-mark")).toHaveCount(0);
     await expect(line(page)).toHaveText("This server keeps files for good.");
+    await expect(page.locator(".nx-media-storage")).toHaveText("2.1 GB / 10 GB");
     await expect(page.getByRole("combobox", { name: "Shared by" })).toBeVisible();
     // People are per server: switching lets go of the one you picked.
     await page.getByRole("combobox", { name: "Shared by" }).selectOption({ label: "Kestrel" });

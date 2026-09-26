@@ -83,6 +83,11 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    keyring warning). The design has no status bar. Each of the four needs a
    home: the list's footer, the server header, or Settings. *(SRV-6, SRV-7,
    UPD-5, SIGN-9)*
+   **Decided (2026-09-25):** a quiet line at the list's foot for each, only
+   while it's true: a server not connected after five seconds, sign-ins not
+   remembered, a new version (with Update…, which opens Settings). The
+   storage figure moved to the Media window, beside how long files are kept.
+   The protocol words ("tls ok…", "ready (28ms)") are gone.
 2. **Light theme.** The design is dark only; today has dark, light and
    follow-the-system. Keep dark only, or design a light version before the
    switch? *(LOOK-3)*
@@ -194,7 +199,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | SIGN-6 | Server errors shown as sentences, in the server's own words when it has them. | `messageFor`, PROTOCOL §1 | Same | U + F | ✅ (core/signin.test.ts, next-signin.spec.ts) |
 | SIGN-7 | Sign-ins survive restarts. Refresh tokens live in the OS keyring, one entry per server; nothing about the account is cached. | `lib/session.ts`, `src-tauri/src/secrets.rs` | Same, **owner window only** (architecture: refresh tokens never leave the owner). | C + U (borrowed tokens) | ✅ (next-list-window.spec.ts, share.test.ts) |
 | SIGN-8 | Several servers at once. Signing out of one leaves the rest alone. Signing back in keeps the server's place in the order. | `lib/session.ts` | Same; order shown as sections, and adding a server is **silent** (decision 16). | C + F | ✅ several servers, and adding one from Settings into the list window with every other server still connected (next-list-window.spec.ts, next-settings-window.spec.ts) |
-| SIGN-9 | "Not remembered" warning when the keyring can't store a sign-in, shown before anyone is surprised by it. | `App.tsx` status bar, `session.ts` `keyringNotice` | **Silent** (decision 1) | F | 🟡 said on the sign-in screen (next-signin.spec.ts); once signed in, waits on decision 1 |
+| SIGN-9 | "Not remembered" warning when the keyring can't store a sign-in, shown before anyone is surprised by it. | `App.tsx` status bar, `session.ts` `keyringNotice` | On the sign-in screen, then a line at the list's foot (decision 1) | F | ✅ (next-signin.spec.ts; next-list-window.spec.ts "a computer that can't keep sign-ins") |
 | SIGN-10 | Only an authentication rejection ends a sign-in. A server outage, rate limit or network failure keeps the saved token (T-906, PROTOCOL §2). | `lib/api.ts`, `session.ts` | Same | C | ✅ (lib/api.test.ts, next-chat-window.spec.ts) |
 | SIGN-11 | A sign-in that ended on its own says why on the next screen. | `AuthScreens.tsx` `notice` | Same | F | ✅ (next-signin.spec.ts) |
 | SIGN-12 | Restore happens exactly once per launch; the StrictMode double mount can't spend a refresh token twice. | `session.ts` module-scope promise | Same, plus viewers never refresh. | C + U | ✅ (next-list-window.spec.ts, lib/api.test.ts) |
@@ -209,8 +214,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | SRV-3 | One slow or down server doesn't block the others at startup. **Not done today (T-907).** | `session.ts` `Promise.all` | **Decision 21** | U + F | ⏸ decision 21 |
 | SRV-4 | The server's name is fetched, and re-fetched every 2 minutes. On failure, the hostname is shown. | `App.tsx` `ServerLink` | Same, in the server header | F | ✅ (next-list-parity.spec.ts) |
 | SRV-5 | You're only ever in one room: switching servers takes you out of the last room. | `App.tsx`, `watchPresence.ts` | In tabs, the visible tab of the focused chat window is where you are (design). | U + F | ✅ (showing.test.ts, share.test.ts) |
-| SRV-6 | Connection state in words: ready, connecting, retrying, can't reach. | `App.tsx` status bar, gateway `status` | **Silent** (decision 1) | F | ⏸ decision 1 |
-| SRV-7 | Storage figure (used / limit, file expiry) visible to anyone sharing. | `App.tsx`, `lib/media.ts` `storageLine` | **Silent** (decision 1) | U + F | ⏸ decision 1 |
+| SRV-6 | Connection state in words: ready, connecting, retrying, can't reach. | `App.tsx` status bar, gateway `status` | A line at the list's foot, only past a 5-second grace (decision 1) | U + F | ✅ (core/notes.test.ts; next-list-window.spec.ts "a server that can't be reached") |
+| SRV-7 | Storage figure (used / limit, file expiry) visible to anyone sharing. | `App.tsx`, `lib/media.ts` `storageLine` | In the Media window, beside how long files are kept (decision 1) | U + F | ✅ (next-media.spec.ts "how full it is") |
 | SRV-8 | Host controls are absent, not greyed out, for members. Decided per server. | `App.tsx`, `HostPanel.tsx` | Settings → Hosting appears only for the host. | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | SRV-9 | A server that goes away (signed out, refused) leaves nothing on screen pointing at it. | `App.tsx` | Same, including its tabs and windows | F | ✅ a signed-out server's tabs close, and the window with them when none are left (next-chat-window.spec.ts) |
 | SRV-10 | A room that's archived, or a DM you've lost access to, is never held open. | `App.tsx` | Same; its tab closes or says so | F | ✅ (tabs.test.ts, conversation.test.ts) |
@@ -438,11 +443,11 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | Same, **owner only** | C + F | 🟡 checks when Settings opens, not at launch |
+| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | Same, **owner only**, and again every 12 hours while it runs in the tray | C + F | ✅ (next-list-window.spec.ts "looked for at launch", next-settings.spec.ts) |
 | UPD-2 | States: ready (with version), current, unconfigured (a browser or dev build), failed (with reason), and managed (the system updates it). | `updates.ts` | Same | U | ✅ (lib/updates.test.ts, next-settings.spec.ts) |
 | UPD-3 | Managed installs (the Arch package marker) say "updates with your system" and never try to replace themselves. | `src-tauri/src/packaging.rs`, `updates.ts` | Same | C + U | ✅ (lib/updates.test.ts, Rust tests) |
 | UPD-4 | Release notes are a link to the release page, not printed in the app (#174). | Settings → Updates | Same | F | ✅ (next-settings.spec.ts) |
-| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | **Silent** (decision 1) | F | ⏸ decision 1 |
+| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | A line at the list's foot with Update…, which opens Settings (decision 1) | F | ✅ (next-list-window.spec.ts "a new version gets one quiet line") |
 | UPD-6 | Installing replaces the app; a failure says why. | `update_install` | Same | D + M | 🟡 built; needs a desktop check |
 
 ## HOST — running the server

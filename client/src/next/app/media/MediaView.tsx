@@ -5,7 +5,7 @@ import type { MediaKind } from "../../../generated/MediaKind";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import type { UserId } from "../../../generated/UserId";
-import { renderAs } from "../../../lib/media";
+import { renderAs, storageDetail, storageLine } from "../../../lib/media";
 import { TYPING_PAUSE_MS } from "../../../lib/search";
 import { isFiltered, keepLine, KINDS, MEDIA_PAGE, mediaAsk, mediaEmpty, mediaOrder, NO_FILTERS, starLine, tileLine, type MediaFilters, type TileLine } from "../../core/media";
 import { merge, type Stream } from "../../core/pages";
@@ -19,6 +19,8 @@ import "./MediaView.css";
 export interface MediaServer extends ViewServer {
   /** How many days it keeps a file, or null for good; left out while it hasn't said. */
   expiryDays?: number | null;
+  /** How much its files take up, of how much it allows (SRV-7); left out while it hasn't said. */
+  storage?: { used: number; limit: number };
 }
 
 /** One page asked of one server. */
@@ -268,6 +270,13 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
         <p className="nx-media-line" role="status" data-problem={status.problem ? "" : undefined}>
           {status.words}
         </p>
+        {/* How full the server is, for whoever is about to share something
+            (SRV-7): the figure, and on hover what happens to old files. */}
+        {one?.storage && !filtered ? (
+          <span className="nx-media-storage" title={storageDetail(one.storage.used, one.storage.limit, one.expiryDays ?? null)}>
+            {storageLine(one.storage.used, one.storage.limit)}
+          </span>
+        ) : null}
         {filtered ? (
           <Button size="sm" variant="quiet" onClick={() => setFilters(NO_FILTERS)}>
             Clear filters

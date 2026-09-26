@@ -262,3 +262,81 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
   await expect(bar).toHaveCount(0);
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
 });
+
+// The foot's standing lines (decision 1): said only while true.
+const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
+
+test("all's well: the foot says nothing, and a new version is looked for at launch", async ({ page }) => {
+  await page.clock.install();
+  await open(page);
+  await page.clock.runFor(10_000);
+  await expect(section(page, "Casa da Ribeira")).toBeVisible();
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  expect(await did(page)).toContain("update_check");
+});
+
+test("a server that can't be reached for a few seconds says so by name, with the reason on hover, and the line goes when it's back", async ({ page }) => {
+  await page.clock.install();
+  await open(page);
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  // Every server connected first, and nothing said about it.
+  await page.clock.runFor(6_000);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 4000, reason: "connection refused" }), GUILD);
+  // A blip is never said: only a connection still down after the grace.
+  await page.clock.runFor(4_000);
+  await expect(notes(page)).toHaveCount(0);
+  await page.clock.runFor(1_500);
+  await expect(notes(page)).toHaveText(["Can't reach Ashen Lanterns. Still trying."]);
+  await expect(notes(page)).toHaveAttribute("title", "connection refused");
+  // Still down while it tries again: the same line, not a new grace.
+  await page.evaluate((server) => window.core?.status(server, { kind: "connecting" }), GUILD);
+  await expect(notes(page)).toHaveText(["Connecting to Ashen Lanterns…"]);
+  await page.evaluate((server) => window.core?.status(server, { kind: "ready", latency_ms: 30 }), GUILD);
+  await expect(notes(page)).toHaveCount(0);
+});
+
+test("a new version gets one quiet line, and Update… opens Settings where it's installed", async ({ page }) => {
+  await open(page, "?one&update");
+  await expect(notes(page)).toHaveText(["Linger 0.4.1 is ready.Update…"]);
+  await notes(page).getByRole("button", { name: "Update…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(
+    `next_open_settings:${JSON.stringify({ section: "account" })}`,
+  );
+});
+
+test("a computer that can't keep sign-ins keeps saying so under the list, once signed in", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&signedout&nokeyring");
+  await page.getByRole("textbox", { name: "Server or link" }).fill("good-company.example");
+  await page.getByRole("textbox", { name: "Server or link" }).press("Enter");
+  const form = page.getByRole("form", { name: "Sign in" });
+  await form.getByRole("textbox", { name: "Username" }).fill("matt");
+  await form.getByLabel("Password").fill("porch light");
+  await form.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await expect(notes(page)).toHaveText(["Sign-ins aren't remembered on this computer."]);
+  await expect(notes(page)).toHaveAttribute("title", /No usable keyring/);
+});
+
+test("the foot's lines fit the list: nothing clipped or sideways, the words lined up", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?update");
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  await page.clock.runFor(1_000);
+  await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 4000, reason: "refused" }), GUILD);
+  await page.clock.runFor(6_000);
+  await expect(notes(page)).toHaveCount(2);
+  const measured = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".nx-note")].map((line) => {
+      const words = line.querySelector<HTMLElement>(".nx-note-words");
+      const box = line.getBoundingClientRect();
+      return {
+        left: words?.getBoundingClientRect().left ?? -1,
+        inside: box.right <= document.documentElement.clientWidth && box.left >= 0,
+        cut: words ? words.scrollWidth > words.clientWidth : true,
+      };
+    }),
+  );
+  expect(measured.every((line) => line.inside && !line.cut)).toBe(true);
+  expect(new Set(measured.map((line) => line.left)).size).toBe(1);
+});

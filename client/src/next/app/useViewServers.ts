@@ -37,6 +37,7 @@ export function useViewServers(apis: ReadonlyMap<string, AuthedApi>): MediaServe
           users: state.users,
           rooms: [...state.rooms, ...state.dms],
           expiryDays: info?.fileExpiryDays,
+          storage: info?.storage,
         },
       ];
     });

@@ -441,7 +441,25 @@ chip. The text ends in "…".
   beside them moves.
 - **`Swatch`** is one of the 16 palette colors as a 24px choice. The ring
   around a chosen one is drawn in its own color.
-- **`Spinner`** is the busy mark inside a `Button`.
+- **`Spinner`** is the busy mark inside a `Button`, and the mark on a
+  connection line at the list's foot.
+
+### The list's foot
+
+Under the list, above the voice bar, the list says what today's status bar
+said, but only while it's true (decision 1, `core/notes.ts`,
+`app/list/ListNotes.tsx`). Each is one 12.5px line in `--text-secondary`, a
+16px mark in `--text-muted`, and words that wrap rather than cut off:
+
+- a server still not connected five seconds on: "Can't reach Pinecone. Still
+  trying.", with the reason on hover, and a `Spinner` for its mark;
+- a keyring that can't keep sign-ins, with the key icon;
+- a new version, with the download icon and a small quiet "Update…" that opens
+  Settings → Account & App.
+
+With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
+("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the
+Media window, beside how long the server keeps files.
 
 ## The conversation
 

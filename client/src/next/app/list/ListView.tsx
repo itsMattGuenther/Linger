@@ -50,6 +50,11 @@ interface ListShared {
    * of the list, just above the voice bar, so they never cover its controls.
    */
   notices?: ReactNode;
+  /**
+   * Standing lines that stay while they're true (decision 1): connection
+   * trouble, the keyring, a new version. Between the list and the voice bar.
+   */
+  notes?: ReactNode;
   /** You're in voice: the voice bar at the bottom. */
   voice?: VoiceDockProps;
   /** One server: changing your status and going away, from the top card. */
@@ -71,11 +76,12 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch } = props;
+  const { onClose, onSettings, notices, notes, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch } = props;
   const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
   const bottom = (
     <>
       <div className="nx-list-notices">{notices}</div>
+      {notes}
       {voice ? <VoiceDock {...voice} /> : null}
       {onMedia || onSearch ? (
         <nav className="nx-list-foot" aria-label="Media and search">

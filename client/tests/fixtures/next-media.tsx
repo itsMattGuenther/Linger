@@ -43,9 +43,12 @@ const note = (what: string) => {
   document.body.dataset.did = did.join("|");
 };
 
+/** Every server has 2.1 GB of 10 GB in use, but The Good Company, whose use is 812 MB. */
+const GB = 1024 ** 3;
+
 function place(server: string, name: string, accent: string, state: ReturnType<typeof evening>, expiryDays: number | null): MediaServer {
   const users: User[] = LONG && server === SERVER ? state.users.map((user) => (user.id === "u-jules" ? { ...user, display_name: "Jules Montgomery-Fairweather of the Long Name" } : user)) : state.users;
-  return { server, name, accent, me: state.me?.id ?? null, users, rooms: [...state.rooms, ...state.dms], expiryDays };
+  return { server, name, accent, me: state.me?.id ?? null, users, rooms: [...state.rooms, ...state.dms], expiryDays, storage: { used: server === SERVER ? 812 * 1024 ** 2 : 2.1 * GB, limit: 10 * GB } };
 }
 
 const home = place(SERVER, SERVER_NAME, "amber", evening(serverState(SERVER)), 365);

@@ -19,9 +19,11 @@
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
  * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
  * check waiting until `window.core.release()`.
- * `?noinfo` has Casa da Ribeira never say its name.
+ * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
+ * version waiting (0.4.1); otherwise this is the newest.
  *
  * `window.core.frame(server, frame)` delivers a gateway frame;
+ * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
  * window would. What the window asked for is in `body[data-did]`.
  */
@@ -29,7 +31,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
-import { type GatewayState, serverState } from "../../src/lib/gateway";
+import { type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { json } from "./next/desktop";
@@ -130,6 +132,9 @@ mockIPC((cmd, args) => {
       }, 20);
       return null;
     }
+    case "update_check":
+      note("update_check");
+      return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };
     case "gateway_disconnect":
       note(`disconnect ${String(a.baseUrl)}`);
       return null;
@@ -154,6 +159,8 @@ declare global {
     core?: {
       /** A gateway frame from a server, numbered after its last. */
       frame: (server: string, frame: Omit<ServerFrame, "s">) => void;
+      /** A server's connection changes state, as the Rust core would say. */
+      status: (server: string, status: GatewayStatus) => void;
       /** Another window asks the owner something (the bus's ask). */
       ask: (event: string, question: Record<string, unknown>) => void;
       /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
@@ -168,6 +175,7 @@ window.core = {
     seq[server] = (seq[server] ?? 1) + 1;
     deliver("gateway:frame", { server, frame: { ...frame, s: seq[server] } });
   },
+  status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
   release: () => release(),

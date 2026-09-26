@@ -85,6 +85,14 @@
   line-height: var(--line-meta);
 }
 
+.nx-media-storage {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  font-variant-numeric: tabular-nums;
+}
+
 .nx-media-line[data-problem] {
   color: var(--text-danger);
 }
