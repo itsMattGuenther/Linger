@@ -233,8 +233,14 @@ struct OpenConversation<'a> {
 /// Open the chat window on a conversation, or, if it is already open, bring it
 /// forward and tell it to show that conversation (it adds a tab or selects
 /// one). Only the list window may ask.
+///
+/// **Every command here that builds a window is `async`, and must stay so.**
+/// On Windows, building a WebView2 window from a synchronous command
+/// deadlocks: the new window comes up white and never answers, which is what
+/// 0.4.0 shipped (tauri-apps/wry#583). Async commands run off the main thread,
+/// and the build hands the window to it properly.
 #[tauri::command]
-pub fn next_open_chat(
+pub async fn next_open_chat(
     app: AppHandle,
     window: WebviewWindow,
     server: String,
@@ -276,7 +282,7 @@ pub fn next_open_chat(
 /// Only the list window may ask; a chat window asks the list window (an
 /// intent) to pop a tab out.
 #[tauri::command]
-pub fn next_open_conversation(
+pub async fn next_open_conversation(
     app: AppHandle,
     window: WebviewWindow,
     server: String,
@@ -325,7 +331,7 @@ pub fn next_open_conversation(
 /// forward and tell it to show that section. Only the list window may ask; a
 /// chat window asks the list window (an intent).
 #[tauri::command]
-pub fn next_open_settings(
+pub async fn next_open_settings(
     app: AppHandle,
     window: WebviewWindow,
     section: Option<String>,
@@ -357,7 +363,11 @@ pub fn next_open_settings(
 /// (`next:shown`, which puts the cursor in Search's box). Only the list window
 /// may ask.
 #[tauri::command]
-pub fn next_open_tool(app: AppHandle, window: WebviewWindow, which: String) -> Result<(), String> {
+pub async fn next_open_tool(
+    app: AppHandle,
+    window: WebviewWindow,
+    which: String,
+) -> Result<(), String> {
     if window.label() != OWNER {
         return Err("only the list window opens windows".into());
     }

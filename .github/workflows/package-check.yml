@@ -120,6 +120,8 @@ jobs:
             client/src-tauri/target/debug/bundle/msi/*.msi
             package-check/running-window-icon.png
             package-check/next/buddy-list-signin.png
+            package-check/next/next_open_settings.png
+            package-check/next/next_open_chat.png
             package-check/next/result.json
             package-check/next-*/result.json
             package-check/audio-*/*.log

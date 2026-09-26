@@ -81,7 +81,10 @@ isolated run checks the previous client's layout against the package's shipped
 CSS at all six interface sizes (with `LINGER_CLASSIC=1`, until T-1812).
 `scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs` check
 the Buddy list client itself starts in the packaged app, signed in nowhere,
-and the Windows one keeps a screenshot of it. No test code
+and the Windows one keeps a screenshot of it. The Windows check also opens
+Settings and a chat window the way the list does and waits for each to draw:
+a window built from a synchronous command deadlocks WebView2 (#205), so every
+window-building command in `src-tauri/src/window.rs` is `async`. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
 ## How the desktop app starts on Linux
