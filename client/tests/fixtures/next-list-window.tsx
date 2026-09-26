@@ -17,7 +17,8 @@
  * to; `?revoked` has The Good Company refuse its saved sign-in (with `?one`,
  * that leaves nothing signed in). The sign-in routes take any username;
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
- * spent, and `nowhere.example` doesn't answer.
+ * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
+ * check waiting until `window.core.release()`.
  *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.ask(event, question)` asks the owner something as another
@@ -148,6 +149,8 @@ declare global {
       frame: (server: string, frame: Omit<ServerFrame, "s">) => void;
       /** Another window asks the owner something (the bus's ask). */
       ask: (event: string, question: Record<string, unknown>) => void;
+      /** With `?hold`, the server answers its health check from now on. */
+      release: () => void;
     };
   }
 }
@@ -157,9 +160,15 @@ window.core = {
     deliver("gateway:frame", { server, frame: { ...frame, s: seq[server] } });
   },
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
+  release: () => release(),
 };
 
 // --- the servers -----------------------------------------------------------
+
+let release: () => void = () => undefined;
+const held = new Promise<void>((settle) => {
+  release = settle;
+});
 
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -178,7 +187,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === "/auth/refresh") {
     return query.has("revoked") && server === SERVER ? refuse(401, "UNAUTHENTICATED", "That sign-in has ended.") : signedIn();
   }
-  if (path === "/health") return new Response(null, { status: 204 });
+  if (path === "/health") {
+    // `?hold`: the server doesn't answer until the test lets it (`window.core.release()`).
+    if (query.has("hold")) await held;
+    return new Response(null, { status: 204 });
+  }
   const invite = /^\/auth\/invite\/(.+)$/.exec(path);
   if (invite) return json({ valid: invite[1] !== "DEAD", server_name: names[server]?.name ?? null, expires_at: null });
   const setup = /^\/setup\/(.+)$/.exec(path);

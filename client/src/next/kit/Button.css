@@ -47,13 +47,15 @@
   white-space: nowrap;
 }
 
-/* Busy: the label keeps the button's width and the spinner sits over it. */
+/* Busy: the label keeps the button's width and the spinner sits over it.
+   The label is only see-through, not hidden, so it's still the button's
+   name: "Continue, busy", not an unnamed button. */
 .k-button[data-busy="yes"] {
   cursor: progress;
 }
 
 .k-button[data-busy="yes"] .k-button-label {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .k-button-busy {

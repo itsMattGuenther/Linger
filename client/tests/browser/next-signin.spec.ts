@@ -133,10 +133,12 @@ test("a setup link leads to setting the server up, and Change goes back to the b
 });
 
 test("while it checks, it says so and a second Enter asks nothing more", async ({ page }) => {
-  await open(page);
+  await open(page, "?one&signedout&hold");
   await pasteBox(page).fill("good-company.example");
   await pasteBox(page).press("Enter");
+  await expect(go(page)).toHaveAttribute("aria-busy", "true");
   await pasteBox(page).press("Enter");
+  await page.evaluate(() => window.core?.release());
   await expect(page.getByRole("form", { name: "Sign in" })).toBeVisible();
   expect((await did(page)).filter((line) => line === `GET ${HOME}/health`)).toHaveLength(1);
 });
