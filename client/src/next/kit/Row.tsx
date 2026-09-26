@@ -34,6 +34,8 @@ export interface RowProps {
   fresh?: boolean;
   /** This row's card or window is open. */
   selected?: boolean;
+  /** A knock just went to this person: the row gives one small shake (none for reduced motion). */
+  knocked?: boolean;
   /** The accessible name, when the visible text isn't enough on its own. */
   label?: string;
   /** Shown but not usable for now, like people once a picker is full. */
@@ -84,6 +86,7 @@ export function Row({
   actions,
   fresh = false,
   selected = false,
+  knocked = false,
   label,
   disabled = false,
   onActivate,
@@ -98,6 +101,7 @@ export function Row({
       data-actions={count || undefined}
       data-fresh={fresh ? "yes" : undefined}
       data-selected={selected ? "yes" : undefined}
+      data-knocked={knocked ? "yes" : undefined}
     >
       <button
         type="button"

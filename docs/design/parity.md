@@ -69,7 +69,7 @@ What's left, biggest first:
   muted, or whose connection is struggling (VOICE-6, VOICE-7). Also missing: a per-server own window
   (MULTI-7), forced-colors mode (A11Y-6), evening warmth (LOOK-2), the update
   check at launch (UPD-1), a download that says where it went and offers a
-  retry (FILE-6), and knocking from a row (KNOCK-1).
+  retry (FILE-6).
 - **19 items wait on Matt**, mostly decisions 1 (the status bar's jobs),
   4 and 5 (the tray), 10 (message aging) and 21 (old gaps).
 
@@ -349,7 +349,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| KNOCK-1 | Knock someone from their card. The sender sees "knocked" for 3 seconds (acknowledging the request, not delivery), and the limit reply "That's three this hour. Give them a bit." Feedback never carries to a different person or server. | `RosterPanel.tsx` `KnockButton`, SPEC §4.9 | The person card, and row hover. The row wiggles. Offline people can't be knocked. | F | 🟡 from the card (next-list.spec.ts); knocking from a row and the wiggle aren't built |
+| KNOCK-1 | Knock someone from their card. The sender sees "knocked" for 3 seconds (acknowledging the request, not delivery), and the limit reply "That's three this hour. Give them a bit." Feedback never carries to a different person or server. | `RosterPanel.tsx` `KnockButton`, SPEC §4.9 | The person card, and row hover. The row wiggles. Offline people can't be knocked. | F | ✅ from the card or the row's hover buttons; the row shakes once (not under reduced motion), rests three seconds, and a refused knock from the row opens the card saying why; offline people can't be knocked; a double-click opens the DM (next-list.spec.ts) |
 | KNOCK-2 | A received knock is a card that says who, disappears after 8 seconds, has no buttons, takes no focus, uses `aria-live="polite"` and leaves nothing behind. It comes from every signed-in server, with the server named when there's more than one. | `knock/KnockCards.tsx` | Same | F | ✅ (next-knocks.spec.ts, next-list-window.spec.ts) |
 | KNOCK-3 | The knock sound follows mute, quiet hours and the knocks switch. | `lib/sound.ts` | Same; a quiet server still lets knocks through (design) | U | ✅ (lib/sound.test.ts, next-list-window.spec.ts) |
 

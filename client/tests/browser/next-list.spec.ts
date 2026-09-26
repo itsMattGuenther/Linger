@@ -181,6 +181,72 @@ test.describe("a person's card", () => {
   });
 });
 
+test.describe("a person's row", () => {
+  test("shows Message and Knock on hover and focus; nobody offline can be knocked", async ({ page }) => {
+    const sam = rows(page, "Away").first();
+    await sam.hover();
+    await expect(sam.getByRole("button", { name: "Message Sam" })).toBeVisible();
+    await expect(sam.getByRole("button", { name: "Knock on Sam's door" })).toBeEnabled();
+    await page.getByRole("button", { name: /Offline/ }).click();
+    const jen = rows(page, "Offline").first();
+    await jen.hover();
+    await expect(jen.getByRole("button", { name: "Knock on Jen's door" })).toBeDisabled();
+    await jen.getByRole("button", { name: "Message Jen" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-jen");
+  });
+
+  test("a knock from the row shakes it once and rests three seconds; from the card too", async ({ page }) => {
+    const opened = new Date("2026-09-25T20:00:00");
+    await page.clock.install({ time: opened });
+    await page.reload();
+    await page.clock.pauseAt(new Date(opened.getTime() + 600_000));
+    const sam = rows(page, "Away").first();
+    await sam.hover();
+    await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "knock:u-sam");
+    await expect(sam).toHaveAttribute("data-knocked", "yes");
+    // One shake, about half a second long.
+    const shakes = await sam.locator(".k-row-main").evaluate((node) => node.getAnimations().map((running) => Number(running.effect?.getComputedTiming().duration)));
+    expect(shakes).toEqual([520]);
+    await expect(sam.getByRole("button", { name: "Knocked on Sam's door" })).toBeDisabled();
+    await page.clock.fastForward(3_100);
+    await expect(sam).not.toHaveAttribute("data-knocked", "yes");
+    await expect(sam.getByRole("button", { name: "Knock on Sam's door" })).toBeEnabled();
+    // From the card, the row shakes the same way.
+    await sam.getByRole("button").first().click();
+    await page.getByRole("dialog", { name: "Sam" }).getByRole("button", { name: "Knock" }).click();
+    await expect(sam).toHaveAttribute("data-knocked", "yes");
+  });
+
+  test("a knock from the row that doesn't go opens their card saying why", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?limit");
+    const sam = rows(page, "Away").first();
+    await sam.hover();
+    await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
+    const card = page.getByRole("dialog", { name: "Sam" });
+    await expect(card).toContainText("That's three this hour. Give them a bit.");
+    // Read once, not waited for: a shake would be over in three seconds anyway.
+    expect(await sam.getAttribute("data-knocked")).toBeNull();
+  });
+
+  test("a double-click goes straight to the DM, the old AIM habit", async ({ page }) => {
+    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().dblclick();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-jules");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("the shake doesn't move for somebody who asked for less motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+    const sam = rows(page, "Away").first();
+    await sam.hover();
+    await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
+    await expect(sam).toHaveAttribute("data-knocked", "yes");
+    const lasts = await sam.locator(".k-row-main").evaluate((node) => node.getAnimations().map((running) => running.effect?.getComputedTiming().duration));
+    for (const duration of lasts) expect(Number(duration)).toBeLessThanOrEqual(2);
+  });
+});
+
 test.describe("the new-message picker", () => {
   const picker = (page: Page) => page.getByRole("dialog", { name: "New message" });
   const offered = (page: Page) => rows(page, "People to pick");

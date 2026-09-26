@@ -22,6 +22,8 @@ export interface PersonCardProps {
   onMessage: () => void;
   onKnock: () => Promise<KnockResult>;
   onClose: () => void;
+  /** Why a knock from their row didn't go, when that's what opened the card. */
+  problem?: string | null;
 }
 
 /**
@@ -36,7 +38,7 @@ export interface PersonCardProps {
 const GAP = 4;
 const EDGE = 8;
 
-export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onClose }: PersonCardProps) {
+export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onClose, problem: refused = null }: PersonCardProps) {
   const first = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
 
@@ -56,7 +58,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
     setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
   }, [anchor.top, anchor.bottom, anchor.left]);
   const [phase, setPhase] = useState<"idle" | "knocking" | "knocked">("idle");
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(refused);
 
   // Focus goes into the card when it opens (the row gets it back on close).
   useEffect(() => {

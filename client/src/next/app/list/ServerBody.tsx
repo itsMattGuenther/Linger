@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { ListModel, PersonRow } from "../../core/list";
@@ -8,6 +8,9 @@ import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
 import type { KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
+
+/** How long a knocked row rests before it can knock again (SPEC §4.9). */
+const KNOCKED_MS = 3_000;
 
 /** What one server's part of the list can do. */
 export interface ServerBodyActions {
@@ -65,7 +68,34 @@ export function ServerBody({
   const on = (words: string) => (serverName ? `${words} on ${serverName}` : words);
 
   // The card that is open, the row it came from, and where that row was.
-  const [card, setCard] = useState<{ row: PersonRow; anchor: { top: number; bottom: number } } | null>(null);
+  const [card, setCard] = useState<{ row: PersonRow; anchor: { top: number; bottom: number }; problem?: string } | null>(null);
+  // Who was just knocked, for three seconds: their row gives a shake, and its
+  // Knock button rests (SPEC §4.9: an acknowledgement, not a record).
+  const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
+  const timers = useRef(new Set<number>());
+  useEffect(() => {
+    const held = timers.current;
+    return () => {
+      for (const timer of held) window.clearTimeout(timer);
+    };
+  }, []);
+  const knockedOn = (userId: string) => {
+    setKnocked((held) => new Set(held).add(userId));
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer);
+      setKnocked((held) => {
+        const next = new Set(held);
+        next.delete(userId);
+        return next;
+      });
+    }, KNOCKED_MS);
+    timers.current.add(timer);
+  };
+  const knock = async (user: User): Promise<KnockResult> => {
+    const result = (await onKnock?.(user)) ?? { ok: false, problem: "Knocking isn't available here." };
+    if (result.ok) knockedOn(user.id);
+    return result;
+  };
   const opener = useRef<HTMLButtonElement | null>(null);
   const [picking, setPicking] = useState<{ bottom: number } | null>(null);
   const pickerOpener = useRef<HTMLButtonElement | null>(null);
@@ -88,10 +118,36 @@ export function ServerBody({
       detail={row.line ?? undefined}
       away={row.state === "away"}
       selected={card?.row.user.id === row.user.id}
+      knocked={knocked.has(row.user.id)}
+      actions={[
+        <IconButton key="message" icon="message" size="sm" label={`Message ${row.user.display_name}`} onClick={() => onMessage?.(row.user)} />,
+        <IconButton
+          key="knock"
+          icon="knock"
+          size="sm"
+          label={knocked.has(row.user.id) ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
+          disabled={row.state === "offline" || knocked.has(row.user.id)}
+          onClick={(event) => {
+            const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
+            void knock(row.user).then((result) => {
+              // A knock that didn't go says why, on their card.
+              if (result.ok || !rowButton) return;
+              opener.current = rowButton;
+              const box = rowButton.getBoundingClientRect();
+              setCard({ row, anchor: { top: box.top, bottom: box.bottom }, problem: result.problem });
+            });
+          }}
+        />,
+      ]}
       onActivate={(event) => {
         opener.current = event.currentTarget;
         const box = event.currentTarget.getBoundingClientRect();
         setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
+      }}
+      onDoubleActivate={() => {
+        // The old AIM habit: a double-click goes straight to the DM.
+        setCard(null);
+        onMessage?.(row.user);
       }}
     />
   );
@@ -225,8 +281,9 @@ export function ServerBody({
             onMessage?.(card.row.user);
             setCard(null);
           }}
-          onKnock={() => onKnock?.(card.row.user) ?? Promise.resolve({ ok: false, problem: "Knocking isn't available here." })}
+          onKnock={() => knock(card.row.user)}
           onClose={closeCard}
+          problem={card.problem ?? null}
         />
       ) : null}
     </>

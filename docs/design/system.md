@@ -122,7 +122,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
 | Faces | `--font-ui` Geist Sans · `--font-mono` Geist Mono · `--font-label` Departure Mono · `--font-pixel` Silkscreen · `--font-<key>` for each of the twelve name faces (a contract with `lib/fonts.ts`) |
-| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion |
+| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion · `--nudge` 2px, how far a knocked row shakes |
 | Layers | `--z-raised` 10 · `-sticky` 20 · `-popover` 100 · `-notice` 200 · `-tooltip` 300 |
 
 All sizes are in pixels.
@@ -261,6 +261,8 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
 - **States:**
   - `fresh` draws the title bold. Weight only, never a count.
   - `selected` means its card or window is open.
+  - `knocked` means you just knocked on this person's door: the row gives one
+    small shake (two slow durations long, so none under reduced motion).
 - **Actions:** up to three md `IconButton`s, shown on hover and keyboard focus.
   While they show, the text column gives up exactly their width, so they never
   cover text, and the note steps aside.

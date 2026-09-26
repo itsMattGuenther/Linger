@@ -18,6 +18,31 @@
   border-radius: var(--radius-md);
 }
 
+/* A knock went out: one small shake, over in about half a second. The
+   durations collapse for reduced motion (tokens.css), so it doesn't move. */
+.k-row[data-knocked="yes"] .k-row-main {
+  animation: k-row-nudge calc(var(--duration-slow) * 2) var(--ease-in-out) 1;
+}
+
+@keyframes k-row-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(calc(var(--nudge) * -1));
+  }
+  40% {
+    transform: translateX(var(--nudge));
+  }
+  60% {
+    transform: translateX(calc(var(--nudge) / -2));
+  }
+  80% {
+    transform: translateX(calc(var(--nudge) / 2));
+  }
+}
+
 .k-row-main {
   display: grid;
   grid-template-columns: var(--marker-slot) minmax(0, 1fr);

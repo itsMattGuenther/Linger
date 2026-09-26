@@ -294,6 +294,8 @@
   --duration-slow: 260ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-out: ease-in-out;
+  /* How far a row shakes when you knock on its person's door. */
+  --nudge: 2px;
 
   /* Layers. */
   --z-raised: 10;
