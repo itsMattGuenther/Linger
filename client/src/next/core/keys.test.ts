@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSettingsKey, type KeyPress, tabCommand } from "./keys";
+import { isSearchKey, isSettingsKey, type KeyPress, tabCommand } from "./keys";
 
 function press(key: string, held: Partial<Omit<KeyPress, "key">> = {}): KeyPress {
   return { key, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...held };
@@ -13,6 +13,18 @@ describe("the Settings shortcut", () => {
     }
     // And it is never mistaken for a tab command.
     expect(tabCommand(press(",", { ctrlKey: true }))).toBeNull();
+  });
+});
+
+describe("the Search shortcut", () => {
+  it("is Ctrl+K, either case, and nothing else", () => {
+    expect(isSearchKey(press("k", { ctrlKey: true }))).toBe(true);
+    expect(isSearchKey(press("K", { ctrlKey: true }))).toBe(true);
+    for (const other of [press("k"), press("k", { ctrlKey: true, shiftKey: true }), press("k", { ctrlKey: true, altKey: true }), press("k", { metaKey: true }), press("j", { ctrlKey: true })]) {
+      expect(isSearchKey(other)).toBe(false);
+    }
+    expect(tabCommand(press("k", { ctrlKey: true }))).toBeNull();
+    expect(isSettingsKey(press("k", { ctrlKey: true }))).toBe(false);
   });
 });
 

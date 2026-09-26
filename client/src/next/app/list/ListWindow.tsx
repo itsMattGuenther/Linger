@@ -24,7 +24,7 @@ import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { RoomId } from "../../../generated/RoomId";
 import { PROTOCOL, tauriBus } from "../../core/bus";
-import { isSettingsKey } from "../../core/keys";
+import { isSearchKey, isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
 import { moveServer, seatsWords, serverHeader } from "../../core/servers";
@@ -288,9 +288,14 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     sharing?.signInsChanged();
   }, [signedIn]);
 
-  // Ctrl+, opens Settings from the list too.
+  // Ctrl+, opens Settings from the list too, and Ctrl+K Search.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (isSearchKey(event)) {
+        event.preventDefault();
+        shell.tool("search");
+        return;
+      }
       if (!isSettingsKey(event)) return;
       event.preventDefault();
       shell.settings();

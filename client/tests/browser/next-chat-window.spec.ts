@@ -241,6 +241,18 @@ test("moves between tabs and closes them from the keyboard, even while typing", 
   await expect(showing).toHaveAccessibleName("DM with Jules");
 });
 
+test("Ctrl+K asks the list window for Search, and Ctrl+, for Settings, even while typing", async ({ page }) => {
+  await open(page);
+  await box(page).click();
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("Control+,");
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "tool" || intent.kind === "settings")).toEqual([
+    { kind: "tool", which: "search" },
+    { kind: "settings" },
+  ]);
+  await expect(box(page)).toHaveValue("");
+});
+
 test("pops the showing tab out into its own window, and its draft goes with it", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.owner?.open("d-jules"));

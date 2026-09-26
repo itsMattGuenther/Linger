@@ -90,6 +90,18 @@ test("the gear and Ctrl+, open Settings", async ({ page }) => {
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_settings"))).toHaveLength(2);
 });
 
+test("Search and Media open from the foot, and Ctrl+K opens Search", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Media" }).click();
+  await page.getByRole("button", { name: "Search" }).click();
+  await page.keyboard.press("Control+k");
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([
+    `next_open_tool:${JSON.stringify({ which: "media" })}`,
+    `next_open_tool:${JSON.stringify({ which: "search" })}`,
+    `next_open_tool:${JSON.stringify({ which: "search" })}`,
+  ]);
+});
+
 test("a window that asks for a snapshot gets every server, each with a lent token", async ({ page }) => {
   await open(page);
   await expect(section(page, "Casa da Ribeira")).toBeVisible();

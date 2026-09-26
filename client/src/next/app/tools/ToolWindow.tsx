@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tauriBus } from "../../core/bus";
+import { isSearchKey, isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { Button, Icon, type IconName, Spinner, TitleBar } from "../../kit";
@@ -114,6 +115,23 @@ function Frame({
       stop?.();
     };
   }, []);
+
+  // Ctrl+, opens Settings, as from any window. Ctrl+K puts the cursor back in
+  // Search's box, or brings Search up from Media.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isSettingsKey(event)) {
+        event.preventDefault();
+        void intend({ kind: "settings" }).catch(() => undefined);
+      } else if (isSearchKey(event)) {
+        event.preventDefault();
+        if (screen === "search-window") setShown((count) => count + 1);
+        else void intend({ kind: "tool", which: "search" }).catch(() => undefined);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [intend, screen]);
 
   return (
     <div className="nx-tool" data-screen={screen}>

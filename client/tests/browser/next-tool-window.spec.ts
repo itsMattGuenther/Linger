@@ -41,6 +41,20 @@ test.describe("the Search window", () => {
     expect(opened?.conversation).toBe(String(opened?.roomId).startsWith("d-") ? "dm" : "room");
   });
 
+  test("Ctrl+K puts the cursor back in the box, and Ctrl+, opens Settings", async ({ page }) => {
+    await open(page, "search");
+    const box = page.getByRole("textbox", { name: "Search", exact: true });
+    await box.fill("porch");
+    await box.blur();
+    await expect(box).not.toBeFocused();
+    await page.keyboard.press("Control+k");
+    await expect(box).toBeFocused();
+    await page.keyboard.press("Control+,");
+    await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "settings" });
+    // Search is already here: Ctrl+K never asks for another.
+    expect(intents(await did(page)).filter((intent) => intent.kind === "tool")).toEqual([]);
+  });
+
   test("counts towards you being here, like any Linger window", async ({ page }) => {
     await open(page, "search");
     await page.getByRole("textbox", { name: "Search", exact: true }).fill("moon");
@@ -59,6 +73,9 @@ test.describe("the Media window", () => {
     const speakers = page.locator(".nx-tile", { has: page.locator(".nx-tile-title", { hasText: "speakers.png" }) });
     await speakers.getByRole("button", { name: /^Star/ }).click();
     await expect.poll(async () => (await did(page)).some((line) => /^PUT \/media\/[^/]+\/star as token-1$/.test(line))).toBe(true);
+    // Ctrl+K from Media brings Search up.
+    await page.keyboard.press("Control+k");
+    await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "tool", which: "search" });
     await speakers.locator(".nx-tile-open").click();
     await expect.poll(async () => intents(await did(page)).find((intent) => intent.kind === "open")).toMatchObject({
       kind: "open",

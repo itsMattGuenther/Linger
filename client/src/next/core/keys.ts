@@ -23,6 +23,11 @@ export type TabCommand =
   /** A tab by its place, from 0; `last` for the ninth key, as browsers do. */
   | { kind: "jump"; to: number | "last" };
 
+/** Ctrl+K opens Search from any window, or puts the cursor back in its box (SPEC §4.12). */
+export function isSearchKey(press: KeyPress): boolean {
+  return press.ctrlKey && !press.altKey && !press.metaKey && !press.shiftKey && (press.key === "k" || press.key === "K");
+}
+
 /** Ctrl+, opens Settings from any window (docs/design/buddy-list.md, "Settings"). */
 export function isSettingsKey(press: KeyPress): boolean {
   return press.ctrlKey && !press.altKey && !press.metaKey && !press.shiftKey && press.key === ",";

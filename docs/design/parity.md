@@ -511,7 +511,7 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| KEY-1 | Shortcuts today: Ctrl/Cmd+K search; Enter and Shift+Enter; Up to edit; Escape closes panels and previews and returns focus. New in the design: Ctrl+Tab and Ctrl+Shift+Tab, Ctrl+W, a jump-to-tab key (the prototype's Alt+1…9), and Ctrl+,. Push-to-talk shares Ctrl (**decision 6**). | `App.tsx`, `Stream.tsx` | Design | F | 🟡 tab keys and Ctrl+, (keys.test.ts); no Ctrl+K yet; decision 6 |
+| KEY-1 | Shortcuts today: Ctrl/Cmd+K search; Enter and Shift+Enter; Up to edit; Escape closes panels and previews and returns focus. New in the design: Ctrl+Tab and Ctrl+Shift+Tab, Ctrl+W, a jump-to-tab key (the prototype's Alt+1…9), and Ctrl+,. Push-to-talk shares Ctrl (**decision 6**). | `App.tsx`, `Stream.tsx` | Design | F | 🟡 tab keys, Ctrl+, and Ctrl+K in every window (keys.test.ts, next-chat-window, next-list-window and next-tool-window specs); decision 6 |
 | KEY-2 | Everything reachable without a mouse: roving focus in lists and tabs, Enter to open, context panels reachable by keyboard (the voice seat, the person card). | `lib/ContextPanel.tsx`, `PanelResize.tsx` | Same | F | ✅ (kit.spec.ts, next-list.spec.ts, next-chat.spec.ts) |
 
 ## A11Y — accessibility

@@ -37,7 +37,7 @@ import {
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
 import { voiceStrip } from "../../core/chat/voice";
-import { isSettingsKey, tabCommand } from "../../core/keys";
+import { isSearchKey, isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage, OPENS, type OpensAnswer } from "../../core/share";
@@ -368,6 +368,11 @@ function Conversations({ following }: { following: Following }) {
       if (isSettingsKey(event)) {
         event.preventDefault();
         void intendNow.current({ kind: "settings" }).catch(() => undefined);
+        return;
+      }
+      if (isSearchKey(event)) {
+        event.preventDefault();
+        void intendNow.current({ kind: "tool", which: "search" }).catch(() => undefined);
         return;
       }
       const command = tabCommand(event);
