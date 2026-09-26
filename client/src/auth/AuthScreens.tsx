@@ -170,7 +170,7 @@ function Connect({ onStep }: { onStep: (step: Step) => void }) {
     <form className="auth-form" onSubmit={submit}>
       <div className="auth-intro">
         <h2>Join your people.</h2>
-        <p>Your invite is the way in.</p>
+        <p>Your invite, or the address of a server you're on.</p>
       </div>
       <Field
         label="server or link"

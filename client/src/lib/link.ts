@@ -25,9 +25,15 @@ export type PastedLink =
  */
 const HOST = /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*|\[[0-9a-f:.]+\])$/i;
 
+/** This computer, by name or address: the one place `http://` is kept. */
+const LOOPBACK = /^(?:localhost|[a-z0-9-]+\.localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+
 /**
- * Bare hostnames get `https://`. Anything already carrying a scheme keeps it,
- * so `http://localhost:8080` still works for a server on your own machine.
+ * Bare hostnames get `https://`, and so does `http://` to anywhere but this
+ * computer (#208): the app only connects over https (the CSP in
+ * `tauri.conf.json`), so a typed `http://` could never reach a server, and
+ * failed as if the server were down. `http://localhost:8080` keeps its
+ * scheme, for a server on your own machine.
  */
 function toUrl(raw: string): URL | null {
   const text = raw.trim();
@@ -39,6 +45,7 @@ function toUrl(raw: string): URL | null {
     const url = new URL(withScheme);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
     if (!HOST.test(url.hostname)) return null;
+    if (url.protocol === "http:" && !LOOPBACK.test(url.hostname)) url.protocol = "https:";
     return url;
   } catch {
     return null;

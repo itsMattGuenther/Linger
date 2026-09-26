@@ -102,7 +102,7 @@ function Paste({
     <form className="nx-signin-form" onSubmit={(event) => void submit(event)} aria-label="Where to go">
       <div className="nx-signin-intro">
         <h1 className="nx-signin-title">{adding ? "Add a server." : "Join your people."}</h1>
-        <p className="nx-signin-lead">{adding ? "An invite, or the address of one you're on." : "Your invite is the way in."}</p>
+        <p className="nx-signin-lead">{adding ? "An invite, or the address of one you're on." : "Your invite, or the address of a server you're on."}</p>
       </div>
       <TextField
         label="Server or link"

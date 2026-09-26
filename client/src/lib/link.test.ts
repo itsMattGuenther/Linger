@@ -14,6 +14,19 @@ describe("reading what was pasted into the sign-in box", () => {
     expect(parsePastedLink("bücher.example")).toEqual({ kind: "server", baseUrl: "https://xn--bcher-kva.example" });
   });
 
+  it("reads http:// as https:// for anywhere but this computer, which the app couldn't reach otherwise (#208)", () => {
+    expect(parsePastedLink("http://linger.example")).toEqual({ kind: "server", baseUrl: "https://linger.example" });
+    expect(parsePastedLink("HTTP://linger.example:8443/")).toEqual({ kind: "server", baseUrl: "https://linger.example:8443" });
+    expect(parsePastedLink("http://linger.example/invite/AB-12")).toEqual({ kind: "invite", baseUrl: "https://linger.example", code: "AB-12" });
+    expect(parsePastedLink("http://192.168.1.20:8080")).toEqual({ kind: "server", baseUrl: "https://192.168.1.20:8080" });
+    // This computer keeps http, for a server run on it.
+    expect(parsePastedLink("http://127.0.0.1:8080")).toEqual({ kind: "server", baseUrl: "http://127.0.0.1:8080" });
+    expect(parsePastedLink("http://linger.localhost:8080")).toEqual({ kind: "server", baseUrl: "http://linger.localhost:8080" });
+    // A name that only starts like this computer's is somewhere else.
+    expect(parsePastedLink("http://localhost.example")).toEqual({ kind: "server", baseUrl: "https://localhost.example" });
+    expect(parsePastedLink("http://127.0.0.1.example")).toEqual({ kind: "server", baseUrl: "https://127.0.0.1.example" });
+  });
+
   it("refuses a sentence, a different kind of link, and nothing", () => {
     expect(parsePastedLink("not a link")).toBeNull();
     expect(parsePastedLink("linger.example is the address")).toBeNull();
