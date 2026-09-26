@@ -66,15 +66,11 @@ What's left, biggest first:
 - **17 items wait on Matt**, mostly decisions 1 (the status bar's jobs),
   4 and 5 (the tray), 10 (message aging) and 21 (old gaps).
 
-Three decisions were answered on 2026-09-25, all kept as built: 9 (names
-inline, once per run), 14 (Away everywhere) and 16 (signing in lives in the
-list window). They're written up in `buddy-list.md`. One is built one way and
-still open:
-
-- **18, the server's color:** the stripe and tag use the host's accent, as
-  `buddy-list.md` says. Matt would like each person to be able to pick their
-  own color for a server too, and more colors to choose from; being worked
-  out.
+Four decisions were answered on 2026-09-25, all kept as built: 9 (names
+inline, once per run), 14 (Away everywhere), 16 (signing in lives in the list
+window) and 18 (the server's color is the host's accent). With 18 came a
+change: a newcomer starts on the color the fewest people on the server wear,
+not gray. They're written up in `buddy-list.md`.
 
 Half of decision 10 is also settled: the 80ch line limit is the `--measure`
 token in `system.md`.
@@ -158,6 +154,11 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 18. **The server accent.** Today the host picks an accent palette key
     (`PATCH /server`). The design colors each server's stripe and tag. Is that
     color the host's accent? *(HOST-9, MULTI-6)*
+    **Decided (2026-09-25):** yes, the host's accent, the same for everybody.
+    Each person's own color is their name's, chosen per server in Profile; a
+    newcomer now starts on the color fewest people there wear instead of gray
+    (SPEC §4.5). The palette stays at 16; Profile should make gradients and
+    fonts easier to find, so a big server can still tell people apart.
 19. **Minimum window sizes, and interface scale across windows.** The old
     resizable columns and narrow-window drawers (SPEC §5.6) don't apply. Set
     minimum sizes for the list and chat windows, and confirm interface scale
@@ -452,7 +453,7 @@ there or where the design puts it.
 | HOST-6 | Members: a list, and "Remove from the server" (never kick or ban) with a confirmation that names the person and the loss. | `HostPanel.tsx`, `host/Removal.tsx`, `POST /users/:id/remove` | Settings → Hosting → People | F | ✅ (next-settings.spec.ts) |
 | HOST-7 | Removed people: a list, and letting someone back in. | `HostPanel.tsx`, `GET /users/removed`, `POST /users/:id/restore` | Same | F | ✅ (next-settings.spec.ts) |
 | HOST-8 | Rename the server. | `HostPanel.tsx`, `PATCH /server` | Settings → Hosting → Server | F | ✅ (next-settings.spec.ts) |
-| HOST-9 | The server's accent: a palette key or none. | `HostPanel.tsx` | Same; its use in the design is **decision 18** | F | ✅ (next-settings.spec.ts); built as the stripe color for decision 18 |
+| HOST-9 | The server's accent: a palette key or none. | `HostPanel.tsx` | Same; its use in the design is **decision 18** | F | ✅ (next-settings.spec.ts); decision 18: the server's color for everybody |
 | HOST-10 | Every host action is enforced by the server; the client only decides what's drawn. | server `FORBIDDEN` | Same | C (server tests) | ✅ (server tests) |
 | HOST-11 | A locked-out host recovers with `linger-server reset-password` on the server (no email, no link). | `crates/linger-server/src/reset.rs`, host guide | Same (docs only) | — | ✅ (docs; nothing to build) |
 

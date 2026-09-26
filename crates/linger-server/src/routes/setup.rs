@@ -67,6 +67,7 @@ async fn complete(
     .bind(now)
     .execute(&mut *tx)
     .await?;
+    crate::repo::colors::assign_starting_color(&mut tx, host_id).await?;
     for (key, value) in [
         ("name", server_name.to_string()),
         ("created_at", now.to_string()),

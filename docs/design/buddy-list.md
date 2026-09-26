@@ -38,6 +38,12 @@ dropped. This page and the prototype in `client/prototypes/` are what is left.
   list opens on the paste box. "Add a server", in Settings → Servers (or next
   to Sign out with one server), shows the same screen there, with a way back,
   and every other server stays connected.
+- **A server's color is its host's accent** (decision 18), the same for
+  everybody. Each person's own color is their name's, chosen per server in
+  Profile. A newcomer starts on the color the fewest people there wear, so a
+  big server isn't a room of gray names. The palette stays at 16 colors;
+  gradients and fonts are what keep sixty people apart, so Profile should
+  make them easy to find.
 
 ## The idea
 

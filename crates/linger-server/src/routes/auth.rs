@@ -106,7 +106,11 @@ async fn register(
     .await;
 
     match inserted {
-        Ok(_) => tx.commit().await.map_err(ApiError::from)?,
+        Ok(_) => {
+            // Somewhere to start on the palette other than everyone's gray.
+            crate::repo::colors::assign_starting_color(&mut tx, user_id).await?;
+            tx.commit().await.map_err(ApiError::from)?;
+        }
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
             return Err(ApiError::conflict("That username is taken."));
         }

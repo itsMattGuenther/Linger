@@ -295,6 +295,10 @@ Each user controls the rendering of their own display name:
 4. **Shimmer and glow respect `prefers-reduced-motion`.**
 5. **A global "Use plain names and message fonts" toggle** renders all names in the reader's default
    style. Some people will want this. Give it to them without friction.
+6. **Newcomers start in different colors.** A new account starts on the palette color the
+   fewest active people on that server wear (never slate, which reads as "not chosen"),
+   so a big server doesn't start as a room of identical gray names. It is only a start:
+   anyone changes it in Profile.
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
 hot-pink-Comic-Sans-on-black was funny for a week and unreadable forever. Users get:
