@@ -44,39 +44,33 @@ must respect are in [`lessons.md`](lessons.md).
 | ⬜ | Not started in the new client. |
 | ⏸ | Waiting on a decision below. |
 
-## Where things stand (2026-09-25, end of day)
+## Where things stand (2026-09-26, after the 0.4.0 release)
 
-Of 231 items: **149 done**, **64 partly**, **1 not started**,
-and **17 waiting on a decision**. Nothing has been tried in the real
-desktop app yet; every ✅ is proved in a browser test or a unit test.
+The Buddy list client is the app from 0.4.0. Of 231 items: **173 done**,
+**50 partly**, **7 to build** and **1 dropped** (the host's time zone,
+decision 3). Every decision is made.
 
 What's left, biggest first:
 
-- **Checks in the real app.** Windows, title bars, remembered window places,
-  voice audio and connection trouble, typing speed, a 10,000-message room,
-  downloads, dropped files on Windows, typing a date in WebKitGTK, and
-  whether each window's permissions let it do what it does. The code is
-  there; nobody has run it on a real desktop.
-- **Smaller pieces still missing:** a per-server own window (MULTI-7),
-  evening warmth (LOOK-2, waiting on an evening version of the colors) and
-  the update check at launch (UPD-1, which has nowhere to say "update ready"
-  until decision 1).
-- **17 items wait on Matt**, mostly decisions 1 (the status bar's jobs),
-  4 and 5 (the tray), 10 (message aging) and 21 (old gaps).
+- **Checks in the real app.** The package checks now prove the list window
+  starts in the packaged WebKitGTK and WebView2 (T-1812), but nobody has used
+  0.4.0 signed in on a real desktop yet: windows and title bars, remembered
+  window places, voice, a 10,000-message room, downloads, dropped files on
+  Windows, and whether each window's permissions let it do what it does.
+- **Decided, to build** (`TASKS.md`, M15): the push-to-talk key picker
+  (decision 6), drafts that survive closing and restarts (11), arrival cards
+  (13) and the door chime (12), empty-state lines (17), banner clicks (20),
+  quiet rooms folding past eight (22), and the three old gaps (21): Pin,
+  DMs showing as "around", and a slow server not holding up the others.
+- **Smaller pieces still missing:** a per-server own window (MULTI-7) and
+  evening warmth (LOOK-2, waiting on an evening version of the colors).
 
-Four decisions were answered on 2026-09-25, all kept as built: 9 (names
-inline, once per run), 14 (Away everywhere), 16 (signing in lives in the list
-window) and 18 (the server's color is the host's accent). With 18 came a
-change: a newcomer starts on the color the fewest people on the server wear,
-not gray. They're written up in `buddy-list.md`.
-
-Half of decision 10 is also settled: the 80ch line limit is the `--measure`
-token in `system.md`.
-
-## Decisions still needed
+## Decisions
 
 Each is referenced by the items it blocks. Matt decides; the answer goes into
-`buddy-list.md` or `system.md`, and the item moves on.
+`buddy-list.md` or `system.md`, and the item moves on. **All 22 are decided**
+(2026-09-25 and 2026-09-26); what they call for that isn't built yet is in
+`TASKS.md` under M15.
 
 1. **The status bar's jobs.** Today a permanent status bar (SPEC §5.6) shows
    connection state in protocol words ("connecting… tls ok… ready (28ms)"),
@@ -92,8 +86,11 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 2. **Light theme.** The design is dark only; today has dark, light and
    follow-the-system. Keep dark only, or design a light version before the
    switch? *(LOOK-3)*
+   **Decided (2026-09-26):** dark only for now. A light version is a design job for later, if
+   people ask for it.
 3. **The host's time zone** for "4:52 AM there" needs one small server setting
    and a protocol field. Build it in M15.8, or drop the line? *(MULTI-8)*
+   **Decided (2026-09-26):** skip it for now; build it when a far-flung server wants it.
 4. **Closing the list:** keep running in the tray (the proposed default) or
    quit. Tray support varies on Linux: GNOME shows no tray without an
    extension, and Waybar needs its tray module. There needs to be a fallback.
@@ -113,10 +110,14 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    Ctrl+,), so while push-to-talk is on, every shortcut briefly opens the
    microphone. Choose: a different default key, a picker, or accept it.
    *(VOICE-8, KEY-1)*
+   **Decided (2026-09-26):** a key picker in Settings → Sound & Voice, with Right Ctrl as
+   the default. Push-to-talk stays off by default: open mic is the default.
 7. **The speaking indicator.** SPEC §5.6 turns a speaking name over onto a
    block of its color. The prototype uses moving sound bars and a highlighted
    chip. Pick one. Whichever wins must change no geometry (#137, #139).
    *(VOICE-5)*
+   **Decided (2026-09-26):** keep what's built: the voice bar's chip lights in the lamp,
+   and the speaker beside a name turns into moving bars.
 8. **Per-person volume.** Today it's a click or right-click on a voice seat.
    The design doesn't say where it lives: the voice bar's chips, or the person
    card. *(VOICE-10)*
@@ -131,18 +132,27 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 10. **Message aging** (bodies fade to 88% after an hour and 78% after a day,
     SPEC §4.7) and the **80ch line limit**. Neither appears in the design. Keep
     or drop? *(CONV-6, CONV-7)*
+    **Decided (2026-09-26):** keep both, as built.
 11. **Drafts.** Today a half-typed line is dropped when you switch rooms, and
     files carry over (`Stream.tsx`). With tabs, each conversation has its own
     composer. Should drafts survive closing a tab, or a restart?
     `architecture.md` lists drafts as local state. *(COMP-9)*
+    **Decided (2026-09-26):** drafts are kept per conversation, across closing a tab and
+    across restarts, on this computer only.
 12. **Door sounds and entrance sounds.** The design adds arrival cards and an
     optional door chime. SPEC §4.1 specifies personal entrance sounds (unbuilt,
     T-901–T-903) with a once-per-5-minutes-per-listener limit and quiet hours.
     Is the door chime the first step toward entrance sounds, or its own
     feature? Does it follow the same limit? *(NEW-6)*
+    **Decided (2026-09-26):** the door chime is the first step toward entrance
+    sounds: one shared soft chime, off by default, with the once-per-5-minutes
+    limit and quiet hours. Personal entrance sounds later replace it.
 13. **Arrival cards.** Are they notifications? They must not take focus.
     Should they follow quiet hours and a quiet server? Should they be
     announced to screen readers? *(NEW-5)*
+    **Decided (2026-09-26):** on by default, quiet: they never take focus, stay silent in
+    quiet hours and on a Quiet server, and are announced politely to screen
+    readers.
 14. **Away everywhere.** Today away is per server, one account at a time. The
     design's single Away button writes to every ticked server. What does it
     say when one server refuses or is offline? *(PPL-9)*
@@ -163,6 +173,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 17. **Empty states:** no rooms yet, no DMs, a quiet server, an empty search,
     an empty media collection. Today each has copy and the porch mark (SPEC
     §5.6 "quiet delight"). The design doesn't show them. *(LIST-9)*
+    **Decided (2026-09-26):** a quiet one-line sentence in each empty place, like "No DMs
+    yet."; the host gets "Make the first room" when there are none.
 18. **The server accent.** Today the host picks an accent palette key
     (`PATCH /server`). The design colors each server's stripe and tag. Is that
     color the host's accent? *(HOST-9, MULTI-6)*
@@ -175,8 +187,12 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     resizable columns and narrow-window drawers (SPEC §5.6) don't apply. Set
     minimum sizes for the list and chat windows, and confirm interface scale
     100–200% applies to every window. *(LOOK-1, WIN-4)*
+    **Decided (2026-09-26):** keep what's built: the list 360 wide, a chat window 420×360,
+    Settings 560×480, Search and Media 360×420; interface size applies to every
+    window.
 20. **Notification clicks.** What does clicking a desktop banner do: focus
     the list, or open the conversation in a tab? *(NOTE-7)*
+    **Decided (2026-09-26):** a banner opens its conversation, at the message.
 21. **Existing gaps: fix in the new client, or carry them over?**
     - T-907: healthy servers open while another server is down.
     - T-908: a pin action (the server supports pins, and media filters by
@@ -185,8 +201,13 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
       than "around".
 
     *(SRV-3, CONV-16, DM-4)*
+    **Decided (2026-09-26):** fix all three. Being in a DM shows as "around" to everybody,
+    the DM's own people included: nobody sees that you're DMing, let alone with
+    whom (the old client named the people).
 22. **Many rooms.** The narrow list suits three to six rooms per server. Decide
     what happens at fifteen. *(LIST-3)*
+    **Decided (2026-09-26):** past eight rooms, the ones with nobody in them and nothing
+    new fold under a "More rooms" line, in the host's order, with no number.
 
 ---
 
@@ -214,7 +235,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | SRV-1 | One gateway connection per server, owned by Rust: hello, identify or resume, heartbeat, backoff. | `src-tauri/src/gateway.rs`, PROTOCOL §8 | Same; **only the owner window connects** (`gateway_connect` replaces a connection). | C + U (owner-only) + D | 🟡 only the list connects (next-list-window.spec.ts, role.test.ts); needs a desktop check |
 | SRV-2 | Resume replays missed frames with no gaps and no duplicates. A too-old gap re-identifies and refetches. | `gateway.rs`, `lib/gateway.ts` | Same; viewers catch up by snapshot plus buffered replay (`lib/catchup.ts`). | C + U (property test: a viewer's state equals the owner's) | ✅ (lib/catchup.test.ts, lib/gateway.catchup.test.ts, share.test.ts) |
-| SRV-3 | One slow or down server doesn't block the others at startup. **Not done today (T-907).** | `session.ts` `Promise.all` | **Decision 21** | U + F | ⏸ decision 21 |
+| SRV-3 | One slow or down server doesn't block the others at startup. **Not done today (T-907).** | `session.ts` `Promise.all` | **Decision 21** | U + F | ⬜ to build (decision 21, T-907) |
 | SRV-4 | The server's name is fetched, and re-fetched every 2 minutes. On failure, the hostname is shown. | `App.tsx` `ServerLink` | Same, in the server header | F | ✅ (next-list-parity.spec.ts) |
 | SRV-5 | You're only ever in one room: switching servers takes you out of the last room. | `App.tsx`, `watchPresence.ts` | In tabs, the visible tab of the focused chat window is where you are (design). | U + F | ✅ (showing.test.ts, share.test.ts) |
 | SRV-6 | Connection state in words: ready, connecting, retrying, can't reach. | `App.tsx` status bar, gateway `status` | A line at the list's foot, only past a 5-second grace (decision 1) | U + F | ✅ (core/notes.test.ts; next-list-window.spec.ts "a server that can't be reached") |
@@ -229,13 +250,13 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | LIST-1 | Rooms show who's in them as a small stack of people, never a number. Sorted by name. | `App.tsx` rail stack, `lib/occupancy.ts` | Rooms section: dots of who's in, in a fixed marker column. | U + G | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-2 | A room or DM with something new changes weight only: no number, no dot, no color. The accessible name says it in words. | `App.tsx` rail, SPEC §4.2 | Same, for rooms, DMs, tabs and folded server headers | F + G | ✅ (next-list.spec.ts, next-servers.spec.ts) |
-| LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); many rooms is decision 22 |
+| LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); quiet rooms folding past eight is to build (decision 22) |
 | LIST-4 | DMs are their own section, named by who's in them, never by a slug. | `lib/dm.ts`, SPEC §4.13 | Same, plus a new-message button (NEW-2) | C (dm.ts) + F | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-5 | Voice activity shows in the room list. | `App.tsx` rail | Moving sound bars on the room row | F + G | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | ✅ Media and Search at the foot of the list, each opening its own window (next-list-window.spec.ts, next-tool-window.spec.ts) |
 | LIST-7 | Every row's names line up: one marker column, fixed row heights for every name face, ellipsis instead of clipping. | new (lessons L-01 to L-06) | The design's rule | G (all 12 faces, both marker counts) | ✅ (kit.spec.ts, next-list.spec.ts, next-servers.spec.ts) |
 | LIST-8 | Room names are the same color: no amber `#` for open rooms (Matt, 2026-09-25). | new | Rule | G | ✅ (next-list.spec.ts) |
-| LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | 🟡 only "No DMs yet" (next-list.spec.ts); decision 17 |
+| LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | 🟡 only "No DMs yet" (next-list.spec.ts); the other one-liners are to build (decision 17) |
 | LIST-10 | Your own card: your styled name, where you are, your status, and Away. | rail footer (#171 removed "you") | Top of the list; no avatar | F + G | ✅ (next-list.spec.ts) |
 
 ## CONV — reading a conversation
@@ -247,8 +268,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-3 | Sessions: a 3-hour gap inserts a divider in natural words ("late Tuesday night", "tonight"). | `lib/time.ts`, `lib/rows.ts`, SPEC §4.7 | Same (the prototype shows "TONIGHT") | U (exists) + F | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | Names inline; **decision 9** | U + F | ✅ (rows.test.ts, next-chat.spec.ts); decision 9: kept as built |
 | CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G | ✅ (next-chat-parity.spec.ts) |
-| CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) | ⏸ decision 10; built as today (lib/time.test.ts) |
-| CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G | ⏸ decision 10; built (`--measure`), no test |
+| CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) | ✅ kept as built (lib/time.test.ts, decision 10) |
+| CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G | 🟡 kept as built (`--measure`, decision 10); no test yet |
 | CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. | `lib/markdown.ts` | Same | C (tests exist) + F | ✅ (lib/markdown.test.ts, next-chat-parity.spec.ts) |
 | CONV-9 | Replies: a short, clickable quote that jumps to the original. It belongs to the reply, not the message above (#116, #181). An unloaded original says so. | `Stream.tsx` `ReplyLine`, SPEC §4.7 | Quote placement with inline names: **decision 9** | F + G (spacing) | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-10 | Deleting a reply hides its quote too; the original and other replies are unchanged (#115). A deleted message stays as "deleted". | `Stream.tsx` | Same | F | ✅ (rows.test.ts, next-chat.spec.ts) |
@@ -257,7 +278,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-13 | Live arrivals never move someone reading older messages. | `Stream.tsx` | Same | F | ✅ (next-chat.spec.ts) |
 | CONV-14 | Memory stays flat: far-off history is let go once scrolling stops, and rooms you've left keep only their newest page (#173). | `Stream.tsx`, `lib/gateway.ts` | Same, per window; each window loads what it shows (architecture) | C + F (`history-memory.spec`) + D | ✅ (next-chat-parity.spec.ts) |
 | CONV-15 | "Back to the newest" when reading far back. Reading down brings the rest back with no gap. | `Stream.tsx` header | Same | F | ✅ (next-chat-parity.spec.ts) |
-| CONV-16 | Pinning a message. **Not in the client today (T-908)**; the server and the media filter support it. | `POST/DELETE /messages/:id/pin` | **Decision 21** | F | ⏸ decision 21 |
+| CONV-16 | Pinning a message. **Not in the client today (T-908)**; the server and the media filter support it. | `POST/DELETE /messages/:id/pin` | **Decision 21** | F | ⬜ to build: Pin in the message menu (decision 21, T-908) |
 | CONV-17 | Jump to a message (from search or media): walk back a few pages if it's close, or reopen the room *at* it (`around=`) if it's far. The target is marked briefly. Gives up cleanly if the message is gone. | `Stream.tsx` `openAround`, `loadUntil` | Same | C + F | ✅ a hit or tile opens its conversation at the message: jumped to if loaded, the room reopened around it if not, and marked (next-chat-window.spec.ts) |
 | CONV-18 | A message that names you (`@username`) is marked in the stream. | `Stream.tsx` mentions | Same; marker style per `system.md` | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-19 | The room header shows the name and topic, and no names (#145). A DM is titled by who's in it. | `Stream.tsx` header, SPEC §4.1 | The tab title plus a pane header with dots and the topic | F | ✅ (conversation.test.ts, next-chat.spec.ts) |
@@ -280,7 +301,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | COMP-6 | Up arrow in an empty box edits your last message (only at the live end). | `Stream.tsx` | Same | F | ✅ (next-chat.spec.ts) |
 | COMP-7 | Emoji selector: ordinary Unicode, a short set, inserted at the cursor. | `lib/composerEmoji.ts` | Same | F | ✅ (next-chat.spec.ts) |
 | COMP-8 | Limits mirrored before the round trip: 8,000 characters and 10 attachments. | `Stream.tsx`, `linger-core::limits` | Same | U | ✅ (next-chat-parity.spec.ts) |
-| COMP-9 | Switching rooms doesn't carry a half-typed line; files already uploading go with the composer. | `Stream.tsx` | Each tab keeps its own composer; persistence is **decision 11** | F | ✅ (next-chat.spec.ts, handoff.test.ts); surviving a restart is decision 11 |
+| COMP-9 | Switching rooms doesn't carry a half-typed line; files already uploading go with the composer. | `Stream.tsx` | Each tab keeps its own composer; persistence is **decision 11** | F | ✅ (next-chat.spec.ts, handoff.test.ts); keeping drafts across closing and restarts is to build (decision 11) |
 | COMP-10 | Typing announces itself with `typing.start`; the server accepts one per 4 seconds per room. | `lib/gateway.ts` `startedTyping`, PROTOCOL §8 | Same | C | ✅ (next-chat-window.spec.ts) |
 | COMP-11 | Dropping a file on the composer shares it and never navigates the webview. Pasting files works too. | `Stream.tsx` | Same, and in every window | F | 🟡 the box takes a dropped or pasted file (next-chat-parity.spec.ts); Tauri's own drop handling is off in every window, so drops reach the page on Windows, and a file dropped anywhere else is refused (lib/drops.test.ts, window.rs tests). Needs a check in the desktop app, on Windows most |
 | COMP-12 | Add menu (+): a compact menu above the button that focuses its first item and dismisses with Escape, an outside click or the trigger (#89). | `Stream.tsx`, SPEC §5.6 | Same | F + G | 🟡 one "Add a file" button, not a menu |
@@ -326,7 +347,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | DM-1 | Create-or-find: the same set of people always gets the same DM. Two to eight people, you included. You can't DM yourself. | `App.tsx` `openDm`, `POST /dms` | New-message picker (NEW-2); the person card's Message button | F | ✅ (newDm.test.ts, next-list.spec.ts) |
 | DM-2 | A DM is named by the others in it, differently for each viewer. A removed member leaves a gap, not "unknown". | `lib/dm.ts` | Same | C (dm tests) | ✅ (lib/dm.test.ts, list.test.ts) |
 | DM-3 | A new DM appears in the other people's lists without them doing anything (`room.create` to members only). | `lib/gateway.ts` | Same | C + F | ✅ (lib/gateway.test.ts, list.test.ts) |
-| DM-4 | Presence never leaks a DM: outsiders see you as around, not in a room. **Outsiders currently see "in a room" (T-921).** | server fan-out, SPEC §4.13 | **Decision 21** | F | ⏸ decision 21 |
+| DM-4 | Presence never leaks a DM: outsiders see you as around, not in a room. **Outsiders currently see "in a room" (T-921).** | server fan-out, SPEC §4.13 | **Decision 21** | F | ⬜ to build: a DM shows as "around" to everybody, its own people included (decision 21, T-921) |
 | DM-5 | Voice in a DM is as private as the DM. | server fan-out | Same | C (server) | ✅ (server tests) |
 
 ## PPL — people, presence and status
@@ -373,7 +394,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C | ✅ (lib/notify.test.ts, core/quietViewers.test.ts) |
 | NOTE-5 | Banners are silent at the OS level, and the app's own chime plays instead. | `src-tauri/src/notifications.rs` | Same | D | 🟡 unchanged; needs a desktop check |
 | NOTE-6 | Permission is asked once; a refusal is final and silent. | `notify.ts` | Same | U | ✅ (lib/notifyPermission.test.ts) |
-| NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | ⏸ decision 20 |
+| NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | ⬜ to build: a banner opens its conversation at the message (decision 20) |
 
 ## SND — sounds
 
@@ -395,10 +416,10 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-2 | Join voice in the room you're in. You're in voice in one room at a time, across every server; joining elsewhere moves you. | `lib/gateway.ts` `joinVoice` | Join, "Move voice here" and "Talk here instead" are distinct labels | C + F | ✅ (chat/voice.test.ts, share.test.ts, next-chat.spec.ts, next-chat-window.spec.ts) |
 | VOICE-3 | Voice survives reading another room, a destination or Settings. Only Leave, moving, quitting or losing the network ends it. | `voice/VoiceAway.tsx`, SPEC §5.6 | It also survives closing the room's tab or window; the voice bar lives in the list | F (tabs and windows) + D | ✅ closing the tab or window leaves voice alone (next-chat-parity.spec.ts); the rest is the list's |
 | VOICE-4 | Mute and deafen: deafen also mutes; undeafen restores the earlier mic choice. Changes are queued so a quick click or push-to-talk edge never announces a mute that wasn't applied. | `lib/gateway.ts` `changeVoiceControls` | Same | C | ✅ (lib/gateway.voice.test.ts, next-list.spec.ts) |
-| VOICE-5 | Who's talking is shown without moving anything. | `voice/VoiceBar.tsx` (turned-over block, #138) | **Decision 7** | G (no geometry change) | ⏸ decision 7; a highlight is built |
+| VOICE-5 | Who's talking is shown without moving anything. | `voice/VoiceBar.tsx` (turned-over block, #138) | **Decision 7** | G (no geometry change) | 🟡 kept as built: the lit chip and moving bars (decision 7); no geometry test yet |
 | VOICE-6 | Shared mute/deafen state: the control's own glyph beside the name, with the word for screen readers. An older client or server "does not share voice controls". | `VoiceBar.tsx` | Same | F | ✅ as the control's glyph beside each name in the voice bar and the conversation's strip, the word for screen readers, and "mic state unknown" when a client or server doesn't share it (next-list.spec.ts, next-chat-window.spec.ts, voice.test.ts) |
 | VOICE-7 | Per-peer connection trouble: "connecting…" and "can't reach", one phrase centered on its person (#124). | `VoiceBar.tsx` | Same | G | 🟡 "connecting…" and "can't reach" beside the person in the voice bar (next-list.spec.ts, voice.test.ts); needs a real network that fails to prove |
-| VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `lib/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F | ✅ (share.test.ts, next-list.spec.ts, next-chat-window.spec.ts); the key is decision 6 |
+| VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `lib/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F | ✅ (share.test.ts, next-list.spec.ts, next-chat-window.spec.ts); the key picker, Right Ctrl by default, is to build (decision 6) |
 | VOICE-9 | Microphone and speakers chosen per computer, with the system default first. A missing remembered device is shown, marked, and falls back to the default. | Settings → Sound & Voice, `voice_devices` | Same | F + D | 🟡 Settings part done (next-settings.spec.ts); needs a desktop check |
 | VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `lib/voice.ts`, `VoiceBar.tsx` | The voice bar's chips (decision 8) | U + F | ✅ (core/voice.test.ts; next-list-window.spec.ts "a voice chip opens that person's volume"; kit.spec.ts slider) |
 | VOICE-11 | Devices that change mid-call recover within a second or two (hotplug, default change, sample rate). | `src-tauri/src/voice/device.rs` (T-1405) | Same | C + M | 🟡 unchanged Rust; needs a real-device check |
@@ -413,9 +434,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| LOOK-1 | Interface scale from 100% to 200%, applied before first paint, including sign-in. Text and controls grow together. Stays on this computer. | `lib/interface.ts`, Settings → Appearance | Every window, with a preview. Minimum sizes: **decision 19**. | G (every scale) + F | 🟡 every window (appearance.test.ts, next-settings-window.spec.ts); no geometry at every scale; decision 19 |
+| LOOK-1 | Interface scale from 100% to 200%, applied before first paint, including sign-in. Text and controls grow together. Stays on this computer. | `lib/interface.ts`, Settings → Appearance | Every window, with a preview. Minimum sizes: **decision 19**. | G (every scale) + F | 🟡 every window (appearance.test.ts, next-settings-window.spec.ts); sizes kept as built (decision 19); no geometry at every scale yet |
 | LOOK-2 | Evening warmth after local "sunset", worked out from the clock (no location asked). It can be turned off, and re-checked every couple of minutes. | `lib/theme.ts` | Same | U (exists) | ⬜ hidden until the colors have an evening version |
-| LOOK-3 | Color theme: dark, light, or follow the system. | `lib/theme.ts`, `AppearanceSettings.tsx` | Dark only so far: **decision 2** | F | ⏸ decision 2 |
+| LOOK-3 | Color theme: dark, light, or follow the system. | `lib/theme.ts`, `AppearanceSettings.tsx` | Dark only so far: **decision 2** | F | ✅ dark only for now (decision 2) |
 | LOOK-4 | Reduced motion removes movement but keeps state and confirmation. | SPEC §5.6 | Same, including the prototype's wiggle, sound bars and pop-outs | F | ✅ every repeating animation repeats `--loop` times at `--motion` speed, both off for reduced motion, and what the movement said stays (next-motion.spec.ts; the design-rule test keeps new loops to it) |
 | LOOK-5 | Bundled fonts only; no remote font URLs. | `src/fonts/`, CSP | Same | U (discipline) | 🟡 bundled fonts only; no check |
 | LOOK-6 | Settings headings and navigation labels in title case (#90). | SPEC §5.6 | Same | U (copy test) | ✅ (settings.test.ts) |
@@ -480,7 +501,7 @@ there or where the design puts it.
 | MULTI-5 | A folded server shows its lights (dots) and a one-line summary, bold when something's new, with no numbers. A long server's header stays pinned. | new | Design | U (summary) + G | ✅ (servers.test.ts, next-servers.spec.ts) |
 | MULTI-6 | Every conversation says where it's from: the server's stripe and tag. | new | Design; the color source is **decision 18** | G | ✅ (next-chat-window.spec.ts, kit.spec.ts) |
 | MULTI-7 | Per-server Quiet (no chimes, no bold, no arrival cards; knocks still come through) and Own window. | new | Design | U + F | 🟡 Quiet done (next-list-window.spec.ts, servers.test.ts); Own window isn't built |
-| MULTI-8 | "4:52 AM there" from the host's time zone. | new, needs a server field | **Decision 3** | U | ⏸ decision 3 |
+| MULTI-8 | "4:52 AM there" from the host's time zone. | new, needs a server field | **Decision 3** | U | — dropped for now (decision 3) |
 | MULTI-9 | A different you on each server (name, styling, status); a friend on two servers appears twice, unlinked. | today, implicitly | Explicit in the design | F | ✅ (servers.test.ts, next-servers.spec.ts) |
 
 ## WIN — windows and tabs (new)
@@ -490,7 +511,7 @@ there or where the design puts it.
 | WIN-1 | The buddy list is the app's main window and the owner (sign-in, connections, side effects). | today: one window | Design and architecture | U + D | 🟡 role.test.ts, next-list-window.spec.ts; needs a desktop check |
 | WIN-2 | Tabs by default everywhere (Hyprland too): the first conversation opens the chat window, and later ones add tabs. A tab goes bold on something new, with no number. Tabs reorder by dragging; Ctrl+Tab and Ctrl+W work. | new | Design | U (tab state machine) + F + D | 🟡 tabs.test.ts, keys.test.ts, kit.spec.ts, next-chat-window.spec.ts; needs a desktop check |
 | WIN-3 | Pop a tab out into its own window, and "Back to tabs". "Each in its own window" is a setting, and switching moves what's open. | new | Design | F + D | 🟡 share.test.ts, next-chat-window.spec.ts; needs a desktop check |
-| WIN-4 | Linger draws its own title bar in every window, with a drag region and window controls; the OS still snaps, resizes and tiles. | `src-tauri/src/window.rs` (today: no GTK bar on Hyprland) | Design. Minimum sizes: **decision 19**. | D (Hyprland, GNOME, Windows 11) | 🟡 built; needs desktop checks; decision 19 |
+| WIN-4 | Linger draws its own title bar in every window, with a drag region and window controls; the OS still snaps, resizes and tiles. | `src-tauri/src/window.rs` (today: no GTK bar on Hyprland) | Design. Minimum sizes: **decision 19**. | D (Hyprland, GNOME, Windows 11) | 🟡 built, sizes kept (decision 19); needs desktop checks |
 | WIN-5 | Window positions, open tabs and their order are remembered per server on this computer. | new | Architecture | U + D | 🟡 tabs (next-chat-window.spec.ts) and places (appearance.test.ts) kept; needs a desktop check |
 | WIN-6 | Every window gets only the capabilities it needs: `capabilities/next.json` (the list), `next-chat.json` and `next-settings.json`. Only `main` can open windows, and only through fixed URL patterns. | `src-tauri/capabilities/` | Architecture | U (Rust) + D | 🟡 a file per window, URLs checked (Rust tests in window.rs); needs a desktop check |
 | WIN-7 | Closing the list keeps Linger running in the tray, or quits. | new (no tray today) | Tray by default, quit in Settings (decisions 4 and 5) | D + M | 🟡 built (next-list-window.spec.ts "the list tells the desktop what closing it does", `tray.rs` tests); not yet tried on a real desktop tray |
@@ -505,15 +526,15 @@ there or where the design puts it.
 | NEW-2 | The new-message picker: search, pick one to seven people, see "already have this DM" before confirming. Enter picks the first match and Backspace removes the last. | new | Design | U + F | ✅ (newDm.test.ts, next-list.spec.ts) |
 | NEW-3 | An AIM-style away editor with saved presets. | new | Design | F | ✅ (you.test.ts, next-list.spec.ts, next-servers.spec.ts) |
 | NEW-4 | Settings → Windows (tabs or windows; tray or quit). | new | Design | F | ✅ (next-settings-window.spec.ts) |
-| NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ⏸ decision 13 |
-| NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ⏸ decision 12 |
+| NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ⬜ to build: on by default, never takes focus, quiet in quiet hours and on Quiet servers (decision 13) |
+| NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ⬜ to build: one shared chime, off by default, the 5-minute limit and quiet hours (decision 12) |
 | NEW-7 | The small title-bar logo mark: the porch door with the light on, also the tray icon. | `lib/PorchMark.tsx` (the porch picture) | Design | — | ✅ (`app/LogoMark.tsx`, `assets/logo/linger-door.svg`) |
 
 ## KEY — keyboard
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| KEY-1 | Shortcuts today: Ctrl/Cmd+K search; Enter and Shift+Enter; Up to edit; Escape closes panels and previews and returns focus. New in the design: Ctrl+Tab and Ctrl+Shift+Tab, Ctrl+W, a jump-to-tab key (the prototype's Alt+1…9), and Ctrl+,. Push-to-talk shares Ctrl (**decision 6**). | `App.tsx`, `Stream.tsx` | Design | F | 🟡 tab keys, Ctrl+, and Ctrl+K in every window (keys.test.ts, next-chat-window, next-list-window and next-tool-window specs); decision 6 |
+| KEY-1 | Shortcuts today: Ctrl/Cmd+K search; Enter and Shift+Enter; Up to edit; Escape closes panels and previews and returns focus. New in the design: Ctrl+Tab and Ctrl+Shift+Tab, Ctrl+W, a jump-to-tab key (the prototype's Alt+1…9), and Ctrl+,. Push-to-talk shares Ctrl (**decision 6**). | `App.tsx`, `Stream.tsx` | Design | F | 🟡 tab keys, Ctrl+, and Ctrl+K in every window (keys.test.ts, next-chat-window, next-list-window and next-tool-window specs); the push-to-talk key picker is to build (decision 6) |
 | KEY-2 | Everything reachable without a mouse: roving focus in lists and tabs, Enter to open, context panels reachable by keyboard (the voice seat, the person card). | `lib/ContextPanel.tsx`, `PanelResize.tsx` | Same | F | ✅ (kit.spec.ts, next-list.spec.ts, next-chat.spec.ts) |
 
 ## A11Y — accessibility

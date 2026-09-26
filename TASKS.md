@@ -293,7 +293,8 @@ where it still makes sense, and is otherwise closed with a note.
   *Accept:* with two saved servers and one stalled response, the healthy one
   becomes usable within a bounded time. The other can recover without restart
   or re-entering credentials. Test token rotation and React StrictMode so no
-  saved token is spent twice.
+  saved token is spent twice. **Decided 2026-09-26 (parity decision 21):**
+  fix it, in the Buddy list client's list window.
 
 - ⬜ **T-908 · Pin a message from the conversation** — effort: **medium**
   Use the existing pin/unpin endpoints and message action strip; indicate the
@@ -301,7 +302,8 @@ where it still makes sense, and is otherwise closed with a note.
   *Accept:* pinning in one client appears in another and in media's pinned
   filter; unpin removes it. A DM's pin remains invisible to non-members, and
   pinned attachments retain the existing expiry protection. Read M10 and M11
-  notes before touching history or visibility.
+  notes before touching history or visibility. **Decided 2026-09-26 (parity
+  decision 21):** build it in the Buddy list client, as Pin in the message menu.
 
 - ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU
@@ -322,6 +324,10 @@ where it still makes sense, and is otherwise closed with a note.
   clarification must preserve compatibility with existing clients.
   *Accept:* an outsider sees the same ordinary around presentation while two
   people use a DM; its members still see their conversation normally.
+  **Decided 2026-09-26 (parity decision 21), wider than first written:** being
+  in a DM shows as "around" to **everybody**, the DM's own people included, so
+  nobody sees that you're DMing, let alone with whom (the old client named
+  them). Your own card can still say where you are.
 
 ---
 
@@ -405,6 +411,27 @@ Rules for this milestone:
   stylesheet, fonts and mark, at every interface size, and keeps a Windows
   screenshot. Still to do before today's client is deleted: the list, chat and
   Settings windows signed in, against a throwaway server.
+- ⬜ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
+  key" picker in Settings → Sound & Voice, Right Ctrl by default, so the Ctrl
+  shortcuts never open the microphone. Push-to-talk stays off by default.
+- ⬜ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
+  line is kept on this computer across closing its tab and restarting Linger,
+  and cleared when sent.
+- ⬜ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
+  desktop notification opens that room or DM in the chat window, at the message.
+- ⬜ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
+  no rooms (with "Make the first room" for the host), nobody else here, an
+  empty search and an empty media collection.
+- ⬜ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
+  default: never takes focus, silent in quiet hours and on a Quiet server,
+  announced politely to screen readers, fades on its own.
+- ⬜ **T-1818 · The door chime** — decision 12. One shared soft chime when
+  somebody arrives, off by default, at most once per 5 minutes per listener and
+  quiet in quiet hours: the first step toward personal entrance sounds
+  (T-901…T-903), which later replace it.
+- ⬜ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
+  the ones with nobody in them and nothing new fold under "More rooms", in the
+  host's order, with no number.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
   new client becomes the default, the old one stays one release as a fallback,
   then is deleted. SPEC §3/§5 are rewritten from `system.md`.

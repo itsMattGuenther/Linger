@@ -48,6 +48,32 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
   gradients and fonts are what keep sixty people apart, so Profile should
   make them easy to find.
 
+## Decided on 2026-09-26
+
+- **Push-to-talk** gets a key picker in Settings → Sound & Voice, Right Ctrl by
+  default, so the Ctrl shortcuts never open the microphone. Open mic stays the
+  default (decision 6).
+- **Who's talking**: the voice bar's chip lights in the lamp and the speaker
+  beside a name moves, as built (decision 7).
+- **Drafts** are kept per conversation, across closing a tab and restarts
+  (decision 11). **Clicking a banner** opens its conversation at the message
+  (decision 20).
+- **Dark only** for now (decision 2). **Message fading** and the comfortable
+  line width stay (decision 10). **Window sizes** stay as built (decision 19).
+- **Empty places** get one quiet sentence each (decision 17).
+- **Arrival cards** ("Callie came into #general") are on by default and quiet:
+  they never take focus, and stay silent in quiet hours and on a Quiet server
+  (decision 13). The **door chime** is the first step toward personal entrance
+  sounds: one shared chime, off by default, at most once per 5 minutes per
+  listener (decision 12).
+- **Many rooms**: past eight, rooms with nobody in them and nothing new fold
+  under "More rooms", in the host's order, with no number (decision 22).
+- **"4:52 AM there"** is skipped for now (decision 3).
+- **The old gaps get fixed** (decision 21): a Pin action; a slow server no
+  longer holds up the others at startup; and **being in a DM shows as
+  "around" to everybody**, its own people included. Nobody sees that you're
+  DMing, let alone with whom.
+
 ## The idea
 
 Eight friends don't need Discord's four columns; they need a buddy list. The
