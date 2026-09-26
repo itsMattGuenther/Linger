@@ -524,6 +524,22 @@ impl Gateway {
         }
     }
 
+    /// Start a forwarded session's connection to the forwarding server afresh
+    /// (#197), when its client says the last one failed. Its seat, and what the
+    /// room sees, don't change; it gets a new offer.
+    pub fn voice_restart(&self, session_id: &str) {
+        let Some((room_id, forwarded)) = self
+            .voice
+            .get(session_id)
+            .map(|seat| (seat.room_id, seat.forwarded))
+        else {
+            return;
+        };
+        if let (true, Some(sfu)) = (forwarded, self.forwarding.get()) {
+            sfu.join(session_id, &room_id.to_string());
+        }
+    }
+
     /// Take a session out of voice. Answers which room it left, if any.
     ///
     /// **Does not announce.** Callers that are only leaving announce it

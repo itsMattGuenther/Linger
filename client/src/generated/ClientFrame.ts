@@ -29,4 +29,4 @@ forwarding?: boolean, } } | { "op": "voice.leave" } | { "op": "voice.signal", "d
 /**
  * The peer's session id, from `voice.state`.
  */
-to: string, kind: VoiceSignalKind, payload: string, } } | { "op": "voice.answer", "d": { sdp: string, } };
+to: string, kind: VoiceSignalKind, payload: string, } } | { "op": "voice.answer", "d": { sdp: string, } } | { "op": "voice.restart" };

@@ -388,6 +388,16 @@ async fn handle_client_frame(
             }
             state.gateway.voice_answer(session_id, &sdp);
         }
+        ClientFrame::VoiceRestart => {
+            if state
+                .limiter
+                .check(&format!("voice:{session_id}"), RATE_VOICE_SIGNAL)
+                .is_err()
+            {
+                return;
+            }
+            state.gateway.voice_restart(session_id);
+        }
         ClientFrame::VoiceLeave => state.gateway.voice_part(session_id),
         ClientFrame::VoiceSignal { to, kind, payload } => {
             if payload.len() > MAX_VOICE_PAYLOAD_BYTES {

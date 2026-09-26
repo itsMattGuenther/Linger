@@ -372,6 +372,9 @@ fn engine_for(app: &AppHandle, base_url: &str) -> std::sync::Arc<VoiceEngine> {
 /// The mesh is not built here: it is built when the server answers with a
 /// `voice.state`, which is the same path a peer arriving later takes. One code
 /// path for "I joined" and "somebody joined" is what stops the two drifting.
+// A Tauri command's arguments are the frontend's named fields, so they can't
+// be gathered into a struct without changing every caller's invoke.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn voice_join(
     app: AppHandle,
@@ -381,9 +384,12 @@ async fn voice_join(
     input: Option<String>,
     output: Option<String>,
     ice: Vec<linger_core::wire::IceServer>,
+    forwarding: Option<bool>,
 ) -> Result<(), String> {
     let engine = engine_for(&app, &base_url);
     engine.set_session(session_id).await;
+    // Voice through the server unless Settings says to use the old way (#197).
+    engine.set_can_forward(forwarding.unwrap_or(true));
     let devices = tokio::task::spawn_blocking(move || {
         voice::device::open(input.as_deref(), output.as_deref())
     })

@@ -87,6 +87,11 @@ pub enum ClientFrame {
     /// so two offers can never cross.
     #[serde(rename = "voice.answer")]
     VoiceAnswer { sdp: String },
+    /// Start this session's connection to the forwarding server afresh (#197):
+    /// the client's connection failed, but it is still in voice. The server
+    /// answers with a new `voice.offer`; nobody else sees a leave or a join.
+    #[serde(rename = "voice.restart")]
+    VoiceRestart,
 }
 
 /// What a `voice.signal` is carrying. The server routes on the frame and never

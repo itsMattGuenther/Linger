@@ -125,6 +125,10 @@ pub struct Engine<S: Signaller, W: Watcher> {
     /// frame and sends silence while it is set — silence rather than nothing,
     /// so the far end's decoder keeps its clock.
     muted: Arc<AtomicBool>,
+    /// Whether to ask for voice through the forwarding server (#197). On
+    /// unless the person turned it off in Settings to use the old way; then
+    /// their whole room goes back to the mesh.
+    can_forward: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -165,7 +169,14 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             ice_servers,
             inner: Arc::new(Mutex::new(Inner::default())),
             muted: Arc::new(AtomicBool::new(false)),
+            can_forward: Arc::new(AtomicBool::new(true)),
         }
+    }
+
+    /// Whether to ask for voice through the forwarding server the next time
+    /// this engine joins (#197). Settings' switch for the old way lands here.
+    pub fn set_can_forward(&self, on: bool) {
+        self.can_forward.store(on, Ordering::Relaxed);
     }
 
     /// Stop or resume sending what the microphone hears. Local, instant, and
@@ -190,7 +201,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
                 self.signaller.send(ClientFrame::VoiceJoin {
                     room_id,
                     controls: Some(controls),
-                    forwarding: Some(true),
+                    forwarding: Some(self.can_forward.load(Ordering::Relaxed)),
                 });
             }
         }
@@ -260,7 +271,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.signaller.send(ClientFrame::VoiceJoin {
             room_id,
             controls: Some(inner.controls),
-            forwarding: Some(true),
+            forwarding: Some(self.can_forward.load(Ordering::Relaxed)),
         });
     }
 
@@ -549,16 +560,33 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             })
         }));
 
-        // One connection carries everybody, so its state is everybody's.
+        // One connection carries everybody, so its state is everybody's. A
+        // failed one is started afresh after a moment, while we're still in
+        // voice, so a network blip doesn't leave the room silent.
         let inner = Arc::clone(&self.inner);
         let watcher = Arc::clone(&self.watcher);
+        let signaller = Arc::clone(&self.signaller);
+        let this = Arc::downgrade(&conn);
         conn.on_peer_connection_state_change(Box::new(move |state| {
             let inner = Arc::clone(&inner);
             let watcher = Arc::clone(&watcher);
+            let signaller = Arc::clone(&signaller);
+            let this = this.clone();
             Box::pin(async move {
                 let sessions: Vec<String> = inner.lock().await.tracks.values().cloned().collect();
-                for session in sessions {
-                    watcher.peer_state(&session, &state.to_string());
+                for session in &sessions {
+                    watcher.peer_state(session, &state.to_string());
+                }
+                if state == RTCPeerConnectionState::Failed {
+                    tokio::spawn(async move {
+                        tokio::time::sleep(RESTART_AFTER).await;
+                        let current = inner.lock().await.forward.as_ref().is_some_and(|forward| {
+                            std::ptr::eq(Arc::as_ptr(&forward.conn), this.as_ptr())
+                        });
+                        if current {
+                            restart_forward(&inner, &*signaller, &*watcher).await;
+                        }
+                    });
                 }
             })
         }));
@@ -568,6 +596,13 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             outbound,
         });
         Ok(conn)
+    }
+
+    /// Start the connection to the forwarding server afresh, without leaving
+    /// voice: the old one is closed and the server is asked for a new offer.
+    /// Called on its own when the connection fails; public for the tests.
+    pub async fn restart_forward(&self) {
+        restart_forward(&self.inner, &*self.signaller, &*self.watcher).await;
     }
 
     /// Whether the server forwards our voice. For tests and the surface.
@@ -939,6 +974,41 @@ async fn receive<W: Watcher>(
     if gate.is_on() {
         watcher.speaking(Some(&peer), false);
     }
+}
+
+/// How long a failed connection to the forwarding server waits before it is
+/// started afresh: long enough not to hammer a server that's restarting.
+const RESTART_AFTER: Duration = Duration::from_secs(3);
+
+/// Close the connection to the forwarding server, forget whose voice it
+/// carried, and ask the server for a new offer. Nothing happens unless we're
+/// in voice and forwarded.
+async fn restart_forward<S: Signaller, W: Watcher>(
+    inner: &Mutex<Inner>,
+    signaller: &S,
+    watcher: &W,
+) {
+    let (forward, tracks, sink) = {
+        let mut held = inner.lock().await;
+        if held.room.is_none() || !held.forwarded {
+            return;
+        }
+        (
+            held.forward.take(),
+            std::mem::take(&mut held.tracks),
+            held.devices.as_ref().map(|d| Arc::clone(&d.sink)),
+        )
+    };
+    if let Some(forward) = forward {
+        let _ = forward.conn.close().await;
+    }
+    for session in tracks.into_values() {
+        if let Some(sink) = &sink {
+            sink.forget(&session).await;
+        }
+        watcher.peer_state(&session, "connecting");
+    }
+    signaller.send(ClientFrame::VoiceRestart);
 }
 
 /// A WebRTC API with the default codecs and interceptors: NACKs, reports.

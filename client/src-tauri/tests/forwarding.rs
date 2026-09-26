@@ -107,6 +107,8 @@ async fn route(
                     sfu.join(session, &room.to_string());
                 }
                 ClientFrame::VoiceAnswer { sdp } => sfu.answer(session, &sdp),
+                // What the gateway does with a restart: join afresh, same room.
+                ClientFrame::VoiceRestart => sfu.join(session, &room.to_string()),
                 _ => {}
             }
         }
@@ -318,4 +320,122 @@ async fn back_to_the_mesh_and_forwarded_again() {
             .any(|(peer, state)| peer == "ccc-session" && state == "closed"),
         "{log:?}"
     );
+}
+
+/// A connection to the forwarding server that fails is started afresh without
+/// leaving voice (#197): the engine closes it, asks for a new offer, and the
+/// voice comes back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restarted_connection_brings_the_voice_back() {
+    let (sender, offers) = std_mpsc::channel();
+    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let sfu = Sfu::start(local, local, move |offer: Offer| {
+        let _ = sender.send(offer);
+    })
+    .expect("the forwarding server starts");
+    let room = RoomId::new();
+    let (a, mut a_rx, _) = engine(A).await;
+    let (b, mut b_rx, b_log) = engine(B).await;
+    let recorder = Arc::new(Recorder::default());
+    a.join(
+        room,
+        Devices {
+            source: Arc::new(Tone::default()),
+            sink: Arc::new(Discard),
+        },
+        Vec::new(),
+    )
+    .await;
+    b.join(
+        room,
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::clone(&recorder) as Arc<dyn Sink>,
+        },
+        Vec::new(),
+    )
+    .await;
+    let state = forwarded(&[A, B]);
+    a.on_state(room, &state).await;
+    b.on_state(room, &state).await;
+    let heard_from_a = |recorder: &Recorder| {
+        recorder
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(peer, _)| peer == A)
+            .count()
+    };
+    for _ in 0..400 {
+        route(
+            &sfu,
+            &offers,
+            room,
+            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
+        )
+        .await;
+        if heard_from_a(&recorder) >= 10 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(
+        heard_from_a(&recorder) >= 10,
+        "B never heard A in the first place"
+    );
+
+    b.restart_forward().await;
+    assert!(
+        !b.is_forward_connected().await,
+        "the old connection is still up"
+    );
+    let before = heard_from_a(&recorder);
+    for _ in 0..400 {
+        route(
+            &sfu,
+            &offers,
+            room,
+            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
+        )
+        .await;
+        if heard_from_a(&recorder) >= before + 10 && b.is_forward_connected().await {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(
+        b.is_forward_connected().await,
+        "the new connection never came up: {:?}",
+        b_log.0.lock().unwrap()
+    );
+    assert!(
+        heard_from_a(&recorder) >= before + 10,
+        "B didn't hear A again after restarting"
+    );
+    assert!(b.is_forwarded().await, "restarting left voice");
+}
+
+/// Settings' switch for the old way: the engine stops asking to forward, which
+/// puts its whole room on the mesh.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_old_way_switch_stops_asking_to_forward() {
+    let (a, mut a_rx, _) = engine(A).await;
+    a.set_can_forward(false);
+    a.join(
+        RoomId::new(),
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::new(Discard),
+        },
+        Vec::new(),
+    )
+    .await;
+    let mut asked = None;
+    while let Ok(frame) = a_rx.try_recv() {
+        if let ClientFrame::VoiceJoin { forwarding, .. } = frame {
+            asked = Some(forwarding);
+        }
+    }
+    assert_eq!(asked, Some(Some(false)));
 }

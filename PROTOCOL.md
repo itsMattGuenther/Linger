@@ -740,6 +740,7 @@ Beyond that, the client must re-identify and refetch.
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.signal` | `{ to, kind, payload }` | pass one WebRTC message to one peer (the mesh) |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` (forwarding) |
+| `voice.restart` | `{}` | start this session's forwarding connection afresh; the server sends a new `voice.offer` (forwarding) |
 
 ### Server → client
 
@@ -856,7 +857,14 @@ above stays for clients and servers that don't.
 - **What the server sees.** Voice is encrypted on the wire (DTLS-SRTP) but each hop ends
   at the server, which forwards packets without decoding them. It stores nothing. It
   could, in principle, listen: SPEC §4.14 says so, and #200 is the layer that would stop it.
-- **Limits.** `voice.answer` shares `voice.signal`'s size cap and rate limit. A room of
+- **A failed connection is restarted, not left.** A client whose connection to the
+  server fails sends `voice.restart` a few seconds later: the server starts that
+  session's connection afresh and sends a new `voice.offer`. Its seat, and what the room
+  sees, don't change. A client that isn't forwarded is ignored.
+- **The old way, by choice.** A person can turn forwarding off in Settings; their client
+  then joins without `forwarding`, and the room goes to the mesh as it would for an
+  older app.
+- **Limits.** `voice.answer` and `voice.restart` share `voice.signal`'s size cap and rate limit. A room of
   forwarded people holds `MAX_FORWARDED_VOICE_PEERS` (25).
 
 **Limits.** `payload` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything larger is not an

@@ -20,6 +20,7 @@ import type { IceServer } from "../generated/IceServer";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { VoiceControls } from "../generated/VoiceControls";
+import { loadVoicePrefs } from "./voice";
 
 export interface StoredSession {
   /** Origin of the server, e.g. `https://linger.example`. No trailing slash. */
@@ -95,6 +96,8 @@ export async function voiceJoin(
     input: devices.input,
     output: devices.output,
     ice,
+    // Voice through the server unless Settings says the old way (#197).
+    forwarding: loadVoicePrefs().forwarding,
   });
 }
 

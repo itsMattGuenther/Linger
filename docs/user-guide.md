@@ -401,9 +401,19 @@ Which microphone and speakers to use is also in **Settings → Sound & Voice**. 
 change applies the next time you join. If a device you picked isn't plugged in,
 the system default is used and the picker says so.
 
+**Voice through the server.** On a server whose host has turned it on, your
+voice goes to the server once and the server passes it on to everyone else in
+the room, which is what lets a room of twenty talk at once. If it ever gives
+you trouble, **Settings → Sound & Voice → Voice through the server** turns it
+off and goes back to the old way, straight to each person. If anybody in a
+room turns it off, or is on an older version of Linger, the whole room uses
+the old way, so everybody can always hear everybody. It takes effect the next
+time you join voice.
+
 **Nothing is recorded.** Not by the server, not by anybody's app, not "for
-transcription". Audio goes between the people in the room, and the server's
-whole part is introducing them.
+transcription". The server passes voice along without keeping it; the person
+who runs it could listen, the same way they could read messages, and Linger
+says so rather than pretending otherwise.
 
 Two things to know: voice between computers on **different networks** needs
 the host to run the relay (the host guide says how), and if your headphones

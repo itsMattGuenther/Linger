@@ -253,3 +253,34 @@ async fn a_server_that_doesnt_forward_keeps_everybody_on_the_mesh() {
     assert!(offers(&frames).is_empty());
     assert_eq!(forwarded_in(&frames, &a_id), Some(Value::Null));
 }
+
+#[tokio::test]
+async fn a_restart_brings_a_fresh_offer_and_the_room_sees_nothing() {
+    let (server, host, callie, room) = forwarding_server(true).await;
+    let (mut a, _) = connect(&server, &host).await;
+    let (mut b, _) = connect(&server, &callie).await;
+    send_json(
+        &mut a,
+        json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
+    )
+    .await;
+    assert_eq!(offers(&drain(&mut a, SETTLE).await).len(), 1);
+    drain(&mut b, SETTLE).await;
+
+    send_json(&mut a, json!({"op":"voice.restart"})).await;
+    let to_a = drain(&mut a, SETTLE).await;
+    let to_b = drain(&mut b, SETTLE).await;
+    assert_eq!(
+        offers(&to_a).len(),
+        1,
+        "no fresh offer after a restart: {to_a:?}"
+    );
+    assert!(
+        to_b.iter().all(|f| f["op"] != "voice.state"),
+        "the room was told something changed: {to_b:?}"
+    );
+
+    // From somebody not forwarded, it's ignored.
+    send_json(&mut b, json!({"op":"voice.restart"})).await;
+    assert!(offers(&drain(&mut b, SETTLE).await).is_empty());
+}
