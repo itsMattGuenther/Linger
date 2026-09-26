@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GatewayStatus } from "../../lib/gateway";
-import { type Connection, connectionNote, listNotes, TROUBLE_GRACE_MS, troubleSince } from "./notes";
+import { type Connection, connectionNote, listNotes, TROUBLE_GRACE_MS, troubleSince, waitingNote } from "./notes";
 
 const at = 1_000_000;
 const pine = (status: GatewayStatus, since: number | null = at): Connection => ({ server: "https://pine", name: "Pinecone", status, troubleSince: since });
@@ -50,5 +50,29 @@ describe("the foot", () => {
     for (const check of [{ kind: "current" }, { kind: "managed", by: "pacman" }, { kind: "unconfigured" }, { kind: "failed", reason: "offline" }] as const) {
       expect(listNotes([], null, check, at)).toEqual([]);
     }
+  });
+});
+
+describe("a saved server not reached yet (T-907)", () => {
+  it("says it's connecting while a try is under way, and can't be reached between tries, with the reason kept", () => {
+    expect(waitingNote({ server: "https://a.example", name: "a.example", why: null })).toEqual({
+      kind: "waiting",
+      server: "https://a.example",
+      words: "Connecting to a.example…",
+      detail: null,
+      trying: true,
+    });
+    expect(waitingNote({ server: "https://a.example", name: "a.example", why: "Couldn't reach it." })).toEqual({
+      kind: "waiting",
+      server: "https://a.example",
+      words: "Can't reach a.example. Still trying.",
+      detail: "Couldn't reach it.",
+      trying: false,
+    });
+  });
+
+  it("sits with the connections, before the keyring", () => {
+    const notes = listNotes([], "no keyring", null, 0, [{ server: "https://a.example", name: "a.example", why: "down" }]);
+    expect(notes.map((note) => note.kind)).toEqual(["waiting", "keyring"]);
   });
 });

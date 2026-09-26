@@ -22,7 +22,7 @@ import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey, talkKeyName } from "../../core/talkKey";
 import { forgetNotifications, resetNotifications, setQuietServers } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
-import { type ServerSession, useSessions } from "../../../lib/session";
+import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
@@ -54,7 +54,7 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
-import { Spinner } from "../../kit";
+import { Button, Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
@@ -79,6 +79,9 @@ const INFO_REFRESH_MS = 120_000;
 export function ListWindow() {
   const sessions = useSessions();
   const { addServer } = sessions;
+  // Nothing signed in has answered yet, and the person would rather sign in
+  // somewhere now than wait (T-907).
+  const [signInAnyway, setSignInAnyway] = useState(false);
   const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
 
   // Every window hears when a server is signed out of, however it happened
@@ -115,6 +118,10 @@ export function ListWindow() {
     );
   }
 
+  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && !signInAnyway) {
+    return <NotReached waiting={sessions.state.waiting} onRetry={sessions.retry} onSignIn={() => setSignInAnyway(true)} />;
+  }
+
   if (sessions.state.servers.length === 0) {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
@@ -131,7 +138,41 @@ export function ListWindow() {
     reauthenticate: (server, auth) => sessions.addServer(server, auth),
     signOut: (server) => sessions.signOut(server),
   };
-  return <Servers signedIn={sessions.state.servers} accounts={accounts} keyringNotice={sessions.keyringNotice} />;
+  return (
+    <Servers
+      signedIn={sessions.state.servers}
+      waiting={sessions.state.waiting}
+      onRetry={sessions.retry}
+      accounts={accounts}
+      keyringNotice={sessions.keyringNotice}
+    />
+  );
+}
+
+/**
+ * Saved servers, none of which has answered yet (T-907): the sign-ins are
+ * kept and Linger keeps trying, so this is a wait, not a sign-in screen. The
+ * list opens by itself when one answers.
+ */
+function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingServer[]; onRetry: (server: string) => void; onSignIn: () => void }) {
+  const trying = waiting.some((one) => one.why === null);
+  const names = waiting.map((one) => hostOf(one.baseUrl));
+  const detail = waiting.flatMap((one) => (one.why === null ? [] : [one.why])).join(" ");
+  return (
+    <WindowMessage>
+      <Spinner />
+      <span title={detail || undefined}>Can't reach {names.join(" or ")} yet.</span>
+      <span className="nx-window-hint">Your sign-in is kept, and Linger keeps trying.</span>
+      <span className="nx-window-actions">
+        <Button size="sm" disabled={trying} onClick={() => waiting.forEach((one) => onRetry(one.baseUrl))}>
+          {trying ? "Trying…" : "Try now"}
+        </Button>
+        <Button size="sm" variant="quiet" onClick={onSignIn}>
+          Sign in to another server
+        </Button>
+      </span>
+    </WindowMessage>
+  );
 }
 
 /**
@@ -180,7 +221,19 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
   return null;
 }
 
-function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSession[]; accounts: Accounts; keyringNotice: string | null }) {
+function Servers({
+  signedIn,
+  waiting,
+  onRetry,
+  accounts,
+  keyringNotice,
+}: {
+  signedIn: ServerSession[];
+  waiting: readonly WaitingServer[];
+  onRetry: (server: string) => void;
+  accounts: Accounts;
+  keyringNotice: string | null;
+}) {
   const states = useServers();
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
@@ -514,6 +567,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     keyringNotice,
     update,
     drawnAt,
+    waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
   );
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
@@ -617,7 +671,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
         onMedia={() => shell.tool("media")}
         onSearch={() => shell.tool("search")}
         notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
-        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} />}
+        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />
       )}

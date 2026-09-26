@@ -45,6 +45,55 @@ test("restores every saved sign-in and leaves one live connection to each server
   await expect(toggle(page, "Casa da Ribeira")).toHaveAttribute("aria-expanded", "false");
 });
 
+test("a server that can't be reached holds up none of the others, keeps its sign-in, and comes back without a restart (T-907)", async ({ page }) => {
+  await open(page, "?down");
+  // The others open well inside the longest wait (RESTORE_WAIT_MS, 5 s).
+  await expect(section(page, "The Good Company")).toBeVisible({ timeout: 2_000 });
+  await expect(section(page, "Casa da Ribeira")).toBeVisible();
+  const notes = page.locator("[data-screen='list-notes']");
+  await expect(notes).toContainText("Can't reach ashen-lanterns.example. Still trying.");
+  expect(await did(page)).not.toContain(`forget ${GUILD}`);
+  // Back up, and Try now brings it in: no restart, no password.
+  await page.evaluate(() => window.core?.up());
+  await notes.getByRole("button", { name: "Try now" }).click();
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  await expect(page.locator(".nx-srv-name")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
+  await expect(notes).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("reuse"))).toEqual([]);
+});
+
+test("a stalled server: the rest open, it joins when it answers, and its token is spent once (T-907)", async ({ page }) => {
+  await open(page, "?stall");
+  await expect(section(page, "The Good Company")).toBeVisible({ timeout: 2_000 });
+  const notes = page.locator("[data-screen='list-notes']");
+  await expect(notes).toContainText("Connecting to ashen-lanterns.example…");
+  // While a try is under way there's nothing to press: a second try would spend the token twice.
+  await expect(notes.getByRole("button", { name: "Try now" })).toHaveCount(0);
+  await page.evaluate(() => window.core?.unstall());
+  await expect(section(page, "Ashen Lanterns")).toBeVisible();
+  const asked = await did(page);
+  expect(asked.filter((line) => line === `POST ${GUILD}/auth/refresh`)).toHaveLength(1);
+  expect(asked.filter((line) => line.startsWith("reuse"))).toEqual([]);
+});
+
+test("nothing reached yet is a wait, not the sign-in screen, and it opens when the server answers (T-907)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&down=good-company.example");
+  const wait = page.getByRole("status");
+  await expect(wait).toContainText("Can't reach good-company.example yet.", { timeout: 8_000 });
+  await expect(wait).toContainText("Your sign-in is kept, and Linger keeps trying.");
+  await expect(page.getByRole("textbox", { name: "Server or link" })).toHaveCount(0);
+  await page.evaluate(() => window.core?.up());
+  await wait.getByRole("button", { name: "Try now" }).click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  expect(await did(page)).not.toContain(`forget ${HOME}`);
+  expect((await did(page)).filter((line) => line.startsWith("reuse"))).toEqual([]);
+
+  // Or sign in somewhere else meanwhile.
+  await page.goto("/tests/fixtures/next-list-window.html?one&down=good-company.example");
+  await page.getByRole("button", { name: "Sign in to another server" }).click({ timeout: 8_000 });
+  await expect(page.getByRole("textbox", { name: "Server or link" })).toBeVisible();
+});
+
 test("with one server it's that server's list, as before", async ({ page }) => {
   await open(page, "?one");
   await expect(page.locator(".k-titlebar")).toContainText("The Good Company");

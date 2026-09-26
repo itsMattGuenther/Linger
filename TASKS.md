@@ -284,7 +284,7 @@ where it still makes sense, and is otherwise closed with a note.
   affected-installation listening remain required before closing #94/#95. See
   [capture method and limits](docs/packaged-audio-checks.md).
 
-- ⬜ **T-907 · Open healthy servers while another is unavailable** — effort:
+- ✅ **T-907 · Open healthy servers while another is unavailable** — effort:
   **high**
   `useSessions` waits for all saved servers, and the HTTP client has no request
   deadline. Failed servers disappear for that launch. Restore each server
@@ -294,7 +294,11 @@ where it still makes sense, and is otherwise closed with a note.
   becomes usable within a bounded time. The other can recover without restart
   or re-entering credentials. Test token rotation and React StrictMode so no
   saved token is spent twice. **Decided 2026-09-26 (parity decision 21):**
-  fix it, in the Buddy list client's list window.
+  fix it, in the Buddy list client's list window. **Done:** every request
+  already had a 30-second deadline (#118); the wait was `Promise.all`. Each
+  server now restores on its own, the list opens when the first is in (5 s at
+  most), and one that can't be reached stays as a line with Try now and
+  retries on its own (5, 15, 30, then every 60 s).
 
 - ✅ **T-908 · Pin a message from the conversation** — effort: **medium**
   Use the existing pin/unpin endpoints and message action strip; indicate the

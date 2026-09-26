@@ -280,11 +280,18 @@ Linux desktop with no tray, closing the list always quits.
 
 Several servers? Each is a section of the list with its own rooms, DMs and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
-or banners from it) and to move it up or down.
+or arrival cards from it, though somebody naming you still gets a banner) and
+to move it up or down.
 
 The list may also show a line at its foot, only while it's true: a server it
 can't reach, a computer that can't remember your sign-in, or a new version of
 Linger with **Update…**.
+
+If one of your servers is down when Linger starts, the others open anyway. The
+one that's down stays signed in and shows as "Can't reach … Still trying." at
+the foot of the list, with **Try now**; it joins the list by itself when it
+answers. If none of your servers answers, Linger says so rather than asking you
+to sign in again.
 
 ## Settings, and where they are
 

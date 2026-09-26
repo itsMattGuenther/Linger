@@ -19,6 +19,11 @@
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
  * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
  * check waiting until `window.core.release()`.
+ * Tokens rotate as a server's do: each refresh spends the one presented and
+ * hands out the next, and one presented twice is refused and written down
+ * as `reuse`. `?down` has Ashen Lanterns unreachable (`?down=<hostname>`,
+ * another) until `window.core.up()`; `?stall` has its first refresh wait until
+ * `window.core.unstall()`.
  * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
  * version waiting (0.4.1); otherwise this is the newest.
  *
@@ -115,12 +120,17 @@ mockIPC((cmd, args) => {
     case "sessions_load":
       if (query.has("nokeyring")) return { kind: "unavailable", reason: NO_KEYRING };
       if (query.has("signedout")) return { kind: "empty" };
-      return { kind: "found", sessions: saved.map((base_url) => ({ base_url, refresh_token: `refresh-${base_url}` })) };
-    case "session_save":
-      note(`save ${String((a.session as { base_url?: string }).base_url)}`);
-      return query.has("nokeyring") ? { kind: "unavailable", reason: NO_KEYRING } : { kind: "done" };
+      return { kind: "found", sessions: saved.filter((base_url) => keyring[base_url] !== undefined).map((base_url) => ({ base_url, refresh_token: keyring[base_url] ?? "" })) };
+    case "session_save": {
+      const session = a.session as { base_url?: string; refresh_token?: string };
+      note(`save ${String(session.base_url)}`);
+      if (query.has("nokeyring")) return { kind: "unavailable", reason: NO_KEYRING };
+      keyring[String(session.base_url)] = session.refresh_token;
+      return { kind: "done" };
+    }
     case "session_forget":
       note(`forget ${String(a.baseUrl)}`);
+      keyring[String(a.baseUrl)] = undefined;
       return { kind: "done" };
     case "gateway_connect": {
       const server = String(a.baseUrl);
@@ -170,6 +180,10 @@ declare global {
       banner: (target: unknown) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
+      /** With `?down`, the server that was down answers from now on. */
+      up: () => void;
+      /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
+      unstall: () => void;
     };
   }
 }
@@ -183,11 +197,26 @@ window.core = {
   tray: (action) => deliver("next:tray", action),
   banner: (target) => deliver("next:banner", target),
   release: () => release(),
+  up: () => {
+    down = null;
+  },
+  unstall: () => unstall(),
 };
 
 // --- the servers -----------------------------------------------------------
 
 let release: () => void = () => undefined;
+/** `?down` is Ashen Lanterns; `?down=<hostname>` any other. */
+let down: string | null = query.has("down") ? query.get("down") || new URL(GUILD).hostname : null;
+let unstall: () => void = () => undefined;
+const stalled = new Promise<void>((settle) => {
+  unstall = settle;
+});
+let stalling = query.has("stall");
+/** What each server will take next, and what the keyring holds: they part only when a token is lost on the way. */
+const issued: Record<string, string> = Object.fromEntries(saved.map((server) => [server, `refresh-1-${server}`]));
+const keyring: Record<string, string | undefined> = { ...issued };
+let minted = 1;
 const held = new Promise<void>((settle) => {
   release = settle;
 });
@@ -197,6 +226,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const server = url.origin;
   if (url.hostname === "nowhere.example") throw new TypeError("Failed to fetch");
+  if (url.hostname === down) {
+    note(`unreachable ${server}${url.pathname.slice("/api/v1".length)}`);
+    throw new TypeError("Failed to fetch");
+  }
   const state = states[server];
   if (!state || !url.pathname.startsWith("/api/v1")) return realFetch(input, init);
   const path = url.pathname.slice("/api/v1".length);
@@ -205,9 +238,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
   await new Promise((settle) => window.setTimeout(settle, 10));
   const refuse = (status: number, code: string, message: string) => json({ error: { code, message, retry_after_ms: null } }, status);
-  const signedIn = () => json({ access_token: `token-${server}`, refresh_token: `refresh-2-${server}`, expires_in: 600, user: state.me });
+  const signedIn = () => {
+    minted += 1;
+    issued[server] = `refresh-${minted}-${server}`;
+    return json({ access_token: `token-${server}`, refresh_token: issued[server], expires_in: 600, user: state.me });
+  };
   if (path === "/auth/refresh") {
-    return query.has("revoked") && server === SERVER ? refuse(401, "UNAUTHENTICATED", "That sign-in has ended.") : signedIn();
+    if (stalling && server === GUILD) {
+      stalling = false;
+      await stalled;
+    }
+    if (query.has("revoked") && server === SERVER) return refuse(401, "UNAUTHENTICATED", "That sign-in has ended.");
+    if (body.refresh_token !== issued[server]) {
+      note(`reuse ${server}`);
+      return refuse(401, "UNAUTHENTICATED", "That sign-in was used twice.");
+    }
+    return signedIn();
   }
   if (path === "/health") {
     // `?hold`: the server doesn't answer until the test lets it (`window.core.release()`).
