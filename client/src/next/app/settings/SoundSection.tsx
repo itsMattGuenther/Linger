@@ -75,7 +75,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
           />
           <SettingRow
             title="Quiet hours"
-            description={`No DM, room or knock chimes from ${from} to ${until}, on this computer's clock. Voice and mute sounds still play.`}
+            description={`No DM, room, knock or door chimes, and no arrival cards, from ${from} to ${until} on this computer's clock. Voice and mute sounds still play.`}
             control={<Switch label="Quiet hours" checked={sound.quietHours} onChange={(quietHours) => onSound({ ...sound, quietHours })} />}
           />
           {sound.quietHours ? (

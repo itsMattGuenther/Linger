@@ -31,6 +31,9 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
   undeafen: { notes: [D, E, A], gain: 0.03, spacing: 0.07, decay: 0.17 },
   dm: { notes: [B, F * 2], gain: 0.038, spacing: 0.13, decay: 0.28 },
   room: { notes: [F * 2], gain: 0.025, spacing: 0, decay: 0.22 },
+  // Somebody came in (decision 12): a soft falling ding-dong, the quietest
+  // two-note cue, a step below a DM.
+  door: { notes: [A, F], gain: 0.026, spacing: 0.17, decay: 0.34 },
 };
 
 function note(

@@ -526,8 +526,8 @@ there or where the design puts it.
 | NEW-2 | The new-message picker: search, pick one to seven people, see "already have this DM" before confirming. Enter picks the first match and Backspace removes the last. | new | Design | U + F | ✅ (newDm.test.ts, next-list.spec.ts) |
 | NEW-3 | An AIM-style away editor with saved presets. | new | Design | F | ✅ (you.test.ts, next-list.spec.ts, next-servers.spec.ts) |
 | NEW-4 | Settings → Windows (tabs or windows; tray or quit). | new | Design | F | ✅ (next-settings-window.spec.ts) |
-| NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ⬜ to build: on by default, never takes focus, quiet in quiet hours and on Quiet servers (decision 13) |
-| NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ⬜ to build: one shared chime, off by default, the 5-minute limit and quiet hours (decision 12) |
+| NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ✅ `core/arrivals.ts` (whose moves, spacing, quiet hours; unit), `ListWindow` + `KnockCards` (a card that goes by itself, none on connecting, none from a Quiet server, in quiet hours or turned off; `next-list-window`), the switch in Notifications (`next-settings-window`). The card is a `Notice`, `role="status"`, so it is announced politely and never takes focus |
+| NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ✅ the `door` cue in `lib/sound.ts` and `lib/chimes.ts` (off by default, held by quiet hours; `sound-player.test.ts`), once per 5 minutes per person (`core/arrivals.ts` `CHIME_EVERY_MS`), the row in Sound & Voice (`settings.test.ts`) |
 | NEW-7 | The small title-bar logo mark: the porch door with the light on, also the tray icon. | `lib/PorchMark.tsx` (the porch picture) | Design | — | ✅ (`app/LogoMark.tsx`, `assets/logo/linger-door.svg`) |
 
 ## KEY — keyboard

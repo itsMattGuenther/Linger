@@ -426,10 +426,10 @@ Rules for this milestone:
 - ✅ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
   no rooms (with "Make the first room" for the host), nobody else here, an
   empty search and an empty media collection.
-- ⬜ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
-  default: never takes focus, silent in quiet hours and on a Quiet server,
+- ✅ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
+  default: never takes focus, held in quiet hours and on a Quiet server,
   announced politely to screen readers, fades on its own.
-- ⬜ **T-1818 · The door chime** — decision 12. One shared soft chime when
+- ✅ **T-1818 · The door chime** — decision 12. One shared soft chime when
   somebody arrives, off by default, at most once per 5 minutes per listener and
   quiet in quiet hours: the first step toward personal entrance sounds
   (T-901…T-903), which later replace it.

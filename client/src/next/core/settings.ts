@@ -97,7 +97,7 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "sound":
       return "Choose your notification chimes. To silence people in voice, use deafen.";
     case "notifications":
-      return "Desktop banners, for mentions and for people you choose.";
+      return "Desktop banners for mentions and the people you choose, and cards when somebody arrives.";
     case "account":
       return "Your password, your archive, updates and this computer.";
     case "servers":
@@ -126,6 +126,7 @@ export const HEADINGS = {
   chimes: "A Familiar Little Sound",
   voice: "Voice",
   banners: "Desktop Notifications",
+  arrivals: "Arrivals",
   password: "Password",
   archive: "Take Everything with You",
   updates: "Updates",
@@ -165,6 +166,7 @@ export const CHIMES: readonly { category: SoundCategory; label: string; hint: st
   { category: "dms", label: "DM messages", hint: "A soft note for a new personal message.", cue: "dm" },
   { category: "rooms", label: "Room messages", hint: "Off by default. Your conversations don't need to compete for attention.", cue: "room" },
   { category: "knocks", label: "Knocks", hint: "Two gentle taps when someone wants your attention.", cue: "knock" },
+  { category: "door", label: "Door chime", hint: "Off by default. A soft ding-dong when somebody comes into a room, at most once every five minutes for each person.", cue: "door" },
 ];
 
 /** Every half hour of the day, plus a saved time that isn't on one, so the box never claims another. */

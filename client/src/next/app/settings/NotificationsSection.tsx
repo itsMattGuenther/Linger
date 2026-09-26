@@ -14,6 +14,8 @@ export interface NotificationsProps {
   rules: readonly NotifyRule[];
   /** Turn one rule on or off (`PUT`/`DELETE /me/notify-rules`). Resolves to the problem in words, or null. */
   setRule: (rule: NotifyRule, on: boolean) => Promise<string | null>;
+  /** Arrival cards (decision 13): on unless turned off, on this computer. */
+  arrivals?: { on: boolean; onChange: (on: boolean) => void };
 }
 
 /**
@@ -21,37 +23,48 @@ export interface NotificationsProps {
  * chosen rooms (NOTE-1, NOTE-2). Somebody naming you always reaches you;
  * there is nothing else to turn on, and no @everyone.
  */
-export function NotificationsSection({ people, rooms, rules, setRule }: NotificationsProps) {
+export function NotificationsSection({ people, rooms, rules, setRule, arrivals }: NotificationsProps) {
   const [open, setOpen] = useState<string | null>(null);
   const save = useSave();
   const others = [...people].sort((a, b) => a.display_name.localeCompare(b.display_name));
   const change = (rule: NotifyRule, on: boolean) => void save.run(setRule(rule, on));
 
   return (
-    <Block
-      heading={HEADINGS.banners}
-      lead="Mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
-    >
-      {others.length === 0 ? (
-        <Note>Nobody else is here yet.</Note>
-      ) : (
-        <ul className="nx-set-list" aria-label="People">
-          {others.map((person) => (
-            <PersonRules
-              key={person.id}
-              person={person}
-              rooms={rooms}
-              rules={rules}
-              open={open === person.id}
-              onOpen={(on) => setOpen(on ? person.id : null)}
-              onChange={change}
-            />
-          ))}
-        </ul>
-      )}
-      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
-      <Note>Somebody naming you always reaches you. Nothing else does, and there is no @everyone to turn on.</Note>
-    </Block>
+    <>
+      <Block
+        heading={HEADINGS.banners}
+        lead="Mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
+      >
+        {others.length === 0 ? (
+          <Note>Nobody else is here yet.</Note>
+        ) : (
+          <ul className="nx-set-list" aria-label="People">
+            {others.map((person) => (
+              <PersonRules
+                key={person.id}
+                person={person}
+                rooms={rooms}
+                rules={rules}
+                open={open === person.id}
+                onOpen={(on) => setOpen(on ? person.id : null)}
+                onChange={change}
+              />
+            ))}
+          </ul>
+        )}
+        <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+        <Note>Somebody naming you always reaches you. Nothing else does, and there is no @everyone to turn on.</Note>
+      </Block>
+      {arrivals ? (
+        <Block heading={HEADINGS.arrivals} lead="Who's around, as it happens. On this computer only.">
+          <SettingRow
+            title="Arrival cards"
+            description="A small card when somebody comes into a room: “Callie came into #general”. It never takes the cursor and goes by itself. None from a Quiet server, or in quiet hours. The door chime, in Sound & Voice, is its sound."
+            control={<Switch label="Arrival cards" checked={arrivals.on} onChange={arrivals.onChange} />}
+          />
+        </Block>
+      ) : null}
+    </>
   );
 }
 

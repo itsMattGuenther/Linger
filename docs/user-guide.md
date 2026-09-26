@@ -533,11 +533,20 @@ room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
 hear what you are choosing. Quiet hours, when you turn them on, silence
-DM, room-message and knock chimes between 22:00 and 08:00 on your computer's
+DM, room-message, knock and door chimes between 22:00 and 08:00 on your computer's
 clock. Once they're on, **Quiet from** and **Quiet until** move the window in
 half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
 sleep late. Voice and mute/deafen sounds still play during quiet hours, because
 they answer something you just did, and voice chat itself is never affected.
+
+When somebody comes into a room, a small **arrival card** says so ("Callie
+came into #general") at the top of the list and goes by itself after a few
+seconds. It never takes the cursor, so whatever you're typing keeps going.
+There are none from a Quiet server or during quiet hours, and at most one a
+minute for each person. Turn them off in **Settings → Notifications →
+Arrivals**. The **door chime** is their sound: a soft ding-dong, off until you turn
+it on in **Settings → Sound & Voice**, at most once every five minutes for each
+person, and quiet during quiet hours.
 
 Messages you are already reading, your own messages, reconnect replay and
 push-to-talk presses do not chime. These switches do not silence voice chat;

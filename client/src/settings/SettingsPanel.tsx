@@ -316,7 +316,8 @@ export function SoundSection() {
         </div>
       ) : null}
       {liveSilenced ? <p className="settings-lead">{liveSilenced}</p> : null}
-      {SOUND_CATEGORIES.map((category) => (
+      {/* The door chime belongs to the Buddy list's arrivals (decision 12). */}
+      {SOUND_CATEGORIES.filter((category) => category !== "door").map((category) => (
         <div key={category} className="sound-preference">
           <PreferenceSwitch
             label={SOUND_LABELS[category]}
@@ -354,6 +355,7 @@ const SOUND_LABELS: Record<SoundCategory, string> = {
   dms: "DM messages",
   rooms: "room messages",
   knocks: "knocks",
+  door: "door chime",
 };
 const SOUND_HINTS: Record<SoundCategory, string> = {
   voice: "Your voice session, and the people joining or leaving it.",
@@ -362,6 +364,7 @@ const SOUND_HINTS: Record<SoundCategory, string> = {
   rooms:
     "Off by default. Your conversations don’t need to compete for attention.",
   knocks: "Two gentle taps when someone wants your attention.",
+  door: "Arrivals are the Buddy list's; this client doesn't play them.",
 };
 const SOUND_PREVIEWS: Record<SoundCategory, SoundCue> = {
   voice: "peer-join",
@@ -369,6 +372,7 @@ const SOUND_PREVIEWS: Record<SoundCategory, SoundCue> = {
   dms: "dm",
   rooms: "room",
   knocks: "knock",
+  door: "door",
 };
 
 /**

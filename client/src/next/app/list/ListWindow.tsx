@@ -59,7 +59,9 @@ import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
-import { type KnockCard, KnockCards } from "./KnockCards";
+import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
+import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadArrivalCards, whereAll, type WhereAll } from "../../core/arrivals";
+import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { ServerInfo } from "../../../generated/ServerInfo";
@@ -500,6 +502,55 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     return () => window.clearTimeout(timer);
   });
 
+  // Arrivals (decisions 12 and 13): somebody came into a room. Worked out by
+  // comparing where everybody is with where they were, per server, from the
+  // server's first word on: a new session (connecting, reconnecting) starts
+  // afresh rather than reading as everybody arriving at once. None from a
+  // Quiet server, and no cards in quiet hours.
+  const [arrivals, setArrivals] = useState<ArrivalCard[]>([]);
+  const where = useRef(new Map<string, { session: string; where: WhereAll }>());
+  const lastCard = useRef(new Map<string, number>());
+  const lastChime = useRef(new Map<string, number>());
+  useEffect(() => {
+    const now = Date.now();
+    const cardsOn = loadArrivalCards(localStore()) && !cardsHushed(loadSoundPrefs(), new Date(now));
+    const fresh: ArrivalCard[] = [];
+    let chime = false;
+    for (const session of ordered) {
+      const state = states[session.baseUrl];
+      if (!state?.me || state.sessionId === null) continue;
+      const before = where.current.get(session.baseUrl);
+      const nowWhere = whereAll(state.presence);
+      where.current.set(session.baseUrl, { session: state.sessionId, where: nowWhere });
+      if (!before || before.session !== state.sessionId || quiet.has(session.baseUrl)) continue;
+      // Rooms only: a server from before 0.4.1 still says who is in which DM.
+      const rooms = new Map(state.rooms.filter((room) => room.kind === "room").map((room) => [room.id as string, room.name]));
+      for (const { userId, roomId } of arrivalsBetween(before.where, nowWhere, state.me.id, new Set(rooms.keys()))) {
+        const key = `${session.baseUrl} ${userId}`;
+        if (cardsOn && due(lastCard.current.get(key), now, CARD_EVERY_MS)) {
+          lastCard.current.set(key, now);
+          fresh.push({
+            server: session.baseUrl,
+            id: `${key} ${now}`,
+            at: now,
+            who: state.users.find((user) => user.id === userId) ?? null,
+            room: rooms.get(roomId) ?? "a room",
+            serverName: several ? (infos[session.baseUrl]?.name ?? hostOf(session.baseUrl)) : null,
+          });
+        }
+        if (due(lastChime.current.get(key), now, CHIME_EVERY_MS)) {
+          lastChime.current.set(key, now);
+          chime = true;
+        }
+      }
+    }
+    // At most three at a time: the newest.
+    if (fresh.length > 0) setArrivals((held) => [...held, ...fresh].slice(-3));
+    // The door chime is off unless somebody turned it on, and quiet hours hold it (lib/sound.ts).
+    if (chime) void playSound("door").catch(() => undefined);
+  }, [states, ordered, quiet, several, infos]);
+  const arrivalGone = useCallback((id: string) => setArrivals((held) => held.filter((card) => card.id !== id)), []);
+
   // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
   const knocks = useMemo(
     (): KnockCard[] =>
@@ -542,7 +593,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
         onSettings={() => shell.settings()}
         onMedia={() => shell.tool("media")}
         onSearch={() => shell.tool("search")}
-        notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
+        notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
         notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />

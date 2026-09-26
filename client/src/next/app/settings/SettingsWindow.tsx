@@ -21,6 +21,7 @@ import { uploadFile } from "../../../lib/upload";
 import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
+import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
 import { loadCloseList, saveCloseList } from "../../core/closing";
 import { loadMode } from "../../core/conversations";
 import { isSettingsKey } from "../../core/keys";
@@ -224,6 +225,7 @@ function Settings({ following }: { following: Following }) {
   const [scale, setScale] = useState<number>(loadScale);
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
+  const [arrivalCards, setArrivalCards] = useState(() => loadArrivalCards(localStore()));
   const [devices, setDevices] = useState<VoiceDeviceList | null | "looking">(isTauri() ? "looking" : null);
   useEffect(() => {
     if (!isTauri()) return;
@@ -387,6 +389,13 @@ function Settings({ following }: { following: Following }) {
         setRule: async (rule, on) => {
           const question: NotifyQuestion = { server, rule, on };
           return askOwner(question, NOTIFY, "Couldn't reach the list window.");
+        },
+        arrivals: {
+          on: arrivalCards,
+          onChange: (on) => {
+            saveArrivalCards(localStore(), on);
+            setArrivalCards(on);
+          },
         },
       }}
       account={{
