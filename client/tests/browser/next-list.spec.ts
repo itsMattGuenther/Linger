@@ -433,11 +433,11 @@ test.describe("in voice", () => {
     await expect(page.locator("body")).toHaveAttribute("data-opened", "mute:true,deafen:true,leave,go:r-general");
   });
 
-  test("with push-to-talk there is no Mute button, and it says how to talk", async ({ page }) => {
+  test("with push-to-talk there is no Mute button, and it names the key to hold", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice&ptt");
     const bar = page.getByRole("region", { name: "In voice in #general" });
     await expect(bar.getByRole("button", { name: /^Mute/ })).toHaveCount(0);
-    await expect(bar.getByRole("status")).toHaveText("hold control to talk");
+    await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
   });
 
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {

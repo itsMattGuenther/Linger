@@ -25,7 +25,7 @@ for (const rate of [44100, 48000]) {
       }
       return result;
     }, rate);
-    expect(results).toHaveLength(12);
+    expect(results).toHaveLength(13);
     for (const result of results) {
       expect(result.error, result.cue).toBeLessThan(0.000001);
       expect(result, result.cue).toMatchObject({ leadSilent: true, endSilent: true });
