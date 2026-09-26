@@ -181,3 +181,12 @@ test.describe("your servers", () => {
     await expect(page.getByRole("switch", { name: "Quiet, for Casa da Ribeira" })).toBeChecked();
   });
 });
+
+test("closing the list: keep Linger in the tray by default, or quit, told to the list window and kept", async ({ page }) => {
+  await open(page, "?section=windows");
+  const keep = page.getByRole("radio", { name: /Keep Linger running/ });
+  await expect(keep).toBeChecked();
+  await page.getByRole("radio", { name: /Quit Linger/ }).check();
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "tray", on: false });
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.next.closeList"))).toBe("quit");
+});

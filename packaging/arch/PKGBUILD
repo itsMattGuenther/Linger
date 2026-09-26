@@ -29,7 +29,8 @@ depends=(
   'webkit2gtk-4.1'
   'xdg-utils'
 )
-optdepends=('gnome-keyring: remember sign-ins between launches')
+optdepends=('gnome-keyring: remember sign-ins between launches'
+            'libayatana-appindicator: keep Linger running in the tray')
 options=('!strip' '!debug')
 # The agent skills (#147) come from agents/ in this repository;
 # build-repo.sh copies them next to this file under these names.

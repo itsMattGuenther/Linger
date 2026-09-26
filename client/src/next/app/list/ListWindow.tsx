@@ -45,6 +45,7 @@ import {
   shareAsOwner,
   type WindowOpener,
 } from "../../core/share";
+import { loadCloseList } from "../../core/closing";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
@@ -263,7 +264,10 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     const list: ListControls = {
       addServer: () => listNow.current.addServer(),
       setPrefs: (next) => listNow.current.setPrefs(next),
+      closeToTray: (on) => closeToTray(on),
     };
+    // What closing the list does, as kept on this computer (core/closing.ts).
+    closeToTray(loadCloseList(localStore()) === "tray");
     void shareAsOwner(tauriBus(), () => apisRef.current, { opener: shell, store: localStore(), accounts: accountsNow, list }).then((started) => {
       if (gone) started.stop();
       else held = sharing = started;
@@ -317,6 +321,35 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
       window.removeEventListener("blur", release);
     };
   }, [voiceServer, pushToTalk]);
+
+  // The tray menu's Mute and Leave (decision 5): the only ones in reach while
+  // the list is hidden in the tray. The shell greys them out out of voice.
+  const trayMuted = voiceState?.myVoice?.muted ?? false;
+  useEffect(() => {
+    if (!isTauri()) return;
+    void invoke("next_tray_voice", { inVoice: voiceServer !== null, muted: trayMuted }).catch(() => undefined);
+  }, [voiceServer, trayMuted]);
+  const trayVoice = useRef<(action: string) => void>(() => undefined);
+  trayVoice.current = (action) => {
+    if (voiceServer === null) return;
+    if (action === "mute") void setVoiceMuted(voiceServer, !trayMuted).catch(() => undefined);
+    if (action === "leave") void leaveVoice(voiceServer).catch(() => undefined);
+  };
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<string>("next:tray", (action) => trayVoice.current(action))
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
@@ -517,6 +550,12 @@ async function startDm(api: ServerSession["api"], people: User[]): Promise<strin
   } catch (error: unknown) {
     return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't open the DM.";
   }
+}
+
+/** Tell the desktop shell what closing the list does (src-tauri/src/tray.rs). */
+function closeToTray(on: boolean): void {
+  if (!isTauri()) return;
+  void invoke("next_close_to_tray", { on }).catch((error: unknown) => console.error("could not set what closing the list does", error));
 }
 
 /** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */

@@ -105,28 +105,27 @@ keeping that WebKit off it (delete the file to try again). An explicit
 GTK and change no desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
-## The Buddy list client (M15, in progress)
+## The Buddy list client and today's client
 
-The new client is built next to today's in `client/src/next/`
-([architecture](design/architecture.md), [design system](design/system.md)).
-It opens only behind a hidden switch:
+The Buddy list client (`client/src/next/`, [architecture](design/architecture.md),
+[design system](design/system.md)) is the app from 0.4.0. Today's client
+(`client/src/`, outside `next/`) stays in the build for one release as a
+fallback, and gets bug fixes only:
 
 ```bash
-cd client && LINGER_NEXT=1 pnpm tauri dev
+cd client && pnpm tauri dev                     # the Buddy list
+cd client && LINGER_CLASSIC=1 pnpm tauri dev    # today's client
 ```
 
-With `LINGER_NEXT=1`, the shell opens the buddy list (`next.html`) as the main
-window instead of today's client. Everything else is unchanged:
+`LINGER_CLASSIC=1` works in an installed copy too. Both clients share the
+sign-ins in the keyring, the servers and the `linger.*` preferences.
 
-- the same sign-ins from the keyring;
-- the same servers;
-- the same `linger.*` preferences.
-
-Opening a room or a DM from the list opens the chat window, with a tab for
-each conversation. The switch is also in the production build, so an installed
-copy honours it.
-Any other value, or none, opens today's client. The new client can't sign in
-yet: sign in with today's client first.
+Closing the list window keeps Linger running in the tray (and in voice) until
+you pick Quit from the tray menu; Settings → Windows can make closing it quit
+instead. On a Linux desktop with no tray (no StatusNotifier host, or no
+`libayatana-appindicator`), closing the list quits, since there would be no
+way back to it. Only one copy of Linger runs at a time: starting a second one
+shows the first one's list, so quit an installed copy before `pnpm tauri dev`.
 
 To look at pieces without the desktop shell, run `pnpm exec vite` in `client/`
 and open any of these pages:

@@ -50,7 +50,8 @@
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
           "gstreamer1.0-pulseaudio"
-        ]
+        ],
+        "recommends": ["libayatana-appindicator3-1"]
       },
       "rpm": {
         "depends": [
@@ -61,7 +62,8 @@
           "/usr/lib64/gstreamer-1.0/libgstinterleave.so",
           "/usr/lib64/gstreamer-1.0/libgstautodetect.so",
           "/usr/lib64/gstreamer-1.0/libgstpulseaudio.so"
-        ]
+        ],
+        "recommends": ["libayatana-appindicator-gtk3"]
       }
     },
     "windows": {

@@ -27,6 +27,8 @@
     "allow-next-open-chat",
     "allow-next-open-conversation",
     "allow-next-open-settings",
-    "allow-next-open-tool"
+    "allow-next-open-tool",
+    "allow-next-close-to-tray",
+    "allow-next-tray-voice"
   ]
 }

@@ -9,6 +9,7 @@ pub mod graphics;
 mod notifications;
 pub mod packaging;
 mod secrets;
+mod tray;
 mod updates;
 pub mod voice;
 mod window;
@@ -465,6 +466,11 @@ async fn voice_frame(app: AppHandle, base_url: String, frame: ServerFrame) {
 /// Entry point shared by main.rs and (later) mobile.
 pub fn run() {
     tauri::Builder::default()
+        // First, so a second launch is caught before anything else starts:
+        // it brings the running Linger's list forward instead (tray.rs).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_list(app);
+        }))
         // Links in a message go to the system browser, never to this window.
         // The capability file narrows the plugin to http and https.
         .plugin(tauri_plugin_opener::init())
@@ -481,10 +487,19 @@ pub fn run() {
         // before `setup` so the windows built there are restored too.
         .plugin(window::remembered_windows())
         .manage(Connections::default())
+        .manage(tray::Closing::default())
+        .manage(tray::VoiceItems::default())
         .manage(VoiceEngines::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
-        .setup(|app| Ok(window::create(app)?))
+        .setup(|app| {
+            window::create(app)?;
+            // The Buddy list keeps running in the tray when its list closes.
+            if window::this_client() == window::Client::BuddyList {
+                tray::install(app);
+            }
+            Ok(())
+        })
         .on_window_event(window::on_event)
         .invoke_handler(tauri::generate_handler![
             sessions_load,
@@ -508,7 +523,9 @@ pub fn run() {
             window::next_open_chat,
             window::next_open_conversation,
             window::next_open_settings,
-            window::next_open_tool
+            window::next_open_tool,
+            tray::next_close_to_tray,
+            tray::next_tray_voice
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

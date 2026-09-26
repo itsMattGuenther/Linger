@@ -325,16 +325,18 @@ one.
   remembers which interface size it was sized for, so a remembered window
   isn't grown again on the next run (`core/appearance.ts`).
 
-## The hidden switch
+## The switch back
 
-- **To try it:** `LINGER_NEXT=1` makes the Rust shell open `next.html` as the
-  `main` window instead of the old client. Everything else stays the same:
-  sessions, the keyring and the servers.
-- **Later, when it's worth trying day to day:** a switch in the old client's
-  Settings, stored on this computer, does the same after a restart.
-- **The production build** includes `next.html` as a second Vite entry, so the
-  hidden switch works in installed builds too. Without the switch, users see
-  nothing different.
+- **The Buddy list is the app** from 0.4.0: the shell opens `next.html` as the
+  `main` window.
+- **`LINGER_CLASSIC=1`** opens today's client (`index.html`) instead, for one
+  release, in case the new client fails somebody. Both entries ship in every
+  build, and they share sessions, the keyring and the servers.
+- **Closing the list** hides it and keeps the connections, sounds and voice
+  running; the tray icon (`src-tauri/src/tray.rs`) brings it back, mutes,
+  leaves voice or quits. Settings → Windows turns that off
+  (`core/closing.ts`), and so does a desktop with no tray. A second launch
+  shows the running copy's list (`tauri-plugin-single-instance`).
 
 ## Testing strategy
 
@@ -371,7 +373,7 @@ real-app check before the next step leans on it.
 | Step | Done when |
 |---|---|
 | M15.0 Foundations | These docs, the tokens, the kit, the gallery, and the discipline, contrast and geometry tests all pass. |
-| M15.1 The switch and the owner | `LINGER_NEXT=1` opens the list window. It signs in with the existing sessions and shows real rooms, DMs and people, drawn only from the kit. |
+| M15.1 The switch and the owner | The shell opens the list window (`LINGER_CLASSIC=1` for today's client). It signs in with the existing sessions and shows real rooms, DMs and people, drawn only from the kit. |
 | M15.2 The chat window | Opening a room opens the `chat` window with a tab. Catch-up and borrowed tokens work, and a conversation reads, sends and loads history. |
 | M15.3 Voice | The voice bar in the list, the strips in rooms, and "move voice here" as an intent. Switching or closing tabs never leaves voice. |
 | M15.4 People and DMs | The person card with Message and Knock, the new-message picker, away and away messages. |

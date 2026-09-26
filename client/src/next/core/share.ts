@@ -170,6 +170,8 @@ export type Intent =
   | { kind: "open"; server: string; roomId: RoomId; conversation: "room" | "dm"; messageId?: MessageId }
   /** Open Search or Media (their own windows, decision 15). */
   | { kind: "tool"; which: "search" | "media" }
+  /** Settings changed what closing the list does: keep Linger in the tray, or quit. */
+  | { kind: "tray"; on: boolean }
   /** Settings changed how conversations open: every window rearranges itself. */
   | { kind: "conversations"; mode: ConversationsMode }
   /** Open Settings (Ctrl+, in any window), on a section if one is named. */
@@ -189,6 +191,8 @@ export interface ListControls {
   addServer(): void;
   /** Your servers' order and which are Quiet, as Settings last left them. */
   setPrefs(prefs: ServerPrefs): void;
+  /** Whether closing the list keeps Linger in the tray (true) or quits it. */
+  closeToTray?(on: boolean): void;
 }
 
 /**
@@ -469,6 +473,9 @@ export async function shareAsOwner(
           return;
         case "tool":
           if (intent.which === "search" || intent.which === "media") opener?.tool(intent.which);
+          return;
+        case "tray":
+          if (typeof intent.on === "boolean") list?.closeToTray?.(intent.on);
           return;
         case "away":
           if (sessions().has(intent.server)) setAway(intent.server, typeof intent.message === "string" ? intent.message : null);

@@ -18,15 +18,15 @@ use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, Webview
 /// the bar and resize the page underneath it.
 /// Window positions and sizes, remembered on this computer (T-1808): where
 /// each Buddy list window was and how big, restored when it opens again, the
-/// chat window's and every popped-out conversation's included. Today's client
-/// keeps its old behavior, so its main window is left out. Only size,
+/// chat window's and every popped-out conversation's included. The classic
+/// client keeps its old behavior, so its main window is left out. Only size,
 /// position and maximized are kept: whether a window has a frame depends on
 /// the desktop it opens on (`create`), not on last time.
 pub fn remembered_windows() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     use tauri_plugin_window_state::{Builder, StateFlags};
     let builder = Builder::default()
         .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED);
-    if chosen_client(std::env::var_os(NEXT).as_deref()) == Client::Next {
+    if chosen_client(std::env::var_os(CLASSIC).as_deref()) == Client::BuddyList {
         builder.build()
     } else {
         builder.with_denylist(&[OWNER]).build()
@@ -38,9 +38,9 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
-    let client = chosen_client(std::env::var_os(NEXT).as_deref());
+    let client = chosen_client(std::env::var_os(CLASSIC).as_deref());
     for config in &app.config().app.windows {
-        if client == Client::Next && config.label == "main" {
+        if client == Client::BuddyList && config.label == "main" {
             WebviewWindowBuilder::from_config(app, &buddy_list(config))?.build()?;
             continue;
         }
@@ -51,23 +51,29 @@ pub fn create(app: &App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// The hidden switch for the Buddy list client under development (M15,
-/// `docs/design/architecture.md`). `LINGER_NEXT=1` opens it as the main
-/// window; anything else, including unset, opens today's client, so nobody
-/// meets the new one by accident.
-const NEXT: &str = "LINGER_NEXT";
+/// The Buddy list client is the app (0.4.0). `LINGER_CLASSIC=1` opens the
+/// client before it instead, kept for one release as a way back if the new
+/// one misbehaves on somebody's machine, then deleted (T-1810).
+const CLASSIC: &str = "LINGER_CLASSIC";
 
 #[derive(Debug, PartialEq, Eq)]
-enum Client {
-    Current,
-    Next,
+pub enum Client {
+    /// The client before the Buddy list, for one release.
+    Classic,
+    /// The Buddy list client: the default.
+    BuddyList,
 }
 
-fn chosen_client(value: Option<&OsStr>) -> Client {
-    match value.and_then(OsStr::to_str) {
-        Some("1") => Client::Next,
-        _ => Client::Current,
+fn chosen_client(classic: Option<&OsStr>) -> Client {
+    match classic.and_then(OsStr::to_str) {
+        Some("1") => Client::Classic,
+        _ => Client::BuddyList,
     }
+}
+
+/// Which client this run opens.
+pub fn this_client() -> Client {
+    chosen_client(std::env::var_os(CLASSIC).as_deref())
 }
 
 /// The main window as the Buddy list client wants it: the list's own page, a
@@ -392,6 +398,19 @@ fn tool_window(which: &str) -> Result<(&'static str, &'static str, f64, f64), St
 /// counting a window that no longer exists towards you being here
 /// (docs/design/architecture.md, "Windows and their roles").
 pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    // Closing the Buddy list's list keeps Linger in the tray, or quits it and
+    // every window with it (tray.rs); the classic client quits as it did.
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        if window.label() == OWNER && this_client() == Client::BuddyList {
+            let app = window.app_handle();
+            if app.state::<crate::tray::Closing>().hides() {
+                api.prevent_close();
+                let _ = window.hide();
+            } else {
+                app.exit(0);
+            }
+        }
+    }
     if matches!(event, tauri::WindowEvent::Destroyed) && is_viewer(window.label()) {
         let _ = window
             .app_handle()
@@ -457,16 +476,16 @@ mod tests {
     use tauri::WebviewUrl;
 
     #[test]
-    fn only_linger_next_1_opens_the_new_client() {
-        assert_eq!(chosen_client(Some(OsStr::new("1"))), Client::Next);
+    fn the_buddy_list_opens_unless_linger_classic_is_1() {
+        assert_eq!(chosen_client(Some(OsStr::new("1"))), Client::Classic);
         for other in ["", "0", "true", "yes", "2", " 1"] {
             assert_eq!(
                 chosen_client(Some(OsStr::new(other))),
-                Client::Current,
+                Client::BuddyList,
                 "{other:?}"
             );
         }
-        assert_eq!(chosen_client(None), Client::Current);
+        assert_eq!(chosen_client(None), Client::BuddyList);
     }
 
     #[test]

@@ -21,6 +21,7 @@ import { uploadFile } from "../../../lib/upload";
 import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
+import { loadCloseList, saveCloseList } from "../../core/closing";
 import { loadMode } from "../../core/conversations";
 import { isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
@@ -222,6 +223,7 @@ function Settings({ following }: { following: Following }) {
   const [plain, setPlain] = useState<boolean>(loadNormalize);
   const [scale, setScale] = useState<number>(loadScale);
   const [mode, setMode] = useState(() => loadMode(localStore()));
+  const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
   const [devices, setDevices] = useState<VoiceDeviceList | null | "looking">(isTauri() ? "looking" : null);
   useEffect(() => {
     if (!isTauri()) return;
@@ -349,6 +351,14 @@ function Settings({ following }: { following: Following }) {
           onChange: (value) => {
             setMode(value);
             void intend({ kind: "conversations", mode: value }).catch(() => undefined);
+          },
+        },
+        closing: {
+          value: closeList,
+          onChange: (value) => {
+            setCloseList(value);
+            saveCloseList(localStore(), value);
+            void intend({ kind: "tray", on: value === "tray" }).catch(() => undefined);
           },
         },
       }}

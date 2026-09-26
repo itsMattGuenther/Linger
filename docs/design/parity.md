@@ -92,10 +92,15 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    quit. Tray support varies on Linux: GNOME shows no tray without an
    extension, and Waybar needs its tray module. There needs to be a fallback.
    *(WIN-7)*
+   **Decided (2026-09-25): the tray by default**, with Settings → Windows
+   offering "quit" instead. A desktop with no tray quits, so the list can't
+   be lost.
 5. **Voice while the list is hidden.** Voice controls live only in the list's
    voice bar. If the list is tucked into the tray during a call, where are
    mute, deafen and leave: a tray menu, or does the list refuse to hide while
    you're in voice? *(VOICE-14, WIN-7)*
+   **Decided (2026-09-25): a tray menu** with Mute (or Unmute) and Leave
+   voice, next to Show Linger and Quit.
 6. **Push-to-talk key.** Today it is fixed to Ctrl (`lib/voice.ts`). The
    design's Settings shows "push to talk with its key", which suggests
    choosing it. Ctrl also starts the new shortcuts (Ctrl+Tab, Ctrl+W, Ctrl+K,
@@ -141,12 +146,12 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 16. **Sign-in and first run in the new shell.** The design shows only the
     signed-in list. Is the paste box a small list-sized window, and where does
     "+ Add a server" open? *(SIGN-1, SIGN-8)* Built for now as the list
-    **Decided (2026-09-25): kept as built** (`buddy-list.md`).
     window itself: signed in nowhere, it opens on the paste box, in the
     list's size and look (`app/signin/SignInView.tsx`). "Add a server" is in
     Settings → Servers with several servers, and next to Sign out in
     Account & App with one; either shows the same screen in the list window,
     with a way back, and every server stays connected meanwhile.
+    **Decided (2026-09-25): kept as built** (`buddy-list.md`).
 17. **Empty states:** no rooms yet, no DMs, a quiet server, an empty search,
     an empty media collection. Today each has copy and the porch mark (SPEC
     §5.6 "quiet delight"). The design doesn't show them. *(LIST-9)*
@@ -391,7 +396,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-11 | Devices that change mid-call recover within a second or two (hotplug, default change, sample rate). | `src-tauri/src/voice/device.rs` (T-1405) | Same | C + M | 🟡 unchanged Rust; needs a real-device check |
 | VOICE-12 | The relay (TURN) password is fetched fresh at each join. With no relay, a join still works on one network. | `lib/gateway.ts`, `GET /voice/ice` | Same | C | ✅ (lib/gateway.voice.test.ts, share.test.ts) |
 | VOICE-13 | A full voice room (8 people) refuses a join and says so in words. | server `MAX_VOICE_PEERS` | Words, never a number ("room for one more") | F | 🟡 "room for one more" (servers.test.ts); a refused join isn't shown |
-| VOICE-14 | The voice controls stay reachable wherever you are. | `VoiceAway.tsx` | The voice bar in the list; with the list hidden, **decision 5** | F | ⏸ decision 5 |
+| VOICE-14 | The voice controls stay reachable wherever you are. | `VoiceAway.tsx` | The voice bar in the list; with the list hidden, the tray menu (decision 5) | F | ✅ (next-list-window.spec.ts "the tray menu's Mute and Leave follow voice") |
 | VOICE-15 | Join, leave, move and peer cues follow the voice and controls switches, not quiet hours. | `sound.ts`, `sound-events.ts` | Same | U | ✅ (lib/sound.test.ts) |
 | VOICE-16 | Voice audio never passes through the webview; the Rust engine owns devices, Opus and peers. Frames go to it from **one** window. | `src-tauri/src/voice/`, `voice_frame` | The owner forwards frames (architecture) | U + D | 🟡 the list forwards frames; needs a desktop check |
 | VOICE-17 | Join and leave draw the final layout from the first frame: no half-built bar, and the conversation doesn't blink (#141, #142). | `VoiceBar.tsx`, `lib/resize.ts` | Same | F (frame-by-frame) | 🟡 the strip keeps its height (next-chat.spec.ts); no frame-by-frame test |
@@ -480,7 +485,7 @@ there or where the design puts it.
 | WIN-4 | Linger draws its own title bar in every window, with a drag region and window controls; the OS still snaps, resizes and tiles. | `src-tauri/src/window.rs` (today: no GTK bar on Hyprland) | Design. Minimum sizes: **decision 19**. | D (Hyprland, GNOME, Windows 11) | 🟡 built; needs desktop checks; decision 19 |
 | WIN-5 | Window positions, open tabs and their order are remembered per server on this computer. | new | Architecture | U + D | 🟡 tabs (next-chat-window.spec.ts) and places (appearance.test.ts) kept; needs a desktop check |
 | WIN-6 | Every window gets only the capabilities it needs: `capabilities/next.json` (the list), `next-chat.json` and `next-settings.json`. Only `main` can open windows, and only through fixed URL patterns. | `src-tauri/capabilities/` | Architecture | U (Rust) + D | 🟡 a file per window, URLs checked (Rust tests in window.rs); needs a desktop check |
-| WIN-7 | Closing the list keeps Linger running in the tray, or quits. | new (no tray today) | **Decisions 4 and 5** | D + M | ⏸ decisions 4 and 5 |
+| WIN-7 | Closing the list keeps Linger running in the tray, or quits. | new (no tray today) | Tray by default, quit in Settings (decisions 4 and 5) | D + M | 🟡 built (next-list-window.spec.ts "the list tells the desktop what closing it does", `tray.rs` tests); not yet tried on a real desktop tray |
 | WIN-8 | Knock cards, arrival cards and banners appear once, not once per window. | new | Architecture (owner only) | F | 🟡 knocks, chimes and banners come only from the list (next-list-window.spec.ts, core/quietViewers.test.ts); arrival cards aren't built |
 | WIN-9 | A viewer that opens after connecting catches up without gaps; its state always equals the owner's. | new | Architecture | U (property test) + F | ✅ (share.test.ts, lib/catchup.test.ts, next-chat-window.spec.ts) |
 
@@ -491,7 +496,7 @@ there or where the design puts it.
 | NEW-1 | The People section and person card replace the roster panel (PPL-1, PPL-5). | roster | Design | F | ✅ (list.test.ts, next-list.spec.ts) |
 | NEW-2 | The new-message picker: search, pick one to seven people, see "already have this DM" before confirming. Enter picks the first match and Backspace removes the last. | new | Design | U + F | ✅ (newDm.test.ts, next-list.spec.ts) |
 | NEW-3 | An AIM-style away editor with saved presets. | new | Design | F | ✅ (you.test.ts, next-list.spec.ts, next-servers.spec.ts) |
-| NEW-4 | Settings → Windows (tabs or windows; tray or quit). | new | Design | F | 🟡 tabs or windows done (next-settings-window.spec.ts); the tray choice waits on decision 4 |
+| NEW-4 | Settings → Windows (tabs or windows; tray or quit). | new | Design | F | ✅ (next-settings-window.spec.ts) |
 | NEW-5 | Arrival cards ("Callie came into #general"). | new | Design; behavior is **decision 13** | F | ⏸ decision 13 |
 | NEW-6 | Door sounds (an optional quiet chime on arrival, off by default). | new | Design; relation to entrance sounds is **decision 12** | U + F | ⏸ decision 12 |
 | NEW-7 | The small title-bar logo mark (a placeholder "L" until the redesign). | `lib/PorchMark.tsx` (the porch picture) | Design (open question) | — | 🟡 placeholder mark (`app/LogoMark.tsx`) |

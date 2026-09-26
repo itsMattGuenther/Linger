@@ -30,10 +30,10 @@ export default defineConfig({
   build: {
     // WebKitGTK is the floor (ARCHITECTURE §2): keep output conservative.
     target: ["es2022", "safari15"],
-    // Two clients: today's (`index.html`) and the Buddy list client under
-    // development (`next.html`, M15), which the shell opens only when
-    // LINGER_NEXT=1 (`src-tauri/src/window.rs`). Both ship in every build so
-    // the hidden switch works in an installed copy too.
+    // Two clients: the Buddy list (`next.html`), which the shell opens, and
+    // today's (`index.html`), kept one release as a fallback behind
+    // LINGER_CLASSIC=1 (`src-tauri/src/window.rs`). Both ship in every build
+    // so the fallback works in an installed copy too.
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("index.html", import.meta.url)),

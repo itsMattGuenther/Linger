@@ -4,7 +4,9 @@ import type { Live } from "./AppearanceSection";
 import { Plain } from "./parts";
 
 export type ConversationMode = "tabs" | "windows";
-export type CloseList = "tray" | "quit";
+import type { CloseList } from "../../core/closing";
+
+export type { CloseList };
 
 export interface WindowsProps {
   /** How conversations open (WIN-2, WIN-3). Left out until there's a choice to make. */
@@ -58,7 +60,7 @@ export function WindowsSection({ conversations, closing }: WindowsProps) {
             value={closing.value}
             onChange={closing.onChange}
             choices={[
-              { value: "tray", title: "Keep Linger running", description: "It tucks into the system tray, so knocks and mentions still reach you. Quit from the tray.", art: "moon" },
+              { value: "tray", title: "Keep Linger running", description: "It tucks into the system tray: voice stays on, and knocks and mentions still reach you. Quit from the tray.", art: "moon" },
               { value: "quit", title: "Quit Linger", description: "Closing the list closes everything, and you're offline until you open it again.", art: "close" },
             ]}
           />

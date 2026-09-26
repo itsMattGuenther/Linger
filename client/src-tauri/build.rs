@@ -27,6 +27,8 @@ const COMMANDS: &[&str] = &[
     "next_open_conversation",
     "next_open_settings",
     "next_open_tool",
+    "next_close_to_tray",
+    "next_tray_voice",
 ];
 
 fn main() {

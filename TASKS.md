@@ -821,8 +821,8 @@ Rules for this milestone:
 
 - 🟡 **T-1801 · Foundations** — the design docs, tokens, the kit, the gallery
   (`tests/fixtures/kit.html`), and the discipline, contrast and geometry tests.
-- 🟡 **T-1802 · The switch and the owner window** — `LINGER_NEXT=1` opens
-  `next.html` as `main`. It signs in with the existing sessions and shows real
+- 🟡 **T-1802 · The switch and the owner window** — the shell opens
+  `next.html` as `main` (`LINGER_CLASSIC=1` for today's client, one release). It signs in with the existing sessions and shows real
   rooms, DMs and people from the kit. Signed in nowhere, it opens on its own
   sign-in screen (paste box, sign in, join from an invite, first-run setup;
   decision 16's default). "Add a server" in Settings shows the same screen in
@@ -848,8 +848,9 @@ Rules for this milestone:
 - 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
   remembered, and the tray. Pop-out and back are built (with the draft going
   along), and so is switching between tabs and windows (Settings → Windows).
-  Window positions and sizes are remembered. The tray isn't built (decisions
-  4 and 5).
+  Window positions and sizes are remembered. Closing the list keeps Linger in
+  the tray (Show, Mute, Leave voice, Quit), or quits if Settings says so
+  (decisions 4 and 5).
 - 🟡 **T-1809 · Several servers** — folding sections, the time there, quiet,
   and a server in its own window. Folding sections, your order and Quiet are
   built, with the list window connecting to every server; "the time there"

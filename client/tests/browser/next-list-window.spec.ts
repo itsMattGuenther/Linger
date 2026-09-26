@@ -227,3 +227,38 @@ test("a search hit asked for from another window opens the chat window at that m
     `next_open_chat:${JSON.stringify({ server: "https://good-company.example", room: "r-general", message: "m000005" })}`,
   );
 });
+
+test("the list tells the desktop what closing it does: the tray by default, and what Settings changes it to", async ({ page }) => {
+  await open(page, "?one");
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_close_to_tray")).at(0)).toBe(
+    `next_close_to_tray:${JSON.stringify({ on: true })}`,
+  );
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "tray", on: false }));
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_close_to_tray")).at(-1)).toBe(
+    `next_close_to_tray:${JSON.stringify({ on: false })}`,
+  );
+});
+
+test("the tray menu's Mute and Leave follow voice, and do what they say while the list is hidden", async ({ page }) => {
+  await open(page, "?one");
+  const trayLines = async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice"));
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`);
+  await page.evaluate(() => window.core?.tray("mute"));
+  await expect(bar.getByRole("button", { name: "Muted" })).toBeVisible();
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
+});

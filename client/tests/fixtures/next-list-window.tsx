@@ -140,6 +140,8 @@ mockIPC((cmd, args) => {
     case "next_open_conversation":
     case "next_open_settings":
     case "next_open_tool":
+    case "next_close_to_tray":
+    case "next_tray_voice":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:
@@ -154,6 +156,8 @@ declare global {
       frame: (server: string, frame: Omit<ServerFrame, "s">) => void;
       /** Another window asks the owner something (the bus's ask). */
       ask: (event: string, question: Record<string, unknown>) => void;
+      /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
+      tray: (action: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
     };
@@ -165,6 +169,7 @@ window.core = {
     deliver("gateway:frame", { server, frame: { ...frame, s: seq[server] } });
   },
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
+  tray: (action) => deliver("next:tray", action),
   release: () => release(),
 };
 

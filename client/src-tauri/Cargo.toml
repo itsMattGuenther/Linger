@@ -21,7 +21,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 linger-core = { path = "../../crates/linger-core" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -60,6 +60,11 @@ tauri-plugin-notification = "2"
 # Window positions and sizes, remembered on this computer (T-1808), for the
 # Buddy list client's windows only (`window::remembered_windows`).
 tauri-plugin-window-state = "2"
+
+# Launching Linger while it's already running (its list hidden in the tray,
+# say) brings that one forward instead of starting a second copy, which would
+# fight the first over the sign-ins in the keyring.
+tauri-plugin-single-instance = "2"
 # Already used by that plugin. Direct access requests silent desktop banners,
 # so the one app sound player owns mute/quiet-hours on every desktop platform.
 notify-rust = "4"
