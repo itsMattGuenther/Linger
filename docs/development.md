@@ -78,7 +78,10 @@ for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
 bundles the current sound player before running it inside each package. The same
 isolated run checks the previous client's layout against the package's shipped
-CSS at all six interface sizes (with `LINGER_CLASSIC=1`, until T-1812). No test code
+CSS at all six interface sizes (with `LINGER_CLASSIC=1`, until T-1812).
+`scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs` check
+the Buddy list client itself starts in the packaged app, signed in nowhere,
+and the Windows one keeps a screenshot of it. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
 ## How the desktop app starts on Linux

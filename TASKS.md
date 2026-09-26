@@ -395,13 +395,16 @@ Rules for this milestone:
   event, so no other window can make one up (architecture.md, "Still open").
   The app's own commands are already limited per window (`build.rs`,
   `capabilities/`, `src-tauri/src/acl.rs`).
-- ⬜ **T-1812 · A packaged layout check for the Buddy list** — the package
+- 🟡 **T-1812 · A packaged layout check for the Buddy list** — the package
   checks (`scripts/linux-audio-check.py`, `client/scripts/windows-audio-check.mjs`)
   inject a layout probe into the installed app and measure today's client
   against its own stylesheet, so since 0.4.0 they run with
-  `LINGER_CLASSIC=1`. The Buddy list needs its own probe (the list window at
-  every interface size, in WebKitGTK and WebView2) before today's client is
-  deleted.
+  `LINGER_CLASSIC=1`. A first check is in: `client/scripts/next-smoke-probe.js`,
+  run by `scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs`,
+  proves the list window starts in the packaged WebKitGTK and WebView2 with its
+  stylesheet, fonts and mark, at every interface size, and keeps a Windows
+  screenshot. Still to do before today's client is deleted: the list, chat and
+  Settings windows signed in, against a throwaway server.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
   new client becomes the default, the old one stays one release as a fallback,
   then is deleted. SPEC §3/§5 are rewritten from `system.md`.
