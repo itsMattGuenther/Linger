@@ -181,12 +181,19 @@ test.describe("adding a server you're already on", () => {
   test("the voice bar stays in reach under the sign-in", async ({ page }) => {
     await open(page, "?one");
     const bar = page.getByRole("region", { name: /In voice/ });
-    // Asked until the list window is listening; joining the same room again does nothing.
+    // Asked until the list window is listening and the seat holds: the page
+    // connects twice at start (React's development mode), and a late "ready"
+    // from the second connection starts the server's state afresh. Joining
+    // the same room again does nothing.
     await expect
-      .poll(async () => {
-        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
-        return bar.count();
-      })
+      .poll(
+        async () => {
+          await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+          await page.waitForTimeout(250);
+          return bar.count();
+        },
+        { timeout: 10_000 },
+      )
       .toBe(1);
     await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
     await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
