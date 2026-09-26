@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
+import { ApiError, type AuthedApi, UnconfirmedError } from "../../../lib/api";
 import { sendMessage } from "../../../lib/gateway";
 import { uploadFile } from "../../../lib/upload";
 import { added, type Drafts, filesIn, NO_DRAFTS, NO_FILES, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
@@ -62,9 +62,12 @@ export function useFileDrafts(
       try {
         await sendMessage(sendApi, tab.roomId, submission.body, submission.replyTo, taking.attachments);
       } catch (error: unknown) {
-        // The server's own words, or the network's: a send nobody answered
-        // says it wasn't confirmed, never that it was lost (#118).
-        throw new Error(error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't reach the server. Your message is kept here.");
+        // The server's own words, or, for a send nobody answered, that it
+        // wasn't confirmed, never that it was lost (#118). Anything else is
+        // the network, in the chat's own words.
+        throw new Error(
+          error instanceof ApiError || error instanceof UnconfirmedError ? error.message : "Couldn't reach the server. Your message is kept here.",
+        );
       }
       setDrafts((held) => sent(held, submission.fileKeys));
     },

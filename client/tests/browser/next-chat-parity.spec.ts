@@ -362,6 +362,15 @@ test.describe("a send nobody answers", () => {
   });
 });
 
+test("a send that can't reach the server says so in the chat's words, and keeps the message", async ({ page }) => {
+  await open(page, "room=r-general&offline");
+  await box(page).fill("anyone there?");
+  await box(page).press("Enter");
+  // Not the sign-in's "check the address", and not "not confirmed": it never left.
+  await expect(page.locator(".nx-composer").getByRole("alert")).toHaveText("Couldn't reach the server. Your message is kept here.");
+  await expect(box(page)).toHaveValue("anyone there?");
+});
+
 test.describe("files in the conversation", () => {
   function attachment(id: string, filename: string, mime: string, extra: Record<string, unknown> = {}) {
     return {

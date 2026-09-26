@@ -10,7 +10,7 @@
  *   for paging back and letting go.
  * - `?ptt`: you're in voice in #general, with push-to-talk on.
  * - `?refuse`: every edit and delete is refused, in the server's words.
- * - `?hang`: a send is never answered.
+ * - `?hang`: a send is never answered; `?offline`: a send can't reach the server.
  * - `?uploadrefuse`: the server refuses every file before it goes up.
  * - `?holdparts`: a file's bytes wait at the file store until
  *   `window.parity.release()`, so it shows as going up.
@@ -155,6 +155,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       return new Response("the store hiccuped", { status: 500 });
     }
     return new Response(null, { status: 200, headers: { ETag: `"etag-${url.pathname.split("/").at(-2) ?? ""}"` } });
+  }
+  if (query.has("offline") && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "POST") {
+    throw new TypeError("Failed to fetch");
   }
   if (query.has("hang") && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "POST") {
     desktop.note(`sent:${typeof init?.body === "string" ? init.body : ""}`);

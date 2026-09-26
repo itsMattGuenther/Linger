@@ -76,6 +76,17 @@ export class TransportError extends Error {
 }
 
 /**
+ * A request that went out and was never answered within its deadline: it may
+ * or may not have arrived (#118), so it is never reported as lost.
+ */
+export class UnconfirmedError extends TransportError {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnconfirmedError";
+  }
+}
+
+/**
  * Every error code the client recognises. This list exists so a code coming off
  * the network can be *checked* rather than assumed, which is what keeps this
  * file free of casts. The `satisfies` clause makes TypeScript fail the build if
@@ -180,7 +191,7 @@ async function withDeadline<T>(
   try {
     return await request({ ...options, signal: controller.signal });
   } catch (error) {
-    if (expired) throw new TransportError(
+    if (expired) throw new UnconfirmedError(
       "The server did not confirm the request. Check whether it arrived before trying again.",
     );
     throw error;
