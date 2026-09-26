@@ -66,18 +66,15 @@ What's left, biggest first:
 - **17 items wait on Matt**, mostly decisions 1 (the status bar's jobs),
   4 and 5 (the tray), 10 (message aging) and 21 (old gaps).
 
-Four decisions are already built one way, and only need a yes or a no:
+Three decisions were answered on 2026-09-25, all kept as built: 9 (names
+inline, once per run), 14 (Away everywhere) and 16 (signing in lives in the
+list window). They're written up in `buddy-list.md`. One is built one way and
+still open:
 
-- **9, names inline:** written up in `system.md`. The name shows once per
-  group, and a reply's quote sits above its own line.
-- **14, away everywhere:** a server that refuses says why under its own name,
-  and the rest still go away.
-- **16, where signing in lives:** in the list window itself. Signed in
-  nowhere, it opens on the paste box; "Add a server" (Settings → Servers, or
-  next to Sign out with one server) shows the same screen there, with a way
-  back, and every other server stays connected.
 - **18, the server's color:** the stripe and tag use the host's accent, as
-  `buddy-list.md` says.
+  `buddy-list.md` says. Matt would like each person to be able to pick their
+  own color for a server too, and more colors to choose from; being worked
+  out.
 
 Half of decision 10 is also settled: the 80ch line limit is the `--measure`
 token in `system.md`.
@@ -124,6 +121,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    and puts a reply's quote under the name. Decide: does every message repeat
    the name inline, or only the first of a group? Where does a reply's quote
    sit? *(CONV-4, CONV-9)*
+   **Decided (2026-09-25): kept as built**: once per run, and a reply's quote above its own line (`buddy-list.md`).
 10. **Message aging** (bodies fade to 88% after an hour and 78% after a day,
     SPEC §4.7) and the **80ch line limit**. Neither appears in the design. Keep
     or drop? *(CONV-6, CONV-7)*
@@ -142,11 +140,13 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 14. **Away everywhere.** Today away is per server, one account at a time. The
     design's single Away button writes to every ticked server. What does it
     say when one server refuses or is offline? *(PPL-9)*
+    **Decided (2026-09-25): kept as built**: a refusal is said under that server, and the rest still go away (`buddy-list.md`).
 15. **Where Media and Search open:** a tab in the chat window, their own
     window, or a panel of the list? *(MEDIA-1, SRCH-1)*
 16. **Sign-in and first run in the new shell.** The design shows only the
     signed-in list. Is the paste box a small list-sized window, and where does
     "+ Add a server" open? *(SIGN-1, SIGN-8)* Built for now as the list
+    **Decided (2026-09-25): kept as built** (`buddy-list.md`).
     window itself: signed in nowhere, it opens on the paste box, in the
     list's size and look (`app/signin/SignInView.tsx`). "Add a server" is in
     Settings → Servers with several servers, and next to Sign out in
@@ -232,7 +232,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-1 | The message list is virtualized: only rows on screen exist, with stable keys, so a measured row stays measured when history loads above it. | `stream/Stream.tsx`, AGENTS | Same, in every tab and window | F + D (10k-message room) | 🟡 virtualized (next-chat.spec.ts, 5,000 messages); needs the 10k desktop check |
 | CONV-2 | The view hangs from the bottom: new messages follow when you're at the end, and history loading above never moves what you read. | `Stream.tsx` `anchorTo: "end"`, `lib/resize.ts` | Same | F | ✅ (next-chat.spec.ts) |
 | CONV-3 | Sessions: a 3-hour gap inserts a divider in natural words ("late Tuesday night", "tonight"). | `lib/time.ts`, `lib/rows.ts`, SPEC §4.7 | Same (the prototype shows "TONIGHT") | U (exists) + F | ✅ (rows.test.ts, next-chat.spec.ts) |
-| CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | Names inline; **decision 9** | U + F | ✅ (rows.test.ts, next-chat.spec.ts); decision 9 is written up in system.md |
+| CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | Names inline; **decision 9** | U + F | ✅ (rows.test.ts, next-chat.spec.ts); decision 9: kept as built |
 | CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G | ✅ (next-chat-parity.spec.ts) |
 | CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) | ⏸ decision 10; built as today (lib/time.test.ts) |
 | CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G | ⏸ decision 10; built (`--measure`), no test |
@@ -328,7 +328,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | PPL-6 | A name in the stream opens the same card, drawn in a portal so the virtualized list can't clip it. | `status/PersonName.tsx` | Same | F | ✅ the name heading a run of messages opens the same card beside it, drawn outside the scrolling list; Message opens the DM, Knock knocks (next-chat-window.spec.ts) |
 | PPL-7 | Status editor: one line (240), reading/listening/working (80 each), an image (512 KB, shown at 400×200), and an away message. Local preview before save, and the draft survives layout changes. | `status/StatusEditor.tsx`, `status.ts` | Your card's status field plus Settings → Profile | U (exists) + F | ✅ (you.test.ts, next-list.spec.ts, next-settings.spec.ts) |
 | PPL-8 | Save order: `PATCH /me` first, then going away on the wire (leave the room, then say away). | `StatusEditor.tsx` | Same | C + U | 🟡 away goes through the list (share.test.ts); the save order is untested |
-| PPL-9 | Typing an away message makes you away; clearing it makes you back. | `StatusEditor.tsx` | An AIM-style editor with saved presets. Away everywhere with a checkbox per server: **decision 14**. | F | ✅ (next-servers.spec.ts, next-list.spec.ts); built one way for decision 14 |
+| PPL-9 | Typing an away message makes you away; clearing it makes you back. | `StatusEditor.tsx` | An AIM-style editor with saved presets. Away everywhere with a checkbox per server: **decision 14**. | F | ✅ (next-servers.spec.ts, next-list.spec.ts); decision 14: kept as built |
 | PPL-10 | A status image uploads when it's picked; an abandoned one is cleaned up. | `StatusEditor.tsx` | Same | F | ✅ (next-settings.spec.ts) |
 
 ## NAME — how names look

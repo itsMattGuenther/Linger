@@ -26,6 +26,19 @@ dropped. This page and the prototype in `client/prototypes/` are what is left.
 - **No avatars.** Nobody has a picture, you included. Identity is the styled
   name and the colored dot.
 
+## Decided on 2026-09-25, from what was built
+
+- **Names inline, once per run** (decision 9). A run of messages starts with
+  `Name:`, and later lines from the same person line up under it without it.
+  A reply starts a new run, with the message it answers quoted just above.
+- **Away everywhere** (decision 14). The one Away button sets you away on every
+  server you tick. A server that refuses or is offline says why under its own
+  name, and the others still go away.
+- **Signing in lives in the list window** (decision 16). Signed in nowhere, the
+  list opens on the paste box. "Add a server", in Settings → Servers (or next
+  to Sign out with one server), shows the same screen there, with a way back,
+  and every other server stays connected.
+
 ## The idea
 
 Eight friends don't need Discord's four columns; they need a buddy list. The
