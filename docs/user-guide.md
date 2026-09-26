@@ -265,8 +265,9 @@ Linger is one tall window: your **list**. From the top:
 
 Click a room or a DM and it opens in the **chat window**. Each conversation
 gets a tab there; **Ctrl+Tab** moves between them and **Ctrl+W** closes one.
-The ⧉ button pops a tab out into a window of its own, and **Back to tabs**
-puts it back. If you'd rather every conversation had its own window, choose
+The pop-out button in the title bar (a box with an arrow leaving it) puts a
+tab in a window of its own, and the same box with the arrow coming in,
+**Back to tabs**, puts it back. If you'd rather every conversation had its own window, choose
 that in **Settings → Windows**.
 
 At the foot of the list are **Media** and **Search**, each in a window of its

@@ -5,7 +5,7 @@ import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
-import { Button, IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
+import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
 import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
 import { ImageViewer } from "./ImageViewer";
@@ -167,11 +167,8 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   }, [paneId, messages, meId, atEnd]);
 
   const popOut = onPopOut && activeId !== null ? <IconButton icon="popout" label="Open in its own window" onClick={() => onPopOut(activeId)} /> : undefined;
-  const backToTabs = single ? (
-    <Button size="sm" variant="secondary" icon="tabs" onClick={single.onBackToTabs}>
-      Back to tabs
-    </Button>
-  ) : undefined;
+  // The pop-out button's opposite, drawn as its mirror (#214).
+  const backToTabs = single ? <IconButton icon="popin" label="Back to tabs" onClick={single.onBackToTabs} /> : undefined;
 
   return (
     <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined}>
