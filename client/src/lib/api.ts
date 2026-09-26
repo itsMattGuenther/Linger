@@ -26,6 +26,7 @@ import type { KnockRequest } from "../generated/KnockRequest";
 import type { CompletedPart } from "../generated/CompletedPart";
 import type { CreateUploadRequest } from "../generated/CreateUploadRequest";
 import type { LinkPreview } from "../generated/LinkPreview";
+import type { Message } from "../generated/Message";
 import type { LoginRequest } from "../generated/LoginRequest";
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
@@ -546,6 +547,12 @@ export class AuthedApi {
     return this.#withAuth((accessToken) =>
       requestVoid(this.baseUrl, "PUT", path, { accessToken, body }),
     );
+  }
+
+  /** Pin a message, or take its pin off (PROTOCOL §4): the message as it is now. */
+  pinMessage(id: string, pinned: boolean): Promise<Message> {
+    const path = `/messages/${encodeURIComponent(id)}/pin`;
+    return this.#withAuth((accessToken) => requestJson<Message>(this.baseUrl, pinned ? "POST" : "DELETE", path, { accessToken }));
   }
 
   /** `body` is for the two routes that identify what to remove in JSON rather

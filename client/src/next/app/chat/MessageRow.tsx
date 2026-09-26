@@ -8,7 +8,7 @@ import { messageFontVar } from "../../../lib/fonts";
 import { linkTargets, mentionHandles } from "../../../lib/markdown";
 import { ageOpacity, clockTime, fullTime } from "../../../lib/time";
 import { cardOnly, excerpt } from "../../core/chat/words";
-import { IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
+import { Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
 import { Attachments } from "./Attachments";
 import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
@@ -33,6 +33,8 @@ export interface MessageActions {
   wantCards?: (urls: readonly string[]) => void;
   /** Open the card of whoever a name belongs to, beside the name (PPL-6). */
   openPerson?: (user: User, anchor: { top: number; bottom: number; left: number }) => void;
+  /** Pin a message or take its pin off (T-908). A refusal rejects with a sentence. */
+  pin?: (message: Message, pinned: boolean) => Promise<void>;
 }
 
 /**
@@ -132,6 +134,19 @@ export const MessageRow = memo(function MessageRow({
             actions.reply(message);
           },
         },
+        ...(actions.pin && !pending
+          ? [
+              {
+                id: "pin",
+                label: message.pinned_at === null ? "Pin" : "Unpin",
+                icon: "pin" as const,
+                onSelect: () => {
+                  closeMenu(true);
+                  if (actions.pin) run(actions.pin(message, message.pinned_at === null));
+                },
+              },
+            ]
+          : []),
         ...(mine
           ? [
               {
@@ -196,7 +211,19 @@ export const MessageRow = memo(function MessageRow({
             source={message.body}
             mentions={mentions}
             onOpenLink={actions.openLink}
-            trailing={message.edited_at === null ? undefined : <span className="nx-msg-edited">edited</span>}
+            trailing={
+              message.edited_at === null && message.pinned_at === null ? undefined : (
+                <>
+                  {message.pinned_at === null ? null : (
+                    <span className="nx-msg-pinned" title="Pinned">
+                      <Icon name="pin" size="sm" />
+                      <span className="k-sr-only">pinned</span>
+                    </span>
+                  )}
+                  {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
+                </>
+              )
+            }
           />
         )}
         {deleted || editing ? null : (

@@ -296,7 +296,7 @@ where it still makes sense, and is otherwise closed with a note.
   saved token is spent twice. **Decided 2026-09-26 (parity decision 21):**
   fix it, in the Buddy list client's list window.
 
-- ⬜ **T-908 · Pin a message from the conversation** — effort: **medium**
+- ✅ **T-908 · Pin a message from the conversation** — effort: **medium**
   Use the existing pin/unpin endpoints and message action strip; indicate the
   saved state and report failures without losing it. No new wire fields.
   *Accept:* pinning in one client appears in another and in media's pinned

@@ -118,6 +118,15 @@
   line-height: var(--line-body);
 }
 
+/* A pinned message: the pin's own glyph after the words, faint; the word is
+   for screen readers and the tooltip. */
+.nx-msg-pinned {
+  display: inline-flex;
+  margin-left: var(--space-1-5);
+  vertical-align: middle;
+  color: var(--icon-muted);
+}
+
 .nx-msg-edited {
   margin-left: var(--space-1-5);
   color: var(--text-muted);

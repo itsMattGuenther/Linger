@@ -145,7 +145,7 @@ test.describe("what a message says", () => {
     await row(page, id).getByRole("button", { name: /^Actions for/ }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     const offered = await page.getByRole("menuitem").allTextContents();
-    expect(offered.map((label) => label.trim())).toEqual(["Reply", "Delete"]);
+    expect(offered.map((label) => label.trim())).toEqual(["Reply", "Pin", "Delete"]);
     expect(offered.join(" ")).not.toMatch(/react/i);
   });
 

@@ -12,6 +12,7 @@ import { openExternal, openExternalChecked } from "../../../lib/external";
 import {
   deleteMessage,
   editMessage,
+  pinMessage,
   leaveWindow,
   loadNewer,
   loadOlder,
@@ -518,6 +519,13 @@ function Conversations({ following }: { following: Following }) {
     },
     [api],
   );
+  const pin = useCallback(
+    async (message: Message, pinned: boolean) => {
+      if (!api) throw new Error("This conversation isn't connected.");
+      await pinMessage(api, message, pinned).catch(rethrowInWords(pinned ? "Couldn't pin it." : "Couldn't take the pin off."));
+    },
+    [api],
+  );
   const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
   const wantCards = useCallback(
     (urls: readonly string[]) => {
@@ -541,8 +549,8 @@ function Conversations({ following }: { following: Following }) {
     if (cardOpener.current?.isConnected) cardOpener.current.focus();
   }, []);
   const actions = useMemo(
-    () => ({ save, remove, openLink: openExternal, download, wantCards, openPerson }),
-    [save, remove, download, wantCards, openPerson],
+    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson }),
+    [save, remove, pin, download, wantCards, openPerson],
   );
 
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);

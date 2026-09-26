@@ -438,6 +438,21 @@ test("a half-typed line outlasts its tab and a restart, and goes once it's sent 
   expect(await page.evaluate(() => localStorage.getItem("linger.next.drafts"))).toBeNull();
 });
 
+test("a message is pinned and unpinned from its menu, and shows its pin (T-908)", async ({ page }) => {
+  await open(page);
+  const row = page.locator("[data-message]").filter({ hasText: "Khruangbin" }).first();
+  await row.hover();
+  await row.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Pin" }).click();
+  await expect.poll(async () => (await did(page)).some((line) => /^POST \/messages\/[^/]+\/pin/.test(line))).toBe(true);
+  await expect(row.locator(".nx-msg-pinned")).toHaveAttribute("title", "Pinned");
+  await row.hover();
+  await row.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Unpin" }).click();
+  await expect.poll(async () => (await did(page)).some((line) => /^DELETE \/messages\/[^/]+\/pin/.test(line))).toBe(true);
+  await expect(row.locator(".nx-msg-pinned")).toHaveCount(0);
+});
+
 test("a knock from a DM says Knocked, unless the server refused it", async ({ page }) => {
   await open(page, "room=d-jules");
   await page.getByRole("button", { name: "Knock" }).click();
