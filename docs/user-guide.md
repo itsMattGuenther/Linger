@@ -525,7 +525,11 @@ versions come back once the new look has versions of its own.
 Desktop banners appear for **somebody naming you**, or a person you've
 specifically asked to hear about. Open **Settings → Notifications** to choose
 those people, either everywhere or in selected rooms. A server you've made
-**Quiet** sends no banners or sounds.
+**Quiet** makes no sounds and no arrival cards, but somebody naming you there
+still gets a banner, and knocks still come through. Clicking a banner opens
+that conversation at the message. On Windows that works while the banner is on
+screen; once it has moved to the notification center, clicking it just brings
+Linger up.
 
 For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
 moves, mute/deafen changes, DMs and knocks have sounds by default. Ordinary

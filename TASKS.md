@@ -421,8 +421,10 @@ Rules for this milestone:
 - ✅ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed
   line is kept on this computer across closing its tab and restarting Linger,
   and cleared when sent.
-- ⬜ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
+- ✅ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
   desktop notification opens that room or DM in the chat window, at the message.
+  Built and tested up to the desktop; clicking a real banner on Linux and
+  Windows is still to be checked by hand.
 - ✅ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
   no rooms (with "Make the first room" for the host), nobody else here, an
   empty search and an empty media collection.

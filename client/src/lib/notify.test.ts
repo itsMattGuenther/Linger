@@ -47,6 +47,13 @@ it("visual mentions still use the silent native banner path", async () => {
   expect(banners).toHaveLength(1);
 });
 
+it("a banner leads to the latest message in its batch (decision 20)", async () => {
+  considerFrame(server, { op: "message.create", s: 1, d: { ...message, body: "@me hello" } }, snapshot);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, id: "later", body: "@me still there?" } }, snapshot);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(banners).toEqual([expect.objectContaining({ open: { server, room: "dm", message: "later" } })]);
+});
+
 it("replay is silent while preserving existing mention-banner batching", async () => {
   considerFrame(server, { op: "message.create", s: 1, d: { ...message, body: "@me hello" } }, snapshot, true);
   considerFrame(server, { op: "message.create", s: 2, d: { ...message, id: "next", body: "@me another" } }, snapshot, true);

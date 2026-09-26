@@ -24,6 +24,7 @@ import { forgetNotifications, resetNotifications, setQuietServers } from "../../
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { PROTOCOL, tauriBus } from "../../core/bus";
 import { isSearchKey, isSettingsKey } from "../../core/keys";
@@ -355,6 +356,28 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
     let gone = false;
     void tauriBus()
       .listen<string>("next:tray", (action) => trayVoice.current(action))
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
+
+  // A desktop banner clicked (decision 20): the shell hands back where it
+  // leads (lib/notify.ts), and the conversation opens there, at the message.
+  // Only for a server still signed in.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<unknown>("next:banner", (payload) => {
+        const target = bannerTarget(payload);
+        if (target && apisRef.current.has(target.server)) openChat(target.server, target.room, target.message);
+      })
       .then((unlisten) => {
         if (gone) unlisten();
         else stop = unlisten;
@@ -708,9 +731,19 @@ let sharing: Sharing | null = null;
  * Show a conversation: in its own window if it was popped out into one,
  * otherwise as a tab in the chat window (core/share.ts, `open`).
  */
-function openChat(server: string, room: RoomId): void {
-  if (sharing) sharing.open(server, room);
-  else shell.chat(server, room);
+function openChat(server: string, room: RoomId, messageId?: MessageId): void {
+  if (sharing) sharing.open(server, room, messageId);
+  else shell.chat(server, room, messageId);
+}
+
+/** What a clicked banner says it leads to, if it says it properly (`src-tauri/src/notifications.rs`). */
+function bannerTarget(payload: unknown): { server: string; room: RoomId; message: MessageId } | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const server: unknown = Reflect.get(payload, "server");
+  const room: unknown = Reflect.get(payload, "room");
+  const message: unknown = Reflect.get(payload, "message");
+  if (typeof server !== "string" || typeof room !== "string" || typeof message !== "string") return null;
+  return { server, room, message };
 }
 
 /**

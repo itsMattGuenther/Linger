@@ -166,6 +166,8 @@ declare global {
       ask: (event: string, question: Record<string, unknown>) => void;
       /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
       tray: (action: string) => void;
+      /** The desktop shell passes on a clicked banner's target. */
+      banner: (target: unknown) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
     };
@@ -179,6 +181,7 @@ window.core = {
   status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
+  banner: (target) => deliver("next:banner", target),
   release: () => release(),
 };
 

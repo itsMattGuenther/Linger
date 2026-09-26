@@ -394,7 +394,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C | ✅ (lib/notify.test.ts, core/quietViewers.test.ts) |
 | NOTE-5 | Banners are silent at the OS level, and the app's own chime plays instead. | `src-tauri/src/notifications.rs` | Same | D | 🟡 unchanged; needs a desktop check |
 | NOTE-6 | Permission is asked once; a refusal is final and silent. | `notify.ts` | Same | U | ✅ (lib/notifyPermission.test.ts) |
-| NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | ⬜ to build: a banner opens its conversation at the message (decision 20) |
+| NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | 🟡 a banner opens its conversation at the message (decision 20): the target it carries (`lib/notify.test.ts`), what counts as a click and the Linux `default` action (`notifications.rs` tests), the list window opening it for a signed-in server only (`next-list-window`). Needs a desktop check: click a real banner on Linux and on Windows. Windows only reports the click while the banner is on screen |
 
 ## SND — sounds
 
@@ -515,7 +515,7 @@ there or where the design puts it.
 | WIN-5 | Window positions, open tabs and their order are remembered per server on this computer. | new | Architecture | U + D | 🟡 tabs (next-chat-window.spec.ts) and places (appearance.test.ts) kept; needs a desktop check |
 | WIN-6 | Every window gets only the capabilities it needs: `capabilities/next.json` (the list), `next-chat.json` and `next-settings.json`. Only `main` can open windows, and only through fixed URL patterns. | `src-tauri/capabilities/` | Architecture | U (Rust) + D | 🟡 a file per window, URLs checked (Rust tests in window.rs); needs a desktop check |
 | WIN-7 | Closing the list keeps Linger running in the tray, or quits. | new (no tray today) | Tray by default, quit in Settings (decisions 4 and 5) | D + M | 🟡 built (next-list-window.spec.ts "the list tells the desktop what closing it does", `tray.rs` tests); not yet tried on a real desktop tray |
-| WIN-8 | Knock cards, arrival cards and banners appear once, not once per window. | new | Architecture (owner only) | F | 🟡 knocks, chimes and banners come only from the list (next-list-window.spec.ts, core/quietViewers.test.ts); arrival cards aren't built |
+| WIN-8 | Knock cards, arrival cards and banners appear once, not once per window. | new | Architecture (owner only) | F | 🟡 knocks, chimes and banners come only from the list (next-list-window.spec.ts, core/quietViewers.test.ts); arrival cards are the list window's own state, so they come from it alone (`next-list-window`) |
 | WIN-9 | A viewer that opens after connecting catches up without gaps; its state always equals the owner's. | new | Architecture | U (property test) + F | ✅ (share.test.ts, lib/catchup.test.ts, next-chat-window.spec.ts) |
 
 ## NEW — other things the design adds

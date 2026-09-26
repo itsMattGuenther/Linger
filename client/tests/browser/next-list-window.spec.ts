@@ -240,6 +240,24 @@ test("a search hit asked for from another window opens the chat window at that m
   );
 });
 
+test("a clicked desktop banner opens its conversation at the message; one from a server you've left does nothing (decision 20)", async ({ page }) => {
+  await open(page, "?one");
+  // Nonsense and a server not signed in are ignored.
+  await page.evaluate(() => {
+    window.core?.banner({ server: "https://good-company.example", room: 7 });
+    window.core?.banner({ server: "https://elsewhere.example", room: "r-general", message: "m000001" });
+  });
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => window.core?.banner({ server: "https://good-company.example", room: "r-general", message: "m000005" }));
+      return (await did(page)).filter((line) => line.startsWith("next_open_chat"));
+    })
+    .not.toEqual([]);
+  expect(new Set((await did(page)).filter((line) => line.startsWith("next_open_chat")))).toEqual(
+    new Set([`next_open_chat:${JSON.stringify({ server: HOME, room: "r-general", message: "m000005" })}`]),
+  );
+});
+
 test("the list tells the desktop what closing it does: the tray by default, and what Settings changes it to", async ({ page }) => {
   await open(page, "?one");
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_close_to_tray")).at(0)).toBe(
