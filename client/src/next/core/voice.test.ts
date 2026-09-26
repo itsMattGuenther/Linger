@@ -107,4 +107,39 @@ describe("the voice bar's contents", () => {
   it("knows who's talking only while you're in voice", () => {
     expect(talkingNow(evening(serverState(SERVER)))).toEqual(new Set());
   });
+
+  it("shows each person's microphone as they share it, and says when a client doesn't (VOICE-6)", () => {
+    const state = inVoice({ muted: true });
+    const shared = {
+      ...state,
+      voice: {
+        "r-general": [
+          { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false } },
+          // An older client or server: nothing is shared, which isn't a live microphone either.
+          { session_id: "s-jules", user_id: "u-jules" },
+          { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false } },
+        ],
+      },
+    };
+    const model = voiceModel(shared, new Set());
+    expect(model?.people.map(({ user, controls }) => [user.display_name, controls])).toEqual([
+      // Yours from your own controls, not what the server last heard.
+      ["Matt", "muted"],
+      ["Eli", "muted"],
+      ["Jules", "unknown"],
+    ]);
+    const deaf = voiceModel({ ...shared, voice: { "r-general": [{ session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: true } }] } }, new Set());
+    expect(deaf?.people.find((person) => person.user.id === "u-eli")?.controls).toBe("deafened");
+  });
+
+  it("says when somebody can't be reached from here, or is still connecting (VOICE-7)", () => {
+    const state = inVoice({ peers: { "s-eli": "connecting", "s-jules": "failed" } });
+    expect(voiceModel(state, new Set())?.people.map(({ user, link }) => [user.display_name, link])).toEqual([
+      ["Matt", null],
+      ["Eli", "connecting"],
+      ["Jules", "unreachable"],
+    ]);
+    const settled = inVoice({ peers: { "s-eli": "connected", "s-jules": "disconnected" } });
+    expect(voiceModel(settled, new Set())?.people.map(({ link }) => link)).toEqual([null, null, "unreachable"]);
+  });
 });

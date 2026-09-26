@@ -121,7 +121,7 @@ export function guild(empty: GatewayState): GatewayState {
       { user_id: "a-tansy", state: "away", room_id: null, away_message: "brb, dog needs out" },
     ],
     occupancy: { "a-raid-night": RAID, "a-loot-council": ["a-morrow"] },
-    voice: { "a-raid-night": RAID.map((user_id) => ({ session_id: `s-${user_id}`, user_id })) },
+    voice: { "a-raid-night": RAID.map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false } })) },
     // #general holds something new.
     newest: { "a-general": "m000903", "a-raid-night": "m000913", "a-dm-nyx": "m000920" },
     read: { "a-general": "m000901", "a-raid-night": "m000913", "a-dm-nyx": "m000920" },

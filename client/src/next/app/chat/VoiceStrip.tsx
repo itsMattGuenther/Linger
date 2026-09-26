@@ -20,6 +20,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   people,
   meId,
   speaking,
+  mics,
   onJoin,
 }: {
   strip: Strip;
@@ -29,6 +30,8 @@ export const VoiceStrip = memo(function VoiceStrip({
   meId: string | null;
   /** Who is talking right now (only known while you are in voice). */
   speaking: ReadonlySet<string>;
+  /** Whose microphone is off, as shared (VOICE-6), by user id. */
+  mics?: ReadonlyMap<string, "muted" | "deafened">;
   /** Join, move here, or start: the window knows which from `strip`. */
   onJoin: () => void;
 }) {
@@ -53,7 +56,12 @@ export const VoiceStrip = memo(function VoiceStrip({
       <ul className="nx-strip-people" aria-label="In voice here">
         {shown.map((user) => (
           <li key={user.id}>
-            <Chip label={user.id === meId ? "you" : user.display_name} marker={markerOf(user, "in_room")} active={speaking.has(user.id)}>
+            <Chip
+              label={user.id === meId ? "you" : user.display_name}
+              marker={markerOf(user, "in_room")}
+              active={speaking.has(user.id)}
+              state={micState(mics?.get(user.id))}
+            >
               {user.id === meId ? "you" : <Name person={user} size="control" />}
             </Chip>
           </li>
@@ -75,3 +83,10 @@ export const VoiceStrip = memo(function VoiceStrip({
     </div>
   );
 });
+
+/** A microphone that's off, as its control's glyph and word. */
+function micState(off: "muted" | "deafened" | undefined): { icon: "micOff" | "headOff"; word: string } | undefined {
+  if (off === "deafened") return { icon: "headOff", word: "Deafened" };
+  if (off === "muted") return { icon: "micOff", word: "Muted" };
+  return undefined;
+}

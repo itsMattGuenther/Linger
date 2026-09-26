@@ -9,12 +9,26 @@ import { dmLabel } from "../../lib/dm";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
 import { microphoneLine } from "../../lib/voice";
 
+/** One person in voice, as the voice bar shows them. */
+export interface VoicePerson {
+  user: User;
+  speaking: boolean;
+  you: boolean;
+  /**
+   * Their microphone as their client shares it (VOICE-6): muted, deafened,
+   * or unknown when their client or server doesn't share it. Null when it's on.
+   */
+  controls: "muted" | "deafened" | "unknown" | null;
+  /** Trouble reaching them from here (VOICE-7), while you're both in voice. */
+  link: "connecting" | "unreachable" | null;
+}
+
 export interface VoiceModel {
   roomId: RoomId;
   /** "#general", or the DM's people. */
   where: string;
   /** Everyone in voice there, you included, in the order the server lists them. */
-  people: { user: User; speaking: boolean; you: boolean }[];
+  people: VoicePerson[];
   muted: boolean;
   deafened: boolean;
   pushToTalk: boolean;
@@ -33,15 +47,23 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>): 
   const room = state.rooms.find((held) => held.id === mine.roomId);
   const dm = state.dms.find((held) => held.id === mine.roomId);
   const where = room ? `#${room.name}` : dm ? dmLabel(dm, state.users, me.id) : "a room";
-  const ids = new Set(voicePeersIn(state, mine.roomId).map((peer) => peer.user_id));
+  const peers = voicePeersIn(state, mine.roomId);
+  const ids = new Set(peers.map((peer) => peer.user_id));
   ids.add(me.id);
   const people = state.users
     .filter((user) => ids.has(user.id))
-    .map((user) => ({
-      user,
-      you: user.id === me.id,
-      speaking: user.id === me.id ? mine.talking : speaking.has(user.id),
-    }));
+    .map((user): VoicePerson => {
+      const you = user.id === me.id;
+      // Somebody on two computers is two peers; the first one speaks for them.
+      const peer = peers.find((one) => one.user_id === user.id);
+      return {
+        user,
+        you,
+        speaking: you ? mine.talking : speaking.has(user.id),
+        controls: you ? controlsOf(mine) : peer?.controls === undefined ? "unknown" : controlsOf(peer.controls),
+        link: you || !peer ? null : linkOf(mine.peers[peer.session_id]),
+      };
+    });
   return {
     roomId: mine.roomId,
     where,
@@ -64,4 +86,15 @@ export function talkingNow(state: GatewayState): ReadonlySet<string> {
     .map(([session]) => bySession.get(session))
     .filter((id): id is string => id !== undefined);
   return new Set(ids);
+}
+
+function controlsOf(controls: { muted: boolean; deafened: boolean }): VoicePerson["controls"] {
+  return controls.deafened ? "deafened" : controls.muted ? "muted" : null;
+}
+
+/** A peer connection's state (the core's words) as trouble worth saying, if any. */
+function linkOf(state: string | undefined): VoicePerson["link"] {
+  if (state === "new" || state === "connecting") return "connecting";
+  if (state === "failed" || state === "disconnected") return "unreachable";
+  return null;
 }

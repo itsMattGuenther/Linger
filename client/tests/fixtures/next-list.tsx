@@ -28,6 +28,8 @@ import { NOW, SERVER, SERVER_NAME, evening, people } from "./next/evening";
 import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk.
+// `&mics`: Jules deafened and out of reach, Eli on a client that doesn't
+// share its microphone (VOICE-6, VOICE-7).
 const query = new URLSearchParams(location.search);
 // `?away`: you're away already, so the top card offers "I'm back".
 const night = evening(serverState(SERVER));
@@ -40,7 +42,14 @@ const base = query.has("away")
 const state = query.has("voice")
   ? {
       ...base,
-      voice: { "r-general": [...(base.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id }] },
+      voice: {
+        "r-general": [
+          ...(base.voice["r-general"] ?? []).map((peer) =>
+            query.has("mics") ? { session_id: peer.session_id, user_id: peer.user_id, controls: peer.user_id === people.jules.id ? { muted: true, deafened: true } : undefined } : peer,
+          ),
+          { session_id: "s-matt", user_id: people.matt.id },
+        ],
+      },
       myVoice: {
         roomId: "r-general",
         muted: query.has("ptt"),
@@ -49,7 +58,7 @@ const state = query.has("voice")
         pushToTalk: query.has("ptt"),
         moved: false,
         audio: "sending",
-        peers: {},
+        peers: query.has("mics") ? { "s-jules": "failed" } : {},
         speaking: { "s-eli": true },
         talking: false,
         volumes: {},

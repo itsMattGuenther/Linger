@@ -158,6 +158,14 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   expect(await did(page)).toContain("POST /dms as token-1");
 });
 
+test("the voice strip shows whose microphone is off, as its glyph", async ({ page }) => {
+  await open(page, "room=r-general&ptt");
+  const here = page.getByRole("list", { name: "In voice here" });
+  // Push-to-talk keeps you muted until you talk.
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+  await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveCount(0);
+});
+
 test("a message is drawn in its sender's message face, and only ever a sans one", async ({ page }) => {
   await open(page);
   const text = page.locator(".nx-msg").filter({ hasText: "A bit of Khruangbin" }).locator(".nx-text");

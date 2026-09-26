@@ -65,8 +65,7 @@ What's left, biggest first:
   uploads, formatting (bold, code, quotes), mentions, "Back to the newest",
   letting go of old history, drag-and-drop and paste. They count once they
   have a test.
-- **Smaller pieces still missing:** the voice bar doesn't show who else is
-  muted, or whose connection is struggling (VOICE-6, VOICE-7). Also missing: a per-server own window
+- **Smaller pieces still missing:** a per-server own window
   (MULTI-7), forced-colors mode (A11Y-6), evening warmth (LOOK-2), the update
   check at launch (UPD-1), a download that says where it went and offers a
   retry (FILE-6).
@@ -386,8 +385,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-3 | Voice survives reading another room, a destination or Settings. Only Leave, moving, quitting or losing the network ends it. | `voice/VoiceAway.tsx`, SPEC §5.6 | It also survives closing the room's tab or window; the voice bar lives in the list | F (tabs and windows) + D | 🟡 voice lives in the list; no test that closing a tab keeps it |
 | VOICE-4 | Mute and deafen: deafen also mutes; undeafen restores the earlier mic choice. Changes are queued so a quick click or push-to-talk edge never announces a mute that wasn't applied. | `lib/gateway.ts` `changeVoiceControls` | Same | C | ✅ (lib/gateway.voice.test.ts, next-list.spec.ts) |
 | VOICE-5 | Who's talking is shown without moving anything. | `voice/VoiceBar.tsx` (turned-over block, #138) | **Decision 7** | G (no geometry change) | ⏸ decision 7; a highlight is built |
-| VOICE-6 | Shared mute/deafen state: the control's own glyph beside the name, with the word for screen readers. An older client or server "does not share voice controls". | `VoiceBar.tsx` | Same | F | ⬜ others' mute and deafen aren't shown |
-| VOICE-7 | Per-peer connection trouble: "connecting…" and "can't reach", one phrase centered on its person (#124). | `VoiceBar.tsx` | Same | G | ⬜ |
+| VOICE-6 | Shared mute/deafen state: the control's own glyph beside the name, with the word for screen readers. An older client or server "does not share voice controls". | `VoiceBar.tsx` | Same | F | ✅ as the control's glyph beside each name in the voice bar and the conversation's strip, the word for screen readers, and "mic state unknown" when a client or server doesn't share it (next-list.spec.ts, next-chat-window.spec.ts, voice.test.ts) |
+| VOICE-7 | Per-peer connection trouble: "connecting…" and "can't reach", one phrase centered on its person (#124). | `VoiceBar.tsx` | Same | G | 🟡 "connecting…" and "can't reach" beside the person in the voice bar (next-list.spec.ts, voice.test.ts); needs a real network that fails to prove |
 | VOICE-8 | Push-to-talk: off by default, starts every call muted, and opens the mic only while the key is held. It releases on a view change or lost focus, and works while Settings is open. | `lib/voice.ts`, `VoiceControls.tsx` | Key choice: **decision 6** | U + F | ✅ (share.test.ts, next-list.spec.ts, next-chat-window.spec.ts); the key is decision 6 |
 | VOICE-9 | Microphone and speakers chosen per computer, with the system default first. A missing remembered device is shown, marked, and falls back to the default. | Settings → Sound & Voice, `voice_devices` | Same | F + D | 🟡 Settings part done (next-settings.spec.ts); needs a desktop check |
 | VOICE-10 | Per-person volume from 0% to 200%, remembered per server and person, shared by that person's sessions; never sent anywhere. | `lib/voice.ts`, `VoiceBar.tsx` | Where it lives: **decision 8** | U + F | ⏸ decision 8 |

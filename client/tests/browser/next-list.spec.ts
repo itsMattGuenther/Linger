@@ -352,6 +352,28 @@ test("says in words what the markers show", async ({ page }) => {
   await expect(page.getByRole("button", { name: "#listening-room, one person in it" })).toBeVisible();
 });
 
+test.describe("who's muted, and who can't be reached", () => {
+  test("each person's shared microphone shows as its control's glyph, with the word for a screen reader", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice&ptt&mics");
+    const who = page.getByRole("list", { name: "Who's in voice" });
+    const jules = who.getByRole("listitem").filter({ hasText: "Jules" });
+    await expect(jules.locator(".k-chip-state")).toHaveText("Deafened");
+    await expect(jules).toContainText("can't reach");
+    // An older client or server doesn't share it: said, not guessed.
+    const eli = who.getByRole("listitem").filter({ hasText: "Eli" });
+    await expect(eli).toContainText("mic state unknown");
+    await expect(eli.locator(".k-chip-state")).toHaveCount(0);
+    // Yours, from your own controls: push-to-talk keeps you muted until you talk.
+    await expect(who.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+  });
+
+  test("nothing shows while everyone's on and reachable", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const who = page.getByRole("list", { name: "Who's in voice" });
+    await expect(who.locator(".k-chip-state, .k-chip-note")).toHaveCount(0);
+  });
+});
+
 test.describe("in voice", () => {
   test("the voice bar names the room, lights who is talking, and offers the three controls", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");

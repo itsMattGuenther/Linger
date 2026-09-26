@@ -21,6 +21,7 @@ import {
   tabModel,
   typingIn,
   voiceHere,
+  micsHere,
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
 import { voiceStrip } from "../../core/chat/voice";
@@ -516,7 +517,7 @@ function Conversations({ following }: { following: Following }) {
     return {
       id: paneId,
       header,
-      voice: { strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab), onJoin },
+      voice: { strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab), onJoin, mics: micsHere(state, room.id) },
       people,
       me: state.me,
       speaking: talking,

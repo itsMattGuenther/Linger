@@ -93,3 +93,26 @@ export function openingAt(state: GatewayState, roomId: RoomId): MessageId | null
   const newest = state.newest[roomId];
   return marker !== undefined && newest !== undefined && newest > marker ? marker : null;
 }
+
+/**
+ * Who in voice in a conversation has their microphone off, as their clients
+ * share it (VOICE-6), by user id; you, from your own controls when you're in
+ * voice there. Anyone not listed is on, or doesn't share it.
+ */
+export function micsHere(state: GatewayState, roomId: RoomId): ReadonlyMap<string, "muted" | "deafened"> {
+  const off = new Map<string, "muted" | "deafened">();
+  for (const peer of voicePeersIn(state, roomId)) {
+    const controls = peer.controls;
+    if (!controls || off.has(peer.user_id)) continue;
+    if (controls.deafened) off.set(peer.user_id, "deafened");
+    else if (controls.muted) off.set(peer.user_id, "muted");
+  }
+  const mine = state.myVoice;
+  const meId = state.me?.id;
+  if (mine && meId && mine.roomId === roomId) {
+    if (mine.deafened) off.set(meId, "deafened");
+    else if (mine.muted) off.set(meId, "muted");
+    else off.delete(meId);
+  }
+  return off;
+}

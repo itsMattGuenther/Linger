@@ -49,3 +49,17 @@ button.k-chip:hover .k-icon {
   font-size: var(--text-control);
   line-height: var(--control-sm);
 }
+
+/* A shared state, as its control's glyph: muted, deafened. */
+.k-chip-state {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-muted);
+}
+
+.k-chip-note {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  white-space: nowrap;
+}

@@ -407,6 +407,12 @@ A 24px pill for a picked person or thing. With `onRemove` the whole chip is
 the remove button ("Remove Eli"), so there is no tiny target inside a tiny
 chip. The text ends in "…".
 
+- `active` lights it in the lamp: that person is talking.
+- `state` draws a control's own glyph after the name, like muted or
+  deafened, with the word for screen readers. It comes after the name, so it
+  never moves it.
+- `note` is a faint word or two at the end: "connecting…", "can't reach".
+
 ### Card and Popover
 
 - **`Card`** is a raised block with a hairline edge. `tint` washes it faintly

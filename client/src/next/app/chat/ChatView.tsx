@@ -48,7 +48,7 @@ export interface ChatPane {
   id: string;
   header: PaneHeaderProps;
   /** Voice in this conversation, or null where there's none to offer. */
-  voice: { strip: VoiceStripModel; onJoin: () => void } | null;
+  voice: { strip: VoiceStripModel; onJoin: () => void; mics?: ReadonlyMap<string, "muted" | "deafened"> } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
   me: User | null;
@@ -181,7 +181,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={single ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
           {single ? null : <PaneHeader {...pane.header} />}
-          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} onJoin={pane.voice.onJoin} /> : null}
+          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} /> : null}
           <Conversation
             key={pane.id}
             id={pane.id}

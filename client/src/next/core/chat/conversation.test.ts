@@ -8,7 +8,7 @@ vi.mock("../../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { serverState } = await import("../../../lib/gateway");
-const { conversationIn, openingAt, tabModel, typingIn, voiceHere } = await import("./conversation");
+const { conversationIn, micsHere, openingAt, tabModel, typingIn, voiceHere } = await import("./conversation");
 
 const HOME = "https://home.example";
 const NOW = Date.parse("2026-09-25T22:52:00Z");
@@ -86,6 +86,23 @@ describe("what the chat window shows about a conversation", () => {
     expect(tabModel(tab("r-general"), mine, true, new Set())?.voice).toBe("mine");
     expect(voiceHere(state, "r-general")).toEqual(["u-eli"]);
     expect(voiceHere(state, "d-jules")).toEqual([]);
+  });
+
+  it("knows whose microphone is off in a conversation, yours from your own controls", () => {
+    const voice = {
+      "r-general": [
+        { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false } },
+        { session_id: "s-jules", user_id: "u-jules", controls: { muted: true, deafened: true } },
+        { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false } },
+      ],
+    };
+    const seat = { ...({} as NonNullable<GatewayState["myVoice"]>), roomId: "r-general", muted: true, deafened: false };
+    const state = evening({ voice, myVoice: seat });
+    expect(Object.fromEntries(micsHere(state, "r-general"))).toEqual({ "u-eli": "muted", "u-jules": "deafened", "u-matt": "muted" });
+    // Back on: gone from the list, whatever the server last heard.
+    const on = evening({ voice: { "r-general": [{ session_id: "s-matt", user_id: "u-matt", controls: { muted: true, deafened: false } }] }, myVoice: { ...seat, muted: false } });
+    expect(Object.fromEntries(micsHere(on, "r-general"))).toEqual({});
+    expect(Object.fromEntries(micsHere(state, "d-jules"))).toEqual({});
   });
 
   it("lists who's typing, without you, and forgets anyone gone quiet", () => {

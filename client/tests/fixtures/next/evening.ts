@@ -122,8 +122,9 @@ export function evening(empty: GatewayState): GatewayState {
     occupancy: { "r-general": ["u-matt", "u-eli", "u-jules"], "r-listening": ["u-dave"] },
     voice: {
       "r-general": [
-        { session_id: "s-eli", user_id: "u-eli" },
-        { session_id: "s-jules", user_id: "u-jules" },
+        // Today's server shares everyone's microphone (VOICE-6); both are on.
+        { session_id: "s-eli", user_id: "u-eli", controls: { muted: false, deafened: false } },
+        { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
       ],
     },
     // #general and the Eli/Sam DM are read; #listening-room, #weekend-plans

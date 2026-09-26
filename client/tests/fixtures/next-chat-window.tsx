@@ -27,7 +27,7 @@ import { serverState } from "../../src/lib/gateway";
 import { ChatWindow } from "../../src/next/app/chat/ChatWindow";
 import "../../src/next/styles/app.css";
 import { fakeDesktop, type Unnumbered } from "./next/desktop";
-import { SERVER, SERVER_NAME, evening } from "./next/evening";
+import { SERVER, SERVER_NAME, evening, people } from "./next/evening";
 import { GUILD, guild, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
@@ -52,6 +52,10 @@ const desktop = fakeDesktop({
   infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" }, [GUILD]: serverInfo[GUILD] },
   ownerState: {
     ...night,
+    // In voice, the server lists your own seat too.
+    voice: query.has("ptt")
+      ? { ...night.voice, "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: true, deafened: false } }] }
+      : night.voice,
     myVoice: query.has("ptt")
       ? {
           roomId: "r-general",
