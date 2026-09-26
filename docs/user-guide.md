@@ -254,7 +254,8 @@ Linger is one tall window: your **list**. From the top:
 - **You**: your name, where you are, and your status. Click the status to
   change it. **Away** sets an away message (more below).
 - **Rooms**: each with the dots of who's in it, and a speaker when people are
-  talking there. A room's name turns bold when something new is said.
+  talking there. A room's name turns bold when something new is said. On a
+  server with more than eight rooms, the quiet ones fold under **More rooms**.
 - **DMs**: your direct messages, named by who's in them. The pencil starts a
   new one.
 - **People**: everyone on the server, with where they are and their status.

@@ -250,13 +250,13 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | LIST-1 | Rooms show who's in them as a small stack of people, never a number. Sorted by name. | `App.tsx` rail stack, `lib/occupancy.ts` | Rooms section: dots of who's in, in a fixed marker column. | U + G | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-2 | A room or DM with something new changes weight only: no number, no dot, no color. The accessible name says it in words. | `App.tsx` rail, SPEC §4.2 | Same, for rooms, DMs, tabs and folded server headers | F + G | ✅ (next-list.spec.ts, next-servers.spec.ts) |
-| LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); quiet rooms folding past eight is to build (decision 22) |
+| LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); quiet rooms fold under More rooms past eight (list.test.ts, next-list.spec.ts "past eight rooms"; decision 22) |
 | LIST-4 | DMs are their own section, named by who's in them, never by a slug. | `lib/dm.ts`, SPEC §4.13 | Same, plus a new-message button (NEW-2) | C (dm.ts) + F | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-5 | Voice activity shows in the room list. | `App.tsx` rail | Moving sound bars on the room row | F + G | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | ✅ Media and Search at the foot of the list, each opening its own window (next-list-window.spec.ts, next-tool-window.spec.ts) |
 | LIST-7 | Every row's names line up: one marker column, fixed row heights for every name face, ellipsis instead of clipping. | new (lessons L-01 to L-06) | The design's rule | G (all 12 faces, both marker counts) | ✅ (kit.spec.ts, next-list.spec.ts, next-servers.spec.ts) |
 | LIST-8 | Room names are the same color: no amber `#` for open rooms (Matt, 2026-09-25). | new | Rule | G | ✅ (next-list.spec.ts) |
-| LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | 🟡 only "No DMs yet" (next-list.spec.ts); the other one-liners are to build (decision 17) |
+| LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | ✅ one quiet line in each empty place, with Make the first room and Invite people for the host (next-list.spec.ts "a brand-new server"; decision 17) |
 | LIST-10 | Your own card: your styled name, where you are, your status, and Away. | rail footer (#171 removed "you") | Top of the list; no avatar | F + G | ✅ (next-list.spec.ts) |
 
 ## CONV — reading a conversation

@@ -10,7 +10,8 @@ vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { serverState } = await import("../../lib/gateway");
-const { listModel } = await import("./list");
+const { listModel, splitRooms } = await import("./list");
+type RoomRow = import("./list").RoomRow;
 
 const NOW = Date.parse("2026-09-25T22:52:00Z");
 const HOUR = 3_600_000;
@@ -164,3 +165,33 @@ describe("the buddy list for one server", () => {
     expect(model).toEqual({ me: null, rooms: [], dms: [], people: { here: [], away: [], offline: [] } });
   });
 });
+
+describe("a long room list", () => {
+  const room = (id: string, busy: Partial<{ fresh: boolean; voice: boolean; people: number }> = {}): RoomRow => ({
+    id,
+    name: id,
+    fresh: busy.fresh ?? false,
+    voice: busy.voice ?? false,
+    people: Array.from({ length: busy.people ?? 0 }, (_, n) => ({ id: `u${n}` }) as User),
+  });
+
+  it("shows every room up to eight", () => {
+    const rooms = Array.from({ length: 8 }, (_, n) => room(`r${n}`));
+    expect(splitRooms(rooms)).toEqual({ shown: rooms, more: [] });
+  });
+
+  it("past eight, folds the quiet ones, keeps anything going on, and keeps the host's order", () => {
+    const rooms = Array.from({ length: 15 }, (_, n) =>
+      room(`r${n}`, n === 12 ? { people: 2 } : n === 13 ? { fresh: true } : n === 14 ? { voice: true } : {}),
+    );
+    const { shown, more } = splitRooms(rooms);
+    expect(shown.map((one) => one.id)).toEqual(["r0", "r1", "r2", "r3", "r4", "r12", "r13", "r14"]);
+    expect(more.map((one) => one.id)).toEqual(["r5", "r6", "r7", "r8", "r9", "r10", "r11"]);
+  });
+
+  it("never hides a busy room, even past eight busy ones", () => {
+    const rooms = Array.from({ length: 10 }, (_, n) => room(`r${n}`, { people: 1 }));
+    expect(splitRooms(rooms).more).toEqual([]);
+  });
+});
+

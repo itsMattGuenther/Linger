@@ -33,6 +33,20 @@
   gap: var(--space-1-5);
 }
 
+/* An empty place: its line, and the host's button under it, on the same
+   edge as the line's words (decision 17). */
+.nx-list-empty-place {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-bottom: var(--space-1);
+}
+
+.nx-list-empty-action {
+  display: block;
+  padding-left: calc(var(--space-1-5) + var(--space-2-5) + var(--marker-slot) + var(--marker-gap));
+}
+
 /* A section with nothing in it yet says so, quietly, in the row's place. */
 .nx-list-empty {
   margin: 0;

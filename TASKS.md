@@ -423,7 +423,7 @@ Rules for this milestone:
   and cleared when sent.
 - ⬜ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
   desktop notification opens that room or DM in the chat window, at the message.
-- ⬜ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
+- ✅ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
   no rooms (with "Make the first room" for the host), nobody else here, an
   empty search and an empty media collection.
 - ⬜ **T-1817 · Arrival cards** — decision 13. "Callie came into #general", on by
@@ -433,7 +433,7 @@ Rules for this milestone:
   somebody arrives, off by default, at most once per 5 minutes per listener and
   quiet in quiet hours: the first step toward personal entrance sounds
   (T-901…T-903), which later replace it.
-- ⬜ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
+- ✅ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
   the ones with nobody in them and nothing new fold under "More rooms", in the
   host's order, with no number.
 - ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The

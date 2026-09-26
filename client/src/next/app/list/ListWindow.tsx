@@ -395,6 +395,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
             onMessage: (user) => void messageWith(api, user),
             onKnock: (user) => knockOn(api, user.id),
             onStartDm: (people) => startDm(api, people),
+            onHost: (section) => shell.settings(section),
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
           },
         ];
