@@ -850,10 +850,14 @@ above stays for clients and servers that don't.
   When somebody joins or leaves, everybody else gets a new offer, whole. Only one offer
   is out per session at a time: a change while one is out waits for its `voice.answer`.
   Two offers can never cross.
-- **ICE-lite, one address.** The server's offer carries one host candidate, the public
+- **Full ICE, one address.** The server's offer carries one host candidate, the public
   address in `LINGER_VOICE_ADDRESS`, on one UDP port (3479 by default) that carries every
-  voice connection. The client needs no candidates from the server and sends none; a
-  client that can't reach UDP goes through the TURN relay to that address.
+  voice connection. The client needs no candidates from the server and sends none: the
+  server learns where a client is from the checks that client sends, and a client that
+  can't reach UDP goes through the TURN relay to that address. The server checks each
+  connection itself every few seconds. It is not ICE-lite, which would count a connection
+  alive only while the client sends checks, and a client's WebRTC stack may send none while
+  voice flows both ways (#210).
 - **What the server sees.** Voice is encrypted on the wire (DTLS-SRTP) but each hop ends
   at the server, which forwards packets without decoding them. It stores nothing. It
   could, in principle, listen: SPEC §4.14 says so, and #200 is the layer that would stop it.

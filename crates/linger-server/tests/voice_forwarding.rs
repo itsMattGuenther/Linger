@@ -132,7 +132,8 @@ async fn a_client_that_can_forward_is_offered_the_server_and_each_offer_names_th
         "nobody else is there yet"
     );
     let sdp = first[0]["d"]["sdp"].as_str().unwrap();
-    assert!(sdp.contains("a=ice-lite"), "the server is ICE-lite");
+    // Full ICE: an ICE-lite server dropped connections carrying voice both ways (#210).
+    assert!(!sdp.contains("a=ice-lite"), "the server runs full ICE");
     assert!(
         sdp.contains("127.0.0.1"),
         "the offer names where to send voice"

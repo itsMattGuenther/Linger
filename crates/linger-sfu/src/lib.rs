@@ -17,10 +17,10 @@
 //!   person already there; the others get a new offer with one more m-line. The
 //!   client only ever answers, so two offers can never cross. `Offer::tracks`
 //!   says whose voice each receiving m-line carries.
-//! - **ICE-lite, with one host candidate**: the address clients reach the
-//!   server at. The server never needs a client's candidates; it answers the
-//!   connectivity checks that arrive, from wherever they come (a TURN relay
-//!   included).
+//! - **Full ICE, with one host candidate**: the address clients reach the
+//!   server at. The server never needs a client's candidates; it learns them
+//!   from the connectivity checks that arrive, from wherever they come (a TURN
+//!   relay included), and checks each connection itself from then on (#210).
 //! - **Audio only, Opus only**, forwarded packet by packet with nothing decoded.
 //!
 //! Everything runs on one thread with a blocking socket, the shape `str0m`'s
@@ -38,7 +38,7 @@ use str0m::change::{SdpAnswer, SdpPendingOffer};
 use str0m::crypto::{from_feature_flags, CryptoProvider};
 use str0m::media::{Direction, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
-use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc};
+use str0m::{Candidate, Event, Input, Output, Rtc};
 
 /// The longest the loop waits on the socket before looking at its commands
 /// again, so a join or an answer never waits behind a quiet room.
@@ -317,8 +317,13 @@ impl Hub<'_> {
 
     fn join(&mut self, session: String, room: String) {
         self.remove(&session);
+        // Full ICE, not ICE-lite (#210). An ICE-lite agent keeps a
+        // connection only while the other side sends it STUN checks, and the
+        // app's WebRTC stack sends those only when the line goes quiet: with
+        // voice both ways, the server dropped everyone about 15 seconds in.
+        // A full agent checks the app itself, every few seconds.
         let mut rtc = Rtc::builder()
-            .set_ice_lite(true)
+            .set_ice_lite(false)
             .set_crypto_provider(Arc::clone(self.crypto))
             .clear_codecs()
             .enable_opus(true, false)
@@ -427,11 +432,6 @@ fn run(
                         if Some(data.mid) == client.mic {
                             heard.push((client.session.clone(), client.room.clone(), data));
                         }
-                    }
-                    Ok(Output::Event(Event::IceConnectionStateChange(
-                        IceConnectionState::Disconnected,
-                    ))) => {
-                        client.rtc.disconnect();
                     }
                     Ok(Output::Event(_)) => {}
                     Err(error) => {
