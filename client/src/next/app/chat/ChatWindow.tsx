@@ -9,7 +9,7 @@ import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
 import { openExternal } from "../../../lib/external";
-import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, serverState, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
+import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, noteDm, serverState, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
@@ -31,6 +31,9 @@ import { MODE, type ModeMessage, OPENS, type OpensAnswer } from "../../core/shar
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { Button, markerOf, Spinner, type TabItem } from "../../kit";
+import { knockOn } from "../../core/knock";
+import { personRow } from "../../core/list";
+import { PersonCard } from "../list/PersonCard";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
@@ -143,11 +146,8 @@ function Conversations({ following }: { following: Following }) {
   // Opened from the list while this window is already open (window.rs,
   // `next_open_chat`). Once listening, the tabs window asks the list window
   // for anything it was sent before it was (OPENS in core/share.ts).
-  useEffect(() => {
-    if (!isTauri()) return;
-    let stop: (() => void) | null = null;
-    let gone = false;
-    const opened = (server: string, roomId: string) => {
+  const opened = useCallback(
+    (server: string, roomId: string) => {
       if (!apis.has(server)) return;
       const tab = { server, roomId };
       const state = serverState(server);
@@ -158,7 +158,13 @@ function Conversations({ following }: { following: Following }) {
       const store = handoffStore();
       const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
       if (text !== null) setSeed({ conversation: keyOf(tab), text });
-    };
+    },
+    [apis],
+  );
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
     const bus = tauriBus();
     void bus
       .listen<{ server: string; room: string }>("next:open", ({ server, room }) => opened(server, room))
@@ -181,7 +187,7 @@ function Conversations({ following }: { following: Following }) {
       gone = true;
       stop?.();
     };
-  }, [apis]);
+  }, [opened]);
 
   // A server signed out of takes its tabs with it; with none left, the
   // window closes.
@@ -442,7 +448,25 @@ function Conversations({ following }: { following: Following }) {
     },
     [api],
   );
-  const actions = useMemo(() => ({ save, remove, openLink: openExternal, download, wantCards }), [save, remove, download, wantCards]);
+  // A name in a conversation opens that person's card (PPL-6), the same card
+  // the list shows, beside the name.
+  const [card, setCard] = useState<{ server: string; userId: string; anchor: { top: number; bottom: number; left: number } } | null>(null);
+  // The name that opened it gets the keyboard back when it closes.
+  const cardOpener = useRef<HTMLElement | null>(null);
+  const openPerson = useCallback((user: User, anchor: { top: number; bottom: number; left: number }) => {
+    const showing = tabsNow.current.active;
+    if (!showing) return;
+    cardOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setCard({ server: showing.server, userId: user.id, anchor });
+  }, []);
+  const closeCard = useCallback(() => {
+    setCard(null);
+    if (cardOpener.current?.isConnected) cardOpener.current.focus();
+  }, []);
+  const actions = useMemo(
+    () => ({ save, remove, openLink: openExternal, download, wantCards, openPerson }),
+    [save, remove, download, wantCards, openPerson],
+  );
 
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
   const onTyping = useCallback(() => {
@@ -518,29 +542,63 @@ function Conversations({ following }: { following: Following }) {
     };
   })();
 
+  const cardState = card ? servers[card.server] : undefined;
+  const cardRow = card && cardState ? personRow(cardState, card.userId, now) : null;
+  const messageFromCard = async (server: string, user: User) => {
+    const cardApi = apis.get(server);
+    if (!cardApi) return;
+    try {
+      // The server finds the DM you already have, or makes it (SPEC §4.13).
+      const dm = await cardApi.openDm([user.id]);
+      noteDm(server, dm);
+      setCard(null);
+      if (SINGLE) void intend({ kind: "open", server, roomId: dm.id, conversation: "dm" }).catch(() => undefined);
+      else opened(server, dm.id);
+    } catch (error: unknown) {
+      console.error("could not open a DM", error);
+    }
+  };
+
   if (empty) return null;
 
   return (
-    <ChatView
-      tabs={items}
-      activeId={paneId}
-      onSelectTab={(id) => {
-        const tab = find(id);
-        if (tab) setTabs((held) => selectTab(held, tab));
-      }}
-      onCloseTab={(id) => {
-        const tab = find(id);
-        if (tab) setTabs((held) => closeTab(held, tab));
-      }}
-      onMoveTab={(id, to) => {
-        const tab = find(id);
-        if (tab) setTabs((held) => moveTab(held, tab, to));
-      }}
-      onPopOut={SINGLE ? undefined : popOut}
-      single={SINGLE ? { onBackToTabs: backToTabs } : undefined}
-      onCloseWindow={isTauri() ? closeWindow : undefined}
-      pane={pane}
-    />
+    <>
+      <ChatView
+        tabs={items}
+        activeId={paneId}
+        onSelectTab={(id) => {
+          const tab = find(id);
+          if (tab) setTabs((held) => selectTab(held, tab));
+        }}
+        onCloseTab={(id) => {
+          const tab = find(id);
+          if (tab) setTabs((held) => closeTab(held, tab));
+        }}
+        onMoveTab={(id, to) => {
+          const tab = find(id);
+          if (tab) setTabs((held) => moveTab(held, tab, to));
+        }}
+        onPopOut={SINGLE ? undefined : popOut}
+        single={SINGLE ? { onBackToTabs: backToTabs } : undefined}
+        onCloseWindow={isTauri() ? closeWindow : undefined}
+        pane={pane}
+      />
+      {card && cardRow ? (
+        <PersonCard
+          key={`${card.server} ${card.userId}`}
+          user={cardRow.user}
+          state={cardRow.state}
+          note={cardRow.note}
+          anchor={card.anchor}
+          onMessage={() => void messageFromCard(card.server, cardRow.user)}
+          onKnock={() => {
+            const cardApi = apis.get(card.server);
+            return cardApi ? knockOn(cardApi, cardRow.user.id) : Promise.resolve({ ok: false, problem: "You're not signed in to that server any more." });
+          }}
+          onClose={closeCard}
+        />
+      ) : null}
+    </>
   );
 }
 

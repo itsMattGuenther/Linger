@@ -593,6 +593,35 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a window asking to show a conversation gets it where conversations open, even a DM this window hasn't heard of", async () => {
+    const { owner, viewer, core } = await windows("chat-5f1e");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const opened: string[] = [];
+    const items = new Map<string, string>();
+    const store = { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) };
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      opener: {
+        chat: (_server, roomId) => opened.push(`tabs ${roomId}`),
+        conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
+        settings: () => undefined,
+      },
+      store,
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm" });
+    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new"]));
+    items.set("linger.next.conversations", "windows");
+    await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm" });
+    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new", "own d-new dm"]));
+    // A server this computer isn't signed in to opens nothing.
+    await follower.intend({ kind: "open", server: "https://elsewhere.example", roomId: "d-new", conversation: "dm" });
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(opened).toHaveLength(2);
+    follower.stop();
+  });
+
   it("tells which servers were signed out of between two lists", () => {
     return import("./share").then(({ leftOut }) => {
       expect(leftOut(["a", "b", "c"], ["c", "a"])).toEqual(["b"]);

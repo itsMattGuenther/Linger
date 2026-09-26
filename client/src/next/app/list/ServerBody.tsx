@@ -6,7 +6,8 @@ import { IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph
 import { markerFor } from "../markers";
 import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
-import { type KnockResult, PersonCard } from "./PersonCard";
+import type { KnockResult } from "../../core/knock";
+import { PersonCard } from "./PersonCard";
 
 /** What one server's part of the list can do. */
 export interface ServerBodyActions {

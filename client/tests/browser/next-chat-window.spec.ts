@@ -119,6 +119,45 @@ test("a conversation opened from the list gets a tab, and the cursor", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(2);
 });
 
+test("a name in a conversation opens that person's card beside it; Escape gives the name the keyboard back", async ({ page }) => {
+  await open(page);
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  await name.click();
+  const card = page.getByRole("dialog", { name: "Eli" });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("in #general");
+  // Beside the name: just under it, starting where it starts (or pulled in
+  // from the window's edge). Measured once it has finished opening.
+  await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
+  const [at, from] = await Promise.all([card.boundingBox(), name.boundingBox()]);
+  expect(at && from).toBeTruthy();
+  if (!at || !from) return;
+  expect(Math.abs(at.x - from.x)).toBeLessThanOrEqual(1);
+  const under = Math.abs(at.y - (from.y + from.height + 4));
+  const over = Math.abs(at.y + at.height - (from.y - 4));
+  expect(Math.min(under, over), `card at ${at.y}–${at.y + at.height}, name at ${from.y}–${from.y + from.height}`).toBeLessThanOrEqual(1);
+  await expect.poll(() => card.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(name).toBeFocused();
+  // Your own name, and a name only drawn once for a run of messages, open nothing.
+  await expect(page.locator(".nx-msg-person", { hasText: "Matt" })).toHaveCount(0);
+  await expect(page.locator(".nx-msg:not([data-head='yes']) .nx-msg-person")).toHaveCount(0);
+});
+
+test("from a name's card, Message opens the DM here and Knock knocks", async ({ page }) => {
+  await open(page);
+  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const card = page.getByRole("dialog", { name: "Eli" });
+  await card.getByRole("button", { name: "Knock" }).click();
+  await expect(card.getByRole("button", { name: "Knocked" })).toBeVisible();
+  await expect.poll(() => did(page)).toContain("POST /knock as token-1");
+  await card.getByRole("button", { name: "Message" }).click();
+  await expect(page.getByRole("tab", { name: "DM with Eli" })).toHaveAttribute("aria-selected", "true");
+  await expect(card).toHaveCount(0);
+  expect(await did(page)).toContain("POST /dms as token-1");
+});
+
 test("a message is drawn in its sender's message face, and only ever a sans one", async ({ page }) => {
   await open(page);
   const text = page.locator(".nx-msg").filter({ hasText: "A bit of Khruangbin" }).locator(".nx-text");

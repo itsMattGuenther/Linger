@@ -65,9 +65,8 @@ What's left, biggest first:
   uploads, formatting (bold, code, quotes), mentions, "Back to the newest",
   letting go of old history, drag-and-drop and paste. They count once they
   have a test.
-- **Smaller pieces still missing:** a name in a conversation doesn't open the
-  person card (PPL-6). The voice bar doesn't show who else is muted, or whose connection
-  is struggling (VOICE-6, VOICE-7). Also missing: a per-server own window
+- **Smaller pieces still missing:** the voice bar doesn't show who else is
+  muted, or whose connection is struggling (VOICE-6, VOICE-7). Also missing: a per-server own window
   (MULTI-7), forced-colors mode (A11Y-6), evening warmth (LOOK-2), the update
   check at launch (UPD-1), a download that says where it went and offers a
   retry (FILE-6), and knocking from a row (KNOCK-1).
@@ -329,7 +328,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | PPL-3 | Focusing the app on a room puts you in it. Backgrounding the app, or 90 seconds idle, takes you out. `room.focus`/`idle`/`away` are sent per server. | `lib/watchPresence.ts` | The visible tab of the focused chat window, or the focused conversation window | U + F | ✅ (report.test.ts, showing.test.ts, share.test.ts) |
 | PPL-4 | "Last here …" for offline people; "away 20m" counts from the server's `away_since`. | `roster.ts` | A faint note on the row | U | 🟡 "last here" done (list.test.ts); no "away 20m" |
 | PPL-5 | Clicking or right-clicking a name opens a person card: status in their own styling, reading/listening/working, where they are, Message and Knock. Escape or an outside click closes it and returns focus. | `RosterPanel.tsx`, `status/PersonName.tsx`, `StatusCard.tsx` | Person card beside the list; Enter opens it; double-click opens a DM | F + G | ✅ (next-list.spec.ts) |
-| PPL-6 | A name in the stream opens the same card, drawn in a portal so the virtualized list can't clip it. | `status/PersonName.tsx` | Same | F | ⬜ a name in a conversation doesn't open the card |
+| PPL-6 | A name in the stream opens the same card, drawn in a portal so the virtualized list can't clip it. | `status/PersonName.tsx` | Same | F | ✅ the name heading a run of messages opens the same card beside it, drawn outside the scrolling list; Message opens the DM, Knock knocks (next-chat-window.spec.ts) |
 | PPL-7 | Status editor: one line (240), reading/listening/working (80 each), an image (512 KB, shown at 400×200), and an away message. Local preview before save, and the draft survives layout changes. | `status/StatusEditor.tsx`, `status.ts` | Your card's status field plus Settings → Profile | U (exists) + F | ✅ (you.test.ts, next-list.spec.ts, next-settings.spec.ts) |
 | PPL-8 | Save order: `PATCH /me` first, then going away on the wire (leave the room, then say away). | `StatusEditor.tsx` | Same | C + U | 🟡 away goes through the list (share.test.ts); the save order is untested |
 | PPL-9 | Typing an away message makes you away; clearing it makes you back. | `StatusEditor.tsx` | An AIM-style editor with saved presets. Away everywhere with a checkbox per server: **decision 14**. | F | ✅ (next-servers.spec.ts, next-list.spec.ts); built one way for decision 14 |

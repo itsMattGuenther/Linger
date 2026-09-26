@@ -154,6 +154,8 @@ export type Intent =
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
   | { kind: "tabs"; server: string; roomId: RoomId }
+  /** Show a conversation where conversations open (tabs or its own window), as the list would. */
+  | { kind: "open"; server: string; roomId: RoomId; conversation: "room" | "dm" }
   /** Settings changed how conversations open: every window rearranges itself. */
   | { kind: "conversations"; mode: ConversationsMode }
   /** Open Settings (Ctrl+, in any window), on a section if one is named. */
@@ -427,6 +429,14 @@ export async function shareAsOwner(
           return;
         case "tabs":
           if (sessions().has(intent.server)) toTabs(intent.server, intent.roomId);
+          return;
+        case "open":
+          // A DM made a moment ago may not have reached this window yet, so
+          // the asking window says which kind it is.
+          if (!sessions().has(intent.server)) return;
+          if (loadMode(store) === "windows" || ownWindow(intent.server, intent.roomId)) {
+            opener?.conversation(intent.server, intent.roomId, intent.conversation === "dm" ? "dm" : "room");
+          } else toTabs(intent.server, intent.roomId);
           return;
         case "settings":
           opener?.settings(typeof intent.section === "string" ? intent.section : undefined);

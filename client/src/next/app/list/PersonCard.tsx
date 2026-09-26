@@ -3,19 +3,22 @@ import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { paletteKey } from "../../../lib/names";
 import { Button, Marker, MARKER_WORDS, markerStateOf, Name, Popover } from "../../kit";
+import type { KnockResult } from "../../core/knock";
 import { markerFor } from "../markers";
 import "./PersonCard.css";
 
-/** How a knock went, for the button's words (SPEC §4.9). */
-export type KnockResult = { ok: true } | { ok: false; problem: string };
 
 export interface PersonCardProps {
   user: User;
   state: PresenceState;
   /** Where they are, said plainly: "in #general", "last here 2d". */
   note: string;
-  /** The row that opened it, in window coordinates: the card sits just under it, or just over it if there's no room below. */
-  anchor: { top: number; bottom: number };
+  /**
+   * What opened it, in window coordinates: the card sits just under it, or
+   * just over it if there's no room below. Centred across the window (the
+   * narrow list), or from `left` when given (a name in a wide conversation).
+   */
+  anchor: { top: number; bottom: number; left?: number };
   onMessage: () => void;
   onKnock: () => Promise<KnockResult>;
   onClose: () => void;
@@ -26,7 +29,8 @@ export interface PersonCardProps {
  * buddy list"): their status in full, where they are, and the two things you
  * can do, Message and Knock. It opens inside the list window, under the row,
  * because the list is its own narrow window and a card beside it would be cut
- * off at the window's edge.
+ * off at the window's edge. A name in a conversation opens the same card
+ * (PPL-6).
  */
 /** Space kept between the card, its row and the window's edges. */
 const GAP = 4;
@@ -45,9 +49,12 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
     const { offsetWidth: width, offsetHeight: height } = card;
     const below = anchor.bottom + GAP;
     const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
-    const x = Math.max(EDGE, Math.round((window.innerWidth - width) / 2));
+    const x =
+      anchor.left === undefined
+        ? Math.max(EDGE, Math.round((window.innerWidth - width) / 2))
+        : Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
     setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
-  }, [anchor.top, anchor.bottom]);
+  }, [anchor.top, anchor.bottom, anchor.left]);
   const [phase, setPhase] = useState<"idle" | "knocking" | "knocked">("idle");
   const [problem, setProblem] = useState<string | null>(null);
 

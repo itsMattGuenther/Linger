@@ -194,6 +194,9 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   key);
 - `popout` and `tabs`: move a conversation into a window of its own, or back
   into the chat window's tabs (only the owner opens windows);
+- `open`: show a conversation where conversations open, from a window of its
+  own (Message on a person's card). It says whether it's a room or a DM, since
+  a DM made a moment ago may not have reached the owner yet;
 - `conversations`: tabs or windows, from Settings;
 - `settings`: open Settings (Ctrl+, in any window), on a section;
 - `away`: you went away or came back from Settings (presence is the owner's);

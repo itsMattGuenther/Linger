@@ -59,6 +59,28 @@
   line-height: var(--line-body);
 }
 
+/* A name opens its person's card (PPL-6): the name as drawn, nothing added
+   until it has the keyboard. */
+.nx-msg-person {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.nx-msg-person:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
 .nx-msg:not([data-head="yes"]) .nx-msg-who {
   visibility: hidden;
 }

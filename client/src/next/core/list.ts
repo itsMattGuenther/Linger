@@ -161,3 +161,13 @@ function noteFor(entry: RosterEntry, now: number): string {
       return entry.seenAt === null ? "offline" : `last here ${shortAgo(entry.seenAt, now)}`;
   }
 }
+
+/**
+ * One person as their row in the list shows them, for their card opened from
+ * anywhere else (a name in a conversation, PPL-6): the same note, the same
+ * words. Null for you, or for somebody this server doesn't list.
+ */
+export function personRow(state: GatewayState, userId: string, now: number): PersonRow | null {
+  const { people } = listModel(state, now);
+  return [...people.here, ...people.away, ...people.offline].find((row) => row.user.id === userId) ?? null;
+}

@@ -30,6 +30,8 @@ export interface MessageActions {
   download: (file: Attachment) => void;
   /** This row's links are on screen: ask the server about them, for their cards. */
   wantCards?: (urls: readonly string[]) => void;
+  /** Open the card of whoever a name belongs to, beside the name (PPL-6). */
+  openPerson?: (user: User, anchor: { top: number; bottom: number; left: number }) => void;
 }
 
 /**
@@ -163,7 +165,23 @@ export const MessageRow = memo(function MessageRow({
       {reply ? <Quote target={quoted} author={quotedAuthor} onJump={actions.jumpTo} /> : null}
 
       <span className="nx-msg-who" aria-hidden={head ? undefined : true}>
-        {author ? <Name person={author} size="body" /> : <span className="nx-msg-someone">someone</span>}
+        {author && head && actions.openPerson && author.id !== me?.id ? (
+          <button
+            type="button"
+            className="nx-msg-person"
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              const box = event.currentTarget.getBoundingClientRect();
+              actions.openPerson?.(author, { top: box.top, bottom: box.bottom, left: box.left });
+            }}
+          >
+            <Name person={author} size="body" />
+          </button>
+        ) : author ? (
+          <Name person={author} size="body" />
+        ) : (
+          <span className="nx-msg-someone">someone</span>
+        )}
         <span className="nx-msg-colon">:</span>
       </span>
 

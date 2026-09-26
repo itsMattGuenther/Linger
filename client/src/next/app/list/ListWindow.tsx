@@ -43,6 +43,7 @@ import {
   shareAsOwner,
   type WindowOpener,
 } from "../../core/share";
+import { knockOn } from "../../core/knock";
 import { signInActions } from "../../core/signin";
 import { Spinner } from "../../kit";
 import { SignInView } from "../signin/SignInView";
@@ -51,7 +52,6 @@ import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type KnockCard, KnockCards } from "./KnockCards";
-import type { KnockResult } from "./PersonCard";
 import type { VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { ServerInfo } from "../../../generated/ServerInfo";
@@ -329,7 +329,7 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
             onOpenRoom: (room) => openChat(baseUrl, room),
             onOpenDm: (room) => openChat(baseUrl, room),
             onMessage: (user) => void messageWith(api, user),
-            onKnock: (user) => knock(api, user),
+            onKnock: (user) => knockOn(api, user.id),
             onStartDm: (people) => startDm(api, people),
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
           },
@@ -494,22 +494,6 @@ async function startDm(api: ServerSession["api"], people: User[]): Promise<strin
     return null;
   } catch (error: unknown) {
     return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't open the DM.";
-  }
-}
-
-/** Knock, and say plainly what happened (SPEC §4.9), in today's client's words. */
-async function knock(api: ServerSession["api"], user: User): Promise<KnockResult> {
-  try {
-    await api.knock(user.id);
-    return { ok: true };
-  } catch (error: unknown) {
-    const problem =
-      error instanceof ApiError && error.code === "RATE_LIMITED"
-        ? "That's three this hour. Give them a bit."
-        : error instanceof ApiError || error instanceof TransportError
-          ? error.message
-          : "Couldn't knock.";
-    return { ok: false, problem };
   }
 }
 

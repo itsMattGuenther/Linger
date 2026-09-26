@@ -46,8 +46,10 @@ export interface Desktop {
   deliver: (event: string, payload: unknown) => void;
   /** A gateway frame, numbered after the owner's snapshot. */
   frame: (frame: Unnumbered) => void;
-  /** A new message on the server, not yet announced. */
-  newMessage: (room: string, author: string, body: string) => Message;
+  /** A new message on the server, not yet announced; `extra` sets anything else on it (files, reactions). */
+  newMessage: (room: string, author: string, body: string, extra?: Partial<Message>) => Message;
+  /** `count` older messages at the start of a room's history, oldest first, for paging. */
+  older: (room: string, count: number) => void;
   /** What the server holds for a room, newest last. */
   held: (room: string) => Message[];
   /** An owner that wasn't answering (`?noowner`) answers from now on. */
@@ -185,7 +187,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     ]),
   );
   let serial = 900_000;
-  const newMessage = (room: string, author: string, body: string): Message => {
+  const newMessage = (room: string, author: string, body: string, extra: Partial<Message> = {}): Message => {
     serial += 1;
     const message: Message = {
       id: `m${String(serial).padStart(6, "0")}`,
@@ -199,9 +201,29 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       edited_at: null,
       deleted_at: null,
       created_at: Date.now(),
+      ...extra,
     };
     store[room] = [...(store[room] ?? []), message];
     return message;
+  };
+  // Older than the evening: ids that sort before `m…`, an hour apart, back from the evening's first.
+  const older = (room: string, count: number): void => {
+    const held = store[room] ?? [];
+    const first = held[0]?.created_at ?? Date.now();
+    const made: Message[] = Array.from({ length: count }, (_, index) => ({
+      id: `l${String(index + 1).padStart(7, "0")}`,
+      room_id: room,
+      author_id: index % 2 === 0 ? people.eli.id : people.jules.id,
+      body: `older message ${index + 1}`,
+      reply_to: null,
+      attachments: [],
+      reactions: [],
+      pinned_at: null,
+      edited_at: null,
+      deleted_at: null,
+      created_at: first - (count - index) * 60_000,
+    }));
+    store[room] = [...made, ...held];
   };
 
   const page = (room: string, params: URLSearchParams): Message[] => {
@@ -262,6 +284,15 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       return refuse(404, "NOT_FOUND", "That message is gone.");
     }
     if (one && method === "DELETE") return new Response(null, { status: 204 });
+    if (path === "/dms" && method === "POST") {
+      // The DM you already have with exactly these people, or a new one.
+      const wanted = [people.matt.id, ...(Array.isArray(body.user_ids) ? body.user_ids.map(String) : [])].sort();
+      const held = ownerState.dms.find((dm) => [...(dm.member_ids ?? [])].sort().join() === wanted.join());
+      return json(
+        held ?? { id: `d-${wanted.filter((id) => id !== people.matt.id).join("-")}`, slug: "", name: "", topic: null, kind: "dm", member_ids: wanted, position: 0, archived_at: null, last_message_id: null },
+        held ? 200 : 201,
+      );
+    }
     if (path === "/knock") {
       return query.has("limit") ? refuse(429, "RATE_LIMITED", "That's three this hour.") : new Response(null, { status: 204 });
     }
@@ -280,6 +311,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       deliver("gateway:frame", { server: SERVER, frame: { ...frame, s: seq } });
     },
     newMessage,
+    older,
     held: (room) => store[room] ?? [],
     wake: () => {
       asleep = false;
