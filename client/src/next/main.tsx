@@ -9,6 +9,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
+import { refuseStrayDrops } from "../lib/drops";
 import { unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
@@ -23,6 +24,10 @@ followAppearance();
 const armAudio = (): void => unlockAudio();
 window.addEventListener("pointerdown", armAudio);
 window.addEventListener("keydown", armAudio);
+
+// A file dropped anywhere but a drop zone is refused, not opened in place of
+// the window (lib/drops.ts).
+refuseStrayDrops(window);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

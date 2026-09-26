@@ -19,6 +19,7 @@
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
  * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
  * check waiting until `window.core.release()`.
+ * `?noinfo` has Casa da Ribeira never say its name.
  *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.ask(event, question)` asks the owner something as another
@@ -206,6 +207,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   if (path === "/read") return json(state.read);
   if (path === "/me/notify-rules") return json([]);
+  if (path === "/server" && query.has("noinfo") && server === LISBON) return json({ error: { code: "UNAVAILABLE", message: "Busy.", retry_after_ms: null } }, 503);
   if (path === "/server") return json({ name: names[server]?.name ?? server, accent_key: names[server]?.accent ?? null, icon_key: null, member_count: state.users.length, created_at: 0 });
   if (path === "/me" && method === "GET") return json(state.me);
   if (path === "/me" && method === "PATCH") return json({ ...state.me, status: body.status ?? state.me?.status ?? null });

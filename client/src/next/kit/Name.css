@@ -104,7 +104,7 @@
     background-size:
       300% 100%,
       100% 100%;
-    animation: k-name-shimmer 4s linear infinite;
+    animation: k-name-shimmer calc(4s * var(--motion)) linear var(--loop);
   }
 
   @keyframes k-name-shimmer {
@@ -135,8 +135,9 @@
   text-shadow: 0 0 var(--space-2) var(--person-name, var(--text-primary));
 }
 
+/* As specific as the rule that draws it, and after it, so it wins. */
 @media (prefers-reduced-motion: reduce) {
-  :root .name[data-name-effect="glow"] {
+  :root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
     text-shadow: none;
   }
 }

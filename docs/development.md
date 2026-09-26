@@ -146,13 +146,19 @@ and open any of these pages:
   real list window, restoring sign-ins and connecting to three faked
   servers. `?one&signedout` opens it on the sign-in screen (the password
   `wrong` is refused, invite `DEAD` and setup token `used` are spent);
-  `?revoked` and `?nokeyring` show its two warnings;
+  `?revoked` and `?nokeyring` show its two warnings; `?noinfo` has one
+  server never say its name;
 - `/tests/fixtures/next-knocks.html` (`?voice`): knocks landing on the list;
 - `/tests/fixtures/next-chat-window.html?room=r-general` and
   `/tests/fixtures/next-settings-window.html`: the real chat and Settings
   windows, wired, with the desktop shell, the list window and the server
   faked in the page (`tests/fixtures/next/desktop.ts`). The options are listed
   at the top of each page's `.tsx`;
+- `/tests/fixtures/next-chat-parity.html?room=r-general`: the same real chat
+  window with the server doing more: files going up (`?holdparts`,
+  `?flakystore`, `?uploadrefuse`), older history to page through
+  (`?many=1200`), refused edits and deletes (`?refuse`) and a send nobody
+  answers (`?hang`), for `next-chat-parity.spec.ts`;
 - `/tests/fixtures/next-settings.html`: the Settings window on the same
   evening. Add `?section=invites` (any section) to open on it, `?member` to
   lose Hosting, `?servers` for three servers, `?fail` to have every save

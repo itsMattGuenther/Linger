@@ -83,6 +83,22 @@ describe("CSS under src/next uses tokens", () => {
     expect(problems, problems.join("\n")).toEqual([]);
   });
 
+  it("repeats an animation only through --loop and --motion, so reduced motion stops it", () => {
+    const problems: string[] = [];
+    for (const file of CSS.filter((css) => css !== TOKENS)) {
+      const text = stripComments(readFileSync(file, "utf8"));
+      for (const hit of findAll(text, /\binfinite\b|animation-iteration-count\s*:\s*(?!var\(--loop\))[^;]+/g)) {
+        problems.push(`${rel(file)}:${hit.line}: "${hit.match}". A repeating animation repeats var(--loop) times: forever, or once for reduced motion.`);
+      }
+      for (const hit of findAll(text, /animation:[^;]*var\(--loop\)[^;]*;/g)) {
+        if (!hit.match.includes("var(--motion)")) {
+          problems.push(`${rel(file)}:${hit.line}: "${hit.match}". A repeating animation's length is times var(--motion), so reduced motion stops it at once.`);
+        }
+      }
+    }
+    expect(problems, problems.join("\n")).toEqual([]);
+  });
+
   it("never uses !important", () => {
     const problems: string[] = [];
     for (const file of CSS) {

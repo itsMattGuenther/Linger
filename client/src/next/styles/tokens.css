@@ -296,6 +296,10 @@
   --ease-in-out: ease-in-out;
   /* How far a row shakes when you knock on its person's door. */
   --nudge: 2px;
+  /* A repeating animation repeats --loop times, each round its length times
+     --motion: forever and as drawn, or once and at once for reduced motion. */
+  --loop: infinite;
+  --motion: 1;
 
   /* Layers. */
   --z-raised: 10;
@@ -310,5 +314,7 @@
     --duration-fast: 1ms;
     --duration-base: 1ms;
     --duration-slow: 1ms;
+    --loop: 1;
+    --motion: 0;
   }
 }

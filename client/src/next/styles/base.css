@@ -70,14 +70,13 @@ svg {
   outline: none;
 }
 
-/* Reduced motion: animations run once and at once; transitions snap. Tokens
-   already shorten durations; this catches keyframe loops. */
+/* Reduced motion: every duration token collapses and --loop is 1
+   (tokens.css), which is what stops movement: a catch-all rule here loses to
+   each part's own, more specific one. Scrolling jumps instead of gliding. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-iteration-count: 1;
-    animation-duration: var(--duration-fast);
     scroll-behavior: auto;
   }
 }

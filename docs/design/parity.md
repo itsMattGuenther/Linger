@@ -203,12 +203,12 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | SRV-1 | One gateway connection per server, owned by Rust: hello, identify or resume, heartbeat, backoff. | `src-tauri/src/gateway.rs`, PROTOCOL §8 | Same; **only the owner window connects** (`gateway_connect` replaces a connection). | C + U (owner-only) + D | 🟡 only the list connects (next-list-window.spec.ts, role.test.ts); needs a desktop check |
 | SRV-2 | Resume replays missed frames with no gaps and no duplicates. A too-old gap re-identifies and refetches. | `gateway.rs`, `lib/gateway.ts` | Same; viewers catch up by snapshot plus buffered replay (`lib/catchup.ts`). | C + U (property test: a viewer's state equals the owner's) | ✅ (lib/catchup.test.ts, lib/gateway.catchup.test.ts, share.test.ts) |
 | SRV-3 | One slow or down server doesn't block the others at startup. **Not done today (T-907).** | `session.ts` `Promise.all` | **Decision 21** | U + F | ⏸ decision 21 |
-| SRV-4 | The server's name is fetched, and re-fetched every 2 minutes. On failure, the hostname is shown. | `App.tsx` `ServerLink` | Same, in the server header | F | 🟡 fetched and re-fetched; the refresh and the fallback are untested |
+| SRV-4 | The server's name is fetched, and re-fetched every 2 minutes. On failure, the hostname is shown. | `App.tsx` `ServerLink` | Same, in the server header | F | ✅ (next-list-parity.spec.ts) |
 | SRV-5 | You're only ever in one room: switching servers takes you out of the last room. | `App.tsx`, `watchPresence.ts` | In tabs, the visible tab of the focused chat window is where you are (design). | U + F | ✅ (showing.test.ts, share.test.ts) |
 | SRV-6 | Connection state in words: ready, connecting, retrying, can't reach. | `App.tsx` status bar, gateway `status` | **Silent** (decision 1) | F | ⏸ decision 1 |
 | SRV-7 | Storage figure (used / limit, file expiry) visible to anyone sharing. | `App.tsx`, `lib/media.ts` `storageLine` | **Silent** (decision 1) | U + F | ⏸ decision 1 |
 | SRV-8 | Host controls are absent, not greyed out, for members. Decided per server. | `App.tsx`, `HostPanel.tsx` | Settings → Hosting appears only for the host. | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
-| SRV-9 | A server that goes away (signed out, refused) leaves nothing on screen pointing at it. | `App.tsx` | Same, including its tabs and windows | F | 🟡 a signed-out server's tabs stay open |
+| SRV-9 | A server that goes away (signed out, refused) leaves nothing on screen pointing at it. | `App.tsx` | Same, including its tabs and windows | F | ✅ a signed-out server's tabs close, and the window with them when none are left (next-chat-window.spec.ts) |
 | SRV-10 | A room that's archived, or a DM you've lost access to, is never held open. | `App.tsx` | Same; its tab closes or says so | F | ✅ (tabs.test.ts, conversation.test.ts) |
 
 ## LIST — the buddy list window
@@ -234,26 +234,26 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-2 | The view hangs from the bottom: new messages follow when you're at the end, and history loading above never moves what you read. | `Stream.tsx` `anchorTo: "end"`, `lib/resize.ts` | Same | F | ✅ (next-chat.spec.ts) |
 | CONV-3 | Sessions: a 3-hour gap inserts a divider in natural words ("late Tuesday night", "tonight"). | `lib/time.ts`, `lib/rows.ts`, SPEC §4.7 | Same (the prototype shows "TONIGHT") | U (exists) + F | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | Names inline; **decision 9** | U + F | ✅ (rows.test.ts, next-chat.spec.ts); decision 9 is written up in system.md |
-| CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G | 🟡 built; no test of the faces |
+| CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G | ✅ (next-chat-parity.spec.ts) |
 | CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) | ⏸ decision 10; built as today (lib/time.test.ts) |
 | CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G | ⏸ decision 10; built (`--measure`), no test |
-| CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. | `lib/markdown.ts` | Same | C (tests exist) + F | 🟡 shared parser (lib/markdown.test.ts); no browser test here |
+| CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. | `lib/markdown.ts` | Same | C (tests exist) + F | ✅ (lib/markdown.test.ts, next-chat-parity.spec.ts) |
 | CONV-9 | Replies: a short, clickable quote that jumps to the original. It belongs to the reply, not the message above (#116, #181). An unloaded original says so. | `Stream.tsx` `ReplyLine`, SPEC §4.7 | Quote placement with inline names: **decision 9** | F + G (spacing) | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-10 | Deleting a reply hides its quote too; the original and other replies are unchanged (#115). A deleted message stays as "deleted". | `Stream.tsx` | Same | F | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-11 | "You left off here": opening a room with something new lands on the line (#123). A caught-up room opens at the newest. The line stays put for the session; there's no catch-up band. | `Stream.tsx`, `rows.ts`, SPEC §4.2 | Same, per tab | F (exists: `console.spec`) | ✅ (rows.test.ts, conversation.test.ts, next-chat.spec.ts, next-chat-window.spec.ts) |
 | CONV-12 | Reading marks read only when the newest message is on screen **and** the window has your attention (`isLooking`). | `Stream.tsx`, `lib/looking.ts`, `PUT /rooms/:id/read` | Same, per window. The focused window's visible tab only. | U + F | ✅ (showing.test.ts, share.test.ts, next-chat-window.spec.ts) |
 | CONV-13 | Live arrivals never move someone reading older messages. | `Stream.tsx` | Same | F | ✅ (next-chat.spec.ts) |
-| CONV-14 | Memory stays flat: far-off history is let go once scrolling stops, and rooms you've left keep only their newest page (#173). | `Stream.tsx`, `lib/gateway.ts` | Same, per window; each window loads what it shows (architecture) | C + F (`history-memory.spec`) + D | 🟡 built; untested in the new client |
-| CONV-15 | "Back to the newest" when reading far back. Reading down brings the rest back with no gap. | `Stream.tsx` header | Same | F | 🟡 built; untested |
+| CONV-14 | Memory stays flat: far-off history is let go once scrolling stops, and rooms you've left keep only their newest page (#173). | `Stream.tsx`, `lib/gateway.ts` | Same, per window; each window loads what it shows (architecture) | C + F (`history-memory.spec`) + D | ✅ (next-chat-parity.spec.ts) |
+| CONV-15 | "Back to the newest" when reading far back. Reading down brings the rest back with no gap. | `Stream.tsx` header | Same | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-16 | Pinning a message. **Not in the client today (T-908)**; the server and the media filter support it. | `POST/DELETE /messages/:id/pin` | **Decision 21** | F | ⏸ decision 21 |
 | CONV-17 | Jump to a message (from search or media): walk back a few pages if it's close, or reopen the room *at* it (`around=`) if it's far. The target is marked briefly. Gives up cleanly if the message is gone. | `Stream.tsx` `openAround`, `loadUntil` | Same | C + F | 🟡 quotes jump (next-chat.spec.ts); far jumps wait for search and media |
-| CONV-18 | A message that names you (`@username`) is marked in the stream. | `Stream.tsx` mentions | Same; marker style per `system.md` | F | 🟡 built; untested |
+| CONV-18 | A message that names you (`@username`) is marked in the stream. | `Stream.tsx` mentions | Same; marker style per `system.md` | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-19 | The room header shows the name and topic, and no names (#145). A DM is titled by who's in it. | `Stream.tsx` header, SPEC §4.1 | The tab title plus a pane header with dots and the topic | F | ✅ (conversation.test.ts, next-chat.spec.ts) |
 | CONV-20 | Typing line: "X is typing" above the composer. It holds its space whether or not anyone types. Nobody sends "stopped typing", so the line re-checks the clock and clears within a couple of seconds of the 6-second signal lapsing. | `Stream.tsx` `Typing` | Same | U + G (no shift) | ✅ (conversation.test.ts, next-chat.spec.ts) |
-| CONV-21 | Hovering a message shows its action button and changes nothing else (#139). | `stream.css`, `Stream.tsx` | Same | G (no box changes) | 🟡 no test that hovering changes nothing |
-| CONV-22 | Message menu: reply, edit (your own), delete (your own, or any if host) with a "delete for good" confirmation. A refusal is shown on that message. | `Stream.tsx` `MessageRow` | Same actions | F | 🟡 reply and delete (next-chat.spec.ts); a refusal on the message is untested |
-| CONV-23 | Edit in place: Enter saves, Escape cancels, the text survives a refusal, and the cursor goes to the end. | `Stream.tsx` `EditBox` | Same | F | 🟡 Enter saves (next-chat.spec.ts); Escape and a refusal are untested |
-| CONV-24 | No reactions are drawn or offered (trial, #168). The server still stores them. | `Stream.tsx`, SPEC §4.8 | Same | F | 🟡 none drawn; no test |
+| CONV-21 | Hovering a message shows its action button and changes nothing else (#139). | `stream.css`, `Stream.tsx` | Same | G (no box changes) | ✅ (next-chat-parity.spec.ts) |
+| CONV-22 | Message menu: reply, edit (your own), delete (your own, or any if host) with a "delete for good" confirmation. A refusal is shown on that message. | `Stream.tsx` `MessageRow` | Same actions | F | ✅ (next-chat.spec.ts, next-chat-parity.spec.ts) |
+| CONV-23 | Edit in place: Enter saves, Escape cancels, the text survives a refusal, and the cursor goes to the end. | `Stream.tsx` `EditBox` | Same | F | ✅ (next-chat.spec.ts, next-chat-parity.spec.ts) |
+| CONV-24 | No reactions are drawn or offered (trial, #168). The server still stores them. | `Stream.tsx`, SPEC §4.8 | Same | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-25 | Links open in the system browser, never in the app. Only http(s) hrefs survive `safeHref`. | `lib/external.ts`, capabilities | Same, in every window's capabilities | U + D | 🟡 opens in the browser (lib/external.test.ts); needs a desktop check |
 
 ## COMP — writing
@@ -263,25 +263,25 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | COMP-1 | Enter sends and clears the box immediately, keeping focus. Typing after Enter belongs to the next message (#117). Shift+Enter adds a new line. | `Stream.tsx` `Composer`, SPEC §4.7 | Same | F | ✅ (next-chat.spec.ts, next-chat-window.spec.ts) |
 | COMP-2 | Optimistic send: the message appears at once as pending, several can be in flight, and confirmation merges by id (#128). | `lib/gateway.ts` pending, `Stream.tsx` | Same | C + F | ✅ (rows.test.ts, lib/gateway.test.ts, next-chat-window.spec.ts) |
 | COMP-3 | A failed send restores its text if the box is empty, or keeps a separate "Retry unsent message" if a newer draft exists. Neither erases the newer draft. | `Stream.tsx` | Same | F | ✅ (sending.test.ts, next-chat.spec.ts) |
-| COMP-4 | Requests that never answer time out visibly. An unconfirmed request isn't reported as definitely lost (#118). | SPEC §4.7, `lib/api.ts` | Same; every request has a deadline | U + F | 🟡 shared deadlines (lib/api.test.ts); untested here |
+| COMP-4 | Requests that never answer time out visibly. An unconfirmed request isn't reported as definitely lost (#118). | SPEC §4.7, `lib/api.ts` | Same; every request has a deadline | U + F | ✅ a send nobody answers gives up at 30 s saying it wasn't confirmed, and keeps the words (next-chat-parity.spec.ts) |
 | COMP-5 | The box grows with its content without laying out the page on every keystroke (#127, measured on a hidden copy). | `lib/autoGrow.ts` | Same | U + D (typing latency) | 🟡 built; needs the desktop typing check |
 | COMP-6 | Up arrow in an empty box edits your last message (only at the live end). | `Stream.tsx` | Same | F | ✅ (next-chat.spec.ts) |
 | COMP-7 | Emoji selector: ordinary Unicode, a short set, inserted at the cursor. | `lib/composerEmoji.ts` | Same | F | ✅ (next-chat.spec.ts) |
-| COMP-8 | Limits mirrored before the round trip: 8,000 characters and 10 attachments. | `Stream.tsx`, `linger-core::limits` | Same | U | 🟡 built; untested |
+| COMP-8 | Limits mirrored before the round trip: 8,000 characters and 10 attachments. | `Stream.tsx`, `linger-core::limits` | Same | U | ✅ (next-chat-parity.spec.ts) |
 | COMP-9 | Switching rooms doesn't carry a half-typed line; files already uploading go with the composer. | `Stream.tsx` | Each tab keeps its own composer; persistence is **decision 11** | F | ✅ (next-chat.spec.ts, handoff.test.ts); surviving a restart is decision 11 |
 | COMP-10 | Typing announces itself with `typing.start`; the server accepts one per 4 seconds per room. | `lib/gateway.ts` `startedTyping`, PROTOCOL §8 | Same | C | ✅ (next-chat-window.spec.ts) |
-| COMP-11 | Dropping a file on the composer shares it and never navigates the webview. Pasting files works too. | `Stream.tsx` | Same, and in every window | F | 🟡 drop and paste built; untested |
+| COMP-11 | Dropping a file on the composer shares it and never navigates the webview. Pasting files works too. | `Stream.tsx` | Same, and in every window | F | 🟡 the box takes a dropped or pasted file (next-chat-parity.spec.ts); Tauri's own drop handling is off in every window, so drops reach the page on Windows, and a file dropped anywhere else is refused (lib/drops.test.ts, window.rs tests). Needs a check in the desktop app, on Windows most |
 | COMP-12 | Add menu (+): a compact menu above the button that focuses its first item and dismisses with Escape, an outside click or the trigger (#89). | `Stream.tsx`, SPEC §5.6 | Same | F + G | 🟡 one "Add a file" button, not a menu |
 
 ## FILE — files in messages
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| FILE-1 | Resumable uploads: a slot, then parts PUT straight to storage, then complete. Missing parts are re-sent. Per-file progress, and a refusal shown on its file. | `lib/upload.ts`, PROTOCOL §6 | Same | C + F | 🟡 shared uploader, drafts tested (drafts.test.ts); no browser test |
-| FILE-2 | Remove a file before sending ("don't send X"); an already-uploaded file is withdrawn (`DELETE /uploads/:id`). | `Stream.tsx` | Same | F | 🟡 built (drafts.test.ts); no browser test |
-| FILE-3 | Images inline at true aspect ratio, capped at 400px tall. The box is sized before the bytes arrive, so rows don't jump. Lazy loaded. | `media/Attachments.tsx`, `lib/media.ts` | Same | U + G | 🟡 sized before loading; no geometry test |
+| FILE-1 | Resumable uploads: a slot, then parts PUT straight to storage, then complete. Missing parts are re-sent. Per-file progress, and a refusal shown on its file. | `lib/upload.ts`, PROTOCOL §6 | Same | C + F | ✅ (next-chat-parity.spec.ts) |
+| FILE-2 | Remove a file before sending ("don't send X"); an already-uploaded file is withdrawn (`DELETE /uploads/:id`). | `Stream.tsx` | Same | F | ✅ (drafts.test.ts, next-chat-parity.spec.ts) |
+| FILE-3 | Images inline at true aspect ratio, capped at 400px tall. The box is sized before the bytes arrive, so rows don't jump. Lazy loaded. | `media/Attachments.tsx`, `lib/media.ts` | Same | U + G | ✅ (next-chat-parity.spec.ts) |
 | FILE-4 | Click to expand: centered in the window, fitted without cropping or upscaling, refits on resize. Escape, a click or close dismisses it and returns focus. | `Attachments.tsx`, SPEC §4.10 | Same, per window | F | ✅ (next-chat.spec.ts) |
-| FILE-5 | Video: poster frame and player. Audio: player. Anything else: one line and a download. | `Attachments.tsx` | Same | F | 🟡 built; untested |
+| FILE-5 | Video: poster frame and player. Audio: player. Anything else: one line and a download. | `Attachments.tsx` | Same | F | ✅ (next-chat-parity.spec.ts) |
 | FILE-6 | Downloads go to the system browser and say so. A failed handoff offers a retry and a selectable URL, and never claims the file was saved. | `media/DownloadFile.tsx`, SPEC §4.10 | Same | F + D | 🟡 hands off to the browser, says so without claiming it's saved, and a failed handoff offers Try again; the address is there to copy either way (next-chat.spec.ts). Needs a check that the browser really opens in the desktop app |
 | FILE-7 | Local media paths resolve against the server that supplied them, never the webview (T-920). | `Attachments.tsx`, `lib/url.ts` | Same | U + D | 🟡 built; needs a desktop check |
 | FILE-8 | Link cards: one line with favicon, title and domain. Favicons arrive as `data:` URIs; the client never contacts a linked site. Fetched in batches per server. | `media/LinkCards.tsx`, `lib/previews.ts`, `POST /links/preview` | Same | C + F | ✅ (next-chat.spec.ts, words.test.ts) |
@@ -340,7 +340,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NAME-2 | Colors are palette keys, validated by the server. No hex anywhere. An unknown key falls back to something drawable. | `lib/palette.ts`, `generated/palette.generated.css`, AGENTS rules 8 and 12 | Same | C + U (discipline) | ✅ (discipline.test.ts, contrast.test.ts) |
 | NAME-3 | Your message font: one of the four sans faces. Other saved choices draw in the default body face. | SPEC §4.5 | Same | F | ✅ chosen in Profile, and each message draws in its sender's face; a name-only face draws in the body face (next-chat-window.spec.ts) |
 | NAME-4 | "Use plain names and message fonts" flattens every name and message font on your screen, with one attribute on `<html>`. | `lib/normalize.ts`, `styles/names.css` | Same, in every window at once | F | ✅ (appearance.test.ts, next-settings-window.spec.ts) |
-| NAME-5 | Shimmer and glow stop under reduced motion. | `names.css` | Same | F | 🟡 built; untested |
+| NAME-5 | Shimmer and glow stop under reduced motion. | `names.css` | Same | F | ✅ shimmer and glow both stop, and the name keeps its colors (next-motion.spec.ts) |
 | NAME-6 | Every palette color passes 4.5:1 on every surface it's drawn on. | `linger-core` palette test | New surfaces added to the test | U (`contrast.test.ts`) | ✅ (contrast.test.ts) |
 
 ## KNOCK
@@ -358,9 +358,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NOTE-1 | Only two things notify: a message that names you (by username), or one from a person you asked to hear from. There's no `@everyone`. | `lib/notify-rules.ts` | Same | U (exists) | ✅ (lib/notify-rules.test.ts) |
 | NOTE-2 | "Always notify me when [person] posts": everywhere, or in chosen rooms. | `notify/NotifyRules.tsx`, `GET/PUT/DELETE /me/notify-rules` | Settings → Notifications | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | NOTE-3 | Nothing notifies about the room you're looking at. | `notify.ts` | The focused window's visible tab | U | ✅ (share.test.ts, lib/notify.test.ts) |
-| NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C | 🟡 batching shared (lib/notify.test.ts); "list window only" is untested |
+| NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C | ✅ (lib/notify.test.ts, core/quietViewers.test.ts) |
 | NOTE-5 | Banners are silent at the OS level, and the app's own chime plays instead. | `src-tauri/src/notifications.rs` | Same | D | 🟡 unchanged; needs a desktop check |
-| NOTE-6 | Permission is asked once; a refusal is final and silent. | `notify.ts` | Same | U | 🟡 shared code; no test of asking once |
+| NOTE-6 | Permission is asked once; a refusal is final and silent. | `notify.ts` | Same | U | ✅ (lib/notifyPermission.test.ts) |
 | NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | ⏸ decision 20 |
 
 ## SND — sounds
@@ -371,7 +371,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | SND-2 | Mute all, and quiet hours from and until in half-hour steps (off by default; 22:00–08:00 until moved). | `sound.ts`, Settings | Same | U + F | ✅ (lib/sound.test.ts, settings.test.ts, next-settings.spec.ts) |
 | SND-3 | Quiet hours silence DMs, rooms and knocks only; voice and mic/deafen cues still play (#186). | `sound.ts` `QUIET_HOURS_SILENCE` | Same; a per-server Quiet adds to it | U | ✅ (lib/sound.test.ts, lib/notify.test.ts) |
 | SND-4 | Play previews ignore every gate. | Settings | Same | F | ✅ (next-settings.spec.ts) |
-| SND-5 | No sound from startup snapshots, replays, your own messages, a room you're reading, edits or history loads. One chime per burst (a 1.2 s cooldown for messages). | `sound.ts`, `lib/sound-events.ts` | Same, **owner only** (architecture) | U | 🟡 rules shared (lib/notify.test.ts); "list window only" is untested |
+| SND-5 | No sound from startup snapshots, replays, your own messages, a room you're reading, edits or history loads. One chime per burst (a 1.2 s cooldown for messages). | `sound.ts`, `lib/sound-events.ts` | Same, **owner only** (architecture) | U | ✅ (lib/notify.test.ts, core/quietViewers.test.ts) |
 | SND-6 | Chimes are synthesized from one score with 50 ms of silence first, so the attack isn't lost (#94, #95). Both knock taps play. | `lib/chimes.ts`, `sound.ts` | Same | C + D (packaged audio check) | 🟡 shared; needs the packaged audio check |
 | SND-7 | Audio unlocks on the first pointer or key press in the window. | `main.tsx` `unlockAudio` | Same, in the owner window | D | 🟡 built in every window; needs a desktop check |
 
@@ -381,7 +381,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | VOICE-1 | See who's in voice in a room before joining (#119). | `lib/gateway.ts` `ready.voice`, `voice.state` | Dots and bars on the room row, and the room's strip | C + F | ✅ (list.test.ts, chat/voice.test.ts, next-chat.spec.ts) |
 | VOICE-2 | Join voice in the room you're in. You're in voice in one room at a time, across every server; joining elsewhere moves you. | `lib/gateway.ts` `joinVoice` | Join, "Move voice here" and "Talk here instead" are distinct labels | C + F | ✅ (chat/voice.test.ts, share.test.ts, next-chat.spec.ts, next-chat-window.spec.ts) |
-| VOICE-3 | Voice survives reading another room, a destination or Settings. Only Leave, moving, quitting or losing the network ends it. | `voice/VoiceAway.tsx`, SPEC §5.6 | It also survives closing the room's tab or window; the voice bar lives in the list | F (tabs and windows) + D | 🟡 voice lives in the list; no test that closing a tab keeps it |
+| VOICE-3 | Voice survives reading another room, a destination or Settings. Only Leave, moving, quitting or losing the network ends it. | `voice/VoiceAway.tsx`, SPEC §5.6 | It also survives closing the room's tab or window; the voice bar lives in the list | F (tabs and windows) + D | ✅ closing the tab or window leaves voice alone (next-chat-parity.spec.ts); the rest is the list's |
 | VOICE-4 | Mute and deafen: deafen also mutes; undeafen restores the earlier mic choice. Changes are queued so a quick click or push-to-talk edge never announces a mute that wasn't applied. | `lib/gateway.ts` `changeVoiceControls` | Same | C | ✅ (lib/gateway.voice.test.ts, next-list.spec.ts) |
 | VOICE-5 | Who's talking is shown without moving anything. | `voice/VoiceBar.tsx` (turned-over block, #138) | **Decision 7** | G (no geometry change) | ⏸ decision 7; a highlight is built |
 | VOICE-6 | Shared mute/deafen state: the control's own glyph beside the name, with the word for screen readers. An older client or server "does not share voice controls". | `VoiceBar.tsx` | Same | F | ✅ as the control's glyph beside each name in the voice bar and the conversation's strip, the word for screen readers, and "mic state unknown" when a client or server doesn't share it (next-list.spec.ts, next-chat-window.spec.ts, voice.test.ts) |
@@ -404,7 +404,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | LOOK-1 | Interface scale from 100% to 200%, applied before first paint, including sign-in. Text and controls grow together. Stays on this computer. | `lib/interface.ts`, Settings → Appearance | Every window, with a preview. Minimum sizes: **decision 19**. | G (every scale) + F | 🟡 every window (appearance.test.ts, next-settings-window.spec.ts); no geometry at every scale; decision 19 |
 | LOOK-2 | Evening warmth after local "sunset", worked out from the clock (no location asked). It can be turned off, and re-checked every couple of minutes. | `lib/theme.ts` | Same | U (exists) | ⬜ hidden until the colors have an evening version |
 | LOOK-3 | Color theme: dark, light, or follow the system. | `lib/theme.ts`, `AppearanceSettings.tsx` | Dark only so far: **decision 2** | F | ⏸ decision 2 |
-| LOOK-4 | Reduced motion removes movement but keeps state and confirmation. | SPEC §5.6 | Same, including the prototype's wiggle, sound bars and pop-outs | F | 🟡 built in the CSS; untested |
+| LOOK-4 | Reduced motion removes movement but keeps state and confirmation. | SPEC §5.6 | Same, including the prototype's wiggle, sound bars and pop-outs | F | ✅ every repeating animation repeats `--loop` times at `--motion` speed, both off for reduced motion, and what the movement said stays (next-motion.spec.ts; the design-rule test keeps new loops to it) |
 | LOOK-5 | Bundled fonts only; no remote font URLs. | `src/fonts/`, CSP | Same | U (discipline) | 🟡 bundled fonts only; no check |
 | LOOK-6 | Settings headings and navigation labels in title case (#90). | SPEC §5.6 | Same | U (copy test) | ✅ (settings.test.ts) |
 | LOOK-7 | Preferences carry over. Today's saved choices live in `localStorage` under `linger.*` keys (scale, theme, warmth, normalize, sound, voice devices, push-to-talk, volumes). The new client reads the same keys, so switching loses nothing. | `lib/*.ts` | Same keys (same origin) | U | ✅ (appearance.test.ts, next-settings-window.spec.ts) |
@@ -482,7 +482,7 @@ there or where the design puts it.
 | WIN-5 | Window positions, open tabs and their order are remembered per server on this computer. | new | Architecture | U + D | 🟡 tabs (next-chat-window.spec.ts) and places (appearance.test.ts) kept; needs a desktop check |
 | WIN-6 | Every window gets only the capabilities it needs: `capabilities/next.json` (the list), `next-chat.json` and `next-settings.json`. Only `main` can open windows, and only through fixed URL patterns. | `src-tauri/capabilities/` | Architecture | U (Rust) + D | 🟡 a file per window, URLs checked (Rust tests in window.rs); needs a desktop check |
 | WIN-7 | Closing the list keeps Linger running in the tray, or quits. | new (no tray today) | **Decisions 4 and 5** | D + M | ⏸ decisions 4 and 5 |
-| WIN-8 | Knock cards, arrival cards and banners appear once, not once per window. | new | Architecture (owner only) | F | 🟡 only the list shows knocks (next-list-window.spec.ts); arrival cards and banners untested |
+| WIN-8 | Knock cards, arrival cards and banners appear once, not once per window. | new | Architecture (owner only) | F | 🟡 knocks, chimes and banners come only from the list (next-list-window.spec.ts, core/quietViewers.test.ts); arrival cards aren't built |
 | WIN-9 | A viewer that opens after connecting catches up without gaps; its state always equals the owner's. | new | Architecture | U (property test) + F | ✅ (share.test.ts, lib/catchup.test.ts, next-chat-window.spec.ts) |
 
 ## NEW — other things the design adds
@@ -513,7 +513,7 @@ there or where the design puts it.
 | A11Y-3 | Accessible names for every icon-only control, with tooltips on hover and focus that are never clipped (#140). | `lib/IconButton.tsx`, `lib/Tooltip.tsx` | Kit rule | F + G | 🟡 names tested (kit.spec.ts, next-chat.spec.ts); tooltip clipping isn't |
 | A11Y-4 | States said in words for screen readers: new activity, presence, talking, muted, "knocked". Color and shape are never the only signal. | throughout | Kit rule | F | ✅ (next-list.spec.ts, next-knocks.spec.ts, next-chat.spec.ts) |
 | A11Y-5 | Hit targets of at least 24px. | style guide | Kit rule | G | ✅ (kit.spec.ts) |
-| A11Y-6 | Forced colors: speaking and selection use system colors. | `voice.css` | Kit rule | F (emulated) | ⬜ |
+| A11Y-6 | Forced colors: speaking and selection use system colors. | `voice.css` | Kit rule | F (emulated) | ✅ presence, the selected row, the showing tab and section, a switch that's on and who's talking keep system colors (kit.spec.ts, emulated) |
 | A11Y-7 | Enlarged text (200%) removes no content or function. | `console-ui-review.md` | Same | G (every scale) | 🟡 scale works; nothing checked at 200% |
 
 ## DESK — desktop and packaging
@@ -543,13 +543,13 @@ there or where the design puts it.
 | ID | Rule | Where it's enforced | Proof | Status |
 |---|---|---|---|---|
 | PRIV-1 | No counts or badges anywhere; new activity is weight only. | SPEC §4.2, AGENTS rule 3 | U (view models return no numbers) + F | ✅ (servers.test.ts, next-list.spec.ts, next-servers.spec.ts, next-chat.spec.ts) |
-| PRIV-2 | Nothing about which apps or windows anyone has open, ever. | AGENTS rule 2 | U (discipline) | 🟡 nothing carries it; no discipline test |
-| PRIV-3 | No telemetry, analytics or crash reporting. | AGENTS rule 4 | U (discipline: no network except the servers) | 🟡 none built; no network discipline test |
+| PRIV-2 | Nothing about which apps or windows anyone has open, ever. | AGENTS rule 2 | U (discipline) | ✅ (next/privacy.test.ts) |
+| PRIV-3 | No telemetry, analytics or crash reporting. | AGENTS rule 4 | U (discipline: no network except the servers) | ✅ (next/privacy.test.ts) |
 | PRIV-4 | No `@everyone` or `@here`. | AGENTS rule 5 | U | ✅ (settings.test.ts, lib/notify-rules.test.ts) |
 | PRIV-5 | No avatars (Matt, 2026-09-25). | design | G / review | ✅ (review: no avatar in the kit) |
 | PRIV-6 | Wire types come from `linger-core` through `ts-rs`; none are hand-written. | AGENTS rule 7 | CI drift check | ✅ (CI drift check) |
-| PRIV-7 | No raw HTML from message bodies; no `dangerouslySetInnerHTML`. | `markdown.ts` | U (discipline) | 🟡 none used; no discipline test |
-| PRIV-8 | The client never fetches linked sites or remote images (previews are server-side). | `previews.ts` | U + D | 🟡 shared previews; no test here |
+| PRIV-7 | No raw HTML from message bodies; no `dangerouslySetInnerHTML`. | `markdown.ts` | U (discipline) | ✅ (next/privacy.test.ts) |
+| PRIV-8 | The client never fetches linked sites or remote images (previews are server-side). | `previews.ts` | U + D | ✅ (next-chat-parity.spec.ts) |
 | PRIV-9 | Search keeps no history or suggestions, and exports belong to the person who asked (polled, not broadcast). | SPEC §4.11, §4.12 | U | 🟡 exports polled (lib/export.test.ts); search isn't built |
 | PRIV-10 | Never claim end-to-end encryption. | AGENTS rule 9 | review | ✅ (settings.test.ts; review) |
 | PRIV-11 | The vocabulary: server, room, in the room, host, media, status. | SPEC §1, AGENTS rule 6 | U (copy lint) | ✅ (settings.test.ts, `scripts/lint-rules.sh`) |

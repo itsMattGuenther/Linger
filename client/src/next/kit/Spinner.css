@@ -6,7 +6,7 @@
   border-radius: var(--radius-pill);
   border: var(--focus-width) solid currentcolor;
   border-right-color: transparent;
-  animation: k-spin 700ms linear infinite;
+  animation: k-spin calc(700ms * var(--motion)) linear var(--loop);
 }
 
 @keyframes k-spin {

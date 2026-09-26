@@ -230,6 +230,8 @@ pub fn next_open_chat(
             .map_err(|e| e.to_string());
     }
     WebviewWindowBuilder::new(&app, CHAT, WebviewUrl::App(url.into()))
+        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
+        .disable_drag_drop_handler()
         .title("Linger")
         .inner_size(780.0, 820.0)
         .min_inner_size(420.0, 360.0)
@@ -261,6 +263,8 @@ pub fn next_open_conversation(
         return open.set_focus().map_err(|e| e.to_string());
     }
     WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
+        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
+        .disable_drag_drop_handler()
         .title("Linger")
         .inner_size(width, height)
         .min_inner_size(360.0, 360.0)
@@ -291,6 +295,8 @@ pub fn next_open_settings(
             .map_err(|e| e.to_string());
     }
     WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into()))
+        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
+        .disable_drag_drop_handler()
         .title("Linger Settings")
         .inner_size(720.0, 640.0)
         .min_inner_size(560.0, 480.0)
@@ -341,6 +347,23 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
+
+    /// Tauri's own drop handling keeps dropped files from the page on
+    /// Windows (COMP-11), so every window turns it off and the page refuses
+    /// stray drops itself (`lib/drops.ts`).
+    #[test]
+    fn every_window_leaves_dropped_files_to_the_page() {
+        let source = include_str!("window.rs");
+        let built = source.matches("WebviewWindowBuilder::new(").count();
+        let off = source.matches(".disable_drag_drop_handler()").count();
+        assert!(built >= 3);
+        assert_eq!(off, built, "a window built here keeps Tauri's drop handler");
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        for window in config["app"]["windows"].as_array().expect("windows") {
+            assert_eq!(window["dragDropEnabled"], serde_json::Value::Bool(false));
+        }
+    }
     use super::{
         buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
         conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, Client,

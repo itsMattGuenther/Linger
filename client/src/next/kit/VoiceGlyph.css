@@ -28,7 +28,7 @@
   border-radius: var(--radius-xs);
   background: currentcolor;
   transform-origin: bottom;
-  animation: k-bar 700ms var(--ease-in-out) infinite;
+  animation: k-bar calc(700ms * var(--motion)) var(--ease-in-out) var(--loop);
 }
 
 .k-voice-bars i:nth-child(2) {
