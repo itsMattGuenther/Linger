@@ -18,6 +18,11 @@ describe("which window a page is", () => {
     expect(windowRole("?window=settings&section=invites", "settings")).toBe("settings");
     expect(windowRole("?window=settings", "main")).toBe("none");
     expect(windowRole("?window=settings", "chat")).toBe("none");
+    // Search and Media: only in their own windows.
+    expect(windowRole("?window=search", "search")).toBe("search");
+    expect(windowRole("?window=media", "media")).toBe("media");
+    expect(windowRole("?window=search", "main")).toBe("none");
+    expect(windowRole("?window=media", "search")).toBe("none");
   });
 
   it("is the chat window where the shell asked for one, and never in main", () => {

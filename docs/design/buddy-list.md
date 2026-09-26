@@ -38,6 +38,9 @@ dropped. This page and the prototype in `client/prototypes/` are what is left.
   list opens on the paste box. "Add a server", in Settings → Servers (or next
   to Sign out with one server), shows the same screen there, with a way back,
   and every other server stays connected.
+- **Media and Search open in windows of their own** (decision 15), from the
+  foot of the list, as in the prototype. A search hit or a media tile opens
+  its conversation at that message.
 - **A server's color is its host's accent** (decision 18), the same for
   everybody. Each person's own color is their name's, chosen per server in
   Profile. A newcomer starts on the color the fewest people there wear, so a

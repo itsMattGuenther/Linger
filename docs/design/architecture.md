@@ -284,6 +284,12 @@ one.
   renders a hostile message can't reach this without a way to run script,
   but the fix is for Rust to hand the owner its frames on a private channel
   (a Tauri `Channel`) instead of a broadcast event (T-1811).
+- **Search and Media** (decision 15) are windows of their own, `search` and
+  `media`, opened by the owner (`next_open_tool`) from the foot of the list.
+  They are viewers: they catch up like the chat window, ask the server with
+  the borrowed sign-in, and ask the owner (the `open` intent, with a message)
+  to show what was found. The chat window then jumps to that message if it's
+  loaded, or reopens the room around it (`openAround`) and goes there.
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
   tab or shows it. When the window is already open, Rust hands it the
   conversation as an event (`next:open`), which a window still catching up

@@ -449,6 +449,8 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
         onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
         onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
         onSettings={() => shell.settings()}
+        onMedia={() => shell.tool("media")}
+        onSearch={() => shell.tool("search")}
         notices={<KnockCards cards={knocks} onGone={dismissKnock} />}
         onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
       />
@@ -519,19 +521,25 @@ async function startDm(api: ServerSession["api"], people: User[]): Promise<strin
 
 /** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */
 const shell: WindowOpener = {
-  chat: (server, roomId) => {
+  chat: (server, roomId, messageId) => {
     if (!isTauri()) return;
-    void invoke("next_open_chat", { server, room: roomId }).catch((error: unknown) => console.error("could not open the chat window", error));
+    void invoke("next_open_chat", { server, room: roomId, message: messageId ?? null }).catch((error: unknown) =>
+      console.error("could not open the chat window", error),
+    );
   },
-  conversation: (server, roomId, kind) => {
+  conversation: (server, roomId, kind, messageId) => {
     if (!isTauri()) return;
-    void invoke("next_open_conversation", { server, room: roomId, kind }).catch((error: unknown) =>
+    void invoke("next_open_conversation", { server, room: roomId, kind, message: messageId ?? null }).catch((error: unknown) =>
       console.error("could not open the conversation's window", error),
     );
   },
   settings: (section) => {
     if (!isTauri()) return;
     void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
+  },
+  tool: (which) => {
+    if (!isTauri()) return;
+    void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
   },
 };
 

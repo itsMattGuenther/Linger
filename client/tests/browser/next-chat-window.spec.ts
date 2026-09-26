@@ -364,6 +364,34 @@ test("a server signed in to while the window is open can be opened in it", async
   await expect(page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" })).toHaveAttribute("aria-selected", "true");
 });
 
+test("a search hit opens its conversation at the message: one in reach is jumped to and marked", async ({ page }) => {
+  await open(page);
+  const first = (await page.evaluate(() => window.owner?.held("r-listening") ?? []))[0]?.id ?? "";
+  await page.evaluate((id) => window.owner?.open("r-listening", undefined, id), first);
+  await expect(page.getByRole("tab", { name: /#listening-room/ })).toHaveAttribute("aria-selected", "true");
+  const row = page.locator(`[data-message="${first}"]`);
+  await expect(row).toHaveAttribute("data-flash", "yes");
+  await expect(row).toBeInViewport();
+});
+
+test("one far back reopens the room around it, then goes there", async ({ page }) => {
+  await open(page, "room=r-general&many=600");
+  await expect(page.locator(".nx-msg").first()).toBeVisible();
+  await page.evaluate(() => window.owner?.open("r-general", undefined, "l0000040"));
+  await expect.poll(() => did(page)).toContain("GET /rooms/r-general/messages?around=l0000040&limit=100 as token-1");
+  const row = page.locator('[data-message="l0000040"]');
+  await expect(row).toHaveAttribute("data-flash", "yes");
+  await expect(row).toBeInViewport();
+  await expect(row).toContainText("older message 40");
+});
+
+test("a window opened on a message goes there", async ({ page }) => {
+  await open(page, "room=r-general&many=600&message=l0000300");
+  const row = page.locator('[data-message="l0000300"]');
+  await expect(row).toHaveAttribute("data-flash", "yes");
+  await expect(row).toBeInViewport();
+});
+
 test("with one server, tabs and headers say nothing about servers", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("tab", { name: "#general" })).toBeVisible();

@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import type { ListModel } from "../../core/list";
-import { IconButton, TitleBar } from "../../kit";
+import { Button, IconButton, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./ListView.css";
 import { ServerBody, type ServerBodyActions } from "./ServerBody";
@@ -42,6 +42,9 @@ interface ListShared {
   onClose?: () => void;
   /** The gear: opens Settings (Ctrl+, does too). */
   onSettings?: () => void;
+  /** The foot of the list: Media and Search, each in a window of its own (decision 15). */
+  onMedia?: () => void;
+  onSearch?: () => void;
   /**
    * Cards that come and go, like a knock on your door: laid over the bottom
    * of the list, just above the voice bar, so they never cover its controls.
@@ -68,12 +71,26 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, voice, you, everywhere, onQuiet, onMove, folded } = props;
+  const { onClose, onSettings, notices, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch } = props;
   const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
   const bottom = (
     <>
       <div className="nx-list-notices">{notices}</div>
       {voice ? <VoiceDock {...voice} /> : null}
+      {onMedia || onSearch ? (
+        <nav className="nx-list-foot" aria-label="Media and search">
+          {onMedia ? (
+            <Button variant="quiet" icon="media" fill onClick={onMedia}>
+              Media
+            </Button>
+          ) : null}
+          {onSearch ? (
+            <Button variant="quiet" icon="search" fill onClick={onSearch}>
+              Search
+            </Button>
+          ) : null}
+        </nav>
+      ) : null}
     </>
   );
   const servers = props.servers;

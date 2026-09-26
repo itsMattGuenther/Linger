@@ -12,7 +12,8 @@
  * refuses knocks, as the fourth in an hour; `&single=1` is the conversation
  * in a window of its own; `?servers` signs in to the guild too;
  * `?missed=r-listening,…` has the list window hand over rooms it sent
- * before this window was listening. The photo
+ * before this window was listening; `?many=600` puts that many older
+ * messages before the evening in #general; `&message=` opens at one. The photo
  * loads only where something serves
  * `PHOTO_PATH` (the spec does).
  *
@@ -79,8 +80,8 @@ declare global {
     owner?: {
       /** A gateway frame reaches every window, as the core sends it. */
       frame: (frame: Unnumbered) => void;
-      /** The list window opens a conversation while this window is open, on a server (the main one if left out). */
-      open: (room: string, server?: string) => void;
+      /** The list window opens a conversation while this window is open, on a server (the main one if left out), at a message if one is named. */
+      open: (room: string, server?: string, message?: string) => void;
       /** Somebody says something in a room, arriving as a frame. */
       say: (room: string, author: string, body: string) => string;
       /** What the page's server holds for a room, newest last. */
@@ -101,7 +102,7 @@ declare global {
 
 window.owner = {
   frame: desktop.frame,
-  open: (room, server = SERVER) => desktop.deliver("next:open", { server, room }),
+  open: (room, server = SERVER, message) => desktop.deliver("next:open", { server, room, message: message ?? null }),
   say: (room, author, body) => {
     const message = desktop.newMessage(room, author, body);
     desktop.frame({ op: "message.create", d: message } as ServerFrame);
@@ -117,6 +118,10 @@ window.owner = {
     if (user) desktop.frame({ op: "user.update", d: { ...user, style: { ...user.style, msg_font_key: key } } });
   },
 };
+
+// `?many=600`: #general has that many older messages before the evening.
+const many = Number(query.get("many") ?? "0");
+if (many > 0) desktop.older("r-general", many);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

@@ -113,8 +113,29 @@ fn chat_url(server: &str, room: &str) -> Result<String, String> {
     ))
 }
 
+/// A message to open a conversation at (a search hit, a media tile): an id,
+/// added to the address only when it is one.
+fn at_message(url: String, message: Option<&str>) -> Result<String, String> {
+    match message {
+        None => Ok(url),
+        Some(id)
+            if !id.is_empty()
+                && id.len() <= 64
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') =>
+        {
+            Ok(format!("{url}&message={}", escape(id)))
+        }
+        Some(_) => Err("not a message id".into()),
+    }
+}
+
 /// The Settings window's label: one, whichever window asked for it.
 const SETTINGS: &str = "settings";
+
+/// Search and the media collection each have one window of their own
+/// (decision 15, the prototype's choice).
+const SEARCH: &str = "search";
+const MEDIA: &str = "media";
 
 /// The page for the Settings window, opened on a section when one is named.
 /// A section is a short lowercase key (`profile`, `invites`); anything else
@@ -194,11 +215,13 @@ fn escape(value: &str) -> String {
     out
 }
 
-/// What an already-open chat window is told when asked to show a conversation.
+/// What an already-open chat window is told when asked to show a
+/// conversation, and the message to show in it, if any.
 #[derive(Clone, serde::Serialize)]
 struct OpenConversation<'a> {
     server: &'a str,
     room: &'a str,
+    message: Option<&'a str>,
 }
 
 /// Open the chat window on a conversation, or, if it is already open, bring it
@@ -210,11 +233,12 @@ pub fn next_open_chat(
     window: WebviewWindow,
     server: String,
     room: String,
+    message: Option<String>,
 ) -> Result<(), String> {
     if window.label() != OWNER {
         return Err("only the list window opens windows".into());
     }
-    let url = chat_url(&server, &room)?;
+    let url = at_message(chat_url(&server, &room)?, message.as_deref())?;
     if let Some(chat) = app.get_webview_window(CHAT) {
         let _ = chat.unminimize();
         let _ = chat.set_focus();
@@ -225,6 +249,7 @@ pub fn next_open_chat(
                 OpenConversation {
                     server: &server,
                     room: &room,
+                    message: message.as_deref(),
                 },
             )
             .map_err(|e| e.to_string());
@@ -251,16 +276,32 @@ pub fn next_open_conversation(
     server: String,
     room: String,
     kind: String,
+    message: Option<String>,
 ) -> Result<(), String> {
     if window.label() != OWNER {
         return Err("only the list window opens windows".into());
     }
-    let url = conversation_url(&server, &room)?;
+    let url = at_message(conversation_url(&server, &room)?, message.as_deref())?;
     let (width, height) = conversation_size(&kind)?;
     let label = conversation_label(&server, &room);
     if let Some(open) = app.get_webview_window(&label) {
         let _ = open.unminimize();
-        return open.set_focus().map_err(|e| e.to_string());
+        let _ = open.set_focus();
+        // Asked for a message: the window already showing the conversation goes to it.
+        if message.is_some() {
+            return app
+                .emit_to(
+                    label.as_str(),
+                    "next:open",
+                    OpenConversation {
+                        server: &server,
+                        room: &room,
+                        message: message.as_deref(),
+                    },
+                )
+                .map_err(|e| e.to_string());
+        }
+        return Ok(());
     }
     WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
         // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
@@ -306,6 +347,45 @@ pub fn next_open_settings(
         .map_err(|e| e.to_string())
 }
 
+/// Open Search or Media (`which`), or bring it forward and tell it so
+/// (`next:shown`, which puts the cursor in Search's box). Only the list window
+/// may ask.
+#[tauri::command]
+pub fn next_open_tool(app: AppHandle, window: WebviewWindow, which: String) -> Result<(), String> {
+    if window.label() != OWNER {
+        return Err("only the list window opens windows".into());
+    }
+    let (label, title, width, height) = tool_window(&which)?;
+    if let Some(open) = app.get_webview_window(label) {
+        let _ = open.unminimize();
+        let _ = open.set_focus();
+        return app
+            .emit_to(label, "next:shown", ())
+            .map_err(|e| e.to_string());
+    }
+    let url = format!("next.html?window={label}");
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
+        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
+        .disable_drag_drop_handler()
+        .title(title)
+        .inner_size(width, height)
+        .min_inner_size(360.0, 420.0)
+        .decorations(false)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Search's and Media's windows: label, title and size. Media is wide for its
+/// grid; Search is a column of results. Anything else is refused.
+fn tool_window(which: &str) -> Result<(&'static str, &'static str, f64, f64), String> {
+    match which {
+        SEARCH => Ok((SEARCH, "Linger Search", 560.0, 680.0)),
+        MEDIA => Ok((MEDIA, "Linger Media", 780.0, 680.0)),
+        _ => Err("not a window Linger opens".into()),
+    }
+}
+
 /// Tell the owner a Buddy list window has gone, however it went: its own close
 /// button, the desktop's, or a crash. A window that closes cleanly says so
 /// itself first; this covers the ones that can't, so the owner never keeps
@@ -320,9 +400,13 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 }
 
 /// The Buddy list client's windows other than the owner: the chat window,
-/// conversations popped out of it, and Settings.
+/// conversations popped out of it, Settings, Search and Media.
 fn is_viewer(label: &str) -> bool {
-    label == CHAT || label == SETTINGS || label.starts_with("chat-")
+    label == CHAT
+        || label == SETTINGS
+        || label == SEARCH
+        || label == MEDIA
+        || label.starts_with("chat-")
 }
 
 /// Hyprland exports its instance signature to every client it starts;
@@ -365,8 +449,9 @@ mod tests {
         }
     }
     use super::{
-        buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
-        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, Client,
+        at_message, buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
+        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window,
+        Client,
     };
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
@@ -494,6 +579,28 @@ mod tests {
         assert_eq!(conversation_size("room"), Ok((560.0, 760.0)));
         assert_eq!(conversation_size("dm"), Ok((460.0, 500.0)));
         assert!(conversation_size("settings").is_err());
+    }
+
+    #[test]
+    fn a_conversation_opens_at_a_message_only_when_it_is_an_id() {
+        let url = chat_url("https://home.example", "r-general").unwrap();
+        assert_eq!(at_message(url.clone(), None).unwrap(), url);
+        assert_eq!(
+            at_message(url.clone(), Some("m000123")).unwrap(),
+            format!("{url}&message=m000123")
+        );
+        for bad in ["", "m1&window=settings", "../x", &"m".repeat(65)] {
+            assert!(at_message(url.clone(), Some(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn search_and_media_are_the_only_other_windows_it_opens() {
+        assert_eq!(tool_window("search").unwrap().0, "search");
+        assert_eq!(tool_window("media").unwrap().0, "media");
+        assert!(tool_window("settings").is_err());
+        assert!(tool_window("").is_err());
+        assert!(is_viewer("search") && is_viewer("media"));
     }
 
     #[test]

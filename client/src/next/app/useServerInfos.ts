@@ -5,6 +5,8 @@ import type { AuthedApi } from "../../lib/api";
 export interface ServerTagInfo {
   name: string;
   accent: string | null;
+  /** How many days it keeps a file, or null for good (the media view says so). */
+  fileExpiryDays?: number | null;
 }
 
 /**
@@ -22,7 +24,9 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
     for (const [server, api] of apis) {
       void api
         .serverInfo(abort.signal)
-        .then((info) => setInfos((held) => ({ ...held, [server]: { name: info.name, accent: info.accent_key ?? null } })))
+        .then((info) =>
+          setInfos((held) => ({ ...held, [server]: { name: info.name, accent: info.accent_key ?? null, fileExpiryDays: info.file_expiry_days } })),
+        )
         .catch(() => undefined);
     }
     return () => abort.abort();

@@ -201,3 +201,29 @@ test.describe("adding a server you're already on", () => {
     await expect(bar.getByRole("button", { name: "Leave" })).toBeVisible();
   });
 });
+
+test("Media and Search at the foot of the list open their own windows", async ({ page }) => {
+  await open(page, "?one");
+  const foot = page.getByRole("navigation", { name: "Media and search" });
+  await foot.getByRole("button", { name: "Media" }).click();
+  await foot.getByRole("button", { name: "Search" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([
+    `next_open_tool:${JSON.stringify({ which: "media" })}`,
+    `next_open_tool:${JSON.stringify({ which: "search" })}`,
+  ]);
+});
+
+test("a search hit asked for from another window opens the chat window at that message", async ({ page }) => {
+  await open(page, "?one");
+  await expect
+    .poll(async () => {
+      await page.evaluate(() =>
+        window.core?.ask("next:intent", { kind: "open", server: "https://good-company.example", roomId: "r-general", conversation: "room", messageId: "m000005" }),
+      );
+      return (await did(page)).filter((line) => line.startsWith("next_open_chat")).length;
+    })
+    .toBeGreaterThan(0);
+  expect((await did(page)).find((line) => line.startsWith("next_open_chat"))).toBe(
+    `next_open_chat:${JSON.stringify({ server: "https://good-company.example", room: "r-general", message: "m000005" })}`,
+  );
+});

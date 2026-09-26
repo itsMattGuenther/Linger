@@ -9,7 +9,19 @@ import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
 import { openExternal, openExternalChecked } from "../../../lib/external";
-import { deleteMessage, editMessage, leaveWindow, loadNewer, loadOlder, noteDm, serverState, startedTyping, trimHistory, useServers } from "../../../lib/gateway";
+import {
+  deleteMessage,
+  editMessage,
+  leaveWindow,
+  loadNewer,
+  loadOlder,
+  noteDm,
+  openAround,
+  serverState,
+  startedTyping,
+  trimHistory,
+  useServers,
+} from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
@@ -159,12 +171,35 @@ function Conversations({ following }: { following: Following }) {
   // Opened from the list while this window is already open (window.rs,
   // `next_open_chat`). Once listening, the tabs window asks the list window
   // for anything it was sent before it was (OPENS in core/share.ts).
+  // Where a search hit or a media tile asked to open (CONV-17): the tab and
+  // the message, handed to the conversation once the message is in reach.
+  // One already loaded is jumped to; one further back reopens the room
+  // around it first (`openAround`), which falls back to the newest page if
+  // the message is gone.
+  const [goTo, setGoTo] = useState<{ tab: string; id: MessageId } | null>(null);
+  const onWentTo = useCallback(() => setGoTo(null), []);
+  const goToMessage = useCallback(
+    (tab: TabKey, id: MessageId) => {
+      const api = apis.get(tab.server);
+      if (!api) return;
+      const held = serverState(tab.server).streams[tab.roomId];
+      if (held?.messages.some((one) => one.id === id)) {
+        setGoTo({ tab: keyOf(tab), id });
+        return;
+      }
+      void openAround(api, tab.roomId, id).then(() => setGoTo({ tab: keyOf(tab), id }));
+    },
+    [apis],
+  );
+
   const opened = useCallback(
-    (server: string, roomId: string) => {
+    (server: string, roomId: string, messageId?: MessageId | null) => {
       if (!apis.has(server)) return;
       const tab = { server, roomId };
       const state = serverState(server);
       if (conversationIn(state, roomId) === null) waiting.add(keyOf(tab));
+      // Before the tab shows, so its first load is the window around the message.
+      if (messageId) goToMessage(tab, messageId);
       setTabs((held) => openTab(held, tab));
       setFocusAsk((ask) => ask + 1);
       // Back from a window of its own, perhaps with a draft.
@@ -172,15 +207,27 @@ function Conversations({ following }: { following: Following }) {
       const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
       if (text !== null) setSeed({ conversation: keyOf(tab), text });
     },
-    [apis, waiting],
+    [apis, waiting, goToMessage],
   );
+
+  // Opened on a message: the address says which (window.rs, `at_message`).
+  const openedAt = useRef(false);
+  useEffect(() => {
+    if (openedAt.current) return;
+    openedAt.current = true;
+    const query = new URLSearchParams(window.location.search);
+    const server = query.get("server");
+    const room = query.get("room");
+    const message = query.get("message");
+    if (server !== null && room !== null && message !== null && apis.has(server)) goToMessage({ server, roomId: room }, message);
+  }, [apis, goToMessage]);
   useEffect(() => {
     if (!isTauri()) return;
     let stop: (() => void) | null = null;
     let gone = false;
     const bus = tauriBus();
     void bus
-      .listen<{ server: string; room: string }>("next:open", ({ server, room }) => opened(server, room))
+      .listen<{ server: string; room: string; message?: string | null }>("next:open", ({ server, room, message }) => opened(server, room, message))
       .then((unlisten) => {
         if (gone) {
           unlisten();
@@ -192,7 +239,7 @@ function Conversations({ following }: { following: Following }) {
         // effect is already being cleaned up.
         void ask<OpensAnswer>(bus, OWNER, OPENS, {})
           .then(({ opens }) => {
-            for (const { server, roomId } of opens) opened(server, roomId);
+            for (const { server, roomId, messageId } of opens) opened(server, roomId, messageId);
           })
           .catch(() => undefined);
       });
@@ -549,6 +596,8 @@ function Conversations({ following }: { following: Following }) {
         onSeenNewest: read,
         onLetGo,
         onBackToNewest,
+        goTo: goTo !== null && goTo.tab === paneId ? goTo.id : null,
+        onWentTo,
       },
       actions,
       composer,

@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "owner",
   "description": "The app's own commands for the list window, `main` in both clients (docs/design/architecture.md, the owner). Only it holds the sign-ins in the keyring, the server connections, voice, notifications and other windows' opening; build.rs declares every command, so no other window can call these unless its own capability file grants one. The old client is a single `main` window and uses all of them.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "allow-sessions-load",
     "allow-session-save",
@@ -24,6 +26,7 @@
     "allow-graphics-started",
     "allow-next-open-chat",
     "allow-next-open-conversation",
-    "allow-next-open-settings"
+    "allow-next-open-settings",
+    "allow-next-open-tool"
   ]
 }

@@ -24,6 +24,7 @@ const OWNER_ONLY: &[&str] = &[
     "next_open_chat",
     "next_open_conversation",
     "next_open_settings",
+    "next_open_tool",
 ];
 
 const CAPABILITIES: &[(&str, &str)] = &[
@@ -36,6 +37,10 @@ const CAPABILITIES: &[(&str, &str)] = &[
     (
         "next-settings.json",
         include_str!("../capabilities/next-settings.json"),
+    ),
+    (
+        "next-tools.json",
+        include_str!("../capabilities/next-tools.json"),
     ),
     ("owner.json", include_str!("../capabilities/owner.json")),
 ];

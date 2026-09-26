@@ -117,7 +117,7 @@ export const MISSED_KEEP_MS = 10_000;
 
 /** What the tabs window was sent to open before it was listening, oldest first. */
 export interface OpensAnswer {
-  opens: { server: string; roomId: RoomId }[];
+  opens: { server: string; roomId: RoomId; messageId?: MessageId }[];
 }
 
 export interface ModeMessage {
@@ -166,8 +166,10 @@ export type Intent =
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
   | { kind: "tabs"; server: string; roomId: RoomId }
-  /** Show a conversation where conversations open (tabs or its own window), as the list would. */
-  | { kind: "open"; server: string; roomId: RoomId; conversation: "room" | "dm" }
+  /** Show a conversation where conversations open (tabs or its own window), as the list would, at a message if one is named. */
+  | { kind: "open"; server: string; roomId: RoomId; conversation: "room" | "dm"; messageId?: MessageId }
+  /** Open Search or Media (their own windows, decision 15). */
+  | { kind: "tool"; which: "search" | "media" }
   /** Settings changed how conversations open: every window rearranges itself. */
   | { kind: "conversations"; mode: ConversationsMode }
   /** Open Settings (Ctrl+, in any window), on a section if one is named. */
@@ -194,12 +196,14 @@ export interface ListControls {
  * (src-tauri/src/window.rs; only the owner may call them), fakes in tests.
  */
 export interface WindowOpener {
-  /** The chat window, adding a tab for this conversation or showing it. */
-  chat(server: string, roomId: RoomId): void;
-  /** This conversation in a window of its own, or that window brought forward. */
-  conversation(server: string, roomId: RoomId, kind: "room" | "dm"): void;
+  /** The chat window, adding a tab for this conversation or showing it, at a message if one is named. */
+  chat(server: string, roomId: RoomId, messageId?: MessageId): void;
+  /** This conversation in a window of its own, or that window brought forward, at a message if one is named. */
+  conversation(server: string, roomId: RoomId, kind: "room" | "dm", messageId?: MessageId): void;
   /** The Settings window, on a section if one is named. */
   settings(section?: string): void;
+  /** Search's or Media's window, or that window brought forward (decision 15). */
+  tool(which: "search" | "media"): void;
 }
 
 /** The sign-ins, which only the owner holds (lib/session.ts). */
@@ -216,7 +220,7 @@ export interface Sharing {
    * Show a conversation: in the window it was popped out into, if it has one,
    * otherwise in the chat window's tabs.
    */
-  open(server: string, roomId: RoomId): void;
+  open(server: string, roomId: RoomId, messageId?: MessageId): void;
   /**
    * The sign-ins changed (a server added, or signed back into after a
    * password change, which starts its presence afresh): put you back in the
@@ -318,9 +322,9 @@ export async function shareAsOwner(
   // open old rooms whenever the next one does.
   let tabsListening = false;
   let missed: (OpensAnswer["opens"][number] & { at: number })[] = [];
-  const toTabs = (server: string, roomId: RoomId) => {
-    if (!tabsListening) missed.push({ server, roomId, at: Date.now() });
-    opener?.chat(server, roomId);
+  const toTabs = (server: string, roomId: RoomId, messageId?: MessageId) => {
+    if (!tabsListening) missed.push({ server, roomId, messageId, at: Date.now() });
+    opener?.chat(server, roomId, messageId);
   };
 
   // The windows holding the push-to-talk key down right now. A window that
@@ -352,13 +356,13 @@ export async function shareAsOwner(
     if (state.dms.some((dm) => dm.id === roomId)) return "dm";
     return state.rooms.some((room) => room.id === roomId) ? "room" : null;
   };
-  const inOwnWindow = (server: string, roomId: RoomId) => {
-    const kind = kindOf(server, roomId);
-    if (kind !== null) opener?.conversation(server, roomId, kind);
+  const inOwnWindow = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm") => {
+    const kind = known ?? kindOf(server, roomId);
+    if (kind !== null) opener?.conversation(server, roomId, kind, messageId);
   };
-  const open = (server: string, roomId: RoomId) => {
-    if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId);
-    else toTabs(server, roomId);
+  const open = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm") => {
+    if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId, messageId, known);
+    else toTabs(server, roomId, messageId);
   };
 
   const stops = await Promise.all([
@@ -413,7 +417,7 @@ export async function shareAsOwner(
       if (from !== CHAT) return { opens: [] };
       tabsListening = true;
       const fresh = Date.now() - MISSED_KEEP_MS;
-      const opens = missed.filter((open) => open.at >= fresh).map(({ server, roomId }) => ({ server, roomId }));
+      const opens = missed.filter((open) => open.at >= fresh).map(({ server, roomId, messageId }) => ({ server, roomId, messageId }));
       missed = [];
       return { opens };
     }),
@@ -451,16 +455,20 @@ export async function shareAsOwner(
         case "tabs":
           if (sessions().has(intent.server)) toTabs(intent.server, intent.roomId);
           return;
-        case "open":
+        case "open": {
           // A DM made a moment ago may not have reached this window yet, so
-          // the asking window says which kind it is.
+          // the asking window says which kind it is. A message named (a
+          // search hit, a media tile) is where the conversation opens.
           if (!sessions().has(intent.server)) return;
-          if (loadMode(store) === "windows" || ownWindow(intent.server, intent.roomId)) {
-            opener?.conversation(intent.server, intent.roomId, intent.conversation === "dm" ? "dm" : "room");
-          } else toTabs(intent.server, intent.roomId);
+          const messageId = typeof intent.messageId === "string" ? intent.messageId : undefined;
+          open(intent.server, intent.roomId, messageId, intent.conversation === "dm" ? "dm" : "room");
           return;
+        }
         case "settings":
           opener?.settings(typeof intent.section === "string" ? intent.section : undefined);
+          return;
+        case "tool":
+          if (intent.which === "search" || intent.which === "media") opener?.tool(intent.which);
           return;
         case "away":
           if (sessions().has(intent.server)) setAway(intent.server, typeof intent.message === "string" ? intent.message : null);

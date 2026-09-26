@@ -318,7 +318,7 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.gateway.connect(api as never);
     const done: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      opener: { chat: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`) },
+      opener: { chat: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`), tool: () => undefined },
       accounts: {
         reauthenticate: async (server, auth) => void done.push(`signed back in to ${server} as ${auth.user.username}`),
         signOut: async (server) => void done.push(`signed out of ${server}`),
@@ -420,6 +420,7 @@ describe("a viewer window sharing the owner's connection", () => {
         chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
         conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
         settings: (section) => opened.push(`settings ${section ?? ""}`),
+        tool: () => undefined,
       },
     });
     evening().slice(0, 3).forEach(core);
@@ -462,6 +463,7 @@ describe("a viewer window sharing the owner's connection", () => {
         chat: (_server, roomId) => opened.push(`chat ${roomId}`),
         conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
         settings: () => undefined,
+        tool: () => undefined,
       },
       store,
     });
@@ -658,7 +660,7 @@ describe("a viewer window sharing the owner's connection", () => {
   });
 
   it("a window asking to show a conversation gets it where conversations open, even a DM this window hasn't heard of", async () => {
-    const { owner, viewer, core } = await windows("chat-5f1e");
+    const { hub, owner, viewer, core } = await windows("chat-5f1e");
     const api = fakeOwnerApi(["token-1"]);
     await owner.gateway.connect(api as never);
     const opened: string[] = [];
@@ -666,19 +668,29 @@ describe("a viewer window sharing the owner's connection", () => {
     const store = { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) };
     await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
       opener: {
-        chat: (_server, roomId) => opened.push(`tabs ${roomId}`),
-        conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
+        chat: (_server, roomId, messageId) => opened.push(`tabs ${roomId}${messageId ? ` at ${messageId}` : ""}`),
+        conversation: (_server, roomId, kind, messageId) => opened.push(`own ${roomId} ${kind}${messageId ? ` at ${messageId}` : ""}`),
         settings: () => undefined,
+        tool: (which) => opened.push(`tool ${which}`),
       },
       store,
     });
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
+    // Search and Media, and a hit opened at its message: in tabs, and kept for a tabs window not yet listening.
+    await follower.intend({ kind: "tool", which: "search" });
+    await follower.intend({ kind: "tool", which: "settings" as never });
+    await follower.intend({ kind: "open", server: HOME, roomId: "r-general", conversation: "room", messageId: "m000005" });
+    await vi.waitFor(() => expect(opened).toEqual(["tool search", "tabs r-general at m000005"]));
+    await expect(ask(hub.bus("chat"), "main", owner.share.OPENS, {})).resolves.toEqual({
+      opens: [{ server: HOME, roomId: "r-general", messageId: "m000005" }],
+    });
+    opened.length = 0;
     await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm" });
     await vi.waitFor(() => expect(opened).toEqual(["tabs d-new"]));
     items.set("linger.next.conversations", "windows");
-    await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm" });
-    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new", "own d-new dm"]));
+    await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm", messageId: "m000009" });
+    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new", "own d-new dm at m000009"]));
     // A server this computer isn't signed in to opens nothing.
     await follower.intend({ kind: "open", server: "https://elsewhere.example", roomId: "d-new", conversation: "dm" });
     await new Promise((settle) => setTimeout(settle, 10));
@@ -700,7 +712,7 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.gateway.connect(api as never);
     const opened: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      opener: { chat: (_server, roomId) => opened.push(roomId), conversation: () => undefined, settings: () => undefined },
+      opener: { chat: (_server, roomId) => opened.push(roomId), conversation: () => undefined, settings: () => undefined, tool: () => undefined },
     });
     evening().slice(0, 3).forEach(core);
     const opens = (label = "chat") => ask<{ opens: unknown[] }>(label === "chat" ? viewer.bus : hub.bus(label), "main", owner.share.OPENS, {});

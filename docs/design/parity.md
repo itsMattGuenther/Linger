@@ -56,9 +56,6 @@ What's left, biggest first:
   downloads, dropped files on Windows, typing a date in WebKitGTK, and
   whether each window's permissions let it do what it does. The code is
   there; nobody has run it on a real desktop.
-- **Search and media are built but not in a window.** Both views work and are
-  tested; where they open is decision 15 (SRCH, MEDIA, LIST-6). Jumping to an
-  old message from far away waits on them (CONV-17).
 - **Smaller pieces still missing:** a per-server own window (MULTI-7),
   evening warmth (LOOK-2, waiting on an evening version of the colors) and
   the update check at launch (UPD-1, which has nowhere to say "update ready"
@@ -139,6 +136,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     **Decided (2026-09-25): kept as built**: a refusal is said under that server, and the rest still go away (`buddy-list.md`).
 15. **Where Media and Search open:** a tab in the chat window, their own
     window, or a panel of the list? *(MEDIA-1, SRCH-1)*
+    **Decided (2026-09-25): their own windows**, as in the prototype, opened
+    from Media and Search at the foot of the list.
 16. **Sign-in and first run in the new shell.** The design shows only the
     signed-in list. Is the paste box a small list-sized window, and where does
     "+ Add a server" open? *(SIGN-1, SIGN-8)* Built for now as the list
@@ -220,7 +219,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); many rooms is decision 22 |
 | LIST-4 | DMs are their own section, named by who's in them, never by a slug. | `lib/dm.ts`, SPEC §4.13 | Same, plus a new-message button (NEW-2) | C (dm.ts) + F | ✅ (list.test.ts, next-list.spec.ts) |
 | LIST-5 | Voice activity shows in the room list. | `App.tsx` rail | Moving sound bars on the room row | F + G | ✅ (list.test.ts, next-list.spec.ts) |
-| LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | 🟡 built in its view and tested (next-search.spec.ts, next-media.spec.ts), not yet in a window (decision 15). |
+| LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | ✅ Media and Search at the foot of the list, each opening its own window (next-list-window.spec.ts, next-tool-window.spec.ts) |
 | LIST-7 | Every row's names line up: one marker column, fixed row heights for every name face, ellipsis instead of clipping. | new (lessons L-01 to L-06) | The design's rule | G (all 12 faces, both marker counts) | ✅ (kit.spec.ts, next-list.spec.ts, next-servers.spec.ts) |
 | LIST-8 | Room names are the same color: no amber `#` for open rooms (Matt, 2026-09-25). | new | Rule | G | ✅ (next-list.spec.ts) |
 | LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | 🟡 only "No DMs yet" (next-list.spec.ts); decision 17 |
@@ -246,7 +245,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-14 | Memory stays flat: far-off history is let go once scrolling stops, and rooms you've left keep only their newest page (#173). | `Stream.tsx`, `lib/gateway.ts` | Same, per window; each window loads what it shows (architecture) | C + F (`history-memory.spec`) + D | ✅ (next-chat-parity.spec.ts) |
 | CONV-15 | "Back to the newest" when reading far back. Reading down brings the rest back with no gap. | `Stream.tsx` header | Same | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-16 | Pinning a message. **Not in the client today (T-908)**; the server and the media filter support it. | `POST/DELETE /messages/:id/pin` | **Decision 21** | F | ⏸ decision 21 |
-| CONV-17 | Jump to a message (from search or media): walk back a few pages if it's close, or reopen the room *at* it (`around=`) if it's far. The target is marked briefly. Gives up cleanly if the message is gone. | `Stream.tsx` `openAround`, `loadUntil` | Same | C + F | 🟡 quotes jump (next-chat.spec.ts); far jumps wait for search and media |
+| CONV-17 | Jump to a message (from search or media): walk back a few pages if it's close, or reopen the room *at* it (`around=`) if it's far. The target is marked briefly. Gives up cleanly if the message is gone. | `Stream.tsx` `openAround`, `loadUntil` | Same | C + F | ✅ a hit or tile opens its conversation at the message: jumped to if loaded, the room reopened around it if not, and marked (next-chat-window.spec.ts) |
 | CONV-18 | A message that names you (`@username`) is marked in the stream. | `Stream.tsx` mentions | Same; marker style per `system.md` | F | ✅ (next-chat-parity.spec.ts) |
 | CONV-19 | The room header shows the name and topic, and no names (#145). A DM is titled by who's in it. | `Stream.tsx` header, SPEC §4.1 | The tab title plus a pane header with dots and the topic | F | ✅ (conversation.test.ts, next-chat.spec.ts) |
 | CONV-20 | Typing line: "X is typing" above the composer. It holds its space whether or not anyone types. Nobody sends "stopped typing", so the line re-checks the clock and clears within a couple of seconds of the 6-second signal lapsing. | `Stream.tsx` `Typing` | Same | U + G (no shift) | ✅ (conversation.test.ts, next-chat.spec.ts) |
@@ -290,22 +289,22 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| MEDIA-1 | A grid of everything shared: images, video, audio, links, files, pinned. | `media/MediaPanel.tsx`, SPEC §4.4 | Media at the bottom of the list; where it opens is **decision 15** | F | 🟡 built in its view and tested (next-media.spec.ts), not yet in a window (decision 15). |
-| MEDIA-2 | Filter by person, type and date range. | `MediaPanel.tsx`, `GET /media` | Same | F + D | 🟡 built and tested in the media view (next-media.spec.ts), not yet in a window (decision 15); typing a date digit by digit is proved in Chromium only, so it needs a check in the Linux app (WebKitGTK) |
-| MEDIA-3 | Anyone can star an item; starred items sort first and never expire. A star confirms only after the server accepts it. | `MediaPanel.tsx`, `PUT/DELETE /media/:id/star` | Same | F | 🟡 built in its view and tested (next-media.spec.ts), not yet in a window (decision 15). |
-| MEDIA-4 | Every item links back to its message and moment. | `MediaPanel.tsx` → CONV-17 | Same; opens the room's tab at the message | F | 🟡 built in its view and tested (next-media.spec.ts), not yet in a window (decision 15). |
-| MEDIA-5 | DM files are visible only to the DM's members. | server `visible_rooms`, SPEC §4.13 | Same (server-enforced) | C (server tests) + F | 🟡 built in its view and tested (next-media.spec.ts), not yet in a window (decision 15). The server part holds already. |
-| MEDIA-6 | Loading, empty and "nothing matches these filters" states. | `MediaPanel.tsx` | Same | F | 🟡 built in its view and tested (next-media.spec.ts), not yet in a window (decision 15). |
+| MEDIA-1 | A grid of everything shared: images, video, audio, links, files, pinned. | `media/MediaPanel.tsx`, SPEC §4.4 | Media at the bottom of the list; where it opens is **decision 15** | F | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) |
+| MEDIA-2 | Filter by person, type and date range. | `MediaPanel.tsx`, `GET /media` | Same | F + D | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) |
+| MEDIA-3 | Anyone can star an item; starred items sort first and never expire. A star confirms only after the server accepts it. | `MediaPanel.tsx`, `PUT/DELETE /media/:id/star` | Same | F | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) |
+| MEDIA-4 | Every item links back to its message and moment. | `MediaPanel.tsx` → CONV-17 | Same; opens the room's tab at the message | F | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) |
+| MEDIA-5 | DM files are visible only to the DM's members. | server `visible_rooms`, SPEC §4.13 | Same (server-enforced) | C (server tests) + F | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) The server part holds already. |
+| MEDIA-6 | Loading, empty and "nothing matches these filters" states. | `MediaPanel.tsx` | Same | F | ✅ in the Media window (next-media.spec.ts, next-tool-window.spec.ts) |
 
 ## SRCH — search
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| SRCH-1 | A search destination, opened from the list or with Ctrl/Cmd+K, which focuses the box (pressing it again re-focuses rather than closing). Works from the composer too. | `search/SearchPanel.tsx`, `App.tsx`, SPEC §4.12 | Search at the bottom of the list; where it opens is **decision 15** | F | 🟡 built in its view and tested (next-search.spec.ts), not yet in a window (decision 15). |
-| SRCH-2 | Whole words, all terms, "quoted phrases". No operators, wildcards, history or suggestions. Newest first. 200-character cap. Debounced. | `search.ts`, PROTOCOL §6 | Same | U (exists) + F | 🟡 built in its view and tested (next-search.spec.ts), not yet in a window (decision 15). |
-| SRCH-3 | Filter by room and by person, combined. DMs are named like everywhere else, never by id (#74). | `SearchPanel.tsx`, `dm.ts` | Same | F | 🟡 built in its view and tested (next-search.spec.ts), not yet in a window (decision 15). |
-| SRCH-4 | A hit is one line: who, where, when, and the matched words marked. A filename-only hit says which file. Screen readers get one line. | `search.ts` `snippetText` | Same | U + F | 🟡 built in its view and tested (next-search.spec.ts), not yet in a window (decision 15). |
-| SRCH-5 | Clicking a hit opens that room at that message (CONV-17). | `SearchPanel.tsx` | Same | F | 🟡 built in its view and tested (next-search.spec.ts), not yet in a window (decision 15). |
+| SRCH-1 | A search destination, opened from the list or with Ctrl/Cmd+K, which focuses the box (pressing it again re-focuses rather than closing). Works from the composer too. | `search/SearchPanel.tsx`, `App.tsx`, SPEC §4.12 | Search at the bottom of the list; where it opens is **decision 15** | F | ✅ in the Search window (next-search.spec.ts, next-tool-window.spec.ts) |
+| SRCH-2 | Whole words, all terms, "quoted phrases". No operators, wildcards, history or suggestions. Newest first. 200-character cap. Debounced. | `search.ts`, PROTOCOL §6 | Same | U (exists) + F | ✅ in the Search window (next-search.spec.ts, next-tool-window.spec.ts) |
+| SRCH-3 | Filter by room and by person, combined. DMs are named like everywhere else, never by id (#74). | `SearchPanel.tsx`, `dm.ts` | Same | F | ✅ in the Search window (next-search.spec.ts, next-tool-window.spec.ts) |
+| SRCH-4 | A hit is one line: who, where, when, and the matched words marked. A filename-only hit says which file. Screen readers get one line. | `search.ts` `snippetText` | Same | U + F | ✅ in the Search window (next-search.spec.ts, next-tool-window.spec.ts) |
+| SRCH-5 | Clicking a hit opens that room at that message (CONV-17). | `SearchPanel.tsx` | Same | F | ✅ in the Search window (next-search.spec.ts, next-tool-window.spec.ts) |
 
 ## DM — direct and group messages
 

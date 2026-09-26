@@ -139,6 +139,7 @@ mockIPC((cmd, args) => {
     case "next_open_chat":
     case "next_open_conversation":
     case "next_open_settings":
+    case "next_open_tool":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:
