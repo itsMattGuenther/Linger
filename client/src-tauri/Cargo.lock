@@ -2652,7 +2652,7 @@ dependencies = [
 
 [[package]]
 name = "linger-client"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2683,7 +2683,7 @@ dependencies = [
 
 [[package]]
 name = "linger-core"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
