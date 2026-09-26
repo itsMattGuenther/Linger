@@ -188,12 +188,29 @@ test.describe("this app", () => {
     await expect(panel(page)).toContainText("Microphones and speakers are picked in the desktop app.");
   });
 
-  test("push-to-talk names its key", async ({ page }) => {
+  test("push-to-talk names its key, and the key is chosen by pressing it", async ({ page }) => {
     await open(page, "?section=sound");
-    await expect(page.locator("kbd")).toHaveText("Ctrl");
+    await expect(page.locator("kbd")).toHaveText("Right Ctrl");
     await page.getByRole("switch", { name: "Push to talk" }).click();
-    const voice = (await did(page)).filter((line) => line.startsWith("voice:"));
-    expect(JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}")).toMatchObject({ pushToTalk: true });
+    const saved = async () => {
+      const voice = (await did(page)).filter((line) => line.startsWith("voice:"));
+      return JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}") as Record<string, unknown>;
+    };
+    expect(await saved()).toMatchObject({ pushToTalk: true });
+    await page.getByRole("button", { name: "Change" }).click();
+    await expect(page.getByRole("button", { name: "Press a key…" })).toBeVisible();
+    // A key that types something is refused, and it's still listening.
+    await page.keyboard.press("v");
+    await expect(page.getByText("That key types something.")).toBeVisible();
+    await page.keyboard.press("AltRight");
+    await expect(page.locator("kbd")).toHaveText("Right Alt");
+    expect(await saved()).toMatchObject({ pushToTalkKey: "AltRight" });
+    await expect(page.getByText("That key types something.")).toHaveCount(0);
+    // Escape leaves it as it was, and doesn't close Settings.
+    await page.getByRole("button", { name: "Change" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("kbd")).toHaveText("Right Alt");
+    await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
   });
 
   test("voice goes through the server by default, and the old way is one switch away (#197)", async ({ page }) => {

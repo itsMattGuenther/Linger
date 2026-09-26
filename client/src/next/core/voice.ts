@@ -46,7 +46,7 @@ export interface VoiceModel {
  * The voice bar, when you're in voice on this server; null when you aren't.
  * `speaking` is who is talking by user id, known only from the audio you hear.
  */
-export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>): VoiceModel | null {
+export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, talkKey = "Right Ctrl"): VoiceModel | null {
   const mine = state.myVoice;
   const me = state.me;
   if (mine === null || me === null) return null;
@@ -79,7 +79,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>): 
     muted: mine.muted,
     deafened: mine.deafened,
     pushToTalk: mine.pushToTalk,
-    line: microphoneLine(mine.audio, mine.pushToTalk, mine.muted),
+    line: microphoneLine(mine.audio, mine.pushToTalk, mine.muted, talkKey),
   };
 }
 

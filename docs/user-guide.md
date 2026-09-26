@@ -392,10 +392,12 @@ With the list tucked away in the tray, the tray icon's menu has **Mute** and
 **Leave voice**.
 
 **Push to talk** is in **Settings → Sound & Voice**. With it on, every call
-starts muted and the microphone is open only while you hold **Ctrl**. Switching
-away from Linger releases a held key; press it again to speak. It's off by
-default, because a room you leave running is the point, and a key you have to
-hold is the opposite of that.
+starts muted and the microphone is open only while you hold the **talk key**:
+**Right Ctrl** unless you pick another under **Talk key** (press **Change**,
+then the key). The shortcuts use the left Ctrl, so they never open your
+microphone. Switching away from Linger releases a held key; press it again to
+speak. It's off by default, because a room you leave running is the point,
+and a key you have to hold is the opposite of that.
 
 Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
 change applies the next time you join. If a device you picked isn't plugged in,

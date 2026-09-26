@@ -109,7 +109,8 @@ describe("the voice bar's contents", () => {
 
   it("says what a button can't: opening the microphone, or how to talk with push-to-talk", () => {
     expect(voiceModel(inVoice({ audio: "opening" }), new Set())?.line).toBe("opening the microphone…");
-    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set())?.line).toBe("hold control to talk");
+    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set())?.line).toBe("hold Right Ctrl to talk");
+    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set(), "F13")?.line).toBe("hold F13 to talk");
     expect(voiceModel(inVoice(), new Set())?.line).toBeNull();
   });
 

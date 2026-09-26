@@ -24,7 +24,8 @@ import {
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
-import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
+import { loadVoicePrefs } from "../../../lib/voice";
+import { isTalkKey } from "../../core/talkKey";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import {
   conversationIn,
@@ -399,10 +400,10 @@ function Conversations({ following }: { following: Following }) {
     if (!pushToTalk) return;
     const say = (down: boolean) => void intend({ kind: "voice.talk", down }).catch(() => undefined);
     const down = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) say(true);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) say(true);
     };
     const up = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY) say(false);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) say(false);
     };
     const release = () => say(false);
     window.addEventListener("keydown", down);

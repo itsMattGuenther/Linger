@@ -18,7 +18,8 @@ import {
   useGateway,
   useServers,
 } from "../../../lib/gateway";
-import { PUSH_TO_TALK_KEY } from "../../../lib/voice";
+import { loadVoicePrefs } from "../../../lib/voice";
+import { isTalkKey, talkKeyName } from "../../core/talkKey";
 import { forgetNotifications, resetNotifications, setQuietServers } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions } from "../../../lib/session";
@@ -315,11 +316,13 @@ function Servers({ signedIn, accounts, keyringNotice }: { signedIn: ServerSessio
   useEffect(() => {
     if (!pushToTalk || voiceServer === null) return;
     const down = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
+      // The chosen key (decision 6), read as it's pressed: Settings may have
+      // just changed it, in another window.
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
     };
     const release = () => void setVoiceMuted(voiceServer, true).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
-      if (event.key === PUSH_TO_TALK_KEY) release();
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) release();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -663,7 +666,7 @@ function openChat(server: string, room: RoomId): void {
  * controls act here, in the owner, which keeps the voice seat.
  */
 function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string): VoiceDockProps | undefined {
-  const model = voiceModel(state, speaking);
+  const model = voiceModel(state, speaking, talkKeyName(loadVoicePrefs().pushToTalkKey));
   if (model === null) return undefined;
   return {
     ...model,

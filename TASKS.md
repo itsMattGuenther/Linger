@@ -415,7 +415,7 @@ Rules for this milestone:
   stylesheet, fonts and mark, at every interface size, and keeps a Windows
   screenshot. Still to do before today's client is deleted: the list, chat and
   Settings windows signed in, against a throwaway server.
-- ⬜ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
+- ✅ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
   key" picker in Settings → Sound & Voice, Right Ctrl by default, so the Ctrl
   shortcuts never open the microphone. Push-to-talk stays off by default.
 - ⬜ **T-1814 · Drafts that last** — decision 11. A conversation's half-typed

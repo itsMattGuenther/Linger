@@ -1,9 +1,11 @@
 import type { VoiceDeviceList } from "../../../lib/ipc";
 import { inQuietHours, type SoundCategory, type SoundPrefs } from "../../../lib/sound";
 import { clockTime } from "../../../lib/time";
-import { PUSH_TO_TALK_KEY, type VoicePrefs } from "../../../lib/voice";
+import { useEffect, useState } from "react";
+import type { VoicePrefs } from "../../../lib/voice";
+import { canBeTalkKey, talkKeyName } from "../../core/talkKey";
 import { CHIMES, deviceOptions, HEADINGS, quietChoices, SYSTEM_DEFAULT } from "../../core/settings";
-import { IconButton, Select, SettingRow, Switch } from "../../kit";
+import { Button, IconButton, Select, SettingRow, Switch } from "../../kit";
 import { Block, Fields, Note } from "./parts";
 
 export interface SoundProps {
@@ -26,8 +28,33 @@ function minuteText(minutes: number): string {
   return clockTime(new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).getTime());
 }
 
-/** Sound & Voice (SND, VOICE-8, VOICE-9). Arrival cards and door sounds are new and not built yet. */
+/** Sound & Voice (SND, VOICE-8, VOICE-9). */
 export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, now }: SoundProps) {
+  // Choosing the push-to-talk key (decision 6): the next key pressed, if it's
+  // one that types nothing. Escape leaves it as it was.
+  const [picking, setPicking] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.code === "Escape") {
+        setPicking(false);
+        setRefused(null);
+        return;
+      }
+      if (!canBeTalkKey(event.code)) {
+        setRefused("That key types something. Pick Ctrl, Alt, Shift or a function key.");
+        return;
+      }
+      setPicking(false);
+      setRefused(null);
+      onVoice({ ...voice, pushToTalkKey: event.code });
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [picking, voice, onVoice]);
   const from = minuteText(sound.quietFrom);
   const until = minuteText(sound.quietUntil);
   const right = sound.muted
@@ -121,15 +148,23 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
         <SettingRow
           title="Push to talk"
           description="Starts every call muted and opens the microphone only while you hold the key. Off by default: a room you leave running shouldn't need a key held down."
+          control={<Switch label="Push to talk" checked={voice.pushToTalk} onChange={(pushToTalk) => onVoice({ ...voice, pushToTalk })} />}
+        />
+        <SettingRow
+          title="Talk key"
+          description="The key you hold. Right Ctrl unless you pick another: the shortcuts use the left one, so they never open the microphone."
           control={
             <>
               <kbd className="nx-set-key" title="The push-to-talk key">
-                {PUSH_TO_TALK_KEY === "Control" ? "Ctrl" : PUSH_TO_TALK_KEY}
+                {talkKeyName(voice.pushToTalkKey)}
               </kbd>
-              <Switch label="Push to talk" checked={voice.pushToTalk} onChange={(pushToTalk) => onVoice({ ...voice, pushToTalk })} />
+              <Button size="sm" variant="secondary" onClick={() => setPicking((on) => !on)}>
+                {picking ? "Press a key…" : "Change"}
+              </Button>
             </>
           }
         />
+        {refused ? <Note tone="problem">{refused}</Note> : null}
         <SettingRow
           title="Voice through the server"
           description="Your voice goes to the server once, and it passes it on to everyone in the room. Turn it off to use the old way, straight to each person: if anybody in a room does, the whole room goes the old way. Only matters on a server that passes voice on, and takes effect the next time you join."
