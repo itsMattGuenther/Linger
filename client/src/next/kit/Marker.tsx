@@ -18,8 +18,8 @@ function colorStyle(color: ColorKey): CSSProperties {
 
 /**
  * A person's presence, in their color: a plain dot when they're here or
- * around, a crescent moon when they're away, a dimmed dot when they're idle or
- * offline. The same at every size.
+ * around, a small "z" when they're idle (#259), a crescent moon when they're
+ * away, a dimmed dot when they're offline. The same at every size.
  *
  * This is the only marker in the app. Every list, card, tab and chip draws
  * presence with it, so one state never looks two ways.
@@ -52,6 +52,11 @@ export function Marker({
       {state === "away" ? (
         <svg viewBox="0 0 16 16" focusable="false">
           <path d="M12.8 10.2A5.5 5.5 0 0 1 5.8 3.2a5.5 5.5 0 1 0 7 7z" />
+        </svg>
+      ) : state === "idle" ? (
+        // One bold z, not three: three don't read at 8px (#259).
+        <svg viewBox="0 0 16 16" focusable="false">
+          <path d="M3 2h10v3l-5.8 6H13v3H3v-3l5.8-6H3z" />
         </svg>
       ) : null}
     </span>

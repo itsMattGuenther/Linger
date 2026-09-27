@@ -72,6 +72,36 @@ test("icons and markers sit exactly in the middle of their boxes (#144, #164, #1
   expect(off).toEqual([]);
 });
 
+// Idle was the here dot, a little dimmed, and easy to miss beside it (#259).
+test("idle is a small z in the person's own color, drawn like the away moon", async ({ page }) => {
+  for (const size of ["md", "sm"]) {
+    const idle = page.getByRole("img", { name: `Eli (${size}), idle` });
+    await expect(idle).toHaveCount(1);
+    const drawn = await idle.evaluate((node) => {
+      const here = node.parentElement?.querySelector('.k-marker[data-state="here"]');
+      const away = node.parentElement?.querySelector('.k-marker[data-state="away"] svg');
+      const svg = node.querySelector("svg");
+      const box = (el: Element | null | undefined) => el?.getBoundingClientRect();
+      const [mine, moon, marker] = [box(svg), box(away), box(node)];
+      return {
+        glyph: svg?.querySelector("path") !== null && svg !== null,
+        color: getComputedStyle(node).color,
+        herColor: here ? getComputedStyle(here).backgroundColor : null,
+        background: getComputedStyle(node).backgroundColor,
+        opacity: getComputedStyle(node).opacity,
+        sameSizeAsMoon: mine && moon ? Math.abs(mine.width - moon.width) < 0.01 && Math.abs(mine.height - moon.height) < 0.01 : false,
+        centered: mine && marker ? Math.abs(mine.x + mine.width / 2 - (marker.x + marker.width / 2)) < 0.5 && Math.abs(mine.y + mine.height / 2 - (marker.y + marker.height / 2)) < 0.5 : false,
+      };
+    });
+    expect(drawn.glyph, size).toBe(true);
+    expect(drawn.color, size).toBe(drawn.herColor);
+    expect(drawn.background, size).toBe("rgba(0, 0, 0, 0)");
+    expect(drawn.opacity, size).toBe("1");
+    expect(drawn.sameSizeAsMoon, size).toBe(true);
+    expect(drawn.centered, size).toBe(true);
+  }
+});
+
 test("a person with no status line has their name level with their marker, not above an empty line", async ({ page }) => {
   const off = await page.evaluate((tolerance) => {
     const problems: string[] = [];
