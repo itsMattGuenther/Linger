@@ -423,6 +423,47 @@ test.describe("in voice", () => {
     expect(new Set(heights)).toEqual(new Set([24]));
   });
 
+  test("Mute, Deafen and Leave are symbols with no words showing, named for the tooltip and screen readers, as in the chat window (#230)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    const yours = bar.getByRole("group", { name: "Your voice" });
+    await expect(yours.getByRole("button")).toHaveCount(3);
+    await expect(yours).toHaveText("");
+    for (const name of ["Mute", "Deafen", "Leave voice"]) {
+      const button = yours.getByRole("button", { name, exact: true });
+      await expect(button).toHaveAttribute("data-kit", "IconButton");
+      await expect(button).toHaveText("");
+      if (name === "Leave voice") await expect(button).not.toHaveAttribute("aria-pressed");
+      else await expect(button).toHaveAttribute("aria-pressed", "false");
+      const box = await button.boundingBox();
+      expect(box && [box.width, box.height]).toEqual([24, 24]);
+      // The word shows on hover.
+      await button.hover();
+      await expect(page.locator("[data-kit='Tooltip']")).toHaveText(name);
+    }
+    const restingMic = await yours.getByRole("button", { name: "Mute", exact: true }).locator("svg").innerHTML();
+    const restingHead = await yours.getByRole("button", { name: "Deafen", exact: true }).locator("svg").innerHTML();
+
+    // Pressed: named for what's on, and crossed out like the glyph beside your name.
+    const you = bar.getByRole("list", { name: "Who's in voice" }).getByRole("listitem").filter({ hasText: "you" });
+    await page.goto("/tests/fixtures/next-list.html?voice&muted");
+    const muted = yours.getByRole("button", { name: "Muted", exact: true });
+    await expect(muted).toHaveAttribute("aria-pressed", "true");
+    await expect(muted).toHaveText("");
+    const mutedMic = await muted.locator("svg").innerHTML();
+    expect(mutedMic).not.toBe(restingMic);
+    expect(mutedMic).toBe(await you.locator(".k-chip-state svg").innerHTML());
+
+    await page.goto("/tests/fixtures/next-list.html?voice&deafened");
+    const deafened = yours.getByRole("button", { name: "Deafened", exact: true });
+    await expect(deafened).toHaveAttribute("aria-pressed", "true");
+    await expect(deafened).toHaveText("");
+    const deafenedHead = await deafened.locator("svg").innerHTML();
+    expect(deafenedHead).not.toBe(restingHead);
+    expect(deafenedHead).toBe(await you.locator(".k-chip-state svg").innerHTML());
+    await expect(yours).toHaveText("");
+  });
+
   test("its controls do what they say", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");
     const bar = page.getByRole("region", { name: "In voice in #general" });
@@ -437,6 +478,8 @@ test.describe("in voice", () => {
     await page.goto("/tests/fixtures/next-list.html?voice&ptt");
     const bar = page.getByRole("region", { name: "In voice in #general" });
     await expect(bar.getByRole("button", { name: /^Mute/ })).toHaveCount(0);
+    // Deafen and Leave are symbols (#230); the line is an instruction, so it stays in words.
+    await expect(bar.getByRole("group", { name: "Your voice" }).getByRole("button")).toHaveText(["", ""]);
     await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
   });
 

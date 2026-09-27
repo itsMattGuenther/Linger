@@ -526,9 +526,10 @@ replaces an unread count.
   topic; a DM's people, a 1:1's status, and Knock.
 - **Voice strip**, 40px in every state, so voice changing never moves the
   conversation: who's in voice as chips (lit while talking) and one way in
-  (Join, Move voice here, Start talking, Talk here instead), or "You're in
-  voice here" with no buttons. Mute, deafen and leave are only in the list's
-  voice bar.
+  (Join, Move voice here, Start talking, Talk here instead). In the room
+  you're in voice in, it ends with your Mute, Deafen and Leave voice as small
+  plain `IconButton`s (#216), the same symbols, sizes and spacing as the
+  list's voice bar (#230); the word is each one's name and tooltip.
 - **Typing line**, 24px, always there, so the box never jumps.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
   then add-a-file, emoji and send (32px each). It grows with its text to

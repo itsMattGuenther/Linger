@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
-import { Button, Chip, IconButton, Name, VoiceGlyph } from "../../kit";
+import { Chip, IconButton, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
@@ -58,9 +58,10 @@ export interface VoiceDockProps {
 
 /**
  * The voice bar at the bottom of the list (docs/design/buddy-list.md, "Voice
- * belongs to the room, not the tab or window"). It is the one place with
- * Mute, Deafen and Leave: the list is always open, so they're always in
- * reach, and closing a chat tab or window never ends voice.
+ * belongs to the room, not the tab or window"). Mute, Deafen and Leave are
+ * always here: the list is always open, so they're always in reach, and
+ * closing a chat tab or window never ends voice. The room's chat window has
+ * the same three (#216), and the tray menu has Mute and Leave.
  */
 export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume }: VoiceDockProps) {
   // Whose volume is open, and the chip it opened from.
@@ -131,18 +132,19 @@ export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, se
       {open && onVolume && volumeOf ? (
         <VolumeCard user={open.user} volume={open.volume ?? 1} anchor={opener} onVolume={(volume) => onVolume(open, volume)} onClose={closeVolume} />
       ) : null}
-      <div className="nx-voice-controls">
+      {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230). */}
+      <div className="nx-voice-controls" role="group" aria-label="Your voice">
         {pushToTalk ? null : (
-          <Button size="sm" variant="secondary" icon={muted ? "micOff" : "mic"} pressed={muted} onClick={() => onMute(!muted)}>
-            {muted ? "Muted" : "Mute"}
-          </Button>
+          <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size="sm" pressed={muted} onClick={() => onMute(!muted)} />
         )}
-        <Button size="sm" variant="secondary" icon={deafened ? "headOff" : "head"} pressed={deafened} onClick={() => onDeafen(!deafened)}>
-          {deafened ? "Deafened" : "Deafen"}
-        </Button>
-        <Button size="sm" variant="secondary" icon="leave" onClick={onLeave}>
-          Leave
-        </Button>
+        <IconButton
+          icon={deafened ? "headOff" : "head"}
+          label={deafened ? "Deafened" : "Deafen"}
+          size="sm"
+          pressed={deafened}
+          onClick={() => onDeafen(!deafened)}
+        />
+        <IconButton icon="leave" label="Leave voice" size="sm" onClick={onLeave} />
       </div>
     </section>
   );
