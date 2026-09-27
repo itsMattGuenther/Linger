@@ -210,7 +210,9 @@ One **sound volume** (#234) sets how loud all of these cues play, knocks and
 the door chime included: 100% by default (the level they were designed at),
 from silent to 400%, kept on the listener's computer. It is one level for
 every cue, never one per cue, so the balance between them stays as designed.
-400% is the most the loudest cue takes before coming near clipping. Letting go
+400% is the most the loudest chime takes before coming near clipping; the
+knock, written louder because a low thud is hard to hear (#252), stops
+getting louder at 240%. Letting go
 of the slider plays one sample chime at the new level. At 0% nothing plays,
 previews included. It is a level, not a gate: mute, quiet hours and the
 category switches work the same at any setting, and it never touches other
