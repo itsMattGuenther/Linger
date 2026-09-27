@@ -224,6 +224,13 @@ export interface GatewayState {
    * and per-person volume remain local (SPEC §4.14).
    */
   myVoice: MyVoice | null;
+  /**
+   * The last try at starting voice failed, where, and the shell's reason
+   * (#261). Cleared by the next try. A failed start used to leave nothing
+   * behind: the strip blinked "opening" and went back, and nobody could tell
+   * why voice wouldn't start.
+   */
+  voiceFailed: { roomId: RoomId; problem: string } | null;
 }
 
 /** Everything about being in voice that is this client's alone. */
@@ -309,6 +316,7 @@ const EMPTY: GatewayState = {
   sessionId: null,
   voice: {},
   myVoice: null,
+  voiceFailed: null,
 };
 
 /**
@@ -872,11 +880,11 @@ export function positionOf(server: string): Position {
  * The fields that change without a frame, which the owner keeps and shares
  * (docs/design/architecture.md, the table under "How windows share state").
  */
-export type SharedLocal = Pick<GatewayState, "myVoice" | "read" | "readLoaded" | "notifyRules">;
+export type SharedLocal = Pick<GatewayState, "myVoice" | "voiceFailed" | "read" | "readLoaded" | "notifyRules">;
 
 export function sharedLocalOf(server: string): SharedLocal {
-  const { myVoice, read, readLoaded, notifyRules } = stateOf(server);
-  return { myVoice, read, readLoaded, notifyRules };
+  const { myVoice, voiceFailed, read, readLoaded, notifyRules } = stateOf(server);
+  return { myVoice, voiceFailed, read, readLoaded, notifyRules };
 }
 
 /** A viewer takes the owner's copy of those fields. */
@@ -1835,6 +1843,7 @@ export async function joinVoice(
   }
   publish(server, {
     ...stateOf(server),
+    voiceFailed: null,
     myVoice: {
       roomId,
       muted: previous?.deafened || previous?.muted || false,
@@ -1867,7 +1876,8 @@ export async function joinVoice(
     await voiceJoin(server, current.sessionId, roomId, devices, ice);
     applySavedVoiceVolumes(server);
   } catch (error) {
-    publish(server, { ...stateOf(server), myVoice: null });
+    const problem = error instanceof Error ? error.message : String(error);
+    publish(server, { ...stateOf(server), myVoice: null, voiceFailed: { roomId, problem } });
     throw error;
   }
 }

@@ -25,7 +25,7 @@ import {
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
-import { loadVoicePrefs } from "../../../lib/voice";
+import { loadVoicePrefs, onWindows, voiceStartProblem } from "../../../lib/voice";
 import { isTalkKey } from "../../core/talkKey";
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
@@ -615,6 +615,11 @@ function Conversations({ following }: { following: Following }) {
         controls:
           state.myVoice?.roomId === room.id
             ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, onMute, onDeafen, onLeave }
+            : undefined,
+        // The last try at starting voice here failed (#261): the strip says why.
+        failed:
+          state.voiceFailed?.roomId === room.id
+            ? { line: voiceStartProblem(state.voiceFailed.problem, onWindows()), detail: state.voiceFailed.problem }
             : undefined,
       },
       people,

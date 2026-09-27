@@ -181,6 +181,34 @@ export function microphoneLine(audio: string, waitingForKey: boolean, talkKey = 
   }
 }
 
+/**
+ * Why voice didn't start, in one short line for the room's voice strip
+ * (#261). `problem` is the desktop shell's reason, which names the device
+ * ("the microphone wouldn't open: …"); the whole of it goes in the tooltip.
+ * A known cause says what to do about it. `windows` because the usual cause
+ * there is Windows' own microphone privacy switch, which Linger can't turn on.
+ */
+export function voiceStartProblem(problem: string, windows: boolean): string {
+  const speakers = /^the speakers wouldn't open/i.test(problem);
+  const device = speakers ? "speakers" : "microphone";
+  if (/no input device/i.test(problem)) return "No microphone found. Plug one in, or pick one in Settings.";
+  if (/no output device/i.test(problem)) return "No speakers found. Plug some in, or pick them in Settings.";
+  if (/denied|access|permission/i.test(problem)) {
+    return !speakers && windows
+      ? "Windows' privacy settings are blocking the microphone."
+      : `Linger isn't allowed to use the ${device}.`;
+  }
+  if (/busy|in use/i.test(problem)) return `The ${device} ${speakers ? "are" : "is"} in use by another app.`;
+  if (/wouldn't open/i.test(problem)) return `The ${device} wouldn't open.`;
+  if (/desktop app/i.test(problem)) return "Voice only works in the desktop app.";
+  return "Something went wrong. Try again.";
+}
+
+/** Whether this is Windows, where WebView2 says so in its user agent. For advice only, never a gate. */
+export function onWindows(): boolean {
+  return typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
+}
+
 /** A volume as a label: 100% is as sent. Numerals are metadata, so the caller draws it mono. */
 export function volumeLabel(volume: number): string {
   return `${Math.round(volume * 100)}%`;

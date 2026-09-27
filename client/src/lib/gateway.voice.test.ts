@@ -47,6 +47,7 @@ const {
   leaveVoice,
   serverState,
   setVoiceMuted,
+  sharedLocalOf,
   setVoiceDeafened,
   setVoicePushToTalk,
   setVoiceTalking,
@@ -298,6 +299,16 @@ describe("voice in the store", () => {
       /no voice_join today/,
     );
     expect(serverState(HOME).myVoice).toBeNull();
+    // The reason stays, for the room's strip to show (#261), and is shared
+    // with the other windows along with the seat.
+    expect(serverState(HOME).voiceFailed).toEqual({ roomId: "r-garage", problem: expect.stringMatching(/no voice_join today/) });
+    expect(sharedLocalOf(HOME).voiceFailed?.roomId).toBe("r-garage");
+
+    // The next try clears it, whether or not it works.
+    failing.delete("voice_join");
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    expect(serverState(HOME).voiceFailed).toBeNull();
+    expect(serverState(HOME).myVoice?.roomId).toBe("r-garage");
   });
 
   it("loses the seat, and tells the core, when the server's list no longer has us", async () => {
