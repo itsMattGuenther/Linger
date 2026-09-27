@@ -14,8 +14,14 @@
  *   knocks, which arrive on their own. Voice and mic/deafen cues answer
  *   something you are doing in a call, so they still play (#186).
  *
- * Both are the reader's preference about their own machine, so they live in
- * local storage beside appearance preferences rather than in the gateway store.
+ * Beside the gate is one **sound volume** (#234): how loud every cue plays,
+ * 100% by default, from silent to {@link MAX_SOUND_VOLUME}. It decides how
+ * loud, not whether, except that at 0% nothing plays at all.
+ *
+ * All of these are the reader's preference about their own machine, so they
+ * live in local storage beside appearance preferences rather than in the
+ * gateway store. The player reads them again for every cue, so a change made
+ * in Settings, which is another window, holds from the next sound on.
  *
  * The knock itself is synthesized rather than played from a file. Two soft
  * taps from an oscillator need no audio asset. The shared score in chimes.ts
@@ -32,11 +38,24 @@ export const DEFAULT_QUIET_UNTIL = 8 * 60;
 /** The steps the window moves in: every half hour. */
 export const QUIET_STEP_MINUTES = 30;
 
+/**
+ * The top of the sound volume: 400% of the score as written (#234).
+ *
+ * Measured, not guessed. Rendered offline, the loudest cue at 100% is the
+ * knock, whose first tap peaks at 0.16 of full scale; the loudest chime,
+ * voice-move, peaks at 0.052, and a DM at 0.042. At 400% the knock peaks at
+ * 0.64, which leaves room below clipping (1.0) even when a chime lands on top
+ * of it. 500% would take the knock to 0.80. `chime-onset.spec.ts` renders
+ * every cue at this setting and fails if any peaks above 0.8.
+ */
+export const MAX_SOUND_VOLUME = 4;
+
 const MUTE_KEY = "linger.sound.muted";
 const QUIET_KEY = "linger.sound.quietHours";
 const QUIET_FROM_KEY = "linger.sound.quietFrom";
 const QUIET_UNTIL_KEY = "linger.sound.quietUntil";
 const CATEGORY_KEY = "linger.sound.categories";
+const VOLUME_KEY = "linger.sound.volume";
 
 export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks", "door"] as const;
 export type SoundCategory = typeof SOUND_CATEGORIES[number];
@@ -48,6 +67,7 @@ export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   quietFrom: DEFAULT_QUIET_FROM, quietUntil: DEFAULT_QUIET_UNTIL,
   // The door chime (decision 12) starts off: an arrival is a card first.
   categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true, door: false },
+  volume: 1,
 };
 let fallbackPrefs = DEFAULT_SOUND_PREFS;
 let storageUnavailable = false;
@@ -63,6 +83,12 @@ export interface SoundPrefs {
   /** When they end. Earlier than `quietFrom` means the window crosses midnight. */
   quietUntil: number;
   categories: Record<SoundCategory, boolean>;
+  /**
+   * How loud every cue plays, as a share of the score as written: 1 is 100%
+   * and the default, 0 is silent, and the top is {@link MAX_SOUND_VOLUME}.
+   * One level for all of them, so the balance between cues stays as designed.
+   */
+  volume: number;
 }
 
 /**
@@ -85,6 +111,16 @@ function minuteOfDay(saved: string | null, fallback: number): number {
   if (saved === null || !/^\d+$/.test(saved)) return fallback;
   const value = Number(saved);
   return Number.isInteger(value) && value >= 0 && value < 24 * 60 ? value : fallback;
+}
+
+/**
+ * A saved sound volume, if it is a plain number from silent to the top of the
+ * range; otherwise 100%, the level everyone had before there was a setting.
+ */
+function soundVolume(saved: string | null): number {
+  if (saved === null || !/^\d+(\.\d+)?$/.test(saved)) return 1;
+  const value = Number(saved);
+  return Number.isFinite(value) && value >= 0 && value <= MAX_SOUND_VOLUME ? value : 1;
 }
 
 /**
@@ -120,6 +156,7 @@ export function loadSoundPrefs(): SoundPrefs {
       quietFrom: minuteOfDay(window.localStorage.getItem(QUIET_FROM_KEY), DEFAULT_QUIET_FROM),
       quietUntil: minuteOfDay(window.localStorage.getItem(QUIET_UNTIL_KEY), DEFAULT_QUIET_UNTIL),
       categories,
+      volume: soundVolume(window.localStorage.getItem(VOLUME_KEY)),
     };
   } catch {
     storageUnavailable = true;
@@ -136,6 +173,7 @@ export function saveSoundPrefs(prefs: SoundPrefs): void {
     window.localStorage.setItem(QUIET_FROM_KEY, String(prefs.quietFrom));
     window.localStorage.setItem(QUIET_UNTIL_KEY, String(prefs.quietUntil));
     window.localStorage.setItem(CATEGORY_KEY, JSON.stringify(prefs.categories));
+    window.localStorage.setItem(VOLUME_KEY, String(prefs.volume));
   } catch {
     // The setting still holds for this session.
     storageUnavailable = true;
@@ -223,15 +261,22 @@ export function cueAllowed(cue: SoundCue, prefs: SoundPrefs, at: Date): boolean 
 }
 
 const lastPlayed = new Map<SoundCategory, number>();
-// The one context has a fixed sample rate. Keep each short synthesized cue in
-// memory, including an in-flight render shared by simultaneous notifications.
+// The one context has a fixed sample rate, and the volume changes only when
+// the listener moves it. Keep each short synthesized cue in memory at the
+// current volume, including an in-flight render shared by simultaneous
+// notifications. A new volume starts a fresh set.
 const buffers = new Map<SoundCue, Promise<AudioBuffer>>();
+let buffersVolume = DEFAULT_SOUND_PREFS.volume;
 
-function chimeBuffer(ctx: AudioContext, cue: SoundCue): Promise<AudioBuffer> {
+function chimeBuffer(ctx: AudioContext, cue: SoundCue, volume: number): Promise<AudioBuffer> {
+  if (volume !== buffersVolume) {
+    buffers.clear();
+    buffersVolume = volume;
+  }
   const cached = buffers.get(cue);
   if (cached) return cached;
-  const pending = renderChime(cue, ctx.sampleRate).catch((error: unknown) => {
-    buffers.delete(cue);
+  const pending = renderChime(cue, ctx.sampleRate, volume).catch((error: unknown) => {
+    if (buffers.get(cue) === pending) buffers.delete(cue);
     throw error;
   });
   buffers.set(cue, pending);
@@ -245,15 +290,19 @@ export async function playSound(cue: SoundCue, now: Date = new Date()): Promise<
 
 /**
  * Settings Listen. The person asked to hear this cue, so mute, quiet hours,
- * categories and burst protection do not apply. Live events still go through
- * {@link playSound}.
+ * categories and burst protection do not apply. It plays at the sound volume,
+ * so letting go of that slider plays one to hear the new level; at 0% it is
+ * silent like everything else. Live events still go through {@link playSound}.
  */
 export async function playPreview(cue: SoundCue): Promise<boolean> {
   return play(cue, new Date(), true);
 }
 
 async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean> {
-  if (!preview && !cueAllowed(cue, loadSoundPrefs(), now)) return false;
+  const prefs = loadSoundPrefs();
+  // At 0% there is nothing to hear, so nothing is started.
+  if (!(prefs.volume > 0)) return false;
+  if (!preview && !cueAllowed(cue, prefs, now)) return false;
   const category = categoryOf(cue);
   const cooldown = category === "dms" || category === "rooms" ? 1200 : 100;
   const started = Date.now();
@@ -270,21 +319,20 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
       } finally { clearTimeout(timeout); }
     }
     if (ctx.state !== "running") return false;
-    const buffer = await chimeBuffer(ctx, cue);
+    const buffer = await chimeBuffer(ctx, cue, prefs.volume);
     if (ctx.state !== "running") return false;
     // Recheck after the await: preferences may have changed, or another cue
     // won the same burst. Never play something saved by a suspended context.
     // A preview is the click itself, so it is not stale.
-    if (
-      !preview &&
-      (Date.now() - started > 1000 ||
-        !cueAllowed(
-          cue,
-          loadSoundPrefs(),
-          new Date(now.getTime() + Date.now() - started),
-        ))
-    ) {
-      return false;
+    if (!preview) {
+      const later = loadSoundPrefs();
+      if (
+        Date.now() - started > 1000 ||
+        !(later.volume > 0) ||
+        !cueAllowed(cue, later, new Date(now.getTime() + Date.now() - started))
+      ) {
+        return false;
+      }
     }
     if (!preview && Date.now() - (lastPlayed.get(category) ?? -Infinity) < cooldown) {
       return false;

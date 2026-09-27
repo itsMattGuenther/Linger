@@ -11,10 +11,10 @@ function storage(held = new Map<string, string>()) {
   return { getItem: (key: string) => held.get(key) ?? null, setItem: (key: string, value: string) => { held.set(key, value); } };
 }
 
-function player() {
+function player(held = new Map<string, string>()) {
   const sources: { buffer: AudioBuffer | null; onended: (() => void) | null; start: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
   const device = { state: "running" as AudioContextState };
-  vi.stubGlobal("window", { localStorage: storage(), AudioContext: class {
+  vi.stubGlobal("window", { localStorage: storage(held), AudioContext: class {
     sampleRate = 48000;
     destination = {};
     get state() { return device.state; }
@@ -33,7 +33,7 @@ describe("notification sound policy", () => {
     const sound = await import("./sound");
     expect(await Promise.all([sound.playPreview("dm"), sound.playPreview("dm")])).toEqual([true, true]);
     await expect(sound.playPreview("dm")).resolves.toBe(true);
-    expect(renderChime).toHaveBeenCalledExactlyOnceWith("dm", 48000);
+    expect(renderChime).toHaveBeenCalledExactlyOnceWith("dm", 48000, 1);
     expect(sources).toHaveLength(3);
     for (const source of sources) {
       expect(source.buffer).toBe(rendered);
@@ -43,7 +43,7 @@ describe("notification sound policy", () => {
     }
   });
 
-  it.each(["mute", "stale", "suspended"] as const)("drops a live cue when %s changes during preparation", async (change) => {
+  it.each(["mute", "silent", "stale", "suspended"] as const)("drops a live cue when %s changes during preparation", async (change) => {
     const { sources, device } = player();
     let finish: (buffer: AudioBuffer) => void = () => {};
     vi.mocked(renderChime).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
@@ -51,6 +51,7 @@ describe("notification sound policy", () => {
     sound.unlockAudio();
     const playing = sound.playSound("dm");
     if (change === "mute") sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, muted: true });
+    if (change === "silent") sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, volume: 0 });
     if (change === "stale") vi.advanceTimersByTime(1100);
     if (change === "suspended") device.state = "suspended";
     finish(rendered);
@@ -73,7 +74,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(held) });
     const sound = await import("./sound");
     const prefs = sound.loadSoundPrefs();
-    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: false } });
+    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: false }, volume: 1 });
     held.set("linger.sound.quietHours", "true");
     expect(sound.loadSoundPrefs().quietHours).toBe(true);
     sound.saveSoundPrefs({ ...prefs, muted: false, categories: { ...prefs.categories, rooms: false } });
@@ -104,6 +105,79 @@ describe("notification sound policy", () => {
       held.set("linger.sound.quietFrom", bad);
       expect(sound.loadSoundPrefs().quietFrom).toBe(sound.DEFAULT_QUIET_FROM);
     }
+  });
+
+  it("remembers the sound volume, and a missing, damaged or out-of-range one is 100% (#234)", async () => {
+    const held = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: storage(held) });
+    const sound = await import("./sound");
+    expect(sound.loadSoundPrefs().volume).toBe(1);
+    expect(sound.DEFAULT_SOUND_PREFS.volume).toBe(1);
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, volume: 2.5 });
+    expect(held.get("linger.sound.volume")).toBe("2.5");
+    expect(sound.loadSoundPrefs().volume).toBe(2.5);
+    for (const edge of ["0", "4", "0.05", "1.35"]) {
+      held.set("linger.sound.volume", edge);
+      expect(sound.loadSoundPrefs().volume).toBe(Number(edge));
+    }
+    for (const bad of ["", " ", "-1", "4.05", "40", "loud", "NaN", "Infinity", "1e0", "0x2", "2,5", "true", "null"]) {
+      held.set("linger.sound.volume", bad);
+      expect(sound.loadSoundPrefs().volume, bad).toBe(1);
+    }
+    // Saving another setting keeps the level: the old client saves what it loaded.
+    held.set("linger.sound.volume", "3");
+    sound.saveSoundPrefs({ ...sound.loadSoundPrefs(), muted: true });
+    expect(held.get("linger.sound.volume")).toBe("3");
+  });
+
+  it("every cue plays at the saved volume, and a level set in another window holds from the next cue (#234)", async () => {
+    const held = new Map<string, string>();
+    const { sources } = player(held);
+    const sound = await import("./sound");
+    sound.unlockAudio();
+    for (const cue of ["dm", "knock", "voice-join", "mute"] as const) {
+      await expect(sound.playSound(cue)).resolves.toBe(true);
+      expect(renderChime).toHaveBeenLastCalledWith(cue, 48000, 1);
+    }
+    // Settings is another window: it only writes storage. The player reads
+    // it again for every cue, so there is nothing to tell this window.
+    held.set("linger.sound.volume", "2");
+    vi.advanceTimersByTime(1200);
+    await expect(sound.playSound("dm")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenLastCalledWith("dm", 48000, 2);
+    await expect(sound.playPreview("knock")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenLastCalledWith("knock", 48000, 2);
+    // At one level each cue is made once and kept; a new level makes them again.
+    const made = vi.mocked(renderChime).mock.calls.length;
+    await expect(sound.playPreview("dm")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenCalledTimes(made);
+    held.set("linger.sound.volume", "1");
+    await expect(sound.playPreview("dm")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenLastCalledWith("dm", 48000, 1);
+    expect(renderChime).toHaveBeenCalledTimes(made + 1);
+    expect(sources).toHaveLength(8);
+  });
+
+  it("at 0% nothing plays, not even a preview; mute and quiet hours still decide at any other level (#234)", async () => {
+    const held = new Map([["linger.sound.volume", "0"]]);
+    const { sources } = player(held);
+    const sound = await import("./sound");
+    sound.unlockAudio();
+    await expect(sound.playSound("dm")).resolves.toBe(false);
+    await expect(sound.playKnock()).resolves.toBe(false);
+    await expect(sound.playPreview("dm")).resolves.toBe(false);
+    expect(renderChime).not.toHaveBeenCalled();
+    expect(sources).toHaveLength(0);
+    // Loud, and muted: mute still wins; a preview still plays.
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, muted: true, volume: 4 });
+    await expect(sound.playSound("dm")).resolves.toBe(false);
+    await expect(sound.playPreview("dm")).resolves.toBe(true);
+    // Loud, in quiet hours: a knock waits, a voice cue plays (#186).
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, quietHours: true, volume: 4 });
+    vi.setSystemTime(new Date(2026, 8, 17, 3));
+    await expect(sound.playKnock()).resolves.toBe(false);
+    await expect(sound.playSound("voice-join")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenLastCalledWith("voice-join", 48000, 4);
   });
 
   it("master mute wins over every category", async () => {

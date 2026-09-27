@@ -370,7 +370,9 @@ readers.
 - **`Switch`** is a `role="switch"` with a required name: a 36×20 track in a
   36×24 hit box, the lamp when on.
 - **`SettingRow`** is one setting: its name, one line saying what it does, and
-  its control at the end. It is the building block for Settings.
+  its control at the end. It is the building block for Settings. `wide` is
+  for a control that needs the row's width, like a `Slider`: it goes on a
+  line of its own under the words, so a narrow window never squeezes them.
 - **`Checkbox`** is one of several choices that are each on or off together,
   like the servers an away message shows on: a real checkbox in a 32px row,
   a 16px box in the lamp when ticked, and its words beside it as its name.
@@ -433,8 +435,12 @@ A value along a line: a native range input, 24px tall and as wide as what
 holds it, with a 4px track (`--slider-track`) and a 14px thumb
 (`--slider-thumb`). The part before the thumb is lit in the lamp. The keys
 work as they do on any slider, and `valueText` is what a screen reader hears
-("150%"). Its first use is a person's volume, over their chip in the voice
-bar (`app/list/VolumeCard.tsx`).
+("150%"). `onChange` fires on every step; `onCommit` fires once when the
+person lets go (the pointer comes up, or the key that moved it is released,
+however long it was held), for something to do once, like playing a sample.
+It's used for a person's volume, over their chip in the voice bar
+(`app/list/VolumeCard.tsx`), and for the sound volume in Settings → Sound &
+Voice, which plays one chime when let go of.
 
 ### Card and Popover
 
@@ -612,6 +618,8 @@ built on the rows' own grid so nothing new lines up by eye:
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
 | A `Select` is named by its label, keeps the choice, links its help, and a disabled one refuses | `kit.spec.ts` › a drop-down is named by its label |
+| A `Slider` says it was let go of once per drag, click or key release, never per step, and never for a press that moved nothing | `kit.spec.ts` › a slider says once when it's let go of |
+| A `wide` `SettingRow` puts its control on a line of its own, as wide as the row | `kit.spec.ts` › a wide setting puts its slider on a line of its own |
 | Compact `ChoiceCards` sit side by side with their titles on one line | `kit.spec.ts` › compact choice cards sit side by side |
 | Settings: sections per scope (Hosting only for the host, Servers only with several), the sidebar's keyboard, every save saying how it went, Escape backing out to its button, and at 720 and 560 wide every control 24/32/40, nothing clipped or past the edge, labels and choices on one edge | `next-settings.spec.ts` |
 | Settings copy: title-case headings and labels, SPEC §1's words | `core/settings.test.ts` |

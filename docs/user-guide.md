@@ -304,8 +304,8 @@ Settings opens in its own window:
 - **Profile**: your display name, your status, and how your name looks
 - **Appearance**: interface size, and plain names (below)
 - **Windows**: tabs or a window per conversation, and what closing the list does
-- **Sound & Voice**: notification chimes and quiet hours; microphone, speakers,
-  push to talk
+- **Sound & Voice**: how loud Linger's sounds are, notification chimes and
+  quiet hours; microphone, speakers, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
 - **Account & App**: password, export, updates, adding a server, and signing out
 - **Servers** (with more than one): their order, Quiet, and signing out of one
@@ -555,6 +555,17 @@ clock. Once they're on, **Quiet from** and **Quiet until** move the window in
 half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
 sleep late. Voice and mute/deafen sounds still play during quiet hours, because
 they answer something you just did, and voice chat itself is never affected.
+
+If the chimes are hard to hear, turn up **Sound volume**, at the top of
+**Settings → Sound & Voice**. It's one slider for all of Linger's own sounds:
+the chimes, knocks, the door chime, and the voice join/leave and mute/deafen
+sounds. They keep their balance with each other; only the overall level
+moves. It starts at 100%, the level they have always had, and goes from
+silent up to 400%. When you let go of the slider, Linger plays a DM chime at
+the new level so you can hear what you picked. At 0% nothing plays, not even
+**play**. Mute and quiet hours work the same at any level. It's kept on this
+computer, and it doesn't change how loud people are in voice: click someone's
+name in the voice bar for that.
 
 When somebody comes into a room, a small **arrival card** says so ("Callie
 came into #general") at the top of the list and goes by itself after a few

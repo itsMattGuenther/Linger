@@ -67,6 +67,57 @@ test("arrival cards are on unless turned off, kept on this computer (decision 13
   expect(await page.evaluate(() => localStorage.getItem("linger.next.arrivalCards"))).toBe("false");
 });
 
+test("the sound volume is kept on this computer, and letting go plays one DM chime at that level (#234)", async ({ page }) => {
+  // The page's own speakers stand in: every sound started is measured, not heard.
+  await page.addInitScript(() => {
+    const started: number[] = [];
+    Object.assign(window, { started });
+    class Speakers {
+      sampleRate = 48000;
+      state = "running";
+      destination = {};
+      async resume() {}
+      createBufferSource() {
+        const source = {
+          buffer: null as AudioBuffer | null,
+          onended: null,
+          connect: () => source,
+          disconnect: () => {},
+          start: () => started.push(source.buffer ? source.buffer.getChannelData(0).reduce((most, value) => Math.max(most, Math.abs(value)), 0) : 0),
+        };
+        return source;
+      }
+    }
+    Object.assign(window, { AudioContext: Speakers });
+  });
+  await open(page, "?section=sound");
+  const started = () => page.evaluate(() => (window as unknown as { started: number[] }).started);
+  const slider = page.getByRole("slider", { name: "Sound volume" });
+  await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+  expect(await page.evaluate(() => localStorage.getItem("linger.sound.volume"))).toBeNull();
+
+  await slider.fill("1");
+  await expect.poll(async () => (await started()).length).toBe(1);
+  await slider.focus();
+  await page.keyboard.press("End");
+  await expect(slider).toHaveAttribute("aria-valuetext", "400%");
+  expect(await page.evaluate(() => localStorage.getItem("linger.sound.volume"))).toBe("4");
+  await expect.poll(async () => (await started()).length).toBe(2);
+  const [usual = 0, loud = 0] = await started();
+  // A DM chime peaks near 0.042 as written, and four times that at 400%.
+  expect(usual).toBeCloseTo(0.042, 2);
+  expect(loud / usual).toBeCloseTo(4, 3);
+
+  // At 0% nothing is started, not even Play: the next sound is the one
+  // played back at 100%.
+  await page.keyboard.press("Home");
+  expect(await page.evaluate(() => localStorage.getItem("linger.sound.volume"))).toBe("0");
+  await page.getByRole("button", { name: "Play the dm messages chime" }).click();
+  await slider.fill("1");
+  await expect.poll(async () => (await started()).length).toBe(3);
+  expect((await started())[2]).toBeCloseTo(usual, 6);
+});
+
 test("a notification rule is the list window's to change, and its answer shows", async ({ page }) => {
   await open(page, "?section=notifications");
   await page.getByRole("button", { name: /^Eli:/ }).click();

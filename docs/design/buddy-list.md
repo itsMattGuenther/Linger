@@ -253,6 +253,8 @@ regrouped, plus the new choices this design needs:
 - **Windows** (new): conversations open as tabs or windows (this works), and
   what closing the list does: keep Linger running in the tray, or quit.
 - **Sound & Voice:**
+  - one sound volume for all of Linger's own sounds, from silent to 400%
+    (#234);
   - mute all notification sounds;
   - quiet hours, from and until in half-hour steps;
   - each chime with a Play preview: voice, mute and deafen, DMs, room

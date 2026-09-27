@@ -248,6 +248,8 @@ function Tabs() {
 function Gallery() {
   const [switches, setSwitches] = useState({ quiet: true, door: false, plain: false });
   const [volume, setVolume] = useState(1.5);
+  const [letGo, setLetGo] = useState<number[]>([]);
+  const [chimeVolume, setChimeVolume] = useState(1);
   const [shownOn, setShownOn] = useState({ home: true, guild: false });
   const [mode, setMode] = useState<"tabs" | "windows">("tabs");
   const [field, setField] = useState("");
@@ -585,9 +587,25 @@ function Gallery() {
           />
           <SettingRow title="Use plain names and message fonts" control={<Switch label="Use plain names and message fonts" checked={false} disabled onChange={() => {}} />} />
           <SettingRow title="Play" description="A preview of the knock chime." control={<Button size="sm" icon="play">Play</Button>} />
+          <SettingRow
+            title="Sound volume"
+            description="A wide control, like a slider, gets a line of its own under the words."
+            wide
+            control={<Slider label="Sound volume" value={chimeVolume} min={0} max={4} step={0.05} valueText={`${Math.round(chimeVolume * 100)}%`} onChange={setChimeVolume} />}
+          />
         </div>
-        <div data-testid="slider" style={{ width: 280 }}>
-          <Slider label="How loud Eli is for you" value={volume} min={0} max={2} step={0.05} valueText={`${Math.round(volume * 100)}%`} onChange={setVolume} />
+        {/* data-let-go: every value the slider was let go at, for kit.spec. */}
+        <div data-testid="slider" data-let-go={letGo.join(" ")} style={{ width: 280 }}>
+          <Slider
+            label="How loud Eli is for you"
+            value={volume}
+            min={0}
+            max={2}
+            step={0.05}
+            valueText={`${Math.round(volume * 100)}%`}
+            onChange={setVolume}
+            onCommit={(at) => setLetGo((held) => [...held, at])}
+          />
         </div>
         <div className="g-fields" data-testid="checkboxes">
           <Checkbox checked={shownOn.home} onChange={(home) => setShownOn((s) => ({ ...s, home }))}>
