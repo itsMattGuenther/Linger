@@ -675,7 +675,30 @@ pub struct Invite {
 #[ts(export)]
 pub struct CreateInviteRequest {
     pub expires_in_hours: Option<u32>,
-    pub max_uses: Option<u32>,
+    /// How many people can join with the invite. Left out, it is one: invites
+    /// are single-use by default (ARCHITECTURE §7). `null` is no limit, which a
+    /// host has to ask for. A number is that many.
+    //
+    // A plain `Option` reads a missing field and `null` as the same `None`,
+    // which left no way to ask for no limit (#246). The outer `Option` is
+    // whether the field was sent at all; the inner one is the limit.
+    #[serde(
+        default,
+        deserialize_with = "sent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub max_uses: Option<Option<u32>>,
+}
+
+/// Reads a field that was sent, `null` included, as `Some`. With
+/// `#[serde(default)]`, a field that was not sent stays `None`.
+fn sent<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(de).map(Some)
 }
 
 /// "Always notify me when [person] posts" — per person, per room (`room_id: None`

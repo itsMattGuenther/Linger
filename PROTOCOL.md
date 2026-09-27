@@ -643,6 +643,14 @@ GET  /voice/ice          → { servers: IceServer[], ttl_secs } # the voice rela
 type IceServer = { urls: string[]; username: string | null; credential: string | null }
 ```
 
+**Invites.** `max_uses` left out is one use: an invite is single-use unless the
+host asks otherwise (ARCHITECTURE §7). `"max_uses": null` is no limit, and a
+number is that many uses; `0` is `VALIDATION_FAILED`. A plain JSON parser reads
+a missing field and `null` alike, so the server tells them apart on purpose,
+and a client asking for no limit must send the `null` rather than leave the
+field out (#246). `expires_in_hours` left out or `null` is never. An `Invite`
+comes back with `max_uses: null` when it has no limit.
+
 **Voice relay** (SPEC §4.14, T-1403). What a client puts in its peer connections'
 ICE configuration before joining voice: the host's STUN and TURN addresses, with a
 password made for the asking member on the spot. The password is coturn's

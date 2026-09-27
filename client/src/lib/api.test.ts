@@ -153,6 +153,23 @@ describe("sign-in renewal", () => {
   });
 });
 
+describe("invites (#246)", () => {
+  it.each([
+    { label: "Anyone", uses: null, sent: '"max_uses":null' },
+    { label: "Five people", uses: 5, sent: '"max_uses":5' },
+  ])("$label sends $sent", async ({ uses, sent }) => {
+    const { api, fetcher } = client();
+    fetcher.mockResolvedValueOnce(Response.json({
+      code: "ABCD-EFGH", created_by: "u", expires_at: null, max_uses: uses, uses: 0, revoked_at: null, created_at: 0,
+    }));
+    await api.createInvite({ max_uses: uses, expires_in_hours: null });
+    const [url, options] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${BASE_URL}/api/v1/invites`);
+    // The server reads a missing max_uses as one use, and null as no limit.
+    expect(String(options?.body)).toContain(sent);
+  });
+});
+
 describe("request deadlines (#118)", () => {
   it("releases a stalled shared token refresh so knock and sending can recover", async () => {
     vi.useFakeTimers();
