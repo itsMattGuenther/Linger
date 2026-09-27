@@ -204,6 +204,16 @@ quiet hours leave them alone; mute and their own switches still silence them
 for that (§4.14). The play control in settings is a deliberate click and is not gated
 by mute, quiet hours or category switches.
 
+One **sound volume** (#234) sets how loud all of these cues play, knocks and
+the door chime included: 100% by default (the level they were designed at),
+from silent to 400%, kept on the listener's computer. It is one level for
+every cue, never one per cue, so the balance between them stays as designed.
+400% is the most the loudest cue takes before coming near clipping. Letting go
+of the slider plays one sample chime at the new level. At 0% nothing plays,
+previews included. It is a level, not a gate: mute, quiet hours and the
+category switches work the same at any setting, and it never touches other
+people's voice.
+
 - Voice cues: your join, leave or move, and other sessions arriving/leaving
   the voice session you are already in. No cue for browsing a text room, no
   ringing someone who has not joined voice, and no sound on push-to-talk edges.

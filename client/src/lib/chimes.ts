@@ -38,6 +38,7 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
 
 function note(
   ctx: BaseAudioContext,
+  out: AudioNode,
   frequency: number,
   at: number,
   volume: number,
@@ -57,7 +58,7 @@ function note(
     level.gain.linearRampToValueAtTime(volume * strength, at + 0.012);
     level.gain.exponentialRampToValueAtTime(0.0001, at + decay);
     level.gain.linearRampToValueAtTime(0, at + decay + 0.015);
-    oscillator.connect(level).connect(ctx.destination);
+    oscillator.connect(level).connect(out);
     oscillator.onended = () => {
       oscillator.disconnect();
       level.disconnect();
@@ -67,7 +68,7 @@ function note(
   }
 }
 
-function tap(ctx: BaseAudioContext, at: number, volume: number): void {
+function tap(ctx: BaseAudioContext, out: AudioNode, at: number, volume: number): void {
   const oscillator = ctx.createOscillator();
   const level = ctx.createGain();
   const wood = ctx.createBiquadFilter();
@@ -80,7 +81,7 @@ function tap(ctx: BaseAudioContext, at: number, volume: number): void {
   level.gain.linearRampToValueAtTime(volume, at + 0.003);
   level.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
   level.gain.linearRampToValueAtTime(0, at + 0.1);
-  oscillator.connect(wood).connect(level).connect(ctx.destination);
+  oscillator.connect(wood).connect(level).connect(out);
   oscillator.onended = () => {
     oscillator.disconnect();
     wood.disconnect();
@@ -90,20 +91,33 @@ function tap(ctx: BaseAudioContext, at: number, volume: number): void {
   oscillator.stop(at + 0.11);
 }
 
-/** Schedule only after the caller has checked mute, quiet hours and category switches. */
+/**
+ * Schedule only after the caller has checked mute, quiet hours and category
+ * switches.
+ *
+ * `volume` is the listener's one sound volume (#234), 1 being the score as
+ * written. It is a single gain after everything else rather than a factor on
+ * each note's envelope: the envelopes decay towards a fixed floor, so scaling
+ * them would change their shape, while one gain at the end scales every
+ * sample alike and keeps the balance between cues exactly as designed.
+ */
 export function scheduleChime(
   ctx: BaseAudioContext,
   cue: SoundCue,
   at: number,
+  volume = 1,
 ): void {
+  const out = ctx.createGain();
+  out.gain.value = volume;
+  out.connect(ctx.destination);
   if (cue === "knock") {
-    tap(ctx, at, 0.16);
-    tap(ctx, at + 0.14, 0.12);
+    tap(ctx, out, at, 0.16);
+    tap(ctx, out, at + 0.14, 0.12);
     return;
   }
   const chime = CHIMES[cue];
   for (const [index, frequency] of chime.notes.entries()) {
-    note(ctx, frequency, at + index * chime.spacing, chime.gain, chime.decay);
+    note(ctx, out, frequency, at + index * chime.spacing, chime.gain, chime.decay);
   }
 }
 
@@ -113,12 +127,12 @@ export function scheduleChime(
  * of one buffer give it time to settle. Scheduling a source later still leaves
  * the backend idle until that source starts, so it is not equivalent padding.
  */
-export async function renderChime(cue: SoundCue, sampleRate: number): Promise<AudioBuffer> {
+export async function renderChime(cue: SoundCue, sampleRate: number, volume = 1): Promise<AudioBuffer> {
   const duration = cue === "knock"
     ? 0.14 + 0.11
     : (CHIMES[cue].notes.length - 1) * CHIMES[cue].spacing + CHIMES[cue].decay + 0.02;
   const lead = 0.05;
   const ctx = new OfflineAudioContext(1, Math.ceil((duration + lead) * sampleRate), sampleRate);
-  scheduleChime(ctx, cue, lead);
+  scheduleChime(ctx, cue, lead, volume);
   return ctx.startRendering();
 }

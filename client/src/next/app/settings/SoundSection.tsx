@@ -1,18 +1,18 @@
 import type { VoiceDeviceList } from "../../../lib/ipc";
-import { inQuietHours, type SoundCategory, type SoundPrefs } from "../../../lib/sound";
+import { inQuietHours, MAX_SOUND_VOLUME, type SoundCategory, type SoundPrefs } from "../../../lib/sound";
 import { clockTime } from "../../../lib/time";
 import { useEffect, useState } from "react";
-import type { VoicePrefs } from "../../../lib/voice";
+import { type VoicePrefs, volumeLabel } from "../../../lib/voice";
 import { canBeTalkKey, talkKeyName } from "../../core/talkKey";
 import { CHIMES, deviceOptions, HEADINGS, quietChoices, SYSTEM_DEFAULT } from "../../core/settings";
-import { Button, IconButton, Select, SettingRow, Switch } from "../../kit";
+import { Button, IconButton, Select, SettingRow, Slider, Switch } from "../../kit";
 import { Block, Fields, Note } from "./parts";
 
 export interface SoundProps {
-  /** Chimes and quiet hours, on this computer (SND-1 to SND-4). Changes take effect at once. */
+  /** Chimes, quiet hours and the sound volume, on this computer (SND-1 to SND-4, SND-8). Changes take effect at once. */
   sound: SoundPrefs;
   onSound: (prefs: SoundPrefs) => void;
-  /** Play a chime now, whatever the switches say (SND-4). */
+  /** Play a chime now, whatever the switches say (SND-4), at the sound volume. */
   onPreview: (category: SoundCategory) => void;
   /** Devices and push-to-talk, on this computer (VOICE-8, VOICE-9). */
   voice: VoicePrefs;
@@ -57,17 +57,41 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
   }, [picking, voice, onVoice]);
   const from = minuteText(sound.quietFrom);
   const until = minuteText(sound.quietUntil);
-  const right = sound.muted
-    ? "All chimes are off. Play still plays a preview."
-    : sound.quietHours && inQuietHours(new Date(now), sound.quietFrom, sound.quietUntil)
-      ? `Quiet hours are on until ${until}: no message or knock chimes. Voice and mute sounds still play.`
-      : null;
+  const right =
+    sound.volume === 0
+      ? "Sound volume is at 0%, so nothing plays, previews included."
+      : sound.muted
+        ? "All chimes are off. Play still plays a preview."
+        : sound.quietHours && inQuietHours(new Date(now), sound.quietFrom, sound.quietUntil)
+          ? `Quiet hours are on until ${until}: no message or knock chimes. Voice and mute sounds still play.`
+          : null;
 
   return (
     <>
       <Block heading={HEADINGS.chimes}>
         {/* One column with no gaps, so every rule between rows has the same space either side. */}
         <div className="nx-set-rows">
+          {/* One level for every cue (#234). Every step is saved; letting go plays one DM chime at the new level. */}
+          <SettingRow
+            title="Sound volume"
+            description={`How loud every chime below plays, up to ${volumeLabel(MAX_SOUND_VOLUME)}. Let go of it to hear one. Voices in a call aren't affected.`}
+            wide
+            control={
+              <span className="nx-set-volume">
+                <Slider
+                  label="Sound volume"
+                  value={sound.volume}
+                  min={0}
+                  max={MAX_SOUND_VOLUME}
+                  step={0.05}
+                  valueText={volumeLabel(sound.volume)}
+                  onChange={(volume) => onSound({ ...sound, volume })}
+                  onCommit={() => onPreview("dms")}
+                />
+                <span className="nx-set-volume-value">{volumeLabel(sound.volume)}</span>
+              </span>
+            }
+          />
           <SettingRow
             title="Mute all notification sounds"
             description="One switch for every chime below. Voice itself is never affected."

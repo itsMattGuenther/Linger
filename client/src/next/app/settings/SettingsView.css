@@ -413,6 +413,24 @@
   border-top: 1px solid var(--hairline);
 }
 
+/* The sound volume: the slider, then its value, as in a person's volume card. */
+.nx-set-volume {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-width: 0;
+}
+
+.nx-set-volume-value {
+  flex: none;
+  min-width: calc(var(--space-8) + var(--space-2));
+  text-align: right;
+  font: var(--text-meta) / var(--line-meta) var(--font-label);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .nx-set-key {
   display: inline-grid;
   place-items: center;

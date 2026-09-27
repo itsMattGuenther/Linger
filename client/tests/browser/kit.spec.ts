@@ -462,6 +462,61 @@ test("a slider moves with the keys, says its value in words, and lights the part
   expect(box?.width).toBeGreaterThan((holder?.width ?? 0) - 1);
 });
 
+test("a slider says once when it's let go of, not on every step (#234)", async ({ page }) => {
+  const slider = page.getByRole("slider", { name: "How loud Eli is for you" });
+  const holder = page.getByTestId("slider");
+  const letGo = async () => ((await holder.getAttribute("data-let-go")) ?? "").split(" ").filter(Boolean).map(Number);
+  expect(await letGo()).toEqual([]);
+
+  // A drag: many steps, one let-go, at where it stopped.
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  if (!box) throw new Error("no slider");
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.75, y);
+  await page.mouse.down();
+  for (const share of [0.7, 0.6, 0.5, 0.4, 0.3]) await page.mouse.move(box.x + box.width * share, y);
+  await page.mouse.up();
+  const dragged = Number(await slider.inputValue());
+  expect(dragged).toBeLessThan(1.5);
+  expect(await letGo()).toEqual([dragged]);
+
+  // A press that moves nothing says nothing.
+  await slider.click({ position: { x: box.width * 0.3, y: box.height / 2 } });
+  await page.keyboard.press("Shift");
+  expect(await letGo()).toHaveLength(1);
+
+  // A key: one per release. Held down with repeats, it's still one.
+  await page.keyboard.press("ArrowRight");
+  const stepped = Number(await slider.inputValue());
+  expect(stepped).toBeCloseTo(dragged + 0.05, 5);
+  expect(await letGo()).toEqual([dragged, stepped]);
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.down("ArrowRight");
+  expect(await letGo()).toHaveLength(2);
+  await page.keyboard.up("ArrowRight");
+  const held = Number(await slider.inputValue());
+  expect(held).toBeCloseTo(stepped + 0.15, 5);
+  expect(await letGo()).toEqual([dragged, stepped, held]);
+
+  // A click on the track jumps there, and that's a let-go too.
+  await slider.click({ position: { x: box.width * 0.9, y: box.height / 2 } });
+  expect(await letGo()).toEqual([dragged, stepped, held, Number(await slider.inputValue())]);
+});
+
+test("a wide setting puts its slider on a line of its own, as wide as the row", async ({ page }) => {
+  const row = page.locator(".k-setting").filter({ has: page.getByRole("slider", { name: "Sound volume" }) });
+  const words = await row.locator(".k-setting-text").boundingBox();
+  const slider = await row.getByRole("slider").boundingBox();
+  const whole = await row.boundingBox();
+  if (!words || !slider || !whole) throw new Error("no row");
+  expect(slider.y).toBeGreaterThanOrEqual(words.y + words.height);
+  expect(slider.x).toBeCloseTo(words.x, 0);
+  expect(slider.width).toBeCloseTo(whole.width, 0);
+  expect(slider.height).toBe(24);
+});
+
 test("compact choice cards sit side by side with their titles on one line", async ({ page }) => {
   const titles = await page
     .getByRole("group", { name: "Color theme" })

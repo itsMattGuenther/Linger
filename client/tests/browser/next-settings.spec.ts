@@ -180,6 +180,46 @@ test.describe("this app", () => {
     expect(await did(page)).toContain("play:knocks");
   });
 
+  test("one sound volume, 100% until moved; letting go saves it and plays one chime at the new level (#234)", async ({ page }) => {
+    await open(page, "?section=sound");
+    const slider = page.getByRole("slider", { name: "Sound volume" });
+    const row = page.getByRole("group", { name: "Sound volume" });
+    await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+    await expect(row).toContainText("100%");
+    await expect(row).toContainText("up to 400%");
+    const saved = async () => (await did(page)).filter((line) => line.startsWith("sound:")).map((line) => (JSON.parse(line.slice("sound:".length)) as { volume: number }).volume);
+    const played = async () => (await did(page)).filter((line) => line.startsWith("play:"));
+    expect(await saved()).toEqual([]);
+
+    // A drag saves every step and plays the sample once, when it's let go.
+    await slider.scrollIntoViewIfNeeded();
+    const box = await slider.boundingBox();
+    if (!box) throw new Error("no slider");
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width * 0.25, y);
+    await page.mouse.down();
+    for (const share of [0.3, 0.35, 0.4, 0.45, 0.5]) await page.mouse.move(box.x + box.width * share, y);
+    await expect.poll(async () => (await saved()).length).toBeGreaterThan(2);
+    expect(await played()).toEqual([]);
+    await page.mouse.up();
+    await expect(slider).toHaveAttribute("aria-valuetext", "200%");
+    await expect(row).toContainText("200%");
+    expect((await saved()).at(-1)).toBe(2);
+    expect(await played()).toEqual(["play:dms"]);
+
+    // So does a key, once it's let go.
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveAttribute("aria-valuetext", "205%");
+    expect((await saved()).at(-1)).toBeCloseTo(2.05, 5);
+    expect(await played()).toEqual(["play:dms", "play:dms"]);
+
+    // At 0% it says nothing will play.
+    await page.keyboard.press("Home");
+    await expect(slider).toHaveAttribute("aria-valuetext", "0%");
+    expect((await saved()).at(-1)).toBe(0);
+    await expect(panel(page)).toContainText("Sound volume is at 0%, so nothing plays, previews included.");
+  });
+
   test("a remembered microphone that isn't plugged in is shown and marked; outside the app it says where to pick", async ({ page }) => {
     await open(page, "?section=sound");
     await expect(page.getByRole("combobox", { name: "Microphone" }).locator("option:checked")).toHaveText("Headset (not plugged in)");

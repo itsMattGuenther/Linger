@@ -233,6 +233,12 @@ Interface size zooms the page and grows the window by the same ratio, because
 the new client's sizes are fixed pixels and a larger base font would grow
 nothing.
 
+**Sound preferences need no message.** Mute, quiet hours, the chime switches
+and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
+The list window plays every sound, and its player reads them from storage
+again for each one, so a change saved in Settings holds from the list's next
+sound. Settings plays its own previews, in its own window.
+
 Anything else a viewer can do with REST it does itself, with its borrowed
 token: send, edit, delete, load history, upload, knock, and typing through the
 shared connection.
