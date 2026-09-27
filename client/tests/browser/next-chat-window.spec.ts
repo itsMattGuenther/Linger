@@ -25,6 +25,17 @@ function intents(asked: string[]): Record<string, unknown>[] {
   return asked.filter((line) => line.startsWith("intent:")).map((line) => JSON.parse(line.slice("intent:".length)) as Record<string, unknown>);
 }
 
+/** What the window asked the list window to do with your voice: Mute, Deafen, Leave. */
+function voiceControls(asked: string[]): Record<string, unknown>[] {
+  const prefix = "ask:next:voicecontrol:";
+  return asked.filter((line) => line.startsWith(prefix)).map((line) => JSON.parse(line.slice(prefix.length)) as Record<string, unknown>);
+}
+
+/** Every sound this window played, in order (tests/fixtures/next/audio.ts). */
+function sounds(asked: string[]): string[] {
+  return asked.filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
+}
+
 const box = (page: Page) => page.getByRole("textbox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 
@@ -199,13 +210,78 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
     await expect(button).toHaveText("");
   }
   await yours.getByRole("button", { name: "Mute" }).click();
+  await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
   await yours.getByRole("button", { name: "Deafen" }).click();
+  await expect(yours.getByRole("button", { name: "Deafened" })).toBeVisible();
   await yours.getByRole("button", { name: "Leave voice" }).click();
-  await expect.poll(async () => intents(await did(page)).filter((intent) => String(intent.kind).startsWith("voice."))).toEqual([
-    { kind: "voice.mute", muted: true },
-    { kind: "voice.deafen", deafened: true },
-    { kind: "voice.leave" },
-  ]);
+  await expect(page.getByRole("group", { name: "Your voice" })).toHaveCount(0);
+  await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }, { control: "deafen", on: true }, { control: "leave" }]);
+});
+
+test("Mute, Deafen and Leave on the voice strip sound in this window, once the list window has made the change (#241)", async ({ page }) => {
+  await open(page, "room=r-general&talking&hold");
+  const yours = page.getByRole("group", { name: "Your voice" });
+  // Pressed: the list window is asked, and nothing sounds while it's still making the change.
+  await yours.getByRole("button", { name: "Mute" }).click();
+  await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }]);
+  await page.waitForTimeout(150);
+  expect(sounds(await did(page))).toEqual([]);
+  await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
+  // Made: the button shows it, and its sound plays here.
+  await page.evaluate(() => window.owner?.finish());
+  await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
+  await expect.poll(async () => sounds(await did(page))).toEqual(["mute"]);
+
+  // Past the player's guard against a burst: one sound of a kind per 100 ms.
+  await page.waitForTimeout(150);
+  await yours.getByRole("button", { name: "Deafen" }).click();
+  await expect.poll(async () => voiceControls(await did(page))).toHaveLength(2);
+  await page.evaluate(() => window.owner?.finish());
+  await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen"]);
+
+  await yours.getByRole("button", { name: "Leave voice" }).click();
+  await expect.poll(async () => voiceControls(await did(page))).toHaveLength(3);
+  await page.evaluate(() => window.owner?.finish());
+  await expect(page.getByRole("group", { name: "Your voice" })).toHaveCount(0);
+  await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);
+  // Once each.
+  await page.waitForTimeout(300);
+  expect(sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);
+});
+
+test("a Mute the list window couldn't make makes no sound (#241)", async ({ page }) => {
+  await open(page, "room=r-general&talking&refuse");
+  const yours = page.getByRole("group", { name: "Your voice" });
+  await yours.getByRole("button", { name: "Mute" }).click();
+  await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }]);
+  await page.waitForTimeout(300);
+  expect(sounds(await did(page))).toEqual([]);
+  await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
+});
+
+test("the sound settings rule the voice strip's sounds as they do the voice bar's: its switch and Mute all silence them, quiet hours don't (#241)", async ({ page }) => {
+  await open(page, "room=r-general&talking");
+  const yours = page.getByRole("group", { name: "Your voice" });
+  // "Mute and deafen controls" off.
+  await page.evaluate(() => localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: false })));
+  await yours.getByRole("button", { name: "Mute" }).click();
+  await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
+  // Back on, but every sound muted.
+  await page.evaluate(() => {
+    localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: true }));
+    localStorage.setItem("linger.sound.muted", "true");
+  });
+  await yours.getByRole("button", { name: "Muted" }).click();
+  await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
+  // Quiet hours all day: they hush what arrives on its own, not what you press (#186).
+  await page.evaluate(() => {
+    localStorage.setItem("linger.sound.muted", "false");
+    localStorage.setItem("linger.sound.quietHours", "true");
+    localStorage.setItem("linger.sound.quietFrom", "0");
+    localStorage.setItem("linger.sound.quietUntil", "1439");
+  });
+  await yours.getByRole("button", { name: "Deafen" }).click();
+  await expect.poll(async () => sounds(await did(page))).toEqual(["deafen"]);
 });
 
 test("with push-to-talk the voice strip keeps Mute, as the voice bar does (#232); a room you're not in voice in has no controls (#216)", async ({ page }) => {

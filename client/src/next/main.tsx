@@ -1,8 +1,9 @@
 /**
  * The Buddy list client's entry point (M15, docs/design/architecture.md).
  * Every one of its windows loads `next.html`, which runs this; the window's
- * role comes from the URL. Today there is one: the list, which owns the
- * sign-in, the connections and the sounds.
+ * role comes from the URL. The list owns the sign-in, the connections and
+ * the sounds, except a voice control's, which plays in the window where it
+ * was pressed (#241).
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { StrictMode } from "react";

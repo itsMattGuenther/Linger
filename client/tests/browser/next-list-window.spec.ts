@@ -544,6 +544,51 @@ test("Settings turning push-to-talk off and on, or picking its key, applies to t
   expect(await joins()).toBe(joined);
 });
 
+test("a Mute pressed in a chat window is answered with its sound for that window to play, and makes none here; the voice bar and the tray still sound here (#241)", async ({ page }) => {
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const sounds = async () => (await did(page)).filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
+  // A key here opens this window's audio, as any key or click does, so
+  // silence below is this window choosing not to play.
+  await page.keyboard.press("Shift");
+
+  await page.evaluate(() => window.core?.ask("next:voicecontrol", { control: "mute", on: true }));
+  await expect(bar.getByRole("button", { name: "Muted", exact: true })).toBeVisible();
+  await expect
+    .poll(async () => (await did(page)).filter((line) => line.startsWith("to chat:next:voicecontrol:answer:")))
+    .toEqual([`to chat:next:voicecontrol:answer:${JSON.stringify({ v: 1, id: "q-1", from: "main", answer: { cue: "mute" } })}`]);
+
+  // The voice bar's own Unmute, and the tray's Mute, sound here as before.
+  await bar.getByRole("button", { name: "Muted", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
+  await expect.poll(sounds).toEqual(["unmute"]);
+  // Past the player's guard against a burst: one sound of a kind per 100 ms.
+  await page.waitForTimeout(150);
+  await page.evaluate(() => window.core?.tray("mute"));
+  await expect(bar.getByRole("button", { name: "Muted", exact: true })).toBeVisible();
+  await expect.poll(sounds).toEqual(["unmute", "mute"]);
+});
+
+test("with push-to-talk, the key makes no sound, and a Mute you choose does, as a real mute (#232, #241)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const sounds = async () => (await did(page)).filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
+  // A key here opens this window's audio, so silence below is a choice.
+  await page.keyboard.press("Shift");
+
+  await page.keyboard.down("ControlRight");
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: false });
+  await page.keyboard.up("ControlRight");
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
+  await page.waitForTimeout(150);
+  expect(await sounds()).toEqual([]);
+
+  await bar.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "Muted", exact: true })).toBeVisible();
+  await expect.poll(sounds).toEqual(["mute"]);
+});
+
 // The foot's standing lines (decision 1): said only while true.
 const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
 

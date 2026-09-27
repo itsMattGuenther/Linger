@@ -46,6 +46,7 @@ import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage, OPENS, type OpensAnswer } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
+import { pressVoiceControl } from "../../core/voiceControl";
 import { Button, markerOf, Spinner, type TabItem } from "../../kit";
 import { knockOn } from "../../core/knock";
 import { personRow } from "../../core/list";
@@ -583,10 +584,11 @@ function Conversations({ following }: { following: Following }) {
     if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
   }, [active, intend]);
   // Your voice controls in the room you're in voice in (#216): the list
-  // window owns the seat and acts, as it does for its own voice bar.
-  const onMute = useCallback((muted: boolean) => void intend({ kind: "voice.mute", muted }).catch(() => undefined), [intend]);
-  const onDeafen = useCallback((deafened: boolean) => void intend({ kind: "voice.deafen", deafened }).catch(() => undefined), [intend]);
-  const onLeave = useCallback(() => void intend({ kind: "voice.leave" }).catch(() => undefined), [intend]);
+  // window owns the seat and makes the change, and this window, the one
+  // clicked, plays the sound that confirms it once it's done (#241).
+  const onMute = useCallback((muted: boolean) => void pressVoiceControl(tauriBus(), { control: "mute", on: muted }), []);
+  const onDeafen = useCallback((deafened: boolean) => void pressVoiceControl(tauriBus(), { control: "deafen", on: deafened }), []);
+  const onLeave = useCallback(() => void pressVoiceControl(tauriBus(), { control: "leave" }), []);
 
   const pane = ((): ChatPane | null => {
     if (!active || !state || !room || paneId === null) return null;

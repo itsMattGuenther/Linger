@@ -70,7 +70,10 @@ Two terms first:
 
 - restores sessions and **refreshes tokens**;
 - **connects** to each server's gateway;
-- plays **chimes**, shows **desktop notifications** and plays the knock sound;
+- plays **chimes**, shows **desktop notifications** and plays the knock sound.
+  The one sound it leaves to another window is the one that confirms a voice
+  control pressed there: it plays where it was pressed (see *Viewer → owner:
+  intents*);
 - **forwards voice frames** to the Rust voice engine, and starts, stops and
   changes voice;
 - checks for **updates**;
@@ -185,11 +188,11 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   positions and tells every window);
 - `window`, `room`, `closing`: for presence, this window's focus, the person
   moving in it, the conversation it shows, and that it is going;
-- `voice.join` (which also moves voice), `voice.leave`, `voice.mute`,
-  `voice.deafen`, and `voice.talk` for push-to-talk pressed in that window.
-  The owner remembers which windows hold the key down, and closes the
-  microphone if one of them goes without letting go (Ctrl+W, with Ctrl as the
-  key);
+- `voice.join` (which also moves voice), and `voice.talk` for push-to-talk
+  pressed in that window. The owner remembers which windows hold the key
+  down, and closes the microphone if one of them goes without letting go
+  (Ctrl+W, with Ctrl as the key). Mute, Deafen and Leave are questions
+  instead (below), so the window pressed can play their sound;
 - `voice.pushtotalk`: Settings turned push-to-talk on or off, or picked its
   key. Joining only reads the choice, so this applies it to the call you're
   in at once (#231), and tells the list window's voice bar which key to name;
@@ -228,6 +231,29 @@ Two things Settings needs an answer to go through the owner as questions
 and changing your password (`next:password`), which the owner follows by
 signing straight back in with the new password, since a change ends every
 other sign-in.
+
+**A voice control's sound plays where it was pressed (#241).** Mute, Deafen
+and Leave on a chat window's voice line are questions too
+(`next:voicecontrol`). The owner makes the change exactly as it does for its
+own voice bar, but doesn't play the sound that confirms it. Once the voice
+engine has taken the change, it answers with that sound, and the window that
+was pressed plays it (`core/voiceControl.ts`). A change that fails is
+answered with the problem, and nothing plays.
+
+- **Why there:** a sound is the answer to a click. The window just clicked
+  has had a gesture, so its audio is awake. The list window may be hidden or
+  behind, and on Linux its sound for a click in the chat window came several
+  seconds late, though the mute itself was instant.
+- **Never two:** the owner never plays a sound it has answered with.
+- **Never late:** the pressed window waits at most a second
+  (`CONFIRM_WITHIN_MS`). A later answer plays nothing, since a sound that late
+  reads as a fault; the change still happens.
+- **The same settings:** every window uses the one player (`lib/sound.ts`),
+  and reads the same saved choices, so Mute all and each kind's switch apply
+  wherever the sound plays.
+- **Unchanged:** the list window's own voice bar, and the tray menu, which
+  the list window carries out, still sound in the list window. Joining still
+  sounds there too, when the server's frame seats you.
 
 **How it looks is the same in every window.** Plain names and interface size
 are kept on this computer; Settings saves a change and announces it
