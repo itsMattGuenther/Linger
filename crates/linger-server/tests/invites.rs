@@ -85,6 +85,65 @@ async fn multi_use_invite_counts_down() {
 }
 
 #[tokio::test]
+async fn null_max_uses_is_no_limit() {
+    // "Anyone" in both clients sends `"max_uses": null` (#246). It used to be
+    // read as "not sent" and stored as one use.
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let invite = make_invite(
+        &server,
+        &host.access_token,
+        serde_json::json!({ "max_uses": null, "expires_in_hours": null }),
+    )
+    .await;
+    assert_eq!(invite.max_uses, None, "null asks for no limit");
+    assert_eq!(invite.expires_at, None);
+
+    for name in ["callie", "dave", "jen"] {
+        assert_eq!(
+            register_with(&server, &invite.code, name).await.status(),
+            200
+        );
+    }
+
+    let preview: InvitePreview = reqwest::get(server.url(&format!("/auth/invite/{}", invite.code)))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(preview.valid, "still works after three people joined");
+
+    let listed: Vec<Invite> = reqwest::Client::new()
+        .get(server.url("/invites"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let stored = listed.iter().find(|i| i.code == invite.code).unwrap();
+    assert_eq!((stored.max_uses, stored.uses), (None, 3));
+}
+
+#[tokio::test]
+async fn zero_uses_is_refused() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let resp = reqwest::Client::new()
+        .post(server.url("/invites"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "max_uses": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 422);
+    let env: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(env.error.code, ErrorCode::ValidationFailed);
+}
+
+#[tokio::test]
 async fn expired_invite_says_expired() {
     let server = common::spawn_server().await;
     let host = common::bootstrap_host(&server).await;

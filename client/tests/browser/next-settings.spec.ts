@@ -420,6 +420,17 @@ test.describe("hosting", () => {
     await expect(links.nth(1).getByRole("button")).toHaveCount(0);
   });
 
+  test("an invite for Anyone asks for no limit (#246)", async ({ page }) => {
+    await open(page, "?section=invites");
+    await page.getByRole("button", { name: "Anyone" }).click();
+    await page.getByRole("button", { name: "Never" }).click();
+    await page.getByRole("button", { name: "Make a link" }).click();
+    await expect(said(page.getByRole("region", { name: "New Invite" }))).toHaveText("Made, and copied");
+    expect(await did(page)).toContain("invite:any:never");
+    const links = page.getByRole("list", { name: "Invite links" }).locator(":scope > li");
+    await expect(links.first()).toContainText("for any number of people");
+  });
+
   test("removing someone asks first, names them, and they can be let back in", async ({ page }) => {
     await open(page, "?section=people");
     const members = page.getByRole("list", { name: "Members" }).locator(":scope > li");

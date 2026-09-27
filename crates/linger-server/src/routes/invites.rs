@@ -83,15 +83,16 @@ async fn create(
     {
         return Err(ApiError::rate_limited(retry));
     }
-    if req.max_uses == Some(0) {
+    if req.max_uses == Some(Some(0)) {
         return Err(ApiError::validation("An invite needs at least one use."));
     }
 
     let now = now_ms();
     let code = new_code();
     let expires_at = req.expires_in_hours.map(|h| now + i64::from(h) * 3_600_000);
-    // Single-use by default (ARCHITECTURE §7): an unlimited invite is opt-in.
-    let max_uses = req.max_uses.or(Some(1));
+    // Single-use by default (ARCHITECTURE §7): an unlimited invite is opt-in,
+    // asked for with `"max_uses": null` (#246).
+    let max_uses = req.max_uses.unwrap_or(Some(1));
 
     sqlx::query(
         "INSERT INTO invites (code, created_by, expires_at, max_uses, uses, created_at)
