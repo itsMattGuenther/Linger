@@ -387,21 +387,23 @@ on in that room. Already talking in another room? **Move voice here** (or
 **Talk here instead**) takes you there.
 
 While you're in, the **voice bar** at the bottom of your list shows the room,
-who's in it (whoever is speaking lights up), and your controls. The same
-three controls sit at the end of the room's voice line in its chat window, as
-symbols (hover one for its name), so you don't need the list in front to mute:
+who's in it (whoever is speaking lights up), and your controls, as symbols
+(hover one for its name): a microphone, headphones, and an arrow leaving a
+box. The same three sit at the end of the room's voice line in its chat
+window, so you don't need the list in front to mute:
 
-- **Mute** stops sending, instantly, and nobody else can change it. Nobody can
-  mute you either, and nobody can turn your microphone on.
-- **Deafen** silences incoming voice and mutes your microphone together.
-  Pressing it again restores your previous mic choice. Deafen doesn't change
-  notification sounds.
+- **Mute** (the microphone) stops sending, instantly, and nobody else can
+  change it. Nobody can mute you either, and nobody can turn your microphone
+  on. While you're muted, the microphone is crossed out and lit.
+- **Deafen** (the headphones) silences incoming voice and mutes your
+  microphone together. Pressing it again restores your previous mic choice.
+  Deafen doesn't change notification sounds.
 - A crossed-out microphone beside a name means that person is muted, and
   crossed-out headphones mean they're deafened, when they share it. Hover
   the symbol for the word. An unmuted microphone is not a guarantee somebody
   is listening.
-- **Leave** turns the microphone off. Quitting Linger does too; closing the
-  list doesn't, since Linger keeps running in the tray.
+- **Leave voice** (the arrow) turns the microphone off. Quitting Linger does
+  too; closing the list doesn't, since Linger keeps running in the tray.
 - Click someone's name in the voice bar to set **how loud they are for you**,
   from silent to twice as loud. Linger remembers it for that person on this
   server, on this computer only; nobody else hears or sees the change.

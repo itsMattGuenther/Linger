@@ -29,7 +29,8 @@ import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk.
 // `&mics`: Jules deafened and out of reach, Eli on a client that doesn't
-// share its microphone (VOICE-6, VOICE-7).
+// share its microphone (VOICE-6, VOICE-7). `&muted`, `&deafened`: your own
+// controls pressed (deafening mutes too, as `setVoiceDeafened` does).
 const query = new URLSearchParams(location.search);
 // `?away`: you're away already, so the top card offers "I'm back".
 const night = evening(serverState(SERVER));
@@ -52,8 +53,8 @@ const state = query.has("voice")
       },
       myVoice: {
         roomId: "r-general",
-        muted: query.has("ptt"),
-        deafened: false,
+        muted: query.has("ptt") || query.has("muted") || query.has("deafened"),
+        deafened: query.has("deafened"),
         mutedBeforeDeafen: false,
         pushToTalk: query.has("ptt"),
         moved: false,

@@ -4,7 +4,9 @@
   flex-direction: column;
   gap: var(--space-2);
   margin: 0 var(--space-2) var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  /* The same above the header's row as below the controls': both are rows of
+     24px symbols, the arrow at the top and your controls at the bottom (#230). */
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--accent-edge-soft);
   border-radius: var(--radius-lg);
   background: var(--accent-wash);
@@ -53,9 +55,10 @@
   color: var(--text-secondary);
 }
 
+/* Your controls, as symbols spaced as in the room's voice line (#216, #230). */
 .nx-voice-controls {
   display: flex;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
 }
 
 /* With several servers: which server this voice room is on. */
