@@ -432,6 +432,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | VOICE-15 | Join, leave, move and peer cues follow the voice and controls switches, not quiet hours. | `sound.ts`, `sound-events.ts` | Same | U | ✅ (lib/sound.test.ts) |
 | VOICE-16 | Voice audio never passes through the webview; the Rust engine owns devices, Opus and peers. Frames go to it from **one** window. | `src-tauri/src/voice/`, `voice_frame` | The owner forwards frames (architecture) | U + D | 🟡 the list forwards frames; needs a desktop check |
 | VOICE-17 | Join and leave draw the final layout from the first frame: no half-built bar, and the conversation doesn't blink (#141, #142). | `VoiceBar.tsx`, `lib/resize.ts` | Same | F (frame-by-frame) | 🟡 the strip keeps its height (next-chat.spec.ts); no frame-by-frame test |
+| VOICE-18 | A start that fails says why in words, in the room's strip, with the fix for a known cause (Windows' microphone privacy switch); devices in any plain sample format open (#261). | `lib/gateway.ts` `joinVoice`, `voice/device.rs` | The strip's words, on its one line; the whole reason in the tooltip | U + F | 🟡 (lib/voice.test.ts, gateway.voice.test.ts, next-chat.spec.ts, device.rs); needs the Windows 10 report's real message |
 
 ## LOOK — appearance and reading comfort
 

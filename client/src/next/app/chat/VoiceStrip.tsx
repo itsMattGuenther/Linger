@@ -34,6 +34,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   mics,
   onJoin,
   controls,
+  failed,
 }: {
   strip: Strip;
   /** Everyone the strip names, by id. */
@@ -48,12 +49,23 @@ export const VoiceStrip = memo(function VoiceStrip({
   onJoin: () => void;
   /** Yours, when you're in voice here. */
   controls?: StripControls;
+  /**
+   * The last try at starting voice here failed (#261). It takes the words'
+   * place, on the same one line, so the strip keeps its height (VOICE-17);
+   * the whole reason is the tooltip. The button stays, to try again.
+   */
+  failed?: { line: string; detail: string };
 }) {
+  const problem = failed && strip.kind !== "mine" ? (
+    <p className="nx-strip-words" data-problem="yes" role="alert" title={failed.detail}>
+      Couldn't start voice. {failed.line}
+    </p>
+  ) : null;
   if (strip.kind === "quiet") {
     return (
       <div className="nx-strip" data-kind="quiet" role="group" aria-label="Voice in this conversation">
         <VoiceGlyph speaking={false} />
-        <p className="nx-strip-words">Nobody's talking in here.</p>
+        {problem ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
         <Button size="sm" variant="secondary" icon="mic" onClick={onJoin}>
           {strip.action === "move" ? QUIET_MOVE_WORDS : VOICE_ACTION_WORDS[strip.action]}
         </Button>
@@ -81,10 +93,12 @@ export const VoiceStrip = memo(function VoiceStrip({
           </li>
         ))}
       </ul>
-      <p className="nx-strip-words">
-        {here.length > shown.length ? "and others " : ""}
-        {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}
-      </p>
+      {problem ?? (
+        <p className="nx-strip-words">
+          {here.length > shown.length ? "and others " : ""}
+          {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}
+        </p>
+      )}
       {strip.kind === "mine" && controls ? (
         <div className="nx-strip-controls" role="group" aria-label="Your voice">
           <IconButton

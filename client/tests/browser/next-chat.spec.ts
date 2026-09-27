@@ -437,6 +437,25 @@ test.describe("voice here", () => {
     await expect(strip.getByRole("button", { name: "Talk here instead" })).toBeVisible();
   });
 
+  // Starting voice used to fail with nothing to show for it: the strip
+  // blinked and went back (#261). It says why now, on its one line.
+  test("a start that failed says why, keeps the strip's height, and offers another try (#261)", async ({ page }) => {
+    const reason = "the microphone wouldn't open: Permission denied. Grant the required access and retry.";
+    await page.goto(`/tests/fixtures/next-chat.html?voice=off&windows&voicefail=${encodeURIComponent(reason)}`);
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const said = strip.getByRole("alert");
+    await expect(said).toHaveText("Couldn't start voice. Windows' privacy settings are blocking the microphone.");
+    await expect(said).toHaveAttribute("title", reason);
+    await expect(strip).not.toContainText("Nobody's talking in here.");
+    await expect(strip.getByRole("button", { name: "Start talking" })).toBeVisible();
+    expect((await rect(strip)).height).toBe(40);
+    // It stays on one line, and doesn't push the button out.
+    const words = await said.evaluate((node) => ({ lines: Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)), right: node.getBoundingClientRect().right }));
+    const button = await rect(strip.getByRole("button", { name: "Start talking" }));
+    expect(words.lines).toBe(1);
+    expect(words.right).toBeLessThanOrEqual(button.x);
+  });
+
   test("nobody in voice: offers to start, and the strip keeps its height", async ({ page }) => {
     await open(page, "?voice=off");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });

@@ -47,6 +47,11 @@
   text-overflow: ellipsis;
 }
 
+/* Voice didn't start here last time (#261): the reason, in the words' place. */
+.nx-strip-words[data-problem="yes"] {
+  color: var(--text-danger);
+}
+
 .nx-strip-here {
   flex: none;
   padding-right: var(--space-1-5);

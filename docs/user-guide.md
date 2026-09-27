@@ -428,7 +428,20 @@ and a key you have to hold is the opposite of that.
 Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
 change applies at once, even in the middle of a call: you carry on talking
 through the new device without leaving. If a device you picked isn't plugged
-in, the system default is used and the picker says so.
+in, or won't open, the system default is used and the picker says so.
+
+**If voice won't start**, the room's voice strip says why, where it would
+say who's talking: hover it for the whole reason. Joining needs a microphone
+and speakers that open. The usual cause on Windows is Windows' own privacy
+switch for the microphone, which Linger can't turn on for you:
+
+- Windows 10: **Settings → Privacy → Microphone**, then turn on **Allow apps
+  to access your microphone** and **Allow desktop apps to access your
+  microphone**.
+- Windows 11: **Settings → Privacy & security → Microphone**, then turn on
+  **Microphone access** and **Let desktop apps access your microphone**.
+
+Then press **Start talking** again.
 
 **Voice through the server.** On a server whose host has turned it on, your
 voice goes to the server once and the server passes it on to everyone else in

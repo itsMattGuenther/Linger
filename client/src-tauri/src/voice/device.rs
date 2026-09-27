@@ -43,7 +43,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, SupportedStreamConfig, SupportedStreamConfigRange};
+use cpal::{
+    FromSample, Sample, SampleFormat, SizedSample, SupportedStreamConfig,
+    SupportedStreamConfigRange, I24, U24,
+};
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
@@ -61,6 +64,10 @@ pub enum DeviceError {
     Thread(#[from] std::io::Error),
     #[error("the audio thread stopped before the device was ready")]
     Gone,
+    /// Which of the two would not open, and why (#261). Joining opens both,
+    /// and "permission denied" means something different for a microphone.
+    #[error("the {0} wouldn't open: {1}")]
+    Opening(&'static str, Box<DeviceError>),
 }
 
 /// Open the default microphone and the default speakers.
@@ -79,8 +86,10 @@ pub fn open_default() -> Result<Devices, DeviceError> {
 /// one that is listed but won't open (`or_default`). The picker shows what is
 /// actually present, so the mismatch is visible there.
 pub fn open(input: Option<&str>, output: Option<&str>) -> Result<Devices, DeviceError> {
-    let source = Microphone::open(input)?;
-    let sink = Speaker::open(output)?;
+    let source = Microphone::open(input)
+        .map_err(|error| DeviceError::Opening("microphone", Box::new(error)))?;
+    let sink =
+        Speaker::open(output).map_err(|error| DeviceError::Opening("speakers", Box::new(error)))?;
     Ok(Devices {
         source: Arc::new(source),
         sink: Arc::new(sink),
@@ -234,26 +243,80 @@ fn input_stream(
         None => device.default_input_config()?,
     };
     let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
+    let config_format = config.sample_format();
     let alarm = alarm.clone();
     let died = move |error: cpal::Error| {
         eprintln!("voice: microphone: {error}");
         alarm.ring();
     };
-    Ok(match config.sample_format() {
+    let config = config.config();
+    Ok(match config_format {
         SampleFormat::I16 => device.build_input_stream(
-            config.config(),
+            config,
             move |data: &[i16], _| framer.push(data.iter().copied()),
             died,
             None,
         )?,
         SampleFormat::F32 => device.build_input_stream(
-            config.config(),
+            config,
             move |data: &[f32], _| framer.push(data.iter().map(|s| from_f32(*s))),
             died,
             None,
         )?,
+        // Any other format is converted on the way in (#261): a microphone on
+        // Windows can offer 24- or 32-bit samples and nothing else.
+        SampleFormat::I8 => input_as::<i8>(device, config, framer, died)?,
+        SampleFormat::I24 => input_as::<I24>(device, config, framer, died)?,
+        SampleFormat::I32 => input_as::<i32>(device, config, framer, died)?,
+        SampleFormat::I64 => input_as::<i64>(device, config, framer, died)?,
+        SampleFormat::U8 => input_as::<u8>(device, config, framer, died)?,
+        SampleFormat::U16 => input_as::<u16>(device, config, framer, died)?,
+        SampleFormat::U24 => input_as::<U24>(device, config, framer, died)?,
+        SampleFormat::U32 => input_as::<u32>(device, config, framer, died)?,
+        SampleFormat::U64 => input_as::<u64>(device, config, framer, died)?,
+        SampleFormat::F64 => input_as::<f64>(device, config, framer, died)?,
         other => return Err(DeviceError::Format("input", other)),
     })
+}
+
+/// An input stream in a sample format other than the two the path speaks,
+/// each sample converted to 16 bits as it arrives.
+fn input_as<T>(
+    device: &cpal::Device,
+    config: cpal::StreamConfig,
+    mut framer: Framer,
+    died: impl FnMut(cpal::Error) + Send + 'static,
+) -> Result<cpal::Stream, DeviceError>
+where
+    T: SizedSample,
+    i16: FromSample<T>,
+{
+    Ok(device.build_input_stream(
+        config,
+        move |data: &[T], _| framer.push(data.iter().map(|s| i16::from_sample(*s))),
+        died,
+        None,
+    )?)
+}
+
+/// An output stream in a sample format other than the two the path speaks.
+fn output_as<T>(
+    device: &cpal::Device,
+    config: cpal::StreamConfig,
+    lanes: Arc<Mutex<HashMap<String, Lane>>>,
+    deafened: Arc<AtomicBool>,
+    channels: usize,
+    died: impl FnMut(cpal::Error) + Send + 'static,
+) -> Result<cpal::Stream, DeviceError>
+where
+    T: SizedSample + FromSample<i16>,
+{
+    Ok(device.build_output_stream(
+        config,
+        move |out: &mut [T], _| mix(&lanes, &deafened, channels, out, T::from_sample),
+        died,
+        None,
+    )?)
 }
 
 /// Build on the device found for `name`; if that was a device picked by name
@@ -409,19 +472,32 @@ fn output_stream(
         alarm.ring();
     };
     let (lanes, deafened) = (Arc::clone(lanes), Arc::clone(deafened));
-    Ok(match config.sample_format() {
+    let format = config.sample_format();
+    let config = config.config();
+    Ok(match format {
         SampleFormat::I16 => device.build_output_stream(
-            config.config(),
+            config,
             move |out: &mut [i16], _| mix(&lanes, &deafened, channels, out, |s| s),
             died,
             None,
         )?,
         SampleFormat::F32 => device.build_output_stream(
-            config.config(),
+            config,
             move |out: &mut [f32], _| mix(&lanes, &deafened, channels, out, to_f32),
             died,
             None,
         )?,
+        // Converted on the way out, as the microphone's are on the way in (#261).
+        SampleFormat::I8 => output_as::<i8>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::I24 => output_as::<I24>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::I32 => output_as::<i32>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::I64 => output_as::<i64>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::U8 => output_as::<u8>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::U16 => output_as::<u16>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::U24 => output_as::<U24>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::U32 => output_as::<u32>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::U64 => output_as::<u64>(device, config, lanes, deafened, channels, died)?,
+        SampleFormat::F64 => output_as::<f64>(device, config, lanes, deafened, channels, died)?,
         other => return Err(DeviceError::Format("output", other)),
     })
 }
@@ -561,13 +637,13 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Prefer 48 kHz, prefer mono, and take either sample format the callbacks
-/// read. `None` means the device offers no 48 kHz at all and the caller
-/// should take the default and resample.
+/// Prefer 48 kHz, prefer mono, and take any sample format the callbacks can
+/// read or convert. `None` means the device offers no 48 kHz at all and the
+/// caller should take the default and resample.
 fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<SupportedStreamConfig> {
     let mut best: Option<SupportedStreamConfig> = None;
     for range in ranges {
-        if !matches!(range.sample_format(), SampleFormat::I16 | SampleFormat::F32) {
+        if format_rank(range.sample_format()).is_none() {
             continue;
         }
         let Some(config) = range.try_with_sample_rate(SAMPLE_RATE) else {
@@ -581,11 +657,31 @@ fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<Supp
 }
 
 /// Lower is better: fewest channels beyond one, then i16 over f32 because it
-/// is what the rest of the path speaks.
+/// is what the rest of the path speaks, then anything else converted.
 fn rank(config: &SupportedStreamConfig) -> (u16, u8) {
     let channels = config.channels().saturating_sub(CHANNELS);
-    let format = u8::from(config.sample_format() != SampleFormat::I16);
+    let format = format_rank(config.sample_format()).unwrap_or(u8::MAX);
     (channels, format)
+}
+
+/// How much work a sample format is: none for 16-bit, a scale for float, a
+/// conversion for the rest. `None` for what can't be read at all (DSD).
+fn format_rank(format: SampleFormat) -> Option<u8> {
+    match format {
+        SampleFormat::I16 => Some(0),
+        SampleFormat::F32 => Some(1),
+        SampleFormat::I8
+        | SampleFormat::I24
+        | SampleFormat::I32
+        | SampleFormat::I64
+        | SampleFormat::U8
+        | SampleFormat::U16
+        | SampleFormat::U24
+        | SampleFormat::U32
+        | SampleFormat::U64
+        | SampleFormat::F64 => Some(2),
+        _ => None,
+    }
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -946,6 +1042,46 @@ mod tests {
         assert_eq!(from_f32(-1.0), -i16::MAX);
         assert_eq!(from_f32(2.0), i16::MAX, "out-of-range input must clamp");
         assert!((to_f32(i16::MIN) + 1.0).abs() < 1e-6);
+    }
+
+    /// Every plain sample format a device can offer is taken (#261); only
+    /// DSD, which isn't samples at all, is refused. 16-bit is preferred, then
+    /// float, then anything that needs converting.
+    #[test]
+    fn every_plain_sample_format_is_readable() {
+        use SampleFormat::*;
+        for format in [I8, I16, I24, I32, I64, U8, U16, U24, U32, U64, F32, F64] {
+            assert!(format_rank(format).is_some(), "{format} refused");
+        }
+        for format in [DsdU8, DsdU16, DsdU32] {
+            assert!(format_rank(format).is_none(), "{format} taken");
+        }
+        assert!(format_rank(I16) < format_rank(F32));
+        assert!(format_rank(F32) < format_rank(I32));
+    }
+
+    /// Converting in and out keeps silence silent and full scale full.
+    #[test]
+    fn converted_samples_keep_their_level() {
+        assert_eq!(i16::from_sample(0i32), 0);
+        assert_eq!(i16::from_sample(i32::MAX), i16::MAX);
+        assert_eq!(i16::from_sample(I24::new(-(1 << 23)).unwrap()), i16::MIN);
+        assert_eq!(i16::from_sample(32_768u16), 0, "u16's middle is silence");
+        assert_eq!(i16::from_sample(0.5f64), 16_384);
+        assert_eq!(u16::from_sample(0i16), 32_768);
+        assert_eq!(i32::from_sample(i16::MIN), i32::MIN);
+        assert!((f64::from_sample(i16::MIN) + 1.0).abs() < 1e-9);
+    }
+
+    /// A failed join says which device it was and why, for the voice strip
+    /// to show (#261).
+    #[test]
+    fn a_device_that_wont_open_is_named() {
+        let error = DeviceError::Opening("microphone", Box::new(DeviceError::NoDevice("input")));
+        assert_eq!(
+            error.to_string(),
+            "the microphone wouldn't open: no input device"
+        );
     }
 
     #[test]
