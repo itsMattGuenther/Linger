@@ -116,7 +116,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--composer-max` 200 · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) · `--status-image-w` 400 · `--status-image-h` 200 (a status picture) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -151,7 +151,7 @@ Each component takes typed props for its states, sizes itself, and exposes a
 
 ### Icon
 
-One glyph (46 of them, typed as `IconName`) in a fixed square box of 12, 16 or
+One glyph (49 of them, typed as `IconName`) in a fixed square box of 12, 16 or
 20px, centered, in `currentColor`. Icons are decoration (`aria-hidden`); the
 control around them carries the name. **Don't** size an icon by hand; pick a
 box.
@@ -447,8 +447,9 @@ work as they do on any slider, and `valueText` is what a screen reader hears
 person lets go (the pointer comes up, or the key that moved it is released,
 however long it was held), for something to do once, like playing a sample.
 It's used for a person's volume, over their chip in the voice bar
-(`app/list/VolumeCard.tsx`), and for the sound volume in Settings → Sound &
-Voice, which plays one chime when let go of.
+(`app/list/VolumeCard.tsx`), for the sound volume in Settings → Sound &
+Voice, which plays one chime when let go of, and for a shared audio file's
+timeline and volume (`app/chat/AudioCard.tsx`).
 
 ### Card and Popover
 
@@ -527,7 +528,43 @@ When the quoted message isn't loaded it says "an earlier message".
 **What else a message holds.** Pictures are sized from their stored width and
 height before they load (at most 320 by 400), so a row is measured once. A
 message that is nothing but one link shows only its link card. Files that
-aren't pictures, video or sound are a card with a Download button. A video
+aren't pictures, video or sound are a card with a Download button.
+
+**Shared audio** has Linger's own player, not the engine's (#247):
+WebKitGTK's controls drop their volume slider on anything under 136px
+tall, which a one-line player always is, so on Linux there was no way to
+turn a file down. The card is a picture's width (`--media-max-w`) on two
+lines: the audio icon, the name (ending in "…") and the time ("0:12 / 3:45")
+first, then a 32px line of kit parts: Play or Pause (a filled `IconButton`),
+the timeline (a `Slider`), then Mute and its volume `Slider`
+(`--audio-volume-w`) side by side, with only the button's own padding
+between them.
+
+- **Names:** the card is a group named by the file, and each part has its
+  own name: Play or Pause, Timeline, Mute or Unmute, Volume. The two buttons
+  draw their state as a symbol (`pause`, `speakerOff`), with the word as the
+  name and tooltip.
+- **Keys:** the timeline moves a second per arrow (a tenth of one in a clip
+  under a minute), Page Up and Down a tenth of the file, Home and End to
+  either end. It shows where it's being moved to and seeks once it's let go
+  of, so the engine asks the server for just that part (#222). The volume
+  moves in steps of 5%.
+- **Muting** keeps the level: the slider shows nothing while muted, and
+  moving it brings the sound back. The last level let go of is kept on this
+  computer (`linger.next.audioVolume`, `core/audioPlayer.ts`) for the next
+  file, and a player nobody has turned takes it up as it starts; one somebody
+  has turned keeps its own. Silence is never kept, so a file never starts
+  out mute.
+- **The time** sits over an invisible copy of the widest it gets for that
+  file, so the name beside it never moves as the seconds tick over.
+- **A narrow card** (under 15em, a long name in a narrow window) keeps Mute
+  and gives its volume slider's room to the timeline.
+- **A file that can't load** says "Couldn't load this audio." on the
+  controls' line, with **Load again**, which picks up where it had got to, as
+  a video does.
+
+A video keeps the engine's own controls, which are tall enough to have
+their volume slider. A video
 that can't load says so over its own frame, which keeps its size, with a
 **Load again** button that brings the player back in place and picks up where
 it had got to (#222). Mono type appears only in metadata (times, a link card's
@@ -628,6 +665,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
+| A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
 | A `Select` is named by its label, keeps the choice, links its help, and a disabled one refuses | `kit.spec.ts` › a drop-down is named by its label |

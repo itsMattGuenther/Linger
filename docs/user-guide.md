@@ -367,6 +367,12 @@ the box, or paste one from your clipboard.
 Click a posted image to expand it. It stays centered and fits the window, even
 when you resize it. Press **Escape** or click it to go back.
 
+Audio files play right in the conversation. Press **Play**, drag along the
+line to move through it (or use the arrow keys), and set how loud it plays
+with the slider beside the speaker; the speaker mutes it. Linger remembers
+that level on this computer for the next file. Videos play with their own
+controls.
+
 For other files, **Download** hands the file to your browser, which may save
 it straight to Downloads without asking; Linger says so when it has. If it
 fails, **Try again**. A file may have expired. Treat download links as

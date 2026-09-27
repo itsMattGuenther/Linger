@@ -439,7 +439,7 @@ test.describe("files in the conversation", () => {
     expect(await rowHeight()).toBe(heightBefore);
   });
 
-  test("video gets its poster and a player, sound a player, anything else one line and a download button (FILE-5)", async ({ page }) => {
+  test("video gets its poster and its player, audio Linger's player, anything else one line and a download button (FILE-5)", async ({ page }) => {
     await open(page);
     const id = await post(page, "three files", "u-eli", {
       attachments: [
@@ -454,12 +454,12 @@ test.describe("files in the conversation", () => {
     await expect(video).toHaveJSProperty("controls", true);
     await expect(video).toHaveAccessibleName("porch-timelapse.mp4");
 
-    const sound = row(page, id).locator("audio");
-    await expect(sound).toHaveJSProperty("controls", true);
-    await expect(sound).toHaveAttribute("src", `${SERVER}/media/aud-1`);
-    const soundCard = row(page, id).locator(".nx-att-card").filter({ has: page.locator("audio") });
-    await expect(soundCard).toContainText("rain-sounds.mp3");
-    await expect(soundCard).toContainText("1:02:05");
+    // Audio has no engine controls: Linger draws its own (#247, below), with
+    // the length the server measured until the file says its own.
+    const sound = row(page, id).getByRole("group", { name: "rain-sounds.mp3" });
+    await expect(sound.locator("audio")).toHaveJSProperty("controls", false);
+    await expect(sound.locator("audio")).toHaveAttribute("src", `${SERVER}/media/aud-1`);
+    await expect(sound.locator(".nx-audio-time > span").first()).toHaveText("0:00 / 1:02:05");
 
     // Anything else is never shown in the app: one line, and a way to download it
     // (what the download does is FILE-6's).
@@ -475,30 +475,35 @@ const CLIP = readFileSync(new URL("../fixtures/clip.webm", import.meta.url));
 const PIECE = 8 * 1024;
 
 /**
- * The file store for `/media/vid-*`, answering as the server does since #222:
- * one byte range at a time, with `206` and `Content-Range`. It sends at most
- * `PIECE` bytes per answer, which a server may, so reaching the end of the
- * clip takes a range that starts partway in, the request a seek makes. While
- * `down`, every request fails.
+ * A file store for `/media/<prefix>*`, answering as the server does since
+ * #222: one byte range at a time, with `206` and `Content-Range`. It sends at
+ * most `PIECE` bytes per answer, which a server may, so reaching the end of
+ * the file takes a range that starts partway in, the request a seek makes.
+ * While `down`, every request fails.
  */
-async function videoStore(page: Page) {
+async function byteStore(page: Page, prefix: string, bytes: Buffer, contentType: string) {
   const store = { down: false, ranges: [] as string[] };
-  await page.route(`${SERVER}/media/vid-*`, async (route) => {
+  await page.route(`${SERVER}/media/${prefix}*`, async (route) => {
     if (store.down) return route.fulfill({ status: 503 });
     const range = route.request().headers()["range"];
     const asked = /^bytes=(\d+)-(\d*)$/.exec(range ?? "");
-    if (!range || !asked) return route.fulfill({ status: 200, contentType: "video/webm", headers: { "accept-ranges": "bytes" }, body: CLIP });
+    if (!range || !asked) return route.fulfill({ status: 200, contentType, headers: { "accept-ranges": "bytes" }, body: bytes });
     store.ranges.push(range);
     const start = Number(asked[1]);
-    const end = Math.min(CLIP.length - 1, start + PIECE - 1, asked[2] ? Number(asked[2]) : Number.POSITIVE_INFINITY);
+    const end = Math.min(bytes.length - 1, start + PIECE - 1, asked[2] ? Number(asked[2]) : Number.POSITIVE_INFINITY);
     await route.fulfill({
       status: 206,
-      contentType: "video/webm",
-      headers: { "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${CLIP.length}` },
-      body: CLIP.subarray(start, end + 1),
+      contentType,
+      headers: { "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${bytes.length}` },
+      body: bytes.subarray(start, end + 1),
     });
   });
   return store;
+}
+
+/** The store for `/media/vid-*`, holding the clip. */
+function videoStore(page: Page) {
+  return byteStore(page, "vid-", CLIP, "video/webm");
 }
 
 test.describe("a shared video (#222)", () => {
@@ -591,6 +596,310 @@ test.describe("a shared video (#222)", () => {
     await expect(row(page, id).getByRole("alert")).toHaveCount(0);
     await expect.poll(() => time(page, id)).toBeCloseTo(2.5, 1);
   });
+});
+
+/**
+ * Four seconds of a quiet 16-bit, 8 kHz mono WAV (64 KB), made here: every
+ * engine plays it without a codec to install, and it takes eight of the
+ * store's pieces, so seeking into it asks for a range partway in.
+ */
+function wav(seconds: number): Buffer {
+  const rate = 8000;
+  const samples = rate * seconds;
+  const data = Buffer.alloc(samples * 2);
+  // A faint hum rather than silence, so nothing takes it for an empty file.
+  for (let at = 0; at < samples; at += 1) data.writeInt16LE(Math.round(Math.sin((at / rate) * 2 * Math.PI * 220) * 600), at * 2);
+  const head = Buffer.alloc(44);
+  head.write("RIFF", 0);
+  head.writeUInt32LE(36 + data.length, 4);
+  head.write("WAVE", 8);
+  head.write("fmt ", 12);
+  head.writeUInt32LE(16, 16);
+  head.writeUInt16LE(1, 20); // PCM
+  head.writeUInt16LE(1, 22); // mono
+  head.writeUInt32LE(rate, 24);
+  head.writeUInt32LE(rate * 2, 28);
+  head.writeUInt16LE(2, 32);
+  head.writeUInt16LE(16, 34);
+  head.write("data", 36);
+  head.writeUInt32LE(data.length, 40);
+  return Buffer.concat([head, data]);
+}
+
+const RAIN = wav(4);
+
+test.describe("a shared audio file (#247)", () => {
+  const rain = {
+    id: "aud-rain",
+    filename: "porch-rain.wav",
+    mime: "audio/wav",
+    size_bytes: RAIN.length,
+    url: "/media/aud-rain",
+    width: null,
+    height: null,
+    duration_ms: 4_000,
+    blurhash: null,
+    poster_url: null,
+    starred_at: null,
+    uploader_id: "u-eli",
+    created_at: Date.parse("2026-09-25T22:50:00"),
+  };
+  const card = (page: Page, id: string) => row(page, id).getByRole("group", { name: "porch-rain.wav" });
+  const sound = (page: Page, id: string) => card(page, id).locator("audio");
+  const shown = (page: Page, id: string) => card(page, id).locator(".nx-audio-time > span").first();
+  const ready = (page: Page, id: string) => sound(page, id).evaluate((audio: HTMLAudioElement) => audio.readyState);
+  const read = <T,>(page: Page, id: string, what: (audio: HTMLAudioElement) => T) => sound(page, id).evaluate(what);
+
+  /** The chat window with the audio store in front of it, on an engine that can play a WAV. */
+  async function openWithAudio(page: Page) {
+    await open(page);
+    const playable = await page.evaluate(() => document.createElement("audio").canPlayType("audio/wav"));
+    test.skip(playable === "", "this engine can't play WAV");
+    return byteStore(page, "aud-", RAIN, "audio/wav");
+  }
+
+  test("is Linger's own player, every part named, on the card's two lines", async ({ page }) => {
+    await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const player = card(page, id);
+    await expect(player).toBeVisible();
+    // None of the engine's own controls, whichever engine this is.
+    await expect(sound(page, id)).toHaveJSProperty("controls", false);
+    await expect(sound(page, id)).toBeHidden();
+    await expect(player.getByRole("button", { name: "Play" })).toBeVisible();
+    await expect(player.getByRole("slider", { name: "Timeline" })).toHaveAttribute("aria-valuetext", "0:00 of 0:04");
+    await expect(shown(page, id)).toHaveText("0:00 / 0:04");
+    await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+    await expect(player.getByRole("slider", { name: "Volume" })).toHaveAttribute("aria-valuetext", "100%");
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+
+    const geometry = await player.evaluate((node) => {
+      const box = (element: Element | null) => {
+        if (!element) throw new Error("missing part");
+        const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+        return { left, right, top, bottom, width, height };
+      };
+      const style = getComputedStyle(node);
+      return {
+        card: box(node),
+        padding: { left: Number.parseFloat(style.paddingLeft), right: Number.parseFloat(style.paddingRight) },
+        border: Number.parseFloat(style.borderLeftWidth),
+        icon: box(node.querySelector('[data-kit="Icon"]')),
+        time: box(node.querySelector(".nx-audio-time")),
+        line: box(node.querySelector(".nx-audio-controls")),
+        controls: [...node.querySelectorAll("[data-kit-control]")].map((control) => ({ kit: (control as HTMLElement).dataset.kit, ...box(control) })),
+      };
+    });
+    // The controls' line is one control tall, as the engine's player was.
+    expect(geometry.line.height).toBe(32);
+    // Every control is a kit size, centered on that line.
+    expect(geometry.controls.map((control) => [control.kit, control.height])).toEqual([
+      ["IconButton", 32],
+      ["Slider", 24],
+      ["IconButton", 32],
+      ["Slider", 24],
+    ]);
+    for (const control of geometry.controls) expect(Math.abs(control.top + control.height / 2 - (geometry.line.top + geometry.line.height / 2))).toBeLessThanOrEqual(0.5);
+    // Inside the card's padding: the controls start on the icon's edge and end on the time's.
+    const inner = { left: geometry.card.left + geometry.border + geometry.padding.left, right: geometry.card.right - geometry.border - geometry.padding.right };
+    expect(geometry.controls[0]?.left).toBeCloseTo(inner.left, 0);
+    expect(geometry.icon.left).toBeCloseTo(inner.left, 0);
+    expect(geometry.controls.at(-1)?.right).toBeCloseTo(inner.right, 0);
+    expect(geometry.time.right).toBeCloseTo(inner.right, 0);
+    // The card is a picture's width, and the timeline has room in it.
+    expect(geometry.card.width).toBe(320);
+    expect(geometry.controls[1]?.width).toBeGreaterThan(120);
+  });
+
+  test("plays and pauses from its own button, which says which it will do", async ({ page }) => {
+    await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const player = card(page, id);
+    await player.getByRole("button", { name: "Play" }).click();
+    await expect(player.getByRole("button", { name: "Pause" })).toBeVisible();
+    expect(await read(page, id, (audio) => audio.paused)).toBe(false);
+    await player.getByRole("button", { name: "Pause" }).click();
+    await expect(player.getByRole("button", { name: "Play" })).toBeVisible();
+    expect(await read(page, id, (audio) => audio.paused)).toBe(true);
+  });
+
+  test("its volume moves with the keys and sets how loud it plays; mute silences it and keeps the level", async ({ page }) => {
+    await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const player = card(page, id);
+    const volume = player.getByRole("slider", { name: "Volume" });
+
+    await volume.focus();
+    for (let step = 0; step < 4; step += 1) await page.keyboard.press("ArrowLeft");
+    await expect(volume).toHaveAttribute("aria-valuetext", "80%");
+    await expect.poll(() => read(page, id, (audio) => audio.volume)).toBeCloseTo(0.8, 5);
+
+    await player.getByRole("button", { name: "Mute" }).click();
+    await expect.poll(() => read(page, id, (audio) => audio.muted)).toBe(true);
+    await expect(volume).toHaveAttribute("aria-valuetext", "Muted");
+    expect(await read(page, id, (audio) => audio.volume)).toBeCloseTo(0.8, 5);
+
+    await player.getByRole("button", { name: "Unmute" }).click();
+    await expect.poll(() => read(page, id, (audio) => audio.muted)).toBe(false);
+    await expect(volume).toHaveAttribute("aria-valuetext", "80%");
+    expect(await read(page, id, (audio) => audio.volume)).toBeCloseTo(0.8, 5);
+
+    // Muted, moving the slider brings the sound back at the new level.
+    await player.getByRole("button", { name: "Mute" }).click();
+    await volume.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => read(page, id, (audio) => audio.muted)).toBe(false);
+    await expect.poll(() => read(page, id, (audio) => audio.volume)).toBeCloseTo(0.05, 5);
+    await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+  });
+
+  test("remembers the last level on this computer, but never silence", async ({ page }) => {
+    await openWithAudio(page);
+    const first = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const volume = card(page, first).getByRole("slider", { name: "Volume" });
+    await volume.focus();
+    for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("linger.next.audioVolume"))).toBe("0.7");
+    // Slid all the way down: silent here, and not remembered.
+    await page.keyboard.press("Home");
+    await expect.poll(() => read(page, first, (audio) => audio.volume)).toBe(0);
+    await expect(card(page, first).getByRole("button", { name: "Unmute" })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("linger.next.audioVolume"))).toBe("0.7");
+
+    // The next file starts at the level let go of.
+    const next = await post(page, "more rain", "u-jules", { attachments: [{ ...rain, id: "aud-rain-2", url: "/media/aud-rain-2" }] });
+    await expect(card(page, next).getByRole("slider", { name: "Volume" })).toHaveAttribute("aria-valuetext", "70%");
+    await expect.poll(() => read(page, next, (audio) => audio.volume)).toBeCloseTo(0.7, 5);
+    // And unmuting the silenced one brings it back there, not to nothing.
+    await card(page, first).getByRole("button", { name: "Unmute" }).click();
+    await expect.poll(() => read(page, first, (audio) => audio.volume)).toBeCloseTo(0.7, 5);
+  });
+
+  test("a player nobody has turned takes up the last level when it plays; one somebody has keeps its own", async ({ page }) => {
+    await openWithAudio(page);
+    const a = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const b = await post(page, "more rain", "u-jules", { attachments: [{ ...rain, id: "aud-rain-2", url: "/media/aud-rain-2" }] });
+    const level = (id: string) => card(page, id).getByRole("slider", { name: "Volume" });
+
+    await level(a).focus();
+    for (let step = 0; step < 2; step += 1) await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("linger.next.audioVolume"))).toBe("0.9");
+    // B was drawn before A was turned down; it catches up as it starts.
+    await expect(level(b)).toHaveAttribute("aria-valuetext", "100%");
+    await card(page, b).getByRole("button", { name: "Play" }).click();
+    await expect(level(b)).toHaveAttribute("aria-valuetext", "90%");
+    await expect.poll(() => read(page, b, (audio) => audio.volume)).toBeCloseTo(0.9, 5);
+    await card(page, b).getByRole("button", { name: "Pause" }).click();
+
+    // Turned down itself, B is now what's remembered; A still has its own.
+    await level(b).focus();
+    for (let step = 0; step < 4; step += 1) await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("linger.next.audioVolume"))).toBe("0.7");
+    await card(page, a).getByRole("button", { name: "Play" }).click();
+    await expect(card(page, a).getByRole("button", { name: "Pause" })).toBeVisible();
+    await expect(level(a)).toHaveAttribute("aria-valuetext", "90%");
+    expect(await read(page, a, (audio) => audio.volume)).toBeCloseTo(0.9, 5);
+  });
+
+  test("seeks with the timeline's keys by asking for the part it needs (#222)", async ({ page }) => {
+    const store = await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    const timeline = card(page, id).getByRole("slider", { name: "Timeline" });
+
+    await timeline.focus();
+    await page.keyboard.press("End");
+    for (let step = 0; step < 5; step += 1) await page.keyboard.press("ArrowLeft");
+    await expect(timeline).toHaveAttribute("aria-valuetext", "0:03 of 0:04");
+    await expect.poll(() => read(page, id, (audio) => audio.currentTime)).toBeCloseTo(3.5, 1);
+    await expect(shown(page, id)).toHaveText("0:03 / 0:04");
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(2);
+    expect(await read(page, id, (audio) => audio.error)).toBeNull();
+    await expect(row(page, id).getByRole("alert")).toHaveCount(0);
+    // It came back for a later part of the file, and got it.
+    expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
+  });
+
+  test("one that can't load says so on its controls' line, and loads again in place", async ({ page }) => {
+    const store = await openWithAudio(page);
+    store.down = true;
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const player = card(page, id);
+    const note = player.getByRole("alert");
+    await expect(note).toHaveText("Couldn't load this audio.");
+    const again = player.getByRole("button", { name: "Load again" });
+    await expect(again).toBeVisible();
+    // On the line the controls sit on, so the card keeps its height.
+    expect(await player.locator(".nx-audio-failed").evaluate((node) => node.getBoundingClientRect().height)).toBe(32);
+
+    store.down = false;
+    await again.click();
+    await expect(note).toHaveCount(0);
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    // The button went; the keyboard is on Play.
+    await expect(player.getByRole("button", { name: "Play" })).toBeFocused();
+
+    // Giving up while the keyboard is on the controls hands it to Load again.
+    // (Once its bytes are in, a player asks for nothing more, so it gives up
+    // by its own event.)
+    await sound(page, id).evaluate((audio: HTMLAudioElement) => audio.dispatchEvent(new Event("error")));
+    await expect(player.getByRole("button", { name: "Load again" })).toBeFocused();
+  });
+
+  test("in a narrow window it keeps mute and gives the volume slider's room to the timeline", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 720 });
+    await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    const player = card(page, id);
+    await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+    const fit = await player.evaluate((node) => {
+      const edge = node.getBoundingClientRect();
+      return {
+        width: edge.width,
+        outside: [...node.querySelectorAll("[data-kit-control]")].filter((control) => {
+          const box = control.getBoundingClientRect();
+          return box.width > 0 && (box.left < edge.left || box.right > edge.right);
+        }).length,
+      };
+    });
+    expect(fit.outside).toBe(0);
+    if (fit.width <= 240) await expect(player.getByRole("slider", { name: "Volume" })).toBeHidden();
+    else await expect(player.getByRole("slider", { name: "Volume" })).toBeVisible();
+  });
+
+  // For people to look at, not asserted on: resting, part-way with the volume
+  // down and a name too long to fit, muted, and failed, at 100% and 200%.
+  for (const scale of [1, 2]) {
+    test.describe(`at ${scale * 100}%`, () => {
+      test.use({ deviceScaleFactor: scale });
+      test("review sheet", async ({ page }) => {
+        await openWithAudio(page);
+        const resting = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+        const moved = await post(page, "the long one", "u-jules", {
+          attachments: [{ ...rain, id: "aud-long", url: "/media/aud-long", filename: "a very long recording of the rain on the porch roof, all night.wav" }],
+        });
+        const long = row(page, moved).getByRole("group");
+        await expect.poll(() => long.locator("audio").evaluate((audio: HTMLAudioElement) => audio.readyState)).toBeGreaterThanOrEqual(1);
+        await long.getByRole("slider", { name: "Timeline" }).focus();
+        for (let step = 0; step < 15; step += 1) await page.keyboard.press("ArrowRight");
+        await long.getByRole("slider", { name: "Volume" }).focus();
+        for (let step = 0; step < 8; step += 1) await page.keyboard.press("ArrowLeft");
+        const muted = await post(page, "quiet please", "u-dave", { attachments: [{ ...rain, id: "aud-muted", url: "/media/aud-muted" }] });
+        await card(page, muted).getByRole("button", { name: "Mute" }).click();
+        // A file of its own that the server refuses, so only this card fails,
+        // and fails at once in every engine.
+        await page.route(`${SERVER}/media/aud-gone`, (route) => route.fulfill({ status: 503 }));
+        const failed = await post(page, "this one won't", "u-callie", { attachments: [{ ...rain, id: "aud-gone", url: "/media/aud-gone" }] });
+        await expect(card(page, failed).getByRole("alert")).toBeVisible();
+        await page.locator("body").click({ position: { x: 1, y: 1 } });
+        await page.mouse.move(0, 0);
+        const project = test.info().project.name;
+        for (const [name, id] of [["resting", resting], ["moved", moved], ["muted", muted], ["failed", failed]] as const) {
+          await row(page, id).screenshot({ path: `test-results/audio/${project}-${scale * 100}-${name}.png`, animations: "disabled" });
+        }
+      });
+    });
+  }
 });
 
 test.describe("voice and the tabs", () => {

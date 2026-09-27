@@ -1,15 +1,17 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
-import { durationText, fileSize, inlineBox, renderAs } from "../../../lib/media";
+import { fileSize, inlineBox, renderAs } from "../../../lib/media";
 import { Button, Icon, TextField } from "../../kit";
+import { AudioCard } from "./AudioCard";
 import "./Attachments.css";
 
 /**
  * A message's files. Images and video are sized before their bytes arrive,
  * so a row is measured once at its real height and never grows under the
- * rows below it (the list is virtualized; lessons L-14). Anything that isn't
- * a picture, a video or a sound is never shown in the app: it is handed to
- * the system to save (ARCHITECTURE §7).
+ * rows below it (the list is virtualized; lessons L-14). Audio gets Linger's
+ * own player (`AudioCard`, #247); a video keeps the engine's. Anything that
+ * isn't a picture, a video or a sound is never shown in the app: it is handed
+ * to the system to save (ARCHITECTURE §7).
  */
 export const Attachments = memo(function Attachments({
   files,
@@ -62,14 +64,7 @@ function One({
         />
       );
     case "audio":
-      return (
-        <div className="nx-att-card">
-          <Icon name="audio" size="md" />
-          <span className="nx-att-name">{file.filename}</span>
-          {file.duration_ms === null ? null : <span className="nx-att-meta">{durationText(Number(file.duration_ms))}</span>}
-          <audio className="nx-att-audio" src={mediaUrl(file.url)} controls preload="metadata" aria-label={file.filename} />
-        </div>
-      );
+      return <AudioCard name={file.filename} src={mediaUrl(file.url)} durationMs={file.duration_ms === null ? null : Number(file.duration_ms)} />;
     case "file":
       return <FileCard file={file} url={mediaUrl(file.url)} onDownload={onDownload} />;
   }

@@ -14,6 +14,7 @@ export const ICON_NAMES = [
   "knock",
   "message",
   "speaker",
+  "speakerOff",
   "note",
   "book",
   "pencil",
@@ -47,6 +48,7 @@ export const ICON_NAMES = [
   "people",
   "house",
   "play",
+  "pause",
   "compose",
   "head",
   "headOff",
@@ -84,6 +86,12 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   speaker: (
     <>
       <path d="M2.5 6h2.4L8.4 3v10L4.9 10H2.5z" fill="currentColor" /><path d="M10.6 5.6c.8.7 1.2 1.5 1.2 2.4s-.4 1.7-1.2 2.4M12.4 4c1.2 1.1 1.8 2.5 1.8 4s-.6 2.9-1.8 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  /* Speaker's off state (#247), drawn as micOff and headOff are: dimmed, struck through. */
+  speakerOff: (
+    <>
+      <path d="M2.5 6h2.4L8.4 3v10L4.9 10H2.5z" fill="currentColor" opacity=".55" /><path d="M10.6 5.6c.8.7 1.2 1.5 1.2 2.4s-.4 1.7-1.2 2.4M12.4 4c1.2 1.1 1.8 2.5 1.8 4s-.6 2.9-1.8 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" opacity=".55" /><path d="M2.5 2.5l11 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </>
   ),
   note: (
@@ -256,6 +264,12 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   play: (
     <>
       <path d="M5 3.4v9.2l7.4-4.6z" fill="currentColor" />
+    </>
+  ),
+  /* Play's partner (#247): two bars as tall as play's triangle, centered on the grid. */
+  pause: (
+    <>
+      <rect x="4.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor" /><rect x="9.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor" />
     </>
   ),
   compose: (
