@@ -148,8 +148,10 @@ open it from your application menu, or the same way you installed it.
 Open Settings (the gear at the top of your list, or **Ctrl+,**). As the host
 you have a **Hosting** group there that nobody else sees.
 
-First make a room: **Hosting → Rooms → New Room**. A room needs a short name
-for after the `#` and, if you like, a topic.
+First make a room: **Hosting → Rooms → New Room**. Give it a name, and a topic
+if you like. The slug, the short form people type after the `#`, fills itself
+in from the name (`Front Porch` becomes `front-porch`); type your own there to
+change it.
 
 Then **Hosting → Invites → New Invite**. You choose how many people the invite
 is good for and when it expires; the link is copied for you the moment it is

@@ -480,7 +480,7 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| HOST-1 | Make a room: slug (the server's rules only), name (defaults to the slug) and topic. | `host/HostPanel.tsx`, `POST /rooms` | Settings → Hosting → Rooms | F | ✅ (next-settings.spec.ts) |
+| HOST-1 | Make a room: slug (the server's rules only), name (defaults to the slug) and topic. | `host/HostPanel.tsx`, `POST /rooms` | Settings → Hosting → Rooms, **name first** (#221): the slug fills itself in from the name until you type one, follows again once emptied, and stays empty with a line saying what it needs when the name has nothing it can use. The server still judges every slug. | U + F | ✅ (`roomSlugOf` and the form's rules in core/settings.test.ts; next-settings.spec.ts) |
 | HOST-2 | Rename a room and change its topic. | `HostPanel.tsx`, `PATCH /rooms/:id` | Same | F | ✅ (next-settings.spec.ts) |
 | HOST-3 | Reorder rooms (move up/down, keyboard accessible). | `HostPanel.tsx` | "Your rooms, in order" | F | ✅ (next-settings.spec.ts) |
 | HOST-4 | Archive a room with a confirmation; archiving is the only delete. | `HostPanel.tsx`, `POST /rooms/:id/archive` | Same | F | ✅ (next-settings.spec.ts) |

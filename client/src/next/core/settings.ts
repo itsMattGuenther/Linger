@@ -218,6 +218,89 @@ export function leftOf(value: string, max: number, warnAt: number): string | nul
 }
 
 // ---------------------------------------------------------------------------
+// A new room's slug (HOST-1, #221)
+
+/**
+ * The longest slug the server takes: `linger-core::limits::ROOM_SLUG_PATTERN`
+ * is `^[a-z0-9-]{1,32}$`. ts-rs exports types, not constants, so the number
+ * is written here. The server stays the judge of every slug, this one included.
+ */
+export const ROOM_SLUG_MAX = 32;
+
+/** Latin letters with no decomposition to strip an accent from, and their plain spelling. */
+const PLAIN_LETTERS: Record<string, string> = { ß: "ss", æ: "ae", œ: "oe", ø: "o", ł: "l", đ: "d", ð: "d", þ: "th", ı: "i" };
+
+/**
+ * The slug a room's name suggests, in the server's alphabet: `Screenshots and
+ * Clips` is `screenshots-and-clips`, `Café` is `cafe`. Lower case; spaces and
+ * punctuation become single dashes, with none at either end; an apostrophe
+ * joins its word (`Matt's` is `matts`); an accent drops to its plain letter;
+ * anything with no plain form (emoji and other symbols, other scripts) is left
+ * out. Longer than `ROOM_SLUG_MAX`, it ends on the last whole word that fits,
+ * unless that would keep less than half, and then it's cut at the limit. A
+ * name with nothing usable gives "", and the form says so rather than
+ * inventing a slug.
+ */
+export function roomSlugOf(name: string): string {
+  const slug = name
+    // Symbols go first, before `™` can come apart into `TM` below.
+    .replace(/\p{So}/gu, "")
+    // Compatibility forms come apart into plain ones (`ﬁ`, full-width letters),
+    // and an accented letter into its letter and the accent.
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/\p{M}/gu, "")
+    .replace(/[ßæœøłđðþı]/g, (letter) => PLAIN_LETTERS[letter] ?? "")
+    .replace(/['‘’ʼ]/g, "")
+    .replace(/[\s\p{Z}\p{P}\p{Sm}\p{Sc}^`]+/gu, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+  if (slug.length <= ROOM_SLUG_MAX) return slug;
+  // The last word end that fits: the dash right after it, at or before the limit.
+  const end = slug.lastIndexOf("-", ROOM_SLUG_MAX);
+  return end >= ROOM_SLUG_MAX / 2 ? slug.slice(0, end) : slug.slice(0, ROOM_SLUG_MAX);
+}
+
+/**
+ * The New Room form's name and slug as they're typed. The slug follows the
+ * name until it's typed in itself; emptied, it follows the name again.
+ */
+export interface RoomDraft {
+  name: string;
+  slug: string;
+  follows: boolean;
+}
+
+export const NEW_ROOM_DRAFT: RoomDraft = { name: "", slug: "", follows: true };
+
+export function nameTyped(draft: RoomDraft, name: string): RoomDraft {
+  return { ...draft, name, slug: draft.follows ? roomSlugOf(name) : draft.slug };
+}
+
+export function slugTyped(draft: RoomDraft, slug: string): RoomDraft {
+  return { ...draft, slug, follows: slug.trim() === "" };
+}
+
+/**
+ * Leaving an emptied slug box fills it from the name again, so a box that
+ * follows never sits empty while the name has something to give it.
+ */
+export function slugLeft(draft: RoomDraft): RoomDraft {
+  return draft.follows ? { ...draft, slug: roomSlugOf(draft.name) } : draft;
+}
+
+/** The slug to send: the one typed in, or the name's while it follows. "" is nothing to send. */
+export function draftSlug(draft: RoomDraft): string {
+  return draft.follows ? roomSlugOf(draft.name) : draft.slug.trim();
+}
+
+/** The name has words but nothing a slug can use, so the slug box asks for one. */
+export function slugNeeded(draft: RoomDraft): boolean {
+  return draft.follows && draft.name.trim() !== "" && roomSlugOf(draft.name) === "";
+}
+
+// ---------------------------------------------------------------------------
 // Invites (HOST-5)
 
 export const INVITE_USES: readonly { label: string; uses: number | null }[] = [

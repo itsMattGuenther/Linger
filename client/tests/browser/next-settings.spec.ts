@@ -275,11 +275,12 @@ test.describe("this app", () => {
 test.describe("hosting", () => {
   test("a room is made, edited in place, and Escape backs out of an edit to its button", async ({ page }) => {
     await open(page, "?section=rooms");
-    await page.getByRole("textbox", { name: "Slug" }).fill("porch");
+    await page.getByRole("textbox", { name: "Name" }).fill("Front Porch");
     await page.getByRole("button", { name: "Make the room" }).click();
     const rooms = page.getByRole("list", { name: "Rooms" }).locator(":scope > li");
     await expect(rooms).toHaveCount(4);
-    await expect(rooms.last()).toContainText("porch");
+    await expect(rooms.last()).toContainText("Front Porch");
+    expect(await did(page)).toContain("create:front-porch:Front Porch:");
     await rooms.first().getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("group", { name: "Editing #general" }).getByRole("textbox", { name: "Name" })).toBeFocused();
     await page.keyboard.press("Escape");
@@ -289,6 +290,58 @@ test.describe("hosting", () => {
     await page.getByRole("group", { name: "Editing #general" }).getByRole("textbox", { name: "Topic" }).fill("Pull up a chair.");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(rooms.first()).toContainText("Pull up a chair.");
+  });
+
+  test("a new room's name comes first, and its slug follows the name until it's typed in (#221)", async ({ page }) => {
+    await open(page, "?section=rooms");
+    const block = page.getByRole("region", { name: "New Room" });
+    const name = block.getByRole("textbox", { name: "Name" });
+    const slug = block.getByRole("textbox", { name: "Slug" });
+    const make = block.getByRole("button", { name: "Make the room" });
+    await expect(block.locator(".k-field-label")).toHaveText(["Name", "Slug", "Topic"]);
+    // Typing the name fills the slug in, a letter at a time.
+    await name.pressSequentially("Café & Clips 📸");
+    await expect(slug).toHaveValue("cafe-clips");
+    // A slug typed in stays put while the name changes.
+    await slug.fill("clips");
+    await name.fill("Screenshots and Clips");
+    await expect(slug).toHaveValue("clips");
+    // Emptied, it follows the name again, and shows what it will be.
+    await slug.fill("");
+    await expect(slug).toHaveAttribute("placeholder", "screenshots-and-clips");
+    await name.fill("Screenshots and Clips!");
+    await expect(slug).toHaveValue("screenshots-and-clips");
+    // Emptied and left, it fills in from the name.
+    await slug.fill("");
+    await name.focus();
+    await expect(slug).toHaveValue("screenshots-and-clips");
+    // A name with nothing a slug can use leaves it empty, says what it needs, and makes nothing.
+    await name.fill("🎮🎮");
+    await expect(slug).toHaveValue("");
+    await expect(slug).not.toHaveAttribute("placeholder");
+    await expect(block.getByText("Needs a–z or 0–9. Type a slug here.")).toBeVisible();
+    await expect(slug).toHaveAccessibleDescription("Needs a–z or 0–9. Type a slug here.");
+    await expect(make).toBeDisabled();
+    await slug.fill("games");
+    await expect(block.getByText("What people type after the #.")).toBeVisible();
+    await make.click();
+    await expect(said(block)).toHaveText("Made");
+    expect(await did(page)).toContain("create:games:🎮🎮:");
+    // Made, the form starts over, and follows again.
+    await expect(name).toHaveValue("");
+    await expect(slug).toHaveValue("");
+    await name.fill("Weekend Walk");
+    await expect(slug).toHaveValue("weekend-walk");
+  });
+
+  test("a slug the server refuses keeps what was typed, with the server's words", async ({ page }) => {
+    await open(page, "?section=rooms&fail");
+    const block = page.getByRole("region", { name: "New Room" });
+    await block.getByRole("textbox", { name: "Name" }).fill("Porch");
+    await block.getByRole("textbox", { name: "Name" }).press("Enter");
+    await expect(said(block)).toHaveText("A room called #porch already exists.");
+    await expect(block.getByRole("textbox", { name: "Name" })).toHaveValue("Porch");
+    await expect(block.getByRole("textbox", { name: "Slug" })).toHaveValue("porch");
   });
 
   test("archiving asks first, starting on Keep it, and Escape keeps it", async ({ page }) => {
@@ -430,6 +483,20 @@ for (const [width, height] of [
       const name = page.locator(".nx-set-preview .k-name");
       await expect(name).toHaveText("Matt");
       expect(await name.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    });
+
+    test("a new room's name sits before its slug: beside it while they fit, above it when not", async ({ page }) => {
+      await open(page, "?section=rooms");
+      const block = page.getByRole("region", { name: "New Room" });
+      const name = await block.getByRole("textbox", { name: "Name" }).boundingBox();
+      const slug = await block.getByRole("textbox", { name: "Slug" }).boundingBox();
+      if (!name || !slug) throw new Error("the New Room fields aren't drawn");
+      if (width >= 720) {
+        expect(Math.round(name.y)).toBe(Math.round(slug.y));
+        expect(name.x + name.width).toBeLessThan(slug.x);
+      } else {
+        expect(name.y + name.height).toBeLessThan(slug.y);
+      }
     });
 
     test("labels line up: fields in a row share a top, and every row of choices starts on one edge", async ({ page }) => {
