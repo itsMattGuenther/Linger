@@ -16,6 +16,8 @@
  * - `?devices=none`: outside the desktop app; `?devices=looking`: still asking.
  * - `?long`: names and topics far too long for their places.
  * - `?nowindows`: nothing to choose in Windows yet, so there's no Windows.
+ * - `?nostart`: starting at sign-in isn't offered (a browser, macOS);
+ *   `?hyprland`: it is, on a desktop that won't start it by itself.
  *
  * What the page was asked to do is written to `body[data-did]`, `|`-separated.
  */
@@ -106,6 +108,7 @@ function Fixture() {
   const [removed, setRemoved] = useState<User[]>(removedPeople);
   const [server, setServer] = useState({ name: SERVER_NAME, accent: "amber" as string | null });
   const [order, setOrder] = useState(["home", "work", "raid"]);
+  const [startsAtSignIn, setStartsAtSignIn] = useState(false);
 
   const devicesQuery = query.get("devices");
   const devices =
@@ -224,6 +227,19 @@ function Fixture() {
           install: () => note("install"),
           openNotes: (version) => note(`notes:${version}`),
         },
+        startAtSignIn: query.has("nostart")
+          ? undefined
+          : {
+              on: startsAtSignIn,
+              ignoredBy: query.has("hyprland") ? "Hyprland" : null,
+              changing: false,
+              problem: FAIL ? "Couldn't turn this on. This computer didn't allow it." : null,
+              onChange: (on) => {
+                note(`autostart:${on}`);
+                if (!FAIL) setStartsAtSignIn(on);
+              },
+              openGuide: () => note("autostart-guide"),
+            },
         signOut: () => note("signout"),
         severalServers: several,
       }}

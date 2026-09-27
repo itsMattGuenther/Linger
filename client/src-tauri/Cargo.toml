@@ -120,3 +120,7 @@ keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+# Starting Linger at sign-in (#228): one value under the user's Run key
+# (`autostart.rs`). Already in the tree for Windows builds (embed-resource
+# uses it at build time), over the same windows-sys the rest links.
+winreg = "0.55"

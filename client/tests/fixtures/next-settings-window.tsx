@@ -9,6 +9,11 @@
  * `?section=invites` opens on a section; `?member` is you as a member, not
  * the host; `?refuse` has the list window refuse a rule or a password;
  * `?servers` signs in to the guild and Lisbon too, so Servers shows.
+ * Starting at sign-in (#228) is off on this computer; `?autostart=on` has it
+ * on already, `?autostart=refuse` has the computer refuse to change it,
+ * `?autostart=ignores` has it take the change without keeping it,
+ * `?autostart=none` is a computer where it isn't offered, and
+ * `?autostart=hyprland` is a desktop that won't start it by itself.
  * `window.shell.prefs(prefs)` is the list window saying your servers'
  * order or Quiet changed.
  * What the window asked for is written to `body[data-did]`, `|`-separated.
@@ -31,6 +36,9 @@ const me = { ...people.matt, is_host: !query.has("member") };
 let info: ServerInfo = { name: SERVER_NAME, accent_key: "amber", icon_key: null, member_count: 7, created_at: NOW - 90 * 86_400_000 } as ServerInfo;
 const invites: Invite[] = [];
 let rules: NotifyRule[] = [];
+// What the computer has for starting at sign-in: the only record there is.
+const startup = query.get("autostart");
+let startsAtSignIn = startup === "on";
 
 const desktop = fakeDesktop({
   label: "settings",
@@ -56,6 +64,15 @@ const desktop = fakeDesktop({
     "plugin:window|set_size": (args) => desktop.note(`size:${JSON.stringify(args.value)}`),
     app_version: () => "0.3.6",
     update_check: () => ({ kind: "current" }),
+    autostart_state: () => (startup === "none" ? null : { on: startsAtSignIn, ignored_by: startup === "hyprland" ? "Hyprland" : null }),
+    autostart_set: (args) => {
+      desktop.note(`autostart:${String(args.on)}`);
+      // The shell answers with a sentence when the computer says no.
+      if (startup === "refuse") throw "This computer didn't allow it.";
+      if (startup !== "ignores") startsAtSignIn = args.on === true;
+      return { on: startsAtSignIn, ignored_by: startup === "hyprland" ? "Hyprland" : null };
+    },
+    "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
     voice_devices: () => ({ inputs: ["Built-in microphone"], outputs: ["Headphones"], default_input: "Built-in microphone", default_output: "Headphones" }),
   },
   routes: (method, path, url, body) => {

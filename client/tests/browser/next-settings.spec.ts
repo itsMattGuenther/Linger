@@ -518,6 +518,19 @@ for (const [width, height] of [
       }
     });
 
+    test("starting at sign-in: on a desktop that ignores it, the note and its link sit on the section's edge", async ({ page }) => {
+      await open(page, "?section=account&hyprland");
+      expect(await misSized(page)).toEqual([]);
+      expect(await clipped(page)).toEqual([]);
+      const block = page.getByRole("region", { name: "This Computer" });
+      const lefts = await Promise.all(
+        [block.getByText("Start Linger when I sign in to the computer"), block.getByText(/startup list by itself/), block.getByRole("button", { name: "How to add it" }), block.getByRole("button", { name: "Sign out" })].map((part) =>
+          part.evaluate((node) => Math.round(node.getBoundingClientRect().left)),
+        ),
+      );
+      expect(new Set(lefts).size, lefts.join(", ")).toBe(1);
+    });
+
     test("your name shows whole in the preview, with the note moving aside for it", async ({ page }) => {
       await open(page, "?section=profile");
       const name = page.locator(".nx-set-preview .k-name");

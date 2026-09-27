@@ -29,6 +29,8 @@ const COMMANDS: &[&str] = &[
     "next_open_tool",
     "next_close_to_tray",
     "next_tray_voice",
+    "autostart_state",
+    "autostart_set",
 ];
 
 fn main() {

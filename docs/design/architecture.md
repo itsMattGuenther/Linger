@@ -279,10 +279,15 @@ one.
   command, which turns on Tauri's access checks for them: a window may call
   only what its capability file grants. `owner.json` gives `main` all of them.
   The chat windows get `gateway_send` (typing) and `graphics_started`; Settings
-  gets `graphics_started`, `voice_devices` and the three update commands. The
-  keyring, the connections, voice, notifications and window opening stay the
-  owner's, and `src-tauri/src/acl.rs` fails the build's tests if a capability
-  ever hands one to another window.
+  gets `graphics_started`, `voice_devices`, the three update commands, and
+  `autostart_state` and `autostart_set` for starting Linger when you sign in
+  to the computer (#228). That last is a setting of this computer that no
+  other window shares, so Settings asks the operating system itself rather
+  than going through the owner. The keyring, the connections, voice,
+  notifications and window opening stay the owner's, and
+  `src-tauri/src/acl.rs` fails the build's tests if a capability ever hands
+  one to another window, or starting at sign-in to any window but Settings
+  and the list.
 - **Still open:** any window may send any event, and the owner can't tell a
   `gateway:frame` the Rust core sent from one a viewer made up. A viewer that
   renders a hostile message can't reach this without a way to run script,

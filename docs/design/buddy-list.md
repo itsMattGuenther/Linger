@@ -264,7 +264,8 @@ regrouped, plus the new choices this design needs:
 - **Notifications:** desktop banners for mentions, plus "always notify me when
   this person posts", everywhere or in chosen rooms.
 - **Account & App:** password, take everything with you (the export), updates,
-  and signing out.
+  starting Linger when you sign in to the computer (new, #228, off unless
+  turned on), and signing out.
 - **Servers** (with several servers): for each server, who you are there,
   Quiet, Own window, its place in the order, and signing out of it. Also Add a
   server.

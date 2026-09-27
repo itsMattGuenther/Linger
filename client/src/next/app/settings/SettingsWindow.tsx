@@ -22,6 +22,7 @@ import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
+import { refusal, setStartsAtSignIn, START_GUIDE_URL, type StartAtSignIn, startsAtSignIn, unanswered } from "../../core/autostart";
 import { loadCloseList, saveCloseList } from "../../core/closing";
 import { loadMode } from "../../core/conversations";
 import { isSettingsKey } from "../../core/keys";
@@ -267,6 +268,39 @@ function Settings({ following }: { following: Following }) {
     void appVersion().then(setVersion);
     checkAgain();
   }, [checkAgain]);
+  // Starting at sign-in: what the computer says, asked when the window opens
+  // and answered again after every change (core/autostart.ts).
+  const [startup, setStartup] = useState<StartAtSignIn | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void startsAtSignIn().then(
+      (now) => {
+        if (alive && now !== null) setStartup({ on: now.on, ignoredBy: now.ignored_by, changing: false, problem: null });
+      },
+      (error: unknown) => {
+        if (alive) setStartup({ on: false, ignoredBy: null, changing: false, problem: unanswered(error) });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const changeStartup = useCallback((wanted: boolean) => {
+    setStartup((held) => held && { ...held, changing: true, problem: null });
+    void setStartsAtSignIn(wanted).then(
+      (now) => setStartup({ on: now.on, ignoredBy: now.ignored_by, changing: false, problem: null }),
+      async (error: unknown) => {
+        // Show what the computer has now, whatever went wrong on the way.
+        const now = await startsAtSignIn().catch(() => null);
+        setStartup((held) => ({
+          on: now?.on ?? held?.on ?? false,
+          ignoredBy: now?.ignored_by ?? held?.ignoredBy ?? null,
+          changing: false,
+          problem: refusal(wanted, error),
+        }));
+      },
+    );
+  }, []);
   const [archive, setArchive] = useState<ExportPhase>({ kind: "idle" });
   // An export in flight stops asking when the window closes.
   const exportAbort = useRef(new AbortController());
@@ -430,6 +464,7 @@ function Settings({ following }: { following: Following }) {
           },
           openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
         },
+        startAtSignIn: startup ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
         signOut: () => {
           for (const one of apis.keys()) void intend({ kind: "signout", server: one }).catch(() => undefined);
           closeWindow();

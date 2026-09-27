@@ -2,8 +2,9 @@ import { useState } from "react";
 import { MIN_PASSWORD_CHARS, passwordReady } from "../../../lib/account";
 import { exportLine, type ExportPhase } from "../../../lib/export";
 import { type UpdateCheck, updateLine } from "../../../lib/updates";
+import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
 import { HEADINGS } from "../../core/settings";
-import { Button, TextField } from "../../kit";
+import { Button, SettingRow, Switch, TextField } from "../../kit";
 import { Actions, Block, Fields, Note, useSave } from "./parts";
 
 export interface AccountProps {
@@ -30,6 +31,16 @@ export interface AccountProps {
     /** Open the release page for a version (#174). */
     openNotes: (version: string) => void;
   };
+  /**
+   * Start Linger when you sign in to the computer (#228), as the computer has
+   * it. Left out where it isn't offered (a browser, macOS) and until the
+   * computer has answered.
+   */
+  startAtSignIn?: StartAtSignIn & {
+    onChange: (on: boolean) => void;
+    /** Open the user guide's lines for a desktop that won't start Linger by itself. */
+    openGuide: () => void;
+  };
   /** Sign out on this computer (SIGN-13). With several servers this is all of them. */
   signOut: () => void;
   severalServers: boolean;
@@ -38,7 +49,7 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, signOut, severalServers, addServer }: AccountProps) {
+export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, signOut, severalServers, addServer }: AccountProps) {
   return (
     <>
       <Password serverName={serverName} changePassword={changePassword} />
@@ -92,14 +103,32 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
           ) : null}
         </Actions>
       </Block>
-      <Block
-        heading={HEADINGS.computer}
-        lead={
-          severalServers
+      <Block heading={HEADINGS.computer}>
+        {startAtSignIn ? (
+          <>
+            <SettingRow
+              title={START_AT_SIGN_IN}
+              description="Linger opens your list by itself each time you sign in to this computer."
+              control={<Switch label={START_AT_SIGN_IN} checked={startAtSignIn.on} disabled={startAtSignIn.changing} onChange={startAtSignIn.onChange} />}
+            />
+            {startAtSignIn.problem ? <Note tone="problem">{startAtSignIn.problem}</Note> : null}
+            {startAtSignIn.ignoredBy !== null ? (
+              <>
+                <Note tone="status">{ignoredLine(startAtSignIn.ignoredBy)}</Note>
+                <Actions start>
+                  <Button icon="go" onClick={startAtSignIn.openGuide}>
+                    How to add it
+                  </Button>
+                </Actions>
+              </>
+            ) : null}
+          </>
+        ) : null}
+        <p className="nx-set-lead">
+          {severalServers
             ? "Signing out forgets every server on this computer. It doesn't delete your accounts. Each server signs out on its own, in Servers."
-            : "Signing out forgets this server on this computer. It doesn't delete your account."
-        }
-      >
+            : "Signing out forgets this server on this computer. It doesn't delete your account."}
+        </p>
         <Actions start>
           {addServer && !severalServers ? (
             <Button icon="plus" onClick={addServer}>
@@ -114,6 +143,9 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
     </>
   );
 }
+
+/** The switch's words, as the issue asked for them: plain, for somebody who has never heard of autostart. */
+const START_AT_SIGN_IN = "Start Linger when I sign in to the computer";
 
 function Password({ serverName, changePassword }: { serverName: string; changePassword: AccountProps["changePassword"] }) {
   const [current, setCurrent] = useState("");

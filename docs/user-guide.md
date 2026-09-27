@@ -307,7 +307,8 @@ Settings opens in its own window:
 - **Sound & Voice**: how loud Linger's sounds are, notification chimes and
   quiet hours; microphone, speakers, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
-- **Account & App**: password, export, updates, adding a server, and signing out
+- **Account & App**: password, export, updates, starting Linger when you sign
+  in to the computer, adding a server, and signing out
 - **Servers** (with more than one): their order, Quiet, and signing out of one
 
 Everything this guide calls *Settings → something* is one of those.
@@ -630,6 +631,59 @@ Do not delete your account or application data to update.
 A code push to GitHub is **not a release**. New downloads appear when a
 desktop release is published. Updating your app also does not update the
 server: the host follows the [server update steps](host-guide.md#updating-the-server).
+
+## Starting Linger when you sign in
+
+Linger doesn't start by itself unless you ask it to. To have it open each time
+you sign in to your computer, turn on **Settings → Account & App → This
+Computer → Start Linger when I sign in to the computer**. Turn the same switch
+off to stop. It's off on a new install.
+
+The switch asks your computer each time Settings opens, so it shows what will
+happen at your next sign-in, even if you changed it somewhere else. If your
+computer refuses the change, Settings says so and the switch stays off. There
+is no Mac version yet.
+
+**Windows.** Linger adds itself to your startup apps, the same list as **Task
+Manager → Startup apps** and **Settings → Apps → Startup**. Switching it off
+there works too, and Linger's switch shows it. Uninstalling with the
+`x64-setup.exe` installer removes it. The `.msi` doesn't, so turn the switch off
+before you uninstall that one. To remove it by hand, open **Registry Editor**,
+go to `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, and
+delete the value named `Linger`.
+
+**Linux.** Linger writes one file, `~/.config/autostart/com.linger.desktop.desktop`
+(or in `$XDG_CONFIG_HOME/autostart` if you set that). To undo it by hand,
+delete that file. Removing the Linger package leaves the file behind. It does
+nothing once Linger is gone, but you can delete it.
+
+- **AppImage:** it starts the AppImage file you turned it on from. If you move
+  or rename that file, the switch shows off again: open the file from its new
+  place and turn the switch back on.
+- **Moved from the AppImage to a package, or back?** Turn the switch off and on
+  in the copy you use now, so sign-in starts that one.
+- If you started Linger with a setting such as `LINGER_LINUX_BACKEND=x11` when
+  you turned the switch on, sign-in starts it with the same setting, as the
+  AppImage's menu entry does.
+
+**Omarchy, Hyprland, Sway, i3 and other window managers.** GNOME, KDE Plasma,
+Xfce, Cinnamon, MATE and similar desktops start what's in that folder. A window
+manager started on its own doesn't, and Settings says so under the switch.
+Start Linger from the window manager's own startup settings instead, and
+remove the line to stop:
+
+- **Omarchy:** add this line to `~/.config/hypr/autostart.lua`. For an
+  AppImage, put its full path in place of `linger-client`.
+
+  ```lua
+  o.launch_on_start("linger-client")
+  ```
+
+- **Hyprland** with a `hyprland.conf`: `exec-once = linger-client`
+- **Sway** or **i3**: `exec linger-client` in its config file.
+
+If your session runs under uwsm or another systemd session manager, the switch
+works as it is, and Settings shows no note.
 
 ## Signing out
 

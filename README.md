@@ -54,7 +54,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 
 - **The buddy list.** One tall window: you, the rooms with who's in each, your
   DMs, and everyone on the server, here, away (with their away message) or
-  offline. Closing it keeps Linger running in the tray.
+  offline. Closing it keeps Linger running in the tray, and it can start when
+  you sign in to the computer (off unless you turn it on).
 - **Conversations as tabs** in one chat window, or each in a window of its own.
 - **No unread counts.** A room with something new gets a bolder name, and a
   conversation opens at "you left off here". Never a badge.

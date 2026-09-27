@@ -129,6 +129,30 @@ fn no_other_window_may_touch_the_keyring_the_connections_voice_or_windows() {
 }
 
 #[test]
+fn only_settings_and_the_list_window_change_what_starts_at_sign_in() {
+    // What runs when somebody signs in to their computer is theirs to choose
+    // in Settings (#228). A chat, search or media window renders other
+    // people's words and has no reason to ask, let alone change it.
+    for (file, windows, commands) in granted() {
+        if !commands.contains("autostart_set") && !commands.contains("autostart_state") {
+            continue;
+        }
+        assert!(
+            windows
+                .iter()
+                .all(|window| window == "main" || window == "settings"),
+            "{file} grants starting at sign-in to {windows:?}"
+        );
+    }
+    let settings: BTreeSet<String> = granted()
+        .into_iter()
+        .filter(|(_, windows, _)| windows.iter().any(|window| window == "settings"))
+        .flat_map(|(_, _, commands)| commands)
+        .collect();
+    assert!(settings.contains("autostart_state") && settings.contains("autostart_set"));
+}
+
+#[test]
 fn a_capability_for_main_names_no_other_window() {
     // Granting the owner's commands in a file that also names a viewer would
     // hand them to that viewer too.
