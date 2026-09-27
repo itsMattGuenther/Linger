@@ -12,6 +12,7 @@ pub mod graphics;
 mod notifications;
 pub mod packaging;
 mod secrets;
+pub mod sounds;
 mod tray;
 mod updates;
 pub mod voice;
@@ -460,6 +461,43 @@ async fn voice_forwarding(app: AppHandle, on: bool) {
     }
 }
 
+/// Play one of Linger's own sounds on the Speakers picked in Settings (#250):
+/// mono samples at 48 kHz, already at the sound volume. In a call it is mixed
+/// into the call's own speaker; otherwise a speaker is opened for it, and
+/// closed again once no sound has played for a while (`sounds.rs`). Answers
+/// whether it played: the page plays it through Web Audio when it didn't.
+#[tauri::command]
+async fn sound_play(app: AppHandle, samples: Vec<i16>, output: Option<String>) -> bool {
+    let Some(samples) = sounds::checked(samples) else {
+        return false;
+    };
+    let engines: Vec<_> = app
+        .state::<VoiceEngines>()
+        .with(|held| held.values().map(std::sync::Arc::clone).collect());
+    for engine in engines {
+        if engine.cue(&samples).await {
+            return true;
+        }
+    }
+    let sounds = std::sync::Arc::clone(app.state::<std::sync::Arc<sounds::Sounds>>().inner());
+    let playing = std::sync::Arc::clone(&sounds);
+    match tokio::task::spawn_blocking(move || playing.play(&samples, output.as_deref())).await {
+        Ok(Ok(())) => {
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(sounds::KEEP_OPEN).await;
+                let _ =
+                    tokio::task::spawn_blocking(move || sounds.close_idle(sounds::KEEP_OPEN)).await;
+            });
+            true
+        }
+        Ok(Err(error)) => {
+            eprintln!("sounds: {error}");
+            false
+        }
+        Err(_) => false,
+    }
+}
+
 /// How loud one peer plays for you, 1.0 being as sent.
 #[tauri::command]
 async fn voice_volume(app: AppHandle, base_url: String, peer: String, volume: f32) {
@@ -537,6 +575,7 @@ pub fn run() {
         .manage(tray::Closing::default())
         .manage(tray::VoiceItems::default())
         .manage(VoiceEngines::default())
+        .manage(std::sync::Arc::new(sounds::Sounds::default()))
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -565,6 +604,7 @@ pub fn run() {
             voice_choose_devices,
             voice_forwarding,
             voice_devices,
+            sound_play,
             notifications::show_notification,
             updates::app_version,
             updates::update_check,

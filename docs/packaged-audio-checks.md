@@ -1,8 +1,19 @@
 # Packaged notification audio
 
-Notification chimes use Web Audio. Voice calls use Rust/CPAL/Opus and have
-separate device and network checks. A working voice call does not prove that
-notification playback is packaged correctly.
+Since #250, the desktop app plays Linger's own sounds (chimes, knocks, voice
+and control sounds) through the shell, on the Speakers picked in Settings:
+each cue is rendered by Web Audio's offline renderer in the page and its
+samples handed to `sound_play`, which plays them with the same CPAL output as
+voice (`src-tauri/src/sounds.rs`). **Web Audio playback is the fallback** when
+the shell can't open an output, and what plays outside the app.
+
+The checks below measure that fallback: the probe answers `sound_play` with
+"couldn't", so every cue goes through the webview's audio as it did before
+#250. The shell path is covered by the Rust tests with stand-in devices
+(`sounds.rs`, `voice/device.rs`, `tests/voice.rs`) and by a real-device check:
+pick non-default Speakers, press Play on a chime in Settings, and hear it come
+out of them, on Linux and on Windows. Voice calls use the same CPAL output and
+have separate device and network checks.
 
 ## Runtime requirements
 

@@ -4,6 +4,14 @@ import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
 
 (() => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // In the app, Linger's sounds go to the shell, which plays them on the
+  // chosen speakers (#250). This probe measures the webview's own audio, the
+  // fallback when the shell can't, so the shell answers "couldn't" here.
+  const internals = window.__TAURI_INTERNALS__;
+  if (internals) {
+    const invoke = internals.invoke.bind(internals);
+    internals.invoke = (cmd, ...rest) => (cmd === "sound_play" ? Promise.resolve(false) : invoke(cmd, ...rest));
+  }
   const NativeContext = window.AudioContext;
   let context;
   let analyser;

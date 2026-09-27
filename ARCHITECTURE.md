@@ -67,11 +67,19 @@ Consequences:
    on the wire. State still catches up without chimes; existing mention-banner
    batching is unchanged. The existing sound player owns all notification audio;
    native desktop banners explicitly request silent presentation.
-   Notification chimes use Web Audio in the WebView. Linux AppImages must
+   Notification chimes are rendered in the WebView and, in the desktop app,
+   played by the shell on the Speakers picked in Settings (#250): the samples
+   go to `sound_play`, which mixes them into the call's output in voice and
+   otherwise opens a short-lived CPAL output on that device (`sounds.rs`). The
+   WebView can't choose an output (WebKitGTK has no `setSinkId`; WebView2's
+   device names don't match CPAL's), and its audio could start late in a
+   window that isn't in front (#241). Web Audio playback in the WebView is
+   the fallback, and what plays outside the app. For it, Linux AppImages must
    bundle GStreamer and its playback plugins; DEB/RPM packages must require
    those plugins through the system package manager. Windows installers ensure
-   WebView2 is installed. Package checks exercise the real WebView audio graph;
-   a browser unit test alone cannot establish that these runtime files shipped.
+   WebView2 is installed. Package checks exercise that fallback's real WebView
+   audio graph; a browser unit test alone cannot establish that these runtime
+   files shipped.
    The shared score is rendered once per cue into a cached, mono audio buffer
    at the context's sample rate. Each buffer includes 50 ms of zero samples
    before its attack so output startup cannot cut into the note. Preview and

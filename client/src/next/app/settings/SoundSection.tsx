@@ -166,7 +166,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
                 options={deviceOptions(devices.outputs, devices.default_output, voice.devices.output)}
               />
             </Fields>
-            <Note>A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
+            <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
           </>
         )}
         <SettingRow

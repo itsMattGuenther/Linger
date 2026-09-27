@@ -23,11 +23,22 @@
  * gateway store. The player reads them again for every cue, so a change made
  * in Settings, which is another window, holds from the next sound on.
  *
+ * **Where they play (#250).** In the desktop app a cue is rendered here and
+ * its samples handed to the shell, which plays them on the Speakers picked in
+ * Settings, the same device voice uses, and in a call mixes them into the
+ * call's own output. The webview can't: WebKitGTK plays only to the system
+ * default, and WebView2's device names don't match the picker's. That also
+ * ends WebKit starting a page's audio late when its window isn't in front
+ * (#241). Outside the app (tests, `vite`), or if the shell couldn't play it,
+ * a cue plays through Web Audio as before.
+ *
  * The knock itself is synthesized rather than played from a file. Two soft
  * taps from an oscillator need no audio asset. The shared score in chimes.ts
  * does not reach into T-903's separate entrance-sound curation.
  */
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { renderChime } from "./chimes";
+import { loadVoicePrefs } from "./voice";
 
 /**
  * Quiet hours start at 22:00 and end at 08:00 unless the listener moves them
@@ -284,6 +295,48 @@ function chimeBuffer(ctx: AudioContext, cue: SoundCue, volume: number): Promise<
   return pending;
 }
 
+/**
+ * The rate cues are rendered at for the shell: voice's rate, which the shell
+ * resamples from to whatever the device runs at.
+ */
+const SHELL_RATE = 48_000;
+// Each cue's samples for the shell, at the current volume, kept like the
+// Web Audio buffers above.
+const shellSamples = new Map<SoundCue, Promise<number[]>>();
+let shellVolume = DEFAULT_SOUND_PREFS.volume;
+
+function samplesFor(cue: SoundCue, volume: number): Promise<number[]> {
+  if (volume !== shellVolume) {
+    shellSamples.clear();
+    shellVolume = volume;
+  }
+  const cached = shellSamples.get(cue);
+  if (cached) return cached;
+  const pending = renderChime(cue, SHELL_RATE, volume).then((buffer) =>
+    Array.from(buffer.getChannelData(0), (sample) => Math.round(Math.max(-1, Math.min(1, sample)) * 32767)),
+  );
+  pending.catch(() => {
+    if (shellSamples.get(cue) === pending) shellSamples.delete(cue);
+  });
+  shellSamples.set(cue, pending);
+  return pending;
+}
+
+/**
+ * Play a cue's samples on the chosen Speakers, through the shell (#250).
+ * True when the shell played it; false (never a throw) when it couldn't, so
+ * the caller plays it through Web Audio instead.
+ */
+async function playInShell(samples: number[]): Promise<boolean> {
+  try {
+    // Read for every cue, so a change in Settings holds from the next sound.
+    const output = loadVoicePrefs().devices.output;
+    return (await invoke<boolean>("sound_play", { samples, output })) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Never queues an old cue for later or throws when the audio device refuses. */
 export async function playSound(cue: SoundCue, now: Date = new Date()): Promise<boolean> {
   return play(cue, now, false);
@@ -308,6 +361,30 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
   const cooldown = category === "dms" || category === "rooms" ? 1200 : 100;
   const started = Date.now();
   if (!preview && started - (lastPlayed.get(category) ?? -Infinity) < cooldown) return false;
+  // Rechecked after every wait: preferences may have changed, or another cue
+  // won the same burst. A preview is the click itself, so it is not stale.
+  const stillWanted = (): boolean => {
+    if (preview) return true;
+    const later = loadSoundPrefs();
+    return (
+      Date.now() - started <= 1000 &&
+      later.volume > 0 &&
+      cueAllowed(cue, later, new Date(now.getTime() + Date.now() - started)) &&
+      Date.now() - (lastPlayed.get(category) ?? -Infinity) >= cooldown
+    );
+  };
+  if (isTauri()) {
+    try {
+      const samples = await samplesFor(cue, prefs.volume);
+      if (!stillWanted()) return false;
+      if (await playInShell(samples)) {
+        if (!preview) lastPlayed.set(category, Date.now());
+        return true;
+      }
+    } catch {
+      // Rendering failed: Web Audio below renders its own, or gives up.
+    }
+  }
   try {
     const ctx = audio(preview);
     if (ctx === null || ctx.state === "closed") return false;
@@ -322,22 +399,8 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
     if (ctx.state !== "running") return false;
     const buffer = await chimeBuffer(ctx, cue, prefs.volume);
     if (ctx.state !== "running") return false;
-    // Recheck after the await: preferences may have changed, or another cue
-    // won the same burst. Never play something saved by a suspended context.
-    // A preview is the click itself, so it is not stale.
-    if (!preview) {
-      const later = loadSoundPrefs();
-      if (
-        Date.now() - started > 1000 ||
-        !(later.volume > 0) ||
-        !cueAllowed(cue, later, new Date(now.getTime() + Date.now() - started))
-      ) {
-        return false;
-      }
-    }
-    if (!preview && Date.now() - (lastPlayed.get(category) ?? -Infinity) < cooldown) {
-      return false;
-    }
+    // Never play something saved by a suspended context.
+    if (!stillWanted()) return false;
     // Starting a complete buffer always begins at sample zero, even if the
     // main thread stalls. Scheduling oscillators/envelopes against a time
     // captured before graph construction can miss the quiet attack (#94).
