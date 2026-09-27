@@ -513,8 +513,11 @@ When the quoted message isn't loaded it says "an earlier message".
 **What else a message holds.** Pictures are sized from their stored width and
 height before they load (at most 320 by 400), so a row is measured once. A
 message that is nothing but one link shows only its link card. Files that
-aren't pictures, video or sound are a card with a Download button. Mono type
-appears only in metadata (times, a link card's domain), never in words.
+aren't pictures, video or sound are a card with a Download button. A video
+that can't load says so over its own frame, which keeps its size, with a
+**Load again** button that brings the player back in place and picks up where
+it had got to (#222). Mono type appears only in metadata (times, a link card's
+domain), never in words.
 
 **Lines between messages.** Session dividers and "you left off here" use the
 label face. The left-off line is in the lamp and is the whole of what
