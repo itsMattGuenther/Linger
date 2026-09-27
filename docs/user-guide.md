@@ -641,3 +641,26 @@ different promise from Signal, and you should know which one you are getting.
 
 **Nothing is collected about you.** No telemetry, no analytics, no crash
 reports. Not anonymous ones either. There is nothing to opt out of.
+
+**On Hyprland, including Omarchy, the mouse pointer jumps into the chat
+window when you open a conversation.** That's Hyprland, not Linger. When an
+app brings one of its windows forward, Hyprland moves the pointer to the
+middle of it, and Linger brings the chat window forward so you can start
+typing. Linger leaves this to your desktop rather than working around it. If
+you'd rather the pointer stayed put, turn the behaviour off in Hyprland. On
+Omarchy, add this to `~/.config/hypr/looknfeel.lua`:
+
+```lua
+hl.config({
+  cursor = {
+    no_warps = true,
+    -- Keep Omarchy moving the pointer to your last window when you switch workspaces.
+    warp_on_change_workspace = 2,
+  },
+})
+```
+
+On other Hyprland setups, add `no_warps = true` inside the `cursor { }`
+block of `~/.config/hypr/hyprland.conf`. Either way it applies to every app,
+and to moving focus with the keyboard too: the pointer stays where you left
+it.
