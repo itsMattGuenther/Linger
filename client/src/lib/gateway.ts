@@ -237,7 +237,10 @@ export interface MyVoice {
   deafened: boolean;
   /** Mic choice to restore after deafen. */
   mutedBeforeDeafen: boolean;
-  /** Push-to-talk is on for this call: the microphone is open only while `talkHeld`. */
+  /**
+   * Push-to-talk is on for this call: the microphone is open only while
+   * `talkHeld`. Settings can turn it on or off mid-call (#231).
+   */
   pushToTalk: boolean;
   /**
    * The push-to-talk key is held down right now. Only means something with
@@ -1958,6 +1961,21 @@ export function setVoiceMuted(server: string, muted: boolean): Promise<void> {
 export function setVoiceTalking(server: string, held: boolean): Promise<void> {
   return changeVoiceControls(server, (mine) => !mine.pushToTalk || mine.talkHeld === held || (held && mine.deafened)
     ? mine : { ...mine, talkHeld: held });
+}
+
+/**
+ * Push-to-talk turned on or off in Settings, for the call you're in (#231):
+ * joining only reads the choice, so without this a change would wait for
+ * the next call. Off opens the microphone, unless you muted yourself, which
+ * stays yours to undo; on closes it until the key is next pressed.
+ */
+export function setVoicePushToTalk(server: string, on: boolean): Promise<void> {
+  return changeVoiceControls(server, (mine) => mine.pushToTalk === on ? mine : { ...mine, pushToTalk: on, talkHeld: false });
+}
+
+/** The server your voice seat is on, if you're in voice anywhere: there is at most one. */
+export function voiceSeatServer(): string | null {
+  return Object.entries(states).find(([, state]) => state.myVoice !== null)?.[0] ?? null;
 }
 
 /** Silence both directions, preserving the prior mic choice and every peer's volume. */

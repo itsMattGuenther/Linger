@@ -868,6 +868,44 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("Settings turning push-to-talk off and on applies to the call at once, and the list window hears the key (#231)", async () => {
+    const saved = new Map([["linger.voice.pushToTalk", "true"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { owner, viewer, core } = await windows("settings");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const keys: string[] = [];
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      list: { addServer: () => undefined, setPrefs: () => undefined, talkKey: (code) => keys.push(code) },
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const gate = () => invoked.filter((call) => call.cmd === "voice_push_to_talk").map((call) => call.args.closed);
+
+    // Out of voice: only the key is passed on; the next join reads the rest.
+    await follower.intend({ kind: "voice.pushtotalk", on: true, key: "AltRight" });
+    await vi.waitFor(() => expect(keys).toEqual(["AltRight"]));
+    expect(gate()).toEqual([]);
+
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(gate()).toEqual([true]));
+    // Off: the microphone opens without rejoining, and every window sees it.
+    await follower.intend({ kind: "voice.pushtotalk", on: false, key: "AltRight" });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice).toMatchObject({ pushToTalk: false, muted: false }));
+    expect(gate()).toEqual([true, false]);
+    // On again: closed until the key is held.
+    await follower.intend({ kind: "voice.pushtotalk", on: true, key: "ControlRight" });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+    expect(gate()).toEqual([true, false, true]);
+    expect(keys).toEqual(["AltRight", "AltRight", "ControlRight"]);
+    await follower.intend({ kind: "voice.talk", down: true });
+    await vi.waitFor(() => expect(gate()).toEqual([true, false, true, false]));
+    // Never a join again, and never a mute.
+    expect(invoked.filter((call) => call.cmd === "voice_join")).toHaveLength(1);
+    expect(invoked.filter((call) => call.cmd === "voice_controls").map((call) => call.args.controls)).toEqual([{ muted: false, deafened: false }]);
+    follower.stop();
+  });
+
   it("a server that isn't answering holds up neither the other servers nor the window", async () => {
     const { owner, viewer, core } = await windows();
     const AWAY = "https://away.example";

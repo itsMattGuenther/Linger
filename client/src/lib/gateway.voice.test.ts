@@ -48,9 +48,11 @@ const {
   serverState,
   setVoiceMuted,
   setVoiceDeafened,
+  setVoicePushToTalk,
   setVoiceTalking,
   setVoiceVolume,
   voicePeersIn,
+  voiceSeatServer,
 } = await import("./gateway");
 
 const HOME = "https://home.example";
@@ -417,6 +419,55 @@ describe("voice in the store", () => {
     await expect(setVoiceTalking(HOME, true)).rejects.toThrow(/disconnected/);
     expect(serverState(HOME).myVoice).toBeNull();
     expect(invoked.at(-1)?.cmd).toBe("voice_leave");
+  });
+
+  it("turning push-to-talk off mid-call opens the microphone, and on closes it until the key is held (#231)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
+    expect(voiceSeatServer()).toBe(HOME);
+    invoked.length = 0;
+
+    await setVoicePushToTalk(HOME, false);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: false, talkHeld: false, muted: false });
+    await setVoicePushToTalk(HOME, true);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: true, talkHeld: false, muted: false });
+    await setVoiceTalking(HOME, true);
+    // Turned off while the key is held: it stays open, and the key is forgotten.
+    await setVoicePushToTalk(HOME, false);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: false, talkHeld: false });
+    // Only the key's gate moved, never a mute, and nothing chimed.
+    expect(invoked.map((call) => [call.cmd, call.args.closed])).toEqual([
+      ["voice_push_to_talk", false],
+      ["voice_push_to_talk", true],
+      ["voice_push_to_talk", false],
+    ]);
+    expect(played).toEqual([]);
+  });
+
+  it("a mute you chose survives turning push-to-talk off, and on (#231)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
+    await setVoiceMuted(HOME, true);
+    await setVoicePushToTalk(HOME, false);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: false, muted: true });
+    expect(invoked.filter((call) => call.cmd === "voice_controls").at(-1)?.args.controls).toEqual({ muted: true, deafened: false });
+    await setVoicePushToTalk(HOME, true);
+    await setVoiceTalking(HOME, true);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: true, muted: true });
+    await setVoiceMuted(HOME, false);
+    expect(serverState(HOME).myVoice).toMatchObject({ pushToTalk: true, talkHeld: true, muted: false });
+  });
+
+  it("turning push-to-talk on or off out of voice changes nothing but the next join", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    expect(voiceSeatServer()).toBeNull();
+    invoked.length = 0;
+    await setVoicePushToTalk(HOME, true);
+    expect(invoked).toEqual([]);
+    expect(serverState(HOME).myVoice).toBeNull();
   });
 
   it("the key does nothing with push-to-talk off", async () => {

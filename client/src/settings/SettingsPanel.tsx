@@ -39,7 +39,7 @@ import {
 } from "../lib/updates";
 import { exportLine, type ExportPhase, runExport } from "../lib/export";
 import StylePicker from "./StylePicker";
-import { saveDisplayName, useGateway } from "../lib/gateway";
+import { saveDisplayName, setVoicePushToTalk, useGateway, voiceSeatServer } from "../lib/gateway";
 import {
   displayNameReady,
   displayNameRequest,
@@ -458,8 +458,9 @@ function ExportSection({ api }: { api: AuthedApi }) {
  * Voice (SPEC §4.14, T-1404): which microphone and speakers, and whether the
  * microphone waits for a key.
  *
- * Both are remembered on this machine and read at the next join. A device
- * you pick that is not plugged in next time falls back to the system default
+ * Both are remembered on this machine. Devices are read at the next join;
+ * push-to-talk applies to the call you're in at once (#231). A device you
+ * pick that is not plugged in next time falls back to the system default
  * rather than stopping you talking; the list here shows what is present now.
  *
  * Push-to-talk is off by default because a room is "a room you leave
@@ -494,6 +495,12 @@ function VoiceSection() {
   const change = (next: VoicePrefs): void => {
     setPrefs(next);
     saveVoicePrefs(next);
+    // Push-to-talk applies to the call you're in at once, not only at the
+    // next join (#231). Devices still wait for the next join.
+    const seat = voiceSeatServer();
+    if (seat !== null && next.pushToTalk !== prefs.pushToTalk) {
+      void setVoicePushToTalk(seat, next.pushToTalk).catch(() => undefined);
+    }
   };
 
   return (

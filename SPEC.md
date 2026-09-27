@@ -605,6 +605,9 @@ except while you hold its key, but not holding the key is not a choice to be
 silent, so it shows as nothing: no mute beside your name, for you or anyone
 else. The room hears you and sees you light up while you hold it. Mute and
 deafen still work on top of it and still show, and the key never undoes them.
+Turning push-to-talk on or off, or picking its key, applies to the call you're
+in at once (#231): off opens the microphone unless you muted yourself, and on
+closes it until the key is held.
 
 The room can see each session's self-reported `muted` or `deafened` state,
 filtered by the same membership rule as voice itself; push-to-talk's closed

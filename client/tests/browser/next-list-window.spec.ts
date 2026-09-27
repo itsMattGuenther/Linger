@@ -481,6 +481,66 @@ test("push-to-talk with the key up shows no mute, to you or to anyone else; a mu
   await expect(eli.you.locator(".k-chip-state")).toHaveText("Muted");
 });
 
+test("Settings turning push-to-talk off and on, or picking its key, applies to the call you're in at once (#231)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const yours = bar.getByRole("listitem").filter({ hasText: "you" });
+  const line = bar.getByRole("status");
+  const closed = async () => (await lastCall(page, "voice_push_to_talk"))?.closed;
+  const joins = async () => (await did(page)).filter((one) => one.startsWith("voice_join")).length;
+  const pushToTalk = (on: boolean, key = "ControlRight") => page.evaluate(({ on, key }) => window.core?.ask("next:intent", { kind: "voice.pushtotalk", on, key }), { on, key });
+  await expect(line).toHaveText("hold Right Ctrl to talk");
+  await expect.poll(closed).toBe(true);
+
+  // Off: the microphone opens, without leaving and joining again.
+  await pushToTalk(false);
+  await expect.poll(closed).toBe(false);
+  await expect(line).toHaveCount(0);
+  await expect(yours.locator(".k-chip-state")).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
+  // The key does nothing now.
+  await page.keyboard.down("ControlRight");
+  await page.keyboard.up("ControlRight");
+  expect(await closed()).toBe(false);
+
+  // On again: closed until the key is held.
+  await pushToTalk(true);
+  await expect.poll(closed).toBe(true);
+  await expect(line).toHaveText("hold Right Ctrl to talk");
+  await page.keyboard.down("ControlRight");
+  await expect.poll(closed).toBe(false);
+  await page.keyboard.up("ControlRight");
+  await expect.poll(closed).toBe(true);
+
+  // A new key: the bar names it, and it's the one that talks.
+  await page.evaluate(() => localStorage.setItem("linger.voice.pushToTalkKey", "AltRight"));
+  await pushToTalk(true, "AltRight");
+  await expect(line).toHaveText("hold Right Alt to talk");
+  await page.keyboard.down("ControlRight");
+  await page.keyboard.up("ControlRight");
+  expect(await closed()).toBe(true);
+  await page.keyboard.down("AltRight");
+  await expect.poll(closed).toBe(false);
+  await page.keyboard.up("AltRight");
+  await expect.poll(closed).toBe(true);
+
+  // A mute you chose survives turning push-to-talk off: you stay muted, and so does the tray.
+  await bar.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect(yours.locator(".k-chip-state")).toHaveText("Muted");
+  await pushToTalk(false, "AltRight");
+  await expect.poll(closed).toBe(false);
+  await expect(bar.getByRole("button", { name: "Muted", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(yours.locator(".k-chip-state")).toHaveText("Muted");
+  await expect(line).toHaveCount(0);
+  expect(await reported(page)).toEqual({ muted: true, deafened: false });
+  await expect.poll(async () => (await did(page)).filter((one) => one.startsWith("next_tray_voice")).at(-1)).toBe(
+    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`,
+  );
+  // All in the one call.
+  expect(await joins()).toBe(1);
+});
+
 // The foot's standing lines (decision 1): said only while true.
 const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
 

@@ -40,6 +40,24 @@ const night = evening(serverState(SERVER));
 // Rooms the list window sent before this window was listening (`?missed=`),
 // handed over when it asks, once.
 let missed = (query.get("missed") ?? "").split(",").filter((room) => room !== "");
+// Your voice seat, as the list window shares it (`?ptt`, `?talking`).
+const seat =
+  query.has("ptt") || query.has("talking")
+    ? {
+        roomId: "r-general",
+        muted: false,
+        deafened: false,
+        mutedBeforeDeafen: false,
+        pushToTalk: query.has("ptt"),
+        talkHeld: false,
+        moved: false,
+        audio: "sending" as const,
+        peers: {},
+        speaking: {},
+        talking: query.has("talking"),
+        volumes: {},
+      }
+    : null;
 const desktop = fakeDesktop({
   label: query.get("single") === "1" ? "chat-5f1e" : "chat",
   query,
@@ -66,23 +84,7 @@ const desktop = fakeDesktop({
             "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: false, deafened: false } }],
           }
         : night.voice,
-    myVoice:
-      query.has("ptt") || query.has("talking")
-        ? {
-            roomId: "r-general",
-            muted: false,
-            deafened: false,
-            mutedBeforeDeafen: false,
-            pushToTalk: query.has("ptt"),
-            talkHeld: false,
-            moved: false,
-            audio: "sending" as const,
-            peers: {},
-            speaking: {},
-            talking: query.has("talking"),
-            volumes: {},
-          }
-        : null,
+    myVoice: seat,
   },
 });
 
@@ -107,6 +109,8 @@ declare global {
       messageFont: (userId: string, key: string | null) => void;
       /** The list window signs in to the guild while this window is open. */
       signInGuild: () => void;
+      /** Settings turned push-to-talk on or off mid-call, as the list window tells every window (#231). */
+      pushToTalk: (on: boolean) => void;
     };
   }
 }
@@ -124,6 +128,8 @@ window.owner = {
   wake: desktop.wake,
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
   signInGuild: () => desktop.signIn(GUILD, guild(serverState(GUILD))),
+  pushToTalk: (on) =>
+    desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: seat && { ...seat, pushToTalk: on }, read: night.read, readLoaded: true, notifyRules: [] } }),
   messageFont: (userId, key) => {
     const user = night.users.find((one) => one.id === userId);
     if (user) desktop.frame({ op: "user.update", d: { ...user, style: { ...user.style, msg_font_key: key } } });

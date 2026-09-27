@@ -260,3 +260,21 @@ test.describe("starting Linger when you sign in to the computer (#228)", () => {
     await expect(startSwitch(page)).toHaveCount(0);
   });
 });
+
+test("push-to-talk and its key are told to the list window as they change, for the call you're in (#231)", async ({ page }) => {
+  await open(page, "?section=sound");
+  const told = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.pushtotalk");
+  await page.getByRole("switch", { name: "Push to talk" }).click();
+  await expect.poll(told).toEqual([{ kind: "voice.pushtotalk", on: true, key: "ControlRight" }]);
+  await page.getByRole("button", { name: "Change" }).click();
+  await page.keyboard.press("AltRight");
+  await expect.poll(told).toEqual([
+    { kind: "voice.pushtotalk", on: true, key: "ControlRight" },
+    { kind: "voice.pushtotalk", on: true, key: "AltRight" },
+  ]);
+  await page.getByRole("switch", { name: "Push to talk" }).click();
+  await expect.poll(async () => (await told()).at(-1)).toEqual({ kind: "voice.pushtotalk", on: false, key: "AltRight" });
+  // Kept on this computer as well, for the next join.
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.pushToTalk"))).toBe("false");
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.pushToTalkKey"))).toBe("AltRight");
+});

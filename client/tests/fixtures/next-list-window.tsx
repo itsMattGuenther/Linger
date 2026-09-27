@@ -143,6 +143,7 @@ mockIPC((cmd, args) => {
       return null;
     }
     case "voice_join":
+      note(`voice_join:${JSON.stringify({ roomId: a.roomId })}`);
       // The engine opens the devices and starts sending, as the Rust core says.
       window.setTimeout(() => deliver("voice:audio", { server: String(a.baseUrl), state: "sending" }), 20);
       return null;

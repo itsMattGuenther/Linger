@@ -204,6 +204,29 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
   );
 });
 
+test("turning push-to-talk off or on in Settings applies to the call you're in (#231)", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("linger.voice.pushToTalk", "true"),
+  );
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-closed", "true");
+  await openSettings(page);
+  await page.getByRole("button", { name: "Sound & Voice", exact: true }).click();
+  await page.getByRole("button", { name: "push to talk", exact: true }).click();
+  await expect(html).toHaveAttribute("data-closed", "false");
+  await page.getByRole("button", { name: "open microphone", exact: true }).click();
+  await expect(html).toHaveAttribute("data-closed", "true");
+  // Never a mute, and never a second join.
+  await expect(html).toHaveAttribute(
+    "data-controls",
+    '{"muted":false,"deafened":false}',
+  );
+});
+
 test("an away-view control failure remains visible after voice disconnects", async ({
   page,
 }) => {

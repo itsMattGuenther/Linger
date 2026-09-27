@@ -24,6 +24,7 @@ import {
   serverState,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoicePushToTalk,
   setVoiceTalking,
   type SharedLocal,
   setNotifyRule,
@@ -163,6 +164,11 @@ export type Intent =
   | { kind: "voice.deafen"; deafened: boolean }
   /** The push-to-talk key went down or up in this window. */
   | { kind: "voice.talk"; down: boolean }
+  /**
+   * Settings turned push-to-talk on or off, or picked its key (`KeyboardEvent.code`):
+   * it applies to the call you're in at once (#231), and the voice bar names the key.
+   */
+  | { kind: "voice.pushtotalk"; on: boolean; key: string }
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
@@ -194,6 +200,8 @@ export interface ListControls {
   setPrefs(prefs: ServerPrefs): void;
   /** Whether closing the list keeps Linger in the tray (true) or quits it. */
   closeToTray?(on: boolean): void;
+  /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
+  talkKey?(code: string): void;
 }
 
 /**
@@ -495,6 +503,17 @@ export async function shareAsOwner(
           saveMode(store, intent.mode);
           const message: ModeMessage = { v: PROTOCOL, mode: intent.mode };
           void bus.broadcast(MODE, message);
+          return;
+        }
+        case "voice.pushtotalk": {
+          // Kept on this computer by Settings already; this is for the call
+          // you're in, which only read it when you joined (#231).
+          if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
+          list?.talkKey?.(intent.key);
+          // Whoever held the key before doesn't hold it for the new setting.
+          holdingTalk.clear();
+          const server = voiceServer(sessions().keys());
+          if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
           return;
         }
         case "voice.join": {
