@@ -24,10 +24,11 @@ default.
 
 ## How to run a task
 
-**0.4.0 release — ⏳ Matt, 2026-09-26.** The Buddy list client (M15, #198)
-becomes the app; today's client stays one release behind `LINGER_CLASSIC=1`.
-Notes in `docs/releases/0.4.0.md`. Earlier releases' notes, with what each
-closed, are in `docs/releases/`.
+**0.4.3 release — ⏳ Matt, 2026-09-27.** Fixes and small things from the
+first weekend of real use (#221–#241); notes in `docs/releases/0.4.3.md`. The
+Buddy list client (M15, #198) has been the app since 0.4.0; today's client stays
+behind `LINGER_CLASSIC=1`. Earlier releases' notes, with what each closed, are
+in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
 agent's contract is `AGENTS.md`; tools that insist on their own filename get a
