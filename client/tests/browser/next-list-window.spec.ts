@@ -374,6 +374,113 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
 });
 
+/** Join voice in #general as a chat window would ask, once the connection is up. */
+async function joinGeneral(page: Page) {
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  return bar;
+}
+
+/** The arguments of the last time the window told the voice engine `cmd`. */
+async function lastCall(page: Page, cmd: string): Promise<Record<string, unknown> | undefined> {
+  const line = (await did(page)).filter((one) => one.startsWith(`${cmd}:`)).at(-1);
+  return line === undefined ? undefined : (JSON.parse(line.slice(cmd.length + 1)) as Record<string, unknown>);
+}
+
+type Controls = { muted: boolean; deafened: boolean };
+
+/** The controls in the last `voice_controls` call: what the engine reports to the room. */
+async function reported(page: Page): Promise<Controls | undefined> {
+  const controls = (await lastCall(page, "voice_controls"))?.controls;
+  if (typeof controls !== "object" || controls === null) return undefined;
+  const muted: unknown = Reflect.get(controls, "muted");
+  const deafened: unknown = Reflect.get(controls, "deafened");
+  return typeof muted === "boolean" && typeof deafened === "boolean" ? { muted, deafened } : undefined;
+}
+
+/**
+ * Eli's chat window on #general (tests/fixtures/next-chat-window.tsx, `as=eli`),
+ * and a way to hand it the room's voice as the server would pass on what your
+ * engine reported: the controls it was last told.
+ */
+async function elisView(page: Page) {
+  const eli = await page.context().newPage();
+  await eli.goto("/tests/fixtures/next-chat-window.html?room=r-general&as=eli");
+  await expect(eli.getByRole("tabpanel")).toBeVisible();
+  const told = async (controls: Controls | undefined) => {
+    if (controls === undefined) throw new Error("nothing was reported");
+    await eli.evaluate((mine) => {
+      window.owner?.frame({
+        op: "voice.state",
+        d: {
+          room_id: "r-general",
+          peers: [
+            { session_id: "s-eli", user_id: "u-eli", controls: { muted: false, deafened: false } },
+            { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
+            { session_id: "s-good-company.example", user_id: "u-matt", controls: mine },
+          ],
+        },
+      });
+    }, controls);
+  };
+  const you = eli.getByRole("list", { name: "In voice here" }).getByRole("listitem").filter({ hasText: "Matt" });
+  return { told, you };
+}
+
+test("push-to-talk with the key up shows no mute, to you or to anyone else; a mute you choose shows to both (#232)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const yours = bar.getByRole("listitem").filter({ hasText: "you" });
+
+  // Your view: how to talk, and no mute anywhere, the tray menu included.
+  await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
+  await expect(yours.locator(".k-chip-state")).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1)).toBe(
+    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`,
+  );
+  // The microphone is closed by the key's own gate; the room is told it's on.
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
+  expect(await reported(page)).toEqual({ muted: false, deafened: false });
+
+  // Holding the key opens it and letting go closes it, still without a mute.
+  await page.keyboard.down("ControlRight");
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: false });
+  await expect(bar.getByRole("status")).toHaveCount(0);
+  await page.keyboard.up("ControlRight");
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
+  await expect(yours.locator(".k-chip-state")).toHaveCount(0);
+  expect(await reported(page)).toEqual({ muted: false, deafened: false });
+
+  // Eli's view of you, from what the room was told: no mute.
+  const eli = await elisView(page);
+  await eli.told(await reported(page));
+  await expect(eli.you).toBeVisible();
+  await expect(eli.you.locator(".k-chip-state")).toHaveCount(0);
+
+  // Without push-to-talk, Mute pressed: the glyph shows, for you and for Eli, as before.
+  await bar.getByRole("button", { name: "Leave voice", exact: true }).click();
+  await expect(bar).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem("linger.voice.pushToTalk", "false"));
+  await joinGeneral(page);
+  await expect(bar.getByRole("status")).toHaveCount(0);
+  await bar.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect(yours.locator(".k-chip-state")).toHaveText("Muted");
+  await expect.poll(() => reported(page)).toEqual({ muted: true, deafened: false });
+  await eli.told(await reported(page));
+  await expect(eli.you.locator(".k-chip-state")).toHaveText("Muted");
+});
+
 // The foot's standing lines (decision 1): said only while true.
 const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
 

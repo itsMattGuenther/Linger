@@ -320,7 +320,7 @@ function Fixture() {
   const onJoin = useCallback(() => note("join"), []);
   // Your controls in the room you're in voice in (#216), as the chat window passes them.
   const controls = useMemo(
-    () => ({ muted: false, deafened: false, pushToTalk: false, onMute: () => note("mute"), onDeafen: () => note("deafen"), onLeave: () => note("leave") }),
+    () => ({ muted: false, deafened: false, onMute: () => note("mute"), onDeafen: () => note("deafen"), onLeave: () => note("leave") }),
     [],
   );
 

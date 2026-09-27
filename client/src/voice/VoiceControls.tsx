@@ -3,7 +3,9 @@ import {
   leaveVoice,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoiceTalking,
   type MyVoice,
+  waitingForKey,
 } from "../lib/gateway";
 import { microphoneLine, PUSH_TO_TALK_KEY } from "../lib/voice";
 import IconButton from "../lib/IconButton";
@@ -27,10 +29,11 @@ export default function VoiceControls({
     if (!pushToTalk) return;
     const down = (event: KeyboardEvent): void => {
       if (event.key === PUSH_TO_TALK_KEY && !event.repeat)
-        void setVoiceMuted(server, false).catch(onProblem);
+        void setVoiceTalking(server, true).catch(onProblem);
     };
+    // Closes the microphone without muting you: nobody sees "muted" (#232).
     const release = (): void => {
-      void setVoiceMuted(server, true).catch(onProblem);
+      void setVoiceTalking(server, false).catch(onProblem);
     };
     const up = (event: KeyboardEvent): void => {
       if (event.key === PUSH_TO_TALK_KEY) release();
@@ -50,26 +53,26 @@ export default function VoiceControls({
   const line =
     !showLine || mine.deafened
       ? null
-      : microphoneLine(mine.audio, pushToTalk, mine.muted);
+      : microphoneLine(mine.audio, waitingForKey(mine));
   return (
     <div className="voice-controls">
       {line === null ? null : <span className="voice-line meta">{line}</span>}
-      {pushToTalk ? null : (
-        <IconButton
-          label={mine.muted ? "Muted" : "Mute"}
-          type="button"
-          className="voice-action"
-          tooltipSide="below"
-          floatingTooltip
-          aria-pressed={mine.muted}
-          disabled={mine.deafened}
-          onClick={() =>
-            void setVoiceMuted(server, !mine.muted).catch(onProblem)
-          }
-        >
-          <ActionIcon name={mine.muted ? "micOff" : "mic"} />
-        </IconButton>
-      )}
+      {/* With push-to-talk too: the key no longer mutes, so a mute
+          carried into a push-to-talk call needs a way out (#232). */}
+      <IconButton
+        label={mine.muted ? "Muted" : "Mute"}
+        type="button"
+        className="voice-action"
+        tooltipSide="below"
+        floatingTooltip
+        aria-pressed={mine.muted}
+        disabled={mine.deafened}
+        onClick={() =>
+          void setVoiceMuted(server, !mine.muted).catch(onProblem)
+        }
+      >
+        <ActionIcon name={mine.muted ? "micOff" : "mic"} />
+      </IconButton>
       <IconButton
         label={mine.deafened ? "Undeafen" : "Deafen"}
         type="button"

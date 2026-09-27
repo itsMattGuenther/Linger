@@ -802,7 +802,9 @@ membership-filtered `voice.state`, including inside DMs.
 This is an additive v1 extension: old servers ignore the extra join field and
 old clients ignore the extra peer field. New clients still enforce local
 controls on an old server, but cannot show others' state. Mic activity and
-output-device health are not inferred from these two booleans.
+output-device health are not inferred from these two booleans. Nor is
+push-to-talk: a client whose push-to-talk key is up sends silence but reports
+`muted: false`, because not holding the key isn't muting (SPEC §4.14, #232).
 
 **`voice.state` is the whole list every time**, never a delta. It is sent to a room's
 members whenever anybody joins, leaves or changes controls, and a client can act on the newest one it has

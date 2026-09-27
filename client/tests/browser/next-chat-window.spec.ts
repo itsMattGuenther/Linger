@@ -158,12 +158,28 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   expect(await did(page)).toContain("POST /dms as token-1");
 });
 
-test("the voice strip shows whose microphone is off, as its glyph", async ({ page }) => {
+test("the voice strip shows whose microphone is off, as its glyph, and push-to-talk's closed key as nothing (#232)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const here = page.getByRole("list", { name: "In voice here" });
-  // Push-to-talk keeps you muted until you talk.
-  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+  // Push-to-talk with the key up closes your microphone, but isn't a mute.
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveCount(0);
   await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveCount(0);
+  // Eli mutes: the server says so, and the strip shows it.
+  await page.evaluate(() =>
+    window.owner?.frame({
+      op: "voice.state",
+      d: {
+        room_id: "r-general",
+        peers: [
+          { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false } },
+          { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
+          { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false } },
+        ],
+      },
+    }),
+  );
+  await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveText("Muted");
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveCount(0);
 });
 
 test("you light up in the voice strip while you talk, as others do (#215)", async ({ page }) => {
@@ -192,10 +208,11 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
   ]);
 });
 
-test("with push-to-talk the voice strip has no Mute, as the voice bar hasn't; a room you're not in voice in has no controls (#216)", async ({ page }) => {
+test("with push-to-talk the voice strip keeps Mute, as the voice bar does (#232); a room you're not in voice in has no controls (#216)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const yours = page.getByRole("group", { name: "Your voice" });
-  await expect(yours.getByRole("button", { name: "Mute" })).toHaveCount(0);
+  // The key doesn't mute, so Mute is a choice of its own.
+  await expect(yours.getByRole("button", { name: "Mute" })).toHaveAttribute("aria-pressed", "false");
   await expect(yours.getByRole("button", { name: "Deafen" })).toBeVisible();
   await expect(yours.getByRole("button", { name: "Leave voice" })).toBeVisible();
 

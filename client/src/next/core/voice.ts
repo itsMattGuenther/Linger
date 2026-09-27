@@ -6,7 +6,7 @@
 import type { RoomId } from "../../generated/RoomId";
 import type { User } from "../../generated/User";
 import { dmLabel } from "../../lib/dm";
-import { type GatewayState, voicePeersIn } from "../../lib/gateway";
+import { type GatewayState, voicePeersIn, waitingForKey } from "../../lib/gateway";
 import { microphoneLine } from "../../lib/voice";
 
 /** One person in voice, as the voice bar shows them. */
@@ -16,7 +16,8 @@ export interface VoicePerson {
   you: boolean;
   /**
    * Their microphone as their client shares it (VOICE-6): muted, deafened,
-   * or unknown when their client or server doesn't share it. Null when it's on.
+   * or unknown when their client or server doesn't share it. Null when it's on,
+   * and for push-to-talk with the key up, which isn't a mute (#232).
    */
   controls: "muted" | "deafened" | "unknown" | null;
   /** Trouble reaching them from here (VOICE-7), while you're both in voice. */
@@ -37,7 +38,6 @@ export interface VoiceModel {
   people: VoicePerson[];
   muted: boolean;
   deafened: boolean;
-  pushToTalk: boolean;
   /** The one thing worth saying about your microphone, if anything. */
   line: string | null;
 }
@@ -78,8 +78,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
     people,
     muted: mine.muted,
     deafened: mine.deafened,
-    pushToTalk: mine.pushToTalk,
-    line: microphoneLine(mine.audio, mine.pushToTalk, mine.muted, talkKey),
+    line: microphoneLine(mine.audio, waitingForKey(mine), talkKey),
   };
 }
 

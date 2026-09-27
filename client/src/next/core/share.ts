@@ -24,6 +24,7 @@ import {
   serverState,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoiceTalking,
   type SharedLocal,
   setNotifyRule,
   sharedLocalOf,
@@ -337,7 +338,7 @@ export async function shareAsOwner(
   const holdingTalk = new Set<string>();
   const letGoOfTalk = () => {
     const server = voiceServer(sessions().keys());
-    if (server !== null && serverState(server).myVoice?.pushToTalk) void setVoiceMuted(server, true).catch(() => undefined);
+    if (server !== null) void setVoiceTalking(server, false).catch(() => undefined);
   };
 
   const gone = (label: string) => {
@@ -509,7 +510,6 @@ export async function shareAsOwner(
         default: {
           const server = voiceServer(sessions().keys());
           if (server === null) return;
-          const mine = serverState(server).myVoice;
           switch (intent.kind) {
             case "voice.leave":
               void leaveVoice(server).catch(() => undefined);
@@ -522,10 +522,11 @@ export async function shareAsOwner(
               return;
             case "voice.talk":
               // Push-to-talk only means something when it is on: the key
-              // opens the microphone while held and closes it on release.
+              // opens the microphone while held and closes it on release,
+              // without muting you (#232). The store ignores it otherwise.
               if (intent.down === true) holdingTalk.add(intent.from);
               else holdingTalk.delete(intent.from);
-              if (mine?.pushToTalk) void setVoiceMuted(server, intent.down !== true).catch(() => undefined);
+              void setVoiceTalking(server, intent.down === true).catch(() => undefined);
               return;
           }
         }

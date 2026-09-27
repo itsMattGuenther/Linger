@@ -594,14 +594,15 @@ test("voice control tooltips show whole under the push-to-talk line and in the o
   // the controls to its bottom edge, where a tooltip drawn below them was cut
   // off; the line now sits by the heading, and the tooltips must stay whole.
   await expect(page.locator(".voice-bar .voice-line")).toBeVisible();
-  for (const name of ["Deafen", "Leave voice"]) {
+  // Mute is there with push-to-talk too, now that the key doesn't mute (#232).
+  for (const name of ["Mute", "Deafen", "Leave voice"]) {
     await expectWholeTooltip(page, page.locator(".voice-bar").getByRole("button", { name, exact: true }), name);
   }
   // The ongoing strip sits on the window's bottom edge.
   await page.getByRole("button", { name: "Settings", exact: true }).first().click();
   const ongoing = page.getByRole("region", { name: "Ongoing voice" });
   await expect(ongoing).toBeVisible();
-  for (const name of ["Deafen", "Leave voice"]) {
+  for (const name of ["Mute", "Deafen", "Leave voice"]) {
     await expectWholeTooltip(page, ongoing.getByRole("button", { name, exact: true }), name);
   }
 });

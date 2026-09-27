@@ -19,10 +19,9 @@ const MAX_CHIPS = 4;
 
 /** Your voice controls, in the room you're in voice in (#216). The list window acts on them. */
 export interface StripControls {
+  /** You muted yourself: with push-to-talk too, which the key can't undo (#232). */
   muted: boolean;
   deafened: boolean;
-  /** Push-to-talk has no Mute: you're quiet until you hold the key, as in the voice bar. */
-  pushToTalk: boolean;
   onMute: (muted: boolean) => void;
   onDeafen: (deafened: boolean) => void;
   onLeave: () => void;
@@ -88,15 +87,13 @@ export const VoiceStrip = memo(function VoiceStrip({
       </p>
       {strip.kind === "mine" && controls ? (
         <div className="nx-strip-controls" role="group" aria-label="Your voice">
-          {controls.pushToTalk ? null : (
-            <IconButton
-              icon={controls.muted ? "micOff" : "mic"}
-              label={controls.muted ? "Muted" : "Mute"}
-              size="sm"
-              pressed={controls.muted}
-              onClick={() => controls.onMute(!controls.muted)}
-            />
-          )}
+          <IconButton
+            icon={controls.muted ? "micOff" : "mic"}
+            label={controls.muted ? "Muted" : "Mute"}
+            size="sm"
+            pressed={controls.muted}
+            onClick={() => controls.onMute(!controls.muted)}
+          />
           <IconButton
             icon={controls.deafened ? "headOff" : "head"}
             label={controls.deafened ? "Deafened" : "Deafen"}

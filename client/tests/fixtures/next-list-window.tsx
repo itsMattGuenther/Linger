@@ -142,6 +142,10 @@ mockIPC((cmd, args) => {
       }, 20);
       return null;
     }
+    case "voice_join":
+      // The engine opens the devices and starts sending, as the Rust core says.
+      window.setTimeout(() => deliver("voice:audio", { server: String(a.baseUrl), state: "sending" }), 20);
+      return null;
     case "update_check":
       note("update_check");
       return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };
@@ -158,6 +162,10 @@ mockIPC((cmd, args) => {
     case "next_close_to_tray":
     case "next_tray_voice":
     case "voice_volume":
+    // What the voice engine is told: controls are what the room hears about,
+    // push-to-talk's gate isn't (#232).
+    case "voice_controls":
+    case "voice_push_to_talk":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:

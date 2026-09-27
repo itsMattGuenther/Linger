@@ -48,6 +48,7 @@ const {
   serverState,
   setVoiceMuted,
   setVoiceDeafened,
+  setVoiceTalking,
   setVoiceVolume,
   voicePeersIn,
 } = await import("./gateway");
@@ -201,7 +202,7 @@ describe("voice in the store", () => {
     expect(serverState(HOME).voice).toEqual({});
   });
 
-  it("joins with the session id and the chosen devices, muting first for push-to-talk", async () => {
+  it("joins with the session id and the chosen devices, closing the microphone first for push-to-talk without muting (#232)", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());
     invoked.length = 0;
@@ -209,9 +210,11 @@ describe("voice in the store", () => {
     await joinVoice(fakeApi(HOME), "r-garage", { input: "USB Mic", output: null }, true);
 
     const calls = invoked.filter((call) => call.cmd.startsWith("voice_"));
-    expect(calls.map((call) => call.cmd)).toEqual(["voice_controls", "voice_join"]);
-    expect(calls[0]?.args).toEqual({ baseUrl: HOME, controls: { muted: true, deafened: false } });
-    expect(calls[1]?.args).toEqual({
+    expect(calls.map((call) => call.cmd)).toEqual(["voice_controls", "voice_push_to_talk", "voice_join"]);
+    // The room is told the microphone is on; the key's gate closes it here.
+    expect(calls[0]?.args).toEqual({ baseUrl: HOME, controls: { muted: false, deafened: false } });
+    expect(calls[1]?.args).toEqual({ baseUrl: HOME, closed: true });
+    expect(calls[2]?.args).toEqual({
       baseUrl: HOME,
       sessionId: "s-me",
       roomId: "r-garage",
@@ -225,7 +228,9 @@ describe("voice in the store", () => {
     });
     expect(serverState(HOME).myVoice).toMatchObject({
       roomId: "r-garage",
-      muted: true,
+      muted: false,
+      pushToTalk: true,
+      talkHeld: false,
       audio: "opening",
     });
   });
@@ -275,6 +280,7 @@ describe("voice in the store", () => {
     expect(calls.map((call) => [call.cmd, call.args.baseUrl])).toEqual([
       ["voice_leave", HOME],
       ["voice_controls", WORK],
+      ["voice_push_to_talk", WORK],
       ["voice_join", WORK],
     ]);
     expect(serverState(HOME).myVoice).toBeNull();
@@ -360,17 +366,66 @@ describe("voice in the store", () => {
     expect(serverState(HOME).myVoice).toMatchObject({ muted, deafened: false, volumes: { friend: 0.4 } });
   });
 
-  it("push-to-talk stays muted after undeafen, even if its key was held", async () => {
+  it("push-to-talk stays closed after undeafen, even if its key was held", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());
     await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
-    await setVoiceMuted(HOME, false);
+    const gate = () => invoked.filter((call) => call.cmd === "voice_push_to_talk").at(-1)?.args.closed;
+    await setVoiceTalking(HOME, true);
+    expect(gate()).toBe(false);
     await setVoiceDeafened(HOME, true);
-    await setVoiceMuted(HOME, false);
+    // Deafening lets go of the key, and the key can't reopen a deafened mic.
+    expect(gate()).toBe(true);
+    await setVoiceTalking(HOME, true);
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: true, deafened: true });
     await setVoiceDeafened(HOME, false);
-    expect(serverState(HOME).myVoice?.muted).toBe(true);
-    await setVoiceMuted(HOME, false);
-    expect(serverState(HOME).myVoice?.muted).toBe(false);
+    // Back to the mic you had chosen, which was on, and closed by the key until it's pressed again.
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: false, deafened: false });
+    expect(gate()).toBe(true);
+    await setVoiceTalking(HOME, true);
+    expect(serverState(HOME).myVoice?.talkHeld).toBe(true);
+    expect(gate()).toBe(false);
+  });
+
+  it("the push-to-talk key opens and closes the microphone without muting you or telling the room (#232)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
+    invoked.length = 0;
+    await setVoiceTalking(HOME, true);
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: true, muted: false });
+    await setVoiceTalking(HOME, false);
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: false });
+    // Only the engine's gate moved: no controls, so nothing for the room.
+    expect(invoked.map((call) => [call.cmd, call.args.closed])).toEqual([
+      ["voice_push_to_talk", false],
+      ["voice_push_to_talk", true],
+    ]);
+
+    // A mute you chose is reported, and holding the key doesn't undo it.
+    await setVoiceMuted(HOME, true);
+    await setVoiceTalking(HOME, true);
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: true, muted: true });
+    expect(invoked.filter((call) => call.cmd === "voice_controls").map((call) => call.args.controls)).toEqual([{ muted: true, deafened: false }]);
+  });
+
+  it("leaves voice when the key's gate can't be set, rather than guess whether the microphone is open", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
+    failing.add("voice_push_to_talk");
+    await expect(setVoiceTalking(HOME, true)).rejects.toThrow(/disconnected/);
+    expect(serverState(HOME).myVoice).toBeNull();
+    expect(invoked.at(-1)?.cmd).toBe("voice_leave");
+  });
+
+  it("the key does nothing with push-to-talk off", async () => {
+    await seated(HOME);
+    invoked.length = 0;
+    await setVoiceTalking(HOME, true);
+    await setVoiceTalking(HOME, false);
+    expect(invoked).toEqual([]);
+    expect(serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: false });
   });
 
   it("serializes rapid controls and leaves after a failed native control", async () => {
@@ -413,8 +468,8 @@ describe("voice in the store", () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());
     await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
-    await setVoiceMuted(HOME, false);
-    await setVoiceMuted(HOME, true);
+    await setVoiceTalking(HOME, true);
+    await setVoiceTalking(HOME, false);
     expect(played).toEqual([]);
     await setVoiceDeafened(HOME, true);
     await setVoiceDeafened(HOME, false);

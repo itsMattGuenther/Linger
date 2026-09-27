@@ -186,28 +186,22 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
   );
   await page.goto("/tests/fixtures/console.html");
   await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
   await page.keyboard.down("Control");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":false,"deafened":false}',
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "false");
   await openSettings(page);
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":true,"deafened":false}',
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
   await page.keyboard.up("Control");
   await page.keyboard.down("Control");
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "false");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
+  await page.keyboard.up("Control");
+  // None of it was a mute: the room was only ever told the microphone is on (#232).
   await expect(page.locator("html")).toHaveAttribute(
     "data-controls",
     '{"muted":false,"deafened":false}',
   );
-  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":true,"deafened":false}',
-  );
-  await page.keyboard.up("Control");
 });
 
 test("an away-view control failure remains visible after voice disconnects", async ({

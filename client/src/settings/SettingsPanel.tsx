@@ -535,8 +535,9 @@ function VoiceSection() {
         </>
       )}
       <p className="settings-lead settings-warmth-lead">
-        Push to talk starts every call muted and opens the microphone only while
-        you hold <span className="meta">{PUSH_TO_TALK_KEY.toLowerCase()}</span>.
+        Push to talk opens the microphone only while you hold{" "}
+        <span className="meta">{PUSH_TO_TALK_KEY.toLowerCase()}</span>. Not
+        holding it isn't muting: nobody sees you as muted.
       </p>
       <button
         type="button"

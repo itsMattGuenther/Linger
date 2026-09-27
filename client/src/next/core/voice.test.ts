@@ -53,6 +53,7 @@ function seat(extra: Partial<MyVoice> = {}): MyVoice {
     deafened: false,
     mutedBeforeDeafen: false,
     pushToTalk: false,
+    talkHeld: false,
     moved: false,
     audio: "sending",
     peers: {},
@@ -109,9 +110,24 @@ describe("the voice bar's contents", () => {
 
   it("says what a button can't: opening the microphone, or how to talk with push-to-talk", () => {
     expect(voiceModel(inVoice({ audio: "opening" }), new Set())?.line).toBe("opening the microphone…");
-    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set())?.line).toBe("hold Right Ctrl to talk");
-    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set(), "F13")?.line).toBe("hold F13 to talk");
+    expect(voiceModel(inVoice({ pushToTalk: true }), new Set())?.line).toBe("hold Right Ctrl to talk");
+    expect(voiceModel(inVoice({ pushToTalk: true }), new Set(), "F13")?.line).toBe("hold F13 to talk");
     expect(voiceModel(inVoice(), new Set())?.line).toBeNull();
+    // Holding the key, nothing to say; muted or deafened, holding it would do
+    // nothing, so it isn't offered: the buttons say why.
+    expect(voiceModel(inVoice({ pushToTalk: true, talkHeld: true }), new Set())?.line).toBeNull();
+    expect(voiceModel(inVoice({ pushToTalk: true, muted: true }), new Set())?.line).toBeNull();
+    expect(voiceModel(inVoice({ pushToTalk: true, muted: true, deafened: true }), new Set())?.line).toBeNull();
+  });
+
+  it("shows no mute on your chip for push-to-talk with the key up, only for a mute you chose (#232)", () => {
+    const yours = (extra: Partial<MyVoice>) => voiceModel(inVoice(extra), new Set())?.people.find((person) => person.you)?.controls;
+    expect(yours({ pushToTalk: true })).toBeNull();
+    expect(yours({ pushToTalk: true, talkHeld: true })).toBeNull();
+    expect(yours({ muted: true })).toBe("muted");
+    expect(yours({ pushToTalk: true, muted: true })).toBe("muted");
+    expect(yours({ pushToTalk: true, muted: true, deafened: true })).toBe("deafened");
+    expect(voiceModel(inVoice({ pushToTalk: true }), new Set())?.muted).toBe(false);
   });
 
   it("counts you as talking while your microphone hears you, for every place that shows it (#215)", () => {

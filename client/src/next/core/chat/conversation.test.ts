@@ -102,6 +102,9 @@ describe("what the chat window shows about a conversation", () => {
     // Back on: gone from the list, whatever the server last heard.
     const on = evening({ voice: { "r-general": [{ session_id: "s-matt", user_id: "u-matt", controls: { muted: true, deafened: false } }] }, myVoice: { ...seat, muted: false } });
     expect(Object.fromEntries(micsHere(on, "r-general"))).toEqual({});
+    // Push-to-talk with the key up closes the microphone but isn't a mute (#232).
+    const keyUp = evening({ voice: { "r-general": [] }, myVoice: { ...seat, muted: false, pushToTalk: true, talkHeld: false } });
+    expect(Object.fromEntries(micsHere(keyUp, "r-general"))).toEqual({});
     expect(Object.fromEntries(micsHere(state, "d-jules"))).toEqual({});
   });
 

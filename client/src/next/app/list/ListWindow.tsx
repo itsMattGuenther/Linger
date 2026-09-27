@@ -14,6 +14,7 @@ import {
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoiceTalking,
   setVoiceVolume,
   useGateway,
   useServers,
@@ -374,9 +375,9 @@ function Servers({
     const down = (event: KeyboardEvent) => {
       // The chosen key (decision 6), read as it's pressed: Settings may have
       // just changed it, in another window.
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceTalking(voiceServer, true).catch(() => undefined);
     };
-    const release = () => void setVoiceMuted(voiceServer, true).catch(() => undefined);
+    const release = () => void setVoiceTalking(voiceServer, false).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
       if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) release();
     };

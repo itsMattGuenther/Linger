@@ -612,7 +612,7 @@ function Conversations({ following }: { following: Following }) {
         mics: micsHere(state, room.id),
         controls:
           state.myVoice?.roomId === room.id
-            ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, pushToTalk: state.myVoice.pushToTalk, onMute, onDeafen, onLeave }
+            ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, onMute, onDeafen, onLeave }
             : undefined,
       },
       people,

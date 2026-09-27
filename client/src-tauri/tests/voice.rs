@@ -119,6 +119,73 @@ async fn deafen_gates_both_directions_and_reports_after_applying() {
     engine.leave().await;
 }
 
+/// Push-to-talk closes the microphone without telling the room (#232): the
+/// key going up or down sends no frame at all, joining with it closed reports
+/// an open microphone, and a real mute is still reported and still wins.
+#[tokio::test]
+async fn push_to_talk_closes_the_microphone_without_telling_the_room() {
+    let (engine, mut rx, _) = engine("a").await;
+    let room = RoomId::new();
+    // Closed before joining, as the app does when push-to-talk is on.
+    engine.set_push_to_talk_closed(true);
+    engine
+        .join(
+            room,
+            Devices {
+                source: Arc::new(Silence),
+                sink: Arc::new(Discard),
+            },
+            vec![],
+        )
+        .await;
+    assert!(
+        matches!(
+            rx.try_recv().unwrap(),
+            ClientFrame::VoiceJoin {
+                controls: Some(VoiceControls {
+                    muted: false,
+                    deafened: false
+                }),
+                ..
+            }
+        ),
+        "the join reported push-to-talk's closed microphone as a mute"
+    );
+    assert!(engine.is_push_to_talk_closed());
+    assert!(!engine.is_muted());
+
+    // The key down and up again: the microphone opens and closes, and the
+    // room hears nothing about it.
+    engine.set_push_to_talk_closed(false);
+    engine.set_push_to_talk_closed(true);
+    assert!(
+        rx.try_recv().is_err(),
+        "a push-to-talk edge went to the server"
+    );
+
+    // A real mute is reported, and the key can't open what mute closed.
+    engine
+        .set_controls(VoiceControls {
+            muted: true,
+            deafened: false,
+        })
+        .await;
+    assert!(matches!(
+        rx.try_recv().unwrap(),
+        ClientFrame::VoiceJoin {
+            controls: Some(VoiceControls {
+                muted: true,
+                deafened: false
+            }),
+            ..
+        }
+    ));
+    engine.set_push_to_talk_closed(false);
+    assert!(engine.is_muted(), "holding the key undid a mute");
+    assert!(rx.try_recv().is_err());
+    engine.leave().await;
+}
+
 async fn engine(session: &str) -> Rig {
     let (tx, rx) = mpsc::unbounded_channel();
     let log = Arc::new(Log::default());
@@ -661,6 +728,185 @@ async fn muting_sends_silence_and_the_mark_follows() {
             .any(|(peer, speaking)| peer.is_none() && *speaking),
         "a silent microphone was marked as talking"
     );
+}
+
+/// Push-to-talk (#232): with the key up, what goes out is silence, from the
+/// very first frame, and A is never marked as talking; held, the tone goes
+/// out and A lights up, for A itself and for B; let go, silence again. None
+/// of it is a mute: A never sends a controls report after joining.
+#[tokio::test(flavor = "multi_thread")]
+async fn push_to_talk_sends_silence_until_the_key_is_held() {
+    /// Records who was said to be speaking, in order.
+    #[derive(Default)]
+    struct Ears(Mutex<Vec<(Option<String>, bool)>>);
+    impl Watcher for Ears {
+        fn peer_state(&self, _peer: &str, _state: &str) {}
+        fn speaking(&self, peer: Option<&str>, speaking: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((peer.map(str::to_string), speaking));
+        }
+    }
+    impl Ears {
+        fn of(&self, peer: Option<&str>) -> Vec<bool> {
+            self.0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(who, _)| who.as_deref() == peer)
+                .map(|(_, speaking)| *speaking)
+                .collect()
+        }
+    }
+
+    /// A talking to B, with whatever A sends besides signals kept aside.
+    struct Call {
+        a: Arc<Engine<Wire, Ears>>,
+        a_rx: mpsc::UnboundedReceiver<ClientFrame>,
+        b: Arc<Engine<Wire, Ears>>,
+        b_rx: mpsc::UnboundedReceiver<ClientFrame>,
+        recorder: Arc<Recorder>,
+        reports: Vec<ClientFrame>,
+    }
+    impl Call {
+        /// Carry signals both ways until B has heard `n` more frames from A.
+        async fn hear(&mut self, n: usize) -> bool {
+            let target = self.recorder.frames().len() + n;
+            for _ in 0..800 {
+                while let Ok(frame) = self.a_rx.try_recv() {
+                    match frame {
+                        ClientFrame::VoiceSignal { kind, payload, .. } => {
+                            self.b.on_signal(A, kind, &payload).await;
+                        }
+                        other => self.reports.push(other),
+                    }
+                }
+                while let Ok(ClientFrame::VoiceSignal { kind, payload, .. }) = self.b_rx.try_recv()
+                {
+                    self.a.on_signal(B, kind, &payload).await;
+                }
+                if self.recorder.frames().len() >= target {
+                    return true;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            false
+        }
+
+        /// How loud the last frame B heard was.
+        fn last(&self) -> f64 {
+            rms(&self.recorder.frames().last().unwrap().1)
+        }
+    }
+
+    let room = RoomId::new();
+    let (a_tx, a_rx) = mpsc::unbounded_channel();
+    let a_ears = Arc::new(Ears::default());
+    let a = Arc::new(Engine::new(
+        Arc::new(Wire(a_tx)),
+        Arc::clone(&a_ears),
+        Vec::new(),
+    ));
+    a.set_session(A.to_string()).await;
+    let (b_tx, b_rx) = mpsc::unbounded_channel();
+    let b_ears = Arc::new(Ears::default());
+    let b = Arc::new(Engine::new(
+        Arc::new(Wire(b_tx)),
+        Arc::clone(&b_ears),
+        Vec::new(),
+    ));
+    b.set_session(B.to_string()).await;
+    let mut call = Call {
+        a,
+        a_rx,
+        b,
+        b_rx,
+        recorder: Arc::new(Recorder::default()),
+        reports: Vec::new(),
+    };
+
+    // The key is up before A joins, as the app arranges it.
+    call.a.set_push_to_talk_closed(true);
+    call.a
+        .join(
+            room,
+            Devices {
+                source: Arc::new(Tone::default()),
+                sink: Arc::new(Discard),
+            },
+            Vec::new(),
+        )
+        .await;
+    call.b
+        .join(
+            room,
+            Devices {
+                source: Arc::new(Silence),
+                sink: Arc::clone(&call.recorder) as Arc<dyn Sink>,
+            },
+            Vec::new(),
+        )
+        .await;
+    while call.b_rx.try_recv().is_ok() {}
+    let state = peers(&[A, B]);
+    call.a.on_state(room, &state).await;
+    call.b.on_state(room, &state).await;
+
+    // Key up: B hears A's frames, and every one of them is quiet.
+    assert!(call.hear(25).await, "B never heard A");
+    let loudest = call
+        .recorder
+        .frames()
+        .iter()
+        .map(|(_, frame)| rms(frame))
+        .fold(0.0, f64::max);
+    assert!(
+        loudest < 200.0,
+        "the tone went out before the key was held: rms {loudest}"
+    );
+    assert!(
+        a_ears.of(None).is_empty(),
+        "A was marked talking with the key up"
+    );
+
+    // Held: the tone arrives, on the same connection.
+    call.a.set_push_to_talk_closed(false);
+    assert!(call.hear(25).await);
+    let loud = call.last();
+    assert!(
+        loud > 2000.0,
+        "holding the key didn't open the microphone: rms {loud}"
+    );
+
+    // Let go: quiet again.
+    call.a.set_push_to_talk_closed(true);
+    assert!(call.hear(25).await);
+    let quiet = call.last();
+    assert!(
+        quiet < 200.0,
+        "letting go didn't close the microphone: rms {quiet}"
+    );
+
+    // The talking mark followed the key, for A and for B.
+    assert_eq!(a_ears.of(None), vec![true, false]);
+    assert!(
+        b_ears.of(Some(A)).starts_with(&[true, false]),
+        "B's mark for A: {:?}",
+        b_ears.of(Some(A))
+    );
+    // And the room was told nothing but the join, which said the mic was on.
+    let controls: Vec<_> = call
+        .reports
+        .iter()
+        .filter_map(|frame| match frame {
+            ClientFrame::VoiceJoin { controls, .. } => Some(*controls),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(controls, vec![Some(VoiceControls::default())]);
+    call.a.leave().await;
+    call.b.leave().await;
 }
 
 /// The microphone loop stops when the source does, and says so. Until

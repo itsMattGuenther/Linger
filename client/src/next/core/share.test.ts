@@ -798,16 +798,17 @@ describe("a viewer window sharing the owner's connection", () => {
 
     // Push-to-talk off: the key does nothing to the microphone.
     await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.audio).toBeDefined());
-    const before = controls().length;
+    await vi.waitFor(() => expect(invoked.map((call) => call.cmd)).toContain("voice_join"));
+    const before = invoked.length;
     await follower.intend({ kind: "voice.talk", down: true });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(controls().length).toBe(before);
-    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false);
+    expect(invoked.slice(before)).toEqual([]);
+    expect(controls()).toEqual([{ muted: false, deafened: false }]);
+    expect(owner.gateway.serverState(HOME).myVoice).toMatchObject({ muted: false, talkHeld: false });
     follower.stop();
   });
 
-  it("with push-to-talk on, the key held in the chat window opens the microphone and letting go closes it", async () => {
+  it("with push-to-talk on, the key held in the chat window opens the microphone and letting go closes it, never muting (#232)", async () => {
     const saved = new Map([["linger.voice.pushToTalk", "true"]]);
     vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
     const { owner, viewer, core } = await windows();
@@ -819,13 +820,19 @@ describe("a viewer window sharing the owner's connection", () => {
 
     await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
     await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
-    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true);
+    const gate = () => invoked.filter((call) => call.cmd === "voice_push_to_talk").map((call) => call.args.closed);
+    await vi.waitFor(() => expect(gate()).toEqual([true]));
 
     await follower.intend({ kind: "voice.talk", down: true });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(true));
     await follower.intend({ kind: "voice.talk", down: false });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
-    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(false));
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.talkHeld).toBe(false));
+    expect(gate()).toEqual([true, false, true]);
+    // Never a mute: the room is only ever told the microphone is on.
+    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false);
+    expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(false);
+    expect(invoked.filter((call) => call.cmd === "voice_controls").map((call) => call.args.controls)).toEqual([{ muted: false, deafened: false }]);
     follower.stop();
   });
 
@@ -843,20 +850,21 @@ describe("a viewer window sharing the owner's connection", () => {
 
     // Ctrl down, then Ctrl+W: the window is gone before the key comes up.
     await follower.intend({ kind: "voice.talk", down: true });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(true));
     hub.broadcast(owner.share.CLOSED, "chat");
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(false));
+    expect(invoked.filter((call) => call.cmd === "voice_push_to_talk").at(-1)?.args.closed).toBe(true);
 
     // A window that let go before it closed changes nothing when it goes.
     await follower.intend({ kind: "voice.talk", down: true });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(false));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(true));
     await follower.intend({ kind: "voice.talk", down: false });
-    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true));
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(false));
     const said = invoked.length;
     hub.broadcast(owner.share.CLOSED, "chat");
     await new Promise((settle) => setTimeout(settle, 20));
     expect(invoked.slice(said)).toEqual([]);
-    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true);
+    expect(owner.gateway.serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: false });
     follower.stop();
   });
 

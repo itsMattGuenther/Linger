@@ -17,6 +17,7 @@
     "allow-voice-leave",
     "allow-voice-frame",
     "allow-voice-controls",
+    "allow-voice-push-to-talk",
     "allow-voice-volume",
     "allow-voice-devices",
     "allow-show-notification",

@@ -106,10 +106,20 @@ export async function voiceLeave(baseUrl: string): Promise<void> {
   await invoke("voice_leave", { baseUrl });
 }
 
-/** Stop or resume sending the microphone. Local and yours alone (SPEC §4.14). */
+/** Mute and deafen: stop or resume sending the microphone, and tell the room. Yours alone (SPEC §4.14). */
 export async function voiceControls(baseUrl: string, controls: VoiceControls): Promise<void> {
   if (!isTauri()) return;
   await invoke("voice_controls", { baseUrl, controls });
+}
+
+/**
+ * Push-to-talk's microphone: closed while its key is up, open while it's
+ * held. Silence goes out just as with mute, but nothing is told to the room,
+ * so not holding the key never shows as muted (#232).
+ */
+export async function voicePushToTalk(baseUrl: string, closed: boolean): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("voice_push_to_talk", { baseUrl, closed });
 }
 
 /** How loud one peer (a session id) plays for you: 1 is as sent, 2 is the ceiling. */
