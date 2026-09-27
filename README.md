@@ -8,7 +8,11 @@
 
 One person runs a server; their friends install the app and connect to it.
 Text rooms, voice rooms, DMs, file sharing, and a buddy list that shows who's
-around. Not federated, not a platform, no company in the middle.
+around. Not federated, not a platform, no company in the middle. Built for a
+dinner party of eight, not a stadium of fifty thousand strangers.
+
+> To linger is to stay somewhere with no agenda and no obligation to be doing
+> anything. That is the product thesis in one word.
 
 <div align="center">
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
@@ -18,16 +22,6 @@ around. Not federated, not a platform, no company in the middle.
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
-## 🧭 Why this exists
-
-The big chat platforms are built for a stadium of fifty thousand strangers. Linger is
-built for a dinner party of eight. Every feature decision resolves against three
-principles, in order:
-
-1. **Presence over messages.** The app should feel alive when nobody is typing.
-2. **Remove obligation.** No counters, no streaks, no red dots, no "you're behind."
-3. **Keep the artifact.** Photos, clips, links, and jokes don't scroll away into nothing.
-
 ## 🏠 The case for running your own
 
 There was a stretch of the internet where a group of friends just *had* a place. Somebody
@@ -36,7 +30,7 @@ was a few files on a machine somebody owned. Then everyone moved into one enormo
 building owned by a company, and the terms changed:
 
 - **Your conversations sit on someone else's disk, and the company's business depends on
-  what it can learn from them.** You are not the customer.
+  what it can learn from them.**
 - **Features get held back and sold back to you.** The free experience gets a little
   worse on purpose, because friction is what makes an upsell work. That is not a bug in
   the design... it *is* the design.
