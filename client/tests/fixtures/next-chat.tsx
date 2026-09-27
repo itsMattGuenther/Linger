@@ -16,6 +16,8 @@
  * - `?file`: Sam shares a PDF in #general; `&downloadfail` has the desktop
  *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
+ * - `?voicefail=<the shell's reason>`: starting voice in the tab showing
+ *   failed last time (#261); `&windows` words it for Windows.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -31,6 +33,7 @@ import { type ChatPane, ChatView } from "../../src/next/app/chat/ChatView";
 import type { DraftFile } from "../../src/next/app/chat/Composer";
 import type { Submission } from "../../src/next/core/chat/sending";
 import { voiceStrip } from "../../src/next/core/chat/voice";
+import { voiceStartProblem } from "../../src/lib/voice";
 import { closeTab, keyOf, openTab, selectTab, type TabKey, type Tabs } from "../../src/next/core/tabs";
 import { markerOf, type TabItem } from "../../src/next/kit";
 import "../../src/next/styles/app.css";
@@ -44,6 +47,7 @@ const VOICE = query.get("voice") ?? "others";
 const PAGE = 150;
 
 const LONG = query.has("long");
+const VOICE_FAIL = query.get("voicefail");
 const everyone: ReadonlyMap<string, User> = new Map(
   Object.values(people).map((user) => [
     user.id,
@@ -342,7 +346,15 @@ function Fixture() {
               onKnock: dmPeople(room).length === 1 ? () => note("knock") : undefined,
             }
           : { kind: "room", name: room.name, topic: room.topic, people: (IN_ROOM[room.id] ?? []).flatMap((one) => everyone.get(one) ?? []) },
-      voice: room.kind === "dm" ? null : { strip: voiceStrip(id, voice, me.id, myVoice), onJoin, controls: myVoice === id ? controls : undefined },
+      voice:
+        room.kind === "dm"
+          ? null
+          : {
+              strip: voiceStrip(id, voice, me.id, myVoice),
+              onJoin,
+              controls: myVoice === id ? controls : undefined,
+              failed: VOICE_FAIL === null ? undefined : { line: voiceStartProblem(VOICE_FAIL, query.has("windows")), detail: VOICE_FAIL },
+            },
       people: everyone,
       me,
       speaking: SPEAKING,

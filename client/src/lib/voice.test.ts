@@ -4,6 +4,7 @@ import type { User } from "../generated/User";
 import type { VoicePeer } from "../generated/VoicePeer";
 import {
   clampVolume,
+  voiceStartProblem,
   DEFAULT_VOICE_PREFS,
   loadVoicePrefs,
   microphoneLine,
@@ -184,5 +185,22 @@ describe("preferences", () => {
     expect(loadVoicePrefs().forwarding).toBe(false);
     window.localStorage.setItem("linger.voice.forwarding", "anything else");
     expect(loadVoicePrefs().forwarding).toBe(true);
+  });
+});
+
+describe("voiceStartProblem (#261)", () => {
+  it.each([
+    ["the microphone wouldn't open: no input device", false, "No microphone found. Plug one in, or pick one in Settings."],
+    ["the speakers wouldn't open: no output device", false, "No speakers found. Plug some in, or pick them in Settings."],
+    ["the microphone wouldn't open: Permission denied. Grant the required access and retry.", true, "Windows' privacy settings are blocking the microphone."],
+    ["the microphone wouldn't open: Permission denied. Grant the required access and retry.", false, "Linger isn't allowed to use the microphone."],
+    ["the speakers wouldn't open: Permission denied.", true, "Linger isn't allowed to use the speakers."],
+    ["the microphone wouldn't open: The requested device is temporarily busy.", false, "The microphone is in use by another app."],
+    ["the speakers wouldn't open: The requested device is temporarily busy.", false, "The speakers are in use by another app."],
+    ["the microphone wouldn't open: the input device produces dsdu8 samples, which this build cannot read", false, "The microphone wouldn't open."],
+    ["Voice only works in the desktop app.", false, "Voice only works in the desktop app."],
+    ["Not connected yet.", false, "Something went wrong. Try again."],
+  ])("%s (windows: %s)", (problem, windows, line) => {
+    expect(voiceStartProblem(problem, windows)).toBe(line);
   });
 });

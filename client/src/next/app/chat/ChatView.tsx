@@ -48,7 +48,14 @@ export interface ChatPane {
   id: string;
   header: PaneHeaderProps;
   /** Voice in this conversation, or null where there's none to offer. */
-  voice: { strip: VoiceStripModel; onJoin: () => void; mics?: ReadonlyMap<string, "muted" | "deafened">; controls?: StripControls } | null;
+  voice: {
+    strip: VoiceStripModel;
+    onJoin: () => void;
+    mics?: ReadonlyMap<string, "muted" | "deafened">;
+    controls?: StripControls;
+    /** Starting voice here failed last time: why, short, and the whole reason (#261). */
+    failed?: { line: string; detail: string };
+  } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
   me: User | null;
@@ -187,7 +194,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={single ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
           {single ? null : <PaneHeader {...pane.header} />}
-          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} controls={pane.voice.controls} /> : null}
+          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} controls={pane.voice.controls} failed={pane.voice.failed} /> : null}
           <Conversation
             key={pane.id}
             id={pane.id}
