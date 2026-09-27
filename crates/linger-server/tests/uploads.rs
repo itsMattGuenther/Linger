@@ -10,7 +10,7 @@ mod common;
 use common::{
     bootstrap_host, join_member, server_with_room, spawn_server, spawn_tuned, TestServer,
 };
-use linger_core::wire::{Attachment, CompletedPart, Message, UploadSlot};
+use linger_core::wire::{Attachment, AuthResponse, CompletedPart, Message, UploadSlot};
 use reqwest::StatusCode;
 
 const PART: u64 = 8 * 1024 * 1024;
@@ -316,6 +316,226 @@ async fn a_plain_file_is_handed_over_as_a_download() {
         .to_str()
         .unwrap()
         .starts_with("attachment;"));
+}
+
+// ---------------------------------------------------------------------------
+// Serving part of a file (#222)
+// ---------------------------------------------------------------------------
+
+/// A video as far as the server can tell: an MP4 `ftyp` box, which is what it
+/// sniffs, then bytes nothing could play. ffprobe finding nothing in them is
+/// the same path as a server without ffmpeg, so no toolchain is needed.
+fn fake_video(len: usize) -> Vec<u8> {
+    let mut bytes = vec![0, 0, 0, 0x18];
+    bytes.extend_from_slice(b"ftypisom");
+    let rest = len - bytes.len();
+    bytes.extend(filler(rest));
+    bytes
+}
+
+/// `GET` a served file, with a `Range` header or without one.
+async fn fetch(url: &str, range: Option<&str>) -> reqwest::Response {
+    let mut request = client().get(url);
+    if let Some(range) = range {
+        request = request.header(reqwest::header::RANGE, range);
+    }
+    request.send().await.unwrap()
+}
+
+const VIDEO_LEN: usize = 100_000;
+
+/// A server with one video on it, its host, and where that video is served.
+async fn server_with_video() -> (TestServer, AuthResponse, String, Vec<u8>) {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let video = fake_video(VIDEO_LEN);
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "clip.mp4",
+        "video/mp4",
+        video.clone(),
+    )
+    .await;
+    assert_eq!(attachment.mime, "video/mp4");
+    let url = absolute(&server, &attachment.url);
+    (server, host, url, video)
+}
+
+#[tokio::test]
+async fn a_video_is_served_in_the_pieces_a_player_asks_for() {
+    let (_server, _host, url, video) = server_with_video().await;
+
+    // Asked for nothing in particular: all of it, and word that pieces work.
+    let whole = fetch(&url, None).await;
+    assert_eq!(whole.status(), 200);
+    assert_eq!(whole.headers()["accept-ranges"], "bytes");
+    assert_eq!(whole.headers()["content-length"], VIDEO_LEN.to_string());
+    assert!(whole.headers().get("content-range").is_none());
+    assert_eq!(whole.bytes().await.unwrap(), video);
+
+    for (range, start, end) in [
+        // The first request a player makes, and a plain slice.
+        ("bytes=0-", 0, VIDEO_LEN - 1),
+        ("bytes=0-99", 0, 99),
+        // A seek: from somewhere in the middle to the end.
+        ("bytes=50000-", 50_000, VIDEO_LEN - 1),
+        // The last n bytes, which is where an MP4's index often lives.
+        ("bytes=-1000", VIDEO_LEN - 1000, VIDEO_LEN - 1),
+        // Running past the end is cut to the end; asking for more than there
+        // is gets all of it.
+        ("bytes=99990-200000", 99_990, VIDEO_LEN - 1),
+        ("bytes=-500000", 0, VIDEO_LEN - 1),
+        // The last byte on its own.
+        ("bytes=99999-99999", VIDEO_LEN - 1, VIDEO_LEN - 1),
+    ] {
+        let part = fetch(&url, Some(range)).await;
+        assert_eq!(part.status(), 206, "{range}");
+        assert_eq!(
+            part.headers()["content-range"],
+            format!("bytes {start}-{end}/{VIDEO_LEN}"),
+            "{range}"
+        );
+        assert_eq!(
+            part.headers()["content-length"],
+            (end - start + 1).to_string(),
+            "{range}"
+        );
+        assert_eq!(part.bytes().await.unwrap(), video[start..=end], "{range}");
+    }
+}
+
+#[tokio::test]
+async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
+    let (server, host, video_url, _) = server_with_video().await;
+    let download = upload(
+        &server,
+        &host.access_token,
+        "notes.txt",
+        "text/plain",
+        filler(4096),
+    )
+    .await;
+    let download_url = absolute(&server, &download.url);
+
+    // What keeps a hostile upload harmless has to hold for a slice of it too:
+    // a browser treats a 206 as the same file.
+    for url in [&video_url, &download_url] {
+        let whole = fetch(url, None).await;
+        let part = fetch(url, Some("bytes=10-19")).await;
+        assert_eq!(part.status(), 206);
+        for name in [
+            "content-type",
+            "x-content-type-options",
+            "content-disposition",
+            "content-security-policy",
+            "cache-control",
+            "cross-origin-resource-policy",
+            "accept-ranges",
+        ] {
+            assert!(whole.headers().contains_key(name), "{name} on {url}");
+            assert_eq!(
+                part.headers().get(name),
+                whole.headers().get(name),
+                "{name} on {url}"
+            );
+        }
+    }
+
+    let part = fetch(&video_url, Some("bytes=10-19")).await;
+    assert_eq!(part.headers()["content-type"], "video/mp4");
+    assert_eq!(part.headers()["x-content-type-options"], "nosniff");
+    assert!(part.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .starts_with("inline;"));
+    assert_eq!(
+        part.headers()["content-security-policy"],
+        "default-src 'none'; sandbox"
+    );
+    assert_eq!(
+        part.headers()["cache-control"],
+        "public, max-age=31536000, immutable"
+    );
+
+    let part = fetch(&download_url, Some("bytes=10-19")).await;
+    assert_eq!(part.headers()["content-type"], "application/octet-stream");
+    assert!(part.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .starts_with("attachment;"));
+}
+
+#[tokio::test]
+async fn a_range_past_the_end_is_refused_with_the_real_length() {
+    let (_server, _host, url, _) = server_with_video().await;
+    for range in [
+        "bytes=100000-",
+        "bytes=100000-100010",
+        "bytes=250000-",
+        // Zero bytes from the end is no bytes at all.
+        "bytes=-0",
+    ] {
+        let refused = fetch(&url, Some(range)).await;
+        assert_eq!(refused.status(), 416, "{range}");
+        assert_eq!(
+            refused.headers()["content-range"],
+            format!("bytes */{VIDEO_LEN}"),
+            "{range}"
+        );
+        assert_eq!(refused.headers()["accept-ranges"], "bytes", "{range}");
+        assert_eq!(refused.headers()["x-content-type-options"], "nosniff");
+        // An empty answer must never be cached as the file.
+        assert_eq!(refused.headers()["cache-control"], "no-store", "{range}");
+        assert!(refused.bytes().await.unwrap().is_empty(), "{range}");
+    }
+}
+
+#[tokio::test]
+async fn anything_but_one_plain_range_gets_the_whole_file() {
+    let (_server, _host, url, video) = server_with_video().await;
+    for range in [
+        // Several ranges would need a multipart body no player asks for.
+        "bytes=0-1,5-6",
+        "bytes=0-99, 200-299",
+        // Backwards, empty, not numbers, not bytes, no unit.
+        "bytes=5-2",
+        "bytes=",
+        "bytes=-",
+        "bytes=abc",
+        "bytes=10-abc",
+        "items=0-5",
+        "0-5",
+    ] {
+        let whole = fetch(&url, Some(range)).await;
+        assert_eq!(whole.status(), 200, "{range}");
+        assert!(whole.headers().get("content-range").is_none(), "{range}");
+        assert_eq!(whole.headers()["accept-ranges"], "bytes", "{range}");
+        assert_eq!(whole.bytes().await.unwrap(), video, "{range}");
+    }
+
+    // Two Range headers are two ranges.
+    let twice = client()
+        .get(&url)
+        .header(reqwest::header::RANGE, "bytes=0-9")
+        .header(reqwest::header::RANGE, "bytes=20-29")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(twice.status(), 200);
+    assert_eq!(twice.bytes().await.unwrap(), video);
+
+    // A range that only holds if the file hasn't changed, checked against a
+    // validator this server never gave out, can't be trusted to line up.
+    let conditional = client()
+        .get(&url)
+        .header(reqwest::header::RANGE, "bytes=0-9")
+        .header(reqwest::header::IF_RANGE, "\"some-etag\"")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(conditional.status(), 200);
+    assert_eq!(conditional.bytes().await.unwrap(), video);
 }
 
 // ---------------------------------------------------------------------------
