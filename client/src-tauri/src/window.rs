@@ -480,10 +480,106 @@ mod tests {
     use super::{
         at_message, buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
         conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window,
-        Client,
+        Client, CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
     };
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
+
+    /// Whether a capability's `windows` entry names this label: exactly, or
+    /// by a trailing `*` (`chat-*`), the only pattern the files use.
+    fn names(pattern: &str, label: &str) -> bool {
+        match pattern.strip_suffix('*') {
+            Some(prefix) => {
+                assert!(
+                    !prefix.contains('*'),
+                    "a pattern this test can't read: {pattern}"
+                );
+                label.starts_with(prefix)
+            }
+            None => pattern == label,
+        }
+    }
+
+    /// Every permission granted to a window with this label, from every
+    /// capability file that names it.
+    fn permissions_of(label: &str) -> Vec<String> {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+        let mut granted = Vec::new();
+        for entry in std::fs::read_dir(dir).expect("the capabilities folder") {
+            let text = std::fs::read_to_string(entry.expect("a capability file").path())
+                .expect("a readable capability file");
+            let capability: serde_json::Value =
+                serde_json::from_str(&text).expect("a capability is JSON");
+            let windows = capability["windows"].as_array().expect("windows");
+            if !windows
+                .iter()
+                .any(|pattern| names(pattern.as_str().unwrap_or(""), label))
+            {
+                continue;
+            }
+            for permission in capability["permissions"].as_array().expect("permissions") {
+                let id = permission
+                    .as_str()
+                    .or_else(|| permission["identifier"].as_str())
+                    .unwrap_or("");
+                granted.push(id.to_string());
+            }
+        }
+        granted
+    }
+
+    /// Every window Linger opens is frameless and moved by its own title bar
+    /// (the kit's `TitleBar`), which asks Tauri to start a drag, and to
+    /// maximize on a double press. A window not granted those calls has a
+    /// title bar that silently does nothing, which on Windows leaves it
+    /// where it opened (#225).
+    #[test]
+    fn every_window_linger_opens_may_be_moved_by_its_title_bar() {
+        let conversation = conversation_label("https://home.example", "r-general");
+        for label in [OWNER, CHAT, conversation.as_str(), SETTINGS, SEARCH, MEDIA] {
+            let granted = permissions_of(label);
+            assert!(
+                granted
+                    .iter()
+                    .any(|id| id == "core:window:allow-start-dragging"),
+                "{label} may not start a drag, so its title bar can't move it"
+            );
+            assert!(
+                granted.iter().any(|id| matches!(
+                    id.as_str(),
+                    "core:default"
+                        | "core:window:default"
+                        | "core:window:allow-internal-toggle-maximize"
+                )),
+                "{label} may not maximize from its title bar"
+            );
+        }
+    }
+
+    /// The browser tests copy Tauri's rule for which presses move a window
+    /// (`client/tests/browser/tauri-drag.ts`), since a browser has no Tauri.
+    /// A copy of another Tauri's rule would prove nothing, so after an
+    /// upgrade this fails until somebody has compared Tauri's `drag.js` with
+    /// the copy and brought the copy's version up to date.
+    #[test]
+    fn the_title_bar_tests_know_the_tauri_they_copy() {
+        let tauri = include_str!("../Cargo.lock")
+            .split("[[package]]")
+            .find(|package| package.contains("\nname = \"tauri\"\n"))
+            .and_then(|package| {
+                package
+                    .lines()
+                    .find_map(|line| line.strip_prefix("version = \""))
+            })
+            .map(|version| version.trim_end_matches('"'))
+            .expect("tauri in Cargo.lock");
+        let copy = include_str!("../../tests/browser/tauri-drag.ts");
+        assert!(
+            copy.contains(&format!("TAURI_DRAG_VERSION = \"{tauri}\"")),
+            "Tauri is now {tauri}: compare its src/window/scripts/drag.js with the copy in \
+             client/tests/browser/tauri-drag.ts, then update the copy and TAURI_DRAG_VERSION"
+        );
+    }
 
     #[test]
     fn the_buddy_list_opens_unless_linger_classic_is_1() {

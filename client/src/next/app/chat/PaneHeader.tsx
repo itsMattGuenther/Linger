@@ -39,30 +39,26 @@ export interface ServerTag {
  */
 /**
  * `place`: its own row under the tabs (the default), or inside the title bar
- * of a conversation's own window, where the title bar is the header and the
- * window is dragged by it.
+ * of a conversation's own window, where the title bar is the header. The
+ * window is dragged by any of it but the Knock button: the title bar is the
+ * drag region, everything inside included (TitleBar.tsx).
  */
 export const PaneHeader = memo(function PaneHeader({ place = "row", ...props }: PaneHeaderProps & { place?: "row" | "title" }) {
   const tag = props.server ? <ServerChip server={props.server} /> : null;
   const Box = place === "title" ? "div" : "header";
-  const drag = place === "title" ? { "data-tauri-drag-region": "" } : {};
   if (props.kind === "room") {
     return (
-      <Box className="nx-pane-head" data-kind="room" data-place={place} {...drag}>
-        <span className="nx-pane-name" {...drag}>
+      <Box className="nx-pane-head" data-kind="room" data-place={place}>
+        <span className="nx-pane-name">
           <HashMark />
-          <h2 className="nx-pane-title" {...drag}>
-            {props.name}
-          </h2>
+          <h2 className="nx-pane-title">{props.name}</h2>
         </span>
         {props.people.length > 0 ? <MarkerCluster people={props.people.map((user) => markerOf(user, "in_room"))} /> : null}
         {tag}
         {props.topic ? (
-          <p className="nx-pane-sub" {...drag}>
-            {props.topic}
-          </p>
+          <p className="nx-pane-sub">{props.topic}</p>
         ) : (
-          <span className="nx-pane-fill" {...drag} />
+          <span className="nx-pane-fill" />
         )}
       </Box>
     );
@@ -71,22 +67,18 @@ export const PaneHeader = memo(function PaneHeader({ place = "row", ...props }: 
   const single = props.people.length === 1 && only ? only : null;
   const status = single ? (single.user.status?.away_message ?? single.user.status?.line ?? null) : null;
   return (
-    <Box className="nx-pane-head" data-kind="dm" data-place={place} {...drag}>
+    <Box className="nx-pane-head" data-kind="dm" data-place={place}>
       {single ? (
         <Marker {...markerOf(single.user, single.state)} />
       ) : (
         <GroupMarker people={props.people.map(({ user, state }) => markerOf(user, state))} />
       )}
-      <h2 className="nx-pane-title" {...drag}>
-        {props.label}
-      </h2>
+      <h2 className="nx-pane-title">{props.label}</h2>
       {tag}
       {status ? (
-        <p className="nx-pane-sub" {...drag}>
-          {status}
-        </p>
+        <p className="nx-pane-sub">{status}</p>
       ) : (
-        <span className="nx-pane-fill" {...drag} />
+        <span className="nx-pane-fill" />
       )}
       {props.onKnock ? (
         <Button size="sm" variant="secondary" icon="knock" disabled={props.knocked} onClick={props.onKnock}>

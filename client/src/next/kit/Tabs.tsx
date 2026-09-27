@@ -56,7 +56,8 @@ export interface TabStripProps {
  * When there are more tabs than fit, the row scrolls sideways and keeps the
  * showing tab in view. With `onMove`, a tab can be dragged along the row:
  * the others slide aside to show where it will land, and a press that moves
- * less than a few pixels is still a click.
+ * less than a few pixels is still a click. In a `TitleBar`, the row's empty
+ * space moves the window and the tabs never do.
  */
 export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, panelIdPrefix }: TabStripProps) {
   const strip = useRef<HTMLDivElement | null>(null);
@@ -184,6 +185,9 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
             data-dragged={drag?.id === tab.id ? "yes" : undefined}
             style={{ ...stripeStyle(tab.stripe), ...(shift === 0 ? {} : { transform: `translateX(${shift}px)` }) }}
             role="presentation"
+            // A press on a tab is the tab's, to show it or drag it along the
+            // row, never the window's (TitleBar.tsx).
+            data-tauri-drag-region="false"
             onPointerDown={(event) => onPointerDown(event, tab.id, index)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
