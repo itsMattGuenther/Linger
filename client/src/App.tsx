@@ -415,7 +415,7 @@ export function Console({
   // and drawn as its own section — a DM is not one of the server's rooms and
   // putting it in that list would be the first step towards it being treated
   // as one.
-  const dms = orderDms(gateway.dms, (room) => hasNewActivity(gateway, room.id));
+  const dms = orderDms(gateway.dms, (room) => hasNewActivity(gateway, room.id), gateway.newest);
   // Everything the stream can be opened on. Land in the first room, and don't
   // hold a room that was archived, a DM you are no longer in, or anything this
   // account can no longer see.

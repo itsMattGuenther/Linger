@@ -63,6 +63,30 @@ test("lists DMs by who is in them, with the new one first", async ({ page }) => 
   await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
 });
 
+// The order used to be the order at connect for the whole session: the
+// store's newest message wasn't part of it (#248).
+test("a new message moves its DM to the top, theirs or yours, and reading it doesn't move it back", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?live");
+  await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
+  type Live = { said: (roomId: string, authorId: string) => void; read: (roomId: string) => void };
+  const live = (act: (linger: Live) => void) => page.evaluate(`(${act.toString()})(window.linger)`);
+  // The Jules DM holds something new; the Eli and Sam one was spoken in later.
+  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
+  await live((linger) => linger.read("d-jules"));
+  await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
+
+  await live((linger) => linger.said("d-jules", "u-jules"));
+  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
+  await live((linger) => linger.read("d-jules"));
+  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
+
+  await live((linger) => {
+    linger.said("d-eli-sam", "u-matt");
+    linger.read("d-eli-sam");
+  });
+  await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
+});
+
 test("with no DMs yet, the heading and its New message button are still there", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?nodms");
   await expect(page.locator("#nx-dms")).toHaveText("No DMs yet.");

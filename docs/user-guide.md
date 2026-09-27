@@ -258,8 +258,9 @@ Linger is one tall window: your **list**. From the top:
 - **Rooms**: each with the dots of who's in it, and a speaker when people are
   talking there. A room's name turns bold when something new is said. On a
   server with more than eight rooms, the quiet ones fold under **More rooms**.
-- **DMs**: your direct messages, named by who's in them. The pencil starts a
-  new one.
+- **DMs**: your direct messages, named by who's in them. One with something
+  new in it is bold and at the top; the rest go by the latest message, yours
+  or theirs, so quiet ones sink. The pencil starts a new one.
 - **People**: everyone on the server, with where they are and their status.
   **Away** and **Offline** fold up under them.
 
