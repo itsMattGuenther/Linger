@@ -306,6 +306,8 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   keyboard way, Ctrl+Shift+PageUp and PageDown (`core/keys.ts`).
 - **Overflow:** more tabs than fit scroll sideways, the showing tab stays in
   view, and the edge with more beyond it fades.
+- **In a title bar:** the row's empty space, and the strip above the tabs,
+  move the window; a press on a tab never does.
 
 ### TitleBar
 
@@ -313,8 +315,12 @@ The top of every Linger window, drawn by Linger (decided 2026-09-25), 40px.
 
 - **Parts:** `leading` (a mark), the title or a `TabStrip`, `actions`, and an
   optional close button.
-- **Drag region:** the bar is `data-tauri-drag-region`; its buttons stay
-  clickable.
+- **Drag region:** a press anywhere on the bar moves the window: the title,
+  the mark, a `TabStrip`'s empty space, a conversation's header. Buttons,
+  links, fields and tabs stay theirs. The bar is
+  `data-tauri-drag-region="deep"`, and a tab is `"false"`. A bare
+  `data-tauri-drag-region` counts only for a press on that very element,
+  not on what's inside it, which left the chat window's tab row dead (#225).
 - **Focus:** `focused={false}` dims it.
 - **Long titles:** plain-text titles end in "…".
 
@@ -610,6 +616,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |
 | Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
 | A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
+| A press anywhere on a title bar but a control moves the window, in the kit and in every window; in the chat window that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |

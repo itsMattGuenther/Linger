@@ -18,21 +18,22 @@ export interface TitleBarProps {
 
 /**
  * The top of every Linger window, drawn by Linger rather than by the system
- * (decided with Matt, 2026-09-25), so it looks the same everywhere. The bar is
- * a drag region for the desktop app; buttons inside it stay clickable.
+ * (decided with Matt, 2026-09-25), so it looks the same everywhere. A press
+ * anywhere on the bar moves the window, whatever is drawn there (the title,
+ * a mark, a `TabStrip`'s empty space, a conversation's header), and controls
+ * inside it stay theirs: buttons, links, fields, tabs.
+ *
+ * That is Tauri's `data-tauri-drag-region="deep"`. A bare
+ * `data-tauri-drag-region` counts only for a press on that very element, not
+ * on anything inside it, so a bar marked that way is dead wherever its
+ * content covers it: the tab row covered all of the chat window's (#225).
  */
 export function TitleBar({ leading, children, actions, focused = true, onClose, closeLabel = "Close window" }: TitleBarProps) {
   return (
-    <header className="k-titlebar" data-kit="TitleBar" data-focused={focused ? "yes" : "no"} data-tauri-drag-region="">
+    <header className="k-titlebar" data-kit="TitleBar" data-focused={focused ? "yes" : "no"} data-tauri-drag-region="deep">
       {leading ? <span className="k-titlebar-lead">{leading}</span> : null}
-      <div className="k-titlebar-title" data-tauri-drag-region="">
-        {typeof children === "string" ? (
-          <span className="k-titlebar-text" data-tauri-drag-region="">
-            {children}
-          </span>
-        ) : (
-          children
-        )}
+      <div className="k-titlebar-title">
+        {typeof children === "string" ? <span className="k-titlebar-text">{children}</span> : children}
       </div>
       {actions ? <span className="k-titlebar-actions">{actions}</span> : null}
       {onClose ? <IconButton icon="close" label={closeLabel} tone="danger" onClick={onClose} /> : null}
