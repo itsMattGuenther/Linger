@@ -208,7 +208,8 @@ test("every chime renders offline, stays short and quiet, and ends in silence", 
   expect(new Set(rendered.map((cue) => cue.fingerprint)).size).toBe(12);
   for (const cue of rendered) {
     expect(cue.peak, cue.cue).toBeGreaterThan(0.01);
-    expect(cue.peak, cue.cue).toBeLessThan(0.2);
+    // The knock plays at twice its first level (#252); nothing else changed.
+    expect(cue.peak, cue.cue).toBeLessThan(cue.cue === "knock" ? 0.4 : 0.2);
     expect(cue.beginning && cue.end, cue.cue).toBe(true);
     expect(cue.discontinuity, cue.cue).toBeLessThan(0.02);
   }
