@@ -41,12 +41,13 @@ export const QUIET_STEP_MINUTES = 30;
 /**
  * The top of the sound volume: 400% of the score as written (#234).
  *
- * Measured, not guessed. Rendered offline, the loudest cue at 100% is the
- * knock, whose first tap peaks at 0.16 of full scale; the loudest chime,
- * voice-move, peaks at 0.052, and a DM at 0.042. At 400% the knock peaks at
- * 0.64, which leaves room below clipping (1.0) even when a chime lands on top
- * of it. 500% would take the knock to 0.80. `chime-onset.spec.ts` renders
- * every cue at this setting and fails if any peaks above 0.8.
+ * Measured, not guessed. Rendered offline, the loudest chime at 100%,
+ * voice-move, peaks at 0.052 of full scale, and a DM at 0.042; at 400% they
+ * are 0.21 and 0.17. The knock is written louder (#252: its first tap peaks
+ * at 0.32, because a low thud is hard to hear), so it stops getting louder at
+ * `KNOCK_TOP_VOLUME` (chimes.ts), about 0.77, clear of clipping (1.0) even
+ * when a chime lands on top of it. `chime-onset.spec.ts` renders every cue at
+ * this setting and fails if any peaks above 0.8.
  */
 export const MAX_SOUND_VOLUME = 4;
 

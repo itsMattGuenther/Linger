@@ -25,8 +25,10 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
   "voice-move": { notes: [F, E, A], gain: 0.043, spacing: 0.08, decay: 0.22 },
   "peer-join": { notes: [A, D * 2], gain: 0.032, spacing: 0.09, decay: 0.2 },
   "peer-leave": { notes: [D * 2, A], gain: 0.028, spacing: 0.09, decay: 0.2 },
-  mute: { notes: [F, D], gain: 0.03, spacing: 0.065, decay: 0.14 },
-  unmute: { notes: [D, F], gain: 0.03, spacing: 0.065, decay: 0.14 },
+  // Short and low, so written louder than their neighbours to be heard as
+  // well: 1.6 times the first score (#252).
+  mute: { notes: [F, D], gain: 0.048, spacing: 0.065, decay: 0.14 },
+  unmute: { notes: [D, F], gain: 0.048, spacing: 0.065, decay: 0.14 },
   deafen: { notes: [A, E, D], gain: 0.03, spacing: 0.07, decay: 0.17 },
   undeafen: { notes: [D, E, A], gain: 0.03, spacing: 0.07, decay: 0.17 },
   dm: { notes: [B, F * 2], gain: 0.038, spacing: 0.13, decay: 0.28 },
@@ -92,6 +94,23 @@ function tap(ctx: BaseAudioContext, out: AudioNode, at: number, volume: number):
 }
 
 /**
+ * The knock's two taps (#252). Twice their first level: a thud sliding from
+ * 180 to 90 Hz is what ears hear least at low volume and laptop speakers
+ * barely play, so at the first level it was the hardest cue to hear, well
+ * below a DM, though it peaked highest.
+ */
+const KNOCK_TAPS = [0.32, 0.24] as const;
+
+/**
+ * The most the knock takes of the sound volume (#252). At twice its first
+ * level the thud would pass full scale near the top of the slider, so it
+ * stops getting louder here, its first tap at about 0.77 of full scale, and
+ * every other cue goes on to `MAX_SOUND_VOLUME`. At this setting it is as
+ * loud as the first knock would have been at 480%.
+ */
+export const KNOCK_TOP_VOLUME = 2.4;
+
+/**
  * Schedule only after the caller has checked mute, quiet hours and category
  * switches.
  *
@@ -108,11 +127,11 @@ export function scheduleChime(
   volume = 1,
 ): void {
   const out = ctx.createGain();
-  out.gain.value = volume;
+  out.gain.value = cue === "knock" ? Math.min(volume, KNOCK_TOP_VOLUME) : volume;
   out.connect(ctx.destination);
   if (cue === "knock") {
-    tap(ctx, out, at, 0.16);
-    tap(ctx, out, at + 0.14, 0.12);
+    tap(ctx, out, at, KNOCK_TAPS[0]);
+    tap(ctx, out, at + 0.14, KNOCK_TAPS[1]);
     return;
   }
   const chime = CHIMES[cue];
