@@ -11,7 +11,8 @@ import type { Room } from "../../generated/Room";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
 import { ask } from "./bus";
-import { CLOSED, NOTIFY, type Outcome, PASSWORD } from "./share";
+import { CLOSED, NOTIFY, type Outcome, PASSWORD, type VoiceControlQuestion } from "./share";
+import { pressVoiceControl } from "./voiceControl";
 
 // What the Rust core's `app.emit` reaches in the owner: the store's own
 // listeners (today's client's path, unchanged).
@@ -20,10 +21,13 @@ const ownerCore = new Map<string, Handler>();
 
 // Every command the pages send to the core, so a test can see what reached the wire.
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
+/** Commands the core refuses, to see what a failure does. */
+const failing = new Set<string>();
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
   invoke: async (cmd: string, args: Record<string, unknown>) => {
     invoked.push({ cmd, args });
+    if (failing.has(cmd)) throw new Error(`no ${cmd} today`);
     return true;
   },
 }));
@@ -44,7 +48,16 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () =>
 // What the owner tells the notifier you're looking at, newest last.
 const viewed = vi.hoisted(() => [] as unknown[]);
 vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined, setViewing: (at: unknown) => viewed.push(at) }));
-vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
+// Every sound a store played. Only the owner's store has side effects, so
+// these are the list window's; a test hands the chat window its own player.
+const played = vi.hoisted(() => [] as string[]);
+vi.mock("../../lib/sound", () => ({
+  playKnock: () => false,
+  playSound: async (cue: string) => {
+    played.push(cue);
+    return true;
+  },
+}));
 
 const HOME = "https://home.example";
 
@@ -158,6 +171,8 @@ describe("a viewer window sharing the owner's connection", () => {
   beforeEach(() => {
     ownerCore.clear();
     invoked.length = 0;
+    failing.clear();
+    played.length = 0;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-25T22:52:00Z"));
   });
@@ -777,13 +792,73 @@ describe("a viewer window sharing the owner's connection", () => {
     await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general"));
     expect(owner.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general");
 
-    await follower.intend({ kind: "voice.mute", muted: true });
+    await pressVoiceControl(viewer.bus, { control: "mute", on: true }, () => undefined);
     await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.muted).toBe(true));
 
-    await follower.intend({ kind: "voice.leave" });
+    await pressVoiceControl(viewer.bus, { control: "leave" }, () => undefined);
     await vi.waitFor(() => expect(invoked.map((call) => call.cmd)).toContain("voice_leave"));
     await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice).toBeNull());
     expect(owner.gateway.serverState(HOME).myVoice).toBeNull();
+    follower.stop();
+  });
+
+  it("Mute, Deafen and Leave pressed in the chat window sound there once they're done, and never in the list window too (#241)", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.audio).toBeDefined());
+
+    // What the chat window played, with the owner's seat as it was at that
+    // moment: the change is made before its sound, never after.
+    const heard: string[] = [];
+    const press = (question: VoiceControlQuestion) =>
+      pressVoiceControl(viewer.bus, question, (cue) => {
+        const mine = owner.gateway.serverState(HOME).myVoice;
+        heard.push(`${cue}: ${mine === null ? "out of voice" : `${mine.muted ? "muted" : "open"}, ${mine.deafened ? "deafened" : "hearing"}`}`);
+      });
+    await press({ control: "mute", on: true });
+    await press({ control: "deafen", on: true });
+    await press({ control: "deafen", on: false });
+    await press({ control: "mute", on: false });
+    // Already open: nothing changed, so nothing to confirm.
+    await press({ control: "mute", on: false });
+    expect(heard).toEqual(["mute: muted, hearing", "deafen: muted, deafened", "undeafen: muted, hearing", "unmute: open, hearing"]);
+    expect(played).toEqual([]);
+
+    // The list window's own voice bar still sounds in the list window.
+    await owner.gateway.setVoiceMuted(HOME, true);
+    expect(played).toEqual(["mute"]);
+    expect(heard).toHaveLength(4);
+
+    await press({ control: "leave" });
+    expect(heard.at(-1)).toBe("voice-leave: out of voice");
+    expect(invoked.map((call) => call.cmd)).toContain("voice_leave");
+    expect(played).toEqual(["mute"]);
+    follower.stop();
+  });
+
+  it("a change pressed in the chat window that fails makes no sound in either window (#241)", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.audio).toBeDefined());
+
+    failing.add("voice_controls");
+    const heard: string[] = [];
+    await expect(pressVoiceControl(viewer.bus, { control: "mute", on: true }, (cue) => heard.push(cue))).resolves.toBeNull();
+    expect(heard).toEqual([]);
+    expect(played).toEqual([]);
+    // As from the list window's own bar: a change the core couldn't make
+    // leaves voice rather than leaving the microphone in doubt.
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice).toBeNull());
     follower.stop();
   });
 
@@ -805,6 +880,40 @@ describe("a viewer window sharing the owner's connection", () => {
     expect(invoked.slice(before)).toEqual([]);
     expect(controls()).toEqual([{ muted: false, deafened: false }]);
     expect(owner.gateway.serverState(HOME).myVoice).toMatchObject({ muted: false, talkHeld: false });
+    follower.stop();
+  });
+
+  it("with push-to-talk, the key makes no sound in either window, and a Mute chosen in the chat window sounds there, as a real mute (#232, #241)", async () => {
+    const saved = new Map([["linger.voice.pushToTalk", "true"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+    const heard: string[] = [];
+    const play = (cue: string) => void heard.push(cue);
+
+    // The key, down and up: the microphone opens and closes, silently.
+    await follower.intend({ kind: "voice.talk", down: true });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(true));
+    await follower.intend({ kind: "voice.talk", down: false });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.talkHeld).toBe(false));
+    // Settings turning push-to-talk off and on again mid-call: silent too.
+    await follower.intend({ kind: "voice.pushtotalk", on: false, key: "ControlRight" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(false));
+    await follower.intend({ kind: "voice.pushtotalk", on: true, key: "ControlRight" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+    expect(played).toEqual([]);
+
+    // Mute chosen in the chat window: a real mute, confirmed there only.
+    await expect(pressVoiceControl(viewer.bus, { control: "mute", on: true }, play)).resolves.toBe("mute");
+    await expect(pressVoiceControl(viewer.bus, { control: "mute", on: false }, play)).resolves.toBe("unmute");
+    expect(heard).toEqual(["mute", "unmute"]);
+    expect(played).toEqual([]);
     follower.stop();
   });
 

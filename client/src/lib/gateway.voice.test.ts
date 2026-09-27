@@ -530,6 +530,44 @@ describe("voice in the store", () => {
     expect(played).toHaveLength(2);
   });
 
+  it("a control pressed in another window hands back its sound, once applied, and plays nothing here (#241)", async () => {
+    await seated(HOME);
+    const controls = () => invoked.filter((call) => call.cmd === "voice_controls").length;
+    const before = controls();
+    await expect(setVoiceMuted(HOME, true, false)).resolves.toBe("mute");
+    expect(controls()).toBe(before + 1);
+    expect(serverState(HOME).myVoice?.muted).toBe(true);
+    // Nothing changed, so nothing to confirm.
+    await expect(setVoiceMuted(HOME, true, false)).resolves.toBeNull();
+    await expect(setVoiceDeafened(HOME, true, false)).resolves.toBe("deafen");
+    await expect(setVoiceDeafened(HOME, false, false)).resolves.toBe("undeafen");
+    await expect(setVoiceMuted(HOME, false, false)).resolves.toBe("unmute");
+    expect(played).toEqual([]);
+    // The list window's own controls still sound where they were pressed.
+    await expect(setVoiceMuted(HOME, true)).resolves.toBe("mute");
+    expect(played).toEqual(["mute"]);
+    // A change the core refuses has nothing to confirm.
+    failing.add("voice_controls");
+    await expect(setVoiceDeafened(HOME, true, false)).rejects.toThrow(/disconnected/);
+    expect(played).toEqual(["mute"]);
+  });
+
+  it("leaving hands back its sound once voice has stopped, and only when you were in voice (#241)", async () => {
+    await seated(HOME);
+    await expect(leaveVoice(HOME, false)).resolves.toBe("voice-leave");
+    expect(invoked.at(-1)?.cmd).toBe("voice_leave");
+    expect(played).toEqual([]);
+    await expect(leaveVoice(HOME, false)).resolves.toBeNull();
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    await expect(leaveVoice(HOME)).resolves.toBe("voice-leave");
+    expect(played).toEqual(["voice-leave"]);
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    played.length = 0;
+    failing.add("voice_leave");
+    await expect(leaveVoice(HOME, false)).rejects.toThrow();
+    expect(played).toEqual([]);
+  });
+
   it("moving has one arrival cue and observers outside voice never ring", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());

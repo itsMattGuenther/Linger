@@ -30,7 +30,8 @@
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
- * window would. What the window asked for is in `body[data-did]`.
+ * window would. What the window asked for is in `body[data-did]`, and every
+ * sound it played as `sound:<cue>` (`next/audio.ts`).
  */
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
@@ -39,6 +40,7 @@ import type { ServerFrame } from "../../src/generated/ServerFrame";
 import { type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
+import { hearSounds } from "./next/audio";
 import { json } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening } from "./next/evening";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
@@ -49,6 +51,7 @@ const note = (what: string) => {
   did.push(what);
   document.body.dataset.did = did.join("|");
 };
+hearSounds(note);
 
 /** Each server as its store state, from the fixtures: every one answers, signed in or not. */
 const states: Record<string, GatewayState> = {

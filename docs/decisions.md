@@ -244,7 +244,8 @@ maintenance and thorough tests.
 **One owner window.** The buddy list window alone:
 - refreshes tokens;
 - connects gateways;
-- plays sounds and shows notifications;
+- plays sounds and shows notifications (a voice control's sound plays in the
+  window where it was pressed, once the owner has made the change: #241);
 - drives voice.
 
 Other windows keep their own copy of the state with the same pure `apply`, and

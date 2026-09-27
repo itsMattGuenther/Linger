@@ -57,8 +57,8 @@ import {
 } from "./ipc";
 import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
-import { playKnock, playSound } from "./sound";
-import { voiceCue } from "./sound-events";
+import { playKnock, playSound, type SoundCue } from "./sound";
+import { controlCue, voiceCue } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "./voice";
 import type { AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
@@ -1872,16 +1872,25 @@ export async function joinVoice(
   }
 }
 
-/** Turn the microphone off and let every peer go. Safe to call when not in voice. */
-export async function leaveVoice(server: string, chime = true): Promise<void> {
+/**
+ * Turn the microphone off and let every peer go. Safe to call when not in voice.
+ *
+ * Resolves to the sound that confirms leaving, once voice has really stopped
+ * (null when you weren't in voice), and plays it here unless `chime` is
+ * false: moving voice says so on arrival instead, and a Leave pressed in
+ * another window is confirmed in that window (#241).
+ */
+export async function leaveVoice(server: string, chime = true): Promise<SoundCue | null> {
   const current = stateOf(server);
   if (current.myVoice !== null) publish(server, { ...current, myVoice: null });
   await controlQueues.get(server)?.catch(() => undefined);
   await voiceLeave(server);
-  if (chime && current.myVoice !== null) void playSound("voice-leave");
+  if (current.myVoice === null) return null;
+  if (chime) void playSound("voice-leave");
+  return "voice-leave";
 }
 
-const controlQueues = new Map<string, Promise<void>>();
+const controlQueues = new Map<string, Promise<unknown>>();
 
 /**
  * Whether push-to-talk has the microphone closed: it's on and its key isn't
@@ -1905,13 +1914,18 @@ export function waitingForKey(mine: Pick<MyVoice, "pushToTalk" | "talkHeld" | "m
  * Serialize rapid clicks and push-to-talk edges; never announce an unapplied
  * mute. Mute and deafen go to the engine as controls, which the room is told
  * about; push-to-talk's key goes as its own gate, which it isn't (#232).
+ *
+ * Resolves to the sound that confirms the change once the core has applied
+ * it (null when nothing changed, or the change makes no sound), and plays it
+ * here unless `chime` is false: a control pressed in another window is
+ * confirmed in that window, whose audio the click has just woken (#241).
  */
-function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice): Promise<void> {
-  const task = (controlQueues.get(server) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice, chime: boolean): Promise<SoundCue | null> {
+  const task = (controlQueues.get(server) ?? Promise.resolve()).catch(() => undefined).then(async (): Promise<SoundCue | null> => {
     const mine = stateOf(server).myVoice;
-    if (mine === null) return;
+    if (mine === null) return null;
     const next = change(mine);
-    if (next === mine) return;
+    if (next === mine) return null;
     const controls = next.muted !== mine.muted || next.deafened !== mine.deafened;
     const closing = closedByKey(next) && !closedByKey(mine);
     const opening = !closedByKey(next) && closedByKey(mine);
@@ -1929,15 +1943,16 @@ function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice)
       throw new Error("Couldn't change voice controls. Voice was disconnected; join again to retry.");
     }
     const current = stateOf(server);
-    if (current.myVoice === null) return;
+    if (current.myVoice === null) return null;
     publish(server, { ...current, myVoice: {
       ...current.myVoice, muted: next.muted, deafened: next.deafened,
       mutedBeforeDeafen: next.mutedBeforeDeafen, pushToTalk: next.pushToTalk, talkHeld: next.talkHeld,
     } });
     // Only deliberate choices chime: the push-to-talk key never changes
-    // `muted`, so it never makes a sound (SPEC §4.2).
-    if (mine.deafened !== next.deafened) void playSound(next.deafened ? "deafen" : "undeafen");
-    else if (mine.muted !== next.muted) void playSound(next.muted ? "mute" : "unmute");
+    // `muted`, so it never makes a sound (SPEC §4.2; controlCue).
+    const cue = controlCue(mine, next);
+    if (chime && cue !== null) void playSound(cue);
+    return cue;
   });
   controlQueues.set(server, task);
   void task.finally(() => {
@@ -1946,21 +1961,25 @@ function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice)
   return task;
 }
 
-/** Mute belongs to this session. While deafened, clicks can't reopen it, and neither can the push-to-talk key. */
-export function setVoiceMuted(server: string, muted: boolean): Promise<void> {
+/**
+ * Mute belongs to this session. While deafened, clicks can't reopen it, and
+ * neither can the push-to-talk key. Resolves to the confirming sound, played
+ * here unless `chime` is false (see {@link changeVoiceControls}).
+ */
+export function setVoiceMuted(server: string, muted: boolean, chime = true): Promise<SoundCue | null> {
   return changeVoiceControls(server, (mine) => mine.deafened || mine.muted === muted
-    ? mine : { ...mine, muted });
+    ? mine : { ...mine, muted }, chime);
 }
 
 /**
  * The push-to-talk key went down or up. It opens and closes the microphone
- * without muting you, so the room sees nothing (#232). It means nothing with
- * push-to-talk off, and can't open a deafened microphone: after undeafening,
- * the key has to be pressed again.
+ * without muting you, so the room sees nothing (#232), and makes no sound.
+ * It means nothing with push-to-talk off, and can't open a deafened
+ * microphone: after undeafening, the key has to be pressed again.
  */
-export function setVoiceTalking(server: string, held: boolean): Promise<void> {
-  return changeVoiceControls(server, (mine) => !mine.pushToTalk || mine.talkHeld === held || (held && mine.deafened)
-    ? mine : { ...mine, talkHeld: held });
+export async function setVoiceTalking(server: string, held: boolean): Promise<void> {
+  await changeVoiceControls(server, (mine) => !mine.pushToTalk || mine.talkHeld === held || (held && mine.deafened)
+    ? mine : { ...mine, talkHeld: held }, true);
 }
 
 /**
@@ -1969,8 +1988,8 @@ export function setVoiceTalking(server: string, held: boolean): Promise<void> {
  * the next call. Off opens the microphone, unless you muted yourself, which
  * stays yours to undo; on closes it until the key is next pressed.
  */
-export function setVoicePushToTalk(server: string, on: boolean): Promise<void> {
-  return changeVoiceControls(server, (mine) => mine.pushToTalk === on ? mine : { ...mine, pushToTalk: on, talkHeld: false });
+export async function setVoicePushToTalk(server: string, on: boolean): Promise<void> {
+  await changeVoiceControls(server, (mine) => mine.pushToTalk === on ? mine : { ...mine, pushToTalk: on, talkHeld: false }, true);
 }
 
 /** The server your voice seat is on, if you're in voice anywhere: there is at most one. */
@@ -1978,8 +1997,12 @@ export function voiceSeatServer(): string | null {
   return Object.entries(states).find(([, state]) => state.myVoice !== null)?.[0] ?? null;
 }
 
-/** Silence both directions, preserving the prior mic choice and every peer's volume. */
-export function setVoiceDeafened(server: string, deafened: boolean): Promise<void> {
+/**
+ * Silence both directions, preserving the prior mic choice and every peer's
+ * volume. Resolves to the confirming sound, played here unless `chime` is
+ * false (see {@link changeVoiceControls}).
+ */
+export function setVoiceDeafened(server: string, deafened: boolean, chime = true): Promise<SoundCue | null> {
   return changeVoiceControls(server, (mine) => mine.deafened === deafened ? mine : {
     ...mine, deafened,
     mutedBeforeDeafen: deafened ? mine.muted : mine.mutedBeforeDeafen,
@@ -1987,7 +2010,7 @@ export function setVoiceDeafened(server: string, deafened: boolean): Promise<voi
     // Deafening lets go of the push-to-talk key, so undeafening leaves the
     // microphone closed until it is pressed again (SPEC §4.14).
     talkHeld: false,
-  });
+  }, chime);
 }
 
 /** Apply saved levels after devices open and whenever a person's sessions change. */

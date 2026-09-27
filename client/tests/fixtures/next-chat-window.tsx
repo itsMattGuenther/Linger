@@ -16,18 +16,23 @@
  * before this window was listening; `?many=600` puts that many older
  * messages before the evening in #general; `&message=` opens at one. The photo
  * loads only where something serves
- * `PHOTO_PATH` (the spec does).
+ * `PHOTO_PATH` (the spec does). Mute, Deafen and Leave are made by the list
+ * window, which answers with their sound (#241): `?hold` keeps each change
+ * waiting until `window.owner.finish()`, and `?refuse` has it fail.
  *
  * `window.owner` lets a test act as the owner or the shell; what the window
- * asked for is written to `body[data-did]`, `|`-separated.
+ * asked for is written to `body[data-did]`, `|`-separated, and every sound it
+ * played as `sound:<cue>` (`next/audio.ts`).
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Message } from "../../src/generated/Message";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
-import { serverState } from "../../src/lib/gateway";
+import { type MyVoice, serverState } from "../../src/lib/gateway";
+import { controlCue } from "../../src/lib/sound-events";
 import { ChatWindow } from "../../src/next/app/chat/ChatWindow";
 import "../../src/next/styles/app.css";
+import { hearSounds } from "./next/audio";
 import { fakeDesktop, type Unnumbered } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening, people } from "./next/evening";
 import { GUILD, guild, serverInfo } from "./next/servers";
@@ -67,6 +72,7 @@ const desktop = fakeDesktop({
       missed = [];
       return { opens };
     },
+    "next:voicecontrol": (question) => voiceControl(question),
   },
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)) } : {},
   infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" }, [GUILD]: serverInfo[GUILD] },
@@ -87,6 +93,31 @@ const desktop = fakeDesktop({
     myVoice: seat,
   },
 });
+
+hearSounds(desktop.note);
+
+// The list window's half of Mute, Deafen and Leave (VOICE_CONTROL in
+// core/share.ts): it makes the change, tells every window the new seat, and
+// only then answers with the sound that confirms it. `?hold` keeps the
+// change waiting until the test finishes it; `?refuse` has it fail, as a
+// change the voice engine refused.
+let finishing: (() => void)[] = [];
+async function voiceControl(question: Record<string, unknown>): Promise<{ cue: string | null }> {
+  if (query.has("hold")) await new Promise<void>((finish) => finishing.push(finish));
+  if (query.has("refuse")) throw new Error("Couldn't change voice controls. Voice was disconnected; join again to retry.");
+  const state = serverState(SERVER);
+  const mine = state.myVoice;
+  if (mine === null) return { cue: null };
+  const on = question.on === true;
+  let next: MyVoice | null = mine;
+  if (question.control === "leave") next = null;
+  else if (question.control === "mute" && !mine.deafened) next = { ...mine, muted: on };
+  else if (question.control === "deafen" && mine.deafened !== on)
+    next = { ...mine, deafened: on, muted: on || mine.mutedBeforeDeafen, mutedBeforeDeafen: on ? mine.muted : mine.mutedBeforeDeafen, talkHeld: false };
+  const { read, readLoaded, notifyRules } = state;
+  desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: next, read, readLoaded, notifyRules } });
+  return { cue: next === null ? "voice-leave" : controlCue(mine, next) };
+}
 
 declare global {
   interface Window {
@@ -111,6 +142,8 @@ declare global {
       signInGuild: () => void;
       /** Settings turned push-to-talk on or off mid-call, as the list window tells every window (#231). */
       pushToTalk: (on: boolean) => void;
+      /** With `?hold`: the list window finishes the Mute, Deafen or Leave it's making. */
+      finish: () => void;
     };
   }
 }
@@ -130,6 +163,11 @@ window.owner = {
   signInGuild: () => desktop.signIn(GUILD, guild(serverState(GUILD))),
   pushToTalk: (on) =>
     desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: seat && { ...seat, pushToTalk: on }, read: night.read, readLoaded: true, notifyRules: [] } }),
+  finish: () => {
+    const waiting = finishing;
+    finishing = [];
+    for (const finish of waiting) finish();
+  },
   messageFont: (userId, key) => {
     const user = night.users.find((one) => one.id === userId);
     if (user) desktop.frame({ op: "user.update", d: { ...user, style: { ...user.style, msg_font_key: key } } });

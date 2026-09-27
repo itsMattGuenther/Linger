@@ -29,7 +29,11 @@ export interface DesktopOptions {
   /** Each server's name and color, for `GET /server`. */
   infos?: Record<string, { name: string; accent: string | null }>;
   query: URLSearchParams;
-  /** Questions the owner answers beyond the snapshot and tokens, by event. */
+  /**
+   * Questions the owner answers beyond the snapshot and tokens, by event. An
+   * answer may take a while (a promise); one that throws or rejects is
+   * refused with its message, as the real owner's `answer` does (core/bus.ts).
+   */
   asks?: Record<string, (question: Record<string, unknown>) => unknown>;
   /** Server routes tried before the shared ones; null to fall through. */
   routes?: (method: string, path: string, url: URL, body: Record<string, unknown>) => Response | null;
@@ -146,6 +150,8 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     const question = payload as { v: number; id: string; from: string } & Record<string, unknown>;
     const reply = (answer: unknown) =>
       window.setTimeout(() => deliver(`${event}:answer`, { v: 1, id: question.id, from: "main", answer }), 5);
+    const refuse = (problem: string) =>
+      window.setTimeout(() => deliver(`${event}:answer`, { v: 1, id: question.id, from: "main", problem }), 5);
     switch (event) {
       case "next:snapshot":
         if (asleep) return;
@@ -173,7 +179,9 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
         if (!answer) return;
         const { v: _v, id: _id, from: _from, ...asked } = question;
         note(`ask:${event}:${JSON.stringify(asked)}`);
-        reply(answer(asked));
+        void Promise.resolve()
+          .then(() => answer(asked))
+          .then(reply, (error: unknown) => refuse(error instanceof Error && error.message !== "" ? error.message : "something went wrong"));
       }
     }
   }

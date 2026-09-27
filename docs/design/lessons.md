@@ -407,17 +407,24 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
   - #95: the knock was clipped to one tap. The attack was lost as output
     started; the fix was 50ms of leading silence.
   - #186: quiet hours also silenced mute and deafen sounds.
+  - #241 (0.4.2): Mute and Deafen pressed in a chat window sounded seconds
+    late, though the mute itself was instant. The list window played the
+    sound, and it may be hidden or behind; its audio started late.
 - **Cause:** browser tests and offline rendering never exercised the packaged
   audio path, and the category rules were implicit.
 - **Rule:**
   - Reuse `lib/sound.ts` and `lib/chimes.ts` unchanged: rendered buffers with
     leading silence, and explicit categories.
   - Quiet hours cover only notification categories.
-  - Only the owner window plays sounds.
+  - Only the owner window plays sounds for what arrives on its own. A voice
+    control's sound answers a click, so it plays in the window that was
+    clicked, once the owner has made the change (#241).
 - **Check:**
   - The existing unit tests of the gates.
   - The packaged audio check (`scripts/linux-audio-check.py` and the Windows
     scripts) in CI.
+  - `share.test.ts` and the chat-window fixture: a control pressed in a chat
+    window sounds once, there, and only after the change is made.
   - A fixture test that two windows produce one chime.
 
 ## Desktop and packaging
@@ -608,7 +615,8 @@ when the server refuses.
     and says when it times out.
 14. **Windows:** everything is derivable from a snapshot plus frames. Viewers
     catch up from the owner, and only the owner refreshes tokens, connects,
-    plays sounds, notifies and drives voice.
+    plays sounds, notifies and drives voice. The exception is a voice
+    control's sound, which plays where it was pressed (#241).
 15. **Voice labels:** join, move and "talk here" are distinct. Only Leave,
     moving or quitting ends voice.
 16. **Sounds:** reuse the tested player. Quiet hours cover notifications only.

@@ -33,6 +33,7 @@ import {
 } from "../../lib/gateway";
 import { loadVoicePrefs } from "../../lib/voice";
 import { setViewing } from "../../lib/notify";
+import type { SoundCue } from "../../lib/sound";
 import { forgetWindow, reportWindow, setAway, setPresenceRoom } from "../../lib/watchPresence";
 import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
@@ -78,6 +79,20 @@ export interface ServerPrefsMessage {
 export const NOTIFY = "next:notify";
 /** Settings asks the owner to change your password and sign back in with the new one. */
 export const PASSWORD = "next:password";
+/** A chat window's Mute, Deafen or Leave: the owner makes the change and answers with its sound. */
+export const VOICE_CONTROL = "next:voicecontrol";
+
+/** Your voice controls on a chat window's voice line (#216). */
+export type VoiceControlQuestion = { control: "mute" | "deafen"; on: boolean } | { control: "leave" };
+
+/**
+ * The sound that confirms the change, sent once the change has really
+ * happened, for the window that was pressed to play (#241). Null when
+ * nothing changed, or the change makes no sound.
+ */
+export interface VoiceControlAnswer {
+  cue: SoundCue | null;
+}
 
 export interface NotifyQuestion {
   server: string;
@@ -157,11 +172,12 @@ export type Intent =
   | { kind: "room"; server: string; roomId: RoomId | null }
   /** The window is closing: it no longer counts towards being here. */
   | { kind: "closing" }
-  /** Join voice in a room, or move it there: you are in voice in one room at a time (SPEC §4.14). */
+  /**
+   * Join voice in a room, or move it there: you are in voice in one room at
+   * a time (SPEC §4.14). Mute, Deafen and Leave are questions instead
+   * (VOICE_CONTROL), so the window pressed can play their sound.
+   */
   | { kind: "voice.join"; server: string; roomId: RoomId }
-  | { kind: "voice.leave" }
-  | { kind: "voice.mute"; muted: boolean }
-  | { kind: "voice.deafen"; deafened: boolean }
   /** The push-to-talk key went down or up in this window. */
   | { kind: "voice.talk"; down: boolean }
   /**
@@ -526,30 +542,34 @@ export async function shareAsOwner(
           void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
           return;
         }
-        default: {
+        case "voice.talk": {
           const server = voiceServer(sessions().keys());
           if (server === null) return;
-          switch (intent.kind) {
-            case "voice.leave":
-              void leaveVoice(server).catch(() => undefined);
-              return;
-            case "voice.mute":
-              void setVoiceMuted(server, intent.muted).catch(() => undefined);
-              return;
-            case "voice.deafen":
-              void setVoiceDeafened(server, intent.deafened).catch(() => undefined);
-              return;
-            case "voice.talk":
-              // Push-to-talk only means something when it is on: the key
-              // opens the microphone while held and closes it on release,
-              // without muting you (#232). The store ignores it otherwise.
-              if (intent.down === true) holdingTalk.add(intent.from);
-              else holdingTalk.delete(intent.from);
-              void setVoiceTalking(server, intent.down === true).catch(() => undefined);
-              return;
-          }
+          // Push-to-talk only means something when it is on: the key opens
+          // the microphone while held and closes it on release, without
+          // muting you (#232). The store ignores it otherwise.
+          if (intent.down === true) holdingTalk.add(intent.from);
+          else holdingTalk.delete(intent.from);
+          void setVoiceTalking(server, intent.down === true).catch(() => undefined);
+          return;
         }
       }
+    }),
+    // Mute, Deafen and Leave pressed in another window. The owner makes the
+    // change, as it does for its own voice bar, but doesn't play the sound
+    // that confirms it: it answers with the sound once the change has
+    // really happened, and the window that was pressed plays it (#241).
+    // That window has just been clicked, so its audio is awake; this one may
+    // be hidden or behind, and on Linux its sound was heard seconds late. A
+    // change that fails is answered with the problem, and makes no sound.
+    answer<VoiceControlQuestion, VoiceControlAnswer>(bus, VOICE_CONTROL, async (question) => {
+      const server = voiceServer(sessions().keys());
+      if (server === null) return { cue: null };
+      if (question.control === "leave") return { cue: await leaveVoice(server, false) };
+      if (typeof question.on !== "boolean") throw new Error("say whether it's on or off");
+      if (question.control === "mute") return { cue: await setVoiceMuted(server, question.on, false) };
+      if (question.control === "deafen") return { cue: await setVoiceDeafened(server, question.on, false) };
+      throw new Error("no such voice control");
     }),
     // A window that crashed or was closed by the desktop never said "closing".
     bus.listen<string>(CLOSED, (label) => {

@@ -4,7 +4,9 @@
  * window, however many other windows are open (parity NOTE-4, SND-5, WIN-8).
  * A viewer folds the same frames into its copy of the store and does nothing
  * else. The owner and a viewer run as two copies of the store in one
- * process, on an in-memory bus, as in share.test.ts.
+ * process, on an in-memory bus, as in share.test.ts. (The one sound a
+ * viewer plays is the answer to a voice control pressed in it, #241:
+ * core/voiceControl.ts, tested in share.test.ts.)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerFrame } from "../../generated/ServerFrame";
