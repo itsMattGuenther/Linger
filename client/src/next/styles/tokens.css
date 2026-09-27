@@ -207,6 +207,7 @@
   --media-max-w: 320px;
   --media-max-h: 400px; /* SPEC §4.7: images are capped at 400px tall */
   --linkcard-w: 360px;
+  --audio-volume-w: 64px; /* a shared audio file's volume slider, beside its mute (#247) */
   --composer-max: 200px; /* the message box grows to this, then scrolls */
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;

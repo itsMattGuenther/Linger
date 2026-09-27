@@ -1,0 +1,70 @@
+/* A shared audio file's player (#247), inside the attachment card
+   (Attachments.css): the name and time on the first line, the controls on a
+   32px line under them. The card is as wide as a picture or a video may be,
+   whatever the name's length, so the timeline always has room. Layout only;
+   the buttons and sliders are kit pieces. Tokens only. */
+.nx-att-card[data-kind="audio"] {
+  width: min(100%, var(--media-max-w));
+  container-type: inline-size;
+}
+
+/* The time, over an invisible copy of the widest it gets for this file, so
+   the name beside it never moves as the seconds tick over. */
+.nx-audio-time {
+  display: grid;
+  justify-items: end;
+}
+
+.nx-audio-time > * {
+  grid-area: 1 / 1;
+}
+
+.nx-audio-time-sizer {
+  visibility: hidden;
+}
+
+.nx-audio-controls,
+.nx-audio-failed {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-md);
+}
+
+.nx-audio-timeline {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Mute and its slider are one control: the button's own padding is the gap. */
+.nx-audio-volume {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.nx-audio-level {
+  width: var(--audio-volume-w);
+}
+
+/* A card squeezed by a long name in a narrow window keeps mute and gives its
+   slider's room to the timeline. */
+@container (max-width: 15em) {
+  .nx-audio-level {
+    display: none;
+  }
+}
+
+.nx-audio-note {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}

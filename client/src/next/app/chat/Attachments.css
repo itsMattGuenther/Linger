@@ -97,12 +97,6 @@
   font: var(--text-label) / var(--line-meta) var(--font-mono);
 }
 
-.nx-att-audio {
-  flex-basis: 100%;
-  width: 100%;
-  height: var(--control-md);
-}
-
 /* Where a download went, and its address to copy: a line of its own under the card's row. */
 .nx-att-download {
   display: flex;
