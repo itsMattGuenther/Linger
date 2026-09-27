@@ -95,11 +95,11 @@ while the packages use the system's.
   equivalent.
 - How the menu launches it: the `Exec=` line of Linger's menu entry, in
   `~/.local/share/applications/` or `/usr/share/applications/`. Variables set
-  there (such as `LINGER_LINUX_BACKEND` or `WEBKIT_DMABUF_RENDERER_DISABLE_GBM`)
-  change how it starts. The AppImage **rewrites its own menu entry** on every
-  launch, copying variables that were set by hand in a terminal, so one test run
-  can change every later menu launch. Compare the entry's change time
-  (`stat -c %y <file>`) with the launch times.
+  there (such as `LINGER_LINUX_BACKEND`, `WEBKIT_DMABUF_RENDERER_DISABLE_GBM`
+  or `GDK_GL`) change how it starts. The AppImage **rewrites its own menu
+  entry** on every launch, copying variables that were set by hand in a
+  terminal, so one test run can change every later menu launch. Compare the
+  entry's change time (`stat -c %y <file>`) with the launch times.
 - Interface scale, if it's a layout problem (Settings → Appearance).
 
 **What happened.** Steps to reproduce, numbered from opening the app; what

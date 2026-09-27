@@ -664,3 +664,28 @@ On other Hyprland setups, add `no_warps = true` inside the `cursor { }`
 block of `~/.config/hypr/hyprland.conf`. Either way it applies to every app,
 and to moving focus with the keyboard too: the pointer stays where you left
 it.
+
+**On an older NVIDIA card, Linger draws without the graphics card.** Cards
+from before the GTX 16 and RTX series (a GTX 980 or 1080, say) need NVIDIA's
+older "legacy" driver, the 580 branch. With that driver, on a GTX 980 Ti, Linger
+closed when one of its windows was resized while another was open (#229).
+Releases after 0.4.2 notice that driver and draw without the graphics card,
+which stops it. Typing may feel a beat behind. On 0.4.2, or on any computer
+where Linger closes the same way, start it with GTK's graphics-card drawing
+turned off:
+
+```bash
+GDK_GL=disable linger-client
+```
+
+To have the menu start it that way on the Arch package, copy its menu entry
+and change one line in the copy:
+
+```bash
+cp /usr/share/applications/linger.desktop ~/.local/share/applications/
+sed -i 's/^Exec=linger-client$/Exec=env GDK_GL=disable linger-client/' ~/.local/share/applications/linger.desktop
+```
+
+Delete the copy to go back. Linger leaves a `GDK_GL` you set alone, so to keep
+the graphics card on with the legacy driver anyway, start it with `GDK_GL=`
+(nothing after the `=`).

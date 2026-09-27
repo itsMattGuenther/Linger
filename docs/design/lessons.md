@@ -265,8 +265,12 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
   - #169: lag with GBM off.
   - #187: the AppImage's bundled WebKit 2.50.4 crashes with GBM on.
   - #135: a Wayland protocol error with NVIDIA explicit sync.
+  - #229: GTK's own GL drawing crashed on NVIDIA's 580 legacy driver when a
+    window was resized with another open. More windows (the Buddy list
+    client) meant more ways in.
 - **Cause:** WebKitGTK's GPU path depends on the driver and the WebKit version.
-  Only trying it tells.
+  Only trying it tells. A mid-session crash leaves no probe behind, so #229
+  is decided by driver version (`GDK_GL=disable` on 580 and older).
 - **Rule:**
   - The shell's startup plumbing stays as it is (`linux_startup.rs`,
     `graphics.rs`).
