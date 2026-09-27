@@ -11,21 +11,14 @@
 use std::ffi::OsStr;
 
 use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
-/// Create every window in `tauri.conf.json`, with the title bar dropped on
-/// Hyprland. The config marks them `"create": false` so Tauri doesn't build
-/// them first; changing the frame after the window is on screen would flash
-/// the bar and resize the page underneath it.
 /// Window positions and sizes, remembered on this computer (T-1808): where
 /// each Buddy list window was and how big, restored when it opens again, the
 /// chat window's and every popped-out conversation's included. The classic
-/// client keeps its old behavior, so its main window is left out. Only size,
-/// position and maximized are kept: whether a window has a frame depends on
-/// the desktop it opens on (`create`), not on last time.
+/// client keeps its old behavior, so its main window is left out.
 pub fn remembered_windows() -> tauri::plugin::TauriPlugin<tauri::Wry> {
-    use tauri_plugin_window_state::{Builder, StateFlags};
-    let builder = Builder::default()
-        .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED);
+    let builder = tauri_plugin_window_state::Builder::default().with_state_flags(remembered());
     if chosen_client(std::env::var_os(CLASSIC).as_deref()) == Client::BuddyList {
         builder.build()
     } else {
@@ -33,6 +26,17 @@ pub fn remembered_windows() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     }
 }
 
+/// What is remembered of a window: only size, position and maximized.
+/// Whether a window has a frame depends on the desktop it opens on
+/// (`create`), not on last time.
+fn remembered() -> StateFlags {
+    StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED
+}
+
+/// Create every window in `tauri.conf.json`, with the title bar dropped on
+/// Hyprland. The config marks them `"create": false` so Tauri doesn't build
+/// them first; changing the frame after the window is on screen would flash
+/// the bar and resize the page underneath it.
 pub fn create(app: &App) -> tauri::Result<()> {
     let decorated = !on_hyprland(
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
@@ -422,9 +426,15 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
         }
     }
     if matches!(event, tauri::WindowEvent::Destroyed) && is_viewer(window.label()) {
-        let _ = window
-            .app_handle()
-            .emit_to(OWNER, "next:closed", window.label());
+        let app = window.app_handle();
+        let _ = app.emit_to(OWNER, "next:closed", window.label());
+        // Where every window is goes to disk now, this one's included (the
+        // plugin noted it as the window closed). The plugin writes only when
+        // Linger quits through its event loop, and it doesn't always: an
+        // update on Windows ends Linger outright (the updater calls
+        // `std::process::exit`), and so does a crash, and every window would
+        // then open where it was before this run (#225).
+        let _ = app.save_window_state(remembered());
     }
 }
 

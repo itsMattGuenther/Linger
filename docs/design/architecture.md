@@ -319,9 +319,11 @@ one.
   next conversation opened starts a fresh set. Every new-client window's size,
   position and maximized state are remembered by the desktop shell
   (`tauri-plugin-window-state`, `remembered_windows` in `window.rs`), for the
-  new client only; today's client is left as it was. Each window also
-  remembers which interface size it was sized for, so a remembered window
-  isn't grown again on the next run (`core/appearance.ts`).
+  new client only; today's client is left as it was. They are written to
+  disk when Linger quits and whenever a window other than the list closes,
+  since an update on Windows or a crash ends Linger without quitting. Each
+  window also remembers which interface size it was sized for, so a
+  remembered window isn't grown again on the next run (`core/appearance.ts`).
 
 ## The switch back
 
