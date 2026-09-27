@@ -80,7 +80,11 @@ import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
             }
             if (elapsed >= 0.8) break;
           }
-          if (peak < 0.01 || peak > (cue === "knock" ? 0.2 : 0.06) || maxStep > 0.01) {
+          // A doubled graph or a click goes over these ceilings. The knock's are
+          // twice the DM's because its level is (#252: taps 0.32 and 0.24,
+          // steepest natural step about 0.009).
+          const [topPeak, topStep] = cue === "knock" ? [0.4, 0.02] : [0.06, 0.01];
+          if (peak < 0.01 || peak > topPeak || maxStep > topStep) {
             throw new Error(`${label} damaged or silent graph: peak=${peak}, step=${maxStep}`);
           }
           if (cue === "knock" && (taps?.length !== 2 ||
