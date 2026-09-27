@@ -457,6 +457,7 @@ there or where the design puts it.
 | SET-2 | Change your password (current and new, 8 minimum). | Settings → Account & App, `PATCH /me/password` | Same | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | SET-3 | Settings opens from a gear (today: beside your name). Escape closes panels and returns focus. | `App.tsx` | Its own window, from the list's gear. New: Ctrl+, opens it too. | F | ✅ (next-list-window.spec.ts, next-settings-window.spec.ts) |
 | SET-4 | Every section's copy is short and states effects (for example "Use plain names and message fonts"). | `settings/copy.ts` | Same | U | ✅ (settings.test.ts) |
+| SET-5 | Start Linger when you sign in to the computer (#228). Off on a new install; the switch shows what the computer has (Windows' per-user Run key, a Linux autostart entry), says a refusal in words, and says when the desktop won't start it by itself. Not offered on macOS. | new | Settings → Account & App → This Computer (`src-tauri/src/autostart.rs`) | U + F + M | 🟡 built (autostart.rs and desktop_entry.rs tests, core/autostart.test.ts, next-settings-window.spec.ts, next-settings.spec.ts); needs a real sign-in on Windows and on a Linux package and AppImage |
 
 ## EXP — take everything with you
 

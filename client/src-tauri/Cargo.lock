@@ -2848,6 +2848,7 @@ dependencies = [
  "tokio-tungstenite",
  "webkit2gtk-sys",
  "webrtc",
+ "winreg",
 ]
 
 [[package]]

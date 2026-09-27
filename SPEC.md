@@ -131,7 +131,9 @@ This list is what makes an empty server feel like a house with the lights on.
 **Conversations open in the chat window**, a tab each, or each in a window of its own
 (Settings → Windows). A tab can be popped out into its own window and put back.
 Closing the list keeps Linger running in the tray, with its sounds and voice; a
-setting makes closing it quit instead. **Settings** is a window too.
+setting makes closing it quit instead. Another starts Linger when you sign in to
+the computer (Windows and Linux); it is off until you turn it on. **Settings** is
+a window too.
 
 Every window draws its own title bar and is an ordinary window to the desktop: it
 snaps, tiles and resizes as the desktop does it. Window sizes and places are

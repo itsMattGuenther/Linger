@@ -6,37 +6,22 @@
 //! the window when the terminal closes, and writing a user menu entry so the
 //! next open does not need a terminal.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Write};
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
+use linger_client_lib::desktop_entry::{
+    self, exec_line, Chosen, APP_ID as MENU_ID, GBM, GDK_GL, NV_EXPLICIT_SYNC, WM_CLASS,
+};
 use linger_client_lib::graphics::{self, LEGACY_OFF, OFF_PREFIX, PROBE};
 
-const MENU_ID: &str = "com.linger.desktop";
-
-/// NVIDIA's driver and newer WebKitGTK disagree about explicit sync on
-/// Wayland, and the compositor closes the connection (`Error 71`). Defaults to
-/// `1` when unset; only NVIDIA's driver reads it.
-const NV_EXPLICIT_SYNC: &str = "__NV_DISABLE_EXPLICIT_SYNC";
-/// WebKit's GPU display path. `1` turns it off, which avoids an abort on some
-/// computers and costs a frame of delay on every one (#169). Decided per launch
-/// by [`choose_gbm`] unless somebody set it.
-const GBM: &str = "WEBKIT_DMABUF_RENDERER_DISABLE_GBM";
-/// GTK's own GL switch; `disable` stops GTK drawing windows through the GPU.
-/// WebKit asks GTK for GL before it turns hardware acceleration on, so with
-/// GTK's GL off it draws pages on the CPU instead. Set on NVIDIA's legacy
-/// driver (see [`legacy_nvidia`]) unless somebody set it.
-const GDK_GL: &str = "GDK_GL";
 /// Exists while NVIDIA's kernel driver is loaded, and holds its version, e.g.
 /// `580.178.04`. The open and the closed kernel module both write it.
 const NVIDIA_VERSION: &str = "/sys/module/nvidia/version";
 /// NVIDIA's 590 driver dropped Maxwell, Pascal and Volta cards. They stay on
 /// the 580 branch (`nvidia-580xx` on Arch).
 const NVIDIA_CURRENT: u32 = 590;
-const BACKEND: &str = "LINGER_LINUX_BACKEND";
-const WM_CLASS: &str = "linger-client";
 
 fn backend(
     value: Option<&OsStr>,
@@ -165,36 +150,11 @@ fn webkit_version() -> String {
     format!("{major}.{minor}.{micro}")
 }
 
-/// What somebody set before this process touched anything. The menu entry is
-/// built from these, never from the values `configure` fills in itself.
-struct Chosen {
-    gbm: Option<OsString>,
-    nv_explicit_sync: Option<OsString>,
-    backend: Option<OsString>,
-    gdk_gl: Option<OsString>,
-}
-
-impl Chosen {
-    fn lookup(&self, key: &str) -> Option<String> {
-        let value = match key {
-            GBM => self.gbm.as_ref(),
-            NV_EXPLICIT_SYNC => self.nv_explicit_sync.as_ref(),
-            BACKEND => self.backend.as_ref(),
-            GDK_GL => self.gdk_gl.as_ref(),
-            _ => None,
-        };
-        value.and_then(|value| value.to_str()).map(str::to_string)
-    }
-}
-
 /// Run before GTK or any worker starts, so the launcher cannot override the choice.
 pub fn configure() -> Result<(), &'static str> {
-    let chosen = Chosen {
-        gbm: std::env::var_os(GBM),
-        nv_explicit_sync: std::env::var_os(NV_EXPLICIT_SYNC),
-        backend: std::env::var_os(BACKEND),
-        gdk_gl: std::env::var_os(GDK_GL),
-    };
+    // What somebody set before this process touched anything. Entries Linger
+    // writes are built from these, never from the values filled in below.
+    let chosen = Chosen::from_env();
     let wayland_display = std::env::var_os("WAYLAND_DISPLAY");
     let selected = backend(chosen.backend.as_deref(), wayland_display.as_deref())?;
     if let Some(selected) = selected {
@@ -246,6 +206,8 @@ pub fn configure() -> Result<(), &'static str> {
             remove_appimage_menu_entry(&home);
         }
     }
+    // For the sign-in entry, if Settings turns it on (#228).
+    desktop_entry::remember(chosen);
     Ok(())
 }
 
@@ -353,82 +315,6 @@ fn write_menu_entry(
     Ok(())
 }
 
-fn exec_line(appimage: &Path, chosen: impl Fn(&str) -> Option<String>) -> Option<String> {
-    let path = std::str::from_utf8(appimage.as_os_str().as_bytes()).ok()?;
-    let quoted = quote_exec_arg(path)?;
-    let prefix = env_prefix(chosen);
-    if prefix.is_empty() {
-        Some(quoted)
-    } else {
-        Some(format!("env {prefix}{quoted}"))
-    }
-}
-
-/// The settings a menu launch should repeat: what somebody chose that Linger
-/// would not choose by itself. `lookup` answers with what was set before
-/// `configure` ran, and is a parameter so tests need not touch the process
-/// environment.
-///
-/// A workaround key set to `1` is never repeated. For explicit sync that is
-/// the default anyway. For GBM it is the trap #169 fell into: releases up to
-/// 0.3.4 wrote their *own* `WEBKIT_DMABUF_RENDERER_DISABLE_GBM=1` into every
-/// menu entry, so every later launch passed it back as if somebody had chosen
-/// it, and no change to the default could ever reach an existing install.
-/// Dropping it costs one launch with the old setting, then the entry is clean.
-/// A computer that really does abort on the GPU path is caught by the probe
-/// (`choose_gbm`) instead. `GDK_GL` takes words, and Linger never wrote it
-/// into an entry, so `GDK_GL=disable` set by hand is kept.
-fn env_prefix(lookup: impl Fn(&str) -> Option<String>) -> String {
-    let mut parts = Vec::new();
-    for key in [GBM, NV_EXPLICIT_SYNC, BACKEND, GDK_GL] {
-        if let Some(raw) = lookup(key) {
-            if let Some(value) = simple_token(&raw) {
-                if key != BACKEND && value == "1" {
-                    continue;
-                }
-                parts.push(format!("{key}={value}"));
-            }
-        }
-    }
-    if parts.is_empty() {
-        String::new()
-    } else {
-        format!("{} ", parts.join(" "))
-    }
-}
-
-fn simple_token(raw: &str) -> Option<&str> {
-    if !raw.is_empty()
-        && raw
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'+'))
-    {
-        Some(raw)
-    } else {
-        None
-    }
-}
-
-/// Freedesktop Exec quoting. Refuse a path that cannot be put on one line.
-fn quote_exec_arg(path: &str) -> Option<String> {
-    if path.is_empty() || path.contains('\n') || path.contains('\r') || path.contains('\0') {
-        return None;
-    }
-    const SPECIAL: [char; 17] = [
-        ' ', '\t', '\\', '"', '\'', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(', ')',
-    ];
-    if path.contains('`') || path.chars().any(|c| SPECIAL.contains(&c)) {
-        let escaped = path
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('$', "\\$")
-            .replace('`', "\\`");
-        Some(format!("\"{escaped}\""))
-    } else {
-        Some(path.to_string())
-    }
-}
-
 fn desktop_entry(exec: &str, icon: bool) -> String {
     let icon_line = if icon {
         format!("Icon={MENU_ID}\n")
@@ -499,23 +385,6 @@ mod tests {
     }
 
     #[test]
-    fn exec_paths_with_spaces_are_quoted_and_newlines_are_refused() {
-        assert_eq!(
-            quote_exec_arg("/home/me/Linger.AppImage").as_deref(),
-            Some("/home/me/Linger.AppImage")
-        );
-        assert_eq!(
-            quote_exec_arg("/home/me/Linger 0.2.0.AppImage").as_deref(),
-            Some("\"/home/me/Linger 0.2.0.AppImage\"")
-        );
-        assert_eq!(quote_exec_arg("/tmp/Linger\n.AppImage"), None);
-        assert_eq!(
-            quote_exec_arg("/tmp/say\"hi.AppImage").as_deref(),
-            Some("\"/tmp/say\\\"hi.AppImage\"")
-        );
-    }
-
-    #[test]
     fn menu_entry_names_linger_and_does_not_ask_for_a_terminal() {
         let body = desktop_entry("/home/me/Linger.AppImage", true);
         assert!(body.contains("Name=Linger\n"));
@@ -530,37 +399,6 @@ mod tests {
     fn menu_entry_omits_icon_when_none_was_installed() {
         let body = desktop_entry("/opt/Linger.AppImage", false);
         assert!(!body.contains("Icon="));
-    }
-
-    #[test]
-    fn menu_entry_repeats_only_what_somebody_chose() {
-        let from = |pairs: &'static [(&'static str, &'static str)]| {
-            move |key: &str| {
-                pairs
-                    .iter()
-                    .find(|(name, _)| *name == key)
-                    .map(|(_, value)| (*value).to_string())
-            }
-        };
-        // What every menu entry up to 0.3.4 passed back in (#169). Both are
-        // what Linger does by itself, so neither is written down again.
-        assert_eq!(env_prefix(from(&[(GBM, "1"), (NV_EXPLICIT_SYNC, "1")])), "");
-        // Turning the GPU path on by hand is a real choice, and is kept.
-        assert_eq!(
-            env_prefix(from(&[(GBM, "0")])),
-            "WEBKIT_DMABUF_RENDERER_DISABLE_GBM=0 "
-        );
-        assert_eq!(
-            env_prefix(from(&[(NV_EXPLICIT_SYNC, "0"), (BACKEND, "x11")])),
-            "__NV_DISABLE_EXPLICIT_SYNC=0 LINGER_LINUX_BACKEND=x11 "
-        );
-        assert_eq!(
-            env_prefix(from(&[(BACKEND, "wayland")])),
-            "LINGER_LINUX_BACKEND=wayland "
-        );
-        // The hand-set workaround for GTK's GL crash (#229) is kept.
-        assert_eq!(env_prefix(from(&[(GDK_GL, "disable")])), "GDK_GL=disable ");
-        assert_eq!(env_prefix(|_| None), "");
     }
 
     #[test]
@@ -697,16 +535,6 @@ mod tests {
         let version = webkit_version();
         assert_eq!(version.split('.').count(), 3, "{version}");
         assert!(version.starts_with("2."), "{version}");
-    }
-
-    #[test]
-    fn simple_tokens_reject_spaces_and_shell_characters() {
-        assert_eq!(simple_token("1"), Some("1"));
-        assert_eq!(simple_token("wayland"), Some("wayland"));
-        assert_eq!(simple_token("x11"), Some("x11"));
-        assert_eq!(simple_token(""), None);
-        assert_eq!(simple_token("wayland;rm"), None);
-        assert_eq!(simple_token("1 2"), None);
     }
 
     fn nothing_chosen() -> Chosen {

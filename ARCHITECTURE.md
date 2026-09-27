@@ -111,7 +111,12 @@ probe on those launches. The driver version comes from
 The same startup path ignores `SIGHUP` so closing the launching terminal does
 not kill the window, and an AppImage writes a user menu entry
 (`com.linger.desktop`) so the next open does not need a terminal. Packaged
-`.deb` / `.rpm` installs already ship a system launcher.
+`.deb` / `.rpm` installs already ship a system launcher. The entry's `Exec`
+line (the AppImage file rather than its temporary mount, quoted, with any
+backend or GPU setting somebody chose by hand) is built in `desktop_entry.rs`,
+which the sign-in entry shares: Settings → Account & App can write an XDG
+autostart entry of the same shape (#228, `autostart.rs`), off until somebody
+turns it on.
 
 Arch and Omarchy get a pacman package from Linger's own repository (#188),
 built by repackaging the release `.deb` (`packaging/arch/`), so it runs against

@@ -4,6 +4,9 @@
 
 #[cfg(test)]
 mod acl;
+mod autostart;
+#[cfg(target_os = "linux")]
+pub mod desktop_entry;
 pub mod gateway;
 pub mod graphics;
 mod notifications;
@@ -534,7 +537,9 @@ pub fn run() {
             window::next_open_settings,
             window::next_open_tool,
             tray::next_close_to_tray,
-            tray::next_tray_voice
+            tray::next_tray_voice,
+            autostart::autostart_state,
+            autostart::autostart_set
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

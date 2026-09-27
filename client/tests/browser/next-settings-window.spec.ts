@@ -199,3 +199,64 @@ test("closing the list: keep Linger in the tray by default, or quit, told to the
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "tray", on: false });
   expect(await page.evaluate(() => window.localStorage.getItem("linger.next.closeList"))).toBe("quit");
 });
+
+test.describe("starting Linger when you sign in to the computer (#228)", () => {
+  const startSwitch = (page: Page) => page.getByRole("switch", { name: "Start Linger when I sign in to the computer" });
+  const changes = async (page: Page) => (await did(page)).filter((line) => line.startsWith("autostart:"));
+
+  test("is off on a fresh install, and Settings changes it only when asked", async ({ page }) => {
+    await open(page, "?section=account");
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "false");
+    // Opening Settings only asks the computer; nothing is registered.
+    expect(await changes(page)).toEqual([]);
+    await startSwitch(page).click();
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "true");
+    await startSwitch(page).click();
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "false");
+    expect(await changes(page)).toEqual(["autostart:true", "autostart:false"]);
+  });
+
+  test("shows what the computer has, not what was clicked", async ({ page }) => {
+    await open(page, "?section=account&autostart=on");
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "true");
+
+    // A computer that takes the change without keeping it: the switch says so.
+    await open(page, "?section=account&autostart=ignores");
+    await startSwitch(page).click();
+    await expect.poll(() => changes(page)).toEqual(["autostart:true"]);
+    await expect(startSwitch(page)).toBeEnabled();
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "false");
+  });
+
+  test("a refusal is said in plain words, and the switch stays off", async ({ page }) => {
+    await open(page, "?section=account&autostart=refuse");
+    await startSwitch(page).click();
+    await expect(page.getByRole("tabpanel").getByRole("status").filter({ hasText: "Couldn't turn this on." })).toHaveText(
+      "Couldn't turn this on. This computer didn't allow it.",
+    );
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "false");
+    await expect(startSwitch(page)).toBeEnabled();
+    expect(await changes(page)).toEqual(["autostart:true"]);
+  });
+
+  test("on a desktop that won't start it by itself, says so and links to the line to add", async ({ page }) => {
+    await open(page, "?section=account");
+    await expect(page.getByText(/startup list by itself/)).toHaveCount(0);
+
+    await open(page, "?section=account&autostart=hyprland");
+    await expect(page.getByRole("tabpanel")).toContainText("Hyprland doesn't start apps from the usual startup list by itself");
+    // The switch still works: the entry is there for a session that does read it.
+    await startSwitch(page).click();
+    await expect(startSwitch(page)).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("button", { name: "How to add it" }).click();
+    await expect
+      .poll(() => did(page))
+      .toContain("open:https://github.com/itsMattGuenther/Linger/blob/main/docs/user-guide.md#starting-linger-when-you-sign-in");
+  });
+
+  test("isn't offered where the computer can't do it", async ({ page }) => {
+    await open(page, "?section=account&autostart=none");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(startSwitch(page)).toHaveCount(0);
+  });
+});
