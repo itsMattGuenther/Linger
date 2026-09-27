@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import { durationText, fileSize, inlineBox, renderAs } from "../../../lib/media";
 import { Button, Icon, TextField } from "../../kit";
@@ -54,15 +54,11 @@ function One({
       );
     case "video":
       return (
-        <video
-          className="nx-att-video"
+        <Video
+          name={file.filename}
           src={mediaUrl(file.url)}
           poster={file.poster_url === null ? undefined : mediaUrl(file.poster_url)}
-          width={box?.width}
-          height={box?.height}
-          controls
-          preload="metadata"
-          aria-label={file.filename}
+          box={box}
         />
       );
     case "audio":
@@ -77,6 +73,77 @@ function One({
     case "file":
       return <FileCard file={file} url={mediaUrl(file.url)} onDownload={onDownload} />;
   }
+}
+
+/**
+ * A shared video, in a frame sized before its bytes arrive. If it stops
+ * loading (the connection dropped, or a server too old to answer a seek,
+ * #222), the frame says so and offers to load it again right here, from
+ * where it had got to, rather than leaving a dead player that only leaving
+ * the room would bring back.
+ */
+function Video({
+  name,
+  src,
+  poster,
+  box,
+}: {
+  name: string;
+  src: string;
+  poster: string | undefined;
+  box: { width: number; height: number } | null;
+}) {
+  // Each go is a new element: one that has failed keeps its failure, and in
+  // the Linux app it holds a GStreamer pipeline that has already given up.
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const resumeAt = useRef(0);
+  const player = useRef<HTMLVideoElement>(null);
+  // The button that was just pressed goes away; the keyboard lands on the player.
+  useEffect(() => {
+    if (attempt > 0) player.current?.focus();
+  }, [attempt]);
+  return (
+    <div className="nx-att-video">
+      <video
+        key={attempt}
+        ref={player}
+        className="nx-att-video-player"
+        src={src}
+        poster={poster}
+        width={box?.width}
+        height={box?.height}
+        controls
+        preload="metadata"
+        aria-label={name}
+        onError={(event) => {
+          resumeAt.current = event.currentTarget.currentTime;
+          setFailed(true);
+        }}
+        onLoadedMetadata={(event) => {
+          const at = resumeAt.current;
+          resumeAt.current = 0;
+          if (at > 0 && at < event.currentTarget.duration) event.currentTarget.currentTime = at;
+        }}
+      />
+      {failed ? (
+        <div className="nx-att-video-failed">
+          <p className="nx-att-video-note" role="alert">
+            Couldn't load this video.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setFailed(false);
+              setAttempt((count) => count + 1);
+            }}
+          >
+            Load again
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /**

@@ -486,7 +486,8 @@ bind address is what `cargo test` and `pnpm tauri dev` both run against.
 Every served object also carries `Content-Security-Policy: default-src 'none'; sandbox`
 and `Cross-Origin-Resource-Policy: cross-origin`, and the `Content-Type` is never the
 uploader's claim: it is one of the thirteen media types the server sniffed for itself, or
-`application/octet-stream`.
+`application/octet-stream`. A piece of a file (a `206`, below) goes out with every one of
+these headers too.
 
 **On S3, the bytes come from the bucket**, and S3 has no `response-` override for
 `X-Content-Type-Options` or `Content-Security-Policy` — only for the content type and the
@@ -574,7 +575,11 @@ you on egress.
 **The local backend's listener.** Step 3 is trivial with S3 — the client PUTs at Amazon.
 With a filesystem there is no second machine, so the local backend hands out URLs under
 `PUT /upload/{upload_id}/{part}` on the app host, and objects come back from
-`GET /objects/{key}` on the media host and only there (§7).
+`GET /objects/{key}` on the media host and only there (§7). That route answers one byte
+range per request with `206 Partial Content`, reading only the bytes asked for: a video
+player seeks by asking for the part of the file it needs, and GStreamer, the player under
+WebKitGTK, gives up when it gets the whole file back instead (#222). The forms it takes
+and what it does with the rest are in PROTOCOL §6.
 Neither path is under `/api/v1`, neither reads an `Authorization` header, and neither
 touches a session: the part URL is signed with an HMAC over the upload id, the part
 number and an expiry, which is what an S3 presigned URL is. The signing key lives in the

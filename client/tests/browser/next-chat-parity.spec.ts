@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 
 // The conversation's items in docs/design/parity.md that had no test in the
@@ -465,6 +466,130 @@ test.describe("files in the conversation", () => {
     const other = row(page, id).locator(".nx-att-card").filter({ hasText: "wiring.pdf" });
     await expect(other.locator("iframe, embed, object, img, video, audio")).toHaveCount(0);
     await expect(other.getByRole("button", { name: /Download/ })).toBeVisible();
+  });
+});
+
+/** A real four-second WebM (VP8, 160×90, its index at the front), for playing and seeking. */
+const CLIP = readFileSync(new URL("../fixtures/clip.webm", import.meta.url));
+/** The largest piece the fake server sends at once, so the player has to come back for the rest. */
+const PIECE = 8 * 1024;
+
+/**
+ * The file store for `/media/vid-*`, answering as the server does since #222:
+ * one byte range at a time, with `206` and `Content-Range`. It sends at most
+ * `PIECE` bytes per answer, which a server may, so reaching the end of the
+ * clip takes a range that starts partway in, the request a seek makes. While
+ * `down`, every request fails.
+ */
+async function videoStore(page: Page) {
+  const store = { down: false, ranges: [] as string[] };
+  await page.route(`${SERVER}/media/vid-*`, async (route) => {
+    if (store.down) return route.fulfill({ status: 503 });
+    const range = route.request().headers()["range"];
+    const asked = /^bytes=(\d+)-(\d*)$/.exec(range ?? "");
+    if (!range || !asked) return route.fulfill({ status: 200, contentType: "video/webm", headers: { "accept-ranges": "bytes" }, body: CLIP });
+    store.ranges.push(range);
+    const start = Number(asked[1]);
+    const end = Math.min(CLIP.length - 1, start + PIECE - 1, asked[2] ? Number(asked[2]) : Number.POSITIVE_INFINITY);
+    await route.fulfill({
+      status: 206,
+      contentType: "video/webm",
+      headers: { "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${CLIP.length}` },
+      body: CLIP.subarray(start, end + 1),
+    });
+  });
+  return store;
+}
+
+test.describe("a shared video (#222)", () => {
+  const clip = {
+    id: "vid-clip",
+    filename: "porch-light.webm",
+    mime: "video/webm",
+    size_bytes: CLIP.length,
+    url: "/media/vid-clip",
+    width: 320,
+    height: 180,
+    duration_ms: 4_000,
+    blurhash: null,
+    poster_url: null,
+    starred_at: null,
+    uploader_id: "u-eli",
+    created_at: Date.parse("2026-09-25T22:50:00"),
+  };
+  const player = (page: Page, id: string) => row(page, id).locator("video");
+  const time = (page: Page, id: string) => player(page, id).evaluate((video: HTMLVideoElement) => video.currentTime);
+  const ready = (page: Page, id: string) => player(page, id).evaluate((video: HTMLVideoElement) => video.readyState);
+
+  /** The chat window with the video store in front of it, on an engine that can play the clip. */
+  async function openWithVideo(page: Page) {
+    await open(page);
+    const playable = await page.evaluate(() => document.createElement("video").canPlayType('video/webm; codecs="vp8"'));
+    test.skip(playable === "", "this engine can't play WebM");
+    return videoStore(page);
+  }
+
+  test("seeks by asking for the part it needs, and plays on from there", async ({ page }) => {
+    const store = await openWithVideo(page);
+    const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+
+    await player(page, id).evaluate(
+      (video: HTMLVideoElement) =>
+        new Promise<void>((settle) => {
+          video.addEventListener("seeked", () => settle(), { once: true });
+          video.currentTime = 3.5;
+        }),
+    );
+    expect(await time(page, id)).toBeCloseTo(3.5, 1);
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(2);
+    expect(await player(page, id).evaluate((video: HTMLVideoElement) => video.error)).toBeNull();
+    await expect(row(page, id).getByRole("alert")).toHaveCount(0);
+    // It came back for a later part of the file, and got it.
+    expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
+  });
+
+  test("one that can't load says so over its own frame, and loads again in place", async ({ page }) => {
+    const store = await openWithVideo(page);
+    store.down = true;
+    const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
+    const frame = await player(page, id).boundingBox();
+    const rowHeight = await row(page, id).evaluate((node) => node.getBoundingClientRect().height);
+
+    const note = row(page, id).getByRole("alert");
+    await expect(note).toHaveText("Couldn't load this video.");
+    const again = row(page, id).getByRole("button", { name: "Load again" });
+    await expect(again).toBeVisible();
+    // Over the player's own frame, exactly: nothing below it moves.
+    expect(await row(page, id).locator(".nx-att-video-failed").boundingBox()).toEqual(frame);
+    expect(await row(page, id).evaluate((node) => node.getBoundingClientRect().height)).toBe(rowHeight);
+
+    store.down = false;
+    await again.click();
+    await expect(note).toHaveCount(0);
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    expect(await player(page, id).evaluate((video: HTMLVideoElement) => video.duration)).toBeCloseTo(4, 0);
+    // The button went; the keyboard is on the player it brought back.
+    await expect(player(page, id)).toBeFocused();
+  });
+
+  test("loading again picks up where it had got to", async ({ page }) => {
+    await openWithVideo(page);
+    const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await player(page, id).evaluate(
+      (video: HTMLVideoElement) =>
+        new Promise<void>((settle) => {
+          video.addEventListener("seeked", () => settle(), { once: true });
+          video.currentTime = 2.5;
+        }),
+    );
+    // A player giving up partway can't be staged by the network here: once its
+    // bytes are in, it asks for nothing more. So it gives up by its own event.
+    await player(page, id).evaluate((video: HTMLVideoElement) => video.dispatchEvent(new Event("error")));
+    await row(page, id).getByRole("button", { name: "Load again" }).click();
+    await expect(row(page, id).getByRole("alert")).toHaveCount(0);
+    await expect.poll(() => time(page, id)).toBeCloseTo(2.5, 1);
   });
 });
 

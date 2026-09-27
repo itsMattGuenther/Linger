@@ -421,6 +421,80 @@ async fn an_archive_is_served_from_the_media_host_and_nowhere_else() {
 }
 
 #[tokio::test]
+async fn an_archive_can_be_fetched_in_pieces() {
+    // A browser resuming a big download asks for the rest of the file rather
+    // than starting over, the same way a video player seeks (#222).
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let general = make_room(&server, &host.access_token, "general", None).await;
+    say(&server, &host.access_token, &general, "hello").await;
+    share(&server, &host.access_token, &general, "a.png", "a picture").await;
+
+    let job = export_now(&server, &host.access_token).await;
+    let url = format!(
+        "{}{}",
+        server.base,
+        job.url.expect("a finished export has a url")
+    );
+
+    let whole = client().get(&url).send().await.unwrap();
+    assert_eq!(whole.status(), 200);
+    assert_eq!(whole.headers()["accept-ranges"], "bytes");
+    let whole_headers = whole.headers().clone();
+    let archive = whole.bytes().await.unwrap();
+    let len = archive.len();
+    assert!(len > 100, "an archive with a picture in it is not tiny");
+
+    let rest = client()
+        .get(&url)
+        .header(reqwest::header::RANGE, "bytes=100-")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rest.status(), 206);
+    assert_eq!(
+        rest.headers()["content-range"],
+        format!("bytes 100-{}/{len}", len - 1)
+    );
+    assert_eq!(rest.headers()["content-length"], (len - 100).to_string());
+    // Still a download, still not cached, still inert: a piece carries every
+    // header the whole archive does.
+    for name in [
+        "content-type",
+        "content-disposition",
+        "cache-control",
+        "x-content-type-options",
+        "content-security-policy",
+        "cross-origin-resource-policy",
+        "accept-ranges",
+    ] {
+        assert!(whole_headers.contains_key(name), "{name}");
+        assert_eq!(rest.headers().get(name), whole_headers.get(name), "{name}");
+    }
+    assert_eq!(rest.headers()["content-type"], "application/zip");
+    assert_eq!(rest.headers()["cache-control"], "private, no-store");
+    assert_eq!(rest.bytes().await.unwrap(), archive[100..]);
+
+    let past = client()
+        .get(&url)
+        .header(reqwest::header::RANGE, format!("bytes={len}-"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(past.status(), 416);
+    assert_eq!(past.headers()["content-range"], format!("bytes */{len}"));
+
+    let several = client()
+        .get(&url)
+        .header(reqwest::header::RANGE, "bytes=0-9,20-29")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(several.status(), 200);
+    assert_eq!(several.bytes().await.unwrap(), archive);
+}
+
+#[tokio::test]
 async fn asking_again_replaces_the_previous_archive() {
     // One archive per member. Otherwise a member with a button can fill a
     // host's disk with copies of their own server.

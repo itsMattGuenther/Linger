@@ -462,6 +462,18 @@ type; everything else is served as `application/octet-stream` with
 `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`
 (ARCHITECTURE §7).
 
+**Ranges.** A file stored on the server's own disk can be fetched a piece at a time,
+which is how a video player seeks and how a browser resumes a download. One byte range
+per request is served: `Range: bytes=a-b`, `bytes=a-` or `bytes=-n` (the last `n` bytes)
+answers `206 Partial Content` with `Content-Range: bytes a-b/<length>` and the piece's own
+`Content-Length`, and carries every header the whole file does. A range that starts at or
+past the end is `416` with `Content-Range: bytes */<length>`, no body, and
+`Cache-Control: no-store`. Anything else —
+several ranges, a malformed header, or a `Range` under an `If-Range` (the server hands out
+no validator for one to match) — gets the whole file with `200`. Every file response says
+`Accept-Ranges: bytes`. On S3 the route is a redirect and the bucket answers ranges
+itself. Export archives (§7) are served the same way.
+
 A client should treat these URLs as opaque and use them as given. Nothing else on the
 media origin answers, and the API does not answer there.
 
@@ -650,7 +662,8 @@ same for all of them; there is no host-only view of it.
 failed`; `progress` is `0.0`–`1.0`; `url` appears once `state` is `complete`
 and points at the **media origin**, the host uploads are served from, because
 an archive of the whole server has no more business being same-origin with the
-app than an upload does.
+app than an upload does. It is served like an upload, byte ranges included
+(§6), so a browser can resume a download that broke off.
 
 As with attachment URLs (§6), a server without `LINGER_DOMAIN` returns a
 root-relative export URL. The client resolves it against that server's origin
