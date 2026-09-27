@@ -1,6 +1,6 @@
 //! Linux launch plumbing that has to run before GTK.
 //!
-//! Graphics workarounds WebKitGTK needs on some GPUs, then three jobs about
+//! Graphics workarounds GTK and WebKitGTK need on some GPUs, then three jobs about
 //! the AppImage-from-a-terminal path: the backend override that survives
 //! linuxdeploy's X11 fallback, ignoring the hang-up that would otherwise kill
 //! the window when the terminal closes, and writing a user menu entry so the
@@ -24,6 +24,17 @@ const NV_EXPLICIT_SYNC: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 /// computers and costs a frame of delay on every one (#169). Decided per launch
 /// by [`choose_gbm`] unless somebody set it.
 const GBM: &str = "WEBKIT_DMABUF_RENDERER_DISABLE_GBM";
+/// GTK's own GL switch; `disable` stops GTK drawing windows through the GPU.
+/// WebKit asks GTK for GL before it turns hardware acceleration on, so with
+/// GTK's GL off it draws pages on the CPU instead. Set on NVIDIA's legacy
+/// driver (see [`legacy_nvidia`]) unless somebody set it.
+const GDK_GL: &str = "GDK_GL";
+/// Exists while NVIDIA's kernel driver is loaded, and holds its version, e.g.
+/// `580.178.04`. The open and the closed kernel module both write it.
+const NVIDIA_VERSION: &str = "/sys/module/nvidia/version";
+/// NVIDIA's 590 driver dropped Maxwell, Pascal and Volta cards. They stay on
+/// the 580 branch (`nvidia-580xx` on Arch).
+const NVIDIA_CURRENT: u32 = 590;
 const BACKEND: &str = "LINGER_LINUX_BACKEND";
 const WM_CLASS: &str = "linger-client";
 
@@ -42,6 +53,26 @@ fn backend(
 // Keep explicit values (including 0); otherwise turn the workaround on.
 fn default_on(value: Option<&OsStr>) -> &OsStr {
     value.unwrap_or_else(|| OsStr::new("1"))
+}
+
+/// The major version of NVIDIA's driver when it is on the legacy branch, from
+/// [`NVIDIA_VERSION`]: `Some(580)` for `580.178.04`.
+///
+/// GTK draws without the GPU there (#229). On a GTX 980 Ti with 580.178.04,
+/// under Hyprland, resizing a Linger window while another was open crashed
+/// the app 3 times out of 3. The core shows GTK finishing one window's frame
+/// with the *other* window's GL context current, then reading that window's
+/// paint surface, which is NULL between frames (`gdk_gl_texture_from_surface`
+/// → `cairo_surface_get_device_scale`). GTK keeps the old context when a
+/// switch fails, so most likely `eglMakeCurrent` failed on the window being
+/// resized. WebKit's web process crashed inside the same driver too, on its
+/// GPU painting thread. With `GDK_GL=disable` the resize crash stopped, and
+/// WebKit paints on the CPU, off the path its own crash was on. It costs what
+/// the GPU path saves: typing runs a beat behind (#169). The 610 driver on the
+/// RTX 4090 Omarchy machine, with the same GTK and WebKit, has not crashed.
+fn legacy_nvidia(version: &str) -> Option<u32> {
+    let major: u32 = version.trim().split('.').next()?.parse().ok()?;
+    (major < NVIDIA_CURRENT).then_some(major)
 }
 
 /// Whether this launch tries WebKit's GPU display path.
@@ -140,6 +171,7 @@ struct Chosen {
     gbm: Option<OsString>,
     nv_explicit_sync: Option<OsString>,
     backend: Option<OsString>,
+    gdk_gl: Option<OsString>,
 }
 
 impl Chosen {
@@ -148,6 +180,7 @@ impl Chosen {
             GBM => self.gbm.as_ref(),
             NV_EXPLICIT_SYNC => self.nv_explicit_sync.as_ref(),
             BACKEND => self.backend.as_ref(),
+            GDK_GL => self.gdk_gl.as_ref(),
             _ => None,
         };
         value.and_then(|value| value.to_str()).map(str::to_string)
@@ -160,6 +193,7 @@ pub fn configure() -> Result<(), &'static str> {
         gbm: std::env::var_os(GBM),
         nv_explicit_sync: std::env::var_os(NV_EXPLICIT_SYNC),
         backend: std::env::var_os(BACKEND),
+        gdk_gl: std::env::var_os(GDK_GL),
     };
     let wayland_display = std::env::var_os("WAYLAND_DISPLAY");
     let selected = backend(chosen.backend.as_deref(), wayland_display.as_deref())?;
@@ -170,9 +204,24 @@ pub fn configure() -> Result<(), &'static str> {
         NV_EXPLICIT_SYNC,
         default_on(chosen.nv_explicit_sync.as_deref()),
     );
+    // Somebody's own `GDK_GL` always wins, whatever it says.
+    let legacy = match chosen.gdk_gl {
+        Some(_) => None,
+        None => fs::read_to_string(NVIDIA_VERSION)
+            .ok()
+            .and_then(|version| legacy_nvidia(&version)),
+    };
+    if let Some(driver) = legacy {
+        std::env::set_var(GDK_GL, "disable");
+        eprintln!(
+            "Linger: NVIDIA's {driver} driver is loaded, so windows are drawn without the \
+             GPU (#229). Setting GDK_GL yourself overrides this."
+        );
+    }
     // Somebody's own `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins; WebKit
-    // reads it straight from the environment.
-    if chosen.gbm.is_none() {
+    // reads it straight from the environment. With GTK's GL off, WebKit never
+    // reaches the GPU path, so there is nothing to probe.
+    if chosen.gbm.is_none() && legacy.is_none() {
         let webkit = webkit_version();
         let launch = Launch {
             native_wayland: selected == Some("wayland"),
@@ -327,10 +376,11 @@ fn exec_line(appimage: &Path, chosen: impl Fn(&str) -> Option<String>) -> Option
 /// it, and no change to the default could ever reach an existing install.
 /// Dropping it costs one launch with the old setting, then the entry is clean.
 /// A computer that really does abort on the GPU path is caught by the probe
-/// (`choose_gbm`) instead.
+/// (`choose_gbm`) instead. `GDK_GL` takes words, and Linger never wrote it
+/// into an entry, so `GDK_GL=disable` set by hand is kept.
 fn env_prefix(lookup: impl Fn(&str) -> Option<String>) -> String {
     let mut parts = Vec::new();
-    for key in [GBM, NV_EXPLICIT_SYNC, BACKEND] {
+    for key in [GBM, NV_EXPLICIT_SYNC, BACKEND, GDK_GL] {
         if let Some(raw) = lookup(key) {
             if let Some(value) = simple_token(&raw) {
                 if key != BACKEND && value == "1" {
@@ -508,7 +558,22 @@ mod tests {
             env_prefix(from(&[(BACKEND, "wayland")])),
             "LINGER_LINUX_BACKEND=wayland "
         );
+        // The hand-set workaround for GTK's GL crash (#229) is kept.
+        assert_eq!(env_prefix(from(&[(GDK_GL, "disable")])), "GDK_GL=disable ");
         assert_eq!(env_prefix(|_| None), "");
+    }
+
+    #[test]
+    fn only_nvidias_legacy_driver_turns_gtks_gl_off() {
+        // The driver on the GTX 980 Ti that crashed resizing windows (#229).
+        assert_eq!(legacy_nvidia("580.178.04\n"), Some(580));
+        // The RTX 4090 Omarchy machine, same GTK and WebKit, no crash.
+        assert_eq!(legacy_nvidia("610.57.04\n"), None);
+        assert_eq!(legacy_nvidia("470.256.02"), Some(470));
+        assert_eq!(legacy_nvidia("590.44.01"), None);
+        // Unreadable means leave the GPU on, as without NVIDIA at all.
+        assert_eq!(legacy_nvidia(""), None);
+        assert_eq!(legacy_nvidia("unknown"), None);
     }
 
     /// A fresh directory for one test, under the system temp dir.
@@ -649,6 +714,7 @@ mod tests {
             gbm: None,
             nv_explicit_sync: None,
             backend: None,
+            gdk_gl: None,
         }
     }
 
@@ -693,6 +759,7 @@ mod tests {
             gbm: Some("1".into()),
             nv_explicit_sync: Some("1".into()),
             backend: Some("wayland".into()),
+            gdk_gl: None,
         };
 
         write_menu_entry(&root.join("data"), &appimage, None, &chosen).unwrap();

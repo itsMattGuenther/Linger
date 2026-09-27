@@ -99,6 +99,15 @@ clears it after drawing two frames. A probe still there at the next launch
 means that launch died, so `gbm-off-<version>` keeps that WebKit off the GPU
 path (`client/src-tauri/src/graphics.rs`, `linux_startup.rs`).
 
+On NVIDIA's legacy driver (the 580 branch and older, which Maxwell, Pascal and
+Volta cards need), startup sets `GDK_GL=disable` unless `GDK_GL` is already
+set (#229). With that driver, GTK's GL drawing crashed when one Linger window
+was resized while another was open: GTK finished a frame with the other
+window's GL context and read its NULL paint surface. With GTK's GL off, WebKit
+turns hardware acceleration off too and paints on the CPU, so there is no GBM
+probe on those launches. The driver version comes from
+`/sys/module/nvidia/version`; the 610 driver keeps the GPU.
+
 The same startup path ignores `SIGHUP` so closing the launching terminal does
 not kill the window, and an AppImage writes a user menu entry
 (`com.linger.desktop`) so the next open does not need a terminal. Packaged
