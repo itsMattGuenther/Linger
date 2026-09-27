@@ -6,7 +6,19 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
 import { PALETTE_KEYS } from "../../../lib/palette";
-import { HEADINGS, INVITE_EXPIRY, INVITE_USES } from "../../core/settings";
+import {
+  draftSlug,
+  HEADINGS,
+  INVITE_EXPIRY,
+  INVITE_USES,
+  nameTyped,
+  NEW_ROOM_DRAFT,
+  type RoomDraft,
+  roomSlugOf,
+  slugLeft,
+  slugNeeded,
+  slugTyped,
+} from "../../core/settings";
 import { Button, HashMark, IconButton, Marker, markerOf, Name, Swatch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useSave } from "./parts";
 
@@ -127,18 +139,24 @@ export function RoomsSection({ rooms, create, update, move, archive }: HostRooms
   );
 }
 
+/**
+ * Name first, and the slug fills itself in from it (#221): `roomSlugOf` in
+ * core/settings.ts is the rule, and the server still judges what's sent.
+ */
 function NewRoom({ create }: { create: HostRoomsProps["create"] }) {
-  const [slug, setSlug] = useState("");
-  const [name, setName] = useState("");
+  const [draft, setDraft] = useState<RoomDraft>(NEW_ROOM_DRAFT);
   const [topic, setTopic] = useState("");
   const save = useSave();
-  const ready = slug.trim() !== "" && save.phase.kind !== "saving";
+  const slug = draftSlug(draft);
+  // Nothing in the name to make a slug from: the box stays empty, with no example in it, and asks.
+  const needed = slugNeeded(draft);
+  const ready = slug !== "" && save.phase.kind !== "saving";
   const submit = async () => {
     if (!ready) return;
-    const ok = await save.run(create({ slug: slug.trim(), name: name.trim() === "" ? slug.trim() : name.trim(), topic: topic.trim() === "" ? null : topic.trim() }));
+    const name = draft.name.trim();
+    const ok = await save.run(create({ slug, name: name === "" ? slug : name, topic: topic.trim() === "" ? null : topic.trim() }));
     if (ok) {
-      setSlug("");
-      setName("");
+      setDraft(NEW_ROOM_DRAFT);
       setTopic("");
     }
   };
@@ -149,8 +167,25 @@ function NewRoom({ create }: { create: HostRoomsProps["create"] }) {
   return (
     <Block heading={HEADINGS.newRoom}>
       <Fields>
-        <TextField label="Slug" mono value={slug} placeholder="porch" hint="What people type after the #." onChange={typed(setSlug)} onEnter={() => void submit()} />
-        <TextField label="Name" value={name} placeholder={slug.trim() || "porch"} hint="Defaults to the slug." onChange={typed(setName)} onEnter={() => void submit()} />
+        <TextField
+          label="Name"
+          value={draft.name}
+          placeholder={draft.follows ? "Front Porch" : draft.slug.trim()}
+          hint="What everyone's list says."
+          onChange={typed((value) => setDraft((held) => nameTyped(held, value)))}
+          onEnter={() => void submit()}
+        />
+        <TextField
+          label="Slug"
+          mono
+          literal
+          value={draft.slug}
+          placeholder={needed ? undefined : roomSlugOf(draft.name) || "front-porch"}
+          hint={needed ? "Needs a–z or 0–9. Type a slug here." : "What people type after the #."}
+          onChange={typed((value) => setDraft((held) => slugTyped(held, value)))}
+          onBlur={() => setDraft(slugLeft)}
+          onEnter={() => void submit()}
+        />
       </Fields>
       <TextField label="Topic" value={topic} placeholder="Pull up a chair." hint="Optional. Sits in the room's header." onChange={typed(setTopic)} onEnter={() => void submit()} />
       <Actions phase={save.phase} saved="Made">

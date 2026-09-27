@@ -33,6 +33,8 @@ export interface TextFieldProps {
   maxLength?: number;
   autoFocus?: boolean;
   onEnter?: () => void;
+  /** Focus left the field. */
+  onBlur?: () => void;
 }
 
 /**
@@ -60,6 +62,7 @@ export function TextField({
   max,
   autoFocus,
   onEnter,
+  onBlur,
 }: TextFieldProps) {
   const id = useId();
   const input = useRef<HTMLInputElement | null>(null);
@@ -107,6 +110,7 @@ export function TextField({
           autoCorrect={literal ? "off" : undefined}
           spellCheck={literal ? false : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+          onBlur={onBlur}
           onKeyDown={(event) => {
             if (event.key === "Enter" && onEnter) {
               event.preventDefault();

@@ -351,6 +351,8 @@ or an error in words underneath.
 - **Focus:** the whole box is the target and draws the focus: the lamp edge
   plus a soft ring.
 - **`onEnter`** submits on Enter.
+- **`onBlur`** says focus left the field, as when New Room's emptied slug
+  fills in from the name again.
 
 ### Select
 
