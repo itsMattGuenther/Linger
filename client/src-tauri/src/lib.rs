@@ -433,6 +433,33 @@ async fn voice_push_to_talk(app: AppHandle, base_url: String, closed: bool) {
     engine_for(&app, &base_url).set_push_to_talk_closed(closed);
 }
 
+/// Other devices picked in Settings while in a call (#249): the call carries
+/// on through them, without leaving. `None` is the system default. Whichever
+/// server's engine holds the call is the one that changes.
+#[tauri::command]
+async fn voice_choose_devices(app: AppHandle, input: Option<String>, output: Option<String>) {
+    let engines: Vec<_> = app
+        .state::<VoiceEngines>()
+        .with(|held| held.values().map(std::sync::Arc::clone).collect());
+    for engine in engines {
+        engine
+            .choose_devices(input.as_deref(), output.as_deref())
+            .await;
+    }
+}
+
+/// Settings' "Voice through the server" switched (#249): it applies to the
+/// call you are in at once, as well as to the next join.
+#[tauri::command]
+async fn voice_forwarding(app: AppHandle, on: bool) {
+    let engines: Vec<_> = app
+        .state::<VoiceEngines>()
+        .with(|held| held.values().map(std::sync::Arc::clone).collect());
+    for engine in engines {
+        engine.set_forwarding(on).await;
+    }
+}
+
 /// How loud one peer plays for you, 1.0 being as sent.
 #[tauri::command]
 async fn voice_volume(app: AppHandle, base_url: String, peer: String, volume: f32) {
@@ -535,6 +562,8 @@ pub fn run() {
             voice_controls,
             voice_push_to_talk,
             voice_volume,
+            voice_choose_devices,
+            voice_forwarding,
             voice_devices,
             notifications::show_notification,
             updates::app_version,

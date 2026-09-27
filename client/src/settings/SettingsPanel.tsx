@@ -48,7 +48,7 @@ import {
   passwordReady,
   passwordRequest,
 } from "../lib/account";
-import { type VoiceDeviceList, voiceDevices } from "../lib/ipc";
+import { type VoiceDeviceList, voiceChooseDevices, voiceDevices } from "../lib/ipc";
 import {
   loadVoicePrefs,
   PUSH_TO_TALK_KEY,
@@ -495,11 +495,14 @@ function VoiceSection() {
   const change = (next: VoicePrefs): void => {
     setPrefs(next);
     saveVoicePrefs(next);
-    // Push-to-talk applies to the call you're in at once, not only at the
-    // next join (#231). Devices still wait for the next join.
+    // Push-to-talk (#231) and the devices (#249) apply to the call you're
+    // in at once, not only at the next join.
     const seat = voiceSeatServer();
     if (seat !== null && next.pushToTalk !== prefs.pushToTalk) {
       void setVoicePushToTalk(seat, next.pushToTalk).catch(() => undefined);
+    }
+    if (seat !== null && (next.devices.input !== prefs.devices.input || next.devices.output !== prefs.devices.output)) {
+      void voiceChooseDevices(next.devices).catch(() => undefined);
     }
   };
 
@@ -537,7 +540,7 @@ function VoiceSection() {
             }
           />
           <p className="settings-lead settings-warmth-lead">
-            A change applies the next time you join voice.
+            A change applies at once, in a call too.
           </p>
         </>
       )}

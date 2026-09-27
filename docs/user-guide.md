@@ -426,8 +426,9 @@ yourself. It's off by default, because a room you leave running is the point,
 and a key you have to hold is the opposite of that.
 
 Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
-change applies the next time you join. If a device you picked isn't plugged in,
-the system default is used and the picker says so.
+change applies at once, even in the middle of a call: you carry on talking
+through the new device without leaving. If a device you picked isn't plugged
+in, the system default is used and the picker says so.
 
 **Voice through the server.** On a server whose host has turned it on, your
 voice goes to the server once and the server passes it on to everyone else in
@@ -435,8 +436,9 @@ the room, which is what lets a room of twenty talk at once. If it ever gives
 you trouble, **Settings → Sound & Voice → Voice through the server** turns it
 off and goes back to the old way, straight to each person. If anybody in a
 room turns it off, or is on an older version of Linger, the whole room uses
-the old way, so everybody can always hear everybody. It takes effect the next
-time you join voice.
+the old way, so everybody can always hear everybody. Switching it applies at
+once, in a call too, on a server that has been updated since Linger 0.4.3; on an
+older server it waits until you next join.
 
 **Nothing is recorded.** Not by the server, not by anybody's app, not "for
 transcription". The server passes voice along without keeping it; the person

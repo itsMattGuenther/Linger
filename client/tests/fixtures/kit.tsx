@@ -667,7 +667,7 @@ function Gallery() {
             label="Microphone"
             value={mic}
             onChange={setMic}
-            hint="A change applies the next time you join voice."
+            hint="A change applies at once, in a call too."
             options={[
               { value: "", label: "System default (Built-in microphone with a name far too long to fit in the box)" },
               { value: "usb", label: "USB microphone" },

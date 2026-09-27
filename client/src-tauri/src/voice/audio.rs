@@ -13,8 +13,9 @@
 //!
 //! Two things are deliberately *not* here:
 //!
-//! - **Device selection** is T-1405's, along with hotplug and the OS default
-//!   changing under a call. Today the default device is the device.
+//! - **Device selection** is `device.rs`'s, along with hotplug and the OS
+//!   default changing under a call (T-1405). All the seam has of it is
+//!   `choose`, for a device picked in the middle of a call (#249).
 //! - **Mixing several peers** happens on the playback side, inside the sink.
 //!   [`Sink::play`] takes the peer it came from so the sink can keep one lane
 //!   per person and sum them at the last moment.
@@ -54,6 +55,11 @@ pub const FRAME_SAMPLES: usize = (SAMPLE_RATE as usize / 1000) * FRAME_MS as usi
 #[async_trait]
 pub trait Source: Send + Sync + 'static {
     async fn frame(&self) -> Option<Vec<i16>>;
+
+    /// Carry on from another device, by name, or the default for `None`
+    /// (#249). Frames keep coming from the same source; only the device under
+    /// it changes. The stand-ins have no device and ignore it.
+    fn choose(&self, _name: Option<&str>) {}
 }
 
 /// Where the sound coming in goes.
@@ -76,6 +82,11 @@ pub trait Sink: Send + Sync + 'static {
     /// ever yours: SPEC §4.14 says nobody can turn anybody else down, and a
     /// gain that lives in your own sink cannot be anything but your own.
     async fn set_volume(&self, _peer: &str, _volume: f32) {}
+
+    /// Carry on playing through another device, by name, or the default for
+    /// `None` (#249). Everybody's volume stays as it was. The stand-ins have
+    /// no device and ignore it.
+    fn choose(&self, _name: Option<&str>) {}
 }
 
 /// The two ends, together. What [`crate::voice::Engine::join`] takes: a

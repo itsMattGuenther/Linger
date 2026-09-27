@@ -122,6 +122,23 @@ export async function voicePushToTalk(baseUrl: string, closed: boolean): Promise
   await invoke("voice_push_to_talk", { baseUrl, closed });
 }
 
+/**
+ * Devices picked in Settings during a call (#249): the call carries on
+ * through them, without leaving. `null` is the system default, and only a
+ * device that changed is reopened. Outside a call it changes nothing: the next
+ * join opens what Settings saved.
+ */
+export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("voice_choose_devices", { input: devices.input, output: devices.output });
+}
+
+/** Voice through the server switched (#197, #249): the call you're in follows at once. */
+export async function voiceForwarding(on: boolean): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("voice_forwarding", { on });
+}
+
 /** How loud one peer (a session id) plays for you: 1 is as sent, 2 is the ceiling. */
 export async function voiceVolume(baseUrl: string, peer: string, volume: number): Promise<void> {
   if (!isTauri()) return;

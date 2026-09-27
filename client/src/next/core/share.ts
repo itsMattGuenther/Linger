@@ -31,6 +31,7 @@ import {
   sharedLocalOf,
   snapshotOf,
 } from "../../lib/gateway";
+import { voiceChooseDevices, voiceForwarding } from "../../lib/ipc";
 import { loadVoicePrefs } from "../../lib/voice";
 import { setViewing } from "../../lib/notify";
 import type { SoundCue } from "../../lib/sound";
@@ -185,6 +186,13 @@ export type Intent =
    * it applies to the call you're in at once (#231), and the voice bar names the key.
    */
   | { kind: "voice.pushtotalk"; on: boolean; key: string }
+  /**
+   * Settings picked another microphone or speakers (`null` is the system
+   * default): the call you're in carries on through them at once (#249).
+   */
+  | { kind: "voice.devices"; input: string | null; output: string | null }
+  /** Settings switched Voice through the server: the call you're in follows at once (#249). */
+  | { kind: "voice.forwarding"; on: boolean }
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
@@ -530,6 +538,21 @@ export async function shareAsOwner(
           holdingTalk.clear();
           const server = voiceServer(sessions().keys());
           if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
+          return;
+        }
+        case "voice.devices": {
+          // Saved on this computer by Settings already; this is for the call
+          // you're in, which opened its devices when you joined (#249).
+          const named = (value: unknown): value is string | null => value === null || typeof value === "string";
+          if (!named(intent.input) || !named(intent.output)) return;
+          if (voiceServer(sessions().keys()) === null) return;
+          void voiceChooseDevices({ input: intent.input, output: intent.output }).catch(() => undefined);
+          return;
+        }
+        case "voice.forwarding": {
+          if (typeof intent.on !== "boolean") return;
+          if (voiceServer(sessions().keys()) === null) return;
+          void voiceForwarding(intent.on).catch(() => undefined);
           return;
         }
         case "voice.join": {

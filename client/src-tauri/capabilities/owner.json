@@ -19,6 +19,8 @@
     "allow-voice-controls",
     "allow-voice-push-to-talk",
     "allow-voice-volume",
+    "allow-voice-choose-devices",
+    "allow-voice-forwarding",
     "allow-voice-devices",
     "allow-show-notification",
     "allow-app-version",

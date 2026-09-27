@@ -186,6 +186,115 @@ async fn push_to_talk_closes_the_microphone_without_telling_the_room() {
     engine.leave().await;
 }
 
+/// Stand-in devices that remember every device they were asked to use.
+#[derive(Default)]
+struct Chooser(Mutex<Vec<Option<String>>>);
+
+#[async_trait]
+impl audio::Source for Chooser {
+    async fn frame(&self) -> Option<Vec<i16>> {
+        tokio::time::sleep(Duration::from_millis(u64::from(audio::FRAME_MS))).await;
+        Some(vec![0; audio::FRAME_SAMPLES])
+    }
+
+    fn choose(&self, name: Option<&str>) {
+        self.0.lock().unwrap().push(name.map(str::to_owned));
+    }
+}
+
+#[async_trait]
+impl Sink for Chooser {
+    async fn play(&self, _peer: &str, _samples: &[i16]) {}
+
+    fn choose(&self, name: Option<&str>) {
+        self.0.lock().unwrap().push(name.map(str::to_owned));
+    }
+}
+
+/// Devices picked in Settings during a call reach the call's own microphone
+/// and speakers, without leaving (#249). Outside a call there is nothing to
+/// change, and nothing is told to the room either way.
+#[tokio::test]
+async fn devices_chosen_in_a_call_reach_the_call() {
+    let (engine, mut rx, _) = engine("a").await;
+    assert!(
+        !engine.choose_devices(Some("USB mic"), None).await,
+        "changed a call that wasn't there"
+    );
+    let mic = Arc::new(Chooser::default());
+    let speakers = Arc::new(Chooser::default());
+    engine
+        .join(
+            RoomId::new(),
+            Devices {
+                source: Arc::clone(&mic) as Arc<dyn audio::Source>,
+                sink: Arc::clone(&speakers) as Arc<dyn Sink>,
+            },
+            vec![],
+        )
+        .await;
+    while rx.try_recv().is_ok() {}
+
+    assert!(
+        engine
+            .choose_devices(Some("USB mic"), Some("Headphones"))
+            .await
+    );
+    assert!(engine.choose_devices(None, Some("Headphones")).await);
+    assert_eq!(
+        *mic.0.lock().unwrap(),
+        vec![Some("USB mic".to_string()), None]
+    );
+    assert_eq!(
+        *speakers.0.lock().unwrap(),
+        vec![
+            Some("Headphones".to_string()),
+            Some("Headphones".to_string())
+        ]
+    );
+    assert!(rx.try_recv().is_err(), "a device change went to the server");
+
+    engine.leave().await;
+    assert!(!engine.choose_devices(Some("USB mic"), None).await);
+    assert_eq!(mic.0.lock().unwrap().len(), 2, "a left call was changed");
+}
+
+/// Settings' "Voice through the server" switched during a call tells the
+/// server at once, with the join a mute sends (#249). Switching it to what it
+/// already is, or outside a call, sends nothing.
+#[tokio::test]
+async fn the_old_way_switch_in_a_call_tells_the_server_at_once() {
+    let (engine, mut rx, _) = engine("a").await;
+    engine.set_forwarding(false).await;
+    assert!(rx.try_recv().is_err(), "told the server outside a call");
+    engine.set_forwarding(true).await;
+    let room = RoomId::new();
+    engine
+        .join(
+            room,
+            Devices {
+                source: Arc::new(Silence),
+                sink: Arc::new(Discard),
+            },
+            vec![],
+        )
+        .await;
+    while rx.try_recv().is_ok() {}
+
+    engine.set_forwarding(false).await;
+    match rx.try_recv() {
+        Ok(ClientFrame::VoiceJoin {
+            room_id,
+            controls: Some(_),
+            forwarding: Some(false),
+        }) => assert_eq!(room_id, room),
+        other => panic!("expected a join asking for the old way, got {other:?}"),
+    }
+    engine.set_forwarding(false).await;
+    assert!(rx.try_recv().is_err(), "an unchanged switch was sent");
+    engine.leave().await;
+}
+
 async fn engine(session: &str) -> Rig {
     let (tx, rx) = mpsc::unbounded_channel();
     let log = Arc::new(Log::default());

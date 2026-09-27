@@ -185,6 +185,40 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.can_forward.store(on, Ordering::Relaxed);
     }
 
+    /// Settings' switch for the old way, changed in a call (#249): tell the
+    /// server now, with the same join a mute sends, rather than waiting for
+    /// the next one. The server moves the room to the mesh or back, and the
+    /// `voice.state` that follows moves this engine with it (`on_state`).
+    /// Outside a call it is only remembered, as `set_can_forward` does.
+    pub async fn set_forwarding(&self, on: bool) {
+        if self.can_forward.swap(on, Ordering::Relaxed) == on {
+            return;
+        }
+        let inner = self.inner.lock().await;
+        if let Some(room_id) = inner.room {
+            self.signaller.send(ClientFrame::VoiceJoin {
+                room_id,
+                controls: Some(inner.controls),
+                forwarding: Some(on),
+            });
+        }
+    }
+
+    /// Talk and listen through other devices in the call you are in, without
+    /// leaving it (#249). `None` is the system default. Only a device that
+    /// changed is reopened; the call carries on over the moment it takes.
+    /// Answers whether there was a call to change: outside one, the choice
+    /// is only Settings' and the next join opens it.
+    pub async fn choose_devices(&self, input: Option<&str>, output: Option<&str>) -> bool {
+        let inner = self.inner.lock().await;
+        let Some(devices) = &inner.devices else {
+            return false;
+        };
+        devices.source.choose(input);
+        devices.sink.choose(output);
+        true
+    }
+
     /// Stop or resume sending what the microphone hears, and tell the room
     /// (SPEC §4.14): mute and deafen are choices the room can see. Local,
     /// instant, and nobody else's to change. Push-to-talk is not this; see
