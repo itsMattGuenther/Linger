@@ -186,28 +186,45 @@ test("push-to-talk releases on navigation and works in Settings without duplicat
   );
   await page.goto("/tests/fixtures/console.html");
   await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
   await page.keyboard.down("Control");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":false,"deafened":false}',
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "false");
   await openSettings(page);
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":true,"deafened":false}',
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
   await page.keyboard.up("Control");
   await page.keyboard.down("Control");
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "false");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator("html")).toHaveAttribute("data-closed", "true");
+  await page.keyboard.up("Control");
+  // None of it was a mute: the room was only ever told the microphone is on (#232).
   await expect(page.locator("html")).toHaveAttribute(
     "data-controls",
     '{"muted":false,"deafened":false}',
   );
-  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-controls",
-    '{"muted":true,"deafened":false}',
+});
+
+test("turning push-to-talk off or on in Settings applies to the call you're in (#231)", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("linger.voice.pushToTalk", "true"),
   );
-  await page.keyboard.up("Control");
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "Join Voice", exact: true }).click();
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-closed", "true");
+  await openSettings(page);
+  await page.getByRole("button", { name: "Sound & Voice", exact: true }).click();
+  await page.getByRole("button", { name: "push to talk", exact: true }).click();
+  await expect(html).toHaveAttribute("data-closed", "false");
+  await page.getByRole("button", { name: "open microphone", exact: true }).click();
+  await expect(html).toHaveAttribute("data-closed", "true");
+  // Never a mute, and never a second join.
+  await expect(html).toHaveAttribute(
+    "data-controls",
+    '{"muted":false,"deafened":false}',
+  );
 });
 
 test("an away-view control failure remains visible after voice disconnects", async ({

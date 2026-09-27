@@ -414,8 +414,8 @@ async fn voice_join(
     Ok(())
 }
 
-/// Stop or resume sending the microphone. Yours alone (SPEC §4.14); the
-/// surface's mute button and its push-to-talk key both land here.
+/// Mute and deafen: stop or resume sending the microphone, and tell the room.
+/// Yours alone (SPEC §4.14); the surface's mute and deafen buttons land here.
 #[tauri::command]
 async fn voice_controls(
     app: AppHandle,
@@ -423,6 +423,14 @@ async fn voice_controls(
     controls: linger_core::gateway::VoiceControls,
 ) {
     engine_for(&app, &base_url).set_controls(controls).await;
+}
+
+/// Push-to-talk's key: the microphone closed while it is up, open while it is
+/// held. Nothing is told to the room (#232), so not holding the key never
+/// shows as a mute.
+#[tauri::command]
+async fn voice_push_to_talk(app: AppHandle, base_url: String, closed: bool) {
+    engine_for(&app, &base_url).set_push_to_talk_closed(closed);
 }
 
 /// How loud one peer plays for you, 1.0 being as sent.
@@ -525,6 +533,7 @@ pub fn run() {
             voice_leave,
             voice_frame,
             voice_controls,
+            voice_push_to_talk,
             voice_volume,
             voice_devices,
             notifications::show_notification,

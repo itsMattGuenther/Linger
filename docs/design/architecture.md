@@ -190,6 +190,9 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   The owner remembers which windows hold the key down, and closes the
   microphone if one of them goes without letting go (Ctrl+W, with Ctrl as the
   key);
+- `voice.pushtotalk`: Settings turned push-to-talk on or off, or picked its
+  key. Joining only reads the choice, so this applies it to the call you're
+  in at once (#231), and tells the list window's voice bar which key to name;
 - `popout` and `tabs`: move a conversation into a window of its own, or back
   into the chat window's tabs (only the owner opens windows);
 - `open`: show a conversation where conversations open, from a window of its

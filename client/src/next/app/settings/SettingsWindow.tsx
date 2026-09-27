@@ -412,6 +412,11 @@ function Settings({ following }: { following: Following }) {
         onVoice: (prefs) => {
           saveVoicePrefs(prefs);
           setVoice(prefs);
+          // Push-to-talk and its key apply to the call you're in at once,
+          // not at the next join: the list window keeps the voice seat (#231).
+          if (prefs.pushToTalk !== voice.pushToTalk || prefs.pushToTalkKey !== voice.pushToTalkKey) {
+            void intend({ kind: "voice.pushtotalk", on: prefs.pushToTalk, key: prefs.pushToTalkKey }).catch(() => undefined);
+          }
         },
         devices,
         now,

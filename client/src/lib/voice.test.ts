@@ -117,13 +117,13 @@ describe("who is in voice anywhere", () => {
 
 describe("the microphone line", () => {
   it("says what is happening only when a button cannot", () => {
-    expect(microphoneLine("opening", false, false)).toMatch(/opening/);
-    expect(microphoneLine("sending", false, false)).toBeNull();
-    expect(microphoneLine("sending", false, true)).toBeNull();
-    expect(microphoneLine("sending", true, true)).toMatch(/hold control to talk/);
-    expect(microphoneLine("sending", true, false)).toBeNull();
-    expect(microphoneLine("stopped", false, false)).toMatch(/stopped/);
-    expect(microphoneLine("encoder: boom", false, false)).toMatch(/could not start/);
+    expect(microphoneLine("opening", false)).toMatch(/opening/);
+    expect(microphoneLine("opening", true)).toMatch(/opening/);
+    expect(microphoneLine("sending", false)).toBeNull();
+    expect(microphoneLine("sending", true)).toMatch(/hold control to talk/);
+    expect(microphoneLine("sending", true, "Right Ctrl")).toBe("hold Right Ctrl to talk");
+    expect(microphoneLine("stopped", true)).toMatch(/stopped/);
+    expect(microphoneLine("encoder: boom", false)).toMatch(/could not start/);
   });
 });
 

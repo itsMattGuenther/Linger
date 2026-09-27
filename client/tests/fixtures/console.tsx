@@ -265,6 +265,9 @@ mockIPC(
         throw new Error("missing fixture controls");
       document.documentElement.dataset.controls = JSON.stringify(args.controls);
     }
+    // Push-to-talk's gate: the microphone closed while the key is up, which
+    // the room is never told about (#232).
+    if (cmd === "voice_push_to_talk" && args && "closed" in args) document.documentElement.dataset.closed = String(args.closed);
     if (cmd === "voice_leave") document.documentElement.dataset.left = "yes";
     // Leaving the slow way too: the server stops listing you 250 ms later.
     if (cmd === "voice_leave" && query.has("slowjoin"))

@@ -19,6 +19,7 @@ const OWNER_ONLY: &[&str] = &[
     "voice_leave",
     "voice_frame",
     "voice_controls",
+    "voice_push_to_talk",
     "voice_volume",
     "show_notification",
     "next_open_chat",

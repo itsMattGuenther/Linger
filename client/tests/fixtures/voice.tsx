@@ -21,6 +21,8 @@ mockIPC((cmd, args) => {
     if (!args || !("controls" in args)) throw new Error("missing fixture controls");
     document.documentElement.dataset.controls = JSON.stringify(args.controls);
   }
+  // Push-to-talk's gate, which the room is never told about (#232).
+  if (cmd === "voice_push_to_talk" && args && "closed" in args) document.documentElement.dataset.closed = String(args.closed);
   if (cmd === "voice_leave") document.documentElement.dataset.left = "yes";
   return true;
 }, { shouldMockEvents: true });

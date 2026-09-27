@@ -52,6 +52,7 @@ import {
   voiceJoin,
   voiceLeave,
   voiceControls,
+  voicePushToTalk,
   voiceVolume,
 } from "./ipc";
 import type { IceServers } from "../generated/IceServers";
@@ -228,12 +229,24 @@ export interface GatewayState {
 /** Everything about being in voice that is this client's alone. */
 export interface MyVoice {
   roomId: RoomId;
-  /** Sending silence. Yours; nobody else can set it. */
+  /**
+   * You muted yourself: sending silence, and the room is told. Yours; nobody
+   * else can set it. Push-to-talk's key never sets it (#232).
+   */
   muted: boolean;
   deafened: boolean;
-  /** Mic choice to restore after deafen; push-to-talk restores closed. */
+  /** Mic choice to restore after deafen. */
   mutedBeforeDeafen: boolean;
+  /**
+   * Push-to-talk is on for this call: the microphone is open only while
+   * `talkHeld`. Settings can turn it on or off mid-call (#231).
+   */
   pushToTalk: boolean;
+  /**
+   * The push-to-talk key is held down right now. Only means something with
+   * `pushToTalk`; the room is never told (#232). See `closedByKey`.
+   */
+  talkHeld: boolean;
   moved: boolean;
   /**
    * What the core says the microphone is doing: `opening` until the
@@ -1794,9 +1807,10 @@ export function voicePeersIn(current: GatewayState, roomId: RoomId): VoicePeer[]
  *
  * You are in voice in at most one room, on one server, at a time — so any
  * seat held anywhere else is given up first, and the server sees a leave
- * before it sees the join. `startMuted` is for push-to-talk, which begins
- * quiet and opens on the key: the mute is set before the devices open so
- * not one frame of the room goes out before the key was held.
+ * before it sees the join. With `pushToTalk` the microphone starts closed
+ * and opens on the key: it is closed before the devices open, so not one
+ * frame of the room goes out before the key was held. Closed that way is
+ * not muted, and the room is never told it is (#232).
  *
  * Rejects with a sentence when the core cannot open the devices; nothing
  * was joined in that case and the store says so.
@@ -1805,7 +1819,7 @@ export async function joinVoice(
   api: AuthedApi,
   roomId: RoomId,
   devices: VoiceDeviceChoice,
-  startMuted: boolean,
+  pushToTalk: boolean,
 ): Promise<void> {
   const server = api.baseUrl;
   // A queued deafen must take effect before its choice is carried to another room.
@@ -1823,10 +1837,11 @@ export async function joinVoice(
     ...stateOf(server),
     myVoice: {
       roomId,
-      muted: previous?.deafened || startMuted || previous?.muted || false,
+      muted: previous?.deafened || previous?.muted || false,
       deafened: previous?.deafened ?? false,
-      mutedBeforeDeafen: startMuted || (previous?.mutedBeforeDeafen ?? false),
-      pushToTalk: startMuted,
+      mutedBeforeDeafen: previous?.mutedBeforeDeafen ?? false,
+      pushToTalk,
+      talkHeld: false,
       moved: previous !== undefined && previous !== null,
       audio: "opening",
       peers: {},
@@ -1839,6 +1854,7 @@ export async function joinVoice(
     const mine = stateOf(server).myVoice;
     if (mine === null) return;
     await voiceControls(server, { muted: mine.muted, deafened: mine.deafened });
+    await voicePushToTalk(server, closedByKey(mine));
     // The host's relay, if there is one (T-1403): STUN and TURN with a
     // password made for us just now. Asked on every join because the password
     // expires, and asked *before* the peer connections exist because ICE has
@@ -1867,15 +1883,44 @@ export async function leaveVoice(server: string, chime = true): Promise<void> {
 
 const controlQueues = new Map<string, Promise<void>>();
 
-/** Serialize rapid clicks and push-to-talk edges; never announce an unapplied mute. */
+/**
+ * Whether push-to-talk has the microphone closed: it's on and its key isn't
+ * held. The engine sends silence for it, as for mute, but it isn't a mute:
+ * the room is never told, so nobody sees "muted" for it (#232).
+ */
+export function closedByKey(mine: Pick<MyVoice, "pushToTalk" | "talkHeld">): boolean {
+  return mine.pushToTalk && !mine.talkHeld;
+}
+
+/**
+ * Whether the voice bar should say to hold the key: the microphone is
+ * closed by the key alone, so holding it would open it. Not while you're
+ * muted or deafened, where holding it does nothing.
+ */
+export function waitingForKey(mine: Pick<MyVoice, "pushToTalk" | "talkHeld" | "muted" | "deafened">): boolean {
+  return closedByKey(mine) && !mine.muted && !mine.deafened;
+}
+
+/**
+ * Serialize rapid clicks and push-to-talk edges; never announce an unapplied
+ * mute. Mute and deafen go to the engine as controls, which the room is told
+ * about; push-to-talk's key goes as its own gate, which it isn't (#232).
+ */
 function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice): Promise<void> {
   const task = (controlQueues.get(server) ?? Promise.resolve()).catch(() => undefined).then(async () => {
     const mine = stateOf(server).myVoice;
     if (mine === null) return;
     const next = change(mine);
     if (next === mine) return;
+    const controls = next.muted !== mine.muted || next.deafened !== mine.deafened;
+    const closing = closedByKey(next) && !closedByKey(mine);
+    const opening = !closedByKey(next) && closedByKey(mine);
     try {
-      await voiceControls(server, { muted: next.muted, deafened: next.deafened });
+      // Whatever closes the microphone goes first, whatever opens it last,
+      // so a change never lets a moment of sound out in between.
+      if (closing) await voicePushToTalk(server, true);
+      if (controls) await voiceControls(server, { muted: next.muted, deafened: next.deafened });
+      if (opening) await voicePushToTalk(server, false);
     } catch {
       publish(server, { ...stateOf(server), myVoice: null });
       try { await voiceLeave(server); } catch {
@@ -1887,10 +1932,12 @@ function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice)
     if (current.myVoice === null) return;
     publish(server, { ...current, myVoice: {
       ...current.myVoice, muted: next.muted, deafened: next.deafened,
-      mutedBeforeDeafen: next.mutedBeforeDeafen,
+      mutedBeforeDeafen: next.mutedBeforeDeafen, pushToTalk: next.pushToTalk, talkHeld: next.talkHeld,
     } });
+    // Only deliberate choices chime: the push-to-talk key never changes
+    // `muted`, so it never makes a sound (SPEC §4.2).
     if (mine.deafened !== next.deafened) void playSound(next.deafened ? "deafen" : "undeafen");
-    else if (!mine.pushToTalk && mine.muted !== next.muted) void playSound(next.muted ? "mute" : "unmute");
+    else if (mine.muted !== next.muted) void playSound(next.muted ? "mute" : "unmute");
   });
   controlQueues.set(server, task);
   void task.finally(() => {
@@ -1899,10 +1946,36 @@ function changeVoiceControls(server: string, change: (mine: MyVoice) => MyVoice)
   return task;
 }
 
-/** Mute belongs to this session. While deafened, neither clicks nor PTT can reopen it. */
+/** Mute belongs to this session. While deafened, clicks can't reopen it, and neither can the push-to-talk key. */
 export function setVoiceMuted(server: string, muted: boolean): Promise<void> {
   return changeVoiceControls(server, (mine) => mine.deafened || mine.muted === muted
     ? mine : { ...mine, muted });
+}
+
+/**
+ * The push-to-talk key went down or up. It opens and closes the microphone
+ * without muting you, so the room sees nothing (#232). It means nothing with
+ * push-to-talk off, and can't open a deafened microphone: after undeafening,
+ * the key has to be pressed again.
+ */
+export function setVoiceTalking(server: string, held: boolean): Promise<void> {
+  return changeVoiceControls(server, (mine) => !mine.pushToTalk || mine.talkHeld === held || (held && mine.deafened)
+    ? mine : { ...mine, talkHeld: held });
+}
+
+/**
+ * Push-to-talk turned on or off in Settings, for the call you're in (#231):
+ * joining only reads the choice, so without this a change would wait for
+ * the next call. Off opens the microphone, unless you muted yourself, which
+ * stays yours to undo; on closes it until the key is next pressed.
+ */
+export function setVoicePushToTalk(server: string, on: boolean): Promise<void> {
+  return changeVoiceControls(server, (mine) => mine.pushToTalk === on ? mine : { ...mine, pushToTalk: on, talkHeld: false });
+}
+
+/** The server your voice seat is on, if you're in voice anywhere: there is at most one. */
+export function voiceSeatServer(): string | null {
+  return Object.entries(states).find(([, state]) => state.myVoice !== null)?.[0] ?? null;
 }
 
 /** Silence both directions, preserving the prior mic choice and every peer's volume. */
@@ -1910,7 +1983,10 @@ export function setVoiceDeafened(server: string, deafened: boolean): Promise<voi
   return changeVoiceControls(server, (mine) => mine.deafened === deafened ? mine : {
     ...mine, deafened,
     mutedBeforeDeafen: deafened ? mine.muted : mine.mutedBeforeDeafen,
-    muted: deafened || mine.pushToTalk || mine.mutedBeforeDeafen,
+    muted: deafened || mine.mutedBeforeDeafen,
+    // Deafening lets go of the push-to-talk key, so undeafening leaves the
+    // microphone closed until it is pressed again (SPEC §4.14).
+    talkHeld: false,
   });
 }
 

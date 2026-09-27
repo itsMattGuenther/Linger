@@ -399,8 +399,18 @@ test.describe("who's muted, and who can't be reached", () => {
     const eli = who.getByRole("listitem").filter({ hasText: "Eli" });
     await expect(eli).toContainText("mic state unknown");
     await expect(eli.locator(".k-chip-state")).toHaveCount(0);
-    // Yours, from your own controls: push-to-talk keeps you muted until you talk.
-    await expect(who.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+    // Yours, from your own controls: push-to-talk with the key up closes the
+    // microphone but isn't a mute, so nothing shows (#232).
+    await expect(who.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveCount(0);
+  });
+
+  test("a mute you chose shows on your chip, with push-to-talk or without (#232)", async ({ page }) => {
+    for (const query of ["voice&muted", "voice&ptt&muted"]) {
+      await page.goto(`/tests/fixtures/next-list.html?${query}`);
+      const who = page.getByRole("list", { name: "Who's in voice" });
+      await expect(who.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+      await expect(page.getByRole("region", { name: "In voice in #general" }).getByRole("button", { name: "Muted" })).toHaveAttribute("aria-pressed", "true");
+    }
   });
 
   test("nothing shows while everyone's on and reachable", async ({ page }) => {
@@ -474,13 +484,17 @@ test.describe("in voice", () => {
     await expect(page.locator("body")).toHaveAttribute("data-opened", "mute:true,deafen:true,leave,go:r-general");
   });
 
-  test("with push-to-talk there is no Mute button, and it names the key to hold", async ({ page }) => {
+  test("with push-to-talk it names the key to hold, shows no mute, and keeps Mute for a mute you choose (#232)", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice&ptt");
     const bar = page.getByRole("region", { name: "In voice in #general" });
-    await expect(bar.getByRole("button", { name: /^Mute/ })).toHaveCount(0);
-    // Deafen and Leave are symbols (#230); the line is an instruction, so it stays in words.
-    await expect(bar.getByRole("group", { name: "Your voice" }).getByRole("button")).toHaveText(["", ""]);
+    // Mute, Deafen and Leave are symbols (#230); the line is an instruction, so it stays in words.
+    await expect(bar.getByRole("group", { name: "Your voice" }).getByRole("button")).toHaveText(["", "", ""]);
     await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
+    await expect(bar.locator(".k-chip-state")).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
+    // Muted, holding the key would do nothing, so the bar doesn't offer it.
+    await page.goto("/tests/fixtures/next-list.html?voice&ptt&muted");
+    await expect(page.getByRole("region", { name: "In voice in #general" }).getByRole("status")).toHaveCount(0);
   });
 
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {

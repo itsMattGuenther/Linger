@@ -412,12 +412,17 @@ window, so you don't need the list in front to mute:
 With the list tucked away in the tray, the tray icon's menu has **Mute** and
 **Leave voice**.
 
-**Push to talk** is in **Settings → Sound & Voice**. With it on, every call
-starts muted and the microphone is open only while you hold the **talk key**:
-**Right Ctrl** unless you pick another under **Talk key** (press **Change**,
-then the key). The shortcuts use the left Ctrl, so they never open your
-microphone. Switching away from Linger releases a held key; press it again to
-speak. It's off by default, because a room you leave running is the point,
+**Push to talk** is in **Settings → Sound & Voice**. With it on, your
+microphone is open only while you hold the **talk key**: **Right Ctrl** unless
+you pick another under **Talk key** (press **Change**, then the key). The
+voice bar says which key to hold. Not holding it isn't muting, so nobody sees
+a crossed-out microphone beside your name; they hear you, and see you light
+up, while you hold it. **Mute** is still there, and the key doesn't undo it.
+The shortcuts use the left Ctrl, so they never open your microphone.
+Switching away from Linger releases a held key; press it again to speak.
+Turning it on or off, or picking a new key, works straight away, even in the
+middle of a call: turned off, your microphone opens, unless you'd muted
+yourself. It's off by default, because a room you leave running is the point,
 and a key you have to hold is the opposite of that.
 
 Which microphone and speakers to use is also in **Settings → Sound & Voice**. A

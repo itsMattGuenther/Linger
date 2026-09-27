@@ -171,7 +171,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
         )}
         <SettingRow
           title="Push to talk"
-          description="Starts every call muted and opens the microphone only while you hold the key. Off by default: a room you leave running shouldn't need a key held down."
+          description="Opens the microphone only while you hold the key. Not holding it isn't muting: nobody sees you as muted. Off by default: a room you leave running shouldn't need a key held down."
           control={<Switch label="Push to talk" checked={voice.pushToTalk} onChange={(pushToTalk) => onVoice({ ...voice, pushToTalk })} />}
         />
         <SettingRow

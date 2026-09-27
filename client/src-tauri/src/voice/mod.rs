@@ -125,6 +125,11 @@ pub struct Engine<S: Signaller, W: Watcher> {
     /// frame and sends silence while it is set — silence rather than nothing,
     /// so the far end's decoder keeps its clock.
     muted: Arc<AtomicBool>,
+    /// Push-to-talk's closed microphone (#232): silence while the key is up,
+    /// exactly as mute sends it, but never reported to the room. Not holding
+    /// the key isn't muting yourself, so nobody is shown a mute for it; they
+    /// hear you when you hold it, and the "talking" mark follows the audio.
+    push_to_talk_closed: Arc<AtomicBool>,
     /// Whether to ask for voice through the forwarding server (#197). On
     /// unless the person turned it off in Settings to use the old way; then
     /// their whole room goes back to the mesh.
@@ -169,6 +174,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             ice_servers,
             inner: Arc::new(Mutex::new(Inner::default())),
             muted: Arc::new(AtomicBool::new(false)),
+            push_to_talk_closed: Arc::new(AtomicBool::new(false)),
             can_forward: Arc::new(AtomicBool::new(true)),
         }
     }
@@ -179,9 +185,10 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.can_forward.store(on, Ordering::Relaxed);
     }
 
-    /// Stop or resume sending what the microphone hears. Local, instant, and
-    /// nobody else's to change (SPEC §4.14). Push-to-talk is this, toggled by
-    /// a key.
+    /// Stop or resume sending what the microphone hears, and tell the room
+    /// (SPEC §4.14): mute and deafen are choices the room can see. Local,
+    /// instant, and nobody else's to change. Push-to-talk is not this; see
+    /// `set_push_to_talk_closed`.
     pub async fn set_controls(&self, controls: VoiceControls) {
         let controls = controls.normalized();
         let mut inner = self.inner.lock().await;
@@ -207,10 +214,29 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         }
     }
 
-    /// Whether we are sending silence.
+    /// Whether mute or deafen has the microphone closed: the state the room
+    /// is told about.
     #[must_use]
     pub fn is_muted(&self) -> bool {
         self.muted.load(Ordering::Relaxed)
+    }
+
+    /// Close or open the microphone for push-to-talk (#232): closed while the
+    /// key is up, open while it is held. It sends silence just as mute does,
+    /// but it is not a mute and nothing goes to the server: the room sees no
+    /// "muted" for somebody who simply isn't holding the key. Mute and deafen
+    /// still close the microphone whatever this says.
+    ///
+    /// Set before `join` when push-to-talk is on, so not one frame of the
+    /// room goes out before the key is held.
+    pub fn set_push_to_talk_closed(&self, closed: bool) {
+        self.push_to_talk_closed.store(closed, Ordering::Relaxed);
+    }
+
+    /// Whether push-to-talk has the microphone closed.
+    #[must_use]
+    pub fn is_push_to_talk_closed(&self) -> bool {
+        self.push_to_talk_closed.load(Ordering::Relaxed)
     }
 
     /// How loud one peer plays for you. Nothing crosses the wire.
@@ -264,7 +290,10 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             Arc::clone(&self.inner),
             source,
             Arc::clone(&self.watcher),
-            Arc::clone(&self.muted),
+            Closed {
+                muted: Arc::clone(&self.muted),
+                push_to_talk: Arc::clone(&self.push_to_talk_closed),
+            },
         ));
         self.inner.lock().await.pump = Some(pump);
         let inner = self.inner.lock().await;
@@ -841,6 +870,21 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
     }
 }
 
+/// The two things that close the microphone, as the sending loop reads them.
+struct Closed {
+    /// Mute or deafen: reported to the room.
+    muted: Arc<AtomicBool>,
+    /// Push-to-talk with its key up: not reported (#232).
+    push_to_talk: Arc<AtomicBool>,
+}
+
+impl Closed {
+    /// Whether this frame goes out as silence.
+    fn now(&self) -> bool {
+        self.muted.load(Ordering::Relaxed) || self.push_to_talk.load(Ordering::Relaxed)
+    }
+}
+
 /// The sending loop: microphone frames, encoded once, to every peer.
 ///
 /// One encoder for the whole mesh rather than one per peer, because every
@@ -848,10 +892,10 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
 /// the CPU for identical bytes. The loop paces itself on the source — a
 /// microphone delivers a frame every 20 ms, and so do the stand-ins.
 ///
-/// Mute is applied here, by sending a frame of zeros in place of the real
-/// one. Silence rather than nothing, so the far end's decoder keeps its
-/// clock; and the level gate sees what is *sent*, so the "you are talking"
-/// mark goes out when the microphone does.
+/// Mute and push-to-talk are applied here, by sending a frame of zeros in
+/// place of the real one. Silence rather than nothing, so the far end's
+/// decoder keeps its clock; and the level gate sees what is *sent*, so the
+/// "you are talking" mark goes out when the microphone does.
 ///
 /// It ends when the source does. That is a microphone that went away, and
 /// until T-1405 makes it recover, the honest thing is to say so and stop.
@@ -859,7 +903,7 @@ async fn pump<W: Watcher>(
     inner: Arc<Mutex<Inner>>,
     source: Arc<dyn Source>,
     watcher: Arc<W>,
-    muted: Arc<AtomicBool>,
+    closed: Closed,
 ) {
     let mut encoder = match codec::Encoder::new() {
         Ok(encoder) => encoder,
@@ -872,11 +916,7 @@ async fn pump<W: Watcher>(
     let quiet = vec![0i16; audio::FRAME_SAMPLES];
     watcher.audio_state("sending");
     while let Some(frame) = source.frame().await {
-        let frame = if muted.load(Ordering::Relaxed) {
-            &quiet
-        } else {
-            &frame
-        };
+        let frame = if closed.now() { &quiet } else { &frame };
         if let Some(talking) = gate.update(level::rms(frame), Instant::now()) {
             watcher.speaking(None, talking);
         }

@@ -24,6 +24,8 @@ import {
   serverState,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoicePushToTalk,
+  setVoiceTalking,
   type SharedLocal,
   setNotifyRule,
   sharedLocalOf,
@@ -162,6 +164,11 @@ export type Intent =
   | { kind: "voice.deafen"; deafened: boolean }
   /** The push-to-talk key went down or up in this window. */
   | { kind: "voice.talk"; down: boolean }
+  /**
+   * Settings turned push-to-talk on or off, or picked its key (`KeyboardEvent.code`):
+   * it applies to the call you're in at once (#231), and the voice bar names the key.
+   */
+  | { kind: "voice.pushtotalk"; on: boolean; key: string }
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back into the chat window's tabs. */
@@ -193,6 +200,8 @@ export interface ListControls {
   setPrefs(prefs: ServerPrefs): void;
   /** Whether closing the list keeps Linger in the tray (true) or quits it. */
   closeToTray?(on: boolean): void;
+  /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
+  talkKey?(code: string): void;
 }
 
 /**
@@ -337,7 +346,7 @@ export async function shareAsOwner(
   const holdingTalk = new Set<string>();
   const letGoOfTalk = () => {
     const server = voiceServer(sessions().keys());
-    if (server !== null && serverState(server).myVoice?.pushToTalk) void setVoiceMuted(server, true).catch(() => undefined);
+    if (server !== null) void setVoiceTalking(server, false).catch(() => undefined);
   };
 
   const gone = (label: string) => {
@@ -496,6 +505,17 @@ export async function shareAsOwner(
           void bus.broadcast(MODE, message);
           return;
         }
+        case "voice.pushtotalk": {
+          // Kept on this computer by Settings already; this is for the call
+          // you're in, which only read it when you joined (#231).
+          if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
+          list?.talkKey?.(intent.key);
+          // Whoever held the key before doesn't hold it for the new setting.
+          holdingTalk.clear();
+          const server = voiceServer(sessions().keys());
+          if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
+          return;
+        }
         case "voice.join": {
           const api = sessions().get(intent.server);
           if (!api) return;
@@ -509,7 +529,6 @@ export async function shareAsOwner(
         default: {
           const server = voiceServer(sessions().keys());
           if (server === null) return;
-          const mine = serverState(server).myVoice;
           switch (intent.kind) {
             case "voice.leave":
               void leaveVoice(server).catch(() => undefined);
@@ -522,10 +541,11 @@ export async function shareAsOwner(
               return;
             case "voice.talk":
               // Push-to-talk only means something when it is on: the key
-              // opens the microphone while held and closes it on release.
+              // opens the microphone while held and closes it on release,
+              // without muting you (#232). The store ignores it otherwise.
               if (intent.down === true) holdingTalk.add(intent.from);
               else holdingTalk.delete(intent.from);
-              if (mine?.pushToTalk) void setVoiceMuted(server, intent.down !== true).catch(() => undefined);
+              void setVoiceTalking(server, intent.down === true).catch(() => undefined);
               return;
           }
         }

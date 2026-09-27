@@ -14,6 +14,7 @@ import {
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
+  setVoiceTalking,
   setVoiceVolume,
   useGateway,
   useServers,
@@ -295,6 +296,10 @@ function Servers({
     setPrefs: changePrefs,
   };
 
+  // The push-to-talk key the voice bar says to hold. Settings tells this
+  // window the moment it's picked (the `voice.pushtotalk` intent, #231).
+  const [talkKey, setTalkKey] = useState(() => loadVoicePrefs().pushToTalkKey);
+
   // One presence watcher for the window, for as long as it is open.
   useEffect(() => {
     const stop = startPresence();
@@ -326,6 +331,7 @@ function Servers({
       addServer: () => listNow.current.addServer(),
       setPrefs: (next) => listNow.current.setPrefs(next),
       closeToTray: (on) => closeToTray(on),
+      talkKey: (code) => setTalkKey(code),
     };
     // What closing the list does, as kept on this computer (core/closing.ts).
     closeToTray(loadCloseList(localStore()) === "tray");
@@ -374,9 +380,9 @@ function Servers({
     const down = (event: KeyboardEvent) => {
       // The chosen key (decision 6), read as it's pressed: Settings may have
       // just changed it, in another window.
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceMuted(voiceServer, false).catch(() => undefined);
+      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceTalking(voiceServer, true).catch(() => undefined);
     };
-    const release = () => void setVoiceMuted(voiceServer, true).catch(() => undefined);
+    const release = () => void setVoiceTalking(voiceServer, false).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
       if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) release();
     };
@@ -443,12 +449,12 @@ function Servers({
 
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
-    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer);
+    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey);
     if (!dock || !several) return dock;
     const info = infos[voiceServer];
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
-  }, [voiceState, voiceServer, several, infos]);
+  }, [voiceState, voiceServer, several, infos, talkKey]);
 
   const listings = useMemo(
     () =>
@@ -816,8 +822,8 @@ function bannerTarget(payload: unknown): { server: string; room: RoomId; message
  * The voice bar: what it shows comes from the store (core/voice.ts); its
  * controls act here, in the owner, which keeps the voice seat.
  */
-function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string): VoiceDockProps | undefined {
-  const model = voiceModel(state, speaking, talkKeyName(loadVoicePrefs().pushToTalkKey));
+function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string, talkKey: string): VoiceDockProps | undefined {
+  const model = voiceModel(state, speaking, talkKeyName(talkKey));
   if (model === null) return undefined;
   return {
     ...model,

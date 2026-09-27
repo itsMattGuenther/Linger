@@ -21,6 +21,7 @@ import {
   setVoiceVolume,
   useGateway,
   voicePeersIn,
+  waitingForKey,
 } from "../lib/gateway";
 import { nameProps } from "../lib/names";
 import {
@@ -129,7 +130,7 @@ export default function VoiceBar({
   // "opening the microphone…" appears in the bar's final layout (#141).
   const line =
     seatedHere && !mine.deafened
-      ? microphoneLine(mine.audio, mine.pushToTalk, mine.muted)
+      ? microphoneLine(mine.audio, waitingForKey(mine))
       : null;
   const selectedSeat = seats.find((seat) => seat.sessionId === selected);
 

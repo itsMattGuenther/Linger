@@ -301,8 +301,12 @@ who did not build it.
    drop back to rest on their screen. Unmute; it comes back.
 5. Turn the other person down with the slider beside their name. Only your
    side changes.
-6. In settings → voice, turn on **push to talk**, leave and join again. You
-   should be silent until you hold `ctrl`.
+6. In settings → voice, turn on **push to talk** while you're still in the
+   call. You should go silent straight away, and stay silent until you hold
+   the talk key (Right Ctrl unless you picked another), lighting up on the
+   other screen only while you hold it. Neither screen should show a
+   crossed-out microphone beside your name while you don't (#232). Turn it
+   off again: you should be heard at once, without leaving (#231).
 7. Unplug one machine's headphones mid-sentence, then plug them back in (or
    let the sound move to the built-in speakers). **Audio should continue
    within a second or two** on whatever the system now uses (T-1405). If the

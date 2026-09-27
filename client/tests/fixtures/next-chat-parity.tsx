@@ -63,10 +63,11 @@ const desktop = fakeDesktop({
     myVoice: query.has("ptt")
       ? {
           roomId: "r-general",
-          muted: true,
+          muted: false,
           deafened: false,
           mutedBeforeDeafen: false,
           pushToTalk: true,
+          talkHeld: false,
           moved: false,
           audio: "sending" as const,
           peers: {},

@@ -32,7 +32,7 @@ export const PUSH_TO_TALK_KEY = "Control";
 export interface VoicePrefs {
   /** Devices by name, or the system default for `null`. */
   devices: VoiceDeviceChoice;
-  /** Start every call muted and open the microphone only while the key is held. */
+  /** Keep the microphone closed, without muting, except while the key is held (#232). */
   pushToTalk: boolean;
   /**
    * Voice through the server, on a server that forwards it (#197). Off is
@@ -164,14 +164,16 @@ export function usersInVoice(voice: Readonly<Record<string, VoicePeer[]>>): Set<
 /**
  * The one line the bar says about your own microphone, or null when there
  * is nothing worth a word. The mute button already says "muted"; this is for
- * the states a button cannot carry.
+ * the states a button cannot carry. `waitingForKey` is push-to-talk with its
+ * key up and nothing else closing the microphone (`waitingForKey` in
+ * lib/gateway.ts): the one time holding the key would open it.
  */
-export function microphoneLine(audio: string, pushToTalk: boolean, muted: boolean, talkKey = PUSH_TO_TALK_KEY.toLowerCase()): string | null {
+export function microphoneLine(audio: string, waitingForKey: boolean, talkKey = PUSH_TO_TALK_KEY.toLowerCase()): string | null {
   switch (audio) {
     case "opening":
       return "opening the microphone…";
     case "sending":
-      return pushToTalk && muted ? `hold ${talkKey} to talk` : null;
+      return waitingForKey ? `hold ${talkKey} to talk` : null;
     case "stopped":
       return "the microphone stopped — leave and join again";
     default:

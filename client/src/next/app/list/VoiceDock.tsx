@@ -38,10 +38,10 @@ export interface VoiceDockProps {
   /** "#general", or a DM's people. */
   where: string;
   people: VoiceDockPerson[];
+  /** You muted yourself. Push-to-talk's closed microphone isn't a mute, and shows only as the line (#232). */
   muted: boolean;
   deafened: boolean;
-  pushToTalk: boolean;
-  /** The one thing worth saying about your microphone, if anything (lib/voice.ts). */
+  /** The one thing worth saying about your microphone, if anything (lib/voice.ts): "hold Right Ctrl to talk". */
   line: string | null;
   /**
    * With several servers, which one: its name and color, and how full the
@@ -63,7 +63,7 @@ export interface VoiceDockProps {
  * closing a chat tab or window never ends voice. The room's chat window has
  * the same three (#216), and the tray menu has Mute and Leave.
  */
-export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume }: VoiceDockProps) {
   // Whose volume is open, and the chip it opened from.
   const [volumeOf, setVolumeOf] = useState<{ id: string } | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -132,11 +132,10 @@ export function VoiceDock({ where, people, muted, deafened, pushToTalk, line, se
       {open && onVolume && volumeOf ? (
         <VolumeCard user={open.user} volume={open.volume ?? 1} anchor={opener} onVolume={(volume) => onVolume(open, volume)} onClose={closeVolume} />
       ) : null}
-      {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230). */}
+      {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
+          Mute shows with push-to-talk too: it's a choice of its own, which the key can't undo (#232). */}
       <div className="nx-voice-controls" role="group" aria-label="Your voice">
-        {pushToTalk ? null : (
-          <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size="sm" pressed={muted} onClick={() => onMute(!muted)} />
-        )}
+        <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size="sm" pressed={muted} onClick={() => onMute(!muted)} />
         <IconButton
           icon={deafened ? "headOff" : "head"}
           label={deafened ? "Deafened" : "Deafen"}

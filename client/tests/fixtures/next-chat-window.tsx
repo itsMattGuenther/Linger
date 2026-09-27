@@ -11,6 +11,7 @@
  * `?ptt` puts you in voice in #general with push-to-talk on; `?limit`
  * refuses knocks, as the fourth in an hour; `&single=1` is the conversation
  * in a window of its own; `?servers` signs in to the guild too;
+ * `?as=eli` is Eli's window, not yours, to see how the room shows you;
  * `?missed=r-listening,…` has the list window hand over rooms it sent
  * before this window was listening; `?many=600` puts that many older
  * messages before the evening in #general; `&message=` opens at one. The photo
@@ -39,6 +40,24 @@ const night = evening(serverState(SERVER));
 // Rooms the list window sent before this window was listening (`?missed=`),
 // handed over when it asks, once.
 let missed = (query.get("missed") ?? "").split(",").filter((room) => room !== "");
+// Your voice seat, as the list window shares it (`?ptt`, `?talking`).
+const seat =
+  query.has("ptt") || query.has("talking")
+    ? {
+        roomId: "r-general",
+        muted: false,
+        deafened: false,
+        mutedBeforeDeafen: false,
+        pushToTalk: query.has("ptt"),
+        talkHeld: false,
+        moved: false,
+        audio: "sending" as const,
+        peers: {},
+        speaking: {},
+        talking: query.has("talking"),
+        volumes: {},
+      }
+    : null;
 const desktop = fakeDesktop({
   label: query.get("single") === "1" ? "chat-5f1e" : "chat",
   query,
@@ -53,32 +72,19 @@ const desktop = fakeDesktop({
   infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" }, [GUILD]: serverInfo[GUILD] },
   ownerState: {
     ...night,
+    ...(query.get("as") === "eli" ? { me: people.eli } : {}),
     // In voice, the server lists your own seat too.
-    // `?ptt`: in voice in #general with push-to-talk, held quiet. `?talking`:
-    // in voice there with an open microphone, and talking.
+    // `?ptt`: in voice in #general with push-to-talk, the key up: the
+    // microphone closed, but not muted, so the server lists you as on (#232).
+    // `?talking`: in voice there with an open microphone, and talking.
     voice:
       query.has("ptt") || query.has("talking")
         ? {
             ...night.voice,
-            "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: query.has("ptt"), deafened: false } }],
+            "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: false, deafened: false } }],
           }
         : night.voice,
-    myVoice:
-      query.has("ptt") || query.has("talking")
-        ? {
-            roomId: "r-general",
-            muted: query.has("ptt"),
-            deafened: false,
-            mutedBeforeDeafen: false,
-            pushToTalk: query.has("ptt"),
-            moved: false,
-            audio: "sending" as const,
-            peers: {},
-            speaking: {},
-            talking: query.has("talking"),
-            volumes: {},
-          }
-        : null,
+    myVoice: seat,
   },
 });
 
@@ -103,6 +109,8 @@ declare global {
       messageFont: (userId: string, key: string | null) => void;
       /** The list window signs in to the guild while this window is open. */
       signInGuild: () => void;
+      /** Settings turned push-to-talk on or off mid-call, as the list window tells every window (#231). */
+      pushToTalk: (on: boolean) => void;
     };
   }
 }
@@ -120,6 +128,8 @@ window.owner = {
   wake: desktop.wake,
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
   signInGuild: () => desktop.signIn(GUILD, guild(serverState(GUILD))),
+  pushToTalk: (on) =>
+    desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: seat && { ...seat, pushToTalk: on }, read: night.read, readLoaded: true, notifyRules: [] } }),
   messageFont: (userId, key) => {
     const user = night.users.find((one) => one.id === userId);
     if (user) desktop.frame({ op: "user.update", d: { ...user, style: { ...user.style, msg_font_key: key } } });

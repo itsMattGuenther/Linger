@@ -158,12 +158,28 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   expect(await did(page)).toContain("POST /dms as token-1");
 });
 
-test("the voice strip shows whose microphone is off, as its glyph", async ({ page }) => {
+test("the voice strip shows whose microphone is off, as its glyph, and push-to-talk's closed key as nothing (#232)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const here = page.getByRole("list", { name: "In voice here" });
-  // Push-to-talk keeps you muted until you talk.
-  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveText("Muted");
+  // Push-to-talk with the key up closes your microphone, but isn't a mute.
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveCount(0);
   await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveCount(0);
+  // Eli mutes: the server says so, and the strip shows it.
+  await page.evaluate(() =>
+    window.owner?.frame({
+      op: "voice.state",
+      d: {
+        room_id: "r-general",
+        peers: [
+          { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false } },
+          { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
+          { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false } },
+        ],
+      },
+    }),
+  );
+  await expect(here.getByRole("listitem").filter({ hasText: "Eli" }).locator(".k-chip-state")).toHaveText("Muted");
+  await expect(here.getByRole("listitem").filter({ hasText: "you" }).locator(".k-chip-state")).toHaveCount(0);
 });
 
 test("you light up in the voice strip while you talk, as others do (#215)", async ({ page }) => {
@@ -192,10 +208,11 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
   ]);
 });
 
-test("with push-to-talk the voice strip has no Mute, as the voice bar hasn't; a room you're not in voice in has no controls (#216)", async ({ page }) => {
+test("with push-to-talk the voice strip keeps Mute, as the voice bar does (#232); a room you're not in voice in has no controls (#216)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const yours = page.getByRole("group", { name: "Your voice" });
-  await expect(yours.getByRole("button", { name: "Mute" })).toHaveCount(0);
+  // The key doesn't mute, so Mute is a choice of its own.
+  await expect(yours.getByRole("button", { name: "Mute" })).toHaveAttribute("aria-pressed", "false");
   await expect(yours.getByRole("button", { name: "Deafen" })).toBeVisible();
   await expect(yours.getByRole("button", { name: "Leave voice" })).toBeVisible();
 
@@ -533,6 +550,40 @@ test("with push-to-talk on, holding the talk key in this window talks through th
   await page.keyboard.down("AltRight");
   await page.keyboard.up("AltRight");
   await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk")).toHaveLength(4);
+});
+
+test("push-to-talk turned on or off mid-call starts or stops this window listening for the key, without rejoining (#231)", async ({ page }) => {
+  await open(page, "room=r-general&talking");
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });
+  const talks = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk");
+  // Push-to-talk off: the key is just a key.
+  await page.keyboard.down("ControlRight");
+  await page.keyboard.up("ControlRight");
+  await page.waitForTimeout(100);
+  expect(await talks()).toEqual([]);
+  // Settings turns it on while you're in the call: the key works here at once.
+  await page.evaluate(() => window.owner?.pushToTalk(true));
+  await expect
+    .poll(async () => {
+      await page.keyboard.down("ControlRight");
+      await page.keyboard.up("ControlRight");
+      return (await talks()).length;
+    })
+    .toBeGreaterThanOrEqual(2);
+  expect((await talks()).slice(0, 2)).toEqual([
+    { kind: "voice.talk", down: true },
+    { kind: "voice.talk", down: false },
+  ]);
+  // And off again: the key is just a key.
+  await page.evaluate(() => window.owner?.pushToTalk(false));
+  await expect(page.getByRole("group", { name: "Your voice" }).getByRole("button", { name: "Mute" })).toBeVisible();
+  await page.waitForTimeout(100);
+  const before = (await talks()).length;
+  await page.keyboard.down("ControlRight");
+  await page.keyboard.up("ControlRight");
+  await page.waitForTimeout(100);
+  expect((await talks()).length).toBe(before);
+  expect(intents(await did(page)).filter((intent) => intent.kind === "voice.join")).toEqual([]);
 });
 
 test("closing the last tab closes the window and tells the list window", async ({ page }) => {

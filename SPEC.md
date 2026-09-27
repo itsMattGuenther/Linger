@@ -610,8 +610,18 @@ choice; with push-to-talk it stays closed until you press the key again.
 Deafen does not change per-person volume or notification preferences. Its
 speaker gate discards queued audio, so undeafening never plays missed speech.
 
+**Push-to-talk is not muting** (#232). With it on, the microphone is closed
+except while you hold its key, but not holding the key is not a choice to be
+silent, so it shows as nothing: no mute beside your name, for you or anyone
+else. The room hears you and sees you light up while you hold it. Mute and
+deafen still work on top of it and still show, and the key never undoes them.
+Turning push-to-talk on or off, or picking its key, applies to the call you're
+in at once (#231): off opens the microphone unless you muted yourself, and on
+closes it until the key is held.
+
 The room can see each session's self-reported `muted` or `deafened` state,
-filtered by the same membership rule as voice itself. It is not proof someone
+filtered by the same membership rule as voice itself; push-to-talk's closed
+microphone is not part of it. That state is not proof someone
 is listening: an older client or server reports no state, and the UI says so.
 These controls last for the voice session, not in the database. Device failure
 and connection failure remain separate from a deliberate mute. Moving voice
