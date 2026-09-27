@@ -886,8 +886,10 @@ test.describe("a shared audio file (#247)", () => {
         for (let step = 0; step < 8; step += 1) await page.keyboard.press("ArrowLeft");
         const muted = await post(page, "quiet please", "u-dave", { attachments: [{ ...rain, id: "aud-muted", url: "/media/aud-muted" }] });
         await card(page, muted).getByRole("button", { name: "Mute" }).click();
-        // Outside the audio store: the window's picture answers, which no engine plays.
-        const failed = await post(page, "this one won't", "u-callie", { attachments: [{ ...rain, id: "gone", url: "/media/gone" }] });
+        // A file of its own that the server refuses, so only this card fails,
+        // and fails at once in every engine.
+        await page.route(`${SERVER}/media/aud-gone`, (route) => route.fulfill({ status: 503 }));
+        const failed = await post(page, "this one won't", "u-callie", { attachments: [{ ...rain, id: "aud-gone", url: "/media/aud-gone" }] });
         await expect(card(page, failed).getByRole("alert")).toBeVisible();
         await page.locator("body").click({ position: { x: 1, y: 1 } });
         await page.mouse.move(0, 0);
