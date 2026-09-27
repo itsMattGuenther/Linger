@@ -492,6 +492,9 @@ test("Settings turning push-to-talk off and on, or picking its key, applies to t
   const pushToTalk = (on: boolean, key = "ControlRight") => page.evaluate(({ on, key }) => window.core?.ask("next:intent", { kind: "voice.pushtotalk", on, key }), { on, key });
   await expect(line).toHaveText("hold Right Ctrl to talk");
   await expect.poll(closed).toBe(true);
+  // `joinGeneral` asks again until the bar shows, so a slow engine may have
+  // been asked twice; what matters is that nothing below joins again.
+  const joined = await joins();
 
   // Off: the microphone opens, without leaving and joining again.
   await pushToTalk(false);
@@ -538,7 +541,7 @@ test("Settings turning push-to-talk off and on, or picking its key, applies to t
     `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`,
   );
   // All in the one call.
-  expect(await joins()).toBe(1);
+  expect(await joins()).toBe(joined);
 });
 
 // The foot's standing lines (decision 1): said only while true.
