@@ -14,6 +14,16 @@
    moves; the window itself stays where it is. Reduced motion stills it
    (tokens.css). Two identical rocks, taken in turn, so a second knock starts
    the rock over. */
+/* The list is exactly the window's size, so while it rocks it reaches a few
+   pixels past the window's edges, and the page grew scroll bars to follow.
+   Windows draws them, on and off with every swing (#251); Linux's float over
+   the page and never showed. What passes the edge is off-screen anyway, so
+   whatever the list is mounted in clips it, and the page never has anything
+   to scroll. The list's own scrolling is `.nx-list-scroll`, inside it. */
+#root:has(> .nx-list) {
+  overflow: clip;
+}
+
 .nx-list[data-rock="a"] {
   animation: nx-list-rock-a var(--duration-rock) var(--ease-in-out) 1;
 }

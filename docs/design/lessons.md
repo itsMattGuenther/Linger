@@ -118,14 +118,21 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
   - #140: voice tooltips were cut off by a collapsed bar that hid overflow.
   - Prototype review (2026-09-25): text was cut mid-word ("the real on")
     instead of ending in an ellipsis.
+  - #251: a knock rocks the list window's whole view, which is exactly the
+    window's size. Each swing took it a few pixels past the window's edges,
+    and the page grew scroll bars to follow. Windows drew them, flickering with
+    the rock; Linux's scroll bars float over the page, so it never showed there.
 - **Cause:** containers with negative margins or hidden overflow, and text with
-  no rule for what happens when it doesn't fit.
+  no rule for what happens when it doesn't fit. For #251, something the size of
+  the window moving inside a page that could scroll.
 - **Rule:**
   - No negative margins on scroll containers.
   - Every single-line text either fits or ends in an ellipsis. Multi-line text
     wraps by design.
   - Tooltips, menus, cards and popovers render in a top layer (a portal), never
     inside a clipping ancestor.
+  - A window's page never scrolls; its view scrolls inside itself. Anything that
+    moves a whole window's view clips where it is mounted (`overflow: clip`).
 - **Check:**
   - Geometry test: no container's `scrollWidth` exceeds its `clientWidth`
     (with long, unbroken names).
@@ -133,6 +140,8 @@ Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
     `text-overflow: ellipsis`.
   - Geometry test: every tooltip and popover lies fully inside the window.
   - Discipline test: no negative margins in list or scroll CSS.
+  - The list's rock, held at each swing, leaves the page nothing to scroll
+    (next-list-window.spec.ts, #251).
 
 ### L-07 · Changing state moved things
 

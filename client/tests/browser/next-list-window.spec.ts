@@ -157,6 +157,34 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await expect(page.locator("[data-screen='knocks'] [data-kit='Notice']").first()).toContainText("knocked.");
 });
 
+// The list is the window's exact size, so a rock takes it a few pixels past the
+// window's edges. The page grew scroll bars to follow, which Windows draws, on
+// and off with each swing (#251). Nothing past the edge is on screen anyway.
+test("a rock never gives the page anything to scroll (#251)", async ({ page }) => {
+  await open(page);
+  const list = page.locator("[data-screen='list']");
+  await page.evaluate((server) => window.core?.frame(server, { op: "knock", d: { from_user_id: "g-rui" } } as never), GUILD);
+  await expect(list).toHaveAttribute("data-rock", "a");
+  // Held at each swing: left and tilted, right, back.
+  for (const at of [70, 140, 280, 350]) {
+    const overflow = await list.evaluate((node, ms) => {
+      const [rock] = node.getAnimations();
+      if (!rock) return null;
+      rock.pause();
+      rock.currentTime = ms;
+      const page = document.scrollingElement ?? document.documentElement;
+      window.scrollTo(50, 50);
+      return {
+        moved: new DOMMatrix(getComputedStyle(node).transform).m41 !== 0,
+        wide: page.scrollWidth - page.clientWidth,
+        tall: page.scrollHeight - page.clientHeight,
+        scrolled: [window.scrollX, window.scrollY],
+      };
+    }, at);
+    expect(overflow, `at ${at}ms`).toEqual({ moved: true, wide: 0, tall: 0, scrolled: [0, 0] });
+  }
+});
+
 test("opening a room asks the shell for the chat window, on that server", async ({ page }) => {
   await open(page);
   await toggle(page, "Casa da Ribeira").click();
