@@ -672,8 +672,15 @@ test("closing the last tab closes the window and tells the list window", async (
 test("says so when the list window doesn't answer, and asks again when told to", async ({ page }) => {
   await page.clock.install();
   await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&noowner");
-  await page.clock.fastForward(6_000);
-  await expect(page.getByRole("status")).toContainText("The list window didn't answer.");
+  // Keep moving the clock until the wait has run out. One jump straight after
+  // loading can land before a slow engine has started waiting, and then the
+  // fake clock never reaches its end (seen on CI's WebKit, 2026-09-27).
+  await expect
+    .poll(async () => {
+      await page.clock.fastForward(1_000);
+      return page.getByRole("status").textContent();
+    })
+    .toContain("The list window didn't answer.");
   // It was only busy.
   await page.evaluate(() => window.owner?.wake());
   await page.getByRole("button", { name: "Try again" }).click();
