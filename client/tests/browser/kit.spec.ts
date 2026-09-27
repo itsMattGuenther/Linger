@@ -441,7 +441,7 @@ test("a drop-down is named by its label, keeps the choice picked, and a disabled
   await size.selectOption("150");
   await expect(size).toHaveValue("150");
   await expect(page.getByRole("combobox", { name: "Speakers" })).toBeDisabled();
-  await expect(page.getByRole("combobox", { name: "Microphone" })).toHaveAccessibleDescription("A change applies the next time you join voice.");
+  await expect(page.getByRole("combobox", { name: "Microphone" })).toHaveAccessibleDescription("A change applies at once, in a call too.");
 });
 
 test("a slider moves with the keys, says its value in words, and lights the part before the thumb", async ({ page }) => {

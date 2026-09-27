@@ -866,6 +866,13 @@ above stays for clients and servers that don't.
   forwarded client and a mesh client can't hear each other, so a room is never both. Old
   clients never say they can forward, and old servers never mark anybody, so both read
   as the mesh.
+- **Changing it in a call** (#249). Repeating `voice.join` for your current room with a
+  different `forwarding` applies it at once, as a repeated join does for `controls`: the
+  room is settled again and announced, and moves to the mesh or back. Turning it off in a
+  room with more people than the mesh holds (`MAX_VOICE_PEERS`) is ignored, and the room
+  keeps forwarding. A repeated join with the same answer changes nothing and announces
+  nothing. A server before this change ignored `forwarding` on a repeated join, so the
+  choice waited for the next join there.
 - **The server makes every offer; the client only answers.** On joining, the server
   sends `voice.offer`: one m-line for the client to send its microphone on, and one
   receiving m-line per other forwarded person in the room. `tracks` names whose voice each

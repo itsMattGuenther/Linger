@@ -433,8 +433,20 @@ impl Gateway {
                 if changed {
                     seat.controls = controls;
                 }
+                // Settings' "Voice through the server" switched in a call
+                // (#249): it applies now, not at the next join. Turning it off
+                // puts the whole room on the mesh, which holds fewer; a room
+                // too big for the mesh keeps forwarding.
+                let switched = seat.can_forward != can_forward;
                 drop(seat);
-                if changed {
+                let fits = can_forward || self.voice_peers(room_id).len() <= MAX_VOICE_PEERS;
+                if switched && fits {
+                    if let Some(mut seat) = self.voice.get_mut(session_id) {
+                        seat.can_forward = can_forward;
+                    }
+                    self.settle_forwarding(room_id);
+                }
+                if changed || (switched && fits) {
                     self.announce_voice(room_id);
                 }
                 return true;

@@ -166,7 +166,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
                 options={deviceOptions(devices.outputs, devices.default_output, voice.devices.output)}
               />
             </Fields>
-            <Note>A change applies the next time you join voice. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
+            <Note>A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
           </>
         )}
         <SettingRow
@@ -191,7 +191,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
         {refused ? <Note tone="problem">{refused}</Note> : null}
         <SettingRow
           title="Voice through the server"
-          description="Your voice goes to the server once, and it passes it on to everyone in the room. Turn it off to use the old way, straight to each person: if anybody in a room does, the whole room goes the old way. Only matters on a server that passes voice on, and takes effect the next time you join."
+          description="Your voice goes to the server once, and it passes it on to everyone in the room. Turn it off to use the old way, straight to each person: if anybody in a room does, the whole room goes the old way. Only matters on a server that passes voice on. A change applies at once, in a call too."
           control={<Switch label="Voice through the server" checked={voice.forwarding} onChange={(forwarding) => onVoice({ ...voice, forwarding })} />}
         />
       </Block>

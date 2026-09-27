@@ -24,6 +24,10 @@
 //!   source (the engine says `stopped`), the speaker goes quiet. Nothing in
 //!   here can tell a device that was unplugged from one that went away for
 //!   good, so the timeout is the whole of that decision.
+//! - **Another device picked in the middle of a call** (#249). The same worker
+//!   is told to build its stream again, now, on the device just chosen. The
+//!   call never notices: the microphone's frames and the speaker's lanes are
+//!   the same objects before and after, only the stream under them changes.
 //!
 //! **Threads.** A `cpal` stream is driven by a thread the library owns, and
 //! the stream handle itself is not something to hand between threads. So each
@@ -71,8 +75,9 @@ pub fn open_default() -> Result<Devices, DeviceError> {
 ///
 /// A name that is no longer there — headphones chosen last week and not
 /// plugged in today — falls back to the default rather than failing, because
-/// the person asked to talk, not to talk through one particular thing. The
-/// picker shows what is actually present, so the mismatch is visible there.
+/// the person asked to talk, not to talk through one particular thing. So does
+/// one that is listed but won't open (`or_default`). The picker shows what is
+/// actually present, so the mismatch is visible there.
 pub fn open(input: Option<&str>, output: Option<&str>) -> Result<Devices, DeviceError> {
     let source = Microphone::open(input)?;
     let sink = Speaker::open(output)?;
@@ -142,7 +147,10 @@ fn find(
 /// The frames a microphone produces, and a way to stop it.
 pub struct Microphone {
     frames: tokio::sync::Mutex<mpsc::Receiver<Vec<i16>>>,
-    _worker: Worker,
+    /// The device asked for by name, or `None` for the default. Read on every
+    /// build, so changing it and waking the worker is a switch (#249).
+    wanted: Arc<Mutex<Option<String>>>,
+    worker: Worker,
 }
 
 impl Microphone {
@@ -151,7 +159,8 @@ impl Microphone {
     /// Blocks while the device is opened, which on some hosts is tens of
     /// milliseconds — call it from a blocking task, not from the reactor.
     pub fn open(name: Option<&str>) -> Result<Self, DeviceError> {
-        let wanted = name.map(str::to_owned);
+        let wanted = Arc::new(Mutex::new(name.map(str::to_owned)));
+        let chosen = Arc::clone(&wanted);
         // Sixteen frames is a third of a second. The callback drops frames if
         // the engine falls further behind than that, because a queue that
         // grows is latency nobody asked for.
@@ -160,37 +169,20 @@ impl Microphone {
         let worker = Worker::start(
             move |alarm: &Alarm| {
                 let host = cpal::default_host();
+                let name = lock(&chosen).clone();
                 let device = find(
-                    wanted.as_deref(),
+                    name.as_deref(),
                     host.input_devices()?,
                     host.default_input_device(),
                     "input",
                 )?;
-                let config = match pick(device.supported_input_configs()?) {
-                    Some(config) => config,
-                    None => device.default_input_config()?,
-                };
-                let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
-                let alarm = alarm.clone();
-                let died = move |error: cpal::Error| {
-                    eprintln!("voice: microphone: {error}");
-                    alarm.ring();
-                };
-                let stream = match config.sample_format() {
-                    SampleFormat::I16 => device.build_input_stream(
-                        config.config(),
-                        move |data: &[i16], _| framer.push(data.iter().copied()),
-                        died,
-                        None,
-                    )?,
-                    SampleFormat::F32 => device.build_input_stream(
-                        config.config(),
-                        move |data: &[f32], _| framer.push(data.iter().map(|s| from_f32(*s))),
-                        died,
-                        None,
-                    )?,
-                    other => return Err(DeviceError::Format("input", other)),
-                };
+                let stream = or_default(
+                    name.as_deref(),
+                    &device,
+                    || host.default_input_device(),
+                    "microphone",
+                    |device| input_stream(device, &tx, alarm),
+                )?;
                 Ok((stream, ()))
             },
             // Given up: an empty frame is the sentinel `frame()` reads as "the
@@ -202,7 +194,8 @@ impl Microphone {
         )?;
         Ok(Self {
             frames: tokio::sync::Mutex::new(rx),
-            _worker: worker,
+            wanted,
+            worker,
         })
     }
 }
@@ -222,6 +215,83 @@ impl Source for Microphone {
         }
         Some(frame)
     }
+
+    fn choose(&self, name: Option<&str>) {
+        if choose(&self.wanted, name) {
+            self.worker.switch();
+        }
+    }
+}
+
+/// A stream from an input device, turning what it delivers into frames.
+fn input_stream(
+    device: &cpal::Device,
+    tx: &mpsc::Sender<Vec<i16>>,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
+    let config = match pick(device.supported_input_configs()?) {
+        Some(config) => config,
+        None => device.default_input_config()?,
+    };
+    let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
+    let alarm = alarm.clone();
+    let died = move |error: cpal::Error| {
+        eprintln!("voice: microphone: {error}");
+        alarm.ring();
+    };
+    Ok(match config.sample_format() {
+        SampleFormat::I16 => device.build_input_stream(
+            config.config(),
+            move |data: &[i16], _| framer.push(data.iter().copied()),
+            died,
+            None,
+        )?,
+        SampleFormat::F32 => device.build_input_stream(
+            config.config(),
+            move |data: &[f32], _| framer.push(data.iter().map(|s| from_f32(*s))),
+            died,
+            None,
+        )?,
+        other => return Err(DeviceError::Format("input", other)),
+    })
+}
+
+/// Build on the device found for `name`; if that was a device picked by name
+/// and it won't open, build on the default instead.
+///
+/// A device can be listed and still refuse: busy, held by another program, or
+/// a sound card output nothing is plugged into (seen on a real machine: ALSA
+/// "unable to open slave"). Retrying it would go on for twenty seconds and
+/// then leave the call silent; the default is what Linger promises for a
+/// device that isn't there (#249).
+fn or_default<T>(
+    name: Option<&str>,
+    device: &cpal::Device,
+    default: impl FnOnce() -> Option<cpal::Device>,
+    what: &str,
+    build: impl Fn(&cpal::Device) -> Result<T, DeviceError>,
+) -> Result<T, DeviceError> {
+    match build(device) {
+        Err(error) if name.is_some() => {
+            eprintln!("voice: {what}: {name:?} would not open ({error}); using the default");
+            match default() {
+                Some(fallback) => build(&fallback),
+                None => Err(error),
+            }
+        }
+        built => built,
+    }
+}
+
+/// Remember the device asked for. True when it is a different one, and the
+/// stream has to be built again for it.
+fn choose(wanted: &Mutex<Option<String>>, name: Option<&str>) -> bool {
+    let mut wanted = lock(wanted);
+    if wanted.as_deref() == name {
+        return false;
+    }
+    *wanted = name.map(str::to_owned);
+    true
 }
 
 /// Mixes every peer into the default output device.
@@ -233,7 +303,10 @@ pub struct Speaker {
     /// Atomic because the device can change under us (T-1405) and come back
     /// at another rate; the worker rewrites it, and the lanes, on reopen.
     rate: Arc<AtomicU32>,
-    _worker: Worker,
+    /// The device asked for by name, or `None` for the default (#249). See
+    /// [`Microphone`].
+    wanted: Arc<Mutex<Option<String>>>,
+    worker: Worker,
 }
 
 /// One peer's audio, waiting to be played.
@@ -266,7 +339,8 @@ impl Speaker {
     /// Open an output device by name, or the default for `None`. Blocks like
     /// [`Microphone::open`].
     pub fn open(name: Option<&str>) -> Result<Self, DeviceError> {
-        let wanted = name.map(str::to_owned);
+        let wanted = Arc::new(Mutex::new(name.map(str::to_owned)));
+        let chosen = Arc::clone(&wanted);
         let lanes: Arc<Mutex<HashMap<String, Lane>>> = Arc::new(Mutex::new(HashMap::new()));
         let rate = Arc::new(AtomicU32::new(SAMPLE_RATE));
         let deafened = Arc::new(AtomicBool::new(false));
@@ -276,56 +350,20 @@ impl Speaker {
         let worker = Worker::start(
             move |alarm: &Alarm| {
                 let host = cpal::default_host();
+                let name = lock(&chosen).clone();
                 let device = find(
-                    wanted.as_deref(),
+                    name.as_deref(),
                     host.output_devices()?,
                     host.default_output_device(),
                     "output",
                 )?;
-                let config = match pick(device.supported_output_configs()?) {
-                    Some(config) => config,
-                    None => device.default_output_config()?,
-                };
-                let channels = usize::from(config.channels());
-                let device_rate = config.sample_rate();
-                // Whatever was queued was for the device that just went; the
-                // new one may run at another rate. Retune every lane before a
-                // single callback fires on it.
-                {
-                    let mut lanes = lock(&shared);
-                    for lane in lanes.values_mut() {
-                        lane.retune(device_rate);
-                    }
-                }
-                shared_rate.store(device_rate, Ordering::Relaxed);
-                let alarm = alarm.clone();
-                let died = move |error: cpal::Error| {
-                    eprintln!("voice: speaker: {error}");
-                    alarm.ring();
-                };
-                let stream = match config.sample_format() {
-                    SampleFormat::I16 => {
-                        let lanes = Arc::clone(&shared);
-                        let deafened = Arc::clone(&shared_deafened);
-                        device.build_output_stream(
-                            config.config(),
-                            move |out: &mut [i16], _| mix(&lanes, &deafened, channels, out, |s| s),
-                            died,
-                            None,
-                        )?
-                    }
-                    SampleFormat::F32 => {
-                        let lanes = Arc::clone(&shared);
-                        let deafened = Arc::clone(&shared_deafened);
-                        device.build_output_stream(
-                            config.config(),
-                            move |out: &mut [f32], _| mix(&lanes, &deafened, channels, out, to_f32),
-                            died,
-                            None,
-                        )?
-                    }
-                    other => return Err(DeviceError::Format("output", other)),
-                };
+                let stream = or_default(
+                    name.as_deref(),
+                    &device,
+                    || host.default_output_device(),
+                    "speaker",
+                    |device| output_stream(device, &shared, &shared_deafened, &shared_rate, alarm),
+                )?;
                 Ok((stream, ()))
             },
             // Given up: nothing plays, and the lanes fill to their ceiling and
@@ -338,9 +376,54 @@ impl Speaker {
             lanes,
             deafened,
             rate,
-            _worker: worker,
+            wanted,
+            worker,
         })
     }
+}
+
+/// A stream to an output device, mixing every lane into it.
+fn output_stream(
+    device: &cpal::Device,
+    lanes: &Arc<Mutex<HashMap<String, Lane>>>,
+    deafened: &Arc<AtomicBool>,
+    rate: &AtomicU32,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
+    let config = match pick(device.supported_output_configs()?) {
+        Some(config) => config,
+        None => device.default_output_config()?,
+    };
+    let channels = usize::from(config.channels());
+    let device_rate = config.sample_rate();
+    // Whatever was queued was for the device that just went; the new one may
+    // run at another rate. Retune every lane before a single callback fires on
+    // it.
+    for lane in lock(lanes).values_mut() {
+        lane.retune(device_rate);
+    }
+    rate.store(device_rate, Ordering::Relaxed);
+    let alarm = alarm.clone();
+    let died = move |error: cpal::Error| {
+        eprintln!("voice: speaker: {error}");
+        alarm.ring();
+    };
+    let (lanes, deafened) = (Arc::clone(lanes), Arc::clone(deafened));
+    Ok(match config.sample_format() {
+        SampleFormat::I16 => device.build_output_stream(
+            config.config(),
+            move |out: &mut [i16], _| mix(&lanes, &deafened, channels, out, |s| s),
+            died,
+            None,
+        )?,
+        SampleFormat::F32 => device.build_output_stream(
+            config.config(),
+            move |out: &mut [f32], _| mix(&lanes, &deafened, channels, out, to_f32),
+            died,
+            None,
+        )?,
+        other => return Err(DeviceError::Format("output", other)),
+    })
 }
 
 /// How far behind playback is allowed to fall before old audio is thrown
@@ -400,6 +483,12 @@ impl Sink for Speaker {
             .entry(peer.to_string())
             .or_insert_with(|| Lane::new(self.rate.load(Ordering::Relaxed)))
             .gain = volume.clamp(0.0, MAX_GAIN);
+    }
+
+    fn choose(&self, name: Option<&str>) {
+        if choose(&self.wanted, name) {
+            self.worker.switch();
+        }
     }
 }
 
@@ -625,9 +714,13 @@ impl Playing for cpal::Stream {
     }
 }
 
-/// What wakes a worker: its stream died, or its owner is done with it.
+/// What wakes a worker: its stream died, another device was chosen, or its
+/// owner is done with it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Wake {
+    // In order of what matters most when several are waiting: see `strongest`.
     Died,
+    Switch,
     Stop,
 }
 
@@ -706,6 +799,17 @@ impl<T: Send + 'static> Worker<T> {
     }
 }
 
+impl<T> Worker<T> {
+    /// Build the stream again now, on whatever device is wanted now (#249).
+    /// Nothing waits for it: the worker does it on its own thread, and a
+    /// device that won't open goes on the same retry schedule as a death.
+    fn switch(&self) {
+        if let Some(wake) = &self.stop {
+            let _ = wake.send(Wake::Switch);
+        }
+    }
+}
+
 impl<T> Drop for Worker<T> {
     fn drop(&mut self) {
         // Said explicitly rather than by dropping the sender: the alarm clones
@@ -748,17 +852,17 @@ fn supervise<S, T, B, A>(
                     let _ = ready.send(Ok(info));
                 }
                 // Hold the stream until something happens to it or to us.
-                let woke = wake.recv();
+                let Ok(woke) = wake.recv() else { return };
                 drop(stream);
-                match woke {
-                    Ok(Wake::Died) => {
-                        // One death can ring more than once; the rest are stale.
-                        while let Ok(Wake::Died) = wake.try_recv() {}
-                        if wait_or_stop(&wake, retry.pause) {
+                match strongest(&wake, woke) {
+                    Wake::Died => {
+                        if wait_or_stop(&wake, retry.pause, &mut failures) {
                             return;
                         }
                     }
-                    Ok(Wake::Stop) | Err(_) => return,
+                    // Another device: build it straight away (#249).
+                    Wake::Switch => {}
+                    Wake::Stop => return,
                 }
             }
             Err(error) => {
@@ -774,7 +878,7 @@ fn supervise<S, T, B, A>(
                     abandon();
                     return;
                 }
-                if wait_or_stop(&wake, retry.pause) {
+                if wait_or_stop(&wake, retry.pause, &mut failures) {
                     return;
                 }
             }
@@ -782,11 +886,37 @@ fn supervise<S, T, B, A>(
     }
 }
 
-/// Sleep for `pause`, unless a stop arrives first. True means stop.
-fn wait_or_stop(wake: &std::sync::mpsc::Receiver<Wake>, pause: Duration) -> bool {
-    match wake.recv_timeout(pause) {
-        Ok(Wake::Stop) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => true,
-        Ok(Wake::Died) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => false,
+/// Everything already waiting, boiled down to the one that matters: a stop
+/// over a switch, a switch over a death. One death can ring more than once,
+/// and a stop or a switch must never be lost behind the extra rings.
+fn strongest(wake: &std::sync::mpsc::Receiver<Wake>, first: Wake) -> Wake {
+    let mut strongest = first;
+    while let Ok(next) = wake.try_recv() {
+        strongest = strongest.max(next);
+    }
+    strongest
+}
+
+/// Sleep for `pause`, unless something arrives first. True means stop. A
+/// switch cuts the wait short and starts the count of failures again, since
+/// the device being tried is a new one.
+fn wait_or_stop(
+    wake: &std::sync::mpsc::Receiver<Wake>,
+    pause: Duration,
+    failures: &mut u32,
+) -> bool {
+    let woke = match wake.recv_timeout(pause) {
+        Ok(woke) => strongest(wake, woke),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return false,
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return true,
+    };
+    match woke {
+        Wake::Stop => true,
+        Wake::Switch => {
+            *failures = 0;
+            false
+        }
+        Wake::Died => false,
     }
 }
 
@@ -923,7 +1053,8 @@ mod tests {
             lanes: Arc::new(Mutex::new(HashMap::new())),
             deafened: Arc::new(AtomicBool::new(false)),
             rate: Arc::new(AtomicU32::new(SAMPLE_RATE)),
-            _worker: Worker {
+            wanted: Arc::new(Mutex::new(None)),
+            worker: Worker {
                 info: (),
                 stop: None,
             },
@@ -1148,6 +1279,138 @@ mod tests {
         );
     }
 
+    /// A pause long enough that a test would notice a worker waiting it out
+    /// when it should have acted at once.
+    const SLOW: Retry = Retry {
+        pause: Duration::from_millis(400),
+        attempts: 3,
+    };
+
+    /// A device picked mid-call (#249): the worker builds again straight away,
+    /// on the name wanted now, and nothing waits out a pause.
+    #[test]
+    fn a_switch_builds_again_at_once_on_the_device_chosen() {
+        let wanted = Arc::new(Mutex::new(Some("Speakers".to_string())));
+        let opened: Arc<Mutex<Vec<Option<String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let builds = Arc::new(AtomicUsize::new(0));
+        let (w, o, b) = (
+            Arc::clone(&wanted),
+            Arc::clone(&opened),
+            Arc::clone(&builds),
+        );
+        let worker = Worker::start(
+            move |_: &Alarm| {
+                o.lock().unwrap().push(w.lock().unwrap().clone());
+                b.fetch_add(1, Ordering::SeqCst);
+                Ok((Fake, ()))
+            },
+            || panic!("gave up on a switch"),
+            SLOW,
+        )
+        .expect("first open");
+
+        assert!(choose(&wanted, Some("Headphones")));
+        worker.switch();
+        let started = std::time::Instant::now();
+        assert_eq!(wait_until(&builds, 2), 2, "the switch built nothing");
+        assert!(
+            started.elapsed() < SLOW.pause,
+            "the switch waited out a pause"
+        );
+        assert!(choose(&wanted, None));
+        worker.switch();
+        assert_eq!(wait_until(&builds, 3), 3);
+        assert_eq!(
+            *opened.lock().unwrap(),
+            vec![Some("Speakers".into()), Some("Headphones".into()), None]
+        );
+    }
+
+    /// Picking what is already picked opens nothing again.
+    #[test]
+    fn choosing_the_same_device_is_not_a_switch() {
+        let wanted = Mutex::new(Some("Headphones".to_string()));
+        assert!(!choose(&wanted, Some("Headphones")));
+        assert!(choose(&wanted, None));
+        assert!(!choose(&wanted, None));
+        assert!(choose(&wanted, Some("Headphones")));
+    }
+
+    /// A switch while the worker is waiting to retry a dead device tries the
+    /// new one now, and the count of failures starts again for it.
+    #[test]
+    fn a_switch_during_retries_tries_the_new_device_now() {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let alarm_out: Arc<Mutex<Option<Alarm>>> = Arc::new(Mutex::new(None));
+        let (b, a) = (Arc::clone(&builds), Arc::clone(&alarm_out));
+        let worker = Worker::start(
+            move |alarm: &Alarm| {
+                let n = b.fetch_add(1, Ordering::SeqCst);
+                *a.lock().unwrap() = Some(alarm.clone());
+                // The first device works, then dies and stays gone; the one
+                // switched to (the fourth build) works.
+                if n == 0 || n >= 3 {
+                    Ok((Fake, ()))
+                } else {
+                    Err(DeviceError::NoDevice("output"))
+                }
+            },
+            || panic!("gave up although a working device was chosen"),
+            Retry {
+                pause: Duration::from_millis(400),
+                attempts: 3,
+            },
+        )
+        .expect("first open");
+        alarm_out.lock().unwrap().as_ref().unwrap().ring();
+        // The death waits a pause, then fails (build 2); the switch arrives in
+        // the next pause and builds at once, failing again (build 3, the
+        // count reset to zero rather than reaching its limit)...
+        assert_eq!(wait_until(&builds, 2), 2);
+        let started = std::time::Instant::now();
+        worker.switch();
+        assert_eq!(wait_until(&builds, 3), 3);
+        assert!(
+            started.elapsed() < Duration::from_millis(400),
+            "the switch waited"
+        );
+        // ...and after one more pause the new device opens.
+        assert_eq!(wait_until(&builds, 4), 4);
+    }
+
+    /// A stop that arrives on the heels of a death is not lost behind it: the
+    /// worker ends rather than building again.
+    #[test]
+    fn a_stop_behind_a_death_is_heard() {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let alarm_out: Arc<Mutex<Option<Alarm>>> = Arc::new(Mutex::new(None));
+        let (b, a) = (Arc::clone(&builds), Arc::clone(&alarm_out));
+        let worker = Worker::start(
+            move |alarm: &Alarm| {
+                b.fetch_add(1, Ordering::SeqCst);
+                *a.lock().unwrap() = Some(alarm.clone());
+                Ok((Fake, ()))
+            },
+            || {},
+            Retry {
+                pause: Duration::from_millis(100),
+                attempts: 3,
+            },
+        )
+        .expect("first open");
+        let alarm = alarm_out.lock().unwrap().clone().unwrap();
+        // Both waiting before the worker wakes: the death, then the stop.
+        alarm.ring();
+        alarm.ring();
+        drop(worker);
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            1,
+            "built after being stopped"
+        );
+    }
+
     #[test]
     fn a_retuned_lane_keeps_its_volume_and_loses_its_queue() {
         let mut lane = Lane::new(48_000);
@@ -1184,6 +1447,35 @@ mod tests {
         // faster is making them up and much slower is dropping them.
         let took = started.elapsed().as_millis();
         assert!((350..=1500).contains(&took), "25 frames took {took} ms");
+    }
+
+    /// Every output device in turn, under one open speaker, as Settings does
+    /// mid-call (#249). Plays silence, so it can run without anybody hearing
+    /// it; what it proves is that each switch builds a stream on a real device
+    /// and the speaker keeps taking frames across them.
+    #[tokio::test]
+    #[ignore = "needs real output devices"]
+    async fn the_speaker_switches_between_real_devices() {
+        let devices = list().expect("enumerate devices");
+        let speaker = Speaker::open(None).expect("open the default speakers");
+        let quiet = vec![0i16; FRAME_SAMPLES];
+        for name in devices
+            .outputs
+            .iter()
+            .map(|name| Some(name.as_str()))
+            .chain([None])
+        {
+            speaker.choose(name);
+            for _ in 0..10 {
+                speaker.play("test", &quiet).await;
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            eprintln!(
+                "switched to {name:?} at {} Hz",
+                speaker.rate.load(Ordering::Relaxed)
+            );
+        }
+        drop(speaker);
     }
 
     /// Half a second of a tone out of the speakers. Whether it was heard is a

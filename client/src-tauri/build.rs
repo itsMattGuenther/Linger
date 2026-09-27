@@ -18,6 +18,8 @@ const COMMANDS: &[&str] = &[
     "voice_controls",
     "voice_push_to_talk",
     "voice_volume",
+    "voice_choose_devices",
+    "voice_forwarding",
     "voice_devices",
     "show_notification",
     "app_version",

@@ -241,6 +241,64 @@ async fn an_older_client_puts_the_room_on_the_mesh_and_forwarding_returns_when_i
     );
 }
 
+/// Settings' "Voice through the server" switched in a call (#249): it
+/// applies at once, not from the next join. Off puts the room on the mesh for
+/// everybody; on again brings forwarding back with a fresh offer.
+#[tokio::test]
+async fn switching_the_old_way_in_a_call_applies_at_once() {
+    let (server, host, callie, room) = forwarding_server(true).await;
+    let (mut a, a_id) = connect(&server, &host).await;
+    let (mut b, b_id) = connect(&server, &callie).await;
+    for ws in [&mut a, &mut b] {
+        send_json(
+            ws,
+            json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
+        )
+        .await;
+    }
+    let frames = drain(&mut b, SETTLE).await;
+    drain(&mut a, SETTLE).await;
+    assert_eq!(forwarded_in(&frames, &b_id), Some(json!(true)));
+
+    // b turns it off while in the call: the same join, with forwarding false.
+    send_json(
+        &mut b,
+        json!({"op":"voice.join","d":{"room_id":room,"forwarding":false}}),
+    )
+    .await;
+    let to_a = drain(&mut a, SETTLE).await;
+    let to_b = drain(&mut b, SETTLE).await;
+    for frames in [&to_a, &to_b] {
+        assert_eq!(forwarded_in(frames, &a_id), Some(Value::Null), "{frames:?}");
+        assert_eq!(forwarded_in(frames, &b_id), Some(Value::Null));
+    }
+    assert!(offers(&to_a).is_empty() && offers(&to_b).is_empty());
+
+    // And on again.
+    send_json(
+        &mut b,
+        json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
+    )
+    .await;
+    let to_b = drain(&mut b, SETTLE).await;
+    assert_eq!(forwarded_in(&to_b, &b_id), Some(json!(true)));
+    assert_eq!(offers(&to_b).len(), 1, "no fresh offer: {to_b:?}");
+    let to_a = drain(&mut a, SETTLE).await;
+    assert_eq!(forwarded_in(&to_a, &a_id), Some(json!(true)));
+
+    // The same join again changes nothing and announces nothing.
+    send_json(
+        &mut b,
+        json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
+    )
+    .await;
+    let quiet = drain(&mut a, SETTLE).await;
+    assert!(
+        !quiet.iter().any(|f| f["op"] == "voice.state"),
+        "an unchanged join was announced: {quiet:?}"
+    );
+}
+
 #[tokio::test]
 async fn a_server_that_doesnt_forward_keeps_everybody_on_the_mesh() {
     let (server, host, _, room) = forwarding_server(false).await;
