@@ -99,7 +99,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
   // connected clients: absent is offline (the same rule as the roster).
   const stateOf = (id: string): PresenceState => presenceOf.get(id) ?? "offline";
 
-  const dms = orderDms(state.dms, (room: Room) => hasNewActivity(state, room.id)).map(
+  const dms = orderDms(state.dms, (room: Room) => hasNewActivity(state, room.id), state.newest).map(
     (room): DmRow => ({
       id: room.id,
       label: dmLabel(room, users, meId),

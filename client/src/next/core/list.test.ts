@@ -9,9 +9,10 @@ import type { User } from "../../generated/User";
 vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
-const { serverState } = await import("../../lib/gateway");
+const { apply, serverState } = await import("../../lib/gateway");
 const { listModel, splitRooms } = await import("./list");
 type RoomRow = import("./list").RoomRow;
+type GatewayState = import("../../lib/gateway").GatewayState;
 
 const NOW = Date.parse("2026-09-25T22:52:00Z");
 const HOUR = 3_600_000;
@@ -121,6 +122,37 @@ describe("the buddy list for one server", () => {
       ["u-eli", "in_room"],
       ["u-sam", "away"],
     ]);
+  });
+
+  // `ready` says where each DM's conversation had got to when the app
+  // connected, and never again; the order has to follow what arrives after.
+  it("moves a DM to the top when somebody writes in it, and keeps it there once read (#248)", () => {
+    const labels = (held: GatewayState) => listModel(held, NOW).dms.map((row) => row.label);
+    const said = (held: GatewayState, roomId: string, id: string, author: string) =>
+      apply(held, {
+        s: 0,
+        op: "message.create",
+        d: { id, room_id: roomId, author_id: author, body: "hi", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: NOW },
+      });
+    const read = (held: GatewayState, roomId: string): GatewayState => ({ ...held, read: { ...held.read, [roomId]: held.newest[roomId] ?? "" } });
+    const start: GatewayState = {
+      ...evening(),
+      dms: [
+        room("d-jules", "d-jules", 0, { kind: "dm", member_ids: ["u-matt", "u-jules"], last_message_id: "m000010" }),
+        room("d-eli-sam", "d-eli-sam", 0, { kind: "dm", member_ids: ["u-matt", "u-eli", "u-sam"], last_message_id: "m000004" }),
+      ],
+      newest: { "d-jules": "m000010", "d-eli-sam": "m000004" },
+      read: { "d-jules": "m000010", "d-eli-sam": "m000004" },
+    };
+    expect(labels(start)).toEqual(["Jules", "Eli and Sam"]);
+
+    const theirs = said(start, "d-eli-sam", "m000011", "u-sam");
+    expect(labels(theirs)).toEqual(["Eli and Sam", "Jules"]);
+    // Reading it used to send it back to where it was at connect.
+    expect(labels(read(theirs, "d-eli-sam"))).toEqual(["Eli and Sam", "Jules"]);
+
+    const mine = read(said(read(theirs, "d-eli-sam"), "d-jules", "m000012", "u-matt"), "d-jules");
+    expect(labels(mine)).toEqual(["Jules", "Eli and Sam"]);
   });
 
   it("puts you in your own card, not among the people", () => {

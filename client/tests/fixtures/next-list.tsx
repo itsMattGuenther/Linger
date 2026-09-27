@@ -12,9 +12,9 @@
  * open, `&quiet` makes Ashen Lanterns quiet, `&awayfail` has Casa da
  * Ribeira refuse to save an away message.
  */
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { serverState } from "../../src/lib/gateway";
+import { apply, serverState } from "../../src/lib/gateway";
 import type { GatewayState } from "../../src/lib/gateway";
 import { withAway, withLine } from "../../src/next/core/you";
 import { listModel } from "../../src/next/core/list";
@@ -106,14 +106,45 @@ const note = (what: string) => {
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 
+/**
+ * `?live`: the spec says things in conversations through `window.linger`, and
+ * the real store folds them in. `said` is a message arriving (anyone's, yours
+ * included); `read` is its window reading up to the newest, as the chat window
+ * does for a message you just sent.
+ */
+interface Live {
+  said: (roomId: string, authorId: string) => void;
+  read: (roomId: string) => void;
+}
+
 /** One server, as the list has always been. */
 function OneServer() {
+  const [held, setHeld] = useState<GatewayState>(shown);
+  useEffect(() => {
+    if (!query.has("live")) return;
+    let next = 100;
+    const live: Live = {
+      said: (roomId, authorId) => {
+        const id = `m${String((next += 1)).padStart(6, "0")}`;
+        setHeld((now) =>
+          apply(now, {
+            s: 0,
+            op: "message.create",
+            d: { id, room_id: roomId, author_id: authorId, body: "hi", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: NOW },
+          }),
+        );
+      },
+      read: (roomId) => setHeld((now) => ({ ...now, read: { ...now.read, [roomId]: now.newest[roomId] ?? "" } })),
+    };
+    (window as unknown as { linger: Live }).linger = live;
+    document.body.dataset.live = "ready";
+  }, []);
   const listing: ServerListing = {
     id: SERVER,
     name: SERVER_NAME,
     accent: "amber",
-    model: listModel(shown, NOW),
-    header: serverHeader(shown, listModel(shown, NOW), false),
+    model: listModel(held, NOW),
+    header: serverHeader(held, listModel(held, NOW), false),
     quiet: false,
     speaking,
     onOpenRoom: (id) => note(`room:${id}`),

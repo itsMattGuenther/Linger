@@ -10,6 +10,7 @@
  * The server does send a `slug` and a `name`, and both are generated and mean
  * nothing (`repo::dms`). Nothing in here reads either of them.
  */
+import type { MessageId } from "../generated/MessageId";
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
@@ -115,21 +116,33 @@ export function noDms(): string {
 }
 
 /**
- * Sort DMs the way the rail draws them: the conversation with something new in
- * it first, then by whichever was spoken in most recently.
+ * Sort DMs the way the list draws them: the conversation with something new in
+ * it first, then by whichever was spoken in most recently, by you or by them.
  *
- * `hasNew` is passed in rather than read here, because it is the store's
- * question and this file is pure. Note what is *not* here: no count, no
- * ordering by how much is unread (SPEC §4.2, AGENTS rule 3). A DM either has
- * something new in it or it does not.
+ * `hasNew` and `latest` are the store's answers, passed in because this file
+ * is pure. `latest` is the store's newest message per room
+ * (`GatewayState.newest`), which every arriving message keeps up to date. A
+ * DM's own `last_message_id` is only what `ready` said when the app connected,
+ * and sorting by it kept the list in its startup order for the whole session
+ * (#248); it is the fallback for a DM the store has nothing on. A DM nobody
+ * has written in yet goes by when it was made. Ids are UUIDv7 in lowercase
+ * hex, so comparing them as strings is comparing times.
+ *
+ * Note what is *not* here: no count, no ordering by how much is unread (SPEC
+ * §4.2, AGENTS rule 3). A DM either has something new in it or it does not.
  */
-export function orderDms(dms: Room[], hasNew: (room: Room) => boolean): Room[] {
+export function orderDms(
+  dms: Room[],
+  hasNew: (room: Room) => boolean,
+  latest: Readonly<Record<string, MessageId>>,
+): Room[] {
+  const when = (room: Room): string => latest[room.id] ?? room.last_message_id ?? room.id;
   return [...dms].sort((a, b) => {
     const newA = hasNew(a);
     const newB = hasNew(b);
     if (newA !== newB) return newA ? -1 : 1;
-    const lastA = a.last_message_id ?? "";
-    const lastB = b.last_message_id ?? "";
+    const lastA = when(a);
+    const lastB = when(b);
     if (lastA !== lastB) return lastA < lastB ? 1 : -1;
     return a.id < b.id ? 1 : -1;
   });

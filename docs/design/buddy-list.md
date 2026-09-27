@@ -140,7 +140,8 @@ From top to bottom, for each server:
 
    Click a room to open it.
 3. **DMs,** with a **new message** button on the heading (see below). A DM with
-   something new goes bold.
+   something new goes bold and goes first; after those, the one somebody wrote
+   in most recently, you or them, is on top (#248).
 4. **People:** everyone on the server in one list, not grouped by room, since
    the rooms above already show who's where.
    - People who are here come first, whether they're in a room or around.

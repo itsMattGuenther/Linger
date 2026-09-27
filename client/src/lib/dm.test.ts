@@ -122,7 +122,7 @@ describe("orderDms", () => {
   const silent = dm("d3", ["u-matt", "u-jen"], null);
 
   it("puts the most recently spoken in first", () => {
-    const order = orderDms([quiet, silent, busy], () => false).map((one) => one.id);
+    const order = orderDms([quiet, silent, busy], () => false, {}).map((one) => one.id);
     expect(order).toEqual(["d2", "d1", "d3"]);
   });
 
@@ -130,15 +130,31 @@ describe("orderDms", () => {
   // new in it comes first, and there is nothing to compare two of them by
   // except when they were last spoken in (SPEC §4.2, AGENTS rule 3).
   it("floats the ones holding something new, without counting anything", () => {
-    const order = orderDms([busy, quiet, silent], (room) => room.id === "d3").map(
+    const order = orderDms([busy, quiet, silent], (room) => room.id === "d3", {}).map(
       (one) => one.id,
     );
     expect(order).toEqual(["d3", "d2", "d1"]);
   });
 
+  // `last_message_id` is what `ready` said when the app connected; the store's
+  // newest message is what has happened since (#248).
+  it("goes by the store's latest message, not what the server said at connect", () => {
+    const order = orderDms([busy, quiet], () => false, { d1: "m0012" }).map((one) => one.id);
+    expect(order).toEqual(["d1", "d2"]);
+  });
+
+  it("puts a DM nobody has written in yet by when it was made", () => {
+    // Ids are UUIDv7 hex: a room made after a message sorts after it too.
+    const early = dm("0190a000000070008000000000000001", ["u-matt", "u-callie"], "0190a000000170008000000000000001");
+    const made = dm("0190a000000270008000000000000001", ["u-matt", "u-jen"], null);
+    const late = dm("0190a000000370008000000000000001", ["u-matt", "u-dave"], "0190a000000470008000000000000001");
+    const order = orderDms([early, made, late], () => false, {}).map((one) => one.id);
+    expect(order).toEqual([late.id, made.id, early.id]);
+  });
+
   it("does not mutate what it was given", () => {
     const input = [quiet, busy];
-    orderDms(input, () => false);
+    orderDms(input, () => false, {});
     expect(input.map((one) => one.id)).toEqual(["d1", "d2"]);
   });
 });
