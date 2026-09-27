@@ -8,8 +8,7 @@
 
 One person runs a server; their friends install the app and connect to it.
 Text rooms, voice rooms, DMs, file sharing, and a buddy list that shows who's
-around. Not federated, not a platform, no company in the middle. Built for a
-dinner party of eight, not a stadium of fifty thousand strangers.
+around. Not federated, not a platform, no company in the middle.
 
 <div align="center">
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
@@ -19,7 +18,45 @@ dinner party of eight, not a stadium of fifty thousand strangers.
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
-## What it does
+## 🧭 Why this exists
+
+The big chat platforms are built for a stadium of fifty thousand strangers. Linger is
+built for a dinner party of eight. Every feature decision resolves against three
+principles, in order:
+
+1. **Presence over messages.** The app should feel alive when nobody is typing.
+2. **Remove obligation.** No counters, no streaks, no red dots, no "you're behind."
+3. **Keep the artifact.** Photos, clips, links, and jokes don't scroll away into nothing.
+
+## 🏠 The case for running your own
+
+There was a stretch of the internet where a group of friends just *had* a place. Somebody
+ran it. You knew who that was, you could ask them for things, and the whole arrangement
+was a few files on a machine somebody owned. Then everyone moved into one enormous
+building owned by a company, and the terms changed:
+
+- **Your conversations sit on someone else's disk, and the company's business depends on
+  what it can learn from them.** You are not the customer.
+- **Features get held back and sold back to you.** The free experience gets a little
+  worse on purpose, because friction is what makes an upsell work. That is not a bug in
+  the design... it *is* the design.
+- **There's a storefront in the middle of your conversation**, selling cosmetics and
+  subscriptions nobody asked for.
+- **The product changes under you** whenever a growth target does, and nobody asks.
+
+Linger is the other arrangement. One person runs a server for their friends. The whole
+thing is one binary, one SQLite file, and a folder of uploads — you can back it up, move
+it to another box, read it with off-the-shelf tools, or walk away with all of it. There
+is no account that spans servers, no directory, no company in the middle.
+
+And there is nothing to sell you, structurally: no paid tier, no store, no cosmetics, no
+premium anything, and none of it held back for later. It's AGPL-3.0, so if someone runs a
+modified server for other people, those people get the source. **Zero telemetry** — not
+opt-in, not anonymous, not crash reports.
+
+This is not an attempt to build a better platform. It's an attempt to not need one.
+
+## ✨ What it does
 
 - **The buddy list.** One tall window: you, the rooms with who's in each, your
   DMs, and everyone on the server, here, away (with their away message) or
@@ -47,7 +84,7 @@ Telemetry or analytics of any kind. A paid tier or a store. AI features.
 Anything that watches which applications you have open. The scope discipline
 is the product.
 
-## Privacy
+## 🔐 Privacy
 
 **The person running the server can read everything on it**, and when their
 server forwards voice, it passes through there too. There is no end-to-end
@@ -60,7 +97,7 @@ opt-in (the app only contacts GitHub to check for updates); EXIF, including
 GPS, stripped from every image; and no code that could read a window title
 ([decision](docs/decisions.md), 2026-08-28).
 
-## Installing the app
+## 📦 Installing the app
 
 You need an invite link from your host. The [user guide](docs/user-guide.md)
 covers each step and what to do when something goes wrong.
@@ -83,7 +120,7 @@ then *Run anyway*. The installer isn't code-signed; that's a
 [decision](docs/decisions.md), not a broken download. Updates are signed, and
 the app checks the signature before installing one.
 
-## Running a server
+## 🚀 Running a server
 
 [The host guide](docs/host-guide.md) is the step-by-step path: a VPS or a
 computer at home, Docker, DNS, voice, backups and updates.
@@ -104,14 +141,14 @@ docker compose logs linger   # prints a one-time setup link
 Paste the setup link into the app. It makes your account, makes you the host
 and names the server. To update later: `docker compose pull && docker compose up -d`.
 
-## Reporting a problem
+## 🐞 Reporting a problem
 
 Open an [issue](https://github.com/itsMattGuenther/Linger/issues/new/choose).
 Issues are public, so leave out message text, other people's names, server
 addresses and invite links. If you use a coding agent, the
 [`linger-report` skill](agents/) drafts the issue with you.
 
-## Development
+## 🛠️ Development
 
 ```
 crates/linger-core/    shared types, IDs and the palette: the wire contract
@@ -142,7 +179,7 @@ docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
 [PROTOCOL](PROTOCOL.md)) are the source of truth; the queue is
 [TASKS.md](TASKS.md).
 
-## License
+## 📜 License
 
 [AGPL-3.0](LICENSE). If you run a modified server for other people, they get
 the source.
