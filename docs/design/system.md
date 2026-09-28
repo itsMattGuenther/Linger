@@ -84,6 +84,7 @@ required a change (marked ▲).
 | `--text-secondary` | `#c0c6d2` | row text, button labels |
 | `--text-muted` | `#8d96a9` | second lines, notes, labels, placeholders, and the dimmest text allowed |
 | `--text-away` | `#e9dcc4` | away messages |
+| `--text-offline` | `#8d96a9` | an offline person's name in the list (#274): none of their color, the dimmest text allowed |
 | `--text-accent` / `--accent` | `#f3b55c` | the lamp: primary action, selected choice, your voice |
 | `--text-on-accent` | `#1c1206` | text on the lamp |
 | `--text-danger` / `--danger` | `#f06e6e` | destructive actions, errors |
@@ -249,6 +250,15 @@ gradient at 92°, and shimmer or glow.
   high contrast.
 - **`raw`** draws the person's own style even with plain names on, for the
   style picker's preview.
+- **`offline`** draws the name in `--text-offline`, a dim neutral grey, with
+  none of their color, gradient, glow or shimmer, so somebody offline reads
+  as nobody home at a glance (#274). Their face, weight and slant stay, so
+  it is still their name. It wins over every rule that paints a name, plain
+  names included (the face is then the reader's default, as for everyone),
+  and in high contrast it is the system's `GrayText`. The list passes it for
+  the Offline group's rows only, from the person's presence as it is now, so
+  the color comes back the moment they do. Names in a conversation and on
+  the person card keep their colors.
 - **`size="inline"`** is the one size without a box: the name flows inside a
   sentence ("Replying to Jules:", "Eli and Sam are typing", a message's
   author) at the sentence's own size and line height, so it never makes its
@@ -454,10 +464,12 @@ place, in groups, the showing one lit by the lamp with a bar along its edge.
 Windows' high-contrast mode (forced colors) repaints backgrounds and borders
 in the system's colors, so a state shown only by a color would vanish. Each
 part that has one keeps it with a system color, in its own stylesheet:
-presence dots are drawn in the text color; the selected row, the showing tab
-and the showing Settings section are outlined in `Highlight`; a switch that's
-on, a ticked box and whoever's talking are filled with it. `kit.spec.ts`
-checks each with high contrast emulated.
+presence dots are drawn in the text color; an offline person's name is in
+`GrayText`, the system's dim text; the selected row, the showing tab and the
+showing Settings section are outlined in `Highlight`; a switch that's on, a
+ticked box and whoever's talking are filled with it. `kit.spec.ts` checks
+each with high contrast emulated, and `next-offline-names.spec.ts` the
+offline name.
 
 ### Chip
 
@@ -710,6 +722,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
+| An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; somebody here keeps their look; going offline and coming back (around, away, idle, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
@@ -728,7 +741,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | No `!important` | `discipline.test.ts` › never uses !important |
 | `src/next` imports only `src/lib` logic (`.ts`), `src/generated` and `src/fonts` from the old client, never its screens, styles or UI components | `discipline.test.ts` › imports nothing from the old client's UI |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
-| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
+| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The
 geometry spec also saves a review sheet of each gallery section to

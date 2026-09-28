@@ -108,7 +108,9 @@ own styling. There's one marker per state, all the same size:
 - **here:** a solid dot;
 - **idle:** 💤, in their color (#259);
 - **away:** a small crescent moon;
-- **offline:** the dot, dimmed.
+- **offline:** the dot, dimmed. In the list their name loses its color too:
+  a dim grey in their own face, with no gradient, glow or shimmer, until
+  they're back (#274).
 
 The words ("away", "last here yesterday") are in the row and in tooltips and
 screen-reader labels, so nothing relies on the shape or the color alone.
@@ -153,7 +155,8 @@ From top to bottom, for each server:
 
    Each row has their dot, their styled name, one line of status or away
    message, and a faint note on the right: "in #general", "around" or "last
-   here yesterday".
+   here yesterday". An offline person's name is a dim grey rather than their
+   colors, so the Offline group reads as nobody home.
 5. **Media and Search** at the bottom.
 
 ![A person's card, with Message and Knock](buddy-list/buddy-list-13-person-card.webp)

@@ -115,6 +115,10 @@
   --text-danger: var(--red-1);
   --text-on-danger: var(--red-ink);
   --text-success: var(--green-1);
+  /* An offline person's name in the list (#274): none of their own color,
+     the dimmest grey text may be, so the row reads as nobody home at a
+     glance. It still reaches 4.5:1 (`contrast.test.ts`). */
+  --text-offline: var(--ink-3);
 
   /* Icons and other marks that are not text: 3:1 is their floor. */
   --icon-default: var(--ink-2);

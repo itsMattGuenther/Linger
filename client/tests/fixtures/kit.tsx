@@ -460,6 +460,14 @@ function Gallery() {
             <div className="g-row g-narrow">
               <Name person={longName} />
             </div>
+            <div className="g-row">
+              {/* Offline (#274): the same people, their faces kept, none of their colors or effects. */}
+              <Name person={jules} offline />
+              <Name person={eli} offline />
+              {FACES.filter(({ user }) => user.style.effect !== "none").map(({ user }) => (
+                <Name key={user.id} person={user} offline />
+              ))}
+            </div>
             <p className="g-row g-sentence" data-testid="inline-names">
               <span>
                 Replying to <Name person={jules} size="inline" />: <Name person={eli} size="inline" /> and{" "}
@@ -562,6 +570,11 @@ function Gallery() {
               <Row lead={{ kind: "person", person: { color: "rose", state: "away" } }} lines="two" title={<Name person={sam} />} detail="“back after work”" away note="away · 1h" />
             </RowList>
             <SectionLabel label="Offline" level="group" open={open.offline} onToggle={() => setOpen((o) => ({ ...o, offline: !o.offline }))} />
+            {open.offline ? (
+              <RowList label="Offline">
+                <Row lead={{ kind: "person", person: { color: "violet", state: "offline" } }} lines="two" title={<Name person={callie} offline />} detail="on the couch with a book" note="last here 1d" />
+              </RowList>
+            ) : null}
           </div>
 
           <div className="g-list" data-kit-column="">
@@ -572,7 +585,7 @@ function Gallery() {
                   key={user.id}
                   lead={{ kind: "person", person: { color, state } }}
                   lines="two"
-                  title={<Name person={user} />}
+                  title={<Name person={user} offline={state === "offline"} />}
                   detail={user.status?.away_message ?? user.status?.line ?? ""}
                   away={state === "away"}
                   note={state}
@@ -585,7 +598,7 @@ function Gallery() {
             <SectionLabel label="Every face, one line" />
             <RowList label="Every face, one line">
               {FACES.map(({ user, color, state }) => (
-                <Row key={user.id} lead={{ kind: "person", person: { color, state } }} lines="one" title={<Name person={user} />} />
+                <Row key={user.id} lead={{ kind: "person", person: { color, state } }} lines="one" title={<Name person={user} offline={state === "offline"} />} />
               ))}
               <Row lead={{ kind: "person", person: { color: "sky", state: "here" } }} lines="one" title={<Name person={longName} />} note="in #general" />
             </RowList>

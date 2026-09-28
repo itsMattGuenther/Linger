@@ -116,7 +116,7 @@ export function ServerBody({
       key={row.user.id}
       lead={{ kind: "person", person: markerFor(row.user, row.state) }}
       lines="two"
-      title={<Name person={row.user} />}
+      title={<Name person={row.user} offline={row.state === "offline"} />}
       label={`${row.user.display_name}, ${row.note}`}
       trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
       note={row.note}
