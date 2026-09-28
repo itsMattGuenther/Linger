@@ -64,6 +64,11 @@ interface ListShared {
   voice?: VoiceDockProps;
   /** One server: changing your status and going away, from the top card. */
   you?: YouActions;
+  /**
+   * One server: your name on the top card opens your own card, as friends
+   * see it (#271), and this is its Edit profile: Settings → Profile.
+   */
+  onEditProfile?: () => void;
   /** Several servers: going away, with a choice of where, and coming back. */
   everywhere?: AwayEverywhere;
   /** Several servers: a server's Quiet, from its menu. */
@@ -81,7 +86,7 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, notes, voice, you, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock } = props;
+  const { onClose, onSettings, notices, notes, voice, you, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock } = props;
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
   const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
@@ -122,7 +127,7 @@ export function ListView(props: ListViewProps) {
           {name}
         </TitleBar>
 
-        {only?.model.me ? <YouCard me={only.model.me} actions={you} /> : null}
+        {only?.model.me ? <YouCard me={only.model.me} actions={you} onEditProfile={onEditProfile} /> : null}
 
         <div className="nx-list-scroll">
           {only ? (

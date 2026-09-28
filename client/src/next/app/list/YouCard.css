@@ -22,6 +22,17 @@
   min-width: 0;
 }
 
+/* Your name opens your own card (#271): the name as drawn, as wide as its
+   letters, with nothing added until it has the keyboard, like a name in a
+   conversation. */
+.nx-you-name {
+  display: flex;
+  align-self: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--radius-xs);
+}
+
 .nx-you-where {
   display: flex;
   align-items: center;

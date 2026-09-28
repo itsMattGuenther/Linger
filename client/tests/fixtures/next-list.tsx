@@ -34,12 +34,19 @@ import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 // doesn't share its microphone (VOICE-6, VOICE-7). `&muted`, `&deafened`: your
 // own controls pressed (deafening mutes too, as `setVoiceDeafened` does).
 const query = new URLSearchParams(location.search);
-// `?away`: you're away already, so the top card offers "I'm back".
+// `?away`: you're away already, so the top card offers "I'm back", and the
+// server says so to everyone, as it does once an away message is saved.
 const night = evening(serverState(SERVER));
 const base = query.has("away")
   ? (() => {
-      const me = night.me && { ...night.me, status: night.me.status && { ...night.me.status, away_message: "walking the dog 🐕" } };
-      return { ...night, me, users: night.users.map((user) => (me && user.id === me.id ? me : user)) };
+      const away = "walking the dog 🐕";
+      const me = night.me && { ...night.me, status: night.me.status && { ...night.me.status, away_message: away } };
+      return {
+        ...night,
+        me,
+        users: night.users.map((user) => (me && user.id === me.id ? me : user)),
+        presence: night.presence.map((entry) => (me && entry.user_id === me.id ? { ...entry, state: "away" as const, room_id: null, away_message: away } : entry)),
+      };
     })()
   : night;
 const state = query.has("voice")
@@ -187,6 +194,7 @@ function OneServer() {
             }
           : undefined
       }
+      onEditProfile={() => note("settings:profile")}
       you={{
         awayChoices: awayChoices([]),
         saveLine: async (line) => {

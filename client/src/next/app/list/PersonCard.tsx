@@ -8,7 +8,7 @@ import { markerFor } from "../markers";
 import "./PersonCard.css";
 
 
-export interface PersonCardProps {
+interface CardBase {
   user: User;
   state: PresenceState;
   /** Where they are, said plainly: "in #general", "last here 2d". */
@@ -19,12 +19,30 @@ export interface PersonCardProps {
    * narrow list), or from `left` when given (a name in a wide conversation).
    */
   anchor: { top: number; bottom: number; left?: number };
+  onClose: () => void;
+}
+
+/** Somebody else's card: Message and Knock. */
+interface TheirCard {
   onMessage: () => void;
   onKnock: () => Promise<KnockResult>;
-  onClose: () => void;
   /** Why a knock from their row didn't go, when that's what opened the card. */
   problem?: string | null;
+  onEditProfile?: undefined;
 }
+
+/**
+ * Your own card (#271): the same card friends see, saying so, with Edit
+ * profile (Settings → Profile) where Message and Knock would be.
+ */
+interface YourCard {
+  onEditProfile: () => void;
+  onMessage?: undefined;
+  onKnock?: undefined;
+  problem?: undefined;
+}
+
+export type PersonCardProps = CardBase & (TheirCard | YourCard);
 
 /**
  * A note's sentences, so a line breaks between them rather than inside a
@@ -43,12 +61,17 @@ function sentencesOf(text: string): string[] {
  * because the list is its own narrow window and a card beside it would be cut
  * off at the window's edge. A name in a conversation opens the same card
  * (PPL-6).
+ *
+ * Your own name opens this card too, not a look-alike, so the preview can't
+ * drift from what friends see (#271): the same presence, note, status and
+ * fields, under a quiet line saying whose view it is, and Edit profile in
+ * place of Message and Knock.
  */
 /** Space kept between the card, its row and the window's edges. */
 const GAP = 4;
 const EDGE = 8;
 
-export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onClose, problem: refused = null }: PersonCardProps) {
+export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEditProfile, onClose, problem: refused = null }: PersonCardProps) {
   const first = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
 
@@ -84,7 +107,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
   }, [phase]);
 
   const knock = async () => {
-    if (phase !== "idle") return;
+    if (phase !== "idle" || !onKnock) return;
     setPhase("knocking");
     setProblem(null);
     const result = await onKnock();
@@ -107,6 +130,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
   return (
     <Popover label={user.display_name} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
       <div className="nx-person" ref={first}>
+        {onEditProfile ? <p className="nx-person-yours">This is how friends see you</p> : null}
         <div className="nx-person-head">
           <Name person={user} size="display" />
           <span className="nx-person-where">
@@ -132,19 +156,27 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
           </dl>
         ) : null}
         <div className="nx-person-actions">
-          <Button variant="primary" size="md" icon="message" onClick={onMessage}>
-            Message
-          </Button>
-          <Button
-            variant="secondary"
-            size="md"
-            icon="knock"
-            busy={phase === "knocking"}
-            disabled={state === "offline" || phase !== "idle"}
-            onClick={() => void knock()}
-          >
-            {phase === "knocked" ? "Knocked" : "Knock"}
-          </Button>
+          {onEditProfile ? (
+            <Button variant="primary" size="md" icon="pencil" onClick={onEditProfile}>
+              Edit profile
+            </Button>
+          ) : (
+            <>
+              <Button variant="primary" size="md" icon="message" onClick={onMessage}>
+                Message
+              </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                icon="knock"
+                busy={phase === "knocking"}
+                disabled={state === "offline" || phase !== "idle"}
+                onClick={() => void knock()}
+              >
+                {phase === "knocked" ? "Knocked" : "Knock"}
+              </Button>
+            </>
+          )}
         </div>
         {problem ? (
           <p className="nx-person-problem" role="status">

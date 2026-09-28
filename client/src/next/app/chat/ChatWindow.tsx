@@ -543,7 +543,8 @@ function Conversations({ following }: { following: Following }) {
     [api],
   );
   // A name in a conversation opens that person's card (PPL-6), the same card
-  // the list shows, beside the name.
+  // the list shows, beside the name. Your own opens yours, as friends see it
+  // (#271).
   const [card, setCard] = useState<{ server: string; userId: string; anchor: { top: number; bottom: number; left: number } } | null>(null);
   // The name that opened it gets the keyboard back when it closes.
   const cardOpener = useRef<HTMLElement | null>(null);
@@ -712,12 +713,22 @@ function Conversations({ following }: { following: Following }) {
           state={cardRow.state}
           note={cardRow.note}
           anchor={card.anchor}
-          onMessage={() => void messageFromCard(card.server, cardRow.user)}
-          onKnock={() => {
-            const cardApi = apis.get(card.server);
-            return cardApi ? knockOn(cardApi, cardRow.user.id) : Promise.resolve({ ok: false, problem: "You're not signed in to that server any more." });
-          }}
           onClose={closeCard}
+          {...(cardRow.user.id === cardState?.me?.id
+            ? {
+                // Your own card (#271): Settings → Profile, through the list window.
+                onEditProfile: () => {
+                  closeCard();
+                  void intend({ kind: "settings", section: "profile" }).catch(() => undefined);
+                },
+              }
+            : {
+                onMessage: () => void messageFromCard(card.server, cardRow.user),
+                onKnock: () => {
+                  const cardApi = apis.get(card.server);
+                  return cardApi ? knockOn(cardApi, cardRow.user.id) : Promise.resolve({ ok: false, problem: "You're not signed in to that server any more." });
+                },
+              })}
         />
       ) : null}
     </>

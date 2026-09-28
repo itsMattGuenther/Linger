@@ -151,10 +151,71 @@ test("a name in a conversation opens that person's card beside it; Escape gives 
   await page.keyboard.press("Escape");
   await expect(card).toHaveCount(0);
   await expect(name).toBeFocused();
-  // Your own name, and a name only drawn once for a run of messages, open nothing.
-  await expect(page.locator(".nx-msg-person", { hasText: "Matt" })).toHaveCount(0);
+  // A name only drawn once for a run of messages opens nothing where it's hidden.
   await expect(page.locator(".nx-msg:not([data-head='yes']) .nx-msg-person")).toHaveCount(0);
 });
+
+// Your own name opens your card, the one friends see (#271): the same card,
+// saying whose view it is, with Edit profile in place of Message and Knock.
+test("your own name opens your card as friends see it, with Edit profile; focus goes in and comes back", async ({ page }) => {
+  await open(page);
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Matt" }).last();
+  await expect(name).toHaveAttribute("aria-haspopup", "dialog");
+  await name.focus();
+  await page.keyboard.press("Enter");
+  const card = page.getByRole("dialog", { name: "Matt" });
+  await expect(card).toBeVisible();
+  await expect(card.locator(".nx-person-yours")).toHaveText("This is how friends see you");
+  await expect(card).toContainText("in #general");
+  await expect(card).toContainText("fixing the porch light (the real one)");
+  await expect(card).toContainText("a design for this app");
+  await expect(card.getByRole("button", { name: "Edit profile" })).toBeFocused();
+  await expect(card.getByRole("button", { name: "Message" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /Knock/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(name).toBeFocused();
+
+  // Edit profile asks the list window for Settings, on Profile, and closes the card.
+  await name.click();
+  await card.getByRole("button", { name: "Edit profile" }).click();
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "settings")).toEqual([{ kind: "settings", section: "profile" }]);
+  await expect(card).toHaveCount(0);
+  await expect(name).toBeFocused();
+  // Nothing was asked of the server on your behalf.
+  expect(await did(page)).not.toContain("POST /knock as token-1");
+  expect(await did(page)).not.toContain("POST /dms as token-1");
+});
+
+// The card beside your name in a wide conversation, at 100% and 200%, saved
+// for a person to look at.
+for (const scale of [1, 2]) {
+  test.describe(`at ${scale * 100}%`, () => {
+    test.use({ deviceScaleFactor: scale });
+    test("your card beside your name fits the window, with nothing cut off", async ({ page }) => {
+      await open(page);
+      const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Matt" }).last();
+      await name.click();
+      const card = page.getByRole("dialog", { name: "Matt" });
+      await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
+      const [at, from] = await Promise.all([card.boundingBox(), name.boundingBox()]);
+      const size = page.viewportSize();
+      expect(at && from && size).toBeTruthy();
+      if (!at || !from || !size) return;
+      expect(Math.abs(at.x - from.x)).toBeLessThanOrEqual(1);
+      expect(at.y).toBeGreaterThanOrEqual(8);
+      expect(at.y + at.height).toBeLessThanOrEqual(size.height - 8);
+      const clipped = await card.evaluate((node) =>
+        [...node.querySelectorAll<HTMLElement>(".nx-person *")]
+          .filter((one) => one.scrollWidth > one.clientWidth + 1 && getComputedStyle(one).textOverflow !== "ellipsis")
+          .map((one) => one.className),
+      );
+      expect(clipped).toEqual([]);
+      await page.mouse.move(0, 0);
+      await card.screenshot({ path: `test-results/your-card/chat-${test.info().project.name}-${scale * 100}.png`, animations: "disabled" });
+    });
+  });
+}
 
 test("from a name's card, Message opens the DM here and Knock knocks", async ({ page }) => {
   await open(page);

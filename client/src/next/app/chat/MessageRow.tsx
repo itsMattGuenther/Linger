@@ -31,7 +31,7 @@ export interface MessageActions {
   download: (file: Attachment) => Promise<void>;
   /** This row's links are on screen: ask the server about them, for their cards. */
   wantCards?: (urls: readonly string[]) => void;
-  /** Open the card of whoever a name belongs to, beside the name (PPL-6). */
+  /** Open the card of whoever a name belongs to, beside the name (PPL-6); yours too (#271). */
   openPerson?: (user: User, anchor: { top: number; bottom: number; left: number }) => void;
   /** Pin a message or take its pin off (T-908). A refusal rejects with a sentence. */
   pin?: (message: Message, pinned: boolean) => Promise<void>;
@@ -181,7 +181,7 @@ export const MessageRow = memo(function MessageRow({
       {reply ? <Quote target={quoted} author={quotedAuthor} onJump={actions.jumpTo} /> : null}
 
       <span className="nx-msg-who" aria-hidden={head ? undefined : true}>
-        {author && head && actions.openPerson && author.id !== me?.id ? (
+        {author && head && actions.openPerson ? (
           <button
             type="button"
             className="nx-msg-person"
