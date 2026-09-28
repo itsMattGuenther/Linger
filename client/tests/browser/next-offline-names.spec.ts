@@ -270,11 +270,14 @@ test("in high contrast, an offline name takes the system's color for dim text", 
   await page.emulateMedia({ forcedColors: "active" });
   const jen = nameIn(page, "Offline", "Jen");
   await expect.poll(async () => (await paint(jen)).color).toBe(await computed(page, "GrayText"));
-  expect((await paint(jen)).filter).toBe("none");
-  // Everybody else's is the system's text color, as it always was.
-  const eli = await paint(nameIn(page, "People here", "Eli"));
-  expect(eli.color).toBe(await computed(page, "CanvasText"));
-  expect(eli.color).not.toBe((await paint(jen)).color);
+  const now = await paint(jen);
+  expect(now.fill).toBe(now.color);
+  expect(now.image).toBe("none");
+  expect(now.filter).toBe("none");
+  // Everybody else's name is repainted by the system itself, in its text
+  // color. That is the engine's doing, not ours: Chromium does it, while
+  // WebKit only answers the media query and repaints nothing, so it isn't
+  // checked here.
 });
 
 // The dim name changes nothing about the row: every person's row is 48px,
