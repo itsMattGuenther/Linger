@@ -484,13 +484,18 @@ test("plain names, reduced motion and high contrast still turn the glow off in a
 
 // --- In the chat window ------------------------------------------------------
 //
-// A name inside a line of words, a reply's quote ("↩ Jules Anyone around…"),
+// A name inside a line of words: a reply's quote ("↩ Jules Anyone around…"),
 // the reply line over the message box ("Replying to Eli: …") and the typing
-// line ("Jules is typing"), and a name in the voice strip's chips. Each line
-// cuts only across, for its "…" (and the strip for the chips that don't fit),
-// so the light reaches past it above and below; where a name leads its line,
-// the cut at the start moves out by the light's reach (#287). Driven in the
-// real chat window (tests/fixtures/next-chat-window.tsx).
+// line ("Jules is typing"). Each line cuts only across, for its "…", so the
+// light reaches past it above and below; where a name leads its line, the cut
+// at the start moves out by the light's reach (#287).
+//
+// The voice strip is as it was (Matt, 2026-09-28): its list of chips cuts on
+// every side, for the chips that don't fit, and a chip is as tall as the
+// list, so a name's light stays inside its chip's border. Across the chip it
+// fades out, as in the list's voice bar, since the chip's text no longer cuts
+// a name (kit/Chip.css). Driven in the real chat window
+// (tests/fixtures/next-chat-window.tsx).
 
 const CHAT = "/tests/fixtures/next-chat-window.html?room=r-general";
 
@@ -535,7 +540,7 @@ for (const scale of [1, 2]) {
   test.describe(`in the chat window at ${scale * 100}%`, () => {
     test.use({ viewport: { width: 780, height: 820 }, deviceScaleFactor: scale });
 
-    test("a glowing name fades out past its box in a reply's quote, the reply line, the typing line and the voice strip", async ({ page }) => {
+    test("a glowing name fades out past its box in a reply's quote, the reply line and the typing line, and inside a voice strip chip", async ({ page }) => {
       await openChat(page);
       await restyleInChat(page, styled(people.eli, AMBER_GLOW));
       await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
@@ -547,19 +552,17 @@ for (const scale of [1, 2]) {
       notes.push(`quote: ${show(quoted)}`);
       expectFades(quoted, "in a reply's quote");
 
-      // Both chips, and where the strip does cut (past the last chip, for
-      // the chips that don't fit) the light has already faded.
-      const inVoice = strip(page).getByRole("list", { name: "In voice here" });
+      // Both strip chips: across the chip the light fades out past the
+      // name's box; above and below, the strip's list cuts at the chip's
+      // edge, so the light stays inside the chip's border.
       for (const who of ["Eli", "Jules"]) {
         const chip = inStrip(page, who);
         await settled(page, chip);
-        const [edge, box] = [await inVoice.boundingBox(), await chip.boundingBox()];
-        if (!edge || !box) throw new Error("nothing to measure");
-        const right = edge.x + edge.width;
-        const light = await lightOf(page, chip, { cut: { x: right - 1.5, y: box.y - 8, width: 1, height: box.height + 16 } });
-        notes.push(`${who}'s chip: ${show(light)}; at the strip's cut ${light.at.cut?.toFixed(3)}`);
-        expectFades(light, `${who}'s chip in the voice strip`);
-        if (who === "Jules") expect(light.at.cut ?? 1, `the light where the strip cuts past its last chip (${show(light)})`).toBeLessThan(0.01);
+        const light = await lightOf(page, chip);
+        notes.push(`${who}'s chip: ${show(light)}`);
+        expectFades(light, `${who}'s chip in the voice strip`, ["left", "right"]);
+        for (const side of ["top", "bottom"] as const)
+          expect(light.sides[side].outside, `${who}'s chip in the voice strip: nothing past the chip's ${side} edge (${show(light)})`).toBeLessThan(0.01);
       }
 
       await replyTo(page, "No plans, no agenda", "Eli");
@@ -593,9 +596,9 @@ for (const scale of [1, 2]) {
 }
 
 // At the chat window's narrowest (420) and a conversation window's (360):
-// with five people in voice, the strip still hides the chips that don't fit,
-// long words still end in "…", and nothing is anywhere but where it was with
-// the old rules, which cut above and below too.
+// with five people in voice, the strip hides the chips that don't fit, long
+// words still end in "…", and nothing is anywhere but where it was with the
+// old rules, which cut the lines above and below too.
 for (const width of [420, 360]) {
   test.describe(`${width} wide`, () => {
     test.use({ viewport: { width, height: 820 }, deviceScaleFactor: 2 });
@@ -705,7 +708,7 @@ for (const width of [420, 360]) {
   });
 }
 
-test("plain names, reduced motion and high contrast still turn the glow off in a quote, the reply line and the voice strip", async ({ page }) => {
+test("plain names, reduced motion and high contrast still turn the glow off in a quote, the reply line and a voice strip chip", async ({ page }) => {
   await page.setViewportSize({ width: 780, height: 820 });
   await openChat(page);
   await restyleInChat(page, styled(people.eli, AMBER_GLOW));
