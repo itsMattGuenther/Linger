@@ -64,6 +64,20 @@
   font-style: italic;
 }
 
+/* A refused knock's sentence, in place of the status for a few seconds
+   (#288). It's words from the app, not their status, so it isn't italic.
+   It shows here only when it fits on the line (PaneHeader.tsx). */
+.nx-pane-head[data-kind="dm"] .nx-pane-sub[data-problem="yes"] {
+  color: var(--text-danger);
+  font-style: normal;
+}
+
+/* In the Knock button's bubble instead, a line breaks between the
+   sentences, not inside one. */
+.nx-pane-sentence {
+  display: inline-block;
+}
+
 .nx-pane-fill {
   flex: 1;
 }

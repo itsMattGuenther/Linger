@@ -114,6 +114,11 @@
   color: var(--text-danger);
 }
 
+/* Offline isn't something that went wrong, so it says so quietly (#288). */
+.nx-person-problem[data-tone="quiet"] {
+  color: var(--text-muted);
+}
+
 /* A sentence wraps as a whole where it can: a line breaks between two, not
    inside one (#268). A sentence longer than the card still wraps inside. */
 .nx-person-sentence {

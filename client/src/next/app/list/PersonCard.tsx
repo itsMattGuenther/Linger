@@ -6,7 +6,7 @@ import { paletteKey } from "../../../lib/names";
 import { fieldsOf } from "../../../lib/status";
 import { valueParts } from "../../../lib/statusLinks";
 import { Button, Marker, MARKER_WORDS, markerStateOf, Name, Popover } from "../../kit";
-import type { KnockResult } from "../../core/knock";
+import { knockOfflineLine, sentencesOf, type KnockResult } from "../../core/knock";
 import { markerFor } from "../markers";
 import "./PersonCard.css";
 
@@ -46,16 +46,6 @@ interface YourCard {
 }
 
 export type PersonCardProps = CardBase & (TheirCard | YourCard);
-
-/**
- * A note's sentences, so a line breaks between them rather than inside a
- * short one: "Three knocks this hour." over "You can knock again in 20
- * minutes." (#268), not "…knock again in" over "20 minutes.". The card is too
- * narrow for both on one line.
- */
-function sentencesOf(text: string): string[] {
-  return text.replace(/([.!?]) +/g, "$1\n").split("\n");
-}
 
 /**
  * A person's card, opened from their row (docs/design/buddy-list.md, "The
@@ -121,6 +111,13 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
     }
   };
 
+  // Somebody offline can't be knocked (#288): the button stays, greyed out,
+  // and the reason shows where a refused knock's does, for as long as
+  // they're offline. It's worked out from their presence on every draw, so
+  // the card comes back to normal the moment they're online again.
+  const offline = onKnock && state === "offline" ? knockOfflineLine(user.display_name) : null;
+  const shown = offline ?? problem;
+
   const status = user.status;
   const away = state === "away";
   const words = away ? (status?.away_message ?? null) : (status?.line ?? null);
@@ -169,7 +166,8 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
                 size="md"
                 icon="knock"
                 busy={phase === "knocking"}
-                disabled={state === "offline" || phase !== "idle"}
+                disabled={phase !== "idle"}
+                unavailable={offline ?? undefined}
                 onClick={() => void knock()}
               >
                 {phase === "knocked" ? "Knocked" : "Knock"}
@@ -177,9 +175,9 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
             </>
           )}
         </div>
-        {problem ? (
-          <p className="nx-person-problem" role="status">
-            {sentencesOf(problem).map((sentence, at) => (
+        {shown ? (
+          <p className="nx-person-problem" data-tone={offline ? "quiet" : undefined} role="status">
+            {sentencesOf(shown).map((sentence, at) => (
               <Fragment key={at}>
                 {at > 0 ? " " : null}
                 <span className="nx-person-sentence">{sentence}</span>

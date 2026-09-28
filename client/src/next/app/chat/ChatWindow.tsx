@@ -50,7 +50,7 @@ import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, 
 import { talkingNow } from "../../core/voice";
 import { pressVoiceControl } from "../../core/voiceControl";
 import { Button, markerOf, Spinner, type TabItem } from "../../kit";
-import { knockOn } from "../../core/knock";
+import { knockOfflineLine, knockOn } from "../../core/knock";
 import { personRow } from "../../core/list";
 import { PersonCard } from "../list/PersonCard";
 import { useFollowing } from "../useFollowing";
@@ -64,6 +64,15 @@ import { useLanding, useReading } from "./visit";
 const TABS_KEY = "linger.next.tabs";
 /** How long a knock's button says "Knocked" (SPEC §4.9), as on the person card. */
 const KNOCKED_MS = 3_000;
+/**
+ * How long a refused knock's reason stays in a DM's header before their
+ * status comes back (#288): long enough to read two short sentences, and the
+ * same as the knock card a person gets.
+ */
+const REFUSED_MS = 8_000;
+
+/** A knock from a DM's header, while there's something to show for it. */
+type HeaderKnockNow = { phase: "knocking" | "knocked"; problem?: undefined } | { phase: "idle"; problem: string };
 /** "Typing…" goes a few seconds after the last keystroke (`TYPING_TTL_MS`); checked this often. */
 const TYPING_CHECK_MS = 2_000;
 const NO_MESSAGES: readonly Message[] = [];
@@ -155,7 +164,8 @@ function Conversations({ following }: { following: Following }) {
   // Bumped when the window should put the cursor in the box: it opened, or a
   // conversation was opened from the list.
   const [focusAsk, setFocusAsk] = useState(1);
-  const [knocked, setKnocked] = useState<ReadonlySet<string>>(new Set());
+  // Each person's knock from a DM's header, by user id, until it has nothing left to say.
+  const [knocks, setKnocks] = useState<ReadonlyMap<string, HeaderKnockNow>>(new Map());
   const reporter = useRef<Reporter | null>(null);
   const intendNow = useRef(intend);
   intendNow.current = intend;
@@ -576,16 +586,28 @@ function Conversations({ following }: { following: Following }) {
   const knock = useCallback(
     (user: User) => {
       if (!api) return;
-      const done = () =>
-        setKnocked((held) => {
-          const next = new Set(held);
-          next.delete(user.id);
-          return next;
-        });
-      setKnocked((held) => new Set(held).add(user.id));
-      window.setTimeout(done, KNOCKED_MS);
-      // A refused knock (three an hour, SPEC §4.9) doesn't get to say "Knocked".
-      void api.knock(user.id).catch(done);
+      // Each step replaces the last, and a step's timer clears only itself,
+      // so an old timer never ends a newer knock early.
+      const show = (now: HeaderKnockNow, forMs?: number) => {
+        setKnocks((held) => new Map(held).set(user.id, now));
+        if (forMs === undefined) return;
+        window.setTimeout(
+          () =>
+            setKnocks((held) => {
+              if (held.get(user.id) !== now) return held;
+              const next = new Map(held);
+              next.delete(user.id);
+              return next;
+            }),
+          forMs,
+        );
+      };
+      show({ phase: "knocking" });
+      // "Knocked" only once the server has taken it: a refused knock (three
+      // an hour, SPEC §4.9) never says it, and says why instead (#288).
+      void knockOn(api, user.id).then((result) =>
+        result.ok ? show({ phase: "knocked" }, KNOCKED_MS) : show({ phase: "idle", problem: result.problem }, REFUSED_MS),
+      );
     },
     [api],
   );
@@ -612,8 +634,16 @@ function Conversations({ following }: { following: Following }) {
           kind: "dm",
           label: dmLabel(room, state.users, state.me?.id ?? null),
           people: others,
-          onKnock: others.length === 1 && only && only.state !== "offline" ? () => knock(only.user) : undefined,
-          knocked: only ? knocked.has(only.user.id) : false,
+          knock:
+            others.length === 1 && only
+              ? {
+                  onKnock: () => knock(only.user),
+                  phase: knocks.get(only.user.id)?.phase ?? "idle",
+                  problem: knocks.get(only.user.id)?.problem ?? null,
+                  // Offline, Knock stays in the header, greyed out, and says why (#288).
+                  unavailable: only.state === "offline" ? knockOfflineLine(only.user.display_name) : undefined,
+                }
+              : undefined,
           server: several ? serverTag(active.server) : undefined,
         }
       : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id), server: several ? serverTag(active.server) : undefined };

@@ -1,7 +1,8 @@
-import type { CSSProperties } from "react";
-import { memo } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
+import { sentencesOf } from "../../core/knock";
 import { Button, GroupMarker, HashMark, Marker, MarkerCluster, markerOf } from "../../kit";
 import "./PaneHeader.css";
 
@@ -20,10 +21,23 @@ export type PaneHeaderProps =
       label: string;
       people: readonly { user: User; state: PresenceState }[];
       server?: ServerTag;
-      /** A one-to-one DM offers a knock. `knocked` for the three seconds after. */
-      onKnock?: () => void;
-      knocked?: boolean;
+      /** A one-to-one DM offers a knock. */
+      knock?: HeaderKnock;
     };
+
+/**
+ * The Knock in a one-to-one DM's header, with everything it can say
+ * (SPEC §4.9, #288).
+ */
+export interface HeaderKnock {
+  onKnock: () => void;
+  /** Waiting for the server, then "Knocked" for three seconds after one went. */
+  phase: "idle" | "knocking" | "knocked";
+  /** Why it can't be pressed: "Can't knock while Jules is offline." */
+  unavailable?: string;
+  /** Why the last one didn't go, for a few seconds: `knockOn`'s sentence. */
+  problem?: string | null;
+}
 
 /** With several servers, which one this conversation is on. */
 export interface ServerTag {
@@ -63,9 +77,42 @@ export const PaneHeader = memo(function PaneHeader({ place = "row", ...props }: 
       </Box>
     );
   }
+  return <DmHeader {...props} Box={Box} place={place} tag={tag} />;
+});
+
+type DmHeaderProps = Extract<PaneHeaderProps, { kind: "dm" }> & { Box: "div" | "header"; place: "row" | "title"; tag: ReactNode };
+
+/** A DM's header: who's in it, and for one person, their status and Knock. */
+function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
   const [only] = props.people;
   const single = props.people.length === 1 && only ? only : null;
   const status = single ? (single.user.status?.away_message ?? single.user.status?.line ?? null) : null;
+  const knock = props.knock;
+  const problem = knock?.problem ?? null;
+  // A refused knock's reason goes where their status sits when it fits there
+  // on one line. A header too narrow for that (the chat window at its
+  // narrowest, a conversation's own window) says it in the Knock button's
+  // bubble instead. Measured before it's painted, so it never shows cut.
+  const said = useRef<HTMLParagraphElement | null>(null);
+  const [cramped, setCramped] = useState<string | null>(null);
+  const inline = problem !== null && cramped !== problem;
+  useLayoutEffect(() => {
+    if (problem === null) {
+      setCramped(null);
+      return;
+    }
+    const node = said.current;
+    if (!inline || !node) return;
+    if (node.scrollWidth > node.clientWidth + 1) setCramped(problem);
+  }, [problem, inline]);
+  const sentences = problem
+    ? sentencesOf(problem).map((sentence, at) => (
+        <Fragment key={at}>
+          {at > 0 ? " " : null}
+          <span className="nx-pane-sentence">{sentence}</span>
+        </Fragment>
+      ))
+    : null;
   return (
     <Box className="nx-pane-head" data-kind="dm" data-place={place}>
       {single ? (
@@ -75,19 +122,34 @@ export const PaneHeader = memo(function PaneHeader({ place = "row", ...props }: 
       )}
       <h2 className="nx-pane-title">{props.label}</h2>
       {tag}
-      {status ? (
+      {inline ? (
+        // A refused knock says why where their status sits, for a few
+        // seconds, then the status comes back (#288).
+        <p ref={said} className="nx-pane-sub" data-problem="yes" role="status">
+          {sentences}
+        </p>
+      ) : status ? (
         <p className="nx-pane-sub">{status}</p>
       ) : (
         <span className="nx-pane-fill" />
       )}
-      {props.onKnock ? (
-        <Button size="sm" variant="secondary" icon="knock" disabled={props.knocked} onClick={props.onKnock}>
-          {props.knocked ? "Knocked" : "Knock"}
+      {knock ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="knock"
+          busy={knock.phase === "knocking"}
+          disabled={knock.phase !== "idle"}
+          unavailable={knock.unavailable}
+          note={problem !== null && !inline ? sentences : undefined}
+          onClick={knock.onKnock}
+        >
+          {knock.phase === "knocked" ? "Knocked" : "Knock"}
         </Button>
       ) : null}
     </Box>
   );
-});
+}
 
 function ServerChip({ server }: { server: ServerTag }) {
   const key = /^[a-z]{2,16}$/.test(server.color) ? server.color : "slate";

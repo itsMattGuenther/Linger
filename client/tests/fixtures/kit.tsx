@@ -358,6 +358,15 @@ function Gallery() {
             </Button>
           </div>
         ))}
+        <div className="g-row" data-testid="unavailable-buttons">
+          <Label>unavailable</Label>
+          <Button icon="knock" unavailable="Can't knock while Jen is offline." onClick={() => (document.body.dataset.pressed = "button")}>
+            Knock
+          </Button>
+          <Button variant="primary" unavailable="Nothing to save yet." onClick={() => (document.body.dataset.pressed = "primary")}>
+            Save
+          </Button>
+        </div>
         <div className="g-row">
           <Label>pressed</Label>
           <Button pressed>Newsreader</Button>
@@ -386,6 +395,17 @@ function Gallery() {
             <IconButton icon="knock" label="Knock" tone={tone} disabled />
           </div>
         ))}
+        <div className="g-row" data-testid="unavailable-icon-buttons">
+          <Label>unavailable</Label>
+          <IconButton
+            icon="knock"
+            label="Knock on Jen's door"
+            size="sm"
+            unavailable="Can't knock while Jen is offline."
+            onClick={() => (document.body.dataset.pressed = "icon")}
+          />
+          <IconButton icon="knock" label="Knock" tone="filled" disabled />
+        </div>
         <div className="g-row">
           <Label>pressed</Label>
           <IconButton icon="mic" label="Mute" pressed />

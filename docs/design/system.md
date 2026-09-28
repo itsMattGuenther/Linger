@@ -171,6 +171,16 @@ A pill with a visible label.
   - `pressed`: a toggle, with `aria-pressed`.
   - `busy`: keeps its width, shows a spinner and refuses clicks.
   - `disabled`.
+  - `unavailable`: why it can't be used right now ("Can't knock while Jen is
+    offline."). It looks exactly like `disabled` but keeps the pointer and the
+    keyboard (`aria-disabled`, not `disabled`, which swallows both): the reason
+    is its tooltip and its description for a screen reader, and a press does
+    nothing (#288). Use it whenever a greyed-out control would otherwise leave
+    somebody guessing why.
+  - `note`: something to say about the last press, in the button's own
+    bubble with no hover, and announced. It's for where there's no room to
+    say it beside the button, like a refused knock in a narrow DM header
+    (#288); the caller takes it away.
   - `fill`: the column's width, or what's left of a row.
 - **The label** ends in "…" if it can't fit.
 
@@ -188,7 +198,12 @@ A square with one icon, exactly centered by the grid.
   - `danger`: window close.
 - **`label` is required.** It is the accessible name and the tooltip. The
   tooltip is drawn in a portal, so a window's edge can't clip it, and it can
-  show a keyboard shortcut.
+  show a keyboard shortcut. It is one line while it fits, and a longer one
+  wraps at the widest a tooltip goes (256px) rather than running out of its
+  box.
+- **`unavailable`**, as on `Button`: it looks disabled, keeps the pointer and
+  the keyboard, and a press does nothing. The reason takes the label's place
+  as its name and tooltip, since an icon button's tooltip is its name (#288).
 - **`skipTab`** takes the button out of the tab order, for something the
   keyboard reaches another way, like a tab's close (Delete).
 - **`expanded`** is for a button that opens something. While it is open the
@@ -745,6 +760,8 @@ built on the rows' own grid so nothing new lines up by eye:
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
+| An `unavailable` `Button` or `IconButton` looks as a disabled one does, with no hover look; it says why on hover, on keyboard focus and to a screen reader; the keyboard reaches it and a press does nothing | `kit.spec.ts` › an unavailable button looks disabled |
+| A DM header's refused knock: on the line where their status was when it fits, in Knock's `note` bubble when it doesn't (420 and 360), each sentence whole, inside the window, announced, gone after eight seconds, and never "Knocked" | `next-chat-window.spec.ts` › a knock the server refuses; a refused knock's reason is in Knock's bubble |
 | A `Select` is named by its label, keeps the choice, links its help, and a disabled one refuses | `kit.spec.ts` › a drop-down is named by its label |
 | A `Slider` says it was let go of once per drag, click or key release, never per step, and never for a press that moved nothing | `kit.spec.ts` › a slider says once when it's let go of |
 | A `wide` `SettingRow` puts its control on a line of its own, as wide as the row | `kit.spec.ts` › a wide setting puts its slider on a line of its own |

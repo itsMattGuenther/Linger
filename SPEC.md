@@ -448,7 +448,10 @@ they can knock again ("Three knocks this hour. You can knock again in 20
 minutes."), and never claims the other person heard.
 
 The sender sees `knocked` for three seconds, then the control resets. This
-acknowledges the request, not delivery; it is not knock history. The recipient's
+acknowledges the request, not delivery; it is not knock history. A refused
+knock never shows `knocked`, wherever it was pressed. Somebody offline can't
+be knocked: the control stays where it is, greyed out, and says why ("Can't
+knock while Justin B is offline.") until they're back (#288). The recipient's
 card still disappears after eight seconds. Changing cards or servers must not
 carry sender feedback to a different person.
 

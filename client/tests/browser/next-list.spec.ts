@@ -361,10 +361,34 @@ test.describe("a person's card", () => {
     });
   }
 
-  test("nobody offline can be knocked", async ({ page }) => {
+  test("nobody offline can be knocked, and the card says why (#288)", async ({ page }) => {
     await page.getByRole("button", { name: /Offline/ }).click();
     await rows(page, "Offline").first().getByRole("button").first().click();
-    await expect(page.getByRole("dialog", { name: "Jen" }).getByRole("button", { name: "Knock" })).toBeDisabled();
+    const card = page.getByRole("dialog", { name: "Jen" });
+    const knock = card.getByRole("button", { name: "Knock" });
+    await expect(knock).toBeDisabled();
+    // Where a refused knock's sentence goes, and quietly: offline isn't a failure.
+    await expect(card.getByRole("status")).toHaveText("Can't knock while Jen is offline.");
+    const tones = await card.evaluate((node) => {
+      const note = node.querySelector(".nx-person-problem");
+      const probe = document.createElement("p");
+      probe.className = "nx-person-problem";
+      node.append(probe);
+      const red = getComputedStyle(probe).color;
+      probe.remove();
+      return { note: note ? getComputedStyle(note).color : "", red };
+    });
+    expect(tones.note).not.toBe(tones.red);
+    await expect(knock).toHaveAccessibleDescription("Can't knock while Jen is offline.");
+    // The keyboard reaches it, and pressing it does nothing.
+    await card.getByRole("button", { name: "Message" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(knock).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("body")).not.toHaveAttribute("data-opened", "knock:u-jen");
+    // The pointer gets the reason too.
+    await knock.hover();
+    await expect(page.locator("[data-kit='Tooltip']")).toHaveText("Can't knock while Jen is offline.");
   });
 
   test("always fits inside the list window, above the row when there is no room below", async ({ page }) => {
@@ -507,7 +531,19 @@ test.describe("a person's row", () => {
     await page.getByRole("button", { name: /Offline/ }).click();
     const jen = rows(page, "Offline").first();
     await jen.hover();
-    await expect(jen.getByRole("button", { name: "Knock on Jen's door" })).toBeDisabled();
+    // Greyed out, and it says why, in its tooltip and to a screen reader (#288).
+    const knock = jen.getByRole("button", { name: "Can't knock while Jen is offline." });
+    await expect(knock).toBeDisabled();
+    await knock.hover();
+    await expect(page.locator("[data-kit='Tooltip']")).toHaveText("Can't knock while Jen is offline.");
+    await knock.click({ force: true });
+    await expect(page.locator("body")).not.toHaveAttribute("data-opened", "knock:u-jen");
+    // The keyboard reaches it: from the row, past Message.
+    await page.mouse.move(0, 0);
+    await jen.getByRole("button").first().focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(knock).toBeFocused();
     await jen.getByRole("button", { name: "Message Jen" }).click();
     await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-jen");
   });
