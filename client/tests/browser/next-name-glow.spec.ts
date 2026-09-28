@@ -13,9 +13,12 @@ import { people } from "../fixtures/next/evening";
 //
 // Driven in the real list window (tests/fixtures/next-list-window.tsx), with
 // people restyled by gateway frames, as a server would. Pixels are read from
-// screenshots: the name as drawn, the same place with the name hidden (what's
-// behind it), and its letters in white on black (where the letters are). The
-// app is dark only (docs/design/system.md, "Tokens"), so there is one theme.
+// screenshots: the name as drawn, the same name with its glow forced off, and
+// its letters in white on black (where the letters are). The light is what
+// the first has and the second doesn't, so the letters themselves, and a
+// letter leaning a pixel past its box onto the next word, are never read as
+// light. The app is dark only (docs/design/system.md, "Tokens"), so there is
+// one theme.
 
 test.use({ viewport: { width: 340, height: 820 } });
 
@@ -153,9 +156,10 @@ const FAR = 1.2;
 
 interface Light {
   /**
-   * The light at each edge of the name's box: how far the paint is from
-   * what's behind it (OKLab distance, averaged along the edge, letters left
-   * out), one pixel inside the edge, one pixel outside it, and `FAR` ems out.
+   * The light at each edge of the name's box: how far the paint is from the
+   * same name with its glow forced off (OKLab distance, averaged along the
+   * edge, letters left out), one pixel inside the edge, one pixel outside
+   * it, and `FAR` ems out.
    */
   sides: Record<Side, { inside: number; outside: number; far: number }>;
   /** The light around the letters per ring in `RINGS`. */
@@ -186,10 +190,15 @@ async function lightOf(page: Page, name: Locator, places: Record<string, Rect> =
   const y = Math.max(0, Math.floor(box.y - pad));
   const clip = { x, y, width: Math.ceil(box.x + box.width + pad) - x, height: Math.ceil(box.y + box.height + pad) - y };
   const painted = await shoot(page, clip);
-  await name.evaluate((node: HTMLElement) => node.style.setProperty("visibility", "hidden"));
-  const behind = await shoot(page, clip);
+  // The same, with no glow of any kind: what the light is measured against.
   await name.evaluate((node: HTMLElement) => {
-    node.style.removeProperty("visibility");
+    node.style.setProperty("filter", "none", "important");
+    node.style.setProperty("text-shadow", "none", "important");
+  });
+  const plain = await shoot(page, clip);
+  await name.evaluate((node: HTMLElement) => {
+    node.style.removeProperty("filter");
+    node.style.removeProperty("text-shadow");
     node.dataset.probe = "letters";
   });
   const letters = await page.addStyleTag({
@@ -210,11 +219,7 @@ async function lightOf(page: Page, name: Locator, places: Record<string, Rect> =
   for (let i = 0; i < n; i += 1) {
     const [cx, cy] = [clip.x + ((i % w) + 0.5) / scale, clip.y + (Math.floor(i / w) + 0.5) / scale];
     const inBox = cx >= left && cx < right && cy >= top && cy < bottom;
-    // A letter can lean a pixel past a name with no room at its end (one
-    // in a sentence): there, what's white in the letters' shot and not in
-    // what's behind counts too.
-    const past = (mask.data[i * 4] ?? 0) - (behind.data[i * 4] ?? 0) >= 16 && (mask.data[i * 4 + 2] ?? 0) - (behind.data[i * 4 + 2] ?? 0) >= 16;
-    ink.push(inBox ? (mask.data[i * 4] ?? 0) >= 16 : past);
+    ink.push(inBox && (mask.data[i * 4] ?? 0) >= 16);
   }
   const away = distances(ink, w, h);
   const bands = Object.fromEntries(SIDES.map((side) => [side, { inside: { sum: 0, count: 0 }, outside: { sum: 0, count: 0 }, far: { sum: 0, count: 0 } }])) as Record<
@@ -226,7 +231,7 @@ async function lightOf(page: Page, name: Locator, places: Record<string, Rect> =
   for (let i = 0; i < n; i += 1) {
     if (ink[i]) continue;
     const [cx, cy] = [clip.x + ((i % w) + 0.5) / scale, clip.y + (Math.floor(i / w) + 0.5) / scale];
-    const light = apart(oklab(rgbAt(painted, i)), oklab(rgbAt(behind, i)));
+    const light = apart(oklab(rgbAt(painted, i)), oklab(rgbAt(plain, i)));
     for (const [place, r] of Object.entries(places)) {
       const sum = at[place];
       if (sum && cx >= r.x && cx < r.x + r.width && cy >= r.y && cy < r.y + r.height) {
@@ -724,27 +729,8 @@ test("plain names, reduced motion and high contrast still turn the glow off in a
   await page.emulateMedia({ reducedMotion: "reduce" });
   await off("reduced motion");
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  // High contrast lays a plate of the system's background behind each line
-  // of words, so hiding a name changes a pixel or two beside it that were
-  // never light. What's painted past the box is what's painted for the same
-  // name with no glow at all.
   await page.emulateMedia({ forcedColors: "active" });
-  const glowing: Light[] = [];
-  for (const [where, name] of names) {
-    expect(await filterOf(name), `high contrast, ${where}`).toBe("none");
-    glowing.push(await lightOf(page, name));
-  }
-  await restyleInChat(page, styled(people.eli, { fill: AMBER_GLOW.fill, effect: "none" }));
-  await restyleInChat(page, styled(people.jules, { fill: GRADIENT_GLOW.fill, effect: "none" }));
-  for (const [i, [where, name]] of names.entries()) {
-    await expect(name).not.toHaveAttribute("data-name-effect");
-    const plain = await lightOf(page, name);
-    for (const side of SIDES)
-      expect(Math.abs((glowing[i]?.sides[side].outside ?? 1) - plain.sides[side].outside), `high contrast, ${where}, past the ${side} edge: glowing ${show(glowing[i] ?? plain)}, with no glow ${show(plain)}`).toBeLessThan(0.005);
-  }
-  await restyleInChat(page, styled(people.eli, AMBER_GLOW));
-  await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
-  for (const [, name] of names) await settled(page, name);
+  await off("high contrast");
   await page.emulateMedia({ forcedColors: "none" });
   await page.evaluate(() => document.documentElement.setAttribute("data-normalize", "true"));
   await off("plain names");
