@@ -679,22 +679,37 @@ for (const width of [420, 360]) {
         expect(white, `${selector}: letters painted past its end`).toBe(0);
       }
 
-      // The strip still hides the chips that don't fit: past its list of
-      // people, the strip is the same with the chips there or not.
-      const list = await page.locator(".nx-strip-people").boundingBox();
-      const whole = await strip(page).boundingBox();
-      if (!list || !whole) throw new Error("nothing to measure");
-      // From the first whole pixel past its end (the edge itself can fall
-      // inside a pixel, which the cut chip then partly covers).
-      const end = Math.ceil(list.x + list.width) + 1;
-      const past = { x: end, y: whole.y, width: whole.x + whole.width - end, height: whole.height };
-      const shown = await shoot(page, past);
-      const gone = await page.addStyleTag({ content: ".nx-strip-people > li { visibility: hidden !important; }" });
-      const hidden = await shoot(page, past);
-      await gone.evaluate((node: Element) => node.remove());
-      const differ: number[] = [];
-      for (let i = 0; i < shown.w * shown.h; i += 1) if ([0, 1, 2].some((c) => shown.data[i * 4 + c] !== hidden.data[i * 4 + c])) differ.push(i % shown.w);
-      expect(differ.length, `a chip is painted past the strip's list of people, in ${differ.length} pixels, at x ${[...new Set(differ)].slice(0, 12).join(" ")} (device pixels from ${end})`).toBe(0);
+      // The strip still hides the chips that don't fit: between the end of
+      // its list of people and its button, the strip is the same with the
+      // chips there or not. The button itself is left out: WebKit draws its
+      // icon a little differently from one shot to the next. Checked as the
+      // strip lays them out (they shrink to fit, so little reaches the end),
+      // and with chips that can't shrink, which run well past it and must
+      // still be cut there.
+      const pastTheList = async (why: string) => {
+        const list = await page.locator(".nx-strip-people").boundingBox();
+        const join = await strip(page).getByRole("button", { name: /Join|Start talking/ }).boundingBox();
+        const whole = await strip(page).boundingBox();
+        if (!list || !join || !whole) throw new Error("nothing to measure");
+        // From the first whole pixel past its end (the edge itself can fall
+        // inside a pixel, which a cut chip then partly covers) to the last
+        // whole pixel before the button.
+        const end = Math.ceil(list.x + list.width) + 1;
+        const past = { x: end, y: whole.y, width: Math.floor(join.x) - 1 - end, height: whole.height };
+        expect(past.width, `${why}: room between the list of people and the button`).toBeGreaterThan(8);
+        const shown = await shoot(page, past);
+        const gone = await page.addStyleTag({ content: ".nx-strip-people > li { visibility: hidden !important; }" });
+        const hidden = await shoot(page, past);
+        await gone.evaluate((node: Element) => node.remove());
+        const differ: number[] = [];
+        for (let i = 0; i < shown.w * shown.h; i += 1) if ([0, 1, 2].some((c) => shown.data[i * 4 + c] !== hidden.data[i * 4 + c])) differ.push(i % shown.w);
+        expect(differ.length, `${why}: a chip is painted past the strip's list of people, in ${differ.length} pixels, at x ${[...new Set(differ)].slice(0, 12).join(" ")} (device pixels from ${end})`).toBe(0);
+      };
+      await pastTheList("as laid out");
+      const stiff = await page.addStyleTag({ content: ".nx-strip-people > li { flex: none !important; }" });
+      await expect.poll(() => page.locator(".nx-strip-people").evaluate((node) => node.scrollWidth > node.clientWidth + 40)).toBe(true);
+      await pastTheList("chips that can't shrink");
+      await stiff.evaluate((node: Element) => node.remove());
       await expect(strip(page).getByRole("button", { name: /Join|Start talking/ })).toBeInViewport({ ratio: 1 });
 
       // The sheet, for a person to look at: the strip, and the lines at the foot.
