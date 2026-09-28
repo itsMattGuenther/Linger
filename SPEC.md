@@ -386,6 +386,9 @@ before. Deleting a reply hides its quote as well as its body; the original messa
 and other replies remain unchanged. Consecutive messages
 do not reserve a hidden action row. A compact action button beside the text opens
 the message menu by pointer or keyboard, without moving the conversation on hover.
+A message's words drawn taller than twenty lines fold: the first twenty, fading
+out, with **Show all** under them, and **Show less** once unfolded (#304). Nothing
+is taken away, and a message is still at most 8,000 characters.
 
 **Sending.** Enter commits the current draft immediately and keeps focus in an
 empty composer. Subsequent typing belongs to the next message. Pending sends

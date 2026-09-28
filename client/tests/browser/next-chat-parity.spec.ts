@@ -36,6 +36,107 @@ async function post(page: Page, body: string, author = "u-eli", extra: Record<st
   return id;
 }
 
+// A long message folds (#304): a message's words drawn taller than twenty
+// lines show the first twenty, fading out, with Show all under them.
+test.describe("a long message folds", () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+  const drawn = (page: Page, id: string) =>
+    row(page, id).evaluate((node) => {
+      const fold = node.querySelector<HTMLElement>(".nx-msg-fold");
+      const style = fold ? getComputedStyle(fold) : null;
+      const line = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--line-body"));
+      return {
+        lines: fold ? Math.round(fold.getBoundingClientRect().height / line) : 0,
+        mask: style?.maskImage ?? style?.webkitMaskImage ?? "",
+        text: fold?.textContent ?? "",
+      };
+    });
+  /** No row overlaps the next one. */
+  const edgeToEdge = (page: Page) =>
+    page.locator(".nx-conv-row").evaluateAll((rows) =>
+      rows
+        .map((one) => one.getBoundingClientRect())
+        .sort((a, b) => a.top - b.top)
+        .every((box, i, all) => i === 0 || Math.abs(box.top - (all[i - 1]?.bottom ?? box.top)) <= 0.5),
+    );
+
+  test("past twenty lines it folds, fading out, with Show all; all of it is still there, and Show less folds it again (#304)", async ({ page }) => {
+    await open(page);
+    const id = await post(page, lines(300));
+    const after = await post(page, "lol what was that", "u-jules");
+    const folded = await drawn(page, id);
+    expect(folded.lines).toBe(20);
+    expect(folded.mask).not.toBe("none");
+    // Nothing is taken out: a screen reader and copying get every line.
+    expect(folded.text).toContain("line 300");
+    const showAll = row(page, id).getByRole("button", { name: "Show all" });
+    await expect(showAll).toBeVisible();
+    expect(await edgeToEdge(page)).toBe(true);
+
+    await showAll.click();
+    await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
+    const open300 = await drawn(page, id);
+    expect(open300.lines).toBe(300);
+    expect(open300.mask).toBe("none");
+    expect(await edgeToEdge(page)).toBe(true);
+
+    await row(page, id).getByRole("button", { name: "Show less" }).click();
+    expect((await drawn(page, id)).lines).toBe(20);
+    expect(await edgeToEdge(page)).toBe(true);
+    await expect(row(page, after)).toContainText("lol what was that");
+  });
+
+  test("a long paragraph with no line breaks folds too; a short message doesn't fold (#304)", async ({ page }) => {
+    await open(page);
+    const paragraph = await post(page, "word ".repeat(1500).trim());
+    expect((await drawn(page, paragraph)).lines).toBe(20);
+    await expect(row(page, paragraph).getByRole("button", { name: "Show all" })).toBeVisible();
+    // Twenty lines exactly is not over twenty: no fold.
+    for (const body of ["just a few words", lines(3), lines(20)]) {
+      const id = await post(page, body);
+      await expect(row(page, id).getByRole("button", { name: /Show (all|less)/ })).toHaveCount(0);
+      expect((await drawn(page, id)).mask).toBe("none");
+    }
+  });
+
+  test("unfolded stays unfolded after scrolling far away and back (#304)", async ({ page }) => {
+    await open(page, "room=r-general&many=600");
+    const id = await post(page, lines(120));
+    await row(page, id).getByRole("button", { name: "Show all" }).click();
+    await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
+    // Far enough up that the row is dropped from the page: older history
+    // loads as the view nears the top, so it takes a few goes.
+    await expect
+      .poll(async () => {
+        await log(page).evaluate((node) => node.scrollTo({ top: 0 }));
+        return row(page, id).count();
+      })
+      .toBe(0);
+    // And back to the newest, the way a person would come back.
+    const newest = page.getByRole("button", { name: "Back to the newest" });
+    await expect
+      .poll(async () => {
+        if (await newest.isVisible()) await newest.click();
+        else await log(page).evaluate((node) => node.scrollTo({ top: node.scrollHeight }));
+        return row(page, id).count();
+      })
+      .toBe(1);
+    await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
+    expect((await drawn(page, id)).lines).toBe(120);
+  });
+
+  test("Show all is reachable by keyboard (#304)", async ({ page }) => {
+    await open(page);
+    const id = await post(page, lines(40));
+    const showAll = row(page, id).getByRole("button", { name: "Show all" });
+    await showAll.focus();
+    await expect(showAll).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeFocused();
+    expect((await drawn(page, id)).lines).toBe(40);
+  });
+});
+
 test.describe("what a message says", () => {
   test("formatting is drawn as the subset allows, and anything else stays the characters typed (CONV-8)", async ({ page }) => {
     await open(page);

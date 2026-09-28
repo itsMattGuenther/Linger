@@ -1,4 +1,4 @@
-import { type CSSProperties, memo, useEffect, useRef, useState } from "react";
+import { type CSSProperties, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -8,7 +8,7 @@ import { messageFontVar } from "../../../lib/fonts";
 import { linkTargets, mentionHandles } from "../../../lib/markdown";
 import { ageOpacity, clockTime, fullTime } from "../../../lib/time";
 import { cardOnly, excerpt } from "../../core/chat/words";
-import { Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
+import { Button, Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
 import { Attachments } from "./Attachments";
 import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
@@ -209,24 +209,26 @@ export const MessageRow = memo(function MessageRow({
         ) : editing ? (
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
-          <MessageText
-            source={message.body}
-            mentions={mentions}
-            onOpenLink={actions.openLink}
-            trailing={
-              message.edited_at === null && message.pinned_at === null ? undefined : (
-                <>
-                  {message.pinned_at === null ? null : (
-                    <span className="nx-msg-pinned" title="Pinned">
-                      <Icon name="pin" size="sm" />
-                      <span className="k-sr-only">pinned</span>
-                    </span>
-                  )}
-                  {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
-                </>
-              )
-            }
-          />
+          <Fold id={message.id}>
+            <MessageText
+              source={message.body}
+              mentions={mentions}
+              onOpenLink={actions.openLink}
+              trailing={
+                message.edited_at === null && message.pinned_at === null ? undefined : (
+                  <>
+                    {message.pinned_at === null ? null : (
+                      <span className="nx-msg-pinned" title="Pinned">
+                        <Icon name="pin" size="sm" />
+                        <span className="k-sr-only">pinned</span>
+                      </span>
+                    )}
+                    {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
+                  </>
+                )
+              }
+            />
+          </Fold>
         )}
         {deleted || editing ? null : (
           <>
@@ -314,3 +316,57 @@ function Quote({ target, author, onJump }: { target: Message | undefined; author
 function bodyStyle(opacity: number, author: User | undefined): CSSProperties {
   return { opacity, "--msg-font": messageFontVar(author?.style.msg_font_key) } as CSSProperties;
 }
+
+/**
+ * Messages unfolded in this window, by id (#304). Kept outside the rows: the
+ * list only draws the rows near the view, so a row scrolled away is thrown
+ * out and drawn again later, and it should come back as it was left.
+ */
+const unfolded = new Set<MessageId>();
+
+/**
+ * A message's words, folded when they're drawn taller than `--message-fold`
+ * (twenty lines): the first twenty, fading out, and Show all under them
+ * (#304). Only the words fold, never a picture or a card. Nothing is taken
+ * out of the page, so a screen reader reads the whole message and copying
+ * copies all of it; the fold is only how much is drawn. It's measured as
+ * drawn, so a long paragraph folds as well as many short lines, and again
+ * when the window's width changes.
+ */
+function Fold({ id, children }: { id: MessageId; children: ReactNode }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(() => unfolded.has(id));
+  const [tall, setTall] = useState(false);
+  useLayoutEffect(() => {
+    const node = box.current;
+    // Unfolded, it was tall to be unfolded; there's nothing to measure.
+    if (!node || open) return;
+    const measure = () => setTall(node.scrollHeight > node.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    if (node.firstElementChild) observer.observe(node.firstElementChild);
+    return () => observer.disconnect();
+  }, [open]);
+  const toggle = () => {
+    const next = !open;
+    if (next) unfolded.add(id);
+    else unfolded.delete(id);
+    setOpen(next);
+  };
+  return (
+    <>
+      <div ref={box} className="nx-msg-fold" data-open={open ? "yes" : undefined} data-tall={tall ? "yes" : undefined}>
+        {children}
+      </div>
+      {tall || open ? (
+        <span className="nx-msg-fold-toggle">
+          <Button size="sm" variant="quiet" icon={open ? "up" : "down"} onClick={toggle}>
+            {open ? "Show less" : "Show all"}
+          </Button>
+        </span>
+      ) : null}
+    </>
+  );
+}
+
