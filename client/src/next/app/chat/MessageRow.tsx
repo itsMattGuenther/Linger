@@ -38,13 +38,12 @@ export interface MessageActions {
 }
 
 /**
- * One message, with its author's name inline (docs/design/system.md, "The
- * conversation"): `Eli: words`, the time faint on the right, and the words of
- * every line and every following message in the group starting on one edge.
- *
- * A continuation row draws the same name, invisible, so its words start
- * exactly where the head's do in any face, with nothing measured. A reply's
- * quote sits above its own line and belongs to it (L-17).
+ * One message (docs/design/system.md, "The conversation"). A run's first
+ * message has its author's name on a line of its own, with the time faint on
+ * the right, and its words underneath, set in from the name (#295). Every
+ * line of every message in the run starts on that one edge, whoever wrote it
+ * and however long their name is, with nothing measured. A reply's quote sits
+ * above the name and belongs to the reply (L-17).
  */
 export const MessageRow = memo(function MessageRow({
   message,
@@ -180,26 +179,29 @@ export const MessageRow = memo(function MessageRow({
     >
       {reply ? <Quote target={quoted} author={quotedAuthor} onJump={actions.jumpTo} /> : null}
 
-      <span className="nx-msg-who" aria-hidden={head ? undefined : true}>
-        {author && head && actions.openPerson ? (
-          <button
-            type="button"
-            className="nx-msg-person"
-            aria-haspopup="dialog"
-            onClick={(event) => {
-              const box = event.currentTarget.getBoundingClientRect();
-              actions.openPerson?.(author, { top: box.top, bottom: box.bottom, left: box.left });
-            }}
-          >
+      {head ? (
+        // The name on a line of its own at the start of a run, with no colon
+        // (#295). Later messages in the run are only their words.
+        <span className="nx-msg-who">
+          {author && actions.openPerson ? (
+            <button
+              type="button"
+              className="nx-msg-person"
+              aria-haspopup="dialog"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                actions.openPerson?.(author, { top: box.top, bottom: box.bottom, left: box.left });
+              }}
+            >
+              <Name person={author} size="body" />
+            </button>
+          ) : author ? (
             <Name person={author} size="body" />
-          </button>
-        ) : author ? (
-          <Name person={author} size="body" />
-        ) : (
-          <span className="nx-msg-someone">someone</span>
-        )}
-        <span className="nx-msg-colon">:</span>
-      </span>
+          ) : (
+            <span className="nx-msg-someone">someone</span>
+          )}
+        </span>
+      ) : null}
 
       <div className="nx-msg-body" style={bodyStyle(ageOpacity(message.created_at, now), author)}>
         {deleted ? (

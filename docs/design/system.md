@@ -116,7 +116,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -557,34 +557,40 @@ Media window, beside how long the server keeps files.
 The chat window's conversation is a screen, not a kit component, but its
 geometry is part of the system and its spec (`next-chat.spec.ts`) measures it.
 
-**Inline names (decision 9).** A message is one grid row:
+**Names on their own line (#295, replacing decision 9's inline names).** A
+message is one grid:
 
 ```
-padding 8 | name: | gap 8 | words (to --measure) | gap 8 | time | gap 8 | actions 24 | padding 4
+a run's first message:   padding 8 | name                         | gap 8 | time | gap 8 | actions 24 | padding 4
+                         padding 8 | indent 16 | words (to --measure)
+a later message:         padding 8 | indent 16 | words (to --measure) | gap 8 | time | gap 8 | actions 24 | padding 4
 ```
 
-- **The name sits on the words' line**, in the person's style at body size,
-  followed by a muted colon. The name cell, the words and the time share the
-  20px line box, so they sit on one line in any face.
-- **Wrapped lines hang under the words**, not under the name.
-- **A continuation** (same author, within 10 minutes, same session) draws the
-  same name and colon *invisibly*. Its words therefore start exactly where the
-  head's do, in any face, with nothing measured. Its time shows on hover and
-  focus only.
+- **The name has a line of its own** at the start of a run, in the person's
+  style at body size, with no colon. The time and the action button sit at
+  that line's end. The name is shown whole, and ends in its own "…" only when
+  the line itself runs out.
+- **The words sit `--message-indent` (16px) in from the name**, in every
+  message of the run. So every line of words in the conversation starts on one
+  edge, whoever wrote it and however long their name is, with nothing
+  measured. The step between name and words makes a new speaker easy to spot.
+- **Wrapped lines** start on that same edge.
+- **A continuation** (same author, within 10 minutes, same session) has no
+  name at all. Its time shows on hover and focus only.
 - **Heights:** a one-line continuation is 24px (its 20px line plus 2px above
   and below, which is also the 24px action target). A group's first row has
-  8px more above it. Nothing else adds space between messages.
+  8px more above it, and its name's line. Nothing else adds space between
+  messages.
 
 **Grouping** follows SPEC §4.7 (same author, a gap under 10 minutes, the same
 session; sessions break after 3 hours with a divider in words: "tonight",
-"yesterday evening"), with one change for inline names: **a reply always opens
-a group.** Its quote sits above its own line, and a quote over a line with no
-name would read as a quote of the message above. So a reply names its author
-and gets a group's space above it, which also keeps it off the message before
-(#181).
+"yesterday evening"), with one change: **a reply always opens a group.** Its
+quote sits above the name, and a quote over words with no name would read as a
+quote of the message above. So a reply names its author and gets a group's
+space above it, which also keeps it off the message before (#181).
 
-**Quotes.** A reply's quote is part of the reply: a 24px line above it, from
-the row's left edge, with a 2px rule, the quoted person's name and an excerpt.
+**Quotes.** A reply's quote is part of the reply: a 24px line above its name,
+from the row's left edge, with a 2px rule, the quoted person's name and an excerpt.
 It is a button that jumps to the quoted message and marks it for a moment.
 When the quoted message isn't loaded it says "an earlier message".
 
@@ -740,7 +746,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; somebody here keeps their look; going offline and coming back (around, away, idle, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
-| The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
+| The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |

@@ -365,9 +365,12 @@ group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts rea
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
 `Saturday morning`, `yesterday afternoon`.
 
-**No avatar column or per-message colored bars.** The styled sender name starts the
-first line of a run of messages, inline (`Eli: text`), once per run. A reply’s
-short, clickable quote sits just above its own line, joined to it by a neutral
+**No avatar column or per-message colored bars.** The styled sender name has a
+line of its own at the start of a run of messages, once per run, with no colon.
+Every line of every message sits a little in from the names, so all of it starts
+on one edge whoever wrote it and however long their name is (#295, 2026-09-28;
+names were inline, `Eli: text`, before). A reply always starts a run, and its
+short, clickable quote sits just above the name, joined to the reply by a neutral
 hairline bracket in the gutter, so a quote never reads as the tail of the message
 before. Deleting a reply hides its quote as well as its body; the original message
 and other replies remain unchanged. Consecutive messages
