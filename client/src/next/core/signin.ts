@@ -9,7 +9,7 @@ import type { AuthResponse } from "../../generated/AuthResponse";
 import type { LoginRequest } from "../../generated/LoginRequest";
 import type { RegisterRequest } from "../../generated/RegisterRequest";
 import type { SetupRequest } from "../../generated/SetupRequest";
-import { MIN_PASSWORD_CHARS } from "../../lib/account";
+import { displayNameProblem, MIN_PASSWORD_CHARS } from "../../lib/account";
 import { type PastedLink, parsePastedLink } from "../../lib/link";
 
 /** Where the flow is. */
@@ -35,14 +35,14 @@ export function loginReady(username: string, password: string): boolean {
 }
 
 export function registerReady(username: string, displayName: string, password: string): boolean {
-  return usernameOf(username) !== "" && displayName.trim() !== "" && password.length >= MIN_PASSWORD_CHARS;
+  return usernameOf(username) !== "" && displayName.trim() !== "" && displayNameProblem(displayName) === null && password.length >= MIN_PASSWORD_CHARS;
 }
 
 export function setupReady(serverName: string, username: string, displayName: string, password: string): boolean {
   return serverName.trim() !== "" && registerReady(username, displayName, password);
 }
 
-export { MIN_PASSWORD_CHARS };
+export { displayNameProblem, MIN_PASSWORD_CHARS };
 
 /** The server calls that decide which form comes after the paste box. */
 export interface Door {

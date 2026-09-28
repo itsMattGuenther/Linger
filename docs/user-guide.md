@@ -594,6 +594,22 @@ recent one or write your own; setting one is what makes you away, and it shows
 instead of your status. With several servers, tick where it shows. **I'm
 back** clears it.
 
+## Your display name
+
+Your display name is what people see in their lists and on your messages.
+Change it in **Settings → Profile → Who You Are**. It can be up to 32
+characters, in any language, with emoji, accents, spaces and punctuation.
+
+Linger turns a name down, and says why, when it has:
+
+- a line break or a tab
+- characters nobody can see, such as a zero-width space, or a name made only
+  of blank-looking letters
+- characters that turn text around to run right to left
+- more than two accent marks piled on one letter
+
+A name you saved before these rules stays as it is until you change it.
+
 ## Making your name yours
 
 **Settings → Profile → Make Yourself At Home.** This is the fun part, and it is what everyone

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { Style } from "../../../generated/Style";
 import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
-import { displayNameReady, MAX_DISPLAY_NAME_CHARS } from "../../../lib/account";
+import { displayNameProblem, displayNameReady, MAX_DISPLAY_NAME_CHARS } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
@@ -61,6 +61,8 @@ function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveN
           value={name}
           maxLength={MAX_DISPLAY_NAME_CHARS}
           hint="How your name reads on this server."
+          // Only once it's changed: a name saved before the rules (#296) stays as it is.
+          error={dirty ? (displayNameProblem(name) ?? undefined) : undefined}
           onChange={(next) => {
             setName(next);
             save.reset();

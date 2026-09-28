@@ -71,7 +71,29 @@ linger.example                         no path: sign in to an existing account
 ```
 
 `username`: `[a-z0-9_]{2,24}`, unique, immutable after creation.
-`display_name`: 1–32 chars, mutable.
+`display_name`: 1–32 chars after trimming, mutable, stored trimmed. Any script,
+emoji, accents, spaces and punctuation. The server refuses (never cleans up) a name
+that holds any of the following (#296), each with its own sentence, checked in this
+order:
+
+1. a control character, line break or tab (category Cc, U+2028, U+2029);
+2. a direction control: U+202A–U+202E, U+2066–U+2069, U+200E, U+200F, U+061C;
+3. an invisible character: any format character (category Cf, e.g. U+200B, U+2060,
+   U+FEFF, U+00AD), and U+034F, U+17B4, U+17B5. Allowed where they are part of the
+   writing: U+200D between two emoji (a family, 🏳️‍🌈), U+200C/U+200D between two
+   letters or marks of a script that spells with them (Arabic, Syriac, N'Ko, Mandaic,
+   the Indic scripts through Sinhala, Myanmar, Khmer, Mongolian, Adlam), and the tag
+   characters U+E0020–U+E007F after 🏴 (the England, Scotland and Wales flags);
+4. a letter carrying more than 2 accent marks (U+0300–U+036F, U+1AB0–U+1AFF,
+   U+1DC0–U+1DFF, U+20D0–U+20FF, U+FE20–U+FE2F), or more than 4 combining marks of
+   any kind (categories Mn, Me), counted from the last character that is not one;
+5. nothing visible at all: only whitespace, marks, or blank letters (U+115F, U+1160,
+   U+3164, U+FFA0, U+2800, U+1D159).
+
+The limits are `MAX_ACCENT_MARKS_PER_LETTER` and `MAX_MARKS_PER_LETTER` in
+`linger-core::limits`. They apply when a name is set or changed: a name saved before
+them is left as it is, and a `PATCH /me` whose `display_name` is the saved name
+unchanged is not held to them.
 `password`: minimum 8 characters. Do not impose composition rules, do not expire
 passwords, and do not ask for a hint. The floor was 12 until 2026-08-21; it came
 down because the client remembers the password in the OS keyring, so the length

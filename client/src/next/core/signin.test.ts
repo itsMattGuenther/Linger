@@ -55,6 +55,7 @@ describe("signing in", () => {
     expect(loginReady("matt", "x")).toBe(true);
     expect(registerReady("matt", "Matt", "1234567")).toBe(false);
     expect(registerReady("matt", "  ", "12345678")).toBe(false);
+    expect(registerReady("matt", "Ma\u{200B}tt", "12345678")).toBe(false);
     expect(registerReady("matt", "Matt", "12345678")).toBe(true);
     expect(setupReady(" ", "matt", "Matt", "12345678")).toBe(false);
     expect(setupReady("The Good Company", "matt", "Matt", "12345678")).toBe(true);

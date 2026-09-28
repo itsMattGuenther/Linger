@@ -90,6 +90,17 @@ pub const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
 pub const USERNAME_PATTERN: &str = "^[a-z0-9_]{2,24}$";
 pub const ROOM_SLUG_PATTERN: &str = "^[a-z0-9-]{1,32}$";
 pub const MAX_DISPLAY_NAME_CHARS: usize = 32;
+/// Accent marks (the combining diacritics every script shares, U+0300–U+036F
+/// and its kin) one letter of a display name may carry (#296). Two covers
+/// every language that writes them decomposed, Vietnamese included; a third
+/// is where "zalgo" text starts, the kind that paints over the lines around it.
+pub const MAX_ACCENT_MARKS_PER_LETTER: usize = 2;
+/// Combining marks of any kind (Unicode categories Mn and Me) one letter of a
+/// display name may carry (#296). Higher than the accent cap because some
+/// scripts write a letter with three or four marks on it (Tibetan's stacked
+/// consonants, Hebrew with its points); four is the ceiling Unicode's own
+/// security guidance suggests (UTS #39 §5.4).
+pub const MAX_MARKS_PER_LETTER: usize = 4;
 /// Minimum only. No composition rules, no expiry (PROTOCOL §2). The client
 /// keeps the password in the OS keyring, so a long floor is friction on every
 /// fresh install rather than security anybody gets.

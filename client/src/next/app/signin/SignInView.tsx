@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
-import { loginReady, MIN_PASSWORD_CHARS, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
+import { displayNameProblem, loginReady, MIN_PASSWORD_CHARS, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
 import { Button, TextField, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./SignInView.css";
@@ -185,7 +185,7 @@ function Register({
         You're joining {step.serverName ?? hostOf(step.baseUrl)}. Pick a username people can mention you by, and the name they'll see in their lists.
       </p>
       <TextField label="Username" value={username} onChange={setUsername} hint="Lowercase letters, numbers and underscores. It can't change later." autoFocus literal />
-      <TextField label="Display name" value={displayName} onChange={setDisplayName} />
+      <TextField label="Display name" value={displayName} onChange={setDisplayName} error={displayNameProblem(displayName) ?? undefined} />
       <TextField
         label="Password"
         type="password"
@@ -218,7 +218,7 @@ function Setup({ step, setup, onBack }: { step: Extract<SignInStep, { kind: "set
       <p className="nx-signin-lead">Nobody has set this server up yet. Whoever does becomes its host: that's you.</p>
       <TextField label="Server name" value={serverName} onChange={setServerName} hint="What your friends will see this place called." autoFocus />
       <TextField label="Username" value={username} onChange={setUsername} literal />
-      <TextField label="Display name" value={displayName} onChange={setDisplayName} />
+      <TextField label="Display name" value={displayName} onChange={setDisplayName} error={displayNameProblem(displayName) ?? undefined} />
       <TextField
         label="Password"
         type="password"
