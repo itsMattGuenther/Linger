@@ -87,7 +87,7 @@ test("a new message moves its DM to the top, theirs or yours, and reading it doe
   await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
 });
 
-test("somebody idle shows a small z in their color, and says idle in words (#259)", async ({ page }) => {
+test("somebody idle shows 💤 in their color, and says idle in words (#259)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?idle");
   const callie = rows(page, "People").filter({ hasText: "Callie" });
   const marker = callie.locator('[data-kit="Marker"]');

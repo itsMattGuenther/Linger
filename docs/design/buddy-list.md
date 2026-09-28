@@ -106,7 +106,7 @@ People show a marker in their own palette color, next to their name in its
 own styling. There's one marker per state, all the same size:
 
 - **here:** a solid dot;
-- **idle:** a small "z" (#259);
+- **idle:** 💤, in their color (#259);
 - **away:** a small crescent moon;
 - **offline:** the dot, dimmed.
 

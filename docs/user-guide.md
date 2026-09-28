@@ -513,8 +513,8 @@ an item to return to its conversation.
 
 ## What the list is telling you
 
-Next to each person, a dot (a small "z" when they're idle, a small moon when
-they're away) and a few words:
+Next to each person, a dot (💤 when they're idle, a small moon when they're
+away) and a few words:
 
 - **in a room** — they are in that room right now
 - **around** — the app is in front of them, but not in a room

@@ -18,7 +18,7 @@ function colorStyle(color: ColorKey): CSSProperties {
 
 /**
  * A person's presence, in their color: a plain dot when they're here or
- * around, a small "z" when they're idle (#259), a crescent moon when they're
+ * around, 💤 when they're idle (#259), a crescent moon when they're
  * away, a dimmed dot when they're offline. The same at every size.
  *
  * This is the only marker in the app. Every list, card, tab and chip draws
@@ -54,9 +54,10 @@ export function Marker({
           <path d="M12.8 10.2A5.5 5.5 0 0 1 5.8 3.2a5.5 5.5 0 1 0 7 7z" />
         </svg>
       ) : state === "idle" ? (
-        // One bold z, not three: three don't read at 8px (#259).
+        // 💤, drawn rather than typed: an emoji keeps its own color and looks
+        // different on every system, and this is their color everywhere (#259).
         <svg viewBox="0 0 16 16" focusable="false">
-          <path d="M3 2h10v3l-5.8 6H13v3H3v-3l5.8-6H3z" />
+          <path d="M0 6 9 6 9 8.6 4 12.9 9 12.9 9 15.5 0 15.5 0 12.9 5 8.6 0 8.6zM8.5 2.2 13.5 2.2 13.5 3.9 10.9 5.5 13.5 5.5 13.5 7.2 8.5 7.2 8.5 5.5 11.1 3.9 8.5 3.9zM13 0 16 0 16 1.1 14.5 1.9 16 1.9 16 3 13 3 13 1.9 14.5 1.1 13 1.1z" />
         </svg>
       ) : null}
     </span>

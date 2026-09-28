@@ -4,7 +4,7 @@
  *
  *   here, around   a plain solid dot in their color (the words beside it,
  *                  "in #general" or "around", tell the two apart)
- *   idle           a small "z" in their color (#259)
+ *   idle           💤 in their color (#259)
  *   away           a crescent moon in their color
  *   offline        the dot, dimmed
  *
@@ -31,8 +31,9 @@
   opacity: 0.32;
 }
 
-/* The moon and the z have less ink than a disc; they fill their box a little
-   more so all three read as the same weight. */
+/* The moon and the 💤 have less ink than a disc; they fill their box a little
+   more so all three read as the same weight. The 💤 is three thin letters, so
+   it takes the lead column's whole width (#259). */
 .k-marker[data-state="away"],
 .k-marker[data-state="idle"] {
   background: none;
@@ -45,6 +46,10 @@
   height: 100%;
   fill: currentcolor;
   transform: scale(1.18);
+}
+
+.k-marker[data-state="idle"] svg {
+  transform: scale(1.75);
 }
 
 .k-marker[data-typing="yes"] {
