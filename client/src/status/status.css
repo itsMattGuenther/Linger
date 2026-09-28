@@ -92,25 +92,6 @@
   overflow-wrap: anywhere;
 }
 
-/* SPEC §4.6: one image, shown at 400×200.
-
-   The panel it sits in is 240px wide and the popover is 260px, so 400px is the
-   size it is drawn *to* and the 2:1 shape is what actually holds. `object-fit`
-   crops rather than squashing, because a stretched picture looks like a bug and
-   a cropped one looks like a crop. */
-.status-image {
-  display: block;
-  width: 100%;
-  max-width: 400px;
-  aspect-ratio: 2 / 1;
-  object-fit: cover;
-  margin-top: 6px;
-  border: 1px solid var(--hairline-strong);
-  /* 0 radius: a picture in a Console panel is a rectangle (SPEC §5.5). */
-  border-radius: 0;
-  background: var(--surface-2);
-}
-
 /* ---------------------------------------------------------------------------
    A name in the stream, and the card it opens.
    --------------------------------------------------------------------------- */
@@ -249,46 +230,6 @@
 .editor-note {
   color: var(--text-faint);
   line-height: 1.4;
-}
-
-/* The editor's own copy of the card's picture, at the same shape, so what you
-   are looking at while you pick is what everybody else will see. */
-.editor-image {
-  display: block;
-  width: 100%;
-  max-width: 400px;
-  aspect-ratio: 2 / 1;
-  object-fit: cover;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 0;
-  background: var(--surface-2);
-}
-
-.editor-image-row {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.editor-pick {
-  background: none;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-label-size);
-  padding: 3px 8px;
-}
-
-.editor-pick:hover:enabled {
-  color: var(--text-primary);
-  border-color: var(--accent);
-}
-
-.editor-pick:disabled {
-  cursor: default;
-  opacity: 0.5;
 }
 
 .editor-problem {

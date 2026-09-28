@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Style } from "../../../generated/Style";
 import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
@@ -6,19 +6,7 @@ import { displayNameReady, MAX_DISPLAY_NAME_CHARS } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
-import {
-  draftOf,
-  FIELDS,
-  imageProblem,
-  isDirty,
-  MAX_FIELD_CHARS,
-  MAX_IMAGE_BYTES,
-  MAX_LINE_CHARS,
-  overLimit,
-  type StatusDraft,
-  type StatusImage,
-  statusOf,
-} from "../../../lib/status";
+import { draftOf, FIELDS, isDirty, MAX_FIELD_CHARS, MAX_LINE_CHARS, overLimit, type StatusDraft, statusOf } from "../../../lib/status";
 import { HEADINGS, leftOf } from "../../core/settings";
 import { Button, Name, Swatch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, useSave } from "./parts";
@@ -29,10 +17,6 @@ export interface ProfileActions {
   saveName: (name: string) => Promise<string | null>;
   /** The whole status (PROTOCOL §5 replaces it whole). Going away or back follows from its away message. */
   saveStatus: (status: UserStatus) => Promise<string | null>;
-  /** Upload a status image as soon as it's picked (PPL-10). */
-  uploadImage: (file: File) => Promise<{ image: StatusImage } | { problem: string }>;
-  /** An uploaded image this form won't use after all: the server can let it go. */
-  dropImage: (id: string) => void;
   /** Your name's style, whole. */
   saveStyle: (style: Style) => Promise<string | null>;
 }
@@ -41,17 +25,15 @@ export interface ProfileProps {
   me: User;
   /** "Use plain names" is on: the preview says it still shows your style. */
   plainNames: boolean;
-  /** A server path as an address this window can load. */
-  mediaUrl: (path: string) => string;
   actions: ProfileActions;
 }
 
 /** Profile: who you are, what you're up to, and how your name looks (SET-1, PPL-7, NAME-1). */
-export function ProfileSection({ me, plainNames, mediaUrl, actions }: ProfileProps) {
+export function ProfileSection({ me, plainNames, actions }: ProfileProps) {
   return (
     <>
       <WhoYouAre me={me} saveName={actions.saveName} />
-      <YourStatus me={me} mediaUrl={mediaUrl} actions={actions} />
+      <YourStatus me={me} saveStatus={actions.saveStatus} />
       <YourLook me={me} plainNames={plainNames} saveStyle={actions.saveStyle} />
     </>
   );
@@ -95,15 +77,10 @@ function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveN
   );
 }
 
-function YourStatus({ me, mediaUrl, actions }: { me: User; mediaUrl: (path: string) => string; actions: ProfileActions }) {
+function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["saveStatus"] }) {
   const saved = me.status ?? null;
   const [draft, setDraft] = useState<StatusDraft>(() => draftOf(saved));
-  const [uploading, setUploading] = useState(false);
   const save = useSave();
-  const picker = useRef<HTMLInputElement | null>(null);
-  // Images uploaded in this sitting and not saved to anything yet: taken back
-  // when replaced, removed, reset or left behind (PPL-10).
-  const unsaved = useRef<Set<string>>(new Set());
   const dirty = isDirty(draft, saved);
 
   useEffect(() => {
@@ -111,52 +88,12 @@ function YourStatus({ me, mediaUrl, actions }: { me: User; mediaUrl: (path: stri
     // Follows the saved status, not the draft (as the name does).
   }, [saved]);
 
-  const drop = actions.dropImage;
-  useEffect(
-    () => () => {
-      for (const id of unsaved.current) drop(id);
-      unsaved.current.clear();
-    },
-    [drop],
-  );
-
-  const letGo = (image: StatusImage | null) => {
-    if (image && unsaved.current.delete(image.id)) drop(image.id);
-  };
   const edit = (change: Partial<StatusDraft>) => {
     setDraft((held) => ({ ...held, ...change }));
     save.reset();
   };
-  const setImage = (next: StatusImage | null) => {
-    letGo(draft.image);
-    edit({ image: next });
-  };
 
-  const pick = (file: File | undefined) => {
-    if (!file) return;
-    const refusal = imageProblem(file);
-    if (refusal) {
-      save.fail(refusal);
-      return;
-    }
-    save.reset();
-    setUploading(true);
-    void actions.uploadImage(file).then((result) => {
-      setUploading(false);
-      if ("problem" in result) {
-        save.fail(result.problem);
-        return;
-      }
-      unsaved.current.add(result.image.id);
-      setImage(result.image);
-    });
-  };
-
-  const commit = async (next: StatusDraft) => {
-    const ok = await save.run(actions.saveStatus(statusOf(next, saved)));
-    // Saved: the image is named by a status now, and not ours to take back.
-    if (ok) unsaved.current.clear();
-  };
+  const commit = (next: StatusDraft) => save.run(saveStatus(statusOf(next, saved)));
 
   const tooLong = overLimit(draft);
   const away = (saved?.away_message ?? "") !== "";
@@ -196,36 +133,6 @@ function YourStatus({ me, mediaUrl, actions }: { me: User; mediaUrl: (path: stri
           />
         ))}
       </Fields>
-      <div className="nx-set-image">
-        <span className="nx-set-image-text">
-          <span className="nx-set-image-title">Image</span>
-          <span className="nx-set-image-hint">
-            One picture on your status card. Up to {MAX_IMAGE_BYTES / 1024} KB, shown at 400 × 200.
-          </span>
-        </span>
-        <span className="nx-set-image-buttons">
-          {draft.image ? (
-            <Button size="sm" variant="quiet" disabled={busy || uploading} onClick={() => setImage(null)}>
-              Remove
-            </Button>
-          ) : null}
-          <Button size="sm" icon="media" busy={uploading} disabled={busy} onClick={() => picker.current?.click()}>
-            {draft.image ? "Replace" : "Add an image"}
-          </Button>
-        </span>
-        <input
-          ref={picker}
-          type="file"
-          accept="image/*"
-          hidden
-          aria-label="Choose a status image"
-          onChange={(event) => {
-            pick(event.target.files?.[0]);
-            event.target.value = "";
-          }}
-        />
-      </div>
-      {draft.image ? <img className="nx-set-image-shown" src={mediaUrl(draft.image.url)} alt="The image on your status" /> : null}
       <TextField
         label="Away message"
         value={draft.awayMessage}
@@ -241,7 +148,6 @@ function YourStatus({ me, mediaUrl, actions }: { me: User; mediaUrl: (path: stri
             variant="quiet"
             disabled={busy}
             onClick={() => {
-              letGo(draft.image);
               setDraft(draftOf(saved));
               save.reset();
             }}
@@ -249,7 +155,7 @@ function YourStatus({ me, mediaUrl, actions }: { me: User; mediaUrl: (path: stri
             Reset
           </Button>
         ) : null}
-        <Button variant="primary" disabled={!dirty || tooLong !== null || uploading} busy={busy} onClick={() => void commit(draft)}>
+        <Button variant="primary" disabled={!dirty || tooLong !== null} busy={busy} onClick={() => void commit(draft)}>
           Save status
         </Button>
       </Actions>

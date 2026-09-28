@@ -361,8 +361,8 @@ type UserStatus = {
   reading: string | null;             // <= 80
   listening: string | null;           // <= 80
   working_on: string | null;          // <= 80
-  image_id: string | null;            // an upload of yours: an image <= 512 KB
-  image_url: string | null;           // server-owned; where to draw it from
+  image_id: string | null;            // always null; accepted and ignored (#269)
+  image_url: string | null;           // always null; server-owned
   away_message: string | null;        // supersedes `line` when set
   away_since: number | null;
 }
@@ -374,21 +374,18 @@ message bodies and renders other saved keys with its default body face. This
 is a rendering fallback; it does not migrate stored styles or change the wire
 format.
 
-**The status image** (SPEC §4.6) is named by attachment id, not by URL and not by
-storage key. On the way in the server checks that the id names a finished upload of
-*this* member's, that it is an image, and that it is within
-`linger-core::limits::MAX_STATUS_IMAGE_BYTES`; anything else is `VALIDATION_FAILED`, or
-`FORBIDDEN` when the file exists and belongs to somebody else. On the way out it fills in
-`image_url`, which is on the media origin like any other object URL (§6) and is
-read-only — send whatever you like for it and the server ignores it, the same as
-`away_since`.
+**A status has no image** (SPEC §4.6, #269). `image_id` and `image_url` stay in
+`UserStatus` so apps from before the removal keep reading and saving statuses, and
+they are **always null** on the way out. On the way in the server accepts an
+`image_id` and ignores it: nothing is checked or stored for it, so a save from an
+older app that still names a picture succeeds with the rest of the status and no
+picture. Send null for both. Taking the two fields out of the wire is a later,
+breaking protocol change.
 
-Because `status` replaces the whole object, a save that omits `image_id` **removes** the
-image. Send back the one you were given unless the person changed it.
-
-Replacing or clearing an image deletes the file it stopped pointing at, unless that file
-is also on a message — then it belongs to the message and stays. A status image is the
-one thing the expiry sweeper never takes, whatever its age (SPEC §4.10).
+A server that had status pictures loses them when it updates: migration
+`0006_no_status_image.sql` clears every one. The files they pointed at are finished
+uploads on no message, so the expiry sweeper takes them after the file expiry window
+like any upload that was never posted (SPEC §4.10).
 
 ### Palette validation (server-side, mandatory)
 

@@ -44,7 +44,7 @@ async fn knock(
     // A member of this server, and still one: `repo::users::expect` only ever
     // sees active accounts, so somebody who was removed is `NOT_FOUND` here
     // without this endpoint having to know what removal is.
-    repo::users::expect(&state.db.read, &state.config, req.target_user_id).await?;
+    repo::users::expect(&state.db.read, req.target_user_id).await?;
 
     // Three an hour **per target** (SPEC §4.9), so the key names both ends:
     // knocking on five different people is five separate buckets and is fine.

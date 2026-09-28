@@ -438,6 +438,8 @@ globalThis.fetch = async (input, init) => {
       );
     }
     if (url.pathname.endsWith("/me")) {
+      // What was sent, for a spec to read back.
+      document.documentElement.dataset.lastMe = String(init.body);
       const patch: UpdateMeRequest = JSON.parse(String(init.body));
       const next: User = {
         ...me,

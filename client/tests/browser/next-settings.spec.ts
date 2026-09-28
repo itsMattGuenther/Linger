@@ -130,15 +130,20 @@ test.describe("profile", () => {
     expect(JSON.parse(sent?.slice("status:".length) ?? "{}")).toMatchObject({ away_message: null });
   });
 
-  test("a status image goes up when picked, and one taken back before saving is let go", async ({ page }) => {
-    await open(page);
+  test("a status has no picture: nothing in Profile offers one, and a save sends none (#269)", async ({ page }) => {
+    // `?picture`: an older server still hands one back.
+    await open(page, "?picture");
     const block = page.getByRole("region", { name: "Your Status" });
-    await page.locator('input[type="file"]').setInputFiles({ name: "porch.png", mimeType: "image/png", buffer: Buffer.from([137, 80, 78, 71]) });
-    await expect(block.getByRole("img", { name: "The image on your status" })).toBeVisible();
-    expect(await did(page)).toContain("upload:porch.png");
-    await block.getByRole("button", { name: "Remove" }).click();
-    await expect(block.getByRole("img")).toHaveCount(0);
-    expect(await did(page)).toContain("drop:img-porch.png");
+    await expect(panel(page).locator('input[type="file"]')).toHaveCount(0);
+    await expect(panel(page).getByRole("img")).toHaveCount(0);
+    await expect(block.getByRole("button")).toHaveText(["Save status"]);
+    await expect(block).not.toContainText(/image|picture/i);
+    await block.getByRole("textbox", { name: "Reading" }).fill("Piranesi");
+    await block.getByRole("button", { name: "Save status" }).click();
+    await expect(said(block)).toHaveText("Saved");
+    const sent = (await did(page)).find((line) => line.startsWith("status:"));
+    expect(JSON.parse(sent?.slice("status:".length) ?? "{}")).toMatchObject({ reading: "Piranesi", image_id: null, image_url: null });
+    expect((await did(page)).filter((line) => /^(upload|drop):/.test(line))).toEqual([]);
   });
 
   test("a new look shows in the preview first, saves whole, and resets", async ({ page }) => {

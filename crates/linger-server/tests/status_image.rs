@@ -1,16 +1,19 @@
-//! The image on a status (T-506, SPEC §4.6), end to end over real HTTP.
+//! A status has no picture any more (#269, SPEC §4.6), end to end over real
+//! HTTP against a temp SQLite file.
 //!
-//! Everything else on a status is somebody's own words. The image is a *name*
-//! for a file, so the tests here are mostly about the four questions the server
-//! has to ask about that name — does it exist, is it theirs, is it an image, is
-//! it small enough — plus what happens to the bytes when a status stops
-//! pointing at them.
+//! Statuses used to carry one. What is left is compatibility, and the tests
+//! here are about that: an app from before the removal still sends `image_id`
+//! on every save and still reads `image_id` and `image_url` on every status.
+//! So a save with one in it has to work and store nothing, every status has to
+//! come back with both fields null, and a server that had pictures has to lose
+//! them — the migration clears what statuses pointed at, and the sweeper stops
+//! keeping those files.
 
 mod common;
 
-use common::{bootstrap_host, join_member, server_with_room, spawn_server, TestServer};
-use linger_core::limits::MAX_STATUS_IMAGE_BYTES;
-use linger_core::wire::{Attachment, Message, Room, UploadSlot, User};
+use common::{bootstrap_host, join_member, spawn_server, TestServer};
+use linger_core::wire::{Attachment, UploadSlot, User, UserStatus};
+use linger_core::UserId;
 use linger_server::expiry;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
@@ -23,22 +26,10 @@ fn client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
-/// A PNG of pseudo-random pixels, which is the only kind that does not shrink
-/// to nothing: the server re-encodes every image it takes, and a gradient comes
-/// back a few hundred bytes long however big it started.
-fn noisy_png(side: u32) -> Vec<u8> {
-    let mut seed: u32 = 0x1234_5678;
-    let mut canvas = image::RgbImage::new(side, side);
-    for pixel in canvas.pixels_mut() {
-        let mut next = || {
-            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-            #[allow(clippy::cast_possible_truncation)]
-            {
-                (seed >> 16) as u8
-            }
-        };
-        *pixel = image::Rgb([next(), next(), next()]);
-    }
+/// A small real PNG, so the upload goes through the image pipeline the way a
+/// picture from an older app would.
+fn png() -> Vec<u8> {
+    let canvas = image::RgbImage::from_pixel(40, 20, image::Rgb([200, 120, 40]));
     let mut out = Vec::new();
     image::DynamicImage::ImageRgb8(canvas)
         .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
@@ -91,37 +82,28 @@ async fn upload(
     done.json().await.unwrap()
 }
 
-/// A whole status with just the image on it — `PATCH /me` replaces the object,
-/// so every save has to send all of it.
-fn status_with(image: Option<&Attachment>) -> serde_json::Value {
+/// A whole status the way an older app sends one: with an image id in it.
+fn status_naming(image_id: &str) -> serde_json::Value {
     serde_json::json!({
         "status": {
             "line": "mounting the drive",
-            "reading": null, "listening": null, "working_on": null,
-            "image_id": image.map(|a| a.id.to_string()),
-            "image_url": null,
+            "reading": "Piranesi", "listening": null, "working_on": null,
+            "image_id": image_id,
+            "image_url": "https://somewhere.example/whatever.png",
             "away_message": null, "away_since": null
         }
     })
 }
 
-async fn save_status(
-    server: &TestServer,
-    token: &str,
-    body: serde_json::Value,
-) -> reqwest::Response {
-    client()
+/// `PATCH /me`, expecting it to be taken.
+async fn save(server: &TestServer, token: &str, body: serde_json::Value) -> User {
+    let resp = client()
         .patch(server.url("/me"))
         .bearer_auth(token)
         .json(&body)
         .send()
         .await
-        .unwrap()
-}
-
-/// Save an image onto a status and expect it to stick.
-async fn set_image(server: &TestServer, token: &str, image: Option<&Attachment>) -> User {
-    let resp = save_status(server, token, status_with(image)).await;
+        .unwrap();
     assert_eq!(
         resp.status(),
         200,
@@ -131,9 +113,16 @@ async fn set_image(server: &TestServer, token: &str, image: Option<&Attachment>)
     resp.json().await.unwrap()
 }
 
-async fn error_code(resp: reqwest::Response) -> String {
-    let body: serde_json::Value = resp.json().await.unwrap();
-    body["error"]["code"].as_str().unwrap().to_string()
+async fn get<T: serde::de::DeserializeOwned>(server: &TestServer, token: &str, path: &str) -> T {
+    client()
+        .get(server.url(path))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
 }
 
 /// Is the object still being served? The bytes are what matters, not the row.
@@ -147,142 +136,89 @@ async fn object_status(server: &TestServer, url: &str) -> u16 {
         .as_u16()
 }
 
-async fn share(server: &TestServer, token: &str, room: &Room, attachment: &Attachment) -> Message {
-    client()
-        .post(server.url(&format!("/rooms/{}/messages", room.id)))
-        .bearer_auth(token)
-        .json(&serde_json::json!({ "body": "look", "attachment_ids": [attachment.id] }))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-/// The whole point: set one, and everybody else's roster can draw it.
-#[tokio::test]
-async fn a_status_image_is_set_once_and_served_to_everyone() {
-    let server = spawn_server().await;
-    let host = bootstrap_host(&server).await;
-    let member = join_member(&server, &host.access_token, "jo").await;
-
-    let image = upload(
-        &server,
-        &host.access_token,
-        "me.png",
-        "image/png",
-        noisy_png(40),
-    )
-    .await;
-    let saved = set_image(&server, &host.access_token, Some(&image)).await;
-
-    let status = saved.status.expect("status saved");
-    assert_eq!(status.image_id, Some(image.id));
-    let url = status.image_url.expect("a URL to draw it from");
-    assert_eq!(object_status(&server, &url).await, 200);
-
-    // The URL is built from the stored key, never from the string the client
-    // sent, and it is the same URL the attachment itself is served from.
-    assert_eq!(url, image.url);
-
-    // Somebody else sees the same thing through the roster.
-    let users: Vec<User> = client()
-        .get(server.url("/users"))
-        .bearer_auth(&member.access_token)
-        .send()
-        .await
-        .unwrap()
-        .json()
+/// A status wearing a picture, written the way a server before #269 wrote one:
+/// the file's object key in `user_status.image_key`. Nothing can put one there
+/// through the API any more, which is the point.
+async fn picture_the_old_way(server: &TestServer, user: UserId, line: &str, file: &Attachment) {
+    let key: String = sqlx::query_scalar("SELECT object_key FROM attachments WHERE id = ?")
+        .bind(file.id.to_vec())
+        .fetch_one(&server.state.db.read)
         .await
         .unwrap();
-    let seen = users
-        .iter()
-        .find(|user| user.id == saved.id)
-        .expect("the host is in the roster");
-    assert_eq!(
-        seen.status.as_ref().and_then(|s| s.image_url.as_deref()),
-        Some(url.as_str())
-    );
+    sqlx::query(
+        "INSERT INTO user_status (user_id, line, image_key, updated_at) VALUES (?, ?, ?, 0)
+         ON CONFLICT(user_id) DO UPDATE SET line = excluded.line, image_key = excluded.image_key",
+    )
+    .bind(user.to_vec())
+    .bind(line)
+    .bind(&key)
+    .execute(&server.state.db.write)
+    .await
+    .unwrap();
 }
 
-/// An id is a string somebody chose. Naming a file that belongs to another
-/// member has to be a refusal, or a status is a way to read anybody's uploads.
+/// Upgrade to #269 by running the migration exactly as shipped.
+async fn run_the_migration(server: &TestServer) {
+    sqlx::raw_sql(include_str!("../migrations/0006_no_status_image.sql"))
+        .execute(&server.state.db.write)
+        .await
+        .expect("the status image migration");
+}
+
+async fn keys_left(server: &TestServer) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM user_status WHERE image_key IS NOT NULL")
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap()
+}
+
+fn assert_no_image(status: Option<&UserStatus>, line: &str) {
+    let status = status.expect("the status is there");
+    assert_eq!(status.line.as_deref(), Some(line), "the words survived");
+    assert_eq!(status.image_id, None);
+    assert_eq!(status.image_url, None);
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+/// The case that matters: an older app saving a status with a picture on it.
+/// The rest is saved, the picture is not, and nothing is refused.
 #[tokio::test]
-async fn an_image_that_is_not_yours_is_refused() {
+async fn a_save_with_an_image_keeps_the_rest_and_no_image() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let image = upload(&server, &host.access_token, "me.png", "image/png", png()).await;
+
+    let saved = save(
+        &server,
+        &host.access_token,
+        status_naming(&image.id.to_string()),
+    )
+    .await;
+    assert_no_image(saved.status.as_ref(), "mounting the drive");
+    assert_eq!(
+        saved.status.and_then(|s| s.reading).as_deref(),
+        Some("Piranesi")
+    );
+    assert_eq!(keys_left(&server).await, 0, "nothing was stored for it");
+
+    // The file is left alone: it is an upload nobody posted, and the sweeper
+    // decides when it goes, the same as any other.
+    assert_eq!(object_status(&server, &image.url).await, 200);
+}
+
+/// The old checks are gone with the picture. Every one of these used to be a
+/// refusal; an older app must never be told its status did not save because
+/// of a field the server no longer reads.
+#[tokio::test]
+async fn an_image_id_is_never_checked() {
     let server = spawn_server().await;
     let host = bootstrap_host(&server).await;
     let member = join_member(&server, &host.access_token, "jo").await;
 
-    let theirs = upload(
-        &server,
-        &member.access_token,
-        "jo.png",
-        "image/png",
-        noisy_png(40),
-    )
-    .await;
-    let resp = save_status(&server, &host.access_token, status_with(Some(&theirs))).await;
-    assert_eq!(resp.status(), 403);
-    assert_eq!(error_code(resp).await, "FORBIDDEN");
-}
-
-#[tokio::test]
-async fn an_id_that_names_nothing_is_refused() {
-    let server = spawn_server().await;
-    let host = bootstrap_host(&server).await;
-
-    let resp = save_status(
-        &server,
-        &host.access_token,
-        serde_json::json!({
-            "status": {
-                "line": null, "reading": null, "listening": null, "working_on": null,
-                "image_id": linger_core::AttachmentId::new().to_string(),
-                "image_url": null, "away_message": null, "away_since": null
-            }
-        }),
-    )
-    .await;
-    assert_eq!(resp.status(), 422);
-    assert_eq!(error_code(resp).await, "VALIDATION_FAILED");
-}
-
-/// SPEC §4.6 says 512 KB. The client counts before it uploads; this is the
-/// answer for a client that does not.
-#[tokio::test]
-async fn an_image_over_the_cap_is_refused() {
-    let server = spawn_server().await;
-    let host = bootstrap_host(&server).await;
-
-    let big = upload(
-        &server,
-        &host.access_token,
-        "big.png",
-        "image/png",
-        noisy_png(600),
-    )
-    .await;
-    assert!(
-        big.size_bytes > MAX_STATUS_IMAGE_BYTES,
-        "the fixture has to be over the cap after re-encoding, got {}",
-        big.size_bytes
-    );
-
-    let resp = save_status(&server, &host.access_token, status_with(Some(&big))).await;
-    assert_eq!(resp.status(), 422);
-    assert_eq!(error_code(resp).await, "VALIDATION_FAILED");
-}
-
-#[tokio::test]
-async fn a_file_that_is_not_an_image_is_refused() {
-    let server = spawn_server().await;
-    let host = bootstrap_host(&server).await;
-
+    let theirs = upload(&server, &member.access_token, "jo.png", "image/png", png()).await;
     let notes = upload(
         &server,
         &host.access_token,
@@ -291,120 +227,97 @@ async fn a_file_that_is_not_an_image_is_refused() {
         b"nothing to look at".to_vec(),
     )
     .await;
-    let resp = save_status(&server, &host.access_token, status_with(Some(&notes))).await;
-    assert_eq!(resp.status(), 422);
-    assert_eq!(error_code(resp).await, "VALIDATION_FAILED");
+    let nothing = linger_core::AttachmentId::new().to_string();
+
+    for id in [theirs.id.to_string(), notes.id.to_string(), nothing] {
+        let saved = save(&server, &host.access_token, status_naming(&id)).await;
+        assert_no_image(saved.status.as_ref(), "mounting the drive");
+    }
+    // And somebody else's file is not touched by a status naming it.
+    assert_eq!(object_status(&server, &theirs.url).await, 200);
 }
 
-/// Replacing an image is the ordinary way to change one, and the old file is
-/// then unreachable — nothing draws it and the sweeper skips status images.
+// ---------------------------------------------------------------------------
+// Reading
+// ---------------------------------------------------------------------------
+
+/// Every way a status is read says no image, even over a row that still names
+/// one — a server that has not run the migration yet, or a row somebody edited
+/// by hand.
 #[tokio::test]
-async fn replacing_an_image_takes_the_old_one_with_it() {
+async fn every_status_reads_back_with_no_image() {
     let server = spawn_server().await;
     let host = bootstrap_host(&server).await;
+    let member = join_member(&server, &host.access_token, "jo").await;
+    let image = upload(&server, &host.access_token, "me.png", "image/png", png()).await;
+    picture_the_old_way(&server, host.user.id, "on the porch", &image).await;
 
-    let first = upload(
+    let me: User = get(&server, &host.access_token, "/me").await;
+    assert_no_image(me.status.as_ref(), "on the porch");
+
+    let one: User = get(
         &server,
-        &host.access_token,
-        "a.png",
-        "image/png",
-        noisy_png(40),
+        &member.access_token,
+        &format!("/users/{}", host.user.id),
     )
     .await;
-    let second = upload(
-        &server,
-        &host.access_token,
-        "b.png",
-        "image/png",
-        noisy_png(48),
-    )
-    .await;
+    assert_no_image(one.status.as_ref(), "on the porch");
 
-    set_image(&server, &host.access_token, Some(&first)).await;
-    assert_eq!(object_status(&server, &first.url).await, 200);
+    let everyone: Vec<User> = get(&server, &member.access_token, "/users").await;
+    let seen = everyone
+        .iter()
+        .find(|user| user.id == host.user.id)
+        .expect("the host is in the list");
+    assert_no_image(seen.status.as_ref(), "on the porch");
 
-    set_image(&server, &host.access_token, Some(&second)).await;
-    assert_eq!(object_status(&server, &first.url).await, 404);
-    assert_eq!(object_status(&server, &second.url).await, 200);
+    // Both fields are on the wire, as nulls, for apps that read them.
+    let raw: serde_json::Value = get(&server, &host.access_token, "/me").await;
+    assert_eq!(raw["status"]["image_id"], serde_json::Value::Null);
+    assert_eq!(raw["status"]["image_url"], serde_json::Value::Null);
+    assert!(raw["status"].as_object().unwrap().contains_key("image_id"));
+    assert!(raw["status"].as_object().unwrap().contains_key("image_url"));
+}
 
-    // And the row goes with the bytes, so the pool stops counting it.
-    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM attachments WHERE id = ?")
-        .bind(first.id.to_vec())
-        .fetch_one(&server.state.db.read)
+// ---------------------------------------------------------------------------
+// Upgrading a server that had pictures
+// ---------------------------------------------------------------------------
+
+/// The migration takes every picture off every status and leaves the words.
+#[tokio::test]
+async fn the_migration_clears_every_status_picture() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let member = join_member(&server, &host.access_token, "jo").await;
+    let mine = upload(&server, &host.access_token, "me.png", "image/png", png()).await;
+    let theirs = upload(&server, &member.access_token, "jo.png", "image/png", png()).await;
+    picture_the_old_way(&server, host.user.id, "on the porch", &mine).await;
+    picture_the_old_way(&server, member.user.id, "at the shop", &theirs).await;
+    assert_eq!(keys_left(&server).await, 2);
+
+    run_the_migration(&server).await;
+
+    assert_eq!(keys_left(&server).await, 0);
+    let lines: Vec<String> = sqlx::query_scalar("SELECT line FROM user_status ORDER BY line")
+        .fetch_all(&server.state.db.read)
         .await
         .unwrap();
-    assert_eq!(left, 0);
-
-    // Clearing it takes the second one too.
-    set_image(&server, &host.access_token, None).await;
-    assert_eq!(object_status(&server, &second.url).await, 404);
+    assert_eq!(lines, ["at the shop", "on the porch"]);
 }
 
-/// Saving a status without touching the image must not throw the image away —
-/// `PATCH /me` replaces the whole object, so an unchanged field arrives looking
-/// exactly like a deliberate one.
+/// After the upgrade, a file a status used to wear goes the way of any upload
+/// that was never posted: kept through the expiry window, then swept. Before
+/// #269 the sweeper skipped it forever.
 #[tokio::test]
-async fn saving_the_same_image_again_leaves_it_alone() {
+async fn a_file_a_status_wore_is_swept_like_any_unposted_upload() {
     let server = spawn_server().await;
     let host = bootstrap_host(&server).await;
+    let image = upload(&server, &host.access_token, "me.png", "image/png", png()).await;
+    picture_the_old_way(&server, host.user.id, "on the porch", &image).await;
+    run_the_migration(&server).await;
 
-    let image = upload(
-        &server,
-        &host.access_token,
-        "me.png",
-        "image/png",
-        noisy_png(40),
-    )
-    .await;
-    set_image(&server, &host.access_token, Some(&image)).await;
-    let again = set_image(&server, &host.access_token, Some(&image)).await;
-
-    assert_eq!(
-        again.status.and_then(|s| s.image_id),
-        Some(image.id),
-        "the image survived a second save"
-    );
+    // Not at once: the window still applies, as it does to anything unposted.
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
     assert_eq!(object_status(&server, &image.url).await, 200);
-}
-
-/// A file somebody also shared in a room belongs to that message. Dropping it
-/// from a status is not a reason to delete what a room is still showing.
-#[tokio::test]
-async fn an_image_on_a_message_is_not_deleted_with_the_status() {
-    let (server, host, room) = server_with_room("den").await;
-
-    let image = upload(
-        &server,
-        &host.access_token,
-        "me.png",
-        "image/png",
-        noisy_png(40),
-    )
-    .await;
-    share(&server, &host.access_token, &room, &image).await;
-
-    set_image(&server, &host.access_token, Some(&image)).await;
-    set_image(&server, &host.access_token, None).await;
-
-    assert_eq!(object_status(&server, &image.url).await, 200);
-}
-
-/// T-505's sweeper skips a status image whatever its age. This is that promise
-/// from the other end: through the real endpoint, on a status a year old.
-#[tokio::test]
-async fn a_status_image_survives_a_year() {
-    let server = spawn_server().await;
-    let host = bootstrap_host(&server).await;
-
-    let image = upload(
-        &server,
-        &host.access_token,
-        "me.png",
-        "image/png",
-        noisy_png(40),
-    )
-    .await;
-    set_image(&server, &host.access_token, Some(&image)).await;
 
     sqlx::query("UPDATE attachments SET created_at = created_at - ?")
         .bind(400 * DAY_MS)
@@ -412,6 +325,12 @@ async fn a_status_image_survives_a_year() {
         .await
         .unwrap();
 
-    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
-    assert_eq!(object_status(&server, &image.url).await, 200);
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 1);
+    assert_eq!(object_status(&server, &image.url).await, 404);
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM attachments WHERE id = ?")
+        .bind(image.id.to_vec())
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "the row goes with the bytes");
 }

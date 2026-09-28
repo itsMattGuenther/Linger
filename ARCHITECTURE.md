@@ -215,7 +215,7 @@ CREATE TABLE user_status (
   reading         TEXT,
   listening       TEXT,
   working_on      TEXT,
-  image_key       TEXT,                        -- object key, not the id the wire uses
+  image_key       TEXT,                        -- left over, always NULL: cleared by 0006 (#269)
   away_message    TEXT,                        -- supersedes `line` when set
   away_since      INTEGER,
   updated_at      INTEGER NOT NULL
@@ -637,8 +637,9 @@ It runs at startup and every six hours, in batches, and takes three kinds of obj
 - **finished uploads that never became a message**, once they are past the same window.
   The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
 
-A status image is never taken, at any age: it is not on a message, so the third rule
-would otherwise claim it. Deletion is bytes first, row second — the other order can lose
+A file a status picture pointed at used to be kept at any age. Status pictures are
+gone (#269), so such a file is now an upload that never became a message, and the
+third rule takes it. Deletion is bytes first, row second — the other order can lose
 an object with nothing left pointing at it, and a crash between the two leaves a row the
 next pass finishes.
 

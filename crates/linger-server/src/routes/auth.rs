@@ -33,7 +33,7 @@ pub fn router() -> Router<AppState> {
 pub async fn auth_response(state: &AppState, user_id: UserId) -> Result<AuthResponse, ApiError> {
     let (access_token, _) = state.jwt.mint(user_id)?;
     let refresh_token = auth::issue_refresh_family(&state.db.write, user_id).await?;
-    let user = repo::users::expect(&state.db.read, &state.config, user_id).await?;
+    let user = repo::users::expect(&state.db.read, user_id).await?;
     Ok(AuthResponse {
         access_token,
         refresh_token,

@@ -871,7 +871,7 @@ const MessageRow = memo(function MessageRow({
     >
       {head ? (
         <p className="msg-head">
-          <PersonName user={author} name={name} state={authorState} className="msg-author" baseUrl={api.baseUrl} />
+          <PersonName user={author} name={name} state={authorState} className="msg-author" />
           {time}
         </p>
       ) : null}

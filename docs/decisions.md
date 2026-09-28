@@ -315,3 +315,33 @@ servers that don't set `LINGER_VOICE_ADDRESS`, until every client forwards.
 hour), a server restart mid-call, and a client that loses UDP and has to come
 back through TURN.
 
+---
+
+## Decided — status pictures are gone
+
+**Matt, 2026-09-27 (#269),** after a friend couldn't add one. A status had one
+optional picture (SPEC §4.6, 512 KB, shown at 400×200). It is removed from both
+clients and the server. A status is words: the line, the three short fields
+and the away message.
+
+Three reasons:
+
+- **It was broken.** Settings uploaded the picture as soon as it was picked,
+  and the form's clean-up for an unsaved upload fired every time the Settings
+  window redrew, which is at least once a minute and on every change on the
+  server. The upload was deleted before Save, and the server answered "That
+  image isn't on this server." It was worst on a busy server.
+- **Nobody would see it.** The Buddy list client, the app since 0.4.0, never
+  drew one. The person card shows the line, the away message and the three
+  fields. Only the previous client's status card drew the picture.
+- **Rooms do it better.** A photo posted in a room is seen without opening
+  anybody's card, can be replied to, and is kept in Media (SPEC §2, "keep the
+  artifact"). A status picture was overwritten and gone.
+
+**Compatible with older apps.** `image_id` and `image_url` stay in
+`UserStatus` and are always null. `PATCH /me` accepts an `image_id` and
+ignores it, so an older app saving a status with a picture gets no error. A
+migration clears every picture a status held; the files are then uploads that
+never became a message, and the sweeper takes them after the expiry window like
+any other. It no longer spares files a status names. Taking the two fields off
+the wire is a later protocol change, for when no older app is left.

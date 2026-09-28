@@ -551,8 +551,8 @@ Click someone to open their card, with their status and **Message** and
 
 Click your status at the top of the list to change the line in your own words.
 **Settings → Profile → Your Status** has the rest: three optional fields
-(*reading*, *listening to*, *working on*) and one image. Other people see a
-change only when you save it.
+(*reading*, *listening to*, *working on*). Other people see a change only when
+you save it. A status is words; to share a photo, post it in a room.
 
 To see what friends see, click your own name, at the top of the list or on one
 of your messages. It opens your card exactly as it opens for them: where you

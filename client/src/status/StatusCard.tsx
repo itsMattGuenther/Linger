@@ -9,10 +9,11 @@
  * The line renders in the person's own styling, because that is the AIM
  * feature this is: the away message was a mood board and a joke delivery
  * mechanism, and half of that was the font it arrived in.
+ *
+ * It has no picture (#269): a status is words.
  */
 import type { User } from "../generated/User";
 import { nameProps } from "../lib/names";
-import { absoluteUrl } from "../lib/url";
 import "./status.css";
 
 /**
@@ -32,7 +33,6 @@ function fieldsOf(user: User): [string, string][] {
 }
 
 export default function StatusCard({
-  baseUrl,
   user,
   /**
    * The away message this surface has already drawn above the card, if any.
@@ -43,7 +43,6 @@ export default function StatusCard({
    */
   awayShown,
 }: {
-  baseUrl: string;
   user: User;
   awayShown: boolean;
 }) {
@@ -53,8 +52,7 @@ export default function StatusCard({
   const fields = fieldsOf(user);
   const line = awayShown ? null : status.line;
   const hasLine = line !== null && line !== "";
-  const image = status.image_url;
-  if (!hasLine && fields.length === 0 && image === null) return null;
+  if (!hasLine && fields.length === 0) return null;
 
   return (
     <div className="person-status">
@@ -72,23 +70,6 @@ export default function StatusCard({
             </div>
           ))}
         </dl>
-      )}
-      {/*
-        SPEC §4.6's one image, at its 400×200. The panel it is drawn in is
-        narrower than that, so 400×200 is the box it is drawn *to* — the width
-        gives way and the 2:1 shape does not, which is what keeps the roster
-        card and the popover showing the same picture.
-
-        `loading="lazy"` because a roster of thirty people is thirty of these,
-        and only the card you opened is on screen.
-      */}
-      {image === null ? null : (
-        <img
-          className="status-image"
-          src={absoluteUrl(baseUrl, image)}
-          alt={`${user.display_name}'s status image`}
-          loading="lazy"
-        />
       )}
     </div>
   );

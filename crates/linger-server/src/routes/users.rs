@@ -38,9 +38,7 @@ async fn list_users(
     State(state): State<AppState>,
     _auth: AuthedUser,
 ) -> Result<Json<Vec<User>>, ApiError> {
-    repo::users::all(&state.db.read, &state.config)
-        .await
-        .map(Json)
+    repo::users::all(&state.db.read).await.map(Json)
 }
 
 async fn get_user(
@@ -48,9 +46,7 @@ async fn get_user(
     _auth: AuthedUser,
     Path(id): Path<UserId>,
 ) -> Result<Json<User>, ApiError> {
-    repo::users::expect(&state.db.read, &state.config, id)
-        .await
-        .map(Json)
+    repo::users::expect(&state.db.read, id).await.map(Json)
 }
 
 /// The host's list of everybody they have removed. Restore is useless if the
@@ -59,9 +55,7 @@ async fn list_removed(
     State(state): State<AppState>,
     _host: HostUser,
 ) -> Result<Json<Vec<User>>, ApiError> {
-    repo::users::removed(&state.db.read, &state.config)
-        .await
-        .map(Json)
+    repo::users::removed(&state.db.read).await.map(Json)
 }
 
 /// Take somebody off the server (PROTOCOL §5, T-413).
@@ -145,7 +139,7 @@ async fn restore_user(
 
     // `user.update` is "here is this person, whether or not you had them"
     // (PROTOCOL §8), so every connected client grows the card back on its own.
-    let user = repo::users::expect(&state.db.read, &state.config, id).await?;
+    let user = repo::users::expect(&state.db.read, id).await?;
     state.gateway.publish(ServerEvent::UserUpdate(user));
     Ok(StatusCode::NO_CONTENT)
 }
@@ -163,9 +157,7 @@ async fn expect_account(state: &AppState, id: UserId) -> Result<(), ApiError> {
 }
 
 async fn me(State(state): State<AppState>, auth: AuthedUser) -> Result<Json<User>, ApiError> {
-    repo::users::expect(&state.db.read, &state.config, auth.id)
-        .await
-        .map(Json)
+    repo::users::expect(&state.db.read, auth.id).await.map(Json)
 }
 
 async fn patch_me(
@@ -180,16 +172,12 @@ async fn patch_me(
     if let Some(style) = &req.style {
         validate::style(style)?;
     }
-    // The image is the one field on a status that names something rather than
-    // saying something, so it is checked against the store and comes back as
-    // the object key the row holds (T-506).
-    let image_key = match &req.status {
-        Some(status) => {
-            validate::status(status)?;
-            validate::status_image(&state.db.read, auth.id, status.image_id).await?
-        }
-        None => None,
-    };
+    // A status has no picture any more (#269). An older app still sends
+    // `image_id`, so it is accepted and ignored: nothing is checked or stored
+    // for it, and saving the rest of the status is never refused over it.
+    if let Some(status) = &req.status {
+        validate::status(status)?;
+    }
     if let Some(sound) = &req.entrance_sound {
         if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {
             return Err(ApiError::validation(
@@ -241,41 +229,30 @@ async fn patch_me(
         .await?;
     }
 
-    // The image this save replaced, if it replaced one. Dropped after the
-    // commit: a status that has stopped pointing at a file is the only moment
-    // anybody can know the file is unreachable, and doing it inside the
-    // transaction would delete bytes a rollback then wanted back.
-    let mut replaced_image: Option<String> = None;
-
     if let Some(status) = &req.status {
         // `away_since` is server-owned: stamped when an away message appears or
         // changes, cleared with it.
-        let previous: Option<(Option<String>, Option<i64>, Option<String>)> = sqlx::query_as(
-            "SELECT away_message, away_since, image_key FROM user_status WHERE user_id = ?",
-        )
-        .bind(auth.id.to_vec())
-        .fetch_optional(&mut *tx)
-        .await?;
-        if let Some((_, _, Some(had))) = &previous {
-            if Some(had) != image_key.as_ref() {
-                replaced_image = Some(had.clone());
-            }
-        }
-        let prev_away = previous.map(|(message, since, _)| (message, since));
+        let prev_away: Option<(Option<String>, Option<i64>)> =
+            sqlx::query_as("SELECT away_message, away_since FROM user_status WHERE user_id = ?")
+                .bind(auth.id.to_vec())
+                .fetch_optional(&mut *tx)
+                .await?;
         let away_since = match (&status.away_message, prev_away) {
             (None, _) => None,
             (Some(new), Some((Some(old), Some(since)))) if new == &old => Some(since),
             (Some(_), _) => Some(now_ms()),
         };
+        // `image_key` is not written: migration 0006 cleared it and it stays
+        // empty (#269).
         sqlx::query(
             "INSERT INTO user_status
-               (user_id, line, reading, listening, working_on, image_key,
+               (user_id, line, reading, listening, working_on,
                 away_message, away_since, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET
                line = excluded.line, reading = excluded.reading,
                listening = excluded.listening, working_on = excluded.working_on,
-               image_key = excluded.image_key, away_message = excluded.away_message,
+               away_message = excluded.away_message,
                away_since = excluded.away_since, updated_at = excluded.updated_at",
         )
         .bind(auth.id.to_vec())
@@ -283,7 +260,6 @@ async fn patch_me(
         .bind(&status.reading)
         .bind(&status.listening)
         .bind(&status.working_on)
-        .bind(&image_key)
         .bind(&status.away_message)
         .bind(away_since)
         .bind(now_ms())
@@ -311,47 +287,9 @@ async fn patch_me(
 
     tx.commit().await.map_err(ApiError::from)?;
 
-    if let Some(key) = replaced_image {
-        drop_replaced_image(&state, &key).await;
-    }
-
-    let user = repo::users::expect(&state.db.read, &state.config, auth.id).await?;
+    let user = repo::users::expect(&state.db.read, auth.id).await?;
     state.gateway.publish(ServerEvent::UserUpdate(user.clone()));
     Ok(Json(user))
-}
-
-/// Throw away the image a status has just stopped pointing at.
-///
-/// Only when the file is on nothing else. An image somebody also shared in a
-/// room belongs to that message and stays; one uploaded for the status alone is
-/// unreachable the moment the status forgets it, and the sweeper will not take
-/// it either — a status image is the one thing `expiry::sweep` skips whatever
-/// its age (T-505), which is exactly why it has to be dropped here.
-///
-/// Failure is not worth refusing the save for. The status is written, the
-/// person's image changed, and the worst case is bytes against the pool.
-async fn drop_replaced_image(state: &AppState, key: &str) {
-    let Some(id) = crate::storage::key_owner(key) else {
-        return;
-    };
-    let record = match repo::attachments::record(&state.db.read, id).await {
-        Ok(Some(record)) if record.message_id.is_none() => record,
-        _ => return,
-    };
-    if let Err(err) = state.storage.delete_object(&record.object_key).await {
-        tracing::warn!(error = %err, key, "could not delete a replaced status image");
-        return;
-    }
-    if let Some(poster) = &record.poster_key {
-        let _ = state.storage.delete_object(poster).await;
-    }
-    if let Err(err) = sqlx::query("DELETE FROM attachments WHERE id = ?")
-        .bind(id.to_vec())
-        .execute(&state.db.write)
-        .await
-    {
-        tracing::warn!(error = ?err, "could not forget a replaced status image");
-    }
 }
 
 async fn change_password(
@@ -416,7 +354,7 @@ async fn put_notify_rule(
     auth: AuthedUser,
     Json(rule): Json<NotifyRule>,
 ) -> Result<StatusCode, ApiError> {
-    repo::users::expect(&state.db.read, &state.config, rule.target_user_id).await?;
+    repo::users::expect(&state.db.read, rule.target_user_id).await?;
     if let Some(room) = rule.room_id {
         // A rule naming a DM you are not in is a way to ask whether that DM
         // exists, one guessed id at a time. It answers like any other room you

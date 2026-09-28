@@ -298,17 +298,17 @@ async fn a_finished_upload_that_never_became_a_message_ages_out_too() {
     assert_eq!(object_status(&server, &orphan).await, 404);
 }
 
-/// A status image is not on a message and would otherwise be swept as an
-/// orphan. Somebody's status quietly losing its picture after a year is not a
-/// thing they could connect to a file expiry they never set (T-506).
+/// Statuses have no pictures now (#269), so the sweeper no longer asks
+/// whether one points at a file. Even a row that still names one — a server
+/// that has not run migration 0006, or a row edited by hand — does not keep
+/// the file past the window. The upgrade end to end is in `status_image.rs`.
 #[tokio::test]
-async fn a_status_image_is_never_swept() {
+async fn a_file_a_status_still_names_ages_out_all_the_same() {
     let (server, token, _room) = fixture(|_| {}).await;
     let image = upload(&server, &token, "me.txt", filler(900)).await;
 
-    // Set straight on the column rather than through `PATCH /me`, so this
-    // stays a test of the sweeper alone. The endpoint's own version of it is
-    // `a_status_image_survives_a_year` in `status_image.rs` (T-506).
+    // Set straight on the column, as a server before #269 did, so this stays a
+    // test of the sweeper alone.
     let key = sqlx::query_scalar::<_, String>("SELECT object_key FROM attachments WHERE id = ?")
         .bind(image.id.to_vec())
         .fetch_one(&server.state.db.read)
@@ -325,8 +325,8 @@ async fn a_status_image_is_never_swept() {
     .unwrap();
 
     age_everything(&server, 900).await;
-    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
-    assert_eq!(object_status(&server, &image).await, 200);
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 1);
+    assert_eq!(object_status(&server, &image).await, 404);
 }
 
 /// The status bar's third figure (SPEC §5.6), and the ceiling it is measured

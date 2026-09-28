@@ -313,8 +313,7 @@ async fn assemble(
     asker: UserId,
     scratch: &Path,
 ) -> anyhow::Result<Vec<Entry>> {
-    let config = &state.config;
-    let users = crate::repo::users::all(&state.db.read, config)
+    let users = crate::repo::users::all(&state.db.read)
         .await
         .map_err(anyhowed)?;
     let by_id: HashMap<UserId, User> = users.iter().map(|u| (u.id, u.clone())).collect();
@@ -1049,7 +1048,5 @@ mod tests {
         let key = object_key(ExportId::new());
         assert!(key.starts_with("exports/"));
         assert!(key.ends_with(".zip"));
-        // `key_owner` is what decides whether a key belongs to an attachment.
-        assert_eq!(crate::storage::key_owner(&key), None);
     }
 }

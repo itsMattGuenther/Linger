@@ -27,13 +27,11 @@ const GAP_PX = 4;
 const EDGE_PX = 8;
 
 export default function PersonName({
-  baseUrl,
   user,
   name,
   state,
   className,
 }: {
-  baseUrl: string;
   /** Undefined for somebody the store has never heard of. */
   user: User | undefined;
   /** What to draw. The caller already worked out the fallback. */
@@ -66,20 +64,18 @@ export default function PersonName({
         {name}
       </button>
       {open ? (
-        <Popover user={user} state={state} anchor={anchor.current} onClose={close} baseUrl={baseUrl} />
+        <Popover user={user} state={state} anchor={anchor.current} onClose={close} />
       ) : null}
     </>
   );
 }
 
 function Popover({
-  baseUrl,
   user,
   state,
   anchor,
   onClose,
 }: {
-  baseUrl: string;
   user: User;
   state: PresenceState;
   anchor: HTMLElement | null;
@@ -156,7 +152,7 @@ function Popover({
       {/* The away message supersedes the status line (SPEC §4.6), so it is
           drawn here and `StatusCard` is told to leave the line out. */}
       {away === null ? null : <p className="person-away">“{away}”</p>}
-      <StatusCard user={user} awayShown={away !== null} baseUrl={baseUrl} />
+      <StatusCard user={user} awayShown={away !== null} />
       {empty ? <p className="popover-empty meta">no status</p> : null}
     </div>,
     document.body,

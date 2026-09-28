@@ -73,6 +73,33 @@ test("status preview shows the draft, with away replacing the status line, witho
   ).toBeUndefined();
 });
 
+test("the status editor offers no picture, and a save sends none (#269)", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/console.html");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Edit status", exact: true }).click();
+  const editor = page.locator(".status-editor");
+  await expect(editor.locator('input[type="file"]')).toHaveCount(0);
+  await expect(editor.getByRole("img")).toHaveCount(0);
+  await expect(editor).not.toContainText(/image|picture/i);
+  await editor
+    .getByRole("textbox", { name: "reading", exact: true })
+    .fill("The Creative Act");
+  await editor.getByRole("button", { name: "save", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.dataset.lastMe ?? ""),
+    )
+    .toContain("The Creative Act");
+  const sent: unknown = JSON.parse(
+    await page.evaluate(() => document.documentElement.dataset.lastMe ?? "{}"),
+  );
+  expect(sent).toMatchObject({
+    status: { reading: "The Creative Act", image_id: null, image_url: null },
+  });
+});
+
 for (const [width, scale] of [
   [1440, 100],
   [760, 100],
