@@ -73,37 +73,84 @@ test("icons and markers sit exactly in the middle of their boxes (#144, #164, #1
 });
 
 // Idle was the here dot, a little dimmed, and easy to miss beside it (#259).
-test("idle is 💤 in the person's own color, its big Z where a dot's middle is, inside the lead column", async ({ page }) => {
+test("idle and away are their mark at half strength, and offline is a hollow dot, in their color at both sizes (#301)", async ({ page }) => {
   for (const size of ["md", "sm"]) {
-    const idle = page.getByRole("img", { name: `Eli (${size}), idle` });
-    await expect(idle).toHaveCount(1);
-    const drawn = await idle.evaluate((node) => {
-      const here = node.parentElement?.querySelector('.k-marker[data-state="here"]');
-      const svg = node.querySelector("svg");
-      const box = (el: Element | null | undefined) => el?.getBoundingClientRect();
-      const [mine, marker, bigZ] = [box(svg), box(node), box(svg?.querySelector("path"))];
-      const slot = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--marker-slot"));
-      return {
-        glyph: svg?.querySelector("path") !== null && svg !== null,
-        color: getComputedStyle(node).color,
-        herColor: here ? getComputedStyle(here).backgroundColor : null,
-        background: getComputedStyle(node).backgroundColor,
-        opacity: getComputedStyle(node).opacity,
-        withinSlot: mine ? mine.width <= slot + 0.01 && mine.height <= slot + 0.01 : false,
-        centered: mine && marker ? Math.abs(mine.x + mine.width / 2 - (marker.x + marker.width / 2)) < 0.5 : false,
-        // The small letters rise above; the big Z sits where a dot would (#259).
-        bigZLevel: bigZ && marker ? Math.abs(bigZ.y + bigZ.height / 2 - (marker.y + marker.height / 2)) < 0.5 : false,
+    const marks = await page.evaluate((size) => {
+      const find = (state: string) => document.querySelector(`[role="img"][aria-label="Eli (${size}), ${state}"]`);
+      const read = (node: Element | null) => {
+        if (!node) return null;
+        const style = getComputedStyle(node);
+        const box = node.getBoundingClientRect();
+        return {
+          background: style.backgroundColor,
+          opacity: style.opacity,
+          ring: style.boxShadow,
+          glyph: node.querySelector("svg") !== null,
+          width: box.width,
+          height: box.height,
+        };
       };
-    });
-    expect(drawn.glyph, size).toBe(true);
-    expect(drawn.color, size).toBe(drawn.herColor);
-    expect(drawn.background, size).toBe("rgba(0, 0, 0, 0)");
-    expect(drawn.opacity, size).toBe("1");
-    expect(drawn.withinSlot, size).toBe(true);
-    expect(drawn.centered, size).toBe(true);
-    expect(drawn.bigZLevel, size).toBe(true);
+      const tokens = getComputedStyle(document.documentElement);
+      return {
+        here: read(find("here")),
+        idle: read(find("idle")),
+        away: read(find("away")),
+        offline: read(find("offline")),
+        ring: tokens.getPropertyValue(size === "sm" ? "--marker-ring-sm" : "--marker-ring").trim(),
+      };
+    }, size);
+    const { here, idle, away, offline } = marks;
+    // Idle is the dot itself, their color, at half strength: no 💤.
+    expect(idle, size).toMatchObject({ background: here?.background, opacity: "0.5", glyph: false, width: here?.width, height: here?.height });
+    // Away is the moon at half strength.
+    expect(away, size).toMatchObject({ opacity: "0.5", glyph: true });
+    // Offline is the dot's outline in their color, the dot's own size.
+    expect(offline, size).toMatchObject({ background: "rgba(0, 0, 0, 0)", glyph: false, width: here?.width, height: here?.height });
+    expect(offline?.ring, size).toBe(`${here?.background} 0px 0px 0px ${marks.ring} inset`);
   }
 });
+
+// A ring was kept out of the kit because one can stop reading as a ring at a
+// small size (#301). Painted, the offline dot has its color at the edge and
+// the page's own background in the middle, at 6px and 8px, at 100% and 200%.
+for (const scale of [1, 2]) {
+  test.describe(`at ${scale * 100}%`, () => {
+    test.use({ deviceScaleFactor: scale });
+    test("an offline dot is painted hollow at both sizes (#301)", async ({ page }) => {
+      await openGallery(page);
+      for (const size of ["md", "sm"]) {
+        const mark = page.getByRole("img", { name: `Eli (${size}), offline` });
+        const png = await mark.screenshot({ animations: "disabled" });
+        const painted = await page.evaluate(async (data) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${data}`;
+          await image.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const context = canvas.getContext("2d");
+          if (!context) return null;
+          context.drawImage(image, 0, 0);
+          const at = (x: number, y: number) => [...context.getImageData(x, y, 1, 1).data].slice(0, 3);
+          const w = image.width;
+          const h = image.height;
+          const middle = at(Math.floor(w / 2), Math.floor(h / 2));
+          // The brightest pixel along the middle row: the ring's color.
+          let edge = middle;
+          for (let x = 0; x < w; x += 1) {
+            const pixel = at(x, Math.floor(h / 2));
+            if (pixel.reduce((a, b) => a + b, 0) > edge.reduce((a, b) => a + b, 0)) edge = pixel;
+          }
+          return { middle, edge };
+        }, png.toString("base64"));
+        expect(painted, size).not.toBeNull();
+        const lift = (pixel: number[]) => pixel.reduce((a, b) => a + b, 0);
+        // The ring is clearly brighter than its own middle: it reads hollow.
+        expect(lift(painted?.edge ?? []) - lift(painted?.middle ?? []), `${size} ring over its middle`).toBeGreaterThan(40);
+      }
+    });
+  });
+}
 
 test("a person with no status line has their name level with their marker, not above an empty line", async ({ page }) => {
   const off = await page.evaluate((tolerance) => {

@@ -144,26 +144,62 @@ test("a new message moves its DM to the top, theirs or yours, and reading it doe
   await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
 });
 
-test("somebody idle shows 💤 in their color, and says idle in words (#259)", async ({ page }) => {
-  await page.goto("/tests/fixtures/next-list.html?idle");
-  const callie = rows(page, "People").filter({ hasText: "Callie" });
-  const marker = callie.locator('[data-kit="Marker"]');
-  await expect(marker).toHaveAttribute("data-state", "idle");
-  await expect(marker.locator("svg path")).toHaveCount(3);
-  await expect(callie).toContainText("idle");
-  // Her row has a second line, and the big Z sits level with her name, not
-  // down between the two lines where the dots are centered.
-  const level = await callie.evaluate((row) => {
-    const title = row.querySelector(".k-row-title");
-    const bigZ = row.querySelector('[data-kit="Marker"] svg path')?.getBoundingClientRect();
-    if (!title || !bigZ) return null;
-    const range = document.createRange();
-    range.selectNodeContents(title);
-    const name = range.getBoundingClientRect();
-    return Math.abs(bigZ.top + bigZ.height / 2 - (name.top + name.height / 2));
-  });
-  expect(level).not.toBeNull();
-  expect(level ?? Infinity).toBeLessThanOrEqual(1);
+// The lights off (#301): idle is their dot at half strength and a grey name,
+// with idle in words. The dot sits where every dot sits, whether or not
+// there's a status line under the name: the 💤 used to be lifted to the
+// name's line, which put it above the name in a row with nothing under it.
+test("somebody idle is a half-strength dot and a grey name, says idle in words, and the dot sits where any dot does (#301)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?idle=many");
+  await page.evaluate(() => document.fonts.ready);
+  const here = rows(page, "People here");
+  // Callie has no status line; Dave has one; Jules is around, with one.
+  for (const who of ["Callie", "Dave"]) {
+    const row = here.filter({ hasText: who });
+    await expect(row.locator('[data-kit="Marker"]')).toHaveAttribute("data-state", "idle");
+    await expect(row.locator('[data-kit="Marker"] svg')).toHaveCount(0);
+    await expect(row.locator('[data-kit="Name"]')).toHaveAttribute("data-dim", "yes");
+    await expect(row).toContainText("idle");
+  }
+  await expect(here.filter({ hasText: "Jules" }).locator('[data-kit="Name"]')).not.toHaveAttribute("data-dim", "yes");
+  const placed = (who: string) =>
+    here.filter({ hasText: who }).evaluate((row) => {
+      const dot = row.querySelector('[data-kit="Marker"]')?.getBoundingClientRect();
+      const title = row.querySelector(".k-row-title");
+      const box = row.getBoundingClientRect();
+      if (!dot || !title) return null;
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const name = range.getBoundingClientRect();
+      return { x: dot.x - box.x, fromMiddle: dot.y + dot.height / 2 - (box.y + box.height / 2), offName: Math.abs(dot.y + dot.height / 2 - (name.y + name.height / 2)) };
+    });
+  const [callie, dave, jules] = [await placed("Callie"), await placed("Dave"), await placed("Jules")];
+  // With nothing under the name, the dot is level with it.
+  expect(callie?.offName ?? Infinity).toBeLessThanOrEqual(1);
+  // With a status line, it's where the around person's dot is.
+  expect(Math.abs((dave?.fromMiddle ?? Infinity) - (jules?.fromMiddle ?? 0))).toBeLessThanOrEqual(0.5);
+  // And every dot is in the same column.
+  expect(new Set([callie?.x, dave?.x, jules?.x].map((x) => Math.round(x ?? -1))).size).toBe(1);
+});
+
+test("somebody away is a grey name and a half-strength moon, with their away message warm; your own card stays lit (#301)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?away");
+  await page.evaluate(() => document.fonts.ready);
+  const sam = rows(page, "Away").filter({ hasText: "Sam" });
+  await expect(sam.locator('[data-kit="Marker"]')).toHaveAttribute("data-state", "away");
+  await expect(sam.locator('[data-kit="Name"]')).toHaveAttribute("data-dim", "yes");
+  expect(await sam.locator('[data-kit="Marker"]').evaluate((node) => getComputedStyle(node).opacity)).toBe("0.5");
+  const warm = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ink-warm").trim());
+  const note = await sam.locator(".k-row-detail").evaluate((node) => getComputedStyle(node).color);
+  expect(note).toBe(await page.evaluate((hex) => {
+    const probe = document.createElement("span");
+    probe.style.color = hex;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, warm));
+  // You're away here too (`?away`), and your own name at the top stays lit.
+  await expect(page.getByRole("region", { name: "You" }).locator('[data-kit="Name"]').first()).not.toHaveAttribute("data-dim", "yes");
 });
 
 test("with no DMs yet, the heading and its New message button are still there", async ({ page }) => {

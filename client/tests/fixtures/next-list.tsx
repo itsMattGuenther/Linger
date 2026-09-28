@@ -108,8 +108,19 @@ const many = query.has("many")
     }
   : bare;
 // `?idle`: Callie hasn't touched anything for ten minutes (#259).
+// `?idle=many`: Callie, Eli and Dave are all idle, as a busy evening's list
+// looks. Callie's and Eli's names glow, and they have no status line, so
+// their rows are a name and nothing under it.
+const idleIds = query.get("idle") === "many" ? new Set([people.callie.id, people.eli.id, people.dave.id]) : new Set([people.callie.id]);
+const glowing = new Set(query.get("idle") === "many" ? [people.callie.id, people.eli.id] : []);
+const glowUp = (user: User): User =>
+  glowing.has(user.id) ? { ...user, style: { ...user.style, effect: "glow" }, status: user.status && { ...user.status, line: null } } : user;
 const shown = query.has("idle")
-  ? { ...many, presence: many.presence.map((entry) => (entry.user_id === people.callie.id ? { ...entry, state: "idle" as const } : entry)) }
+  ? {
+      ...many,
+      users: many.users.map(glowUp),
+      presence: many.presence.map((entry) => (idleIds.has(entry.user_id) ? { ...entry, state: "idle" as const, room_id: null } : entry)),
+    }
   : many;
 // `?fields`: Jules and you have fields with labels of your own, web
 // addresses among them (#270); `&long`, as long as the server takes.

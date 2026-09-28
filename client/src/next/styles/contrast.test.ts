@@ -230,7 +230,7 @@ describe("contrast of the new client's tokens", () => {
   // colors are read from the stylesheets that paint them. Dark is the only
   // theme (docs/decisions.md, 2026-09-28).
   it("keeps an offline name at 4.5:1 on the list, and on a hovered or selected row", () => {
-    const offline = tokenIn(NAME, ':root .name.k-name[data-offline="yes"]', "color", "kit/Name.css");
+    const offline = tokenIn(NAME, ':root .name.k-name[data-dim="yes"]', "color", "kit/Name.css");
     const behind: Array<[string, string]> = [
       ["the list", tokenIn(LIST, ".nx-list", "background", "app/list/ListView.css")],
       ["a hovered or selected row", tokenIn(ROW, ".k-row-main:hover:not(:disabled)", "background", "kit/Row.css")],

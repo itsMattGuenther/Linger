@@ -11,9 +11,9 @@
  * `.k-name` adds what the old client never had: a fixed line box per size, so
  * no face can change a row's height, and a box exactly as wide as the letters.
  * The glow differs too: a light behind the letters sized in the name's own
- * ems, not a fixed text shadow (see "Glow" below). And `data-offline` draws
+ * ems, not a fixed text shadow (see "Glow" below). And `data-dim` draws
  * the name in a dim grey with none of its color or effects, for somebody
- * offline in the list (#274; see "Offline" below).
+ * idle, away or offline in the list (#274, #301; see "The lights off" below).
  */
 
 .k-name {
@@ -194,13 +194,14 @@
   filter: drop-shadow(0 0 var(--name-glow) var(--person-name, var(--text-primary)));
 }
 
-/* Offline (#274): a dim neutral grey, with none of their color, gradient,
-   glow or shimmer, so the list's Offline group reads as nobody home. Their
+/* The lights off (#274, #301): idle, away or offline in the list, a dim
+   neutral grey, with none of their color, gradient, glow or shimmer, so only
+   somebody who's here is lit. Their
    face, weight and slant stay, so it is still their name; with plain names
    on, the face is the reader's default as for everyone. As specific as the
    rules that paint a gradient, a shimmer, a glow or a plain name, and after
    all of them, so it wins over every one. */
-:root .name.k-name[data-offline="yes"] {
+:root .name.k-name[data-dim="yes"] {
   color: var(--text-offline);
   -webkit-text-fill-color: currentcolor;
   background-image: none;
@@ -211,7 +212,7 @@
 
 /* High contrast repaints the letters in the system's text color and drops
    text shadows; a filter it would keep, so the glow goes too. Last, so it
-   wins over both rules that draw it. An offline name keeps its dimness in
+   wins over both rules that draw it. A dim name keeps its dimness in
    the system's own color for dim text, which the contrast theme chooses. */
 @media (forced-colors: active) {
   :root:not([data-normalize="true"]) .name[data-name-effect="glow"],
@@ -219,7 +220,7 @@
     filter: none;
   }
 
-  :root .name.k-name[data-offline="yes"] {
+  :root .name.k-name[data-dim="yes"] {
     color: GrayText;
   }
 }

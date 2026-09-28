@@ -119,7 +119,9 @@ export function ServerBody({
       key={row.user.id}
       lead={{ kind: "person", person: markerFor(row.user, row.state) }}
       lines="two"
-      title={<Name person={row.user} offline={row.state === "offline"} />}
+      // The lights are on only for somebody here (#301): idle, away and
+      // offline names are the dim grey, and their mark says which.
+      title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
       label={`${row.user.display_name}, ${row.note}`}
       trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
       note={row.note}

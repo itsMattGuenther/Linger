@@ -85,7 +85,7 @@ required a change (marked ▲).
 | `--text-secondary` | `#c0c6d2` | row text, button labels |
 | `--text-muted` | `#8d96a9` | second lines, notes, labels, placeholders, and the dimmest text allowed |
 | `--text-away` | `#e9dcc4` | away messages |
-| `--text-offline` | `#8d96a9` | an offline person's name in the list (#274): none of their color, the dimmest text allowed |
+| `--text-offline` | `#8d96a9` | the name in the list of somebody idle, away or offline (#274, #301): none of their color, the dimmest text allowed |
 | `--text-accent` / `--accent` | `#f3b55c` | the lamp: primary action, selected choice, your voice |
 | `--text-on-accent` | `#1c1206` | text on the lamp |
 | `--lit-wash` / `--lit-wash-hover` / `--lit-edge` | the lamp at 12%, 16% and 28% | a DM you haven't read, lit (#291) |
@@ -214,19 +214,23 @@ A square with one icon, exactly centered by the grid.
 
 ### Marker, MarkerSlot, GroupMarker, HashMark, MarkerCluster
 
-Presence, in the person's palette color:
+Presence, always in the person's palette color. Somebody here has the lights
+on; the other three are dimmed, and their shape says which (#301):
 
 | State | Drawn as |
 |---|---|
 | here (in a room) | a plain solid dot |
 | around | the same plain dot; the words beside it ("in #general", "around") tell them apart |
-| idle | 💤, drawn in their color, as wide as the lead column (#259) |
-| away | a crescent moon |
-| offline | a dot, dimmed |
+| idle | the dot at half strength |
+| away | a crescent moon, at half strength |
+| offline | a hollow dot: the dot's outline (`--marker-ring`, `--marker-ring-sm` at the small size), at 60% |
 
-`typing` makes a marker breathe. There are no rings or halos at any size: a
-ring that shows at one size and not another makes one person's presence look
-two ways.
+`typing` makes a marker breathe. The hollow dot is the one ring: an outline of
+the dot itself, never a halo around one. A ring was kept out because one can
+stop reading as a ring at a small size, so the kit checks it's painted hollow
+at 6px and 8px, at 100% and 200%. It's drawn as an inner shadow rather than
+a border, because engines round a border to whole pixels. The 💤 idle had
+from #259 is gone, and so is the lift that put it on the name's line.
 
 - **One mapping.** `markerStateOf(PresenceState)` is the only translation from
   the wire's five presence states, and `Marker` is the only way presence is
@@ -278,15 +282,16 @@ gradient at 92°, and shimmer or glow.
   moves.
 - **`raw`** draws the person's own style even with plain names on, for the
   style picker's preview.
-- **`offline`** draws the name in `--text-offline`, a dim neutral grey, with
-  none of their color, gradient, glow or shimmer, so somebody offline reads
-  as nobody home at a glance (#274). Their face, weight and slant stay, so
-  it is still their name. It wins over every rule that paints a name, plain
-  names included (the face is then the reader's default, as for everyone),
-  and in high contrast it is the system's `GrayText`. The list passes it for
-  the Offline group's rows only, from the person's presence as it is now, so
-  the color comes back the moment they do. Names in a conversation and on
-  the person card keep their colors.
+- **`dim`** draws the name in `--text-offline`, a dim neutral grey, with
+  none of their color, gradient, glow or shimmer: the lights off (#274,
+  #301). Their face, weight and slant stay, so it is still their name. It
+  wins over every rule that paints a name, plain names included (the face is
+  then the reader's default, as for everyone), and in high contrast it is the
+  system's `GrayText`. The list passes it for People rows whose person is
+  idle, away or offline, from their presence as it is now, so the color
+  comes back the moment they're around or in a room. An away message keeps
+  its warm color. Names in a conversation, on the person card, and your own
+  at the top of the list keep their colors.
 - **`size="inline"`** is the one size without a box: the name flows inside a
   sentence ("Replying to Jules:", "Eli and Sam are typing", a message's
   author) at the sentence's own size and line height, so it never makes its
@@ -503,8 +508,8 @@ place, in groups, the showing one lit by the lamp with a bar along its edge.
 Windows' high-contrast mode (forced colors) repaints backgrounds and borders
 in the system's colors, so a state shown only by a color would vanish. Each
 part that has one keeps it with a system color, in its own stylesheet:
-presence dots are drawn in the text color; an offline person's name is in
-`GrayText`, the system's dim text; the selected row, the showing tab and the
+presence dots are drawn in the text color (an offline one as its outline);
+a dim name (idle, away or offline) is in `GrayText`, the system's dim text; the selected row, the showing tab and the
 showing Settings section are outlined in `Highlight`; a switch that's on, a
 ticked box and whoever's talking are filled with it. `kit.spec.ts` checks
 each with high contrast emulated, and `next-offline-names.spec.ts` the
@@ -773,7 +778,8 @@ built on the rows' own grid so nothing new lines up by eye:
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
-| An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; somebody here keeps their look; going offline and coming back (around, away, idle, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
+| An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
+| Presence marks (#301): idle is the dot at half strength with no 💤, away the moon at half strength, offline the dot's outline in their color at both sizes, painted hollow at 6px and 8px at 100% and 200%; in the list an idle dot sits where any dot does, with or without a status line; an away name is grey with its message warm, and your own card stays lit | `kit.spec.ts` › idle and away are their mark at half strength; an offline dot is painted hollow; `next-list.spec.ts` › somebody idle; somebody away |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |

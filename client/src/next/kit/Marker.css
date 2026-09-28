@@ -1,15 +1,17 @@
 /*
  * Presence markers. One shape per state, drawn the same way at every size and
- * everywhere:
+ * everywhere, always in the person's color:
  *
- *   here, around   a plain solid dot in their color (the words beside it,
- *                  "in #general" or "around", tell the two apart)
- *   idle           💤 in their color (#259)
- *   away           a crescent moon in their color
- *   offline        the dot, dimmed
+ *   here, around   a plain solid dot (the words beside it, "in #general" or
+ *                  "around", tell the two apart)
+ *   idle           the dot at half strength (#301)
+ *   away           a crescent moon, at half strength (#301)
+ *   offline        a hollow dot: just its outline (#301)
  *
- * No rings or halos: a ring shows at one size and not another, and then one
- * person's presence looks two ways.
+ * Somebody here has the lights on; the other three are dimmed, and their
+ * shape says which. The hollow dot is the one ring allowed, and it's an
+ * outline of the dot itself, never a halo around one: at 6px it still reads
+ * hollow, at 100% and 200% (checked for #301).
  */
 .k-marker {
   --marker-color: var(--icon-muted);
@@ -27,32 +29,37 @@
   height: var(--marker-sm);
 }
 
-.k-marker[data-state="offline"] {
-  opacity: 0.32;
+/* Idle and away are dimmed: at home, but the lights are off (#301). */
+.k-marker[data-state="idle"],
+.k-marker[data-state="away"] {
+  opacity: 0.5;
 }
 
-/* The moon and the 💤 have less ink than a disc; they fill their box a little
-   more so all three read as the same weight. The 💤 is three thin letters, so
-   it takes the lead column's whole width (#259). */
-.k-marker[data-state="away"],
-.k-marker[data-state="idle"] {
+/* Offline is the dot's outline, nobody home (#301). Drawn as an inner
+   shadow rather than a border: engines round a border to whole pixels, so a
+   1.5px one is 1px at 100%, and a shadow isn't rounded. */
+.k-marker[data-state="offline"] {
+  background: none;
+  box-shadow: inset 0 0 0 var(--marker-ring) var(--marker-color);
+  opacity: 0.6;
+}
+
+.k-marker[data-size="sm"][data-state="offline"] {
+  box-shadow: inset 0 0 0 var(--marker-ring-sm) var(--marker-color);
+}
+
+/* The moon has less ink than a disc; it fills its box a little more so the
+   two read as the same weight. */
+.k-marker[data-state="away"] {
   background: none;
   color: var(--marker-color);
 }
 
-.k-marker[data-state="away"] svg,
-.k-marker[data-state="idle"] svg {
+.k-marker[data-state="away"] svg {
   width: 100%;
   height: 100%;
   fill: currentcolor;
   transform: scale(1.18);
-}
-
-/* The big Z, not the whole 💤, sits where a dot's middle would: the two
-   small letters rise above it, as they do in the emoji. 30% of the marker is
-   how far the big Z's middle sits below the glyph's, once scaled. */
-.k-marker[data-state="idle"] svg {
-  transform: translateY(-30%) scale(1.75);
 }
 
 .k-marker[data-typing="yes"] {
@@ -152,9 +159,17 @@
     background: CanvasText;
   }
 
-  .k-marker[data-state="away"],
-  .k-marker[data-state="idle"] {
+  .k-marker[data-state="away"] {
     background: none;
     color: CanvasText;
+  }
+
+  .k-marker[data-state="offline"] {
+    background: none;
+    box-shadow: inset 0 0 0 var(--marker-ring) CanvasText;
+  }
+
+  .k-marker[data-size="sm"][data-state="offline"] {
+    box-shadow: inset 0 0 0 var(--marker-ring-sm) CanvasText;
   }
 }

@@ -176,6 +176,19 @@ async function pixelsAround(page: Page, name: Locator): Promise<{ pixels: Rgb[];
   }, png.toString("base64"));
 }
 
+/**
+ * The average tint of the ink in a patch, as how far red sits from green and
+ * green from blue: a grey has almost none, a colored name a lot. Only pixels
+ * clearly off the background count, so the empty space around the letters
+ * doesn't water it down.
+ */
+function tintOf(pixels: Rgb[]): number[] {
+  const background = pixels.reduce((dark, pixel) => (pixel[0] + pixel[1] + pixel[2] < dark[0] + dark[1] + dark[2] ? pixel : dark), pixels[0] ?? [0, 0, 0]);
+  const ink = pixels.length === 1 ? pixels : pixels.filter((pixel) => pixel.reduce((sum, v, i) => sum + Math.abs(v - (background[i] ?? 0)), 0) > 60);
+  const n = Math.max(ink.length, 1);
+  return [ink.reduce((sum, p) => sum + (p[0] - p[1]), 0) / n, ink.reduce((sum, p) => sum + (p[1] - p[2]), 0) / n];
+}
+
 // --- The tests -------------------------------------------------------------
 
 test.describe("an offline name is drawn in the dim grey, with none of their look (#274)", () => {
@@ -211,7 +224,10 @@ test.describe("an offline name is drawn in the dim grey, with none of their look
   }
 });
 
-test("going offline takes the color away, and coming back, away or idle brings it back", async ({ page }) => {
+// Only somebody here has the lights on (#301): idle and away are home with
+// the lights off, so their names are the dim grey too, and only around or a
+// room brings their look back.
+test("only somebody here wears their look: idle, away and offline take it away, around or a room brings it back (#301)", async ({ page }) => {
   await open(page);
   const look: Look = { fill: { kind: "gradient", from: "violet", to: "orchid" }, effect: "glow" };
   await restyle(page, styled(people.callie, look));
@@ -233,17 +249,56 @@ test("going offline takes the color away, and coming back, away or idle brings i
   await expect(rows(page, "Offline").filter({ hasText: "Callie" })).toHaveCount(0);
   await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
 
-  // Away is still here enough to wear their colors, and so is idle.
+  // Away and idle are the lights off: dim, in the same face.
   await move(page, people.callie.id, "away", null, "out for a walk");
-  await expectTheirs(page, nameIn(page, "Away", "Callie"), look);
+  const away = nameIn(page, "Away", "Callie");
+  await expectDim(page, away);
+  expect((await paint(away)).font).toBe(face.font);
   await move(page, people.callie.id, "idle");
-  await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
+  await expectDim(page, nameIn(page, "People here", "Callie"));
 
-  // And offline once more, then into a room.
+  // Around again, then offline once more, then into a room.
+  await move(page, people.callie.id, "around");
+  await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
   await move(page, people.callie.id, "offline");
   await expectDim(page, nameIn(page, "Offline", "Callie"));
   await move(page, people.callie.id, "in_room", "r-general");
   await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
+});
+
+test.describe("an idle or away name is the dim grey, glow and all, and an away message keeps its warm color (#301)", () => {
+  test.use({ deviceScaleFactor: 2 });
+  for (const [state, list] of [["idle", "People here"], ["away", "Away"]] as const) {
+    test(state, async ({ page }) => {
+      await open(page);
+      // Callie, who isn't in voice: nothing colorful is drawn after her name,
+      // so every colored pixel near it would be hers.
+      const look: Look = { fill: SOLID, effect: "glow" };
+      await restyle(page, styled(people.callie, look));
+      await move(page, people.callie.id, state, null, state === "away" ? "back after lunch" : null);
+      const callie = nameIn(page, list, "Callie");
+      await expectDim(page, callie);
+      await page.mouse.move(0, 0);
+      // What's painted, read as the letters' overall tint. Chromium on CI
+      // smooths text with colored fringes (blue on one edge of a letter,
+      // orange on the other), so a single pixel can look colorful even on
+      // grey letters; the fringes cancel out over a name, and her lime
+      // wouldn't. The dim letters are tinted like the grey token, not like her.
+      const dim = await pixelsAround(page, callie);
+      await move(page, people.callie.id, "around");
+      const lit = await pixelsAround(page, nameIn(page, "People here", "Callie"));
+      const away = (from: number[], to: number[]) => Math.hypot(...from.map((v, i) => v - (to[i] ?? 0)));
+      const [dimTint, litTint, greyTint] = [tintOf(dim.pixels), tintOf(lit.pixels), tintOf([dim.token])];
+      expect(away(litTint, greyTint), "her own color shows when she's around").toBeGreaterThan(30);
+      expect(away(dimTint, greyTint), "the dim letters are tinted like the grey, not like her").toBeLessThan(away(litTint, greyTint) * 0.25);
+      if (state === "away") {
+        await move(page, people.callie.id, "away", null, "back after lunch");
+        const note = rows(page, "Away").filter({ hasText: "Callie" }).locator(".k-row-detail");
+        await expect(note).toHaveText("back after lunch");
+        expect(await note.evaluate((node) => getComputedStyle(node).color)).toBe(await computed(page, "--text-away"));
+      }
+    });
+  }
 });
 
 test("with plain names on, an offline name is still the dim grey, and everybody else plain", async ({ page }) => {
