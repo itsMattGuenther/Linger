@@ -464,9 +464,9 @@ async function elisView(page: Page) {
         d: {
           room_id: "r-general",
           peers: [
-            { session_id: "s-eli", user_id: "u-eli", controls: { muted: false, deafened: false } },
-            { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
-            { session_id: "s-good-company.example", user_id: "u-matt", controls: mine },
+            { session_id: "s-eli", user_id: "u-eli", controls: { muted: false, deafened: false }, forwarded: true },
+            { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false }, forwarded: true },
+            { session_id: "s-good-company.example", user_id: "u-matt", controls: mine, forwarded: true },
           ],
         },
       });
@@ -480,9 +480,9 @@ test("somebody talking or you talking moves no chip and no row, and a mute glyph
   await open(page, "?one");
   const bar = await joinGeneral(page);
   const peers = (eliMuted: boolean) => [
-    { session_id: "s-eli", user_id: "u-eli", controls: { muted: eliMuted, deafened: false } },
-    { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
-    { session_id: "s-good-company.example", user_id: "u-matt", controls: { muted: false, deafened: false } },
+    { session_id: "s-eli", user_id: "u-eli", controls: { muted: eliMuted, deafened: false }, forwarded: true },
+    { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false }, forwarded: true },
+    { session_id: "s-good-company.example", user_id: "u-matt", controls: { muted: false, deafened: false }, forwarded: true },
   ];
   const voiceState = (eliMuted: boolean) =>
     page.evaluate((list) => window.core?.frame("https://good-company.example", { op: "voice.state", d: { room_id: "r-general", peers: list } } as never), peers(eliMuted));
@@ -831,11 +831,11 @@ test("the volume card sits over its chip, inside the window, with nothing clippe
       d: {
         room_id: "r-general",
         peers: [
-          { session_id: "s-good-company.example", user_id: "u-matt" },
-          { session_id: "s-dave", user_id: "u-dave" },
-          { session_id: "s-callie", user_id: "u-callie" },
-          { session_id: "s-eli", user_id: "u-eli" },
-          { session_id: "s-jules", user_id: "u-jules" },
+          { session_id: "s-good-company.example", user_id: "u-matt", forwarded: true },
+          { session_id: "s-dave", user_id: "u-dave", forwarded: true },
+          { session_id: "s-callie", user_id: "u-callie", forwarded: true },
+          { session_id: "s-eli", user_id: "u-eli", forwarded: true },
+          { session_id: "s-jules", user_id: "u-jules", forwarded: true },
         ],
       },
     } as never),

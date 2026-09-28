@@ -384,4 +384,5 @@ The principles don't change:
 - **Many rooms.** The narrow list suits three to six rooms per server, not
   fifteen.
 - **Big groups.** Voice rooms above eight people and servers of 50–60 are a
-  separate piece of work, tracked in #197.
+  separate piece of work, tracked in #197. (Voice rooms now hold 25, through
+  the host's server.)

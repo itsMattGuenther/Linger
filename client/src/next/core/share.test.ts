@@ -1015,7 +1015,7 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
-  it("Settings picking other devices or the old way applies to the call at once, and outside one waits for the join (#249)", async () => {
+  it("Settings picking other devices applies to the call at once, and outside one waits for the join (#249)", async () => {
     const { owner, viewer, core } = await windows("settings");
     const api = fakeOwnerApi(["token-1"]);
     await owner.gateway.connect(api as never);
@@ -1023,27 +1023,20 @@ describe("a viewer window sharing the owner's connection", () => {
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
     const chosen = () => invoked.filter((call) => call.cmd === "voice_choose_devices").map((call) => call.args);
-    const switched = () => invoked.filter((call) => call.cmd === "voice_forwarding").map((call) => call.args.on);
 
     // Out of voice: Settings has saved them, and the next join opens them.
     await follower.intend({ kind: "voice.devices", input: "USB mic", output: null });
-    await follower.intend({ kind: "voice.forwarding", on: false });
     await new Promise((settle) => setTimeout(settle, 20));
     expect(chosen()).toEqual([]);
-    expect(switched()).toEqual([]);
 
     await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
     await vi.waitFor(() => expect(invoked.filter((call) => call.cmd === "voice_join")).toHaveLength(1));
     await follower.intend({ kind: "voice.devices", input: null, output: "Headphones" });
     await vi.waitFor(() => expect(chosen()).toEqual([{ input: null, output: "Headphones" }]));
-    await follower.intend({ kind: "voice.forwarding", on: false });
-    await vi.waitFor(() => expect(switched()).toEqual([false]));
     // Something that isn't a device name is dropped, not passed on.
     await follower.intend({ kind: "voice.devices", input: 7, output: null } as never);
-    await follower.intend({ kind: "voice.forwarding", on: "no" } as never);
     await new Promise((settle) => setTimeout(settle, 20));
     expect(chosen()).toHaveLength(1);
-    expect(switched()).toHaveLength(1);
     // Never a second join: nobody left the call to change it.
     expect(invoked.filter((call) => call.cmd === "voice_join")).toHaveLength(1);
     follower.stop();

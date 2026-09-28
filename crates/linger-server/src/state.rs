@@ -62,8 +62,9 @@ impl AppState {
             .reload_dms(&db.read)
             .await
             .map_err(|_| anyhow::anyhow!("could not load DM membership from the database"))?;
-        // Voice through this server rather than the mesh (#197). A server told
-        // to forward that can't is refused, not quietly left on the mesh.
+        // Voice through this server (#197), the only way it travels (#306). A
+        // server told to forward that can't is refused, not quietly left with
+        // no voice.
         if let Some(voice) = config.voice_forwarding {
             let address = gateway
                 .start_forwarding(voice.bind, voice.public)

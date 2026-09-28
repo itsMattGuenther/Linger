@@ -76,4 +76,4 @@ body:
     id: voice
     attributes:
       label: "Voice only: devices and networks"
-      description: Which microphone and speakers, and whether the others were on different networks.
+      description: Which microphone and speakers, what kind of network each person was on (home, office, public wifi), and whether it's everyone or one person.

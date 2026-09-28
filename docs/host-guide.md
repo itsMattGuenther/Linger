@@ -47,8 +47,8 @@ The remaining examples assume a root SSH session. If you use another account,
 put `sudo` before each `docker` command.
 
 Before continuing, apply the [firewall rules](vps-setup.md#4-set-the-cloud-firewall):
-TCP **22** for SSH and **80/443** for the app, plus the voice ports if you want
-voice. DNS alone does not open these ports.
+TCP **22** for SSH, **80/443** for the app and UDP **3479** for voice, plus the
+relay's ports if you run it. DNS alone does not open these ports.
 
 ## 2. Point two names at the server
 
@@ -90,9 +90,13 @@ Open `nano compose.yaml` and make these changes together:
 - **On a 50 GiB disk**, remove the `#` before `LINGER_POOL_BYTES` and change
   its value to `10GB`. Keep it aligned with the other environment settings.
   The default 50 GB file pool leaves too little room for Ubuntu and Docker.
-- **If you want voice**, also change `--realm=linger.example.com` to that
-  same main name. The remaining [voice steps](#voice-between-different-networks)
-  add a secret and start the relay.
+- **For voice**, remove the `#` before `LINGER_VOICE_ADDRESS` and put the
+  server's public IP address after it (`curl -4 https://api.ipify.org` prints
+  it). Without it the server carries no voice, and the app says voice isn't
+  set up. [Voice](#voice) says more.
+- **If you'll run the voice relay**, also change `--realm=linger.example.com`
+  to that same main name. [The relay steps](#the-voice-relay) add a secret and
+  start it.
 
 Save with **Ctrl+O**, Enter, then **Ctrl+X**.
 
@@ -123,8 +127,9 @@ desktop app in step 6, **not a browser**. Restarting Linger before you use the
 link creates a new one and invalidates the old one. If you accidentally share
 the link, restart Linger to replace it.
 
-You may also see a warning that `LINGER_TURN_SECRET` is not set. That is about
-the optional voice relay; it does not stop the server or text chat.
+You may also see a warning that `LINGER_VOICE_ADDRESS` is not set, which means
+no voice until you set it, or that `LINGER_TURN_SECRET` is not set, which is
+about the optional voice relay. Neither stops the server or text chat.
 
 From **your own computer**, check the address before opening the app:
 `curl -f https://linger.example.com/health` (replace the example name with
@@ -158,8 +163,9 @@ is good for and when it expires; the link is copied for you the moment it is
 made. Send it however you normally talk to your friends.
 
 An invite link is the only way to get an account. There is no public sign-up.
-Text chat is ready. For voice with friends on other networks, also complete
-[the voice setup](#voice-between-different-networks) below.
+Text chat is ready, and so is voice if you set `LINGER_VOICE_ADDRESS`. For
+friends on networks that block voice (some offices, some public wifi), also set
+up [the voice relay](#the-voice-relay) below.
 
 ---
 
@@ -243,14 +249,14 @@ comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
 
-## Voice for bigger groups
+## Voice
 
-*New in 0.4.1.*
-
-Out of the box, everybody in a voice room sends their voice straight to
-everybody else. That's fine for a handful of people and stops working past
-about ten. Your server can instead take each person's voice once and pass it
-on to the others, up to 25 in a room:
+Voice goes through your server: everybody sends their voice to it once, and
+it passes it on to everyone else in the room, up to 25 at a time. It needs one
+setting and one open port. Without them the server carries no voice at all,
+and the app tells people voice isn't set up rather than offering a call nobody
+could hear. (Servers used to fall back to an older way when this wasn't set,
+voice straight between people's computers. That's gone.)
 
 1. Find the server's public IP address: `curl -4 https://api.ipify.org`.
 2. In `compose.yaml`, remove the `#` before `LINGER_VOICE_ADDRESS` and put that
@@ -272,18 +278,18 @@ on to the others, up to 25 in a room:
 The address is an IP address, not a name, so there's nothing to change in
 your DNS.
 
-Your server then passes voice along. It keeps none of it and plays none of it,
+Your server passes voice along. It keeps none of it and plays none of it,
 but it is on your machine, so you *could* listen, the same way you could read
-messages. While anybody in a voice room is on an older version of the app,
-that room uses the old way, so everybody can still hear everybody.
+messages. Anybody still on Linger 0.4.0 or older can't join voice until they
+update.
 
-## Voice between different networks
+## The voice relay
 
-Two people on the same wifi can talk without any of this. Two people in two
-houses usually cannot: home routers
-hide the computers behind them, and somebody has to introduce the two — that is
-a *relay*, and it is the third container in `compose.yaml`. It is yours, on your
-machine; what passes through it is scrambled sound it cannot listen to.
+Voice goes straight to your server on UDP 3479, which works from behind almost
+any home router. Some networks block it: some offices, some public wifi. The
+*relay* lets people on those through, over the ports it uses. It is the third
+container in `compose.yaml`. It is yours, on your machine; what passes through
+it is scrambled sound it cannot listen to.
 
 Run these steps **on the server**, inside the `linger` folder containing
 `compose.yaml`.
@@ -406,7 +412,7 @@ docker compose --profile voice pull
 docker compose --profile voice up -d
 ```
 
-Repeat the [relay check](#voice-between-different-networks) after updating.
+Repeat the [relay check](#the-voice-relay) after updating.
 
 ## Somebody forgot their password
 
@@ -440,9 +446,18 @@ a connection failure.
 
 ### Voice cannot connect
 
-Run `docker compose --profile voice ps -a` and find `coturn`:
+- **The voice line says `Voice isn't set up on this server`:**
+  `LINGER_VOICE_ADDRESS` isn't set. Follow [Voice](#voice).
+- **It says the server needs an update:** the app is newer than the server.
+  Run the update steps above.
+- **Nobody hears anybody:** check that inbound UDP 3479 is open in both
+  firewalls (and forwarded, if the server is at home), and that
+  `docker compose logs linger` says `voice forwarding is on`.
 
-- **No coturn row:** finish [the voice setup](#voice-between-different-networks)
+For people on a network that blocks voice, the relay has to be running. Run
+`docker compose --profile voice ps -a` and find `coturn`:
+
+- **No coturn row:** finish [the voice setup](#the-voice-relay)
   and start with `docker compose --profile voice up -d`.
 - **Restarting or Exited:** read the first error with
   `docker compose --profile voice logs coturn | head -n 35`. A missing-secret

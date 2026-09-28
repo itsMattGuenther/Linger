@@ -132,7 +132,8 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
-                             storage_used_bytes, storage_limit_bytes, file_expiry_days }
+                             storage_used_bytes, storage_limit_bytes, file_expiry_days,
+                             voice? }
 PATCH /server            (host only) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -178,6 +179,11 @@ starred files and files on pinned messages never expire whatever it says (SPEC �
 They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
 inside the app — see `docs/decisions.md`.
+
+**`voice`** says whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
+(§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so
+rather than offering a call. A server from before the field leaves it out, which a client
+reads as "maybe" (#306).
 
 ### 3.1 DMs
 
@@ -834,11 +840,10 @@ Beyond that, the client must re-identify and refetch.
 | `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). |
 | `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
 | `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room |
-| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding?: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client can take voice through the server (#197) |
+| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
-| `voice.signal` | `{ to, kind, payload }` | pass one WebRTC message to one peer (the mesh) |
-| `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` (forwarding) |
-| `voice.restart` | `{}` | start this session's forwarding connection afresh; the server sends a new `voice.offer` (forwarding) |
+| `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
+| `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
 
 ### Server → client
 
@@ -858,7 +863,6 @@ Beyond that, the client must re-identify and refetch.
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
-| `voice.signal` | `{ from, kind, payload }` — one peer's WebRTC message, **addressed to one session** |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
 
 ```ts
@@ -870,89 +874,69 @@ type PresenceEntry = {
 }
 ```
 
-### Voice signalling
+### Voice
 
-The server's whole part in voice is **introducing two clients to each other** (SPEC
-§4.14). Audio never touches it: `payload` is a WebRTC offer, answer or ICE candidate,
-and it crosses this server as an opaque string that nothing here parses, validates or
-stores. It is a post office, not a participant.
+The server's part in voice is **taking each client's voice once and passing it on to
+everyone else in the room** (SPEC §4.14, #197). It forwards the packets without decoding
+or keeping them. Until #306 there was also a mesh, where the server only introduced
+clients to each other (`voice.signal`) and each sent to every other; it is gone, and so is
+that frame. A client that still sends one is ignored, as any unknown frame is (§9).
 
 ```ts
 type VoiceControls = { muted: boolean; deafened: boolean }
-type VoicePeer   = { session_id: string; user_id: string; controls?: VoiceControls | null }
-type VoiceSignal = "offer" | "answer" | "candidate"
+type VoicePeer   = { session_id: string; user_id: string; controls?: VoiceControls | null; forwarded?: boolean }
 ```
 
-**A peer is a session, not a person.** A peer connection is between two *clients*, and
-one person signed in on a laptop and a desktop is two of them. Session ids survive a
-resume and change on a fresh `identify`, which is exactly the identity a WebRTC session
-has.
+**A seat is a session, not a person.** Each client has its own connection to the server,
+and one person signed in on a laptop and a desktop is two of them. Session ids survive a
+resume and change on a fresh `identify`.
 
 **Controls are self-reported, not remote commands.** Repeating `voice.join`
 for your current room with `controls` changes only your own session's state;
-it does not leave/rejoin or rebuild peer connections. The server normalizes
+it does not leave/rejoin or rebuild the connection. The server normalizes
 `deafened: true` to `muted: true`. Unchanged reports produce no frame. Missing
-controls on a legacy join mean unknown, not an open microphone; repeating a
-legacy join does not erase known state. Reports are held in memory, survive
+controls on a join mean unknown, not an open microphone; repeating a join
+without them does not erase known state. Reports are held in memory, survive
 resume with the seat, and disappear on leaving. They use the ordinary
 membership-filtered `voice.state`, including inside DMs.
 
-This is an additive v1 extension: old servers ignore the extra join field and
-old clients ignore the extra peer field. New clients still enforce local
-controls on an old server, but cannot show others' state. Mic activity and
-output-device health are not inferred from these two booleans. Nor is
+Old servers ignore the extra join field and old clients ignore the extra peer field. New
+clients still enforce local controls on an old server, but cannot show others' state. Mic
+activity and output-device health are not inferred from these two booleans. Nor is
 push-to-talk: a client whose push-to-talk key is up sends silence but reports
 `muted: false`, because not holding the key isn't muting (SPEC §4.14, #232).
 
 **`voice.state` is the whole list every time**, never a delta. It is sent to a room's
-members whenever anybody joins, leaves or changes controls, and a client can act on the newest one it has
-without replaying what came before. Getting it twice is harmless; missing one is not,
-which is why it is a snapshot.
-
-**Who offers is decided by the ids, not by who arrived first.** Of any two peers, the
-one whose `session_id` sorts **lower** sends the offer. Both sides read the same
-`voice.state` and reach the same answer, so exactly one offer is made and no pair ever
-sends two offers at each other. "Whoever joined later offers" would need an order both
-sides agree on, and a reconnect is precisely when they stop agreeing.
-
-**`voice.signal` only reaches a peer in the same voice room.** Both the sender and `to`
-have to be in voice in one room, and it has to be the same one. Without that rule this
-frame is a way to send an arbitrary string to any session on the server, which is a
-side channel nobody asked for and nothing else here has.
-
-A signal to a session that is not there is **dropped, not refused**. Somebody's client
-closing is the ordinary end of a call, and it happens mid-exchange all the time; an
-error frame for it would be noise about a thing that is not wrong.
+members whenever anybody joins, leaves or changes controls, and a client can act on the
+newest one it has without replaying what came before. Getting it twice is harmless;
+missing one is not, which is why it is a snapshot.
 
 **Leaving is implicit as well as explicit.** A session that ends leaves the voice room
-it was in and the other peers are told — as are the peers of a session whose resume
+it was in and the others are told — as are the others of a session whose resume
 window lapses, which is what stops a dead client sitting in the list looking connected.
-A session that *resumes* keeps its place: it is the same client, its peers are still
-connected to it, and it replays whatever it missed.
+A session that *resumes* keeps its seat: it is the same client, and it replays whatever
+it missed, the server's latest offer included.
 
 ### Voice forwarding (#197)
 
 A server with `LINGER_VOICE_ADDRESS` set **forwards voice**: each client sends its voice
-once, to the server, and the server passes it on to everyone else in the room. The mesh
-above stays for clients and servers that don't.
+once, to the server, and the server passes it on to everyone else in the room. It is the
+only way voice travels (#306). A server without it carries no voice at all: every
+`voice.join` there is refused, and `GET /server` says `voice: false` (§3).
 
-- **Who is forwarded.** A room is forwarded while everybody in voice there sent
-  `forwarding: true` in `voice.join`, on a server that forwards; `voice.state` marks each
-  of them `forwarded: true`. One client that didn't (an older app) puts the whole room on
-  the mesh, and when it leaves, forwarding comes back with a fresh `voice.offer` each. A
-  forwarded client and a mesh client can't hear each other, so a room is never both. Old
-  clients never say they can forward, and old servers never mark anybody, so both read
-  as the mesh.
-- **Changing it in a call** (#249). Repeating `voice.join` for your current room with a
-  different `forwarding` applies it at once, as a repeated join does for `controls`: the
-  room is settled again and announced, and moves to the mesh or back. Turning it off in a
-  room with more people than the mesh holds (`MAX_VOICE_PEERS`) is ignored, and the room
-  keeps forwarding. A repeated join with the same answer changes nothing and announces
-  nothing. A server before this change ignored `forwarding` on a repeated join, so the
-  choice waited for the next join there.
+- **Who gets a seat.** A `voice.join` that carries `forwarding`, true or false, on a
+  server that forwards. Every app from 0.4.1 sends it; 0.4.1 to 0.4.3 send `false` when
+  their Settings said "the old way", and are forwarded anyway. A join without it is an app
+  from before 0.4.1, which spoke only the mesh: it is refused, and the room carries on as
+  it was. A refused join, like any voice frame that doesn't fit, gets no answer.
+- **Everybody is marked `forwarded: true`** in `voice.state`. Nobody needs it to know
+  anything now, but apps 0.4.1 to 0.4.3 read it to know they're forwarded, and without
+  it would wait for a mesh nobody offers. A server from before #306 leaves it out for a
+  room on the mesh; a current app that finds its own seat unmarked leaves voice and says
+  the server needs an update.
 - **The server makes every offer; the client only answers.** On joining, the server
   sends `voice.offer`: one m-line for the client to send its microphone on, and one
-  receiving m-line per other forwarded person in the room. `tracks` names whose voice each
+  receiving m-line per other person in the room. `tracks` names whose voice each
   receiving m-line carries, by `mid`; the one m-line it doesn't name is the microphone's.
   When somebody joins or leaves, everybody else gets a new offer, whole. Only one offer
   is out per session at a time: a change while one is out waits for its `voice.answer`.
@@ -971,17 +955,11 @@ above stays for clients and servers that don't.
 - **A failed connection is restarted, not left.** A client whose connection to the
   server fails sends `voice.restart` a few seconds later: the server starts that
   session's connection afresh and sends a new `voice.offer`. Its seat, and what the room
-  sees, don't change. A client that isn't forwarded is ignored.
-- **The old way, by choice.** A person can turn forwarding off in Settings; their client
-  then joins without `forwarding`, and the room goes to the mesh as it would for an
-  older app.
-- **Limits.** `voice.answer` and `voice.restart` share `voice.signal`'s size cap and rate limit. A room of
-  forwarded people holds `MAX_FORWARDED_VOICE_PEERS` (25).
-
-**Limits.** `payload` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything larger is not an
-SDP this server needs to carry. Signals are rate-limited per session
-(`RATE_VOICE_SIGNAL`) — generously, because trickle ICE arrives in bursts across every
-peer at once, and a limit tight enough to be interesting would break a normal join.
+  sees, don't change. A client that isn't in voice is ignored.
+- **Limits.** `voice.answer`'s `sdp` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything
+  larger is dropped. Answers and restarts are rate-limited per session
+  (`RATE_VOICE_SIGNAL`), loosely, because a busy room re-offers everybody each time
+  somebody comes or goes. A room holds `MAX_VOICE_PEERS` (25).
 
 ### Fan-out rules
 

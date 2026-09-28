@@ -1010,21 +1010,27 @@ async function attachListeners(): Promise<void> {
         const cue = voiceCue(frame, before, next);
         if (cue !== null) void playSound(cue);
       }
-      // Voice is the core's business, not this page's (ARCHITECTURE §2). These
-      // frames are handed straight over — the fold above ignores them, and
-      // deliberately: nothing the store holds changes because a peer connection
-      // did, and the voice surface (T-1404) will read the core's own events.
-      // `voice.offer` is the forwarding server's (#197): the core answers it.
-      if (frame.op === "voice.state" || frame.op === "voice.signal" || frame.op === "voice.offer") {
-        void voiceFrame(server, frame).then(() => {
-          if (frame.op === "voice.state") applySavedVoiceVolumes(server);
-        });
-        // The fold above drops our seat if the server's list no longer has
-        // us in it. The core still holds the devices, so tell it to let go —
-        // a microphone left open after the server has said you are gone is
-        // exactly the thing SPEC §4.14 is careful about.
-        if (frame.op === "voice.state" && seated && next.myVoice === null) {
+      // The forwarding server's offer is the core's business, not this
+      // page's (ARCHITECTURE §2, #197): it is handed straight over, and the
+      // core answers it.
+      if (frame.op === "voice.offer") void voiceFrame(server, frame);
+      if (frame.op === "voice.state") {
+        applySavedVoiceVolumes(server);
+        if (seated && next.myVoice === null) {
+          // The fold above drops our seat if the server's list no longer has
+          // us in it. The core still holds the devices, so tell it to let go —
+          // a microphone left open after the server has said you are gone is
+          // exactly the thing SPEC §4.14 is careful about.
           void voiceLeave(server);
+        } else if (next.myVoice !== null && onTheOldWay(frame.d.room_id, frame.d.peers, next)) {
+          // A server from before the mesh was taken out (#306) sends a room
+          // the old way when it doesn't forward, or when an older app is in
+          // it. This app has no old way, so there's nothing to hear: leave,
+          // and say why rather than sit in a silent call.
+          const roomId = next.myVoice.roomId;
+          void leaveVoice(server, false).then(() => {
+            publish(server, { ...stateOf(server), voiceFailed: { roomId, problem: OLD_WAY, devices: { input: null, output: null } } });
+          });
         }
       }
     }),
@@ -1871,6 +1877,23 @@ export async function joinVoice(
     publish(server, { ...stateOf(server), myVoice: null, voiceFailed: { roomId, problem, devices } });
     throw error;
   }
+}
+
+/**
+ * What a join says when the server put the room the old way (#306). The
+ * strip's words for it are `voiceStartProblem`'s.
+ */
+export const OLD_WAY = "the server sent this call the old way";
+
+/**
+ * Whether the server has our seat in `roomId` without forwarding it (#306):
+ * the old way, which this app no longer has. Only a server from before the
+ * mesh was taken out does this; every newer one forwards every seat.
+ */
+function onTheOldWay(roomId: RoomId, peers: readonly VoicePeer[], current: GatewayState): boolean {
+  if (current.myVoice?.roomId !== roomId) return false;
+  const mine = peers.find((peer) => peer.session_id === current.sessionId);
+  return mine !== undefined && mine.forwarded !== true;
 }
 
 /**

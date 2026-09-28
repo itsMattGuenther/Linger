@@ -14,7 +14,6 @@ import type { VoiceDeviceChoice } from "./ipc";
 const INPUT_KEY = "linger.voice.input";
 const OUTPUT_KEY = "linger.voice.output";
 const PTT_KEY = "linger.voice.pushToTalk";
-const FORWARDING_KEY = "linger.voice.forwarding";
 const TALK_KEY = "linger.voice.pushToTalkKey";
 
 /**
@@ -32,11 +31,6 @@ export interface VoicePrefs {
   /** Keep the microphone closed, without muting, except while the key is held (#232). */
   pushToTalk: boolean;
   /**
-   * Voice through the server, on a server that forwards it (#197). Off is
-   * the old way, straight to each person, and puts the whole room on it.
-   */
-  forwarding: boolean;
-  /**
    * The key held to talk, as a `KeyboardEvent.code` (decision 6).
    */
   pushToTalkKey: string;
@@ -45,7 +39,6 @@ export interface VoicePrefs {
 export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   devices: { input: null, output: null },
   pushToTalk: false,
-  forwarding: true,
   pushToTalkKey: "ControlRight",
 };
 
@@ -61,7 +54,6 @@ export function loadVoicePrefs(): VoicePrefs {
         output: output === null || output === "" ? null : output,
       },
       pushToTalk: ptt === "true",
-      forwarding: window.localStorage.getItem(FORWARDING_KEY) !== "false",
       pushToTalkKey: window.localStorage.getItem(TALK_KEY) || DEFAULT_VOICE_PREFS.pushToTalkKey,
     };
   } catch {
@@ -77,7 +69,6 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
     if (prefs.devices.output === null) store.removeItem(OUTPUT_KEY);
     else store.setItem(OUTPUT_KEY, prefs.devices.output);
     store.setItem(PTT_KEY, prefs.pushToTalk ? "true" : "false");
-    store.setItem(FORWARDING_KEY, prefs.forwarding ? "true" : "false");
     store.setItem(TALK_KEY, prefs.pushToTalkKey);
   } catch {
     // Storage refused; the preference lasts for this run and no longer.
@@ -160,6 +151,7 @@ export function voiceStartProblem(problem: string, windows: boolean, asked: Voic
     return { line: `${windows ? "Windows'" : "The"} default ${device} wouldn't open.`, fix: PICK_A_DEVICE };
   }
   if (/desktop app/i.test(problem)) return only("Voice only works in the desktop app.");
+  if (/the old way/i.test(problem)) return only("This server needs an update for voice. Ask its host.");
   return only("Something went wrong. Try again.");
 }
 

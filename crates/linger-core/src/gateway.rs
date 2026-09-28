@@ -59,9 +59,12 @@ pub enum ClientFrame {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         controls: Option<VoiceControls>,
-        /// This client can take its voice through the server's forwarding
-        /// (#197) rather than the mesh. Absent from older clients, which the
-        /// server keeps on the mesh.
+        /// This client takes its voice through the server's forwarding
+        /// (#197). Sent by every app from 0.4.1; its value no longer matters,
+        /// only that it's there. 0.4.1 to 0.4.3 sent `false` when Settings
+        /// said "the old way", and are forwarded anyway. A join without it is
+        /// an app from before 0.4.1, which spoke only the mesh, and is refused:
+        /// the mesh is gone (#306).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         forwarding: Option<bool>,
@@ -70,18 +73,6 @@ pub enum ClientFrame {
     /// thing this could mean.
     #[serde(rename = "voice.leave")]
     VoiceLeave,
-    /// One WebRTC message for one peer.
-    ///
-    /// `payload` is an offer, an answer or an ICE candidate, and the server
-    /// does not parse it — it forwards it to `to` and that is the whole of its
-    /// involvement in voice (PROTOCOL §8).
-    #[serde(rename = "voice.signal")]
-    VoiceSignal {
-        /// The peer's session id, from `voice.state`.
-        to: String,
-        kind: VoiceSignalKind,
-        payload: String,
-    },
     /// The answer to the server's latest `voice.offer` (#197). With
     /// forwarding, the server makes every offer and the client only answers,
     /// so two offers can never cross.
@@ -94,24 +85,11 @@ pub enum ClientFrame {
     VoiceRestart,
 }
 
-/// What a `voice.signal` is carrying. The server routes on the frame and never
-/// looks inside `payload`, so this exists for the receiving client's benefit —
-/// it says which of the three things to do with the string without parsing it
-/// to find out.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export)]
-pub enum VoiceSignalKind {
-    Offer,
-    Answer,
-    Candidate,
-}
-
 /// One client in a voice room (SPEC §4.14).
 ///
-/// Keyed by session rather than by person: a peer connection is between two
-/// *clients*, and somebody signed in on a laptop and a desktop is two of them.
-/// `user_id` is there so a client can draw a name against a peer without
+/// Keyed by session rather than by person: somebody signed in on a laptop and
+/// a desktop is two clients, each with its own connection to the server.
+/// `user_id` is there so a client can draw a name against a session without
 /// looking anything up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -122,8 +100,11 @@ pub struct VoicePeer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub controls: Option<VoiceControls>,
-    /// Their voice goes through the server's forwarding (#197), not the mesh.
-    /// A mesh client can't reach them, and doesn't try.
+    /// Their voice goes through the server's forwarding (#197). Always
+    /// `true` since the mesh was taken out (#306), because there is no other
+    /// way: apps 0.4.1 to 0.4.3 read it to know they're forwarded, and
+    /// without it would wait for a mesh nobody offers. An older server leaves
+    /// it out for a room on the mesh, which this app can't join.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub forwarded: Option<bool>,
@@ -278,17 +259,6 @@ pub enum ServerEvent {
         room_id: RoomId,
         peers: Vec<VoicePeer>,
     },
-    /// One peer's WebRTC message, on its way to one other peer.
-    ///
-    /// Addressed to a single session, like `knock` is addressed to a single
-    /// person — and unlike `knock`, the sender is named, because answering it
-    /// is the entire point.
-    #[serde(rename = "voice.signal")]
-    VoiceSignal {
-        from: String,
-        kind: VoiceSignalKind,
-        payload: String,
-    },
     /// The server's offer for this session's one connection to its voice
     /// forwarding (#197): an m-line to send the microphone on, and one per
     /// other person in the room. `tracks` says whose voice each receiving
@@ -373,8 +343,8 @@ mod tests {
         let wire = serde_json::to_value(modern).unwrap();
         let decoded: LegacyJoin = serde_json::from_value(wire["d"].clone()).unwrap();
         assert_eq!(decoded.room_id, room_id);
-        // An older client never says it can forward, and an older server
-        // never says anybody is forwarded: both read as the mesh.
+        // An app from before 0.4.1 never says it can forward, and a server
+        // from before forwarding never says anybody is forwarded.
         assert!(matches!(
             serde_json::from_value::<ClientFrame>(
                 serde_json::json!({"op":"voice.join", "d":{"room_id":room_id}})

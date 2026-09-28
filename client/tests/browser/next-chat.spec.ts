@@ -606,6 +606,18 @@ test.describe("voice here", () => {
     await expect(strip.getByRole("button", { name: "Talk here instead" })).toBeVisible();
   });
 
+  // A server whose host hasn't set voice up carries none (#306): the strip
+  // says so, plainly, keeps its height, and offers no way in.
+  test("on a server without voice: says it isn't set up, and offers nothing", async ({ page }) => {
+    await open(page, "?voice=off");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const usual = await rect(strip);
+    await open(page, "?voice=none");
+    await expect(strip).toHaveText("Voice isn't set up on this server.");
+    await expect(strip.getByRole("button")).toHaveCount(0);
+    expect((await rect(strip)).height).toBe(usual.height);
+  });
+
   // Starting voice used to fail with nothing to show for it: the strip
   // blinked and went back (#261). It says why now, on its one line.
   test("a start that failed says why, keeps the strip's height, and offers another try (#261)", async ({ page }) => {

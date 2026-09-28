@@ -20,7 +20,6 @@ import type { IceServer } from "../generated/IceServer";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { VoiceControls } from "../generated/VoiceControls";
-import { loadVoicePrefs } from "./voice";
 
 export interface StoredSession {
   /** Origin of the server, e.g. `https://linger.example`. No trailing slash. */
@@ -96,8 +95,6 @@ export async function voiceJoin(
     input: devices.input,
     output: devices.output,
     ice,
-    // Voice through the server unless Settings says the old way (#197).
-    forwarding: loadVoicePrefs().forwarding,
   });
 }
 
@@ -131,12 +128,6 @@ export async function voicePushToTalk(baseUrl: string, closed: boolean): Promise
 export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<void> {
   if (!isTauri()) return;
   await invoke("voice_choose_devices", { input: devices.input, output: devices.output });
-}
-
-/** Voice through the server switched (#197, #249): the call you're in follows at once. */
-export async function voiceForwarding(on: boolean): Promise<void> {
-  if (!isTauri()) return;
-  await invoke("voice_forwarding", { on });
 }
 
 /** How loud one peer (a session id) plays for you: 1 is as sent, 2 is the ceiling. */

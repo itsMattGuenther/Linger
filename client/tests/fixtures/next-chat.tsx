@@ -9,7 +9,8 @@
  *
  * - `?tab=r-listening` (or `d-jules`, `r-plans`): which tab shows first.
  * - `?voice=mine`: you're in voice in #general. `elsewhere`: you're in voice
- *   in #listening-room. `off`: nobody is in voice anywhere.
+ *   in #listening-room. `off`: nobody is in voice anywhere. `none`: the
+ *   server carries no voice at all; its host hasn't set it up (#306).
  * - `?big`: #general holds 5,000 messages, all at once. `&paged`: loaded
  *   150 at a time from the newest, as the store pages them.
  * - `?fail`: every send is refused.
@@ -63,13 +64,13 @@ const tabOf = (roomId: string): TabKey => ({ server: SERVER, roomId });
 /** Who's in each room, and who's in voice there, as the evening has it. */
 const IN_ROOM: Record<string, string[]> = { "r-general": ["u-matt", "u-eli", "u-jules"], "r-listening": ["u-dave"] };
 const inVoice = (roomId: string): string[] => {
-  if (VOICE === "off") return [];
+  if (VOICE === "off" || VOICE === "none") return [];
   const others = roomId === "r-general" ? ["u-eli", "u-jules"] : [];
   const mine = (VOICE === "mine" && roomId === "r-general") || (VOICE === "elsewhere" && roomId === "r-listening");
   return mine ? ["u-matt", ...others] : others;
 };
 const myVoice = VOICE === "mine" ? keyOf(tabOf("r-general")) : VOICE === "elsewhere" ? keyOf(tabOf("r-listening")) : null;
-const SPEAKING: ReadonlySet<string> = new Set(VOICE === "off" ? [] : ["u-eli"]);
+const SPEAKING: ReadonlySet<string> = new Set(VOICE === "off" || VOICE === "none" ? [] : ["u-eli"]);
 
 /** Five thousand messages over many evenings: long enough that only virtualization keeps it quick. */
 function bigRoom(): Message[] {
@@ -355,7 +356,7 @@ function Fixture() {
         room.kind === "dm"
           ? null
           : {
-              strip: voiceStrip(id, voice, me.id, myVoice),
+              strip: voiceStrip(id, voice, me.id, myVoice, VOICE !== "none"),
               onJoin,
               onPickDevice,
               controls: myVoice === id ? controls : undefined,

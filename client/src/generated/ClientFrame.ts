@@ -2,7 +2,6 @@
 import type { PresenceState } from "./PresenceState";
 import type { RoomId } from "./RoomId";
 import type { VoiceControls } from "./VoiceControls";
-import type { VoiceSignalKind } from "./VoiceSignalKind";
 
 /**
  * A client frame is just `{ op, d }` — no sequence number in this direction.
@@ -21,12 +20,11 @@ s: number, } } | { "op": "heartbeat", "d": {
  */
 s: number | null, } } | { "op": "presence.update", "d": { state: PresenceState, away_message: string | null, } } | { "op": "room.focus", "d": { room_id: RoomId | null, } } | { "op": "typing.start", "d": { room_id: RoomId, } } | { "op": "voice.join", "d": { room_id: RoomId, controls?: VoiceControls, 
 /**
- * This client can take its voice through the server's forwarding
- * (#197) rather than the mesh. Absent from older clients, which the
- * server keeps on the mesh.
+ * This client takes its voice through the server's forwarding
+ * (#197). Sent by every app from 0.4.1; its value no longer matters,
+ * only that it's there. 0.4.1 to 0.4.3 sent `false` when Settings
+ * said "the old way", and are forwarded anyway. A join without it is
+ * an app from before 0.4.1, which spoke only the mesh, and is refused:
+ * the mesh is gone (#306).
  */
-forwarding?: boolean, } } | { "op": "voice.leave" } | { "op": "voice.signal", "d": { 
-/**
- * The peer's session id, from `voice.state`.
- */
-to: string, kind: VoiceSignalKind, payload: string, } } | { "op": "voice.answer", "d": { sdp: string, } } | { "op": "voice.restart" };
+forwarding?: boolean, } } | { "op": "voice.leave" } | { "op": "voice.answer", "d": { sdp: string, } } | { "op": "voice.restart" };

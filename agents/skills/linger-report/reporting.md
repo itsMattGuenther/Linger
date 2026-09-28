@@ -40,7 +40,7 @@ Happens: every time / sometimes / once.
   WebKitGTK <version> for a package install
 - Launched by: <menu entry's Exec= line, if it sets any variables>
 - Interface scale: <if it's a layout problem>
-- Voice only: <devices>, <same network | different networks>
+- Voice only: <devices>, <home | office | public wifi network>
 
 ## Evidence
 

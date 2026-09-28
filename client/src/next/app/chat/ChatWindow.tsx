@@ -652,7 +652,7 @@ function Conversations({ following }: { following: Following }) {
       id: paneId,
       header,
       voice: {
-        strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab),
+        strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false),
         onJoin,
         onPickDevice,
         mics: micsHere(state, room.id),

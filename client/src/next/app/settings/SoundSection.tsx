@@ -189,11 +189,6 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
           }
         />
         {refused ? <Note tone="problem">{refused}</Note> : null}
-        <SettingRow
-          title="Voice through the server"
-          description="Your voice goes to the server once, and it passes it on to everyone in the room. Turn it off to use the old way, straight to each person: if anybody in a room does, the whole room goes the old way. Only matters on a server that passes voice on. A change applies at once, in a call too."
-          control={<Switch label="Voice through the server" checked={voice.forwarding} onChange={(forwarding) => onVoice({ ...voice, forwarding })} />}
-        />
       </Block>
     </>
   );

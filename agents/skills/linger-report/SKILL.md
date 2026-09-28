@@ -57,7 +57,8 @@ shows recent package changes; on Debian/Ubuntu, `/var/log/apt/history.log`.
 | Whole desktop stutters, every app is slow | The system | Does another app lag the same way? |
 | Crash or black window on launch, on Linux | Often the graphics path; Linger's if the system didn't change | Section 3. |
 | No sound in voice for one person | Their devices or OS mixer | Settings → Sound & Voice device choice; does the OS play sound? |
-| Voice fails only across different networks | The server's relay (TURN) setup | Ask whether the host followed [voice between different networks](https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice-between-different-networks). |
+| The voice line says "Voice isn't set up on this server" | The server's voice setup | Ask whether the host followed the host guide's [Voice](https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice) steps. |
+| Voice fails for one person on a strict network (an office, public wifi) | The server's relay (TURN) setup | Ask whether the host followed [the voice relay](https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#the-voice-relay). |
 | A layout, text, button or behavior looks wrong | Linger | Screenshot it. |
 
 If it clearly isn't Linger's, say so plainly, suggest where it does belong
@@ -106,8 +107,9 @@ while the packages use the system's.
 happened and what was expected, in the user's words; a screenshot or short
 recording for anything visual or timing-related, cropped to the problem.
 
-**For voice:** which microphone and speakers, whether the others were on
-different networks, and whether it's everyone or one person.
+**For voice:** which microphone and speakers, what kind of network each
+person was on (home, office, public wifi), and whether it's everyone or one
+person.
 
 ### Crashes and "won't open" on Linux
 

@@ -696,6 +696,8 @@ services:
       LINGER_STORAGE: local
       # uploads are served from cdn.<LINGER_DOMAIN>; override with
       # LINGER_MEDIA_DOMAIN
+      # LINGER_VOICE_ADDRESS: 203.0.113.7   # voice, through this server (#197)
+    ports: [ "3479:3479/udp" ]             # voice forwarding's one port
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -710,9 +712,13 @@ services:
 volumes: { caddy_data: {} }
 ```
 
-The third container is the voice relay (SPEC §4.14). It is optional and behind a
-compose profile, so a plain `docker compose up -d` needs no secret and runs no
-relay. Its one secret lives in `.env`, never in the compose file, and is shared
+Voice goes through the `linger` container itself (#197): with `LINGER_VOICE_ADDRESS` set
+to the machine's public IP and UDP 3479 open, each client sends its voice there once and
+the server passes it on. Without it the server carries no voice (#306).
+
+The third container is the voice relay (SPEC §4.14), for people on networks that block
+UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
+needs no secret and runs no relay. Its one secret lives in `.env`, never in the compose file, and is shared
 with `linger` so the server can sign the short-lived relay passwords it hands
 members (`PROTOCOL.md` §7, `GET /voice/ice`). It runs on the host's own network
 because a relay's job is being reachable at its real address on a range of UDP
@@ -765,8 +771,9 @@ are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
 on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
 checks*; steps in `docs/tasks/release-checks.md`). M12's full four-people,
-four-networks hour was not run; it moves to #197, which rebuilds voice for
-large rooms and reruns every voice check.
+four-networks hour was not run; it moves to #197, which rebuilt voice for
+large rooms through the host's server (0.4.1). The mesh that came before it
+is gone (#306).
 
 | # | Milestone | Done when | Estimate |
 |---|---|---|---|

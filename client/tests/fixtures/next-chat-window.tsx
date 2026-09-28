@@ -75,7 +75,8 @@ const desktop = fakeDesktop({
     "next:voicecontrol": (question) => voiceControl(question),
   },
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)) } : {},
-  infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" }, [GUILD]: serverInfo[GUILD] },
+  // `?novoice`: the main server says it carries no voice (#306).
+  infos: { [SERVER]: { name: SERVER_NAME, accent: "amber", ...(query.has("novoice") ? { voice: false } : {}) }, [GUILD]: serverInfo[GUILD] },
   ownerState: {
     ...night,
     ...(query.get("as") === "eli" ? { me: people.eli } : {}),

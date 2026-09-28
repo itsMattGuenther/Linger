@@ -46,6 +46,7 @@ async fn build_info(state: &AppState) -> Result<ServerInfo, ApiError> {
         storage_used_bytes: repo::attachments::pool_used(&state.db.read).await?,
         storage_limit_bytes: state.config.pool_bytes,
         file_expiry_days: state.config.file_expiry_days,
+        voice: Some(state.gateway.forwards_voice()),
     })
 }
 

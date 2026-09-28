@@ -9,6 +9,8 @@ export interface ServerTagInfo {
   fileExpiryDays?: number | null;
   /** How much its files take up, and how much it allows, in bytes. */
   storage?: { used: number; limit: number };
+  /** Whether it carries voice; left out by a server from before it said (#306). */
+  voice?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
             accent: info.accent_key ?? null,
             fileExpiryDays: info.file_expiry_days,
             storage: { used: info.storage_used_bytes, limit: info.storage_limit_bytes },
+            voice: info.voice,
           } })),
         )
         .catch(() => undefined);

@@ -632,7 +632,8 @@ out loud.
 - ⏳ **T-1402 · The audio path** — effort: **treacherous** — Matt, 2026-09-01.
   Built and in daily use. It stays open until four people have talked for an
   hour on four different networks, which moved to #197 with the voice rework
-  (a forwarding server). Its notes are in `m12.md`.
+  (a forwarding server, 0.4.1). The mesh it first built is gone (#306): voice
+  goes only through the server. Its notes are in `m12.md`.
 
 ### M13 — ambient voice
 
