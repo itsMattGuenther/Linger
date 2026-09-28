@@ -1,7 +1,10 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
+import { openExternal } from "../../../lib/external";
 import { paletteKey } from "../../../lib/names";
+import { fieldsOf } from "../../../lib/status";
+import { valueParts } from "../../../lib/statusLinks";
 import { Button, Marker, MARKER_WORDS, markerStateOf, Name, Popover } from "../../kit";
 import type { KnockResult } from "../../core/knock";
 import { markerFor } from "../markers";
@@ -121,11 +124,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
   const status = user.status;
   const away = state === "away";
   const words = away ? (status?.away_message ?? null) : (status?.line ?? null);
-  const fields: [string, string | null | undefined][] = [
-    ["Listening to", status?.listening],
-    ["Reading", status?.reading],
-    ["Working on", status?.working_on],
-  ];
+  const fields = fieldsOf(status);
 
   return (
     <Popover label={user.display_name} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
@@ -143,16 +142,16 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
             {words}
           </p>
         ) : null}
-        {fields.some(([, value]) => value) ? (
+        {fields.length > 0 ? (
           <dl className="nx-person-fields">
-            {fields.map(([label, value]) =>
-              value ? (
-                <div key={label} className="nx-person-field">
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ) : null,
-            )}
+            {fields.map((field) => (
+              <div key={field.label} className="nx-person-field">
+                <dt>{field.label}</dt>
+                <dd>
+                  <FieldValue value={field.value} />
+                </dd>
+              </div>
+            ))}
           </dl>
         ) : null}
         <div className="nx-person-actions">
@@ -190,5 +189,36 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
         ) : null}
       </div>
     </Popover>
+  );
+}
+
+/**
+ * What a field says, with its web addresses drawn as links (#270): each opens
+ * in the browser, never in this window, the way a link in a message does
+ * (`lib/external.ts`). Nothing else in it is a link (`lib/statusLinks.ts`).
+ */
+function FieldValue({ value }: { value: string }) {
+  return (
+    <>
+      {valueParts(value).map((part, at) =>
+        part.kind === "link" ? (
+          <a
+            key={at}
+            className="nx-person-link"
+            href={part.href}
+            title={part.href}
+            rel="noreferrer noopener"
+            onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+              event.preventDefault();
+              openExternal(part.href);
+            }}
+          >
+            {part.text}
+          </a>
+        ) : (
+          <Fragment key={at}>{part.text}</Fragment>
+        ),
+      )}
+    </>
   );
 }

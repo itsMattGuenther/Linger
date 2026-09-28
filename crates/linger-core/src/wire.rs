@@ -132,15 +132,50 @@ impl Default for Style {
 // Users and statuses (SPEC §4.6, PROTOCOL §5)
 // ---------------------------------------------------------------------------
 
+/// One of a status's short fields (SPEC §4.6, #270): a label the person chose,
+/// from the app's suggestions or typed, and what they wrote beside it.
+///
+/// Both are checked by the server: the label is 1–24 characters and the value
+/// 1–80, trimmed, with no control characters (`limits::MAX_STATUS_LABEL_CHARS`,
+/// `MAX_STATUS_FIELD_CHARS`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StatusField {
+    pub label: String,
+    pub value: String,
+}
+
+/// The labels of the three fields a status had before labels were chosen
+/// (#270), in the order a card shows them. A field whose label is exactly one
+/// of these is also carried under its old key, so apps from before keep
+/// reading and saving it (PROTOCOL §5).
+pub const STATUS_LABEL_LISTENING: &str = "Listening to";
+pub const STATUS_LABEL_READING: &str = "Reading";
+pub const STATUS_LABEL_WORKING_ON: &str = "Working on";
+
 /// A user's status: a small card, not a bio field. The away message supersedes
 /// `line` when set.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UserStatus {
     pub line: Option<String>,
+    /// The value of the field labelled exactly "Reading", for apps from
+    /// before labelled fields (#270, PROTOCOL §5). Filled by the server.
     pub reading: Option<String>,
+    /// The value of the field labelled exactly "Listening to" (#270).
     pub listening: Option<String>,
+    /// The value of the field labelled exactly "Working on" (#270).
     pub working_on: Option<String>,
+    /// Up to three labelled fields, in the order they show (SPEC §4.6, #270).
+    ///
+    /// A server that knows fields always sends a list, empty when there are
+    /// none; an older server leaves it out. On the way in, a list is the whole
+    /// set and `reading`, `listening` and `working_on` beside it are ignored.
+    /// Null or missing is a save from an app that predates fields: the server
+    /// applies its three classic values to the fields with those labels and
+    /// keeps every other field (PROTOCOL §5).
+    #[serde(default)]
+    pub fields: Option<Vec<StatusField>>,
     /// Always null. A status has no picture any more (#269, PROTOCOL §5).
     ///
     /// Kept on the wire so an app from before the removal still reads and

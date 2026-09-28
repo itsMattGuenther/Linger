@@ -58,25 +58,27 @@
   color: var(--text-away);
 }
 
+/* The fields (#270): labels in a column as wide as the longest, up to a
+   little under half the card, so what they say starts on one edge. A label
+   longer than that wraps rather than running under its value. */
 .nx-person-fields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: fit-content(45%) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
   margin: 0;
 }
 
 .nx-person-field {
-  display: grid;
-  grid-template-columns: calc(var(--space-8) * 3) 1fr;
-  gap: var(--space-2);
-  min-width: 0;
+  display: contents;
 }
 
 .nx-person-field dt {
+  min-width: 0;
   font: var(--text-label) / var(--line-meta) var(--font-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .nx-person-field dd {
@@ -86,6 +88,18 @@
   line-height: var(--line-meta);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+/* A web address in a field, drawn as a message's link is. */
+.nx-person-link {
+  color: var(--text-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-edge);
+  text-underline-offset: var(--space-0-5);
+}
+
+.nx-person-link:hover {
+  text-decoration-color: var(--accent);
 }
 
 .nx-person-actions {

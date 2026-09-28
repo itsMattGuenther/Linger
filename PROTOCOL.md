@@ -358,13 +358,19 @@ type Style = {
 
 type UserStatus = {
   line: string | null;                // <= 240 chars
-  reading: string | null;             // <= 80
-  listening: string | null;           // <= 80
-  working_on: string | null;          // <= 80
+  reading: string | null;             // <= 80; the field labelled "Reading" (#270)
+  listening: string | null;           // <= 80; the field labelled "Listening to"
+  working_on: string | null;          // <= 80; the field labelled "Working on"
+  fields: StatusField[] | null;       // <= 3, in order; absent from servers before #270
   image_id: string | null;            // always null; accepted and ignored (#269)
   image_url: string | null;           // always null; server-owned
   away_message: string | null;        // supersedes `line` when set
   away_since: number | null;
+}
+
+type StatusField = {
+  label: string;                      // 1–24 chars: a suggestion, or the person's own
+  value: string;                      // 1–80 chars
 }
 ```
 
@@ -386,6 +392,44 @@ A server that had status pictures loses them when it updates: migration
 `0006_no_status_image.sql` clears every one. The files they pointed at are finished
 uploads on no message, so the expiry sweeper takes them after the file expiry window
 like any upload that was never posted (SPEC §4.10).
+
+**Status fields** (SPEC §4.6, #270). A status has up to three short fields,
+each a `label` and a `value`, in the order the card shows them. The app
+suggests Listening to, Reading, Working on, Playing and Watching, and takes
+any label typed; the server doesn't keep a list. It checks every field: at
+most three (`VALIDATION_FAILED` for a fourth), each label 1–24 characters and
+each value 1–80, counted after trimming, neither holding a control character
+(a tab, a line break), and no label twice, ignoring case. It stores them
+trimmed. An empty value is refused rather than dropped: an app leaves out a
+field nobody filled in. A web address in a value is the app's to draw as a
+link; on the wire a value is plain text.
+
+Older apps keep working, both ways:
+
+- **Reading.** Every status still carries `reading`, `listening` and
+  `working_on`, each the value of the field whose label is exactly "Reading",
+  "Listening to" or "Working on" (case and spelling as written), or null. A
+  field with any other label is only in `fields`. A server from #270 on always
+  sends `fields`, `[]` when there are none.
+- **Saving with `fields`** (an app from #270 on): the list is the whole set,
+  and replaces what was there. `reading`, `listening` and `working_on` in the
+  same request are checked like values and otherwise ignored; the server fills
+  them from the fields. Send them filled from your fields anyway, so a server
+  from before #270, which ignores `fields`, keeps the three it knows.
+- **Saving without `fields`**, or with `fields: null` (an app from before
+  #270): the three keys change only the fields with those labels, and every
+  other field stays where it is. For each of "Listening to", "Reading" and
+  "Working on": a non-empty value replaces that field's value in its place, or
+  adds a field with that label at the end if there is none; an empty or null
+  value removes that field. Replacing and removing happen before adding. A
+  value that would make a fourth field is refused with `VALIDATION_FAILED`
+  ("Your status already has three fields…") and nothing is saved, because the
+  older app can't show the field it would push out. The three keys are held to
+  a value's rules: 80 characters, no control characters.
+
+A server that updates to #270 turns each status's three old values into
+fields with those labels, in the order Listening to, Reading, Working on
+(migration `0007_status_fields.sql`), so every status reads back unchanged.
 
 ### Palette validation (server-side, mandatory)
 

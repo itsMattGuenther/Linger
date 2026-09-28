@@ -336,7 +336,12 @@ and a joke delivery mechanism in one field.
 
 A user's **status** is a small card, not a bio field:
 - One line of free text (240 chars, rendered in their name styling)
-- Optional: reading / listening to / working on (three labeled short fields)
+- Optional: up to three short fields, each a label and a value (#270). The
+  label is picked from Listening to, Reading, Working on, Playing and
+  Watching, or typed ("Your own…", 24 chars); the value is 80 chars of the
+  person's own words. A web address in a value opens in the browser, with the
+  same rules and safety as a link in a message; nothing else in a value is a
+  link. No icons or emoji per label: three at most, a small card, not a bio.
 - Optional: an away message that supersedes the status when set
 
 A status is words. It has no picture: a photo goes in a room, where people see

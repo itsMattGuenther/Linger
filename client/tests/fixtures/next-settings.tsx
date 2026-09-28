@@ -15,6 +15,8 @@
  * - `?away`: you're away already.
  * - `?picture`: your status still has a picture, the way an older server
  *   hands one back (#269). Profile shows nothing for it, and saves drop it.
+ * - `?fields`: your status has fields with labels of your own (#270);
+ *   with `&long`, as long as the server takes.
  * - `?devices=none`: outside the desktop app; `?devices=looking`: still asking.
  * - `?long`: names and topics far too long for their places.
  * - `?nowindows`: nothing to choose in Windows yet, so there's no Windows.
@@ -39,7 +41,7 @@ import { type SettingsKey } from "../../src/next/core/settings";
 import { SettingsView } from "../../src/next/app/settings/SettingsView";
 import type { CloseList, ConversationMode } from "../../src/next/app/settings/WindowsSection";
 import "../../src/next/styles/app.css";
-import { NOW, SERVER, SERVER_NAME, people, rooms as eveningRooms } from "./next/evening";
+import { NOW, SERVER, SERVER_NAME, ownFields, people, rooms as eveningRooms, withFields } from "./next/evening";
 
 const query = new URLSearchParams(location.search);
 const FAIL = query.has("fail");
@@ -58,9 +60,10 @@ function saving(what: string, words = "The server is busy. Try again in a moment
   return new Promise((settle) => window.setTimeout(() => settle(FAIL ? words : null), 120));
 }
 
+const fielded: User = query.has("fields") ? withFields(people.matt, ownFields(LONG)) : people.matt;
 const pictured: User = query.has("picture")
-  ? { ...people.matt, status: people.matt.status && { ...people.matt.status, image_id: "img-porch", image_url: "/objects/im/g-/img-porch" } }
-  : people.matt;
+  ? { ...fielded, status: fielded.status && { ...fielded.status, image_id: "img-porch", image_url: "/objects/im/g-/img-porch" } }
+  : fielded;
 const matt: User = query.has("away")
   ? { ...pictured, status: pictured.status && { ...pictured.status, away_message: "walking the dog 🐕", away_since: NOW - HOUR } }
   : pictured;

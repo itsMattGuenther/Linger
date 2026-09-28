@@ -29,7 +29,7 @@ function person(id: string, name: string, extra: Partial<User> = {}): User {
 }
 
 function status(line: string | null, away: string | null = null): User["status"] {
-  return { line, reading: null, listening: null, working_on: null, image_id: null, image_url: null, away_message: away, away_since: null };
+  return { line, reading: null, listening: null, working_on: null, fields: [], image_id: null, image_url: null, away_message: away, away_since: null };
 }
 
 function room(id: string, name: string, position: number, extra: Partial<Room> = {}): Room {

@@ -164,7 +164,8 @@ From top to bottom, for each server:
 **Click someone (or press Enter) and their card opens beside the list:**
 
 - the status in full, in their own face;
-- what they're listening to, reading or working on;
+- their fields: what they're listening to, reading, playing, or anything
+  they labelled themselves, with web addresses as links (#270);
 - where they are.
 
 The card has two clear buttons: **Message** and **Knock**. A knock makes their
@@ -252,8 +253,9 @@ regrouped, plus the new choices this design needs:
 
 - **Profile:**
   - **Who you are:** display name and username.
-  - **Your status:** status line, reading, listening to, working on, and away
-    message. There is no status picture (#269).
+  - **Your status:** status line, up to three fields (each a label picked
+    from a list or typed, and a value; #270), and away message. There is no
+    status picture (#269).
   - **Make yourself at home:** your name's font, weight, italic, one color or
     two blended, effect, and your message font, with a live preview. Saving
     changes your name in the list and in every conversation.

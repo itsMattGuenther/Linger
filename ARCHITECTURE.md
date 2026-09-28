@@ -212,13 +212,23 @@ CREATE TABLE user_style (
 CREATE TABLE user_status (
   user_id         BLOB PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   line            TEXT,                        -- 240 chars
-  reading         TEXT,
-  listening       TEXT,
-  working_on      TEXT,
+  reading         TEXT,                        -- these three: kept in step with the fields
+  listening       TEXT,                        --   labelled "Reading", "Listening to" and
+  working_on      TEXT,                        --   "Working on" since 0007 (#270), never read
   image_key       TEXT,                        -- left over, always NULL: cleared by 0006 (#269)
   away_message    TEXT,                        -- supersedes `line` when set
   away_since      INTEGER,
   updated_at      INTEGER NOT NULL
+);
+
+-- a status's short fields, each a label the person chose and a value (#270);
+-- PROTOCOL §5 says how older apps' three fixed fields map onto them
+CREATE TABLE user_status_fields (
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  position        INTEGER NOT NULL,            -- 0, 1 or 2: the order they show in
+  label           TEXT NOT NULL,               -- 24 chars
+  value           TEXT NOT NULL,               -- 80 chars
+  PRIMARY KEY (user_id, position)
 );
 
 CREATE TABLE entrance_sounds (

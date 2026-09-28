@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Style } from "../../../generated/Style";
 import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
@@ -6,9 +6,10 @@ import { displayNameReady, MAX_DISPLAY_NAME_CHARS } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
-import { draftOf, FIELDS, isDirty, MAX_FIELD_CHARS, MAX_LINE_CHARS, overLimit, type StatusDraft, statusOf } from "../../../lib/status";
+import { MAX_FIELD_CHARS, MAX_LABEL_CHARS, MAX_LINE_CHARS, SUGGESTED_LABELS } from "../../../lib/status";
 import { HEADINGS, leftOf } from "../../core/settings";
-import { Button, Name, Swatch, TextField } from "../../kit";
+import { draftOf, type FieldRow, isDirty, type LabelChoice, labelOf, OWN, problemOf, type StatusDraft, statusOf, type SuggestedLabel } from "../../core/status";
+import { Button, IconButton, Name, Select, Swatch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, useSave } from "./parts";
 
 /** What Profile saves. Each resolves to the problem in words, or null once saved. */
@@ -92,10 +93,14 @@ function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["
     setDraft((held) => ({ ...held, ...change }));
     save.reset();
   };
+  const editRow = (at: number, row: FieldRow) => {
+    setDraft((held) => ({ ...held, rows: held.rows.map((other, index) => (index === at ? row : other)) }));
+    save.reset();
+  };
 
   const commit = (next: StatusDraft) => save.run(saveStatus(statusOf(next, saved)));
 
-  const tooLong = overLimit(draft);
+  const tooLong = problemOf(draft);
   const away = (saved?.away_message ?? "") !== "";
   const busy = save.phase.kind === "saving";
 
@@ -120,19 +125,7 @@ function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["
         error={overBy(draft.line, MAX_LINE_CHARS)}
         onChange={(line) => edit({ line })}
       />
-      <Fields columns={3}>
-        {FIELDS.map((field) => (
-          <TextField
-            key={field.key}
-            label={field.label}
-            value={draft[field.key]}
-            maxLength={MAX_FIELD_CHARS}
-            placeholder={PLACEHOLDERS[field.key]}
-            hint={leftOf(draft[field.key], MAX_FIELD_CHARS, 20) ?? undefined}
-            onChange={(value) => edit({ [field.key]: value })}
-          />
-        ))}
-      </Fields>
+      <StatusFields rows={draft.rows} onChange={editRow} />
       <TextField
         label="Away message"
         value={draft.awayMessage}
@@ -168,11 +161,94 @@ function overBy(value: string, max: number): string | undefined {
   return [...value.trim()].length > max ? (leftOf(value, max, 0) ?? undefined) : undefined;
 }
 
-const PLACEHOLDERS: Record<(typeof FIELDS)[number]["key"], string> = {
-  reading: "a book, an article",
-  listening: "a record, a show",
-  workingOn: "a project",
+/** What each suggested label's box offers before anything is typed. */
+const PLACEHOLDERS: Record<SuggestedLabel, string> = {
+  "Listening to": "a record, a show",
+  Reading: "a book, an article",
+  "Working on": "a project",
+  Playing: "a game",
+  Watching: "a film, a series",
 };
+
+const ORDINALS = ["First", "Second", "Third"] as const;
+
+const LABEL_OPTIONS: readonly { value: LabelChoice; label: string }[] = [...SUGGESTED_LABELS.map((label) => ({ value: label, label })), { value: OWN, label: "Your own…" }];
+
+/**
+ * The three short fields (#270): each a label and what it says. The label is
+ * picked from the suggestions or typed ("Your own…" turns the drop-down into
+ * a box, with the list a click away). A web address in what it says opens
+ * when somebody clicks it on your card.
+ */
+function StatusFields({ rows, onChange }: { rows: readonly FieldRow[]; onChange: (at: number, row: FieldRow) => void }) {
+  const id = useId();
+  return (
+    <div className="nx-set-status-fields" role="group" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help`}>
+      <span id={`${id}-label`} className="nx-set-group-label">
+        Fields
+      </span>
+      <div className="nx-set-status-rows">
+        {rows.map((row, at) => (
+          <StatusFieldRow key={at} at={at} row={row} rows={rows} onChange={(next) => onChange(at, next)} />
+        ))}
+      </div>
+      <p id={`${id}-help`} className="nx-set-note">
+        Pick a label or type your own. A web address, like github.com/you, opens when somebody clicks it on your card.
+      </p>
+    </div>
+  );
+}
+
+function StatusFieldRow({ at, row, rows, onChange }: { at: number; row: FieldRow; rows: readonly FieldRow[]; onChange: (row: FieldRow) => void }) {
+  const cell = useRef<HTMLDivElement | null>(null);
+  // Focus follows a switch between the list and your own box, and only a
+  // switch: opening Profile on a typed label doesn't take the focus.
+  const [moved, setMoved] = useState(false);
+  useEffect(() => {
+    if (!moved) return;
+    cell.current?.querySelector<HTMLElement>("input, select")?.focus();
+    setMoved(false);
+  }, [moved]);
+
+  const ordinal = ORDINALS[at] ?? "Another";
+  const labelName = `${ordinal} field's label`;
+  const label = labelOf(row);
+  const pick = (choice: LabelChoice) => {
+    onChange({ ...row, choice });
+    if (choice === OWN) setMoved(true);
+  };
+  // Back to the list: the first suggestion no other field is using.
+  const backToList = () => {
+    const taken = new Set(rows.filter((_, index) => index !== at).map((other) => labelOf(other)));
+    const free = SUGGESTED_LABELS.find((suggestion) => !taken.has(suggestion)) ?? SUGGESTED_LABELS[0];
+    onChange({ ...row, choice: free });
+    setMoved(true);
+  };
+
+  return (
+    <div className="nx-set-status-field">
+      <div className="nx-set-status-label" ref={cell}>
+        {row.choice === OWN ? (
+          <>
+            <TextField label={labelName} hideLabel value={row.own} maxLength={MAX_LABEL_CHARS} placeholder="Your own label" onChange={(own) => onChange({ ...row, own })} />
+            <IconButton icon="caret" tone="filled" label="Pick a label from the list" onClick={backToList} />
+          </>
+        ) : (
+          <Select label={labelName} hideLabel value={row.choice} options={LABEL_OPTIONS} onChange={pick} />
+        )}
+      </div>
+      <TextField
+        label={label || `${ordinal} field`}
+        hideLabel
+        value={row.value}
+        maxLength={MAX_FIELD_CHARS}
+        placeholder={row.choice === OWN ? "a few words, or a link" : PLACEHOLDERS[row.choice]}
+        hint={leftOf(row.value, MAX_FIELD_CHARS, 20) ?? undefined}
+        onChange={(value) => onChange({ ...row, value })}
+      />
+    </div>
+  );
+}
 
 const WEIGHT_WORDS: Record<(typeof WEIGHTS)[number], string> = { 400: "Regular", 500: "Medium", 700: "Bold" };
 const EFFECT_WORDS: Record<(typeof EFFECTS)[number], string> = { none: "None", shimmer: "Shimmer", glow: "Glow" };

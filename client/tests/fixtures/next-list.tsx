@@ -11,6 +11,9 @@
  * open and the others folded; `&folded` starts them all folded, `&open` all
  * open, `&quiet` makes Ashen Lanterns quiet, `&awayfail` has Casa da
  * Ribeira refuse to save an away message.
+ *
+ * `?fields`: Jules and you have fields with labels of your own and web
+ * addresses in them (#270); `&long` makes them as long as the server takes.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -26,7 +29,8 @@ import { voiceModel } from "../../src/next/core/voice";
 import { awayChoices } from "../../src/next/core/you";
 import { ListView } from "../../src/next/app/list/ListView";
 import "../../src/next/styles/app.css";
-import { NOW, SERVER, SERVER_NAME, evening, people } from "./next/evening";
+import type { User } from "../../src/generated/User";
+import { NOW, SERVER, SERVER_NAME, evening, ownFields, people, withFields } from "./next/evening";
 import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk,
@@ -107,6 +111,15 @@ const many = query.has("many")
 const shown = query.has("idle")
   ? { ...many, presence: many.presence.map((entry) => (entry.user_id === people.callie.id ? { ...entry, state: "idle" as const } : entry)) }
   : many;
+// `?fields`: Jules and you have fields with labels of your own, web
+// addresses among them (#270); `&long`, as long as the server takes.
+const fielded = query.has("fields")
+  ? (() => {
+      const fields = ownFields(query.has("long"));
+      const wearing = (user: User): User => (user.id === people.jules.id || user.id === people.matt.id ? withFields(user, fields) : user);
+      return { ...shown, me: shown.me && wearing(shown.me), users: shown.users.map(wearing) };
+    })()
+  : shown;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
@@ -132,7 +145,7 @@ interface Live {
 
 /** One server, as the list has always been. */
 function OneServer() {
-  const [held, setHeld] = useState<GatewayState>(shown);
+  const [held, setHeld] = useState<GatewayState>(fielded);
   useEffect(() => {
     if (!query.has("live")) return;
     let next = 100;

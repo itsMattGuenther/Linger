@@ -3,10 +3,11 @@
  * (docs/design/buddy-list.md, "The buddy list"): the status line, and going
  * away or coming back. Pure: each returns the whole status to save, with
  * every other field carried over, so a quick edit never wipes what you
- * wrote in Settings.
+ * wrote in Settings, your labelled fields included (#270).
  */
 import type { UserStatus } from "../../generated/UserStatus";
-import { draftOf, MAX_LINE_CHARS, statusOf } from "../../lib/status";
+import { MAX_LINE_CHARS } from "../../lib/status";
+import { draftOf, statusOf } from "./status";
 
 /** Your status with a new line; blank clears it. */
 export function withLine(status: UserStatus | null | undefined, line: string): UserStatus {

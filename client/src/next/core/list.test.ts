@@ -60,7 +60,7 @@ function presence(user_id: string, state: PresenceEntry["state"], room_id: strin
 const matt = person("u-matt", "Matt");
 const eli = person("u-eli", "Eli");
 const jules = person("u-jules", "Jules", {
-  status: { line: "speakers: finally set up", reading: null, listening: null, working_on: null, image_id: null, image_url: null, away_message: null, away_since: null },
+  status: { line: "speakers: finally set up", reading: null, listening: null, working_on: null, fields: [], image_id: null, image_url: null, away_message: null, away_since: null },
 });
 const sam = person("u-sam", "Sam");
 const jen = person("u-jen", "Jen", { last_seen_at: NOW - 30 * HOUR });

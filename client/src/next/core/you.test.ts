@@ -7,6 +7,11 @@ const status: UserStatus = {
   reading: null,
   listening: "Khruangbin",
   working_on: "a design for this app",
+  fields: [
+    { label: "Listening to", value: "Khruangbin" },
+    { label: "GitHub", value: "github.com/bendthebracket" },
+    { label: "Working on", value: "a design for this app" },
+  ],
   image_id: "img-1",
   image_url: "https://cdn.example/img-1",
   away_message: null,
@@ -35,6 +40,23 @@ describe("changing your status from the list", () => {
   it("never sends a picture, even one an older server still has (#269)", () => {
     expect(withLine(status, "second coffee")).toMatchObject({ image_id: null, image_url: null });
     expect(withAway(status, "asleep")).toMatchObject({ image_id: null, image_url: null });
+  });
+
+  it("keeps your own labelled fields, in their order (#270)", () => {
+    expect(withLine(status, "second coffee").fields).toEqual(status.fields);
+    expect(withAway(status, "asleep").fields).toEqual(status.fields);
+  });
+
+  it("from an older server with no fields, keeps its three and sends them as fields too", () => {
+    const older: UserStatus = { ...words, fields: null };
+    expect(withLine(older, "second coffee")).toMatchObject({
+      listening: "Khruangbin",
+      working_on: "a design for this app",
+      fields: [
+        { label: "Listening to", value: "Khruangbin" },
+        { label: "Working on", value: "a design for this app" },
+      ],
+    });
   });
 
   it("works for someone with no status yet", () => {

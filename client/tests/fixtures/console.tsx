@@ -65,6 +65,10 @@ const users: User[] = [
       reading: "The Creative Act",
       listening: "Khruangbin",
       working_on: null,
+      fields: [
+        { label: "Listening to", value: "Khruangbin" },
+        { label: "Reading", value: "The Creative Act" },
+      ],
       image_id: null,
       image_url: null,
       away_message: null,

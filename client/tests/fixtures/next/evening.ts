@@ -13,6 +13,8 @@ import type { Style } from "../../../src/generated/Style";
 import type { User } from "../../../src/generated/User";
 import type { UserStatus } from "../../../src/generated/UserStatus";
 import type { GatewayState } from "../../../src/lib/gateway";
+import type { StatusField } from "../../../src/generated/StatusField";
+import { classicOf, fieldsOf } from "../../../src/lib/status";
 
 /** 22:52 on Friday 25 September 2026, the prototype's "now". */
 export const NOW = Date.parse("2026-09-25T22:52:00");
@@ -25,18 +27,52 @@ function style(font_key: string, weight: Style["weight"], fill: Style["fill"], i
   return { font_key, weight, italic, fill, effect: "none", msg_font_key: null };
 }
 
+/**
+ * A status as a server from #270 on sends it: its fields, and the three
+ * fixed keys filled from the ones with those labels. Given only the keys,
+ * the fields are made from them.
+ */
 function status(line: string | null, extra: Partial<UserStatus> = {}): UserStatus {
-  return {
+  const held: UserStatus = {
     line,
     reading: null,
     listening: null,
     working_on: null,
+    fields: null,
     image_id: null,
     image_url: null,
     away_message: null,
     away_since: null,
     ...extra,
   };
+  return { ...held, fields: extra.fields ?? fieldsOf(held) };
+}
+
+/**
+ * Fields with labels of people's own (#270), for the `?fields` pages: a
+ * suggested label, a typed one, and web addresses both bare and typed out in
+ * full, beside words that look like one and aren't. `long`: a label and
+ * values as long as the server takes, one of them an address with no space
+ * to break at.
+ */
+export function ownFields(long = false): StatusField[] {
+  return long
+    ? [
+        { label: "Supercalifragilisticexpi", value: "https://example.com/a-path-that-goes-on-and-on-without-a-single-space-in-it/wxyz" },
+        { label: "Currently obsessing over", value: "a sentence that fills the whole field, word after word after word, up to its end" },
+        { label: "GitHub", value: "github.com/bendthebracket" },
+      ]
+    : [
+        { label: "Listening to", value: "Khruangbin — Con Todo El Mundo" },
+        { label: "GitHub", value: "github.com/bendthebracket" },
+        { label: "Playing", value: "Outer Wilds, not main.rs. https://www.mobiusdigitalgames.com" },
+      ];
+}
+
+/** Somebody wearing these fields, with the three fixed keys filled from them as a server does. */
+export function withFields(user: User, fields: StatusField[]): User {
+  const held = user.status ?? status(null);
+  return { ...user, status: { ...held, ...classicOf(fields), fields } };
 }
 
 function person(id: string, name: string, personStyle: Style, extra: Partial<User> = {}): User {
