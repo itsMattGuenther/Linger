@@ -14,6 +14,26 @@ export interface Knocker {
   knock(userId: UserId): Promise<unknown>;
 }
 
+/**
+ * Why Knock can't be pressed for somebody who's offline (#288), in their
+ * name. The control stays, greyed out, and says this, rather than going
+ * quiet or disappearing: a knock is a sound and a card on their screen
+ * (SPEC §4.9), and nobody offline has Linger open to show it.
+ */
+export function knockOfflineLine(name: string): string {
+  return `Can't knock while ${name} is offline.`;
+}
+
+/**
+ * A note's sentences, so a line breaks between them rather than inside a
+ * short one: "Three knocks this hour." over "You can knock again in 20
+ * minutes." (#268), not "…knock again in" over "20 minutes.". The card and a
+ * narrow DM header are too narrow for both on one line.
+ */
+export function sentencesOf(text: string): string[] {
+  return text.replace(/([.!?]) +/g, "$1\n").split("\n");
+}
+
 export async function knockOn(api: Knocker, userId: UserId): Promise<KnockResult> {
   try {
     await api.knock(userId);

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ErrorEnvelope } from "../../generated/ErrorEnvelope";
 import { AuthedApi } from "../../lib/api";
-import { knockOn } from "./knock";
+import { knockOfflineLine, knockOn } from "./knock";
 
 /** The real REST client, with the server's answer to `POST /knock` faked. */
 function answering(response: Response): AuthedApi {
@@ -57,5 +57,11 @@ describe("knockOn", () => {
       ok: false,
       problem: "Couldn't knock.",
     });
+  });
+});
+
+describe("knockOfflineLine", () => {
+  it("names who is offline (#288)", () => {
+    expect(knockOfflineLine("Justin B")).toBe("Can't knock while Justin B is offline.");
   });
 });

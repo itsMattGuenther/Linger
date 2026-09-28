@@ -9,7 +9,10 @@
   box-shadow: var(--shadow-popover);
   color: var(--text-primary);
   font: 500 var(--text-meta) / var(--line-meta) var(--font-ui);
-  white-space: nowrap;
+  /* One line while it fits; a longer one, like a reason in somebody's long
+     name (#288), wraps at the widest a tooltip goes rather than running out
+     of its box. */
+  width: max-content;
   pointer-events: none;
 }
 

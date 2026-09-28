@@ -72,7 +72,7 @@
   color: var(--text-on-accent);
 }
 
-.k-button[data-variant="primary"]:hover:not(:disabled) {
+.k-button[data-variant="primary"]:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
@@ -85,7 +85,7 @@
   color: var(--text-secondary);
 }
 
-.k-button[data-variant="secondary"]:hover:not(:disabled) {
+.k-button[data-variant="secondary"]:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--surface-subtle-hover);
   border-color: var(--edge-hover);
   color: var(--text-primary);
@@ -97,7 +97,7 @@
   color: var(--text-secondary);
 }
 
-.k-button[data-variant="quiet"]:hover:not(:disabled) {
+.k-button[data-variant="quiet"]:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
@@ -107,7 +107,7 @@
   color: var(--text-danger);
 }
 
-.k-button[data-variant="danger"]:hover:not(:disabled) {
+.k-button[data-variant="danger"]:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--danger-wash);
   border-color: var(--danger-edge);
   color: var(--text-on-danger);
@@ -120,6 +120,6 @@
   color: var(--text-primary);
 }
 
-.k-button:disabled {
+.k-button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.45;
 }

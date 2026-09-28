@@ -522,6 +522,46 @@ test("a list of places moves with the arrow keys, Home and End, with only the sh
   await expect(nav.locator('[role="tab"][tabindex="0"]')).toHaveText("Profile");
 });
 
+test("an unavailable button looks disabled but keeps the pointer and the keyboard, says why, and a press does nothing (#288)", async ({ page }) => {
+  const buttons = page.getByTestId("unavailable-buttons");
+  const icons = page.getByTestId("unavailable-icon-buttons");
+  const knock = buttons.getByRole("button", { name: "Knock" });
+  const icon = icons.getByRole("button", { name: "Can't knock while Jen is offline." });
+  const opacity = (locator: ReturnType<Page["locator"]>) => locator.evaluate((node) => getComputedStyle(node).opacity);
+  // It looks exactly as a disabled one of its kind does.
+  expect(await opacity(knock)).toBe(await opacity(page.locator(".k-button:disabled").first()));
+  expect(await opacity(icon)).toBe(await opacity(icons.locator(".k-icon-button:disabled")));
+  for (const control of [knock, icon]) {
+    await expect(control).toBeDisabled();
+    await expect(control).toHaveAttribute("aria-disabled", "true");
+  }
+  // A button keeps its label as its name and says why as its description;
+  // an icon button, whose name is its tooltip, says why as both.
+  await expect(knock).toHaveAccessibleDescription("Can't knock while Jen is offline.");
+  await expect(buttons.getByRole("button", { name: "Save" })).toHaveAccessibleDescription("Nothing to save yet.");
+  // The pointer gets the reason, and no hover look.
+  const tip = page.locator("[data-kit='Tooltip']");
+  for (const control of [knock, icon]) {
+    const before = await control.evaluate((node) => getComputedStyle(node).backgroundColor);
+    await control.hover();
+    await expect(tip).toHaveText("Can't knock while Jen is offline.");
+    expect(await control.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(before);
+    await control.click({ force: true });
+    await page.mouse.move(0, 0);
+    await expect(tip).toHaveCount(0);
+  }
+  // The keyboard reaches both, gets the reason too, and Enter does nothing.
+  await buttons.getByRole("button", { name: "Save" }).focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(knock).toBeFocused();
+  await expect(tip).toHaveText("Can't knock while Jen is offline.");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
+  await icon.focus();
+  await page.keyboard.press("Enter");
+  expect(await page.evaluate(() => document.body.dataset.pressed ?? "")).toBe("");
+});
+
 test("a drop-down is named by its label, keeps the choice picked, and a disabled one refuses", async ({ page }) => {
   const size = page.getByRole("combobox", { name: "Interface size" });
   await expect(size).toHaveValue("100");

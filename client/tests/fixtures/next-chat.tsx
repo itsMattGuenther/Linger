@@ -346,7 +346,7 @@ function Fixture() {
               kind: "dm",
               label: dmLabel(room),
               people: dmPeople(room).map((user) => ({ user, state: stateOf(user) })),
-              onKnock: dmPeople(room).length === 1 ? () => note("knock") : undefined,
+              knock: dmPeople(room).length === 1 ? { onKnock: () => note("knock"), phase: "idle" } : undefined,
             }
           : { kind: "room", name: room.name, topic: room.topic, people: (IN_ROOM[room.id] ?? []).flatMap((one) => everyone.get(one) ?? []) },
       voice:

@@ -16,6 +16,13 @@ export interface IconButtonProps {
   tone?: IconButtonTone;
   pressed?: boolean;
   disabled?: boolean;
+  /**
+   * Why it can't be used right now: "Can't knock while Jules is offline." It
+   * looks disabled but stays hoverable and reachable by keyboard (a plain
+   * `disabled` swallows both), and the reason becomes its name and tooltip,
+   * so the pointer and a screen reader both learn why. A press does nothing.
+   */
+  unavailable?: string;
   /** Take it out of the tab order, for a control keyboard users reach another way. */
   skipTab?: boolean;
   /** For a button that opens something: `aria-expanded`. */
@@ -37,11 +44,13 @@ export function IconButton({
   tone = "plain",
   pressed,
   disabled = false,
+  unavailable,
   skipTab = false,
   expanded,
   onClick,
 }: IconButtonProps) {
-  const tip = useTooltip(shortcut ? `${label} · ${shortcut}` : label);
+  const name = unavailable ?? label;
+  const tip = useTooltip(shortcut && !unavailable ? `${name} · ${shortcut}` : name);
   return (
     <>
       <button
@@ -51,13 +60,14 @@ export function IconButton({
         data-kit-control=""
         data-size={size}
         data-tone={tone}
-        aria-label={label}
+        aria-label={name}
         aria-pressed={pressed}
         aria-expanded={expanded}
-        aria-keyshortcuts={shortcut}
-        disabled={disabled}
+        aria-keyshortcuts={unavailable ? undefined : shortcut}
+        aria-disabled={unavailable ? true : undefined}
+        disabled={disabled && !unavailable}
         tabIndex={skipTab ? -1 : undefined}
-        onClick={onClick}
+        onClick={unavailable ? undefined : onClick}
         {...tip.anchorProps}
       >
         <Icon name={icon} size={ICON_FOR[size]} />

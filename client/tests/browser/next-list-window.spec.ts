@@ -846,3 +846,23 @@ test("no arrival cards from a Quiet server, in quiet hours, or with them turned 
   await page.clock.runFor(500);
   await expect(page.locator("[data-screen='knocks']")).toHaveCount(0);
 });
+
+test("somebody's card and row give Knock back the moment they come online (#288)", async ({ page }) => {
+  await open(page, "?one");
+  await page.getByRole("button", { name: /Offline/ }).click();
+  const jen = page.getByRole("listitem").filter({ hasText: "Jen" });
+  await jen.getByRole("button").first().click();
+  const card = page.getByRole("dialog", { name: "Jen" });
+  await expect(card.getByRole("status")).toHaveText("Can't knock while Jen is offline.");
+  await expect(card.getByRole("button", { name: "Knock" })).toBeDisabled();
+  // Jen comes online while her card is open.
+  await page.evaluate((server) => window.core?.frame(server, { op: "presence.update", d: { user_id: "u-jen", state: "around", room_id: null, away_message: null } } as never), HOME);
+  await expect(card.getByRole("status")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+  await expect(card.getByRole("button", { name: "Knock" })).not.toHaveAccessibleDescription(/offline/);
+  // Her row's Knock is back too.
+  await page.keyboard.press("Escape");
+  const row = page.getByRole("listitem").filter({ hasText: "Jen" });
+  await row.hover();
+  await expect(row.getByRole("button", { name: "Knock on Jen's door" })).toBeEnabled();
+});

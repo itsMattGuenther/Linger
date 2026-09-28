@@ -6,7 +6,7 @@ import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, Vo
 import { markerFor } from "../markers";
 import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
-import type { KnockResult } from "../../core/knock";
+import { knockOfflineLine, type KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
 
 /** How long a knocked row rests before it can knock again (SPEC §4.9). */
@@ -105,6 +105,9 @@ export function ServerBody({
   const [picking, setPicking] = useState<{ bottom: number } | null>(null);
   const pickerOpener = useRef<HTMLButtonElement | null>(null);
   const everyone = [...model.people.here, ...model.people.away, ...model.people.offline];
+  // The open card follows the person as they come and go (#288): coming
+  // online brings Knock back while their card is open.
+  const cardRow = card ? (everyone.find((row) => row.user.id === card.row.user.id) ?? card.row) : null;
   const closeCard = () => {
     setCard(null);
     // Focus goes back to the row that opened it.
@@ -131,7 +134,10 @@ export function ServerBody({
           icon="knock"
           size="sm"
           label={knocked.has(row.user.id) ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
-          disabled={row.state === "offline" || knocked.has(row.user.id)}
+          disabled={knocked.has(row.user.id)}
+          // Offline, it stays greyed out and says why, on hover, on focus
+          // and to a screen reader (#288).
+          unavailable={row.state === "offline" ? knockOfflineLine(row.user.display_name) : undefined}
           onClick={(event) => {
             const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
             void knock(row.user).then((result) => {
@@ -295,12 +301,12 @@ export function ServerBody({
         />
       ) : null}
 
-      {card ? (
+      {card && cardRow ? (
         <PersonCard
-          key={card.row.user.id}
-          user={card.row.user}
-          state={card.row.state}
-          note={card.row.note}
+          key={cardRow.user.id}
+          user={cardRow.user}
+          state={cardRow.state}
+          note={cardRow.note}
           anchor={card.anchor}
           onMessage={() => {
             onMessage?.(card.row.user);

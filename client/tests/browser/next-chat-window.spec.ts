@@ -665,16 +665,109 @@ test("a message is pinned and unpinned from its menu, and shows its pin (T-908)"
   await expect(row.locator(".nx-msg-pinned")).toHaveCount(0);
 });
 
-test("a knock from a DM says Knocked, unless the server refused it", async ({ page }) => {
+test("a knock from a DM says Knocked once the server has it", async ({ page }) => {
   await open(page, "room=d-jules");
-  await page.getByRole("button", { name: "Knock" }).click();
-  await expect(page.getByRole("button", { name: "Knocked" })).toBeDisabled();
+  const header = page.locator(".nx-pane-head");
+  await header.getByRole("button", { name: "Knock" }).click();
+  await expect(header.getByRole("button", { name: "Knocked" })).toBeDisabled();
   expect(await did(page)).toContain("POST /knock as token-1");
+});
 
-  // Refused: back to Knock at once, well before the three seconds a knock shows for.
+test("a knock the server refuses says why in the DM's header, never Knocked, then their status comes back (#288)", async ({ page }) => {
+  await page.clock.install();
   await open(page, "room=d-jules&limit");
-  await page.getByRole("button", { name: "Knock" }).click();
-  await expect(page.getByRole("button", { name: "Knock" })).toBeEnabled({ timeout: 1_000 });
+  const header = page.locator(".nx-pane-head");
+  await expect(header.locator(".nx-pane-sub")).toHaveText("speakers: finally set up");
+  // Every word the button shows, from here on.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { knockWords: string[] }).knockWords = seen;
+    new MutationObserver(() => {
+      const words = document.querySelector(".nx-pane-head .k-button-label")?.textContent;
+      if (words && seen.at(-1) !== words) seen.push(words);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await header.getByRole("button", { name: "Knock" }).click();
+  await expect(header.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+  await expect(header.getByRole("button", { name: "Knock" })).toBeEnabled();
+  expect(await page.evaluate(() => (window as unknown as { knockWords: string[] }).knockWords)).not.toContain("Knocked");
+  // On one line, in the chat window at its usual width, where their status was.
+  const said = header.locator(".nx-pane-sub[data-problem='yes']");
+  expect(await said.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(page.locator("[data-kit='Tooltip']")).toHaveCount(0);
+  // It goes on its own, and their status is back.
+  await page.clock.fastForward(8_000);
+  await expect(header.getByRole("status")).toHaveCount(0);
+  await expect(header.locator(".nx-pane-sub")).toHaveText("speakers: finally set up");
+});
+
+for (const [width, query, where] of [
+  [420, "", "the chat window at its narrowest"],
+  [360, "&single=1", "a conversation's own window"],
+] as const) {
+  test(`in ${where}, a refused knock's reason is in Knock's bubble, whole, and goes on its own (#288)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.clock.install();
+    if (query === "") await open(page, "room=d-jules&limit");
+    else await page.goto(`/tests/fixtures/next-chat-window.html?room=d-jules&limit${query}`);
+    const header = page.locator(".nx-pane-head");
+    await header.getByRole("button", { name: "Knock" }).click();
+    // Announced, and drawn in the bubble rather than cut in the header.
+    await expect(header.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+    await expect(header.locator(".nx-pane-sub[data-problem='yes']")).toHaveCount(0);
+    await expect(header.locator(".nx-pane-sub")).toHaveText("speakers: finally set up");
+    const bubble = page.locator("[data-kit='Tooltip']");
+    await expect(bubble).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+    const laid = await bubble.evaluate((node) => {
+      const edge = node.getBoundingClientRect();
+      return {
+        inWindow: edge.left >= 0 && edge.right <= window.innerWidth && edge.bottom <= window.innerHeight,
+        sentences: [...node.querySelectorAll(".nx-pane-sentence")].map((sentence) => {
+          const words = document.createRange();
+          words.selectNodeContents(sentence);
+          const boxes = [...words.getClientRects()];
+          return {
+            lines: new Set(boxes.map((box) => Math.round(box.top))).size,
+            inside: boxes.every((box) => box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5),
+          };
+        }),
+      };
+    });
+    expect(laid).toEqual({ inWindow: true, sentences: [{ lines: 1, inside: true }, { lines: 1, inside: true }] });
+    await expect(header.getByRole("button", { name: "Knock" })).toBeEnabled();
+    await page.clock.fastForward(8_000);
+    await expect(bubble).toHaveCount(0);
+    await expect(header.getByRole("status")).toHaveCount(0);
+  });
+}
+
+test("a DM with somebody offline keeps Knock, greyed out, saying why on hover and focus, until they're back (#288)", async ({ page }) => {
+  await open(page, "room=d-jules");
+  const header = page.locator(".nx-pane-head");
+  await page.evaluate(() =>
+    window.owner?.frame({ op: "presence.update", d: { user_id: "u-jules", state: "offline", room_id: null, away_message: null } }),
+  );
+  const knock = header.getByRole("button", { name: "Knock" });
+  await expect(knock).toBeDisabled();
+  await expect(knock).toHaveAccessibleDescription("Can't knock while Jules is offline.");
+  // The pointer gets the reason.
+  await knock.hover();
+  await expect(page.locator("[data-kit='Tooltip']")).toHaveText("Can't knock while Jules is offline.");
+  // So does the keyboard: it can be reached, and pressing it does nothing.
+  await page.mouse.move(0, 0);
+  await knock.focus();
+  await expect(knock).toBeFocused();
+  await page.keyboard.press("Enter");
+  await knock.click({ force: true });
+  expect(await did(page)).not.toContain("POST /knock as token-1");
+  // Back online, it knocks as ever.
+  await page.evaluate(() =>
+    window.owner?.frame({ op: "presence.update", d: { user_id: "u-jules", state: "around", room_id: null, away_message: null } }),
+  );
+  await expect(knock).toBeEnabled();
+  await expect(knock).not.toHaveAccessibleDescription(/offline/);
+  await knock.click();
+  await expect(header.getByRole("button", { name: "Knocked" })).toBeVisible();
 });
 
 test("Join asks the list window to join voice here", async ({ page }) => {
