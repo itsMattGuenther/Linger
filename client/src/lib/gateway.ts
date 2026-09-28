@@ -107,6 +107,16 @@ export interface RoomStream {
   /** A page is in flight; stops the same backfill firing twice. */
   loading: boolean;
   /**
+   * Which opening of the room this history belongs to. `openRoom` and
+   * `openAround` each start a new one, and `leaveWindow` goes through
+   * `openRoom`. A page asked for under one opening that comes back under
+   * another is for history the room no longer holds: it is dropped whole,
+   * `loading` included, because that flag now belongs to the new opening's
+   * own page. Clearing it early is what let Back to the newest ask for the
+   * newest page twice (#266).
+   */
+  opened: number;
+  /**
    * Sends still waiting on the server, shown in the room the instant Enter is
    * pressed rather than after the round trip (issue #128). Never merged into
    * `messages` — that list stays exactly what the server has confirmed, which
@@ -1146,13 +1156,31 @@ function putStream(server: string, roomId: RoomId, stream: RoomStream): void {
   publish(server, { ...current, streams: { ...current.streams, [roomId]: stream } });
 }
 
+/** Numbers each opening of a room (`RoomStream.opened`). */
+let openings = 0;
+
+/**
+ * The room's history as the opening that asked for a page left it, or null if
+ * the room has been opened again or dropped since. Either way the page is an
+ * answer to a question nobody is asking any more.
+ */
+function stillOpen(server: string, roomId: RoomId, opened: number): RoomStream | null {
+  const stream = stateOf(server).streams[roomId];
+  return stream !== undefined && stream.opened === opened ? stream : null;
+}
+
 /**
  * Fetch the page before `from` and fold it in.
  *
  * A short answer is the start of the room: the range scan ran out before the
  * limit did.
  */
-async function fetchPage(api: AuthedApi, roomId: RoomId, before: MessageId | null): Promise<void> {
+async function fetchPage(
+  api: AuthedApi,
+  roomId: RoomId,
+  before: MessageId | null,
+  opened: number,
+): Promise<void> {
   const server = api.baseUrl;
   const room = encodeURIComponent(roomId);
   const range = before === null ? "" : `&before=${encodeURIComponent(before)}`;
@@ -1162,11 +1190,13 @@ async function fetchPage(api: AuthedApi, roomId: RoomId, before: MessageId | nul
   } catch {
     // A page that didn't arrive doesn't need a state of its own. The status bar
     // is already saying what is wrong, and the next scroll asks again.
-    const stream = stateOf(server).streams[roomId];
+    const stream = stillOpen(server, roomId, opened);
     if (linkFor(api) !== null && stream) putStream(server, roomId, { ...stream, loading: false });
     return;
   }
-  const stream = stateOf(server).streams[roomId];
+  // A room opened again while this page was on the wire (Back to the newest,
+  // a search hit, a reconnect) has a page of its own on the way.
+  const stream = stillOpen(server, roomId, opened);
   if (linkFor(api) === null || !stream) return;
   // History let go of while this page was on the wire (#173) means it no
   // longer joins onto what is held. Folding it in would leave a gap, so it is
@@ -1203,13 +1233,18 @@ const WINDOW_NEWER = Math.floor(PAGE_SIZE / 2);
  * the price of never producing a gap, and it is worth paying: `after` on this
  * endpoint answers newest-first, so it hands back the *newest* hundred messages
  * after a point rather than the next hundred — which is exactly the gap.
+ *
+ * `"stale"` means the room was opened again, or dropped, while the window was
+ * on the wire. Whoever did that is in charge of the room now, so the answer is
+ * dropped and the caller does nothing more.
  */
 async function fetchWindow(
   api: AuthedApi,
   roomId: RoomId,
   around: MessageId,
   replace: boolean,
-): Promise<"failed" | "window" | "end"> {
+  opened: number,
+): Promise<"failed" | "stale" | "window" | "end"> {
   const server = api.baseUrl;
   const room = encodeURIComponent(roomId);
   let page: Message[];
@@ -1218,13 +1253,16 @@ async function fetchWindow(
       `/rooms/${room}/messages?around=${encodeURIComponent(around)}&limit=${PAGE_SIZE}`,
     );
   } catch {
-    const stream = stateOf(server).streams[roomId];
-    if (linkFor(api) !== null && stream) putStream(server, roomId, { ...stream, loading: false });
+    if (linkFor(api) === null) return "failed";
+    const stream = stillOpen(server, roomId, opened);
+    if (!stream) return "stale";
+    putStream(server, roomId, { ...stream, loading: false });
     return "failed";
   }
   const current = stateOf(server);
-  const stream = current.streams[roomId];
-  if (linkFor(api) === null || !stream) return "failed";
+  if (linkFor(api) === null) return "failed";
+  const stream = stillOpen(server, roomId, opened);
+  if (!stream) return "stale";
   // Reading forwards overlaps what is held by construction — unless the
   // message it was centred on was let go of in the meantime (#173).
   if (!replace && !stream.messages.some((held) => held.id === around)) {
@@ -1251,6 +1289,7 @@ async function fetchWindow(
     atEnd: pageEnds && !missedOne,
     loading: false,
     pending: stream.pending,
+    opened,
   });
   return pageEnds ? "end" : "window";
 }
@@ -1268,8 +1307,9 @@ async function fetchWindow(
  */
 export async function openRoom(api: AuthedApi, roomId: RoomId): Promise<void> {
   if (linkFor(api) === null || stateOf(api.baseUrl).streams[roomId]) return;
-  putStream(api.baseUrl, roomId, { messages: [], atStart: false, atEnd: true, loading: true, pending: [] });
-  await fetchPage(api, roomId, null);
+  const opened = ++openings;
+  putStream(api.baseUrl, roomId, { messages: [], atStart: false, atEnd: true, loading: true, pending: [], opened });
+  await fetchPage(api, roomId, null, opened);
 }
 
 /**
@@ -1292,16 +1332,20 @@ export async function openAround(
   around: MessageId,
 ): Promise<void> {
   if (linkFor(api) === null) return;
+  const opened = ++openings;
   putStream(api.baseUrl, roomId, {
     messages: [],
     atStart: false,
     atEnd: false,
     loading: true,
     pending: [],
+    opened,
   });
-  const landed = await fetchWindow(api, roomId, around, true);
+  const landed = await fetchWindow(api, roomId, around, true, opened);
   // The message is gone, or the server is. Either way the room is better off
-  // showing its newest page than an empty window nobody can get out of.
+  // showing its newest page than an empty window nobody can get out of. A
+  // "stale" landing is left alone: the room was opened again meanwhile, and
+  // that opening is the one on screen.
   if (landed === "failed") await leaveWindow(api, roomId);
 }
 
@@ -1465,7 +1509,7 @@ export async function loadOlder(api: AuthedApi, roomId: RoomId): Promise<void> {
   if (linkFor(api) === null || !stream || stream.loading || stream.atStart) return;
   const oldest = stream.messages[0];
   putStream(api.baseUrl, roomId, { ...stream, loading: true });
-  await fetchPage(api, roomId, oldest?.id ?? null);
+  await fetchPage(api, roomId, oldest?.id ?? null, stream.opened);
 }
 
 /**
@@ -1485,7 +1529,7 @@ export async function loadNewer(api: AuthedApi, roomId: RoomId): Promise<void> {
     const newest = stream.messages[stream.messages.length - 1];
     if (newest === undefined) return;
     putStream(api.baseUrl, roomId, { ...stream, loading: true });
-    if ((await fetchWindow(api, roomId, newest.id, false)) !== "end") return;
+    if ((await fetchWindow(api, roomId, newest.id, false, stream.opened)) !== "end") return;
   }
 }
 

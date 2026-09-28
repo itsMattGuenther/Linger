@@ -981,6 +981,36 @@ test.describe("reading far back", () => {
     expect((await did(page)).filter((line) => line === "GET /rooms/r-general/messages?limit=100 as token-1").length).toBe(newestPages + 1);
   });
 
+  test("a read forwards that comes back after Back to the newest leaves the newest page to finish (CONV-14, #266)", async ({ page }) => {
+    const asked = async (part: string) => (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?") && line.includes(part)).length;
+    const newestPage = "?limit=100 as token-1";
+    await readFarBack(page);
+    // From here every read waits for the test, which fixes the order two of them come back in.
+    await page.evaluate(() => window.parity?.holdReads());
+    const forwards = await asked("around=");
+    // At the bottom of what's held, a read forwards starts, and is still on its way...
+    await log(page).evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect.poll(() => asked("around=")).toBe(forwards + 1);
+    const newestPages = await asked(newestPage);
+    // ...when Back to the newest starts the room over and asks for its newest page.
+    await newest(page).click();
+    await expect.poll(() => asked(newestPage)).toBe(newestPages + 1);
+    // The read forwards comes back first, to a room that isn't the one it was asked for.
+    expect(await page.evaluate(() => window.parity?.answerReads("around="))).toBe(1);
+    // Anything that looks at the edges of the room while its newest page is still on its way.
+    for (let look = 0; look < 5; look += 1) {
+      await log(page).evaluate((node) => node.dispatchEvent(new Event("scroll")));
+      await page.waitForTimeout(40);
+    }
+    await page.evaluate(() => window.parity?.answerReads());
+    await expect(row(page, "m000016")).toBeVisible();
+    await expect(newest(page)).toHaveCount(0);
+    // The newest page was asked for once, not again because the late read cleared the way.
+    expect(await asked(newestPage)).toBe(newestPages + 1);
+  });
+
   test("reading back down brings the rest back with no gap (CONV-15)", async ({ page }) => {
     await readFarBack(page);
     const seen = new Set<string>();

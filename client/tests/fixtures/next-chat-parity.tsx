@@ -16,6 +16,10 @@
  *   `window.parity.release()`, so it shows as going up.
  * - `?flakystore`: the file store refuses each part the first time it's sent.
  *
+ * `window.parity.holdReads()` makes every history read from then on wait for
+ * `window.parity.answerReads(…)`, so a test decides the order two reads come
+ * back in.
+ *
  * Files go up as the real server has them: a slot (`POST /uploads`), the
  * bytes to the store (`PUT /api/v1/store/…`), then `complete`. A send that
  * names finished files carries them on the message. `window.parity` lets a
@@ -141,6 +145,11 @@ const desktop = fakeDesktop({
   },
 });
 
+// History reads being held for the test (`holdReads`): each is asked of the
+// server at once, so it shows in `data-did`, and answered when the test says.
+let holdingReads = false;
+const heldReads: { query: string; answer: () => void }[] = [];
+
 // The store's bytes and a send that never comes back sit outside `routes`,
 // which can't wait: they're answered here, before the fake server sees them.
 const fakeFetch = window.fetch;
@@ -148,6 +157,11 @@ const refusedOnce = new Set<string>();
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const method = init?.method ?? "GET";
+  if (holdingReads && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "GET") {
+    const answer = fakeFetch(input, init);
+    await new Promise<void>((settle) => heldReads.push({ query: url.search, answer: settle }));
+    return answer;
+  }
   if (url.origin === SERVER && url.pathname.startsWith("/api/v1/store/") && method === "PUT") {
     desktop.note(`PUT ${url.pathname.slice("/api/v1".length)}`);
     if (query.has("holdparts")) await parts;
@@ -181,6 +195,13 @@ declare global {
       release: () => void;
       /** The list window opens a conversation while this window is open. */
       open: (room: string) => void;
+      /** From now on, every history read waits to be answered. */
+      holdReads: () => void;
+      /**
+       * Answer the held reads whose query has `part` in it; without one,
+       * answer them all and stop holding. Says how many were answered.
+       */
+      answerReads: (part?: string) => number;
     };
   }
 }
@@ -194,6 +215,18 @@ window.parity = {
   },
   release: () => release(),
   open: (room) => desktop.deliver("next:open", { server: SERVER, room }),
+  holdReads: () => {
+    holdingReads = true;
+  },
+  answerReads: (part) => {
+    if (part === undefined) holdingReads = false;
+    const answering = heldReads.filter((read) => part === undefined || read.query.includes(part));
+    for (const read of answering) {
+      heldReads.splice(heldReads.indexOf(read), 1);
+      read.answer();
+    }
+    return answering.length;
+  },
 };
 
 const root = document.getElementById("root");

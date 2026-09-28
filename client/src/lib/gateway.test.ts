@@ -602,6 +602,88 @@ describe("a room opened on a search hit", () => {
     expect(stream?.messages.some((held) => held.id === id(NEWEST))).toBe(true);
     expect(stream?.messages.some((held) => held.id === id(HIT))).toBe(false);
   });
+
+  /**
+   * The room's history, with every read held until the test answers it, so
+   * the test decides the order two reads on the wire together come back in.
+   */
+  function heldHistory(): { api: AuthedApi; asked: string[]; answer: (part: string) => void } {
+    const room = history();
+    const asked: string[] = [];
+    const waiting: { path: string; go: () => void }[] = [];
+    const api = fakeApi(HOME, async (path: string) => {
+      asked.push(path);
+      await new Promise<void>((go) => waiting.push({ path, go }));
+      return room(path);
+    });
+    const answer = (part: string): void => {
+      const at = waiting.findIndex((read) => read.path.includes(part));
+      const read = waiting[at];
+      if (!read) throw new Error(`nothing waiting for ${part}`);
+      waiting.splice(at, 1);
+      read.go();
+    };
+    return { api, asked, answer };
+  }
+
+  /** Let every answered read land and fold in. */
+  const settle = () => new Promise<void>((done) => setTimeout(done, 0));
+
+  it("drops a read forwards that lands after going back to the newest, and asks for the newest page once (#266)", async () => {
+    const { api, asked, answer } = heldHistory();
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    const landing = openAround(api, "r-garage", id(HIT));
+    answer("around=");
+    await landing;
+
+    // Reading forwards, and Back to the newest pressed while that read is on the wire.
+    const forwards = loadNewer(api, "r-garage");
+    const back = leaveWindow(api, "r-garage");
+    answer("around=");
+    await forwards;
+    await settle();
+
+    // The late read answered a room that has since started over: it changes nothing,
+    // and the newest page is still the thing on its way.
+    const waiting = serverState(HOME).streams["r-garage"];
+    expect(waiting?.messages).toEqual([]);
+    expect(waiting?.loading).toBe(true);
+    // So scrolling in the meantime can't ask for the newest page a second time.
+    await loadOlder(api, "r-garage");
+    const newestPage = "/rooms/r-garage/messages?limit=100";
+    expect(asked.filter((path) => path === newestPage)).toHaveLength(1);
+
+    answer("?limit=100");
+    await back;
+    const stream = serverState(HOME).streams["r-garage"];
+    expect(stream?.atEnd).toBe(true);
+    expect(stream?.loading).toBe(false);
+    expect(stream?.messages.at(-1)?.id).toBe(id(NEWEST));
+    expect(stream?.messages.some((held) => held.id === id(HIT))).toBe(false);
+    expect(asked.filter((path) => path === newestPage)).toHaveLength(1);
+  });
+
+  it("leaves no gap when a search hit lands after going back to the newest", async () => {
+    const { api, answer } = heldHistory();
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    // Back to the newest pressed while the window around the hit is still on its way.
+    const landing = openAround(api, "r-garage", id(HIT));
+    const back = leaveWindow(api, "r-garage");
+    answer("around=");
+    await landing;
+    answer("?limit=100");
+    await back;
+
+    const stream = serverState(HOME).streams["r-garage"];
+    const ids = (stream?.messages ?? []).map((held) => held.id);
+    // The newest page, whole and attached, and nothing of the window beside it.
+    expect(stream?.atEnd).toBe(true);
+    expect(ids).toHaveLength(100);
+    expect(ids[0]).toBe(id(NEWEST - 99));
+    expect(ids.at(-1)).toBe(id(NEWEST));
+  });
 });
 
 /**

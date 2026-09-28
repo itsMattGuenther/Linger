@@ -333,6 +333,9 @@ one.
   the borrowed sign-in, and ask the owner (the `open` intent, with a message)
   to show what was found. The chat window then jumps to that message if it's
   loaded, or reopens the room around it (`openAround`) and goes there.
+  Walking into the tab doesn't open the room a second time: the visit waits
+  for the opening already on its way, because the store drops a page asked
+  for under an earlier opening of the room (#266).
 - **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
   tab or shows it. When the window is already open, Rust hands it the
   conversation as an event (`next:open`), which a window still catching up
