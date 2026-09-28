@@ -23,7 +23,9 @@
 use tauri::ipc::Response;
 use tauri::AppHandle;
 
-/// Where the image is taken from, given what the clipboard offers.
+/// Where the image is taken from, given what the clipboard offers. Only
+/// Linux reads the clipboard here; the tests run everywhere.
+#[cfg(any(target_os = "linux", test))]
 #[derive(Debug, PartialEq, Eq)]
 enum Source {
     /// A PNG as it is: what screenshot tools, browsers and GTK apps offer.
@@ -36,6 +38,7 @@ enum Source {
 
 /// The format to read, from the clipboard's offered formats (MIME types and
 /// X11 names such as `TARGETS`), or `None` when nothing offered is an image.
+#[cfg(any(target_os = "linux", test))]
 fn source(offered: &[impl AsRef<str>]) -> Option<Source> {
     let offered = || offered.iter().map(AsRef::as_ref);
     if offered().any(|format| format == "image/png") {
