@@ -208,7 +208,7 @@ describe("contrast of the new client's tokens", () => {
   // none of their own color (#274). Dim, but still text: it must read at
   // 4.5:1 on the list and on a row that's hovered or has its card open. The
   // colors are read from the stylesheets that paint them. Dark is the only
-  // theme there is; a light one would add its block to tokens.css.
+  // theme (docs/decisions.md, 2026-09-28).
   it("keeps an offline name at 4.5:1 on the list, and on a hovered or selected row", () => {
     const offline = tokenIn(NAME, ':root .name.k-name[data-offline="yes"]', "color", "kit/Name.css");
     const behind: Array<[string, string]> = [

@@ -24,7 +24,7 @@ Not in M15:
 - **No server change**, except the host time zone (see *Open decisions*).
 - **No voice forwarding** (#197) and **no voice encryption** (#200).
 - **No macOS build.**
-- **No light theme**, which is an open decision.
+- **No light theme.** Decided 2026-09-28: the app is dark only, for good.
 
 ## Where the code lives
 
@@ -436,8 +436,8 @@ real-app check before the next step leans on it.
 
 ## Open decisions for Matt
 
-- **Light theme.** The design is dark only. Keep it that way, or design a light
-  version before the switch?
+- **Light theme.** Decided (2026-09-28): dark only. No light version is
+  planned.
 - **The host time zone** for "4:52 AM there". It needs one small server
   setting. Build it in M15.8, or drop the line?
 - The rest are listed, with what each blocks, in `parity.md` ("Decisions

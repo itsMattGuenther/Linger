@@ -391,7 +391,7 @@ Rules for this milestone:
 - 🟡 **T-1806 · Settings** — every setting in `parity.md`, in the Settings
   window. Built and wired (Ctrl+, opens it) and tested against a faked owner
   and server; not yet tried in the desktop app. Evening warmth waits for an
-  evening version of the new colors; a light theme waits on decision 2.
+  evening version of the new colors. There is no light theme (decision 2).
 - ✅ **T-1807 · Media, search and uploads.** Search and Media are windows of
   their own (decision 15), opened from the foot of the list; a hit or a tile
   opens its conversation at that message.

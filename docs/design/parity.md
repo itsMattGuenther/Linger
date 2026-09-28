@@ -86,8 +86,8 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 2. **Light theme.** The design is dark only; today has dark, light and
    follow-the-system. Keep dark only, or design a light version before the
    switch? *(LOOK-3)*
-   **Decided (2026-09-26):** dark only for now. A light version is a design job for later, if
-   people ask for it.
+   **Decided (2026-09-26):** dark only for now. **2026-09-28:** dark only for
+   good; no light version is planned.
 3. **The host's time zone** for "4:52 AM there" needs one small server setting
    and a protocol field. Build it in M15.8, or drop the line? *(MULTI-8)*
    **Decided (2026-09-26):** skip it for now; build it when a far-flung server wants it.
@@ -442,7 +442,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 |---|---|---|---|---|---|
 | LOOK-1 | Interface scale from 100% to 200%, applied before first paint, including sign-in. Text and controls grow together. Stays on this computer. | `lib/interface.ts`, Settings → Appearance | Every window, with a preview. Minimum sizes: **decision 19**. | G (every scale) + F | 🟡 every window (appearance.test.ts, next-settings-window.spec.ts); sizes kept as built (decision 19); no geometry at every scale yet |
 | LOOK-2 | Evening warmth after local "sunset", worked out from the clock (no location asked). It can be turned off, and re-checked every couple of minutes. | `lib/theme.ts` | Same | U (exists) | ⬜ hidden until the colors have an evening version |
-| LOOK-3 | Color theme: dark, light, or follow the system. | `lib/theme.ts`, `AppearanceSettings.tsx` | Dark only so far: **decision 2** | F | ✅ dark only for now (decision 2) |
+| LOOK-3 | Color theme: dark, light, or follow the system. | `lib/theme.ts`, `AppearanceSettings.tsx` | Dark only: **decision 2** | F | ✅ dark only (decision 2) |
 | LOOK-4 | Reduced motion removes movement but keeps state and confirmation. | SPEC §5.6 | Same, including the prototype's wiggle, sound bars and pop-outs | F | ✅ every repeating animation repeats `--loop` times at `--motion` speed, both off for reduced motion, and what the movement said stays (next-motion.spec.ts; the design-rule test keeps new loops to it) |
 | LOOK-5 | Bundled fonts only; no remote font URLs. | `src/fonts/`, CSP | Same | U (discipline) | 🟡 bundled fonts only; no check |
 | LOOK-6 | Settings headings and navigation labels in title case (#90). | SPEC §5.6 | Same | U (copy test) | ✅ (settings.test.ts) |

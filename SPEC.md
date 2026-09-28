@@ -696,7 +696,7 @@ dark-mode Discord reskin.
 
 ### 5.3 Color
 
-Dark only for now (a light version is an open decision). Every color is a token in
+Dark only. There is no light theme and none is planned (decided 2026-09-28). Every color is a token in
 `client/src/next/styles/tokens.css`; `system.md` lists them with their contrast. Text
 meets 4.5:1 on every background it sits on, icons 3:1, and the test suite checks it.
 Evening warmth waits for an evening version of these colors.
@@ -721,6 +721,9 @@ violet 295 orchid 320 rose 350   slate 250*
 dark theme:   oklch(0.76 0.13 <hue>)
 light theme:  oklch(0.50 0.14 <hue>)
 ```
+
+The light line serves only the previous client (`LINGER_CLASSIC=1`), which still
+has a light theme; it goes when that client is deleted. The app is dark only (§5.3).
 
 Build generates hex fallbacks from these. **Verify `oklch()` renders in the target
 WebKitGTK version during M0** — if it doesn't, ship the generated hex and drop the
