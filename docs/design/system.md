@@ -247,6 +247,11 @@ gradient at 92°, and shimmer or glow.
   shadow: a text shadow was cut off at the name's line box, and painted over a
   gradient's letters. It goes under reduced motion, with plain names, and in
   high contrast.
+- **Nothing around a name cuts its glow.** The name cuts its own letters and
+  draws its own "…", so a part that holds one (a `Row`'s title, a `Chip`'s
+  text) doesn't cut too: a part that did drew the glow as a tinted rectangle
+  at the name's box (#287). Words in the same place (a room's name) are
+  still cut there, with an ellipsis.
 - **`raw`** draws the person's own style even with plain names on, for the
   style picker's preview.
 - **`offline`** draws the name in `--text-offline`, a dim neutral grey, with
@@ -274,7 +279,8 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
 - **Heights:** `lines="one"` is 32px; `lines="two"` is 48px (a 20px name line
   and a 16px second line).
 - **Parts:**
-  - `title` on the first line;
+  - `title` on the first line. Words end in "…" here; a `Name` ends in its
+    own "…", and nothing cuts its glow at its box (#287);
   - `trailing` marks right after it (a voice glyph beside a name);
   - `note`, a faint end-of-line note ("in #general");
   - `end` marks at the end ("who's in a room");
@@ -474,7 +480,8 @@ offline name.
 
 A 24px pill for a picked person or thing. With `onRemove` the whole chip is
 the remove button ("Remove Eli"), so there is no tiny target inside a tiny
-chip. The text ends in "…".
+chip. The text ends in "…"; a `Name` in it ends in its own, and its glow
+reaches past its box and the pill's edge, as everywhere else (#287).
 
 - `active` lights it in the lamp: that person is talking.
 - `state` draws a control's own glyph after the name, like muted or
@@ -721,6 +728,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
+| A glowing name's light fades out past its box in a list row and a voice chip, with no step at the box's edges (sampled from screenshots, for a solid color and a gradient), and its rings match the person card's; a long glowing name in a row still ends in its own "…" with no letter past its box; rows, names and chips sit exactly where they did when the title and chip text cut them; plain names, reduced motion and high contrast leave no light past the box; at 100% and 200% | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; somebody here keeps their look; going offline and coming back (around, away, idle, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
