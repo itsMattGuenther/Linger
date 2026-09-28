@@ -39,6 +39,20 @@ async function open(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect(rows(page, "People here").first()).toBeVisible();
+  // The page connects twice at start (React's development mode), and each
+  // connection's "ready" starts the server's state afresh, which would undo
+  // a restyle sent before it. Wait until no new connection has been made
+  // for a while; each "ready" follows its connection within 20ms.
+  const connections = () => page.evaluate(() => (document.body.dataset.did ?? "").split("|").filter((line) => line.startsWith("connect ")).length);
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const now = await connections();
+      const still = now > 0 && now === last;
+      last = now;
+      return still;
+    }, { intervals: [300] })
+    .toBe(true);
 }
 
 const restyle = (page: Page, user: User) => page.evaluate(([server, d]) => window.core?.frame(server, { op: "user.update", d } as never), [HOME, user] as const);
@@ -308,8 +322,10 @@ for (const scale of [1, 2]) {
     ] as const) {
       test(`a glowing name in ${label} fades out past its box in a list row and a voice chip`, async ({ page }) => {
         await open(page);
-        await restyle(page, styled(people.eli, look));
+        // Restyle once the connection is up, so its first snapshot can't
+        // arrive after and put the fixture's style back (slow in WebKit).
         const bar = await joinGeneral(page);
+        await restyle(page, styled(people.eli, look));
         const row = inRow(page, "Eli");
         const chip = inChip(bar, "Eli");
         await settled(page, row);
@@ -427,11 +443,11 @@ for (const scale of [1, 2]) {
     // voice bar, with four people glowing, one hovered.
     test("review sheet", async ({ page }) => {
       await open(page);
+      const bar = await joinGeneral(page);
       await restyle(page, styled(people.eli, AMBER_GLOW));
       await restyle(page, styled(people.jules, { fill: { kind: "gradient", from: "fern", to: "teal" }, effect: "glow" }));
       await restyle(page, styled(people.dave, { fill: { kind: "solid", color: "cyan" }, effect: "glow" }));
       await restyle(page, styled(people.callie, { fill: { kind: "gradient", from: "violet", to: "orchid" }, effect: "glow" }));
-      const bar = await joinGeneral(page);
       await settled(page, inRow(page, "Callie"));
       await settled(page, inChip(bar, "Jules"));
       const project = test.info().project.name;
@@ -455,8 +471,8 @@ for (const scale of [1, 2]) {
 
 test("plain names, reduced motion and high contrast still turn the glow off in a row and a chip", async ({ page }) => {
   await open(page);
-  await restyle(page, styled(people.eli, AMBER_GLOW));
   const bar = await joinGeneral(page);
+  await restyle(page, styled(people.eli, AMBER_GLOW));
   const [row, chip] = [inRow(page, "Eli"), inChip(bar, "Eli")];
   await settled(page, row);
   await settled(page, chip);
