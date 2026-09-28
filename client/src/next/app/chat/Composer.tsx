@@ -1,21 +1,25 @@
-import { type FormEvent, type KeyboardEvent, memo, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { useAutoGrow } from "../../../lib/autoGrow";
 import { COMPOSER_EMOJI, insertGlyph } from "../../../lib/composerEmoji";
+import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
 import "./Composer.css";
 import type { DraftFile } from "../../core/chat/drafts";
+import { useMentions } from "./useMentions";
 
 /** `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE`, mirrored to refuse the eleventh file up front. */
 export const MAX_ATTACHMENTS = 10;
 
 /** A file on its way into the next message. The window uploads it; the composer shows it. */
 export type { DraftFile };
+
+const NOBODY: readonly MentionPerson[] = [];
 
 export interface ComposerProps {
   /**
@@ -62,6 +66,11 @@ export interface ComposerProps {
    * core/chat/keptDrafts.ts). Left out, a draft lasts as long as the box.
    */
   keep?: { load: (conversation: string) => string; save: (conversation: string, text: string) => void };
+  /**
+   * Who an `@` offers here, in order (core/chat/mentions.ts `mentionable`):
+   * everyone on the server with the room's people first, or a DM's people.
+   */
+  mentionable?: readonly MentionPerson[];
 }
 
 /**
@@ -74,6 +83,8 @@ export interface ComposerProps {
  * - It grows with its text by measuring a hidden copy, never the page, so
  *   typing never lays out the conversation (L-12). Its state is its own, so
  *   a keystroke redraws only the box.
+ * - An `@` at the start of a word offers people to mention (#267,
+ *   `useMentions`); choosing one puts in their `@username`.
  */
 export const Composer = memo(function Composer({
   conversation,
@@ -93,6 +104,7 @@ export const Composer = memo(function Composer({
   seed,
   onDraft,
   keep,
+  mentionable = NOBODY,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -101,7 +113,10 @@ export const Composer = memo(function Composer({
   const [emoji, setEmoji] = useState(false);
   const serial = useRef(0);
   const box = useRef<HTMLTextAreaElement | null>(null);
+  const boxRow = useRef<HTMLDivElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
+  // Where the caret goes once a chosen mention is in the box.
+  const caretAfter = useRef<number | null>(null);
 
   const draft = drafts.get(conversation) ?? keep?.load(conversation) ?? "";
   const problem = problems.get(conversation) ?? null;
@@ -166,6 +181,29 @@ export const Composer = memo(function Composer({
       return next;
     });
 
+  const mentions = useMentions({
+    box,
+    anchor: boxRow,
+    conversation,
+    people: mentionable,
+    put: (typing: MentionTyping, user: User) => {
+      const next = putMention(draft, typing, user.username, MAX_MESSAGE_CHARS);
+      if (next === null) {
+        say(`A message can be at most ${MAX_MESSAGE_CHARS} characters.`);
+        return;
+      }
+      caretAfter.current = next.caret;
+      change(next.text);
+      onTyping();
+    },
+  });
+  useLayoutEffect(() => {
+    const at = caretAfter.current;
+    if (at === null) return;
+    caretAfter.current = null;
+    box.current?.setSelectionRange(at, at);
+  }, [draft]);
+
   const ready = files.filter((file) => file.ready);
   const uploading = files.some((file) => !file.ready && file.problem === null);
 
@@ -216,6 +254,8 @@ export const Composer = memo(function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // The @ list, while it's open, has the arrows, Enter, Tab and Escape.
+    if (mentions.onKey(event)) return;
     if (event.key === "Escape" && emoji) {
       event.preventDefault();
       setEmoji(false);
@@ -328,7 +368,7 @@ export const Composer = memo(function Composer({
         </ul>
       )}
 
-      <div className="nx-composer-box">
+      <div className="nx-composer-box" ref={boxRow}>
         <span className="nx-composer-prompt" aria-hidden="true">
           ›
         </span>
@@ -341,8 +381,10 @@ export const Composer = memo(function Composer({
           placeholder={placeholder}
           aria-label={isDm ? `Message ${title}` : `Message in ${title}`}
           autoComplete="off"
+          {...mentions.field}
           onChange={(event) => {
             change(event.target.value);
+            mentions.track(event.target);
             if (event.target.value !== "") onTyping();
           }}
           onKeyDown={onKeyDown}
@@ -391,6 +433,8 @@ export const Composer = memo(function Composer({
           }}
         />
       </div>
+
+      {mentions.list}
 
       {/* Only near the ceiling: a counter that is always on is a scold. */}
       {left <= 200 ? <p className="nx-composer-left">{left} characters left</p> : null}

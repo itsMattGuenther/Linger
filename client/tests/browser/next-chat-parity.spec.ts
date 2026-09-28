@@ -25,7 +25,7 @@ function intents(asked: string[]): Record<string, unknown>[] {
   return asked.filter((line) => line.startsWith("intent:")).map((line) => JSON.parse(line.slice("intent:".length)) as Record<string, unknown>);
 }
 
-const box = (page: Page) => page.getByRole("textbox", { name: /^Message/ });
+const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 /** The row of the message with this id. */
 const row = (page: Page, id: string) => page.locator(`[data-message="${id}"]`);
@@ -273,6 +273,190 @@ test.describe("the message box", () => {
     await expect(listed).toContainText("light.txt");
     await expect(box(page)).toHaveValue("");
     expect(page.url()).toContain("/tests/fixtures/next-chat-parity.html");
+  });
+});
+
+/** Justin B, whose username is nothing like his name (#267), arriving on the server as a frame. */
+const JUSTIN = {
+  id: "u-justin",
+  username: "bendthebracket",
+  display_name: "Justin B",
+  is_host: false,
+  style: { font_key: "inter", weight: 700, italic: false, fill: { kind: "solid", color: "sky" }, effect: "none", msg_font_key: null },
+  status: null,
+  entrance_sound: null,
+  last_seen_at: null,
+};
+
+async function arrives(page: Page, user: Record<string, unknown> = JUSTIN) {
+  await page.evaluate((person) => window.parity?.frame({ op: "user.update", d: person } as never), user);
+}
+
+const people = (page: Page) => page.getByRole("listbox", { name: "People to mention" });
+const offered = (page: Page) => people(page).getByRole("option");
+const sent = async (page: Page) => (await did(page)).filter((line) => line.startsWith("sent:"));
+
+test.describe("mentioning somebody by the name you know (#267)", () => {
+  test("@ju lists Justin B, and Enter puts in @bendthebracket and a space without sending", async ({ page }) => {
+    await open(page);
+    await arrives(page);
+    await box(page).click();
+    await box(page).pressSequentially("hey @ju");
+    // Jules is in #general, so she comes first; Justin isn't, so he follows.
+    await expect(offered(page)).toHaveText([/^Jules\s*@jules$/, /^Justin B\s*@bendthebracket$/]);
+    await expect(offered(page).first()).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowDown");
+    await expect(offered(page).nth(1)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(box(page)).toHaveValue("hey @bendthebracket ");
+    await expect(people(page)).toHaveCount(0);
+    await expect(box(page)).toBeFocused();
+    expect(await sent(page)).toEqual([]);
+    // The caret is after the space: what's typed next follows it.
+    await page.keyboard.type("look");
+    await expect(box(page)).toHaveValue("hey @bendthebracket look");
+    // With the list closed, Enter sends as ever, and what's stored is the username.
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await sent(page)).join()).toContain('"body":"hey @bendthebracket look"');
+  });
+
+  test("Escape closes the list and keeps what was typed; Enter with the list open never sends", async ({ page }) => {
+    await open(page);
+    await box(page).click();
+    await box(page).pressSequentially("@ca");
+    await expect(offered(page)).toHaveText([/^Callie/]);
+    await page.keyboard.press("Control+Enter");
+    await expect(box(page)).toHaveValue("@callie ");
+    expect(await sent(page)).toEqual([]);
+
+    await box(page).fill("");
+    await box(page).pressSequentially("ask @ca");
+    await expect(people(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(people(page)).toHaveCount(0);
+    await expect(box(page)).toHaveValue("ask @ca");
+    await expect(box(page)).toHaveAttribute("aria-expanded", "false");
+    // It stays closed on that @, however much more is typed.
+    await page.keyboard.type("l");
+    await expect(people(page)).toHaveCount(0);
+    // A new @ opens it again.
+    await page.keyboard.type(" and @d");
+    await expect(offered(page)).toHaveText([/^Dave/]);
+  });
+
+  test("a click on somebody puts them in, and the box keeps the keyboard", async ({ page }) => {
+    await open(page);
+    await arrives(page);
+    await box(page).click();
+    await box(page).pressSequentially("@bend");
+    await offered(page).filter({ hasText: "Justin B" }).click();
+    await expect(box(page)).toHaveValue("@bendthebracket ");
+    await expect(box(page)).toBeFocused();
+    await expect(people(page)).toHaveCount(0);
+  });
+
+  test("an address opens nothing, nor does code", async ({ page }) => {
+    await open(page);
+    await box(page).click();
+    await box(page).pressSequentially("write to you@example.com");
+    await expect(people(page)).toHaveCount(0);
+    await expect(box(page)).toHaveAttribute("aria-expanded", "false");
+    // Inside a code span it's the characters typed, never a mention.
+    await box(page).fill("");
+    await box(page).pressSequentially("`@ju`");
+    await page.keyboard.press("ArrowLeft");
+    await expect(people(page)).toHaveCount(0);
+    await expect(box(page)).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("a DM lists only its people, never you", async ({ page }) => {
+    await open(page, "room=d-eli-sam");
+    await arrives(page);
+    await box(page).click();
+    await box(page).pressSequentially("@");
+    await expect(offered(page)).toHaveText([/^Eli/, /^Sam/]);
+  });
+
+  test("the list is the box's listbox: named, reached by the keys, the highlighted one announced", async ({ page }) => {
+    await open(page);
+    await box(page).click();
+    await expect(box(page)).toHaveAttribute("aria-expanded", "false");
+    await box(page).pressSequentially("@");
+    await expect(box(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(box(page)).toHaveAttribute("aria-autocomplete", "list");
+    const list = people(page);
+    await expect(list).toBeVisible();
+    await expect(box(page)).toHaveAttribute("aria-controls", (await list.getAttribute("id")) ?? "none");
+    // Everyone on the server but you: #general's people first, then the rest, by name.
+    await expect(offered(page)).toHaveText([/^Eli/, /^Jules/, /^Callie/, /^Dave/, /^Jen/, /^Sam/]);
+    const highlighted = async () => {
+      const id = await box(page).getAttribute("aria-activedescendant");
+      return id === null ? null : page.evaluate((one) => document.getElementById(one)?.getAttribute("aria-label") ?? null, id);
+    };
+    expect(await highlighted()).toBe("Eli, @eli");
+    await page.keyboard.press("ArrowUp");
+    expect(await highlighted()).toBe("Sam, @sam");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    expect(await highlighted()).toBe("Jules, @jules");
+    await expect(list.locator('[aria-selected="true"]')).toHaveAttribute("aria-label", "Jules, @jules");
+    // Tab takes the highlighted one too.
+    await page.keyboard.press("Tab");
+    await expect(box(page)).toHaveValue("@jules ");
+    await expect(box(page)).toBeFocused();
+    // The list floats above the box, inside the window, in the kit's rows.
+    await page.keyboard.type("@");
+    const [floating, field] = [await list.boundingBox(), await page.locator(".nx-composer-box").boundingBox()];
+    expect(floating && field && floating.y + floating.height <= field.y && floating.y >= 0).toBe(true);
+    const heights = await offered(page).evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+    expect(new Set(heights)).toEqual(new Set([32]));
+  });
+
+  test("an input method composing neither opens the list nor moves it", async ({ page }) => {
+    await open(page);
+    await box(page).click();
+    await box(page).dispatchEvent("compositionstart", { data: "" });
+    await page.keyboard.insertText("@ju");
+    await expect(people(page)).toHaveCount(0);
+    await box(page).dispatchEvent("compositionend", { data: "@ju" });
+    await expect(people(page)).toBeVisible();
+    await expect(offered(page).first()).toHaveAttribute("aria-selected", "true");
+    // Keys the input method is still using belong to it: nothing moves, nothing is chosen or sent.
+    await box(page).dispatchEvent("compositionstart", { data: "" });
+    await box(page).evaluate((field) => {
+      for (const key of ["ArrowDown", "Enter", "Tab"]) field.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true, cancelable: true }));
+    });
+    await expect(offered(page).first()).toHaveAttribute("aria-selected", "true");
+    await expect(box(page)).toHaveValue("@ju");
+    expect(await sent(page)).toEqual([]);
+  });
+
+  test("a mention reads as the name people know, the username in its tooltip, looked up live", async ({ page }) => {
+    await open(page);
+    await arrives(page);
+    const id = await post(page, "ask @bendthebracket about the bulb");
+    const mention = row(page, id).locator(".nx-mention");
+    await expect(mention).toHaveText("@Justin B");
+    await expect(mention).toHaveAttribute("title", "@bendthebracket");
+    // In the mention's own highlight, not his name's face or color.
+    const looks = await mention.evaluate((node) => {
+      const words = getComputedStyle(node.closest(".nx-text") ?? node);
+      const own = getComputedStyle(node);
+      return { same: own.fontFamily === words.fontFamily, color: own.color };
+    });
+    expect(looks.same).toBe(true);
+    // A changed name shows in old messages too.
+    await arrives(page, { ...JUSTIN, display_name: "Justin Bend" });
+    await expect(mention).toHaveText("@Justin Bend");
+    // A handle nobody has stays as typed.
+    const nobody = await post(page, "@nobodyhere hi");
+    await expect(row(page, nobody)).toContainText("@nobodyhere hi");
+    await expect(row(page, nobody).locator(".nx-mention")).toHaveCount(0);
+    // A mention of you keeps its stronger mark.
+    const mine = await post(page, "@matt the porch light");
+    await expect(row(page, mine).locator(".nx-mention")).toHaveText("@Matt");
+    await expect(row(page, mine).locator(".nx-mention")).toHaveAttribute("data-me", "yes");
+    await expect(row(page, mine)).toHaveAttribute("data-names-me", "yes");
   });
 });
 

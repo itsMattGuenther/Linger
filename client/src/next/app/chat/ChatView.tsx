@@ -3,6 +3,7 @@ import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
+import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
 import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
@@ -65,6 +66,8 @@ export interface ChatPane {
   speaking: ReadonlySet<string>;
   /** Who is writing here right now, not counting you. */
   typing: readonly User[];
+  /** Who an `@` in the box offers, in order (core/chat/mentions.ts). */
+  mentionable: readonly MentionPerson[];
   stream: ChatStream;
   actions: ChatMessageActions;
   composer: ChatComposer;
@@ -221,6 +224,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             onClearReply={onClearReply}
             onRestoreReply={onRestoreReply}
             onEditLast={onEditLast}
+            mentionable={pane.mentionable}
             {...pane.composer}
           />
         </section>

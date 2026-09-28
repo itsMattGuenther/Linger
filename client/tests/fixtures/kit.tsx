@@ -30,6 +30,7 @@ import {
   Name,
   NavList,
   Notice,
+  OptionList,
   Popover,
   Row,
   RowList,
@@ -145,6 +146,58 @@ function StripedTabs() {
         <TabStrip label="Tabs from two servers" tabs={tabs} activeId={active} onSelect={setActive} />
       </TitleBar>
       <div className="g-window-body">Two servers: the stripe along each tab's top is its server's color.</div>
+    </div>
+  );
+}
+
+/**
+ * The people the message box offers after an @ (#267): a list the keyboard
+ * reaches from the box that opened it, which keeps the focus. Here a button
+ * opens it; the pointer highlights and a click chooses.
+ */
+function OptionListDemo() {
+  const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
+  const [active, setActive] = useState<string | null>(null);
+  const [chose, setChose] = useState("nobody yet");
+  const offered = [...FACES, { user: longName, color: "sky", state: "around" as MarkerState }];
+  return (
+    <div className="g-row">
+      <span data-testid="options-trigger">
+        <Button
+          size="md"
+          icon="message"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            setAnchor((open) => (open ? null : { top: box.top, left: box.left, right: box.right, bottom: box.bottom }));
+            setActive(offered[0]?.user.id ?? null);
+          }}
+        >
+          Who @ offers
+        </Button>
+      </span>
+      <span className="g-label" data-testid="options-chose">
+        {chose}
+      </span>
+      {anchor ? (
+        <OptionList
+          id="g-options"
+          label="People to mention"
+          anchor={anchor}
+          active={active}
+          items={offered.map(({ user, color, state }) => ({
+            id: user.id,
+            lead: { kind: "person", person: { color, state } },
+            title: <Name person={user} />,
+            note: `@${user.username}`,
+            label: `${user.display_name}, @${user.username}`,
+          }))}
+          onActive={setActive}
+          onPick={(id) => {
+            setChose(offered.find((one) => one.user.id === id)?.user.display_name ?? id);
+            setAnchor(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -559,6 +612,10 @@ function Gallery() {
 
       <Section id="menus" title="Menus">
         <MenuDemo />
+      </Section>
+
+      <Section id="options" title="Option lists">
+        <OptionListDemo />
       </Section>
 
       <Section id="fields" title="Fields">

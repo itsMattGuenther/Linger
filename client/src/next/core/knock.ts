@@ -4,6 +4,7 @@
  */
 import type { UserId } from "../../generated/UserId";
 import { ApiError, TransportError } from "../../lib/api";
+import { knockLimitLine } from "../../lib/knock";
 
 /** How a knock went, for the button's words. */
 export type KnockResult = { ok: true } | { ok: false; problem: string };
@@ -20,7 +21,7 @@ export async function knockOn(api: Knocker, userId: UserId): Promise<KnockResult
   } catch (error: unknown) {
     const problem =
       error instanceof ApiError && error.code === "RATE_LIMITED"
-        ? "That's three this hour. Give them a bit."
+        ? knockLimitLine(error.retryAfterMs)
         : error instanceof ApiError || error instanceof TransportError
           ? error.message
           : "Couldn't knock.";

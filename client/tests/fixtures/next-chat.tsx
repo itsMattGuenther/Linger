@@ -363,6 +363,13 @@ function Fixture() {
       me,
       speaking: SPEAKING,
       typing: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []),
+      // As the window lists them (core/chat/mentions.ts): a DM's people, or the room's first.
+      mentionable: (room.kind === "dm"
+        ? dmPeople(room)
+        : [...everyone.values()].sort((a, b) => Number(!(IN_ROOM[room.id] ?? []).includes(a.id)) - Number(!(IN_ROOM[room.id] ?? []).includes(b.id)))
+      )
+        .filter((user) => user.id !== me.id)
+        .map((user) => ({ user, state: stateOf(user) })),
       stream: {
         messages: mine.messages,
         pending: pending[activeRoom] ?? EMPTY,

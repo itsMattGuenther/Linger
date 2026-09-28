@@ -1,0 +1,29 @@
+/* A short list of choices, floating by the text box that owns the keys. Its
+   top, left and height are set where it's placed (OptionList.tsx). */
+.k-options {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--picker-w);
+  max-width: calc(100vw - 2 * var(--space-2));
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--white-a10);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-popover);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Rows keep their height however short the list is placed. */
+.k-options > .k-row {
+  flex: none;
+}
+
+/* Measured before it is placed; invisible for that one frame. */
+.k-options[data-placed="no"] {
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}

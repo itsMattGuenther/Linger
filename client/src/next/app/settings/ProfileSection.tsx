@@ -84,7 +84,7 @@ function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveN
           }}
           onEnter={submit}
         />
-        <TextField label="Username" value={me.username} onChange={() => undefined} readOnly mono hint={`People mention you with @${me.username}. It never changes.`} />
+        <TextField label="Username" value={me.username} onChange={() => undefined} readOnly mono hint={`People mention you by typing @ and your name, and it goes in as @${me.username}. Your username never changes.`} />
       </Fields>
       <Actions phase={save.phase}>
         <Button variant="primary" disabled={!ready} busy={save.phase.kind === "saving"} onClick={submit}>

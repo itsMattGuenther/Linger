@@ -188,6 +188,16 @@ Replace with:
 **One exception:** direct mentions produce a real notification and a marker. Mentions
 are person-to-person only. `@everyone` and `@here` do not exist and will not be added.
 
+A mention is stored as `@username`. Usernames never change, so an old mention never
+breaks. People mention each other by the names they know (#267): `@` at the start of
+a word opens a list of people under the message box (above it when there's no room),
+matching display name or username. In a room it offers everyone on the server, the
+people in the room first; in a DM, only its people, since nobody else could see the
+mention; never yourself. Choosing one puts in their `@username`. Reading, a mention of
+somebody the app knows shows their display name as it is now (`@Justin B`), with the
+username in its tooltip; a mention of you keeps its stronger highlight, and a handle
+nobody has stays as typed.
+
 **Person-centric notifications.** Users may set "always notify me when [person] posts",
 per person, per room. This is the notification setting people actually want, and no
 keyword-based system delivers it.
@@ -423,7 +433,9 @@ nothing to dismiss or respond to.
 
 Low-obligation contact is the thing group chats are worst at.
 
-Rate limit: 3 knocks per person per hour.
+Rate limit: 3 knocks per person per hour. A refused knock tells the sender when
+they can knock again ("Three knocks this hour. You can knock again in 20
+minutes."), and never claims the other person heard.
 
 The sender sees `knocked` for three seconds, then the control resets. This
 acknowledges the request, not delivery; it is not knock history. The recipient's
