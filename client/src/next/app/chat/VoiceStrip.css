@@ -30,7 +30,10 @@
   min-width: 0;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  /* Chips that don't fit across are cut here; nothing is cut above or below,
+     so a glowing name's light reaches past its chip (#287). */
+  overflow-x: clip;
+  overflow-y: visible;
   list-style: none;
 }
 

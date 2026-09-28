@@ -161,6 +161,11 @@
   /* How far a glowing name's light reaches, in the name's own ems, so a glow
      looks the same on a message (8px at 14.5px) and on a card (#272). */
   --name-glow: 0.55em;
+  /* Past which the glow's light has faded to nothing. A line of words that
+     cuts at its edges for its "…" and holds a name moves its cut out this
+     far on the name's side, so the light fades out rather than stopping at
+     the line (#287). */
+  --name-glow-reach: calc(var(--name-glow) * 2);
 
   /* --- 3. scales ------------------------------------------------------------ */
 

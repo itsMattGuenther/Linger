@@ -26,7 +26,8 @@ type Look = Pick<Style, "fill" | "effect">;
 
 const AMBER_GLOW: Look = { fill: { kind: "solid", color: "amber" }, effect: "glow" };
 const GRADIENT_GLOW: Look = { fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "glow" };
-const LONG = "Eli, whose name is far too long for any row in the list";
+/** As long as a server lets a name be (32 letters). */
+const LONG = "Eli, whose name is far too long";
 
 const styled = (user: User, look: Look, extra: Partial<User> = {}): User => ({ ...user, ...extra, style: { ...user.style, ...look } });
 
@@ -159,10 +160,23 @@ interface Light {
   sides: Record<Side, { inside: number; outside: number; far: number }>;
   /** The light around the letters per ring in `RINGS`. */
   rings: number[];
+  /** The light in each place asked about by name, the same way. */
+  at: Record<string, number>;
 }
 
-/** The light a name gives off, around its letters and across the edges of its box. */
-async function lightOf(page: Page, name: Locator): Promise<Light> {
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The light a name gives off, around its letters and across the edges of its
+ * box, and in any other `places` (in CSS pixels, near the name).
+ */
+async function lightOf(page: Page, name: Locator, places: Record<string, Rect> = {}): Promise<Light> {
+  await name.scrollIntoViewIfNeeded();
   const { box, em } = await name.evaluate((node: HTMLElement) => {
     const rect = node.getBoundingClientRect();
     return { box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, em: Number.parseFloat(getComputedStyle(node).fontSize) };
@@ -179,7 +193,7 @@ async function lightOf(page: Page, name: Locator): Promise<Light> {
     node.dataset.probe = "letters";
   });
   const letters = await page.addStyleTag({
-    content: `[data-probe="letters"] { background: #000 !important; background-clip: border-box !important; -webkit-background-clip: border-box !important; color: #fff !important; -webkit-text-fill-color: #fff !important; text-shadow: none !important; filter: none !important; animation: none !important; }`,
+    content: `[data-probe="letters"] { background: #000 !important; background-clip: border-box !important; -webkit-background-clip: border-box !important; color: #fff !important; -webkit-text-fill-color: #fff !important; text-shadow: none !important; filter: none !important; animation: none !important; forced-color-adjust: none !important; }`,
   });
   const mask = await shoot(page, clip);
   await name.evaluate((node: HTMLElement) => delete node.dataset.probe);
@@ -204,10 +218,18 @@ async function lightOf(page: Page, name: Locator): Promise<Light> {
     Record<"inside" | "outside" | "far", { sum: number; count: number }>
   >;
   const rings = RINGS.map(() => ({ sum: 0, count: 0 }));
+  const at = Object.fromEntries(Object.keys(places).map((place) => [place, { sum: 0, count: 0 }]));
   for (let i = 0; i < n; i += 1) {
     if (ink[i]) continue;
     const [cx, cy] = [clip.x + ((i % w) + 0.5) / scale, clip.y + (Math.floor(i / w) + 0.5) / scale];
     const light = apart(oklab(rgbAt(painted, i)), oklab(rgbAt(behind, i)));
+    for (const [place, r] of Object.entries(places)) {
+      const sum = at[place];
+      if (sum && cx >= r.x && cx < r.x + r.width && cy >= r.y && cy < r.y + r.height) {
+        sum.sum += light;
+        sum.count += 1;
+      }
+    }
     const ems = (away[i] ?? 0) / (em * scale);
     RINGS.forEach(([from, to], k) => {
       const ring = rings[k];
@@ -237,6 +259,7 @@ async function lightOf(page: Page, name: Locator): Promise<Light> {
   return {
     sides: Object.fromEntries(SIDES.map((side) => [side, { inside: mean(bands[side].inside), outside: mean(bands[side].outside), far: mean(bands[side].far) }])) as Light["sides"],
     rings: rings.map(mean),
+    at: Object.fromEntries(Object.entries(at).map(([place, sum]) => [place, mean(sum)])),
   };
 }
 
@@ -251,7 +274,7 @@ const show = (light: Light) =>
 function expectFades(light: Light, where: string, sides: readonly Side[] = SIDES) {
   for (const side of sides) {
     const { inside, outside, far } = light.sides[side];
-    expect(inside, `${where}: there is light just inside the box's ${side} edge (${show(light)})`).toBeGreaterThan(0.015);
+    expect(inside, `${where}: there is light just inside the box's ${side} edge (${show(light)})`).toBeGreaterThan(0.01);
     expect(outside, `${where}: the light carries on past the ${side} edge, with no step (${show(light)})`).toBeGreaterThan(inside * 0.5);
     expect(far, `${where}: and fades out further on (${show(light)})`).toBeLessThan(outside * 0.5);
   }
@@ -445,6 +468,274 @@ test("plain names, reduced motion and high contrast still turn the glow off in a
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.emulateMedia({ forcedColors: "active" });
   await off("high contrast");
+  await page.emulateMedia({ forcedColors: "none" });
+  await page.evaluate(() => document.documentElement.setAttribute("data-normalize", "true"));
+  await off("plain names");
+});
+
+// --- In the chat window ------------------------------------------------------
+//
+// A name inside a line of words, a reply's quote ("↩ Jules Anyone around…"),
+// the reply line over the message box ("Replying to Eli: …") and the typing
+// line ("Jules is typing"), and a name in the voice strip's chips. Each line
+// cuts only across, for its "…" (and the strip for the chips that don't fit),
+// so the light reaches past it above and below; where a name leads its line,
+// the cut at the start moves out by the light's reach (#287). Driven in the
+// real chat window (tests/fixtures/next-chat-window.tsx).
+
+const CHAT = "/tests/fixtures/next-chat-window.html?room=r-general";
+
+async function openChat(page: Page) {
+  await page.goto(CHAT);
+  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+const restyleInChat = (page: Page, user: User) => page.evaluate((d) => window.owner?.frame({ op: "user.update", d } as never), user);
+const strip = (page: Page) => page.getByRole("group", { name: "Voice in this conversation" });
+const inStrip = (page: Page, who: string) => strip(page).getByRole("list", { name: "In voice here" }).getByRole("listitem").filter({ hasText: who }).locator("[data-kit='Name']");
+const inQuote = (page: Page) => page.locator("button.nx-quote").last().locator("[data-kit='Name']");
+const inReply = (page: Page) => page.locator(".nx-composer-reply [data-kit='Name']");
+const inTyping = (page: Page) => page.locator(".nx-typing [data-kit='Name']");
+
+/** Answer somebody's message: the reply line shows over the message box. */
+async function replyTo(page: Page, words: string, whose: string) {
+  const row = page.locator(".nx-msg", { hasText: words }).last();
+  await row.hover();
+  await row.getByRole("button", { name: `Actions for ${whose}'s message` }).click();
+  await page.getByRole("menuitem", { name: "Reply" }).click();
+  await expect(page.locator(".nx-composer-reply")).toContainText(`Replying to ${whose}`);
+}
+
+/** Somebody starts typing here, as the server says it. */
+const typing = (page: Page, user_id: string) => page.evaluate((id) => window.owner?.frame({ op: "typing", d: { room_id: "r-general", user_id: id } } as never), user_id);
+
+/** Everybody in the evening's voice room, as the server would say it. */
+const everyoneInVoice = (page: Page) =>
+  page.evaluate(() =>
+    window.owner?.frame({
+      op: "voice.state",
+      d: {
+        room_id: "r-general",
+        peers: ["u-eli", "u-jules", "u-dave", "u-callie", "u-sam"].map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false } })),
+      },
+    } as never),
+  );
+
+for (const scale of [1, 2]) {
+  test.describe(`in the chat window at ${scale * 100}%`, () => {
+    test.use({ viewport: { width: 780, height: 820 }, deviceScaleFactor: scale });
+
+    test("a glowing name fades out past its box in a reply's quote, the reply line, the typing line and the voice strip", async ({ page }) => {
+      await openChat(page);
+      await restyleInChat(page, styled(people.eli, AMBER_GLOW));
+      await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
+      const notes: string[] = [];
+
+      const quote = inQuote(page);
+      await settled(page, quote);
+      const quoted = await lightOf(page, quote);
+      notes.push(`quote: ${show(quoted)}`);
+      expectFades(quoted, "in a reply's quote");
+
+      // Both chips, and where the strip does cut (past the last chip, for
+      // the chips that don't fit) the light has already faded.
+      const inVoice = strip(page).getByRole("list", { name: "In voice here" });
+      for (const who of ["Eli", "Jules"]) {
+        const chip = inStrip(page, who);
+        await settled(page, chip);
+        const [edge, box] = [await inVoice.boundingBox(), await chip.boundingBox()];
+        if (!edge || !box) throw new Error("nothing to measure");
+        const right = edge.x + edge.width;
+        const light = await lightOf(page, chip, { cut: { x: right - 1.5, y: box.y - 8, width: 1, height: box.height + 16 } });
+        notes.push(`${who}'s chip: ${show(light)}; at the strip's cut ${light.at.cut?.toFixed(3)}`);
+        expectFades(light, `${who}'s chip in the voice strip`);
+        if (who === "Jules") expect(light.at.cut ?? 1, `the light where the strip cuts past its last chip (${show(light)})`).toBeLessThan(0.01);
+      }
+
+      await replyTo(page, "No plans, no agenda", "Eli");
+      const reply = inReply(page);
+      await settled(page, reply);
+      const replied = await lightOf(page, reply);
+      notes.push(`reply: ${show(replied)}`);
+      expectFades(replied, "in the reply line");
+
+      await typing(page, people.jules.id);
+      const typist = inTyping(page);
+      await settled(page, typist);
+      await typing(page, people.jules.id);
+      const typed = await lightOf(page, typist);
+      notes.push(`typing: ${show(typed)}`);
+      expectFades(typed, "in the typing line");
+      test.info().annotations.push({ type: "light", description: notes.join(" / ") });
+
+      // The sheets, for a person to look at: the strip, the quote with the
+      // line it answers from, and the foot of the conversation.
+      await page.mouse.move(0, 0);
+      const project = test.info().project.name;
+      await strip(page).screenshot({ path: `${SHEETS}/${project}-chat-${scale * 100}-strip.png`, animations: "disabled" });
+      const quoteBox = await page.locator("button.nx-quote").last().boundingBox();
+      if (quoteBox) await page.screenshot({ path: `${SHEETS}/${project}-chat-${scale * 100}-quote.png`, clip: { x: 0, y: quoteBox.y - 16, width: 780, height: quoteBox.height + 56 }, animations: "disabled" });
+      const [typingBox, replyBox] = [await page.locator(".nx-typing").boundingBox(), await page.locator(".nx-composer-reply").boundingBox()];
+      if (typingBox && replyBox)
+        await page.screenshot({ path: `${SHEETS}/${project}-chat-${scale * 100}-foot.png`, clip: { x: 0, y: typingBox.y - 12, width: 780, height: replyBox.y + replyBox.height + 12 - (typingBox.y - 12) }, animations: "disabled" });
+    });
+  });
+}
+
+// At the chat window's narrowest (420) and a conversation window's (360):
+// with five people in voice, the strip still hides the chips that don't fit,
+// long words still end in "…", and nothing is anywhere but where it was with
+// the old rules, which cut above and below too.
+for (const width of [420, 360]) {
+  test.describe(`${width} wide`, () => {
+    test.use({ viewport: { width, height: 820 }, deviceScaleFactor: 2 });
+
+    test("nothing moves, long lines still end in an ellipsis, and the voice strip still hides what doesn't fit", async ({ page }) => {
+      await openChat(page);
+      await restyleInChat(page, styled(people.eli, AMBER_GLOW));
+      await restyleInChat(page, styled(people.jules, GRADIENT_GLOW, { display_name: "Jules, whose name goes on and on" }));
+      await restyleInChat(page, styled(people.dave, AMBER_GLOW, { display_name: "Dave, whose name also goes on" }));
+      await everyoneInVoice(page);
+      await expect(inStrip(page, "Dave")).toBeVisible();
+      await replyTo(page, "A bit of Khruangbin", "Eli");
+      // Three typing, so the line is long: "Jules…, Dave and Callie are typing".
+      const threeTyping = async () => {
+        for (const id of [people.jules.id, people.dave.id, people.callie.id]) await typing(page, id);
+      };
+      await threeTyping();
+      await settled(page, inTyping(page).first());
+      await settled(page, inStrip(page, "Dave"));
+      // Typing lasts a few seconds; said again, it holds for the measuring.
+      await threeTyping();
+
+      const layout = () =>
+        page.evaluate(() => {
+          const rect = (node: Element | Range | null) => {
+            if (!node) return null;
+            const r = node.getBoundingClientRect();
+            return [r.x, r.y, r.width, r.height];
+          };
+          const words = (node: Element | null) => {
+            if (!node) return null;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return rect(range);
+          };
+          const lines = [".nx-quote-text", ".nx-composer-reply-text", ".nx-typing-words"].flatMap((selector) => [...document.querySelectorAll(selector)]);
+          return {
+            words: lines.map(words),
+            names: [...document.querySelectorAll(".nx-quote [data-kit='Name'], .nx-composer-reply [data-kit='Name'], .nx-typing [data-kit='Name'], .nx-strip [data-kit='Name']")].map(rect),
+            strip: [".nx-strip", ".nx-strip-people", ".nx-strip-words", ".nx-strip button"].map((selector) => rect(document.querySelector(selector))),
+            chips: [...document.querySelectorAll(".nx-strip-people > li")].map(rect),
+          };
+        });
+      const now = await layout();
+      const old = await page.addStyleTag({
+        content:
+          ".nx-quote-text, .nx-typing-words { margin-inline-start: 0 !important; padding-inline-start: 0 !important; } .nx-quote-text, .nx-typing-words, .nx-composer-reply-text, .nx-strip-people { overflow: hidden !important; }",
+      });
+      const before = await layout();
+      await old.evaluate((node: Element) => node.remove());
+      expect(now.words.length).toBeGreaterThanOrEqual(4);
+      expect(now.chips.length).toBe(4);
+      expect(now).toEqual(before);
+      expect(now.strip[0]?.[3], "the strip's height").toBe(40);
+
+      // Long lines are cut by their own box and end in "…", which the old
+      // rules did too; their letters stop at the box.
+      for (const selector of [".nx-quote-text", ".nx-composer-reply-text", ".nx-typing-words"]) {
+        if (selector === ".nx-typing-words") await threeTyping();
+        const line = page.locator(selector).last();
+        const cut = await line.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return { over: node.scrollWidth > node.clientWidth, ellipsis: style.textOverflow, across: style.overflowX, nowrap: style.whiteSpace };
+        });
+        expect(cut, selector).toEqual({ over: true, ellipsis: "ellipsis", across: "clip", nowrap: "nowrap" });
+        await line.scrollIntoViewIfNeeded();
+        const box = await line.boundingBox();
+        if (!box) throw new Error("nothing to measure");
+        await line.evaluate((node: HTMLElement) => (node.dataset.probe = "letters"));
+        const letters = await page.addStyleTag({ content: `[data-probe="letters"], [data-probe="letters"] * { color: #fff !important; -webkit-text-fill-color: #fff !important; background: none !important; filter: none !important; }` });
+        // Up to 12px past its end, inside the window.
+        const room = Math.min(12, width - (box.x + box.width + 1));
+        const beyond = room >= 1 ? await shoot(page, { x: box.x + box.width + 1, y: box.y, width: room, height: box.height }) : { w: 0, h: 0, data: new Uint8Array() };
+        await letters.evaluate((node: Element) => node.remove());
+        await line.evaluate((node: HTMLElement) => delete node.dataset.probe);
+        let white = 0;
+        for (let i = 0; i < beyond.w * beyond.h; i += 1) if ([0, 1, 2].every((c) => (beyond.data[i * 4 + c] ?? 0) > 230)) white += 1;
+        expect(white, `${selector}: letters painted past its end`).toBe(0);
+      }
+
+      // The strip still hides the chips that don't fit: past its list of
+      // people, the strip is the same with the chips there or not.
+      const list = await page.locator(".nx-strip-people").boundingBox();
+      const whole = await strip(page).boundingBox();
+      if (!list || !whole) throw new Error("nothing to measure");
+      const past = { x: list.x + list.width, y: whole.y, width: whole.x + whole.width - (list.x + list.width), height: whole.height };
+      const shown = await shoot(page, past);
+      const gone = await page.addStyleTag({ content: ".nx-strip-people > li { visibility: hidden !important; }" });
+      const hidden = await shoot(page, past);
+      await gone.evaluate((node: Element) => node.remove());
+      expect(Buffer.from(shown.data).equals(Buffer.from(hidden.data)), "a chip is painted past the strip's list of people").toBe(true);
+      await expect(strip(page).getByRole("button", { name: /Join|Start talking/ })).toBeInViewport({ ratio: 1 });
+
+      // The sheet, for a person to look at: the strip, and the lines at the foot.
+      await page.mouse.move(0, 0);
+      const project = test.info().project.name;
+      await strip(page).screenshot({ path: `${SHEETS}/${project}-chat-${width}-strip.png`, animations: "disabled" });
+      const [typingBox, composer] = [await page.locator(".nx-typing").boundingBox(), await page.locator(".nx-composer-reply").boundingBox()];
+      if (typingBox && composer)
+        await page.screenshot({ path: `${SHEETS}/${project}-chat-${width}-foot.png`, clip: { x: 0, y: typingBox.y - 12, width, height: composer.y + composer.height + 12 - (typingBox.y - 12) }, animations: "disabled" });
+    });
+  });
+}
+
+test("plain names, reduced motion and high contrast still turn the glow off in a quote, the reply line and the voice strip", async ({ page }) => {
+  await page.setViewportSize({ width: 780, height: 820 });
+  await openChat(page);
+  await restyleInChat(page, styled(people.eli, AMBER_GLOW));
+  await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
+  await replyTo(page, "No plans, no agenda", "Eli");
+  const names: [string, Locator][] = [
+    ["quote", inQuote(page)],
+    ["reply line", inReply(page)],
+    ["voice strip", inStrip(page, "Eli")],
+  ];
+  for (const [, name] of names) {
+    await settled(page, name);
+    expect(await filterOf(name)).toContain("drop-shadow");
+  }
+  const off = async (why: string) => {
+    for (const [where, name] of names) {
+      expect(await filterOf(name), `${why}, ${where}`).toBe("none");
+      expectDark(await lightOf(page, name), `${why}, ${where}`);
+    }
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await off("reduced motion");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  // High contrast lays a plate of the system's background behind each line
+  // of words, so hiding a name changes a pixel or two beside it that were
+  // never light. What's painted past the box is what's painted for the same
+  // name with no glow at all.
+  await page.emulateMedia({ forcedColors: "active" });
+  const glowing: Light[] = [];
+  for (const [where, name] of names) {
+    expect(await filterOf(name), `high contrast, ${where}`).toBe("none");
+    glowing.push(await lightOf(page, name));
+  }
+  await restyleInChat(page, styled(people.eli, { fill: AMBER_GLOW.fill, effect: "none" }));
+  await restyleInChat(page, styled(people.jules, { fill: GRADIENT_GLOW.fill, effect: "none" }));
+  for (const [i, [where, name]] of names.entries()) {
+    await expect(name).not.toHaveAttribute("data-name-effect");
+    const plain = await lightOf(page, name);
+    for (const side of SIDES)
+      expect(Math.abs((glowing[i]?.sides[side].outside ?? 1) - plain.sides[side].outside), `high contrast, ${where}, past the ${side} edge: glowing ${show(glowing[i] ?? plain)}, with no glow ${show(plain)}`).toBeLessThan(0.005);
+  }
+  await restyleInChat(page, styled(people.eli, AMBER_GLOW));
+  await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
+  for (const [, name] of names) await settled(page, name);
   await page.emulateMedia({ forcedColors: "none" });
   await page.evaluate(() => document.documentElement.setAttribute("data-normalize", "true"));
   await off("plain names");
