@@ -220,6 +220,8 @@
      is the same 20px box as a name, so an inline name and its words share a
      baseline whatever the name's face. */
   --line-body: 20px;
+  /* A message's words fold past this many lines (#304). */
+  --message-fold: calc(20 * var(--line-body));
   --pane-head: 40px;
   --voice-strip: 40px;
   --measure: 80ch; /* the longest a line of a message runs (SPEC §4.7) */

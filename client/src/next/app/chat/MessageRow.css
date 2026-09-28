@@ -220,3 +220,25 @@ button.nx-quote:hover {
 .nx-quote[data-missing="yes"] .nx-quote-text {
   font-style: italic;
 }
+
+/* A long message folds (#304): its words at most --message-fold tall (twenty
+   lines), fading out over their last two lines, with Show all under them.
+   Unfolded, it's drawn whole. Only the words fold, never a picture or card. */
+.nx-msg-fold:not([data-open="yes"]) {
+  max-height: var(--message-fold);
+}
+
+/* Cut only once it's tall enough to fold, so a short message's link keeps
+   the focus ring that reaches past its words' edge. */
+.nx-msg-fold[data-tall="yes"]:not([data-open="yes"]) {
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, var(--mask-solid) calc(100% - 2 * var(--line-body)), transparent);
+}
+
+/* Its arrow lines up with the words' edge: a small quiet button's own
+   padding and border are taken back. */
+.nx-msg-fold-toggle {
+  display: flex;
+  margin-top: var(--space-1);
+  margin-left: calc(-1 * var(--space-2-5) - 1px);
+}

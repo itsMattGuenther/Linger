@@ -326,7 +326,9 @@ color).
 
 Type and press **Enter**. **Shift+Enter** starts a new line instead of sending.
 Something half-typed stays in its conversation's box, even if you close the
-tab or quit Linger, until you send it.
+tab or quit Linger, until you send it. A message can be up to 8,000 characters.
+One longer than twenty lines shows its first twenty with **Show all** under
+them, so a long paste doesn't fill everybody's screen.
 
 A little formatting works, the kind you already type:
 

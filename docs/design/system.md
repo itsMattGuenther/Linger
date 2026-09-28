@@ -627,6 +627,19 @@ from the row's left edge, with a 2px rule, the quoted person's name and an excer
 It is a button that jumps to the quoted message and marks it for a moment.
 When the quoted message isn't loaded it says "an earlier message".
 
+**Long messages fold** (#304). A message's words drawn taller than
+`--message-fold` (twenty lines of `--line-body`) show their first twenty lines,
+fading out over the last two (a mask to `--mask-solid`), with a small quiet
+**Show all** under them whose arrow sits on the words' edge; unfolded, it's
+**Show less**. It's measured as drawn, so a long paragraph folds as well as many
+short lines, and again when the window's width changes. Only the words fold,
+never a picture, file or card. Nothing leaves the page: a screen reader reads
+the whole message and copying copies all of it. An unfolded message stays
+unfolded in that window, even after its row is scrolled away and drawn again.
+A message short enough not to fold is drawn with no cut at all, so its links
+keep their focus ring. This is the one place words are cut without "…": the
+fade and Show all say there's more.
+
 **What else a message holds.** Pictures are sized from their stored width and
 height before they load (at most 320 by 400), so a row is measured once. A
 message that is nothing but one link shows only its link card. Files that
@@ -784,6 +797,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
+| A long message folds: past twenty lines its words are drawn twenty lines tall, fading out, with Show all, and all of it stays in the page; Show all and Show less draw it whole and fold it again, with no row overlapping the next; a long paragraph folds too, and twenty lines or fewer never do; unfolded, it stays unfolded after its row is scrolled away and back; Show all is reachable by keyboard | `next-chat-parity.spec.ts` › a long message folds |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
 | An `unavailable` `Button` or `IconButton` looks as a disabled one does, with no hover look; it says why on hover, on keyboard focus and to a screen reader; the keyboard reaches it and a press does nothing | `kit.spec.ts` › an unavailable button looks disabled |
 | A DM header's refused knock: on the line where their status was when it fits, in Knock's `note` bubble when it doesn't (420 and 360), each sentence whole, inside the window, announced, gone after eight seconds, and never "Knocked" | `next-chat-window.spec.ts` › a knock the server refuses; a refused knock's reason is in Knock's bubble |
