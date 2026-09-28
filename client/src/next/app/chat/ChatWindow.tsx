@@ -583,6 +583,8 @@ function Conversations({ following }: { following: Following }) {
   const onJoin = useCallback(() => {
     if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
   }, [active, intend]);
+  // A system default that wouldn't open is fixed by picking a device by name (#273).
+  const onPickDevice = useCallback(() => void intend({ kind: "settings", section: "sound" }).catch(() => undefined), [intend]);
   // Your voice controls in the room you're in voice in (#216): the list
   // window owns the seat and makes the change, and this window, the one
   // clicked, plays the sound that confirms it once it's done (#241).
@@ -611,6 +613,7 @@ function Conversations({ following }: { following: Following }) {
       voice: {
         strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab),
         onJoin,
+        onPickDevice,
         mics: micsHere(state, room.id),
         controls:
           state.myVoice?.roomId === room.id
@@ -619,7 +622,10 @@ function Conversations({ following }: { following: Following }) {
         // The last try at starting voice here failed (#261): the strip says why.
         failed:
           state.voiceFailed?.roomId === room.id
-            ? { line: voiceStartProblem(state.voiceFailed.problem, onWindows()), detail: state.voiceFailed.problem }
+            ? {
+                ...voiceStartProblem(state.voiceFailed.problem, onWindows(), state.voiceFailed.devices),
+                detail: state.voiceFailed.problem,
+              }
             : undefined,
       },
       people,

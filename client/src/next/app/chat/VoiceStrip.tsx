@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { User } from "../../../generated/User";
+import { startProblemWords, type StartProblem } from "../../../lib/voice";
 import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
 import { Button, Chip, IconButton, markerOf, Name, VoiceGlyph } from "../../kit";
@@ -26,6 +27,10 @@ export interface StripControls {
   onDeafen: (deafened: boolean) => void;
   onLeave: () => void;
 }
+
+/** Why the last start here failed, as the strip says it, and the shell's whole reason (#261, #273). */
+export type StripProblem = StartProblem & { detail: string };
+
 export const VoiceStrip = memo(function VoiceStrip({
   strip,
   people,
@@ -33,6 +38,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   speaking,
   mics,
   onJoin,
+  onPickDevice,
   controls,
   failed,
 }: {
@@ -47,25 +53,43 @@ export const VoiceStrip = memo(function VoiceStrip({
   mics?: ReadonlyMap<string, "muted" | "deafened">;
   /** Join, move here, or start: the window knows which from `strip`. */
   onJoin: () => void;
+  /** Open Settings on Sound & Voice, where a device is picked by name (#273). */
+  onPickDevice: () => void;
   /** Yours, when you're in voice here. */
   controls?: StripControls;
   /**
    * The last try at starting voice here failed (#261). It takes the words'
    * place, on the same one line, so the strip keeps its height (VOICE-17);
-   * the whole reason is the tooltip. The button stays, to try again.
+   * the whole of it, and the shell's reason, are the tooltip. The button
+   * stays, to try again. When picking a device fixes it, that's a button
+   * too, which opens Settings there and is never cut off: on a narrow window
+   * the words give way first (#273).
    */
-  failed?: { line: string; detail: string };
+  failed?: StripProblem;
 }) {
-  const problem = failed && strip.kind !== "mine" ? (
-    <p className="nx-strip-words" data-problem="yes" role="alert" title={failed.detail}>
-      Couldn't start voice. {failed.line}
+  const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
+  const problem = showFailed ? (
+    <p
+      className="nx-strip-words"
+      data-problem="yes"
+      role="alert"
+      title={`Couldn't start voice. ${startProblemWords(showFailed)}\n${showFailed.detail}`}
+    >
+      Couldn't start voice. {showFailed.line}
     </p>
   ) : null;
+  const fix =
+    showFailed && showFailed.fix !== null ? (
+      <Button size="sm" variant="secondary" icon="gear" onClick={onPickDevice}>
+        {showFailed.fix}
+      </Button>
+    ) : null;
   if (strip.kind === "quiet") {
     return (
       <div className="nx-strip" data-kind="quiet" role="group" aria-label="Voice in this conversation">
         <VoiceGlyph speaking={false} />
         {problem ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
+        {fix}
         <Button size="sm" variant="secondary" icon="mic" onClick={onJoin}>
           {strip.action === "move" ? QUIET_MOVE_WORDS : VOICE_ACTION_WORDS[strip.action]}
         </Button>
@@ -99,6 +123,7 @@ export const VoiceStrip = memo(function VoiceStrip({
           {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}
         </p>
       )}
+      {fix}
       {strip.kind === "mine" && controls ? (
         <div className="nx-strip-controls" role="group" aria-label="Your voice">
           <IconButton

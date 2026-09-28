@@ -181,27 +181,68 @@ export function microphoneLine(audio: string, waitingForKey: boolean, talkKey = 
   }
 }
 
+/** Why voice didn't start, as the room's voice strip says it (#261). */
+export interface StartProblem {
+  /** What went wrong, in a line. */
+  line: string;
+  /**
+   * What fixes it, when that is something to do in Linger (#273): the label
+   * of a button beside the line, so it's never cut off. On a narrow window
+   * the line gives way first.
+   */
+  fix: string | null;
+}
+
 /**
- * Why voice didn't start, in one short line for the room's voice strip
- * (#261). `problem` is the desktop shell's reason, which names the device
- * ("the microphone wouldn't open: …"); the whole of it goes in the tooltip.
- * A known cause says what to do about it. `windows` because the usual cause
- * there is Windows' own microphone privacy switch, which Linger can't turn on.
+ * The fix for a system default that wouldn't open (#273), and the label of
+ * the strip's button that opens Settings on Sound & Voice. Written out as
+ * "Pick yours in Settings → Sound & Voice" it doesn't fit on the strip's one
+ * line even at a chat window's usual width, so it stops at Settings; the
+ * button lands on Sound & Voice.
  */
-export function voiceStartProblem(problem: string, windows: boolean): string {
+export const PICK_A_DEVICE = "Pick yours in Settings";
+
+/**
+ * Why voice didn't start, short, for the room's voice strip (#261).
+ * `problem` is the desktop shell's reason, which names the device ("the
+ * microphone wouldn't open: …"); the whole of it goes in the tooltip. A known
+ * cause says what to do about it. `windows` because the usual causes there
+ * are Windows' own: its microphone privacy switch, which Linger can't turn
+ * on, and a system default that points at something that won't open.
+ *
+ * `asked` is what Settings → Sound & Voice asked the shell to open, with
+ * `null` for the system default (#273). A default that won't open is fixed
+ * by picking a device by name, as it was in the Windows 10 report, so that
+ * is what the strip says. Linger doesn't try other devices on its own when
+ * the default fails: it could quietly pick a webcam's microphone or the
+ * wrong speakers.
+ */
+export function voiceStartProblem(problem: string, windows: boolean, asked: VoiceDeviceChoice): StartProblem {
   const speakers = /^the speakers wouldn't open/i.test(problem);
   const device = speakers ? "speakers" : "microphone";
-  if (/no input device/i.test(problem)) return "No microphone found. Plug one in, or pick one in Settings.";
-  if (/no output device/i.test(problem)) return "No speakers found. Plug some in, or pick them in Settings.";
+  const only = (line: string): StartProblem => ({ line, fix: null });
+  if (/no input device/i.test(problem)) return only("No microphone found. Plug one in, or pick one in Settings.");
+  if (/no output device/i.test(problem)) return only("No speakers found. Plug some in, or pick them in Settings.");
   if (/denied|access|permission/i.test(problem)) {
-    return !speakers && windows
-      ? "Windows' privacy settings are blocking the microphone."
-      : `Linger isn't allowed to use the ${device}.`;
+    return only(
+      !speakers && windows
+        ? "Windows' privacy settings are blocking the microphone."
+        : `Linger isn't allowed to use the ${device}.`,
+    );
   }
-  if (/busy|in use/i.test(problem)) return `The ${device} ${speakers ? "are" : "is"} in use by another app.`;
-  if (/wouldn't open/i.test(problem)) return `The ${device} wouldn't open.`;
-  if (/desktop app/i.test(problem)) return "Voice only works in the desktop app.";
-  return "Something went wrong. Try again.";
+  if (/busy|in use/i.test(problem)) return only(`The ${device} ${speakers ? "are" : "is"} in use by another app.`);
+  if (/wouldn't open/i.test(problem)) {
+    const byName = (speakers ? asked.output : asked.input) !== null;
+    if (byName) return only(`The ${device} wouldn't open.`);
+    return { line: `${windows ? "Windows'" : "The"} default ${device} wouldn't open.`, fix: PICK_A_DEVICE };
+  }
+  if (/desktop app/i.test(problem)) return only("Voice only works in the desktop app.");
+  return only("Something went wrong. Try again.");
+}
+
+/** A start problem as the words the strip shows, fix and all, for its tooltip and for tests. */
+export function startProblemWords(said: StartProblem): string {
+  return said.fix === null ? said.line : `${said.line} ${said.fix}.`;
 }
 
 /** Whether this is Windows, where WebView2 says so in its user agent. For advice only, never a gate. */
