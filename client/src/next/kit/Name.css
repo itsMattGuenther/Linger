@@ -8,12 +8,19 @@
  *     once, and nothing that draws a name has to know about it;
  *   - reduced motion stops the shimmer band rather than freezing it.
  *
- * `.k-name` adds the one thing the old client never had: a fixed line box per
- * size, so no face can change a row's height.
+ * `.k-name` adds what the old client never had: a fixed line box per size, so
+ * no face can change a row's height, and a box exactly as wide as the letters.
+ * The glow differs too: a light behind the letters sized in the name's own
+ * ems, not a fixed text shadow (see "Glow" below).
  */
 
 .k-name {
   display: inline-block;
+  /* As wide as its letters wherever it's put, never stretched by a column
+     or a grid cell: the gradient and the shimmer's band are laid across
+     this box, so a stretched one would spread them past the letters and a
+     short name would show only its first color (#272). */
+  width: fit-content;
   min-width: 0;
   max-width: 100%;
   height: var(--line-name);
@@ -130,15 +137,21 @@
   }
 }
 
-/* Glow: the one text shadow, on the one expressive element (SPEC §4.5). */
+/* Glow: a soft light of their first color, on the one expressive element
+   (SPEC §4.5). It reaches `--name-glow`, in the name's own ems, so it looks
+   the same on a message and on a card (#272). It is a drop shadow of the
+   drawn name rather than a text shadow for two reasons: a text shadow is cut
+   off at the name's line box, which drew the light as a faint rectangle, and
+   it is painted over a gradient's letters, tinting them with the first
+   color. A filter lays the light behind the letters, and past the box. */
 :root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
-  text-shadow: 0 0 var(--space-2) var(--person-name, var(--text-primary));
+  filter: drop-shadow(0 0 var(--name-glow) var(--person-name, var(--text-primary)));
 }
 
 /* As specific as the rule that draws it, and after it, so it wins. */
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
-    text-shadow: none;
+    filter: none;
   }
 }
 
@@ -151,6 +164,7 @@
   font-style: normal;
   background-image: none;
   text-shadow: none;
+  filter: none;
   animation: none;
 }
 
@@ -175,5 +189,15 @@
 }
 
 :root .name.name-raw[data-name-effect="glow"] {
-  text-shadow: 0 0 var(--space-2) var(--person-name, var(--text-primary));
+  filter: drop-shadow(0 0 var(--name-glow) var(--person-name, var(--text-primary)));
+}
+
+/* High contrast repaints the letters in the system's text color and drops
+   text shadows; a filter it would keep, so the glow goes too. Last, so it
+   wins over both rules that draw it. */
+@media (forced-colors: active) {
+  :root:not([data-normalize="true"]) .name[data-name-effect="glow"],
+  :root .name.name-raw[data-name-effect="glow"] {
+    filter: none;
+  }
 }

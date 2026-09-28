@@ -154,6 +154,9 @@
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
      and `kit/Name.css` read it. */
   --name-shimmer: rgb(255 255 255 / 0.6);
+  /* How far a glowing name's light reaches, in the name's own ems, so a glow
+     looks the same on a message (8px at 14.5px) and on a card (#272). */
+  --name-glow: 0.55em;
 
   /* --- 3. scales ------------------------------------------------------------ */
 

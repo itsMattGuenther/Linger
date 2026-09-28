@@ -236,6 +236,17 @@ gradient at 92°, and shimmer or glow.
   lists, 28px for display, 16px for meta), so no face can change a row's
   height.
 - **Long names** end in "…".
+- **Its box is its letters.** A name is exactly as wide as its letters
+  wherever it sits, never stretched by a column or a grid cell. Its gradient
+  and its shimmer's band are laid across that box, so a stretched box spread
+  them past the letters: a short gradient name on a person's card showed only
+  its first color (#272).
+- **Glow** is a soft light of their first color behind the letters, reaching
+  `--name-glow` (0.55em of the name's own size), so it looks the same on a
+  message and on a card. It is a drop shadow of the drawn name, not a text
+  shadow: a text shadow was cut off at the name's line box, and painted over a
+  gradient's letters. It goes under reduced motion, with plain names, and in
+  high contrast.
 - **`raw`** draws the person's own style even with plain names on, for the
   style picker's preview.
 - **`size="inline"`** is the one size without a box: the name flows inside a
@@ -480,7 +491,9 @@ timeline and volume (`app/chat/AudioCard.tsx`).
 ### Card and Popover
 
 - **`Card`** is a raised block with a hairline edge. `tint` washes it faintly
-  in a person's palette color.
+  in a person's palette color. The wash rises from the foot of a `Card` and
+  from the far corner of a `Popover`, away from the name at the head: a name
+  on a wash of its own color reads as a different name (#272).
 - **`Popover`** floats: a person's card, a menu, a picker.
   - It is a named `dialog`, with a close button and Escape.
   - It can point left or right at what opened it.
@@ -696,6 +709,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
+| A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
@@ -714,7 +728,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | No `!important` | `discipline.test.ts` › never uses !important |
 | `src/next` imports only `src/lib` logic (`.ts`), `src/generated` and `src/fonts` from the old client, never its screens, styles or UI components | `discipline.test.ts` › imports nothing from the old client's UI |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
-| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
+| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The
 geometry spec also saves a review sheet of each gallery section to

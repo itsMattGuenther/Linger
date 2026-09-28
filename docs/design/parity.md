@@ -377,7 +377,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NAME-3 | Your message font: one of the four sans faces. Other saved choices draw in the default body face. | SPEC §4.5 | Same | F | ✅ chosen in Profile, and each message draws in its sender's face; a name-only face draws in the body face (next-chat-window.spec.ts) |
 | NAME-4 | "Use plain names and message fonts" flattens every name and message font on your screen, with one attribute on `<html>`. | `lib/normalize.ts`, `styles/names.css` | Same, in every window at once | F | ✅ (appearance.test.ts, next-settings-window.spec.ts) |
 | NAME-5 | Shimmer and glow stop under reduced motion. | `names.css` | Same | F | ✅ shimmer and glow both stop, and the name keeps its colors (next-motion.spec.ts) |
-| NAME-6 | Every palette color passes 4.5:1 on every surface it's drawn on. | `linger-core` palette test | New surfaces added to the test | U (`contrast.test.ts`) | ✅ (contrast.test.ts) |
+| NAME-6 | Every palette color passes 4.5:1 on every surface it's drawn on. | `linger-core` palette test | New surfaces added to the test | U (`contrast.test.ts`) | ✅ (contrast.test.ts, with a person's card washed in any color; next-name-paint.spec.ts checks the card's name against what is actually behind it) |
 
 ## KNOCK
 

@@ -41,6 +41,15 @@ function rootVars(css: string): Map<string, string> {
   return vars;
 }
 
+const CARD = readFileSync(resolve(HERE, "../kit/Card.css"), "utf8");
+
+/** How strong a tinted card's wash of a person's color is, read from `kit/Card.css`, as 0–1. */
+function washOf(selector: string): number {
+  const rule = new RegExp(`${selector.replace(/[[\]".]/g, "\\$&")}\\s*\\{[^}]*var\\(--card-tint\\)\\s+([\\d.]+)%`).exec(CARD);
+  if (!rule?.[1]) throw new Error(`no wash found for ${selector} in kit/Card.css`);
+  return Number(rule[1]) / 100;
+}
+
 const VARS = rootVars(TOKENS);
 const NAMES = rootVars(PALETTE);
 
@@ -153,6 +162,28 @@ describe("contrast of the new client's tokens", () => {
 
   it("keeps all 16 name colors at 4.5:1 on every surface a name sits on", () => {
     const bad = failures(PALETTE_KEYS, SURFACES, 4.5);
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
+  // A person's card is washed faintly in their color (kit/Card.css). The wash
+  // is kept away from the name at the card's head (#272), but a name must stay
+  // readable even where the wash is strongest, whoever's color it is.
+  it("keeps all 16 name colors at 4.5:1 on a card washed in any of them, where the wash is strongest", () => {
+    const washes: Array<[string, string, number]> = [
+      ["a person's card (a Popover)", "--surface-popover", washOf('.k-popover[data-tinted="yes"]')],
+      ["a Card", "--surface-raised", washOf('.k-card[data-tinted="yes"]')],
+    ];
+    const bad: string[] = [];
+    for (const [where, surface, strength] of washes) {
+      for (const tint of PALETTE_KEYS) {
+        const [r, g, b] = color(tint);
+        const behind = over([r, g, b, strength], color(surface));
+        for (const name of PALETTE_KEYS) {
+          const value = ratio(color(name), behind);
+          if (value < 4.5) bad.push(`${name} on ${where} washed in ${tint}: ${value.toFixed(2)}:1, needs 4.5:1`);
+        }
+      }
+    }
     expect(bad, bad.join("\n")).toEqual([]);
   });
 
