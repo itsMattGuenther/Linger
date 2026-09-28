@@ -48,10 +48,8 @@ describe("files dropped where nothing takes them (COMP-11)", () => {
     }
   });
 
-  it("is on in both clients", () => {
+  it("is on in the app", () => {
     const src = join(dirname(fileURLToPath(import.meta.url)), "..");
-    for (const entry of ["main.tsx", "next/main.tsx"]) {
-      expect(readFileSync(join(src, entry), "utf8"), entry).toContain("refuseStrayDrops(window);");
-    }
+    expect(readFileSync(join(src, "next/main.tsx"), "utf8")).toContain("refuseStrayDrops(window);");
   });
 });

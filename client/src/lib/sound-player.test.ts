@@ -124,7 +124,7 @@ describe("notification sound policy", () => {
       held.set("linger.sound.volume", bad);
       expect(sound.loadSoundPrefs().volume, bad).toBe(1);
     }
-    // Saving another setting keeps the level: the old client saves what it loaded.
+    // Saving another setting keeps the level: it saves what it loaded.
     held.set("linger.sound.volume", "3");
     sound.saveSoundPrefs({ ...sound.loadSoundPrefs(), muted: true });
     expect(held.get("linger.sound.volume")).toBe("3");

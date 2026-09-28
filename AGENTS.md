@@ -97,8 +97,8 @@ pass.
   file.
 - The gateway gets a test that forcibly drops the connection mid-stream and asserts
   resume replays with no gaps and no duplicates.
-- The 16-color palette gets a property test asserting ≥4.5:1 against both theme
-  backgrounds for all 16 keys × 2 themes. It must run in CI.
+- The 16-color palette gets a property test asserting ≥4.5:1 for all 16 keys
+  against the background and its evening version. It must run in CI.
 
 **Commits**
 - Conventional-ish: `feat(gateway): resume with sequence replay`
@@ -313,9 +313,9 @@ server) are #197. Close a milestone's checks before starting the next.
 `TASKS.md`.
 - **Visual rules:** `docs/design/system.md` governs, and the kit's tests
   enforce it.
-- **The previous client** (the rest of `client/src/`) stays one release behind
-  `LINGER_CLASSIC=1` as a fallback. It gets bug fixes only, and new-client code
-  never imports its UI.
+- **Shared logic:** `client/src/lib/` is the logic the windows share (`.ts`
+  only, no components), and `client/src/generated/` the wire types. The
+  previous client that also used them was deleted after 0.4.3 (#306).
 
 ---
 

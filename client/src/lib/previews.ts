@@ -14,7 +14,7 @@
  * once and remembered, including when the answer was "nothing" — a card with
  * just its domain is a finished card, not a retry.
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 import type { LinkPreview } from "../generated/LinkPreview";
 import type { AuthedApi } from "./api";
@@ -110,21 +110,6 @@ async function drain(api: AuthedApi): Promise<void> {
 /** Everything known about this server's links. */
 export function useLinkPreviews(server: string): ServerCache {
   return useSyncExternalStore(subscribe, () => cacheOf(server));
-}
-
-/**
- * Ask about a message's links while it is on screen, and read back whatever has
- * arrived. One hook so a row cannot do half of it.
- */
-export function useCards(api: AuthedApi, urls: string[]): ServerCache {
-  const held = useLinkPreviews(api.baseUrl);
-  // Joined rather than passed as an array: the list is rebuilt on every render
-  // of the row, and an effect keyed on the array would run every time.
-  const key = urls.join(" ");
-  useEffect(() => {
-    if (key !== "") wantPreviews(api, key.split(" "));
-  }, [api, key]);
-  return held;
 }
 
 /** Drop a server's cards when its sign-in goes. Cards are cheap, but they are

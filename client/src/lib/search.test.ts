@@ -1,27 +1,12 @@
 /**
  * What a search result says. The cases worth writing down are the ones a
- * result list gets wrong: a hit with no words in it at all, a hit that matched
- * a filename rather than the text, and the three different reasons the list can
- * be empty.
+ * result list gets wrong: a hit with no words in it at all, and the three
+ * different reasons the list can be empty.
  */
 import { describe, expect, it } from "vitest";
 
-import type { SearchHit } from "../generated/SearchHit";
 import type { SearchSnippetPart } from "../generated/SearchSnippetPart";
-import { emptyLine, fileLine, hitLabel, isSearchable, snippetText } from "./search";
-
-function hit(over: Partial<SearchHit>): SearchHit {
-  return {
-    message_id: "m1",
-    room_id: "r1",
-    author_id: "u1",
-    created_at: 0,
-    cursor: "0189",
-    snippet: [],
-    matched_filenames: [],
-    ...over,
-  };
-}
+import { emptyLine, isSearchable, snippetText } from "./search";
 
 const runs = (...parts: [string, boolean][]): SearchSnippetPart[] =>
   parts.map(([text, matched]) => ({ text, matched }));
@@ -35,63 +20,6 @@ describe("snippetText", () => {
 
   it("is empty for a message that said nothing", () => {
     expect(snippetText([])).toBe("");
-  });
-});
-
-describe("fileLine", () => {
-  it("says nothing when no filename matched", () => {
-    expect(fileLine([])).toBeNull();
-  });
-
-  it("names one file", () => {
-    expect(fileLine(["invoice.pdf"])).toBe("file: invoice.pdf");
-  });
-
-  it("joins two with an and", () => {
-    expect(fileLine(["a.png", "b.png"])).toBe("files: a.png and b.png");
-  });
-
-  it("joins three", () => {
-    expect(fileLine(["a.png", "b.png", "c.png"])).toBe("files: a.png, b.png and c.png");
-  });
-
-  it("counts the rest rather than listing them", () => {
-    expect(fileLine(["a", "b", "c", "d", "e"])).toBe("files: a, b and 3 more");
-  });
-});
-
-describe("hitLabel", () => {
-  it("reads as a sentence: who, where, when, what", () => {
-    const one = hit({ snippet: runs(["mounting it ", false], ["now", true]) });
-    expect(hitLabel(one, "Matt", "#garage", "14 Mar 2026, 09:31")).toBe(
-      "Matt in #garage, 14 Mar 2026, 09:31: mounting it now",
-    );
-  });
-
-  it("falls back to the filename when the message had no words", () => {
-    const one = hit({ snippet: [], matched_filenames: ["drive-cage.jpg"] });
-    expect(hitLabel(one, "Callie", "#shop", "1 Feb 2026, 10:00")).toBe(
-      "Callie in #shop, 1 Feb 2026, 10:00: file: drive-cage.jpg",
-    );
-  });
-
-  it("says both when there are words and a matched filename", () => {
-    const one = hit({
-      snippet: runs(["here it is", false]),
-      matched_filenames: ["drive-cage.jpg"],
-    });
-    expect(hitLabel(one, "Callie", "#shop", "when")).toBe(
-      "Callie in #shop, when: here it is, file: drive-cage.jpg",
-    );
-  });
-
-  it("survives a room the client has not been told about", () => {
-    const one = hit({ snippet: runs(["hello", false]) });
-    expect(hitLabel(one, "Matt", undefined, "when")).toBe("Matt, when: hello");
-  });
-
-  it("says so rather than nothing when there is neither", () => {
-    expect(hitLabel(hit({}), "Matt", "#porch", "when")).toBe("Matt in #porch, when: no text");
   });
 });
 

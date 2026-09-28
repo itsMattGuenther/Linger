@@ -13,7 +13,6 @@ import {
   expiryText,
   fileSize,
   inlineBox,
-  itemDescription,
   itemLabel,
   MAX_INLINE_HEIGHT,
   renderAs,
@@ -144,13 +143,6 @@ describe("labels", () => {
     expect(itemLabel(bare)).toBe("example.com");
 
     expect(itemLabel(item({ excerpt: "keep this" }))).toBe("keep this");
-  });
-
-  it("says out loud what the layout only shows", () => {
-    const starred = item({ kind: "image", excerpt: "look", starred_at: 5 });
-    expect(itemDescription(starred, "Sam")).toContain("shared by Sam");
-    expect(itemDescription(starred, "Sam")).toContain("starred");
-    expect(itemDescription(item({}), "Sam")).not.toContain("starred");
   });
 });
 

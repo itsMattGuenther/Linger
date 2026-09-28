@@ -9,8 +9,10 @@ Where this says "discipline test" it means `client/src/next/kit/discipline.test.
 a unit test that reads the new client's source and CSS and fails on forbidden
 patterns (see [`architecture.md`](architecture.md)). "Geometry test" means
 Playwright measuring real boxes on the kit gallery or a screen fixture, in
-Chromium and WebKit. "Desktop check" means the real app under WebKitGTK via
-`tauri-driver` (`docs/desktop-checks.md`), and WebView2 in Windows CI.
+Chromium and WebKit. "Desktop check" means the real app: the packaged app in
+CI under WebKitGTK and WebView2 (`scripts/linux-next-check.py`,
+`client/scripts/windows-next-check.mjs`), and, once it's built, a signed-in
+check through `tauri-driver` (T-1820).
 
 ---
 

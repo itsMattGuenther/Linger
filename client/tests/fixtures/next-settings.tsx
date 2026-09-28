@@ -34,7 +34,6 @@ import type { User } from "../../src/generated/User";
 import { type ExportPhase } from "../../src/lib/export";
 import { inviteUrl } from "../../src/lib/host";
 import { DEFAULT_SOUND_PREFS, type SoundPrefs } from "../../src/lib/sound";
-import type { ThemePref } from "../../src/lib/theme";
 import { DEFAULT_VOICE_PREFS, type VoicePrefs } from "../../src/lib/voice";
 import type { UpdateCheck } from "../../src/lib/updates";
 import { type SettingsKey } from "../../src/next/core/settings";
@@ -96,7 +95,6 @@ const removedPeople: User[] = [{ ...people.jen, id: "u-rory", username: "rory", 
 function Fixture() {
   const [me, setMe] = useState<User>(matt);
   const [plain, setPlain] = useState(false);
-  const [theme, setTheme] = useState<ThemePref>("dark");
   const [scale, setScale] = useState(100);
   const [warmth, setWarmth] = useState(true);
   const [mode, setMode] = useState<ConversationMode>("tabs");
@@ -161,7 +159,6 @@ function Fixture() {
         },
       }}
       appearance={{
-        theme: { value: theme, choices: ["dark", "light", "system"], onChange: (value) => (note(`theme:${value}`), setTheme(value)) },
         scale: { value: scale, onChange: (value) => (note(`scale:${value}`), setScale(value)) },
         warmth: { value: warmth, onChange: (value) => (note(`warmth:${value}`), setWarmth(value)) },
         plainNames: { value: plain, onChange: (value) => (note(`plain:${value}`), setPlain(value)) },

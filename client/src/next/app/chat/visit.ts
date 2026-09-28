@@ -8,7 +8,7 @@ import type { Following } from "../../core/mirror";
 import { keyOf, type TabKey } from "../../core/tabs";
 
 /**
- * Walking into a conversation, as today's client does (`stream/Stream.tsx`):
+ * Walking into a conversation:
  * pin the "you left off here" line, let go of other rooms' scrollback (#173),
  * and load the history around where you left off, or the newest. Once per
  * visit, after the read positions are in; again after a reconnect, which may

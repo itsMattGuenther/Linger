@@ -4,12 +4,8 @@ import { defineConfig } from "vitest/config";
 // parser — is arithmetic that cannot be checked by looking at the app, so it
 // gets a test runner.
 //
-// This is still not a component-testing setup: there is no DOM here and no
-// testing library. The one `.tsx` file in it renders `Markdown` to a *string*
-// with `react-dom/server` and reads the string, because T-304's accept
-// criterion is about the markup a browser would be handed, and asserting on the
-// markup itself is the only way to prove it. The rest of the React half is
-// verified by running the app.
+// This is not a component-testing setup: there is no DOM here and no testing
+// library. Components are tested in a real browser (`tests/browser/`).
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],

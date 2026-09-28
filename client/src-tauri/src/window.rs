@@ -8,22 +8,16 @@
 //! bar: GNOME, for one, draws nothing, and without it the window could not be
 //! moved or closed with the mouse.
 
-use std::ffi::OsStr;
-
 use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// Window positions and sizes, remembered on this computer (T-1808): where
-/// each Buddy list window was and how big, restored when it opens again, the
-/// chat window's and every popped-out conversation's included. The classic
-/// client keeps its old behavior, so its main window is left out.
+/// each window was and how big, restored when it opens again, the chat
+/// window's and every popped-out conversation's included.
 pub fn remembered_windows() -> tauri::plugin::TauriPlugin<tauri::Wry> {
-    let builder = tauri_plugin_window_state::Builder::default().with_state_flags(remembered());
-    if chosen_client(std::env::var_os(CLASSIC).as_deref()) == Client::BuddyList {
-        builder.build()
-    } else {
-        builder.with_denylist(&[OWNER]).build()
-    }
+    tauri_plugin_window_state::Builder::default()
+        .with_state_flags(remembered())
+        .build()
 }
 
 /// What is remembered of a window: only size, position and maximized.
@@ -36,62 +30,20 @@ fn remembered() -> StateFlags {
 /// Create every window in `tauri.conf.json`, with the title bar dropped on
 /// Hyprland. The config marks them `"create": false` so Tauri doesn't build
 /// them first; changing the frame after the window is on screen would flash
-/// the bar and resize the page underneath it.
+/// the bar and resize the page underneath it. The one window there is the
+/// list: its own page, tall and narrow, with no system title bar on any
+/// desktop, because every window draws its own (`docs/design/buddy-list.md`).
 pub fn create(app: &App) -> tauri::Result<()> {
     let decorated = !on_hyprland(
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
-    let client = chosen_client(std::env::var_os(CLASSIC).as_deref());
     for config in &app.config().app.windows {
-        if client == Client::BuddyList && config.label == "main" {
-            WebviewWindowBuilder::from_config(app, &buddy_list(config))?.build()?;
-            continue;
-        }
         WebviewWindowBuilder::from_config(app, config)?
             .decorations(config.decorations && decorated)
             .build()?;
     }
     Ok(())
-}
-
-/// The Buddy list client is the app (0.4.0). `LINGER_CLASSIC=1` opens the
-/// client before it instead, kept for one release as a way back if the new
-/// one misbehaves on somebody's machine, then deleted (T-1810).
-const CLASSIC: &str = "LINGER_CLASSIC";
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Client {
-    /// The client before the Buddy list, for one release.
-    Classic,
-    /// The Buddy list client: the default.
-    BuddyList,
-}
-
-fn chosen_client(classic: Option<&OsStr>) -> Client {
-    match classic.and_then(OsStr::to_str) {
-        Some("1") => Client::Classic,
-        _ => Client::BuddyList,
-    }
-}
-
-/// Which client this run opens.
-pub fn this_client() -> Client {
-    chosen_client(std::env::var_os(CLASSIC).as_deref())
-}
-
-/// The main window as the Buddy list client wants it: the list's own page, a
-/// tall narrow window, and no system title bar on any desktop, because every
-/// window of the new client draws its own (`docs/design/buddy-list.md`).
-fn buddy_list(config: &tauri::utils::config::WindowConfig) -> tauri::utils::config::WindowConfig {
-    let mut list = config.clone();
-    list.url = WebviewUrl::App("next.html".into());
-    list.width = 340.0;
-    list.height = 820.0;
-    list.min_width = Some(300.0);
-    list.min_height = Some(480.0);
-    list.decorations = false;
-    list
 }
 
 /// The owner window's label. Only it may open the Buddy list client's other
@@ -412,10 +364,10 @@ fn tool_window(which: &str) -> Result<(&'static str, &'static str, f64, f64), St
 /// counting a window that no longer exists towards you being here
 /// (docs/design/architecture.md, "Windows and their roles").
 pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
-    // Closing the Buddy list's list keeps Linger in the tray, or quits it and
-    // every window with it (tray.rs); the classic client quits as it did.
+    // Closing the list keeps Linger in the tray, or quits it and every
+    // window with it (tray.rs).
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-        if window.label() == OWNER && this_client() == Client::BuddyList {
+        if window.label() == OWNER {
             let app = window.app_handle();
             if app.state::<crate::tray::Closing>().hides() {
                 api.prevent_close();
@@ -542,9 +494,9 @@ mod tests {
         }
     }
     use super::{
-        at_message, attention_target, buddy_list, chat_url, chosen_client, conversation_label,
-        conversation_size, conversation_url, escape, is_origin, is_viewer, on_hyprland,
-        settings_url, tool_window, Client, CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
+        at_message, attention_target, chat_url, conversation_label, conversation_size,
+        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window,
+        CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
     };
 
     /// A DM points at its own window, then the chat window, then the list,
@@ -569,7 +521,6 @@ mod tests {
         assert_eq!(attention_target(&order, only(&[CHAT, OWNER]), true), None);
     }
     use std::ffi::OsStr;
-    use tauri::WebviewUrl;
 
     /// Whether a capability's `windows` entry names this label: exactly, or
     /// by a trailing `*` (`chat-*`), the only pattern the files use.
@@ -668,19 +619,6 @@ mod tests {
     }
 
     #[test]
-    fn the_buddy_list_opens_unless_linger_classic_is_1() {
-        assert_eq!(chosen_client(Some(OsStr::new("1"))), Client::Classic);
-        for other in ["", "0", "true", "yes", "2", " 1"] {
-            assert_eq!(
-                chosen_client(Some(OsStr::new(other))),
-                Client::BuddyList,
-                "{other:?}"
-            );
-        }
-        assert_eq!(chosen_client(None), Client::BuddyList);
-    }
-
-    #[test]
     fn a_chat_window_opens_only_our_page_with_a_real_server_and_room() {
         assert_eq!(
             chat_url("https://linger.example", "0193a2b4-7c1d-7000-8000-000000000001").as_deref(),
@@ -714,13 +652,17 @@ mod tests {
     }
 
     #[test]
-    fn the_buddy_list_window_is_tall_narrow_and_frameless() {
-        let main = tauri::utils::config::WindowConfig::default();
-        let list = buddy_list(&main);
-        assert_eq!(list.url, WebviewUrl::App("next.html".into()));
-        assert!(list.height > list.width);
-        assert!(!list.decorations);
-        assert_eq!(list.label, main.label);
+    fn the_list_window_is_tall_narrow_and_frameless() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let windows = conf["app"]["windows"].as_array().unwrap();
+        assert_eq!(windows.len(), 1);
+        let list = &windows[0];
+        assert_eq!(list["label"].as_str().unwrap_or("main"), OWNER);
+        assert_eq!(list["url"], "next.html");
+        assert!(list["height"].as_f64() > list["width"].as_f64());
+        assert_eq!(list["decorations"], false);
+        assert_eq!(list["create"], false);
     }
 
     #[test]

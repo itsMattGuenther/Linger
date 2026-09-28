@@ -110,22 +110,6 @@ export function buildRoster(input: {
   );
 }
 
-/** The state, said out loud. Carries the presence dot for a screen reader. */
-export function stateWord(state: PresenceState): string {
-  switch (state) {
-    case "in_room":
-      return "in a room";
-    case "around":
-      return "around";
-    case "idle":
-      return "idle";
-    case "away":
-      return "away";
-    case "offline":
-      return "offline";
-  }
-}
-
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -148,14 +132,4 @@ export function shortAgo(at: number, now: number): string {
   if (span < WEEK_MS) return `${Math.floor(span / DAY_MS)}d`;
   if (span < MONTH_MS) return `${Math.floor(span / WEEK_MS)}w`;
   return `${Math.floor(span / MONTH_MS)}mo`;
-}
-
-/** Whether a card has anything to open: a status, or an away message. */
-export function hasStatus(entry: RosterEntry): boolean {
-  const status = entry.user.status;
-  if (entry.awayMessage !== null && entry.awayMessage !== "") return true;
-  if (!status) return false;
-  return [status.line, status.reading, status.listening, status.working_on].some(
-    (field) => field !== null && field !== "",
-  );
 }

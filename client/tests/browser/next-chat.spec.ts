@@ -32,6 +32,38 @@ function message(page: Page, words: string | RegExp): Locator {
   return page.locator(".nx-msg", { hasText: words });
 }
 
+/**
+ * Hover a control and check its tooltip is drawn whole: inside the window and
+ * on top of everything at its middle and corners (#140).
+ */
+async function expectWholeTooltip(page: Page, control: Locator, name: string) {
+  await control.hover();
+  const tip = page.locator("[data-kit='Tooltip']");
+  await expect(tip).toHaveText(name);
+  await expect(tip).toHaveAttribute("data-placed", "yes");
+  const whole = await tip.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    const inset = 2;
+    const points = [
+      [r.left + r.width / 2, r.top + r.height / 2],
+      [r.left + inset, r.top + inset],
+      [r.right - inset, r.top + inset],
+      [r.left + inset, r.bottom - inset],
+      [r.right - inset, r.bottom - inset],
+    ] as const;
+    // A tooltip ignores the pointer, which hides it from elementFromPoint
+    // too; let it be seen just for the check.
+    const bubble = node as HTMLElement;
+    bubble.style.pointerEvents = "auto";
+    const onTop = points.every(([x, y]) => node.contains(document.elementFromPoint(x, y)));
+    bubble.style.pointerEvents = "";
+    return { inWindow: r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth, onTop };
+  });
+  expect(whole, name).toEqual({ inWindow: true, onTop: true });
+  await page.mouse.move(1, 1);
+  await expect(tip).toHaveCount(0);
+}
+
 async function rect(locator: Locator) {
   const found = await locator.boundingBox();
   if (!found) throw new Error("not on screen");
@@ -238,6 +270,32 @@ test.describe("built on the system", () => {
     });
   }
 
+  test("on a wide window a message's lines stop at 80 characters (CONV-7)", async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 800 });
+    await open(page);
+    const words = "the porch light is on and the kettle is warm, come sit a while ".repeat(8).trim();
+    await page.evaluate((body) => window.chat?.arrive("r-general", "u-dave", body), words);
+    const text = message(page, "the porch light is on").locator(".nx-text");
+    await expect(text).toBeInViewport();
+    const measured = await text.evaluate((node) => {
+      const probe = document.createElement("span");
+      probe.textContent = "0".repeat(80);
+      probe.style.font = getComputedStyle(node).font;
+      probe.style.position = "absolute";
+      probe.style.whiteSpace = "pre";
+      document.body.append(probe);
+      const eighty = probe.getBoundingClientRect().width;
+      probe.remove();
+      const row = node.closest(".nx-msg")?.getBoundingClientRect().width ?? 0;
+      return { width: node.getBoundingClientRect().width, eighty, row, lines: Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)) };
+    });
+    // The row has room for far more, and the words wrap anyway, at 80ch.
+    expect(measured.row).toBeGreaterThan(measured.eighty + 100);
+    expect(measured.lines).toBeGreaterThan(1);
+    expect(measured.width).toBeLessThanOrEqual(measured.eighty + 0.5);
+    expect(measured.width).toBeGreaterThan(measured.eighty * 0.85);
+  });
+
   test("rows sit edge to edge, groups have one gap, and a one-line continuation is 24px", async ({ page }) => {
     const rows = await page.locator(".nx-conv-row").evaluateAll((elements) =>
       elements
@@ -388,6 +446,52 @@ test.describe("emoji", () => {
   });
 });
 
+test.describe("the message box", () => {
+  test.beforeEach(async ({ page }) => open(page));
+
+  // Dictation and paste tools put text in whole rather than key by key.
+  // A regression guard at the browser level, not a test of those tools.
+  test("text put in whole stays as it came, on several lines, and doesn't send", async ({ page }) => {
+    await box(page).focus();
+    const text = "Café — hello 👋\nA second line, still a draft.";
+    await page.keyboard.insertText(text);
+    await expect(box(page)).toHaveValue(text);
+    expect((await did(page)).filter((line) => line.startsWith("send:"))).toEqual([]);
+  });
+
+  test("Add a file opens the file picker and keeps what's typed", async ({ page }) => {
+    await box(page).fill("keep this draft");
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Add a file" }).click();
+    expect((await chooser).isMultiple()).toBe(true);
+    await expect(box(page)).toHaveValue("keep this draft");
+  });
+
+  test("the box grows with its lines and shrinks back, and its buttons keep their size by the last line", async ({ page }) => {
+    const shape = () =>
+      page.locator(".nx-composer-box").evaluate((node) => {
+        const frame = node.getBoundingClientRect();
+        const send = node.querySelector("[aria-label='Send']")?.getBoundingClientRect();
+        const add = node.querySelector("[aria-label='Add a file']")?.getBoundingClientRect();
+        if (!send || !add) throw new Error("no buttons");
+        return { height: frame.height, send: send.height, add: add.height, sendBelow: frame.bottom - send.bottom, addBelow: frame.bottom - add.bottom };
+      });
+    await box(page).fill("one line");
+    const one = await shape();
+    await box(page).fill("first line\nsecond line\nthird line");
+    await expect.poll(async () => (await shape()).height).toBeGreaterThan(one.height);
+    const three = await shape();
+    expect({ send: three.send, add: three.add, sendBelow: three.sendBelow, addBelow: three.addBelow }).toEqual({
+      send: one.send,
+      add: one.add,
+      sendBelow: one.sendBelow,
+      addBelow: one.addBelow,
+    });
+    await box(page).fill("one line again");
+    await expect.poll(async () => (await shape()).height).toBe(one.height);
+  });
+});
+
 test.describe("the row menu", () => {
   test.beforeEach(async ({ page }) => open(page));
 
@@ -471,6 +575,17 @@ test.describe("a send the server refuses", () => {
 });
 
 test.describe("voice here", () => {
+  for (const [width, height] of [[780, 790], [480, 360]] as const) {
+    test(`the voice strip's tooltips show whole at ${width} by ${height} (#140)`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await open(page, "?voice=mine");
+      const yours = page.getByRole("group", { name: "Voice in this conversation" }).getByRole("group", { name: "Your voice" });
+      for (const name of ["Mute", "Deafen", "Leave voice"]) {
+        await expectWholeTooltip(page, yours.getByRole("button", { name, exact: true }), name);
+      }
+    });
+  }
+
   test("in voice here: your mute, deafen and leave, as symbols, and nothing to join (#216)", async ({ page }) => {
     await open(page, "?voice=mine");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });
@@ -574,6 +689,59 @@ test.describe("reading and arriving", () => {
     expect(await page.locator(".nx-conv-row").count()).toBeLessThan(80);
   });
 
+  // Every message row formats its full date once per render, for the tooltip
+  // on its time, and nothing else in the chat window uses that format.
+  // Counting those calls counts row renders without instrumenting the app.
+  test("scrolling re-renders only the rows coming into view (PERF-2, #170)", async ({ page }) => {
+    await page.addInitScript(() => {
+      const format = Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, "format");
+      if (!format?.get) throw new Error("Intl.DateTimeFormat#format is not a getter here");
+      const read = format.get;
+      Object.defineProperty(Intl.DateTimeFormat.prototype, "format", {
+        configurable: true,
+        get(this: Intl.DateTimeFormat) {
+          const bound = read.call(this) as (date?: Date | number) => string;
+          if (this.resolvedOptions().dateStyle !== "full") return bound;
+          return (date?: Date | number) => {
+            const counted = window as unknown as { rowRenders?: number };
+            counted.rowRenders = (counted.rowRenders ?? 0) + 1;
+            return bound(date);
+          };
+        },
+      });
+    });
+    await open(page, "?big");
+    await expect(message(page, "(5000)")).toBeInViewport();
+    await log(page).evaluate((element) => element.scrollBy({ top: -600 }));
+    // Let the scroll and the rows' measuring settle before counting.
+    await page.waitForTimeout(800);
+    const result = await page.evaluate(async () => {
+      const scroller = document.querySelector<HTMLElement>(".nx-conv-scroll");
+      if (!scroller) throw new Error("no scroller");
+      const drawn = () => new Set([...document.querySelectorAll<HTMLElement>("[data-message]")].map((row) => row.dataset.message));
+      const before = drawn();
+      const counted = window as unknown as { rowRenders?: number };
+      counted.rowRenders = 0;
+      const startTop = scroller.scrollTop;
+      // Twenty-five small wheel-sized steps: each re-renders the list, and
+      // only a handful of rows come into view across all of them.
+      const seen = new Set(before);
+      for (let step = 0; step < 25; step += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        scroller.scrollTop -= 4;
+        for (const id of drawn()) seen.add(id);
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      for (const id of drawn()) seen.add(id);
+      return { renders: counted.rowRenders ?? 0, arrived: seen.size - before.size, moved: startTop - scroller.scrollTop, drawn: before.size };
+    });
+    expect(result.moved, "the log actually scrolled").toBeGreaterThan(40);
+    // Unmemoized, every drawn row re-renders on every step: 25 × the drawn
+    // rows. A minute tick can re-render the drawn rows once, hence the
+    // allowance.
+    expect(result.renders).toBeLessThanOrEqual(result.arrived + result.drawn + 5);
+  });
+
   test("a new message while you read older ones does not move what you're reading", async ({ page }) => {
     await open(page, "?big");
     await expect(message(page, "(5000)")).toBeInViewport();
@@ -586,6 +754,26 @@ test.describe("reading and arriving", () => {
     await page.waitForTimeout(300);
     expect(Math.abs((await offsetIn(page, reading)) - before)).toBeLessThanOrEqual(1);
     await expect(message(page, "did anyone see the moon")).not.toBeInViewport();
+  });
+
+  test("resizing the window while you read older ones keeps your place, and no rows overlap", async ({ page }) => {
+    await open(page, "?big");
+    await expect(message(page, "(5000)")).toBeInViewport();
+    await log(page).evaluate((element) => element.scrollBy({ top: -1500 }));
+    await page.waitForTimeout(200);
+    const reading = await firstInView(page);
+    const overlaps = () =>
+      page.locator(".nx-conv-row").evaluateAll((rows) => {
+        const boxes = rows.map((row) => row.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+        return boxes.slice(1).filter((box, index) => box.top < (boxes[index]?.bottom ?? 0) - 0.5).length;
+      });
+    for (const [width, height] of [[520, 500], [1100, 700], [780, 790]] as const) {
+      await page.setViewportSize({ width, height });
+      await page.waitForTimeout(300);
+      await expect(page.locator(`[data-message="${reading}"]`), `${width} by ${height}`).toBeInViewport();
+      await expect(message(page, "(5000)")).not.toBeInViewport();
+      expect(await overlaps(), `${width} by ${height}`).toBe(0);
+    }
   });
 
   test("at the bottom, a new message comes into view", async ({ page }) => {

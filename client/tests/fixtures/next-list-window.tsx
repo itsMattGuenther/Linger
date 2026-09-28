@@ -196,6 +196,8 @@ declare global {
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
       unstall: () => void;
+      /** The voice engine hears somebody start or stop talking (`peer` null for you). */
+      speaking: (server: string, peer: string | null, speaking: boolean) => void;
     };
   }
 }
@@ -213,6 +215,7 @@ window.core = {
     down = null;
   },
   unstall: () => unstall(),
+  speaking: (server, peer, speaking) => deliver("voice:speaking", { server, peer, speaking }),
 };
 
 // --- the servers -----------------------------------------------------------

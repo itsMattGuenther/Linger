@@ -4,7 +4,7 @@
  * windows", "Viewer → owner: intents").
  *
  * The owner already connects, folds every frame and runs the side effects,
- * exactly as today's client does. This adds what the other windows need from
+ * as it always has. This adds what the other windows need from
  * it: a snapshot to start from, access tokens to borrow, the fields that
  * change without a frame, and someone to carry out what only the owner may do.
  */
@@ -169,7 +169,7 @@ export type Intent =
   | { kind: "read"; server: string; roomId: RoomId; messageId: MessageId }
   /** The window gained or lost focus, or the person typed or moved in it (presence). */
   | { kind: "window"; focused: boolean; input: boolean }
-  /** The conversation this window shows (a room or DM; null for none), as today's client passes it. */
+  /** The conversation this window shows (a room or DM; null for none). */
   | { kind: "room"; server: string; roomId: RoomId | null }
   /** The window is closing: it no longer counts towards being here. */
   | { kind: "closing" }
@@ -558,9 +558,9 @@ export async function shareAsOwner(
         case "voice.join": {
           const api = sessions().get(intent.server);
           if (!api) return;
-          // The same devices and push-to-talk choice today's client joins
-          // with. A device that can't be opened leaves you out of voice, and
-          // the list window's voice bar says so.
+          // The devices and push-to-talk choice from Settings. A device
+          // that can't be opened leaves you out of voice, and the list
+          // window's voice bar says so.
           const prefs = loadVoicePrefs();
           void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
           return;

@@ -14,10 +14,12 @@
       {
         "create": false,
         "title": "Linger",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 760,
+        "url": "next.html",
+        "width": 340,
+        "height": 820,
+        "minWidth": 300,
         "minHeight": 480,
+        "decorations": false,
         "dragDropEnabled": false
       }
     ],

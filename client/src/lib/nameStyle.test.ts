@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Style } from "../generated/Style";
 import type { User } from "../generated/User";
-import { draftOf, isDirty, previewUser, styleOf, styleRequest, withColor } from "./nameStyle";
+import { draftOf, isDirty, previewUser, styleOf, withColor } from "./nameStyle";
 
 function style(over: Partial<Style> = {}): Style {
   return {
@@ -116,16 +116,6 @@ describe("isDirty", () => {
     expect(isDirty({ ...base, from: "rose" }, saved)).toBe(true);
     expect(isDirty({ ...base, gradient: true, to: "rose" }, saved)).toBe(true);
     expect(isDirty({ ...base, msgFontKey: "ibm-plex-sans" }, saved)).toBe(true);
-  });
-});
-
-describe("styleRequest", () => {
-  it("touches the style and nothing else", () => {
-    const request = styleRequest(draftOf(style()));
-    expect(request.display_name).toBeNull();
-    expect(request.status).toBeNull();
-    expect(request.entrance_sound).toBeNull();
-    expect(request.style).toEqual(style());
   });
 });
 

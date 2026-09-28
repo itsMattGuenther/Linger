@@ -6,7 +6,7 @@
  * website, taking the signed-in session with it — so the app never follows a
  * link, it hands it over.
  *
- * The URL has already been through `safeHref` in `stream/markdown.ts`, which is
+ * The URL has already been through `safeHref` in `lib/markdown.ts`, which is
  * how it became a link at all, and the Tauri capability in
  * `src-tauri/capabilities/default.json` narrows the plugin to http and https on
  * the Rust side. Two locks on the door, because the input is a message body and

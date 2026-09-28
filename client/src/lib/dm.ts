@@ -58,34 +58,6 @@ export function dmLabel(room: Room, users: User[], meId: UserId | null): string 
 }
 
 /**
- * Where somebody is, when where they are is a DM (SPEC §4.13, §4.3).
- *
- * The roster asks this about *another person*, so the names it wants are the
- * DM's members minus the person whose card it is — which always includes the
- * reader, because a reader who was not a member would have been told `null` for
- * the room and would never get here (PROTOCOL §8's redaction).
- *
- * That is why the reader comes out as "you". `dmLabel` answers "what is this
- * conversation called to me" and would say "Callie" for the DM Callie is
- * standing in, which read on Callie's own card is nonsense.
- */
-export function dmWhere(
-  room: Room,
-  users: User[],
-  subjectId: UserId,
-  meId: UserId | null,
-): string {
-  const names = peopleIn(room, users, subjectId).map((person) =>
-    person.id === meId ? "you" : person.display_name,
-  );
-  const [first, second] = names;
-  if (first === undefined) return "in a message";
-  if (second === undefined) return `in a message with ${first}`;
-  const rest = names.length - 1;
-  return `in a message with ${first} and ${rest} ${rest === 1 ? "other" : "others"}`;
-}
-
-/**
  * What to call any conversation, wherever both kinds appear in one list — the
  * media grid and the search results (SPEC §4.4, §4.12).
  *
@@ -102,17 +74,6 @@ export function conversationLabel(
 ): string | undefined {
   if (room === undefined) return undefined;
   return room.kind === "dm" ? dmLabel(room, users, meId) : `#${room.slug}`;
-}
-
-/**
- * What the DM section calls itself when there is nothing in it.
- *
- * It says how to start one rather than that there are none — an empty list
- * that only reports its emptiness is a dead end, and the way in is not
- * somewhere anybody would look for it.
- */
-export function noDms(): string {
-  return "empty";
 }
 
 /**

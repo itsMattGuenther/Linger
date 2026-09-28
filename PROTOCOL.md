@@ -459,16 +459,16 @@ There is no runtime color clamping, because there are no arbitrary colors. The s
 validates that every `ColorKey` and `font_key` is a member of `linger-core::PALETTE` and
 `linger-core::FONTS` respectively, and rejects anything else with `VALIDATION_FAILED`.
 
-Contrast safety is structural. The palette is defined once with theme-mirrored lightness:
+Contrast safety is structural. The palette is defined once, at one lightness (the app is
+dark only, SPEC §5.3):
 
 ```
-dark theme:   oklch(0.76 0.13 <hue>)     // slate: chroma 0.02
-light theme:  oklch(0.50 0.14 <hue>)
+oklch(0.76 0.13 <hue>)     // slate: chroma 0.02
 ```
 
-Every entry holds ≥4.5:1 against both theme backgrounds by construction. A property test
-asserts this across all 16 keys × 2 themes and must run in CI — it is the guard against
-someone "improving" a palette value later.
+Every entry holds ≥4.5:1 against the background, and its evening version, by construction.
+A property test asserts this across all 16 keys and must run in CI — it is the guard
+against someone "improving" a palette value later.
 
 ---
 

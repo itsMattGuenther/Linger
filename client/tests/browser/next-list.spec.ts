@@ -24,6 +24,38 @@ function rows(page: Page, list: string): Locator {
   return page.getByRole("list", { name: list }).locator(":scope > li");
 }
 
+/**
+ * Hover a control and check its tooltip is drawn whole: inside the window and
+ * on top of everything at its middle and corners (#140).
+ */
+async function expectWholeTooltip(page: Page, control: Locator, name: string) {
+  await control.hover();
+  const tip = page.locator("[data-kit='Tooltip']");
+  await expect(tip).toHaveText(name);
+  await expect(tip).toHaveAttribute("data-placed", "yes");
+  const whole = await tip.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    const inset = 2;
+    const points = [
+      [r.left + r.width / 2, r.top + r.height / 2],
+      [r.left + inset, r.top + inset],
+      [r.right - inset, r.top + inset],
+      [r.left + inset, r.bottom - inset],
+      [r.right - inset, r.bottom - inset],
+    ] as const;
+    // A tooltip ignores the pointer, which hides it from elementFromPoint
+    // too; let it be seen just for the check.
+    const bubble = node as HTMLElement;
+    bubble.style.pointerEvents = "auto";
+    const onTop = points.every(([x, y]) => node.contains(document.elementFromPoint(x, y)));
+    bubble.style.pointerEvents = "";
+    return { inWindow: r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth, onTop };
+  });
+  expect(whole, name).toEqual({ inWindow: true, onTop: true });
+  await page.mouse.move(1, 1);
+  await expect(tip).toHaveCount(0);
+}
+
 test("shows the server, you, and the rooms in their order", async ({ page }) => {
   await expect(page.locator(".k-titlebar")).toContainText("The Good Company");
   const you = page.getByRole("region", { name: "You" });
@@ -291,6 +323,61 @@ test.describe("a person's card", () => {
     await page.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
     await expect(row).toBeFocused();
+  });
+
+  // A pointer open lights nothing: a ring on a button nobody reached with the
+  // keyboard reads as a stray highlight (A11Y-1, #96, #143). A keyboard open
+  // shows where focus went.
+  test("opened with the mouse, no focus ring shows; opened from the keyboard, it does (A11Y-1)", async ({ page }) => {
+    const row = rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first();
+    const card = page.getByRole("dialog", { name: "Jules" });
+    const message = card.getByRole("button", { name: "Message" });
+    await row.click();
+    await expect(message).toBeFocused();
+    await expect(message).toHaveCSS("outline-style", "none");
+    await expect(page.locator("[data-kit='Tooltip']")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+
+    await row.focus();
+    await page.keyboard.press("Enter");
+    await expect(message).toBeFocused();
+    await expect(message).toHaveCSS("outline-style", "solid");
+  });
+
+  test("a knock still waiting can't be pressed again; one that failed says so, and trying again clears it", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?holdknock");
+    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    const card = page.getByRole("dialog", { name: "Jules" });
+    const knock = card.getByRole("button", { name: /^Knock/ });
+    const knocks = async () => ((await page.locator("body").getAttribute("data-opened")) ?? "").split(",").filter((line) => line.startsWith("knock:"));
+    await knock.click();
+    await expect(knock).toBeDisabled();
+    await knock.dispatchEvent("click");
+    expect(await knocks()).toHaveLength(1);
+    await page.evaluate(() => window.answerKnock?.(false));
+    await expect(card.getByRole("status")).toHaveText("Couldn't knock.");
+    await expect(knock).toBeEnabled();
+    await knock.click();
+    await expect(card.getByRole("status")).toHaveCount(0);
+    await page.evaluate(() => window.answerKnock?.(true));
+    await expect(card.getByRole("button", { name: "Knocked" })).toBeVisible();
+    expect(await knocks()).toHaveLength(2);
+  });
+
+  test("a knock answered after its card closed lands on nobody else's card", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?holdknock");
+    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    await page.getByRole("dialog", { name: "Jules" }).getByRole("button", { name: /^Knock/ }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Jules" })).toHaveCount(0);
+    await rows(page, "Away").first().getByRole("button").first().click();
+    const sam = page.getByRole("dialog", { name: "Sam" });
+    await expect(sam).toBeVisible();
+    await page.evaluate(() => window.answerKnock?.(false));
+    await page.waitForTimeout(200);
+    await expect(sam.getByRole("status")).toHaveCount(0);
+    await expect(sam.getByRole("button", { name: "Knock" })).toBeEnabled();
   });
 
   test("shows what somebody is listening to, reading or working on", async ({ page }) => {
@@ -831,6 +918,19 @@ test.describe("who's muted, and who can't be reached", () => {
 });
 
 test.describe("in voice", () => {
+  // The voice bar sits on the list's bottom edge, where a tooltip drawn
+  // below its buttons would be cut off by the window.
+  for (const [width, height] of [[340, 820], [300, 480]] as const) {
+    test(`the voice bar's tooltips show whole at ${width} by ${height} (#140)`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/tests/fixtures/next-list.html?voice");
+      const yours = page.getByRole("region", { name: "In voice in #general" }).getByRole("group", { name: "Your voice" });
+      for (const name of ["Mute", "Deafen", "Leave voice"]) {
+        await expectWholeTooltip(page, yours.getByRole("button", { name, exact: true }), name);
+      }
+    });
+  }
+
   test("the voice bar names the room, lights who is talking, and offers the three controls", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");
     const bar = page.getByRole("region", { name: "In voice in #general" });

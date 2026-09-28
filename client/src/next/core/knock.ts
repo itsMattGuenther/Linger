@@ -1,6 +1,6 @@
 /**
  * Knocking on somebody's door (SPEC §4.9), from their card in any window: the
- * request, and what happened in plain words, in today's client's words.
+ * request, and what happened in plain words.
  */
 import type { UserId } from "../../generated/UserId";
 import { ApiError, TransportError } from "../../lib/api";

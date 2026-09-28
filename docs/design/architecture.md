@@ -6,9 +6,9 @@
 folder.
 
 The Buddy list client replaced the previous client (the "Console" design),
-which stays one release behind `LINGER_CLASSIC=1` and is then deleted. This
-document says where the code goes, how the windows share one connection, and
-how the pieces are tested.
+which stayed three releases behind `LINGER_CLASSIC=1` and was deleted after
+0.4.3 (#306). This document says where the code goes, how the windows share
+one connection, and how the pieces are tested.
 
 ## Goals
 
@@ -16,8 +16,8 @@ how the pieces are tested.
   the slowest engine it runs on, WebKitGTK on Linux.
 - **Built to last.** Clear layers, rules enforced by tests rather than by
   memory, and every lesson from the first client turned into a check.
-- **No risk to the released app.** The old client keeps shipping and updating
-  until the switch. Nothing a user runs changes before then.
+- **No risk to the released app.** The old client kept shipping and updating
+  until the switch, and stayed behind a switch for three releases after it.
 
 Not in M15:
 
@@ -35,11 +35,12 @@ Not in M15:
 | `client/src/next/kit/` | The kit of parts: every button, row, marker, tab, title bar and field. Screens build only from these. |
 | `client/src/next/core/` | New logic with no UI: window roles, the catch-up protocol, borrowed tokens, intents, view models. Pure where possible, and unit-tested. |
 | `client/src/next/app/` | Screens: the list window, the chat window (tabs), Settings, the person card, the new-message picker. |
-| `client/src/lib/`, `client/src/generated/`, `client/src/fonts/` | **The shared core, reused rather than copied:** the REST client, sessions, the gateway store and its pure `apply`, IPC, sounds, updates, name styling, the palette, and the wire types from `linger-core`. |
-| Everything else in `client/src/` | The previous client, kept one release behind `LINGER_CLASSIC=1`: bug fixes only, then deleted. |
+| `client/src/lib/`, `client/src/generated/`, `client/src/fonts/` | **The shared core:** the REST client, sessions, the gateway store and its pure `apply`, IPC, sounds, updates, name styling, the palette, and the wire types from `linger-core`. `lib/` is logic only, no components. |
 
-`client/src/next/kit/discipline.test.ts` fails the build if new-client code
-imports the old client's UI, or if its CSS uses raw colors or magic sizes.
+`client/src/next/kit/discipline.test.ts` fails the build if code under
+`src/next` imports anything in `src/` but the shared core, if `src/lib` holds
+a component or leans on anything outside the core, or if CSS uses raw colors
+or magic sizes.
 
 **Why reuse the core instead of rewriting it.** The gateway store encodes the
 hardest-won behavior in the project: history windows (#173), resume without
@@ -47,8 +48,9 @@ gaps, read positions without counts, and DM filtering. It is covered by about
 1,350 lines of tests. Rewriting it would re-learn all of that. The new client
 changes how things look and how windows work, not what a message is.
 
-After the switch, the old UI is deleted, and `src/next/` can move up to `src/`
-in one mechanical commit.
+With the old UI deleted (#306), `src/next/` could move up to `src/` in one
+mechanical commit. It hasn't: every path in these docs and the tests would
+move with it, for no change anybody sees.
 
 ## Windows and their roles
 
@@ -175,9 +177,8 @@ A question the owner can't answer gets a reply saying why (`answer` in
 `core/bus.ts`), rather than silence the asking window would wait out. A
 window that still can't catch up says so and offers **Try again**.
 
-**Refresh tokens never leave the owner window**, or the keyring. The old client
-uses the owner source, so its behavior does not change, and `api.test.ts`
-proves that.
+**Refresh tokens never leave the owner window**, or the keyring, and
+`api.test.ts` proves that.
 
 ## Viewer → owner: intents
 
@@ -284,8 +285,7 @@ says so itself, and the Rust shell also tells the owner whenever a viewer
 window is destroyed (`next:closed`), so a crash or the desktop's own close
 never leaves you standing in a room. The same bookkeeping tells the
 notifier which conversation you're looking at: the one in the window that has
-focus, if any. A message arriving there doesn't chime or pop a banner, as in
-today's client.
+focus, if any. A message arriving there doesn't chime or pop a banner.
 
 ## Several servers
 
@@ -369,20 +369,18 @@ one.
   (`linger.next.tabs`). Closing the last tab closes the chat window, and the
   next conversation opened starts a fresh set. Every new-client window's size,
   position and maximized state are remembered by the desktop shell
-  (`tauri-plugin-window-state`, `remembered_windows` in `window.rs`), for the
-  new client only; today's client is left as it was. They are written to
+  (`tauri-plugin-window-state`, `remembered_windows` in `window.rs`). They are written to
   disk when Linger quits and whenever a window other than the list closes,
   since an update on Windows or a crash ends Linger without quitting. Each
   window also remembers which interface size it was sized for, so a
   remembered window isn't grown again on the next run (`core/appearance.ts`).
 
-## The switch back
+## The list window
 
 - **The Buddy list is the app** from 0.4.0: the shell opens `next.html` as the
-  `main` window.
-- **`LINGER_CLASSIC=1`** opens today's client (`index.html`) instead, for one
-  release, in case the new client fails somebody. Both entries ship in every
-  build, and they share sessions, the keyring and the servers.
+  `main` window, tall, narrow and frameless, as `tauri.conf.json` says. The
+  previous client that `LINGER_CLASSIC=1` used to open instead was deleted
+  after 0.4.3 (#306).
 - **Closing the list** hides it and keeps the connections, sounds and voice
   running; the tray icon (`src-tauri/src/tray.rs`) brings it back, mutes,
   leaves voice or quits. Settings → Windows turns that off
@@ -398,13 +396,14 @@ fixed gets a test at that layer.
 |---|---|---|---|
 | Pure logic | view models (grouping people, room activity, DM order), the tab state machine, intents, window keys | vitest | `pnpm test`, CI |
 | State across windows | a viewer's state equals the owner's for any frame stream, with reconnects, resumes and any snapshot point | vitest property tests over generated frame streams | `pnpm test`, CI |
-| Tokens | one refresh at a time, and viewers never refresh; the old client's behavior unchanged | vitest (`api.test.ts` plus new tests) | `pnpm test`, CI |
-| Visual discipline | no raw colors or magic sizes in CSS, and no imports of the old UI | vitest (`discipline.test.ts`) | `pnpm test`, CI |
+| Tokens | one refresh at a time, and viewers never refresh | vitest (`api.test.ts` plus new tests) | `pnpm test`, CI |
+| Visual discipline | no raw colors or magic sizes in CSS, and imports only from the shared core | vitest (`discipline.test.ts`) | `pnpm test`, CI |
 | Contrast | text tokens and all 16 name colors against every surface | vitest (`contrast.test.ts`) | `pnpm test`, CI |
 | Kit geometry and access | the three control heights, centered icons, identical row heights across all 12 faces, aligned names, ellipsis instead of clipping, 24px hit targets, visible focus, accessible names, keyboard roving | Playwright on the kit gallery | Chromium locally; Chromium and WebKit in CI |
 | Screens | tabs, the voice bar, the person card, the new-message picker, Settings, driven with a fake store | Playwright on fixture pages | local and CI |
 | Several windows | catch-up, borrowed tokens and every intent end to end: two copies of the store in one test sharing an in-memory bus (`core/share.test.ts`), and the real chat window against a faked shell, owner and server (`tests/fixtures/next-chat-window.html`) | vitest; Playwright | local and CI |
-| Real WebKitGTK | real windows and title bars, fonts, typing latency, scrolling, several windows at once | `tauri-driver` desktop checks under Xvfb (`docs/desktop-checks.md`) | local, before each merge |
+| Real WebKitGTK and WebView2 | the packaged app starts and draws its list at every interface size, and plays sound | `scripts/linux-next-check.py`, `client/scripts/windows-next-check.mjs`, the packaged audio checks (`docs/packaged-audio-checks.md`) | CI's package check |
+| Real windows, signed in | real windows and title bars, fonts, typing latency, scrolling, several windows at once, against a real server | a `tauri-driver` desktop check under Xvfb (T-1820, not built yet) | local, before a release |
 | Real world | the parity checklist, then the release checks on real computers and networks | people | before the switch |
 
 **Performance budgets**, measured in the real Linux app:
@@ -424,7 +423,7 @@ real-app check before the next step leans on it.
 | Step | Done when |
 |---|---|
 | M15.0 Foundations | These docs, the tokens, the kit, the gallery, and the discipline, contrast and geometry tests all pass. |
-| M15.1 The switch and the owner | The shell opens the list window (`LINGER_CLASSIC=1` for today's client). It signs in with the existing sessions and shows real rooms, DMs and people, drawn only from the kit. |
+| M15.1 The switch and the owner | The shell opens the list window. It signs in with the existing sessions and shows real rooms, DMs and people, drawn only from the kit. |
 | M15.2 The chat window | Opening a room opens the `chat` window with a tab. Catch-up and borrowed tokens work, and a conversation reads, sends and loads history. |
 | M15.3 Voice | The voice bar in the list, the strips in rooms, and "move voice here" as an intent. Switching or closing tabs never leaves voice. |
 | M15.4 People and DMs | The person card with Message and Knock, the new-message picker, away and away messages. |
@@ -432,7 +431,7 @@ real-app check before the next step leans on it.
 | M15.6 Media, search and uploads | Media, search and uploads, as the design places them. |
 | M15.7 Windows mode | Separate windows, pop-out and back, positions remembered, the tray. |
 | M15.8 Several servers | Folding server sections, the time there, quiet, and a server in its own window. |
-| M15.9 Parity and the switch | Every item in `parity.md` is proved. The switch becomes the default, the old client stays one release as a fallback, then it is deleted, and SPEC §3/§5 are rewritten from `system.md`. |
+| M15.9 Parity and the switch | Every item in `parity.md` is proved. The switch becomes the default (0.4.0), the old client stays behind as a fallback, then it is deleted (#306), and SPEC §3/§5 are rewritten from `system.md`. |
 
 ## Open decisions for Matt
 

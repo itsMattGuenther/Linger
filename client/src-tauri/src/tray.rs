@@ -1,7 +1,6 @@
 //! Closing the list keeps Linger running in the tray (decisions 4 and 5): voice
 //! and notifications go on, and the tray icon brings the list back or quits.
-//! A setting (Settings → Windows) makes closing the list quit instead. Only
-//! the Buddy list client does this; the classic one quits as it always did.
+//! A setting (Settings → Windows) makes closing the list quit instead.
 //!
 //! A desktop with nowhere to put a tray icon (a Linux box without the
 //! appindicator library, say) gets no tray, and closing the list quits there

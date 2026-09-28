@@ -8,7 +8,7 @@ for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/scree
 for (const paths of [[], ["unexpected.conf"], ["Cargo.lock"], [".github/workflows/ci.yml"], ["crates/linger-core/src/lib.rs"]])
   test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 6));
 test("UI changes test both browser and native packages, not unrelated server jobs", () => {
-  assert.deepEqual(active(["client/src/app.css"]), ["web", "packages"]);
+  assert.deepEqual(active(["client/src/next/styles/app.css"]), ["web", "packages"]);
 });
 test("browser assertions alone need no package rebuild", () => {
   assert.deepEqual(active(["client/tests/browser/console.spec.ts"]), ["web"]);
@@ -20,6 +20,6 @@ test("desktop changes test the separately built shell and packages", () => {
   assert.deepEqual(active(["client/src-tauri/Cargo.lock"]), ["shell", "packages"]);
 });
 test("union retains every affected domain, including deletion side of a rename", () => {
-  assert.deepEqual(active(["client/src/app.css", "docs/old.css", "deploy/Dockerfile"]),
+  assert.deepEqual(active(["client/src/next/styles/app.css", "docs/old.css", "deploy/Dockerfile"]),
     ["rust", "s3", "web", "coturn", "packages"]);
 });

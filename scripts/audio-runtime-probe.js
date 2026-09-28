@@ -107,8 +107,7 @@ import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
         }
       }
       // Keep output open: samples may still be queued in the device backend.
-      const layout = await window.__runNativeLayout();
-      window.__lingerAudioResult = { status: "passed", cues, layout };
+      window.__lingerAudioResult = { status: "passed", cues };
     } catch (error) {
       window.__lingerAudioResult = { status: "failed", error: String(error) };
     }

@@ -53,7 +53,6 @@ const {
   setVoiceTalking,
   setVoiceVolume,
   voicePeersIn,
-  voiceSeatServer,
 } = await import("./gateway");
 
 const HOME = "https://home.example";
@@ -446,7 +445,7 @@ describe("voice in the store", () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());
     await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, true);
-    expect(voiceSeatServer()).toBe(HOME);
+    expect(serverState(HOME).myVoice).not.toBeNull();
     invoked.length = 0;
 
     await setVoicePushToTalk(HOME, false);
@@ -484,7 +483,7 @@ describe("voice in the store", () => {
   it("turning push-to-talk on or off out of voice changes nothing but the next join", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());
-    expect(voiceSeatServer()).toBeNull();
+    expect(serverState(HOME).myVoice).toBeNull();
     invoked.length = 0;
     await setVoicePushToTalk(HOME, true);
     expect(invoked).toEqual([]);

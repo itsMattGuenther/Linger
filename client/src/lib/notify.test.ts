@@ -114,7 +114,7 @@ it("the switch is read on every DM, so a change in Settings counts at once", asy
   expect(asked).toHaveLength(1);
 });
 
-it("the previous client never turns DM alerts on, so its DMs get no banner", async () => {
+it("a DM alerts nothing until the app says how to read the switch", async () => {
   considerFrame(server, { op: "message.create", s: 1, d: message }, withFriend);
   await vi.advanceTimersByTimeAsync(1200);
   expect(banners).toEqual([]);

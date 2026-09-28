@@ -252,10 +252,9 @@ test.describe("profile", () => {
 test.describe("this app", () => {
   test("appearance choices take effect at once", async ({ page }) => {
     await open(page, "?section=appearance");
-    await page.getByRole("radio", { name: /Light/ }).check();
     await page.getByRole("combobox", { name: "Interface size" }).selectOption("150");
     await page.getByRole("switch", { name: "Use plain names and message fonts" }).click();
-    expect(await did(page)).toEqual(expect.arrayContaining(["theme:light", "scale:150", "plain:true"]));
+    expect(await did(page)).toEqual(expect.arrayContaining(["scale:150", "plain:true"]));
   });
 
   test("quiet hours show their times only while on, and every chime can be played", async ({ page }) => {
@@ -267,6 +266,21 @@ test.describe("this app", () => {
     const sounds = (await did(page)).filter((line) => line.startsWith("sound:"));
     expect(JSON.parse(sounds.at(-1)?.slice("sound:".length) ?? "{}")).toMatchObject({ quietHours: true, quietFrom: 23 * 60 + 30 });
     expect(await did(page)).toContain("play:knocks");
+  });
+
+  test("says when quiet hours are on right now, and when every chime is off", async ({ page }) => {
+    await open(page, "?section=sound");
+    const line = page.getByRole("status").filter({ hasText: /Quiet hours are on|All chimes are off/ });
+    await expect(line).toHaveCount(0);
+    // It's 10:52 PM here, inside the usual 10 PM to 8 AM.
+    await page.getByRole("switch", { name: "Quiet hours" }).click();
+    await expect(line).toHaveText(/^Quiet hours are on until 8:00\sAM: no message or knock chimes\./);
+    await page.getByRole("switch", { name: "Mute all notification sounds" }).click();
+    await expect(line).toHaveText("All chimes are off. Play still plays a preview.");
+    await page.getByRole("switch", { name: "Mute all notification sounds" }).click();
+    // Quiet from 11:30 PM: not yet.
+    await page.getByRole("combobox", { name: "Quiet from" }).selectOption({ label: "11:30 PM" });
+    await expect(line).toHaveCount(0);
   });
 
   test("one sound volume, 100% until moved; letting go saves it and plays one chime at the new level (#234)", async ({ page }) => {
@@ -379,6 +393,9 @@ test.describe("this app", () => {
     expect(await did(page)).toEqual(expect.arrayContaining(["password:12:12", "export", "download:https://good-company.example/exports/archive.zip", "notes:0.4.0", "signout"]));
     await page.getByRole("button", { name: "Check again" }).click();
     await expect(panel(page)).toContainText("This is the newest version.");
+    // Nothing waiting: nothing to read about or install.
+    await expect(page.getByRole("button", { name: "What's new" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Install and restart" })).toHaveCount(0);
   });
 
   test("an archive asked for too soon says when to come back", async ({ page }) => {

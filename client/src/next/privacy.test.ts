@@ -1,8 +1,8 @@
 /**
  * The privacy lines the new client holds, read from the source on every test
  * run (docs/design/parity.md, PRIV-2, PRIV-3, PRIV-7; AGENTS.md hard rules 2
- * and 4). Each check reads what ships: the new client (src/next), the core it
- * shares with today's client (src/lib), the wire types (src/generated) and
+ * and 4). Each check reads what ships: the app (src/next), the core it
+ * shares between windows (src/lib), the wire types (src/generated) and
  * the desktop shell (src-tauri). Comments are left out, so a line saying what
  * the code never does doesn't count as doing it.
  */

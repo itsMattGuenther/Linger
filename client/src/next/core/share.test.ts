@@ -1,6 +1,6 @@
 /**
  * Two windows, one connection (docs/design/architecture.md): the owner
- * connects and folds frames as today's client does; a viewer opens partway
+ * connects and folds frames; a viewer opens partway
  * through, catches up from the owner's snapshot over the bus, borrows its
  * sign-in, and asks it to do what only it may. Each window is its own copy of
  * the store module, as each Tauri window is its own page.
@@ -15,7 +15,7 @@ import { CLOSED, NOTIFY, type Outcome, PASSWORD, type VoiceControlQuestion } fro
 import { pressVoiceControl } from "./voiceControl";
 
 // What the Rust core's `app.emit` reaches in the owner: the store's own
-// listeners (today's client's path, unchanged).
+// listeners.
 type Handler = (event: { payload: unknown }) => void;
 const ownerCore = new Map<string, Handler>();
 

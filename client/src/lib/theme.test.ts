@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isEvening, resolveTheme } from "./theme";
+import { isEvening } from "./theme";
 
 /** A local-time moment, built from the parts the function actually reads. */
 function at(hour: number): Date {
@@ -27,18 +27,5 @@ describe("isEvening", () => {
     expect(isEvening(new Date(2026, 7, 27, 19, 0, 0))).toBe(true);
     expect(isEvening(new Date(2026, 7, 27, 6, 59, 59))).toBe(true);
     expect(isEvening(new Date(2026, 7, 27, 7, 0, 0))).toBe(false);
-  });
-});
-
-describe("resolveTheme", () => {
-  it("passes an explicit choice straight through", () => {
-    expect(resolveTheme("dark")).toBe("dark");
-    expect(resolveTheme("light")).toBe("light");
-  });
-
-  it("answers dark for system when nothing can be asked", () => {
-    // No `window.matchMedia` in this runner, which is the same shape as a
-    // browser that has no view: dark is what this app was designed in.
-    expect(resolveTheme("system")).toBe("dark");
   });
 });

@@ -384,19 +384,6 @@ export function useServers(): Record<string, GatewayState> {
   return useSyncExternalStore(subscribe, () => states);
 }
 
-/**
- * True when this server is holding something you have not read, in any room.
- *
- * Still a boolean, still not a count (SPEC §4.2, AGENTS rule 3). It is the
- * server-rail half of the same signal the room list already draws: a server you
- * are not looking at gets a mark, never a number.
- */
-export function anyNewActivity(current: GatewayState): boolean {
-  return [...current.rooms, ...current.dms].some(
-    (room) => room.archived_at === null && hasNewActivity(current, room.id),
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Folding frames into the snapshot
 // ---------------------------------------------------------------------------
@@ -825,13 +812,13 @@ const links = new Map<string, Link>();
 const positions = new Map<string, Position>();
 
 // ---------------------------------------------------------------------------
-// Following without connecting: the Buddy list client's viewer windows
+// Following without connecting: the viewer windows
 // (docs/design/architecture.md, "How windows share state").
 //
-// The owner window connects, as today's client does. A viewer window never
-// calls `connect`: the core already delivers every frame to every window, so
-// a viewer only needs a link (for the REST helpers below, with a borrowed
-// sign-in), the owner's snapshot to start from, and the same pure `apply`.
+// The owner window connects. A viewer window never calls `connect`: the
+// core already delivers every frame to every window, so a viewer only needs
+// a link (for the REST helpers below, with a borrowed sign-in), the owner's
+// snapshot to start from, and the same pure `apply`.
 // None of the owner's side effects run here: no chimes, no notifications, no
 // voice frames handed to the core, no token supplied to the gateway.
 // ---------------------------------------------------------------------------
@@ -1447,47 +1434,6 @@ export function releaseOtherRooms(server: string, openRoomId: RoomId): void {
 }
 
 /**
- * How far an explicit message jump walks before fetching a centered window. Ten pages is a
- * thousand messages; past that the line is somewhere you are not going to
- * scroll to anyway, and the alternative is a loop that pulls a year of history
- * because somebody was on holiday.
- */
-const MAX_CATCHUP_PAGES = 10;
-
-/**
- * Load older pages until `id` is inside the loaded range.
- *
- * Nearby reply and search targets reuse the loaded history. Distant targets
- * use `openAround`; room-entry bookmarks go directly through that path.
- *
- * Answers whether the room now actually holds that message. A caller that has
- * somewhere else to go when walking does not reach — a search hit thousands of
- * messages back — needs to know the difference between "it is here" and "I ran
- * out of pages", and "the oldest message held is older than it" is not the same
- * answer: a deleted or moved id passes that test and is still not there.
- */
-export async function loadUntil(
-  api: AuthedApi,
-  roomId: RoomId,
-  id: MessageId,
-): Promise<boolean> {
-  const holds = (): boolean =>
-    stateOf(api.baseUrl).streams[roomId]?.messages.some((held) => held.id === id) ?? false;
-
-  for (let page = 0; page < MAX_CATCHUP_PAGES; page += 1) {
-    const stream = stateOf(api.baseUrl).streams[roomId];
-    if (linkFor(api) === null || !stream || stream.atStart) return holds();
-    const oldest = stream.messages[0];
-    if (oldest !== undefined && oldest.id <= id) return holds();
-    await loadOlder(api, roomId);
-    // `loadOlder` declines while a page is already in flight. Nothing changed,
-    // so asking again in a tight loop would only spin.
-    if (stateOf(api.baseUrl).streams[roomId] === stream) return holds();
-  }
-  return holds();
-}
-
-/**
  * Fold a DM the server just handed back into the snapshot (SPEC §4.13).
  *
  * `POST /dms` answers with the room *and* the server publishes `room.create`
@@ -2047,11 +1993,6 @@ export async function setVoicePushToTalk(server: string, on: boolean): Promise<v
   await changeVoiceControls(server, (mine) => mine.pushToTalk === on ? mine : { ...mine, pushToTalk: on, talkHeld: false }, true);
 }
 
-/** The server your voice seat is on, if you're in voice anywhere: there is at most one. */
-export function voiceSeatServer(): string | null {
-  return Object.entries(states).find(([, state]) => state.myVoice !== null)?.[0] ?? null;
-}
-
 /**
  * Silence both directions, preserving the prior mic choice and every peer's
  * volume. Resolves to the confirming sound, played here unless `chime` is
@@ -2180,28 +2121,4 @@ export async function saveStyle(api: AuthedApi, request: UpdateMeRequest): Promi
   const user = await api.updateMe(request);
   foldUser(api, user);
   return user;
-}
-
-/** The status bar line (SPEC §5.6): protocol text, never a spinner. */
-export function statusText(status: GatewayStatus): string {
-  switch (status.kind) {
-    case "offline":
-      return "offline";
-    case "connecting":
-      return "connecting…";
-    case "connected":
-      // Only claim TLS when there was a TLS handshake. A server on your own
-      // machine over plain http gets the honest word instead.
-      return status.tls ? "tls ok…" : "socket ok…";
-    case "identifying":
-      return "identify…";
-    case "resuming":
-      return "resume…";
-    case "ready":
-      return `ready (${status.latency_ms}ms)`;
-    case "waiting":
-      return `retry in ${Math.max(1, Math.round(status.retry_in_ms / 1000))}s…`;
-    case "needs_token":
-      return "renewing…";
-  }
 }

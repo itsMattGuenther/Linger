@@ -9,9 +9,6 @@
  * Nothing in here counts anything (SPEC §4.2). A list of people in voice is
  * a list of names, and the bar shows the names.
  */
-import type { User } from "../generated/User";
-import type { VoicePeer } from "../generated/VoicePeer";
-import type { VoiceControls } from "../generated/VoiceControls";
 import type { VoiceDeviceChoice } from "./ipc";
 
 const INPUT_KEY = "linger.voice.input";
@@ -40,8 +37,7 @@ export interface VoicePrefs {
    */
   forwarding: boolean;
   /**
-   * The key held to talk, as a `KeyboardEvent.code` (decision 6). The
-   * Buddy list client reads it; today's client keeps Ctrl.
+   * The key held to talk, as a `KeyboardEvent.code` (decision 6).
    */
   pushToTalkKey: string;
 }
@@ -86,79 +82,6 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
   } catch {
     // Storage refused; the preference lasts for this run and no longer.
   }
-}
-
-/** One seat in the bar: a session, drawn as the person holding it. */
-export interface Seat {
-  sessionId: string;
-  /** Undefined for somebody the store has never heard of. */
-  user: User | undefined;
-  /** What to draw when there is no user to draw. */
-  name: string;
-  isMe: boolean;
-  controls: VoiceControls | null;
-}
-
-/**
- * The seats in a room, you first and then by name, so the bar stops
- * shuffling itself while you are looking at it.
- *
- * Two sessions of one person (a laptop and a desktop) are two seats: they
- * are two connections, and both use the same saved volume for that person.
- */
-export function seatsOf(
-  peers: readonly VoicePeer[],
-  users: readonly User[],
-  mySessionId: string | null,
-): Seat[] {
-  const byId = new Map(users.map((user) => [user.id, user]));
-  return peers
-    .map((peer): Seat => {
-      const user = byId.get(peer.user_id);
-      return {
-        sessionId: peer.session_id,
-        user,
-        name: user?.display_name ?? "somebody",
-        isMe: peer.session_id === mySessionId,
-        controls: peer.controls ?? null,
-      };
-    })
-    .sort(
-      (a, b) =>
-        Number(b.isMe) - Number(a.isMe) ||
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
-        a.sessionId.localeCompare(b.sessionId),
-    );
-}
-
-/**
- * The room's voice list as this client knows it to be right now (#141). The
- * server lists you a few hundred milliseconds after you join and stops a few
- * hundred after you leave; drawn as-is, the bar would show you missing from a
- * call you are in, then present in one you have left, and rebuild itself when
- * the server caught up. So your own session follows what you did: `me` when
- * you are in voice here adds your seat if the server has not yet, and null
- * drops `mySessionId` if the server still lists it.
- */
-export function withMySeat(
-  peers: readonly VoicePeer[],
-  mySessionId: string | null,
-  me: { userId: string; controls: VoiceControls } | null,
-): readonly VoicePeer[] {
-  if (mySessionId === null) return peers;
-  const listed = peers.some((peer) => peer.session_id === mySessionId);
-  if (me === null) return listed ? peers.filter((peer) => peer.session_id !== mySessionId) : peers;
-  if (listed) return peers;
-  return [...peers, { session_id: mySessionId, user_id: me.userId, controls: me.controls }];
-}
-
-/** Everybody who is in voice anywhere we can see, as a set of user ids. */
-export function usersInVoice(voice: Readonly<Record<string, VoicePeer[]>>): Set<string> {
-  const out = new Set<string>();
-  for (const peers of Object.values(voice)) {
-    for (const peer of peers) out.add(peer.user_id);
-  }
-  return out;
 }
 
 /**
