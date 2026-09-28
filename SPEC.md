@@ -123,7 +123,8 @@ buddy list, like AIM's, with conversations in windows of their own
 status, and Away); then **Rooms**, each with the dots of who is in it and bold when
 something new arrives; **DMs**, named by who is in them; and **People**, everyone on
 the server with their marker, where they are, and their status. Offline people show
-when they were last here and their away message. With several servers, each is a
+when they were last here and their away message, and their name is a dim grey in its
+own face rather than their colors until they are back. With several servers, each is a
 folding section of the list. When you are in voice, the voice bar sits at the bottom,
 and under everything are **Media** and **Search**, each opening a window of its own.
 This list is what makes an empty server feel like a house with the lights on.

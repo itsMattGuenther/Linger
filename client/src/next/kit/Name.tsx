@@ -21,11 +21,17 @@ export type NameSize = "meta" | "control" | "body" | "name" | "display" | "inlin
  *
  * `raw` draws the person's own style even when the reader has chosen plain
  * names, for the one place that must: the style picker's preview.
+ *
+ * `offline` draws the name in a dim neutral grey instead of their color,
+ * gradient, glow or shimmer, for somebody who isn't here (the list's Offline
+ * group, #274). Their face, weight and slant stay, so it still looks like
+ * their name; the color comes back the moment they do, because the caller
+ * passes their presence as it is now.
  */
-export function Name({ person, size = "name", raw = false }: { person: User; size?: NameSize; raw?: boolean }) {
+export function Name({ person, size = "name", raw = false, offline = false }: { person: User; size?: NameSize; raw?: boolean; offline?: boolean }) {
   const props = nameProps(person, raw ? "k-name name-raw" : "k-name");
   return (
-    <span {...props} data-kit="Name" data-size={size}>
+    <span {...props} data-kit="Name" data-size={size} data-offline={offline ? "yes" : undefined}>
       {person.display_name}
     </span>
   );

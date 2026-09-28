@@ -50,6 +50,23 @@ function washOf(selector: string): number {
   return Number(rule[1]) / 100;
 }
 
+const NAME = readFileSync(resolve(HERE, "../kit/Name.css"), "utf8");
+const ROW = readFileSync(resolve(HERE, "../kit/Row.css"), "utf8");
+const LIST = readFileSync(resolve(HERE, "../app/list/ListView.css"), "utf8");
+
+/**
+ * The token the first rule naming `selector` (alone or in a list) sets
+ * `property` to in a sheet, as in `color: var(--text-offline)`, so a test
+ * follows the stylesheet rather than a copy of it.
+ */
+function tokenIn(css: string, selector: string, property: string, sheet: string): string {
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const escaped = selector.replace(/[[\]".:()]/g, "\\$&");
+  const rule = new RegExp(`${escaped}[^{]*\\{[^}]*?(?<![\\w-])${property}\\s*:\\s*var\\((--[\\w-]+)\\)`).exec(clean);
+  if (!rule?.[1]) throw new Error(`no ${property} found for ${selector} in ${sheet}`);
+  return rule[1];
+}
+
 const VARS = rootVars(TOKENS);
 const NAMES = rootVars(PALETTE);
 
@@ -129,7 +146,7 @@ const SURFACES = [
   "--surface-titlebar-end",
 ];
 
-const TEXT = ["--text-primary", "--text-secondary", "--text-muted", "--text-away", "--text-accent", "--text-danger", "--text-success"];
+const TEXT = ["--text-primary", "--text-secondary", "--text-muted", "--text-away", "--text-accent", "--text-danger", "--text-success", "--text-offline"];
 const NON_TEXT = ["--icon-default", "--icon-muted", "--icon-faint", "--accent", "--focus", "--danger", "--success"];
 const PALETTE_KEYS = [...NAMES.keys()].filter((key) => key.startsWith("--name-"));
 
@@ -184,6 +201,25 @@ describe("contrast of the new client's tokens", () => {
         }
       }
     }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
+  // Somebody offline has their name drawn in a dim grey in the list, with
+  // none of their own color (#274). Dim, but still text: it must read at
+  // 4.5:1 on the list and on a row that's hovered or has its card open. The
+  // colors are read from the stylesheets that paint them. Dark is the only
+  // theme there is; a light one would add its block to tokens.css.
+  it("keeps an offline name at 4.5:1 on the list, and on a hovered or selected row", () => {
+    const offline = tokenIn(NAME, ':root .name.k-name[data-offline="yes"]', "color", "kit/Name.css");
+    const behind: Array<[string, string]> = [
+      ["the list", tokenIn(LIST, ".nx-list", "background", "app/list/ListView.css")],
+      ["a hovered or selected row", tokenIn(ROW, ".k-row-main:hover:not(:disabled)", "background", "kit/Row.css")],
+    ];
+    const bad = behind
+      .map(([where, surface]) => [where, surface, ratio(color(offline), color(surface))] as const)
+      .filter(([, , value]) => value < 4.5)
+      .map(([where, surface, value]) => `${offline} on ${where} (${surface}): ${value.toFixed(2)}:1, needs 4.5:1`);
+    expect(offline).toBe("--text-offline");
     expect(bad, bad.join("\n")).toEqual([]);
   });
 

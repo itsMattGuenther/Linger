@@ -540,7 +540,9 @@ away) and a few words:
 - **around** — the app is in front of them, but not in a room
 - **idle** — no typing or clicking for ten minutes
 - **away** — they set an away message on purpose
-- **offline** — the app is closed
+- **offline** — the app is closed. Their name turns a plain grey, so the
+  Offline group reads as nobody home; it gets its colors back the moment
+  they're here again.
 
 Click someone to open their card, with their status and **Message** and
 **Knock**. Press Escape or click outside it to close it.
