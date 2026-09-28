@@ -211,6 +211,7 @@
   --composer-max: 200px; /* the message box grows to this, then scrolls */
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
+  --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */
   --emoji-grid: 8; /* columns in the composer's emoji panel */
 
   /* Search and media (docs/design/system.md, "Search and media"). */

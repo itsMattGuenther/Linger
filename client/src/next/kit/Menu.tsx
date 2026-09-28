@@ -1,11 +1,8 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
+import { type Anchor, placeBeside } from "./place";
 import "./Menu.css";
-
-/** Distance from the trigger, and the closest a menu may come to an edge. */
-const GAP = 4;
-const EDGE = 8;
 
 export interface MenuItem {
   id: string;
@@ -26,12 +23,7 @@ export interface MenuItem {
 const ITEMS = '[role="menuitem"], [role="menuitemcheckbox"]';
 
 /** Where the menu was opened from: the trigger's box in the window. */
-export interface MenuAnchor {
-  top: number;
-  left: number;
-  right: number;
-  bottom: number;
-}
+export type MenuAnchor = Anchor;
 
 export type MenuCloseReason = "escape" | "outside" | "select" | "tab";
 
@@ -57,7 +49,7 @@ export function Menu({
   onClose: (reason: MenuCloseReason) => void;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  const [place, setPlace] = useState<{ top: number; left: number; maxHeight?: number } | null>(null);
   const itemKey = items.map((item) => item.id).join("|");
 
   useLayoutEffect(() => {
@@ -66,11 +58,9 @@ export function Menu({
     const size = node.getBoundingClientRect();
     // Below the trigger, its right edge on the trigger's; above when there is
     // no room below. Always inside the window.
-    const below = anchor.bottom + GAP + size.height <= window.innerHeight - EDGE;
-    const top = below ? anchor.bottom + GAP : Math.max(EDGE, anchor.top - GAP - size.height);
-    const left = Math.min(Math.max(anchor.right - size.width, EDGE), window.innerWidth - EDGE - size.width);
-    setPlace({ top, left });
-  }, [anchor.bottom, anchor.right, anchor.top, itemKey]);
+    const { top, left, room } = placeBeside(anchor, size, "end");
+    setPlace({ top, left, maxHeight: room < size.height ? room : undefined });
+  }, [anchor.bottom, anchor.left, anchor.right, anchor.top, itemKey]);
 
   // Only once it's placed: an item is not focusable while the menu is
   // hidden for measuring.
@@ -119,7 +109,7 @@ export function Menu({
       role="menu"
       aria-label={label}
       data-placed={place ? "yes" : "no"}
-      style={place ? { top: place.top, left: place.left } : undefined}
+      style={place ? { top: place.top, left: place.left, maxHeight: place.maxHeight } : undefined}
       onKeyDown={onKeyDown}
     >
       {items.map((item) => (

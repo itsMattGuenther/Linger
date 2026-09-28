@@ -336,8 +336,17 @@ A little formatting works, the kind you already type:
 - a list
 ```
 
-Paste a link and it becomes a link. Type `@` and someone's username to mention
-them — that is the one thing that will interrupt them.
+Paste a link and it becomes a link.
+
+To mention somebody, type `@` and start their name or their username. A list
+of people opens by the box: **Up** and **Down** move through it, **Enter** or
+**Tab** (or a click) puts them in, and **Escape** closes it and keeps what you
+typed. With the list open, Enter never sends. In a room the list has everyone on
+the server, the people in the room first; in a DM, only the people in it. A
+mention is the one thing that will interrupt someone.
+
+In messages, a mention shows the person's name as it is now (`@Justin B`).
+Hover it to see their username, which is what the message keeps.
 
 Hover over a message or use Tab to reveal its **⋯** button. Click it or press
 Enter to open the message actions; Escape closes the menu and returns focus.

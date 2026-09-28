@@ -36,7 +36,7 @@ function sounds(asked: string[]): string[] {
   return asked.filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
 }
 
-const box = (page: Page) => page.getByRole("textbox", { name: /^Message/ });
+const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
