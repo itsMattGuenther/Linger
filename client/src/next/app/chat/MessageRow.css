@@ -1,14 +1,23 @@
 /*
- * One message: [name:] [words] [time] [actions], on one grid. The name cell
- * and the time share the words' 20px line box, so all three sit on one line
- * in any face. A one-line continuation is 24px with its action target, a new
- * group has 8px above it (SPEC §4.7). Hovering changes a background and
- * shows the time and the action button, and moves nothing (#139).
+ * One message, on one grid (#295):
+ *
+ *   a run's first message        a later one
+ *   [quote]                      (none)
+ *   [name]     [time] [actions]
+ *   [  words]                    [  words]  [time] [actions]
+ *
+ * The name has a line of its own at the row's edge, and the words sit
+ * --message-indent in from it, in every message of the run, so every line of
+ * words starts on one edge whoever wrote it. A one-line later message is 24px
+ * with its action target, a new group has 8px above it (SPEC §4.7). Hovering
+ * changes a background and shows the time and the action button, and moves
+ * nothing (#139).
  */
 .nx-msg {
   position: relative;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content var(--control-sm);
+  grid-template-columns: minmax(0, 1fr) max-content var(--control-sm);
+  grid-template-areas: "body time actions";
   column-gap: var(--space-2);
   align-items: start;
   padding: 0 var(--space-1) 0 var(--space-2);
@@ -17,7 +26,18 @@
 }
 
 .nx-msg[data-head="yes"] {
+  grid-template-areas:
+    "who time actions"
+    "body . .";
   padding-top: var(--space-2);
+}
+
+/* A reply always opens a run, and its quote goes above the name. */
+.nx-msg[data-head="yes"][data-reply="yes"] {
+  grid-template-areas:
+    "quote quote quote"
+    "who time actions"
+    "body . .";
 }
 
 .nx-msg:hover,
@@ -47,14 +67,13 @@
   background: var(--accent-wash-stronger);
 }
 
-/* The name, and its colon. A continuation draws it invisibly so its words
-   start on the same edge as the head's. */
+/* The name, on its own line. It has the line to itself, so it's shown whole
+   and ends in its own "…" only where the line runs out. */
 .nx-msg-who {
-  grid-column: 1;
+  grid-area: who;
   display: flex;
   align-items: flex-start;
   min-width: 0;
-  max-width: var(--name-inline-max);
   padding-block: var(--space-0-5);
   line-height: var(--line-body);
 }
@@ -81,25 +100,16 @@
   outline-offset: var(--focus-offset);
 }
 
-.nx-msg:not([data-head="yes"]) .nx-msg-who {
-  visibility: hidden;
-}
-
-.nx-msg-colon {
-  flex: none;
-  color: var(--text-muted);
-  line-height: var(--line-name);
-}
-
 .nx-msg-someone {
   color: var(--text-muted);
   font-size: var(--text-body);
 }
 
 .nx-msg-body {
-  grid-column: 2;
+  grid-area: body;
   min-width: 0;
   padding-block: var(--space-0-5);
+  padding-inline-start: var(--message-indent);
 }
 
 /* Whatever a message starts with (words, a picture, a card) starts on its line. */
@@ -141,7 +151,7 @@
 }
 
 .nx-msg-time {
-  grid-column: 3;
+  grid-area: time;
   padding-block: var(--space-0-5);
   color: var(--text-muted);
   font: var(--text-label) / var(--line-body) var(--font-mono);
@@ -153,7 +163,7 @@
 }
 
 .nx-msg-actions {
-  grid-column: 4;
+  grid-area: actions;
   display: grid;
   place-items: center;
   width: var(--control-sm);
@@ -165,9 +175,9 @@
   opacity: 1;
 }
 
-/* A reply's quote: above its own line, part of its own message (L-17). */
+/* A reply's quote: above the name, part of its own message (L-17). */
 .nx-quote {
-  grid-column: 1 / -1;
+  grid-area: quote;
   display: flex;
   align-items: center;
   gap: var(--space-1-5);

@@ -157,15 +157,32 @@ test.describe("built on the system", () => {
     expect(heights).toEqual([40, 40, 40, 40]);
   });
 
-  test("names start on one edge, and every line of words starts on another", async ({ page }) => {
+  test("names start on one edge, and every line of words starts on another, 16px in (#295)", async ({ page }) => {
     const names = await page.locator(".nx-msg[data-head='yes'] .nx-msg-who").evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().x)));
     expect(names.length).toBeGreaterThan(5);
     expect(new Set(names).size).toBe(1);
 
+    // Every message's words start on one edge, whoever wrote them and
+    // however long their name is: the head of a run and the rest of it alike.
+    const words = await page.locator(".nx-msg .nx-text").evaluateAll((texts) => texts.map((text) => Math.round(text.getBoundingClientRect().x * 2) / 2));
+    expect(words.length).toBeGreaterThan(8);
+    expect(new Set(words).size).toBe(1);
+    const indent = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-4")));
+    expect((words[0] ?? 0) - (names[0] ?? 0)).toBeCloseTo(indent, 0);
+
+    // The name has a line of its own: the words start under it, not beside it.
+    const head = message(page, "Found the playlist");
+    const who = await rect(head.locator(".nx-msg-who"));
+    const said = await rect(head.locator(".nx-text"));
+    expect(who.y + who.height).toBeLessThanOrEqual(said.y + 0.5);
+    // A later message in the run has no name at all, and no colon anywhere.
+    await expect(message(page, "Putting it on now").locator(".nx-msg-who")).toHaveCount(0);
+    expect(await page.locator(".nx-msg").evaluateAll((rows) => rows.some((row) => /^\s*:/.test(row.querySelector(".nx-msg-body")?.textContent ?? "")))).toBe(false);
+    await expect(page.locator(".nx-msg-colon")).toHaveCount(0);
+
     // A continuation's words start where its head's do.
-    const head = await rect(message(page, "Found the playlist").locator(".nx-text"));
     const next = await rect(message(page, "Putting it on now").locator(".nx-text"));
-    expect(Math.abs(head.x - next.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(said.x - next.x)).toBeLessThanOrEqual(0.5);
 
     // A wrapped line starts under the first line's words, not under the name.
     const lines = await message(page, "exactly what I wanted")
@@ -183,6 +200,30 @@ test.describe("built on the system", () => {
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(Math.max(...lines) - Math.min(...lines)).toBeLessThanOrEqual(0.5);
   });
+
+  for (const width of [780, 420, 360]) {
+    test(`a name far too long moves nobody's words, and shows whole where it fits, at ${width} (#295)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 790 });
+      await open(page, "?long");
+      const words = await page.locator(".nx-msg .nx-text").evaluateAll((texts) => texts.map((text) => Math.round(text.getBoundingClientRect().x * 2) / 2));
+      expect(new Set(words).size).toBe(1);
+      const eli = page.locator(".nx-msg[data-head='yes'] .nx-msg-who").filter({ has: page.locator(".k-name") }).first();
+      await expect(eli).toBeVisible();
+      // The name's own box never runs past the row, and it's cut only when
+      // the line itself is too narrow for it.
+      const fit = await page.locator(".nx-msg[data-head='yes'] .nx-msg-who .k-name").evaluateAll((names) =>
+        names.map((name) => {
+          const row = name.closest(".nx-msg")?.getBoundingClientRect();
+          const box = name.getBoundingClientRect();
+          return { inside: row !== undefined && box.right <= row.right + 0.5, cut: name.scrollWidth > name.clientWidth + 1 };
+        }),
+      );
+      expect(fit.every((one) => one.inside)).toBe(true);
+      // Inline, it was cut at 14em wherever it was; on a line of its own it
+      // shows whole in the chat window at its usual width.
+      if (width === 780) expect(fit.some((one) => one.cut)).toBe(false);
+    });
+  }
 
   test("rows sit edge to edge, groups have one gap, and a one-line continuation is 24px", async ({ page }) => {
     const rows = await page.locator(".nx-conv-row").evaluateAll((elements) =>
@@ -300,7 +341,7 @@ test.describe("the keyboard", () => {
     await expect(edit).toHaveValue("Count me in. Let's put the details in #weekend-plans when we know.");
     await edit.fill("Count me in.");
     await page.keyboard.press("Enter");
-    await expect(message(page, /^Matt:\s*Count me in\.edited/)).toBeVisible();
+    await expect(message(page, /^Matt\s*Count me in\.edited/)).toBeVisible();
     expect(await did(page)).toContain("save:m000014:Count me in.");
     // Straight back to the box, to carry on.
     await expect(box(page)).toBeFocused();

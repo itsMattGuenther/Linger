@@ -215,7 +215,7 @@
   --pane-head: 40px;
   --voice-strip: 40px;
   --measure: 80ch; /* the longest a line of a message runs (SPEC §4.7) */
-  --name-inline-max: 14em; /* an inline name longer than this ends in … */
+  --message-indent: var(--space-4); /* a message's words, in from its sender's name (#295) */
   --media-max-w: 320px;
   --media-max-h: 400px; /* SPEC §4.7: images are capped at 400px tall */
   --linkcard-w: 360px;

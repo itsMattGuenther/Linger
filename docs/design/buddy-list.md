@@ -28,9 +28,11 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
 
 ## Decided on 2026-09-25, from what was built
 
-- **Names inline, once per run** (decision 9). A run of messages starts with
-  `Name:`, and later lines from the same person line up under it without it.
-  A reply starts a new run, with the message it answers quoted just above.
+- **Names on their own line, once per run** (decision 9, changed on
+  2026-09-28 by #295). A run of messages starts with the name on a line of its
+  own, with no colon, and every message's words sit 16px in from it, so all of
+  them start on one edge whoever wrote them. A reply starts a new run, with the
+  message it answers quoted just above the name.
 - **Away everywhere** (decision 14). The one Away button sets you away on every
   server you tick. A server that refuses or is offline says why under its own
   name, and the others still go away.
