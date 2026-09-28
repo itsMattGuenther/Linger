@@ -620,8 +620,8 @@ Also in settings:
   and message fonts, for you only. Nobody is told. Use it if a room is too loud
   to read.
 
-Linger is dark only for now. The light theme and evening warmth of earlier
-versions come back once the new look has versions of its own.
+Linger is dark only; there is no light theme. The evening warmth of earlier
+versions comes back once the new look has an evening version of its own.
 
 ## Being interrupted, or not
 

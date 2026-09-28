@@ -13,9 +13,9 @@
  *   2. Semantic roles: what a color is *for*. Components use only these.
  *   3. Scales: spacing, control heights, icon boxes, rows, radii, type, motion.
  *
- * Dark only for now. A light theme is an open decision (#198). When it comes,
- * it is one `[data-theme="light"]` block that redefines layer 2 and nothing
- * else, which is why components never touch layer 1.
+ * Dark only. A light theme was dropped (2026-09-28, docs/decisions.md).
+ * Components still use only layer 2, never layer 1, so a color changes in
+ * one place.
  *
  * Names are not colored here. A person's color is a palette key on the wire
  * (AGENTS rules 8 and 12) and becomes a color only in

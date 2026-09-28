@@ -368,3 +368,17 @@ a web address in a field was text you couldn't click.
   others; a value that would make a fourth field is refused, since that app
   can't show the field it would push out (PROTOCOL §5). A migration turns the
   old three columns into fields, so nobody's status changed on update.
+
+---
+
+## Decided — dark only, no light theme
+
+**Matt, 2026-09-28.** The Buddy list client shipped dark only, with a light
+version left as an open question (parity decision 2, 2026-09-26). It's closed
+now: "We can scrap the light theme from the spec. I think we're going to pass
+on that." The app is dark only, and no light version is planned.
+
+The previous client (`LINGER_CLASSIC=1`) still has its dark, light and
+follow-the-system choice, and `linger-core`'s palette still carries the light
+lightness it uses. Both go when that client is deleted. Evening warmth is a
+separate question and still waits for an evening version of the new colors.

@@ -61,9 +61,8 @@ Tokens come in three layers. **Primitives** are named colors with no meaning;
 only `tokens.css` uses them. **Semantic roles** say what a color is *for*;
 components use only these. **Scales** set spacing, sizes, type and motion.
 
-A light theme is an open decision (#198). When it comes, it will be one
-`[data-theme="light"]` block that redefines the semantic roles and nothing
-else.
+The app is dark only. A light theme was dropped (2026-09-28,
+`docs/decisions.md`), so there is one set of semantic roles.
 
 ### Colors
 
