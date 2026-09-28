@@ -176,6 +176,19 @@ async function pixelsAround(page: Page, name: Locator): Promise<{ pixels: Rgb[];
   }, png.toString("base64"));
 }
 
+/**
+ * The average tint of the ink in a patch, as how far red sits from green and
+ * green from blue: a grey has almost none, a colored name a lot. Only pixels
+ * clearly off the background count, so the empty space around the letters
+ * doesn't water it down.
+ */
+function tintOf(pixels: Rgb[]): number[] {
+  const background = pixels.reduce((dark, pixel) => (pixel[0] + pixel[1] + pixel[2] < dark[0] + dark[1] + dark[2] ? pixel : dark), pixels[0] ?? [0, 0, 0]);
+  const ink = pixels.length === 1 ? pixels : pixels.filter((pixel) => pixel.reduce((sum, v, i) => sum + Math.abs(v - (background[i] ?? 0)), 0) > 60);
+  const n = Math.max(ink.length, 1);
+  return [ink.reduce((sum, p) => sum + (p[0] - p[1]), 0) / n, ink.reduce((sum, p) => sum + (p[1] - p[2]), 0) / n];
+}
+
 // --- The tests -------------------------------------------------------------
 
 test.describe("an offline name is drawn in the dim grey, with none of their look (#274)", () => {
@@ -266,12 +279,18 @@ test.describe("an idle or away name is the dim grey, glow and all, and an away m
       const callie = nameIn(page, list, "Callie");
       await expectDim(page, callie);
       await page.mouse.move(0, 0);
-      const { pixels, token } = await pixelsAround(page, callie);
-      expect(Math.max(...pixels.map(chroma)), "the most colorful pixel in and beside the name").toBeLessThan(chroma(token) + 0.02);
-      // Around again, the same pixels carry her color, so the check can fail.
+      // What's painted, read as the letters' overall tint. Chromium on CI
+      // smooths text with colored fringes (blue on one edge of a letter,
+      // orange on the other), so a single pixel can look colorful even on
+      // grey letters; the fringes cancel out over a name, and her lime
+      // wouldn't. The dim letters are tinted like the grey token, not like her.
+      const dim = await pixelsAround(page, callie);
       await move(page, people.callie.id, "around");
       const lit = await pixelsAround(page, nameIn(page, "People here", "Callie"));
-      expect(Math.max(...lit.pixels.map(chroma))).toBeGreaterThan(0.08);
+      const away = (from: number[], to: number[]) => Math.hypot(...from.map((v, i) => v - (to[i] ?? 0)));
+      const [dimTint, litTint, greyTint] = [tintOf(dim.pixels), tintOf(lit.pixels), tintOf([dim.token])];
+      expect(away(litTint, greyTint), "her own color shows when she's around").toBeGreaterThan(30);
+      expect(away(dimTint, greyTint), "the dim letters are tinted like the grey, not like her").toBeLessThan(away(litTint, greyTint) * 0.25);
       if (state === "away") {
         await move(page, people.callie.id, "away", null, "back after lunch");
         const note = rows(page, "Away").filter({ hasText: "Callie" }).locator(".k-row-detail");
