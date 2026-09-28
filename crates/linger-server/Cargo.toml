@@ -47,6 +47,11 @@ tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Unicode general categories and the emoji property, for the display-name rules
+# (#296): what a combining mark is, what a format character is, and where a
+# zero-width joiner is part of an emoji. No dependencies of its own, no_std,
+# and the version already in Cargo.lock (sqlx's other drivers name it).
+unicode-properties = "0.1"
 uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

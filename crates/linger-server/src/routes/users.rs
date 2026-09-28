@@ -166,8 +166,15 @@ async fn patch_me(
     Json(req): Json<UpdateMeRequest>,
 ) -> Result<Json<User>, ApiError> {
     // Validate everything before writing anything — a PATCH is all-or-nothing.
+    //
+    // The name rules apply when a name is set or changed (#296). A name saved
+    // before them stays, and sending it back as it is changes nothing, so it
+    // is not held to them.
     if let Some(name) = &req.display_name {
-        validate::display_name(name)?;
+        let held = repo::users::expect(&state.db.read, auth.id).await?;
+        if name.trim() != held.display_name {
+            validate::display_name(name)?;
+        }
     }
     if let Some(style) = &req.style {
         validate::style(style)?;

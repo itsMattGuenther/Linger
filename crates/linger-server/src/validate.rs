@@ -1,12 +1,15 @@
-//! Input validation with the PROTOCOL §2/§3 shapes. Kept dependency-free (no
-//! regex crate for three character classes) and returning `ApiError` directly
-//! so handlers read as straight-line code.
+//! Input validation with the PROTOCOL §2/§3 shapes. No regex crate for three
+//! character classes, and returning `ApiError` directly so handlers read as
+//! straight-line code. The one dependency is Unicode's character data, which
+//! display names need (#296) and a hand-written table would not keep current.
 
 use linger_core::limits::{
-    MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MESSAGE_CHARS, MAX_STATUS_FIELDS,
-    MAX_STATUS_FIELD_CHARS, MAX_STATUS_LABEL_CHARS, MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
+    MAX_ACCENT_MARKS_PER_LETTER, MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MARKS_PER_LETTER,
+    MAX_MESSAGE_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS, MAX_STATUS_LABEL_CHARS,
+    MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
 };
 use linger_core::wire::{Fill, StatusField, Style, UserStatus};
+use unicode_properties::{GeneralCategory, UnicodeEmoji, UnicodeGeneralCategory};
 
 use crate::error::ApiError;
 
@@ -50,13 +53,252 @@ pub fn room_slug(s: &str) -> Result<(), ApiError> {
     }
 }
 
+/// A display name (PROTOCOL §2, #296): 1–32 characters after trimming, in any
+/// script, with emoji, accents, spaces and punctuation, and nothing that hides,
+/// breaks the line, turns the text around, or paints over its neighbours.
+///
+/// Refused, not cleaned up, so people see exactly what their name is (as
+/// [`username`] does). The name is stored trimmed, so the trimmed name is what
+/// is checked. The checks run in a fixed order, and the first to fail is the
+/// sentence the person sees. `client/src/lib/account.ts` mirrors them for
+/// early feedback; this is the answer that counts.
+///
+/// They apply when a name is set or changed. A name saved before them is left
+/// as it is, so nobody's account breaks (`routes::users::patch_me`).
 pub fn display_name(s: &str) -> Result<(), ApiError> {
-    let len = s.trim().chars().count();
-    if (1..=MAX_DISPLAY_NAME_CHARS).contains(&len) {
-        Ok(())
-    } else {
-        Err(ApiError::validation("Display names are 1–32 characters."))
+    let name = s.trim();
+    if name.is_empty() && !s.is_empty() {
+        return Err(ApiError::validation(NAME_UNSEEN));
     }
+    let chars: Vec<char> = name.chars().collect();
+    if !(1..=MAX_DISPLAY_NAME_CHARS).contains(&chars.len()) {
+        return Err(ApiError::validation("Display names are 1–32 characters."));
+    }
+    if chars.iter().copied().any(breaks_the_line) {
+        return Err(ApiError::validation(
+            "Names can't have tabs, line breaks or other control characters.",
+        ));
+    }
+    if chars.iter().copied().any(changes_direction) {
+        return Err(ApiError::validation(
+            "Names can't have characters that change the direction of text.",
+        ));
+    }
+    if (0..chars.len()).any(|at| is_invisible(chars[at]) && !joins_here(&chars, at)) {
+        return Err(ApiError::validation(
+            "Names can't have invisible characters.",
+        ));
+    }
+    marks_per_letter(&chars)?;
+    if !chars.iter().copied().any(is_seen) {
+        return Err(ApiError::validation(NAME_UNSEEN));
+    }
+    Ok(())
+}
+
+/// A name made of nothing anybody can see: only spaces, blank letters, or
+/// marks with no letter under them.
+const NAME_UNSEEN: &str = "That name has no letters anyone can see.";
+
+/// A control character (tab, line break, bell…), or one of the line and
+/// paragraph separators, which break a line without being control characters.
+fn breaks_the_line(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// The bidirectional controls: the embeddings and overrides (U+202A–U+202E)
+/// and isolates (U+2066–U+2069), which turn the text after them around, and
+/// the three direction marks (U+200E, U+200F, U+061C), which move the
+/// punctuation and numbers beside them. A name in Arabic or Hebrew needs none
+/// of them: its letters carry their own direction.
+fn changes_direction(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// Characters that draw nothing: every format character (Unicode category Cf:
+/// the zero-width space and joiners, the word joiner, the byte-order mark, the
+/// soft hyphen and the rest), and three combining marks Unicode itself says
+/// draw nothing (the combining grapheme joiner and Khmer's two inherent
+/// vowels). Mixed into a name, they make it look like somebody else's.
+fn is_invisible(c: char) -> bool {
+    c.general_category() == GeneralCategory::Format
+        || matches!(c, '\u{034F}' | '\u{17B4}' | '\u{17B5}')
+}
+
+/// Where an invisible character is part of how something is written, and so
+/// allowed. Three places:
+///
+/// - U+200D, the zero-width joiner, between two emoji: it is what joins 👨 👩
+///   👧 into 👨‍👩‍👧, and 🏳️ 🌈 into 🏳️‍🌈.
+/// - U+200C and U+200D inside a word in a script that spells with them
+///   ([`JOINING_SCRIPTS`]): the non-joiner Persian writes in علی‌رضا, or the
+///   joiner in Sinhala's ශ්‍රී ("Sri").
+/// - The tag characters (U+E0020–U+E007F) after 🏴, which spell out the flags
+///   of England, Scotland and Wales.
+fn joins_here(chars: &[char], at: usize) -> bool {
+    let before = at.checked_sub(1).map(|i| chars[i]);
+    let after = chars.get(at + 1).copied();
+    match chars[at] {
+        '\u{200D}'
+            if before.is_some_and(|c| is_emoji(c) || c == '\u{FE0F}')
+                && after.is_some_and(is_emoji) =>
+        {
+            true
+        }
+        '\u{200C}' | '\u{200D}' => {
+            before.is_some_and(in_joining_word) && after.is_some_and(in_joining_word)
+        }
+        '\u{E0020}'..='\u{E007F}' => {
+            before.is_some_and(|c| c == '\u{1F3F4}' || ('\u{E0020}'..='\u{E007E}').contains(&c))
+        }
+        _ => false,
+    }
+}
+
+/// An emoji, skin tones included. The ASCII digits, `#` and `*` are emoji to
+/// Unicode too, as the start of a keycap (1️⃣), but a joiner between two of
+/// them joins nothing: it only hides in the middle of a number.
+fn is_emoji(c: char) -> bool {
+    c.is_emoji_char() && !c.is_ascii()
+}
+
+/// Scripts that spell with U+200C ZERO WIDTH NON-JOINER and U+200D ZERO WIDTH
+/// JOINER: the joined ones (Arabic, Syriac, N'Ko, Mandaic, Mongolian, Adlam),
+/// where a non-joiner keeps two letters from joining (Persian writes one inside
+/// many words), and those that draw consonant clusters (Devanagari through
+/// Sinhala, Myanmar, Khmer), where the pair decides how a cluster is drawn.
+///
+/// By block rather than by the Unicode Script property, which the crate does
+/// not carry. A block answers "is this letter from one of those scripts?" well
+/// enough, since the question is only ever asked of the letters either side of
+/// a joiner. `client/src/lib/account.ts` mirrors the list.
+const JOINING_SCRIPTS: &[(char, char)] = &[
+    ('\u{0600}', '\u{06FF}'),   // Arabic
+    ('\u{0700}', '\u{074F}'),   // Syriac
+    ('\u{0750}', '\u{077F}'),   // Arabic Supplement
+    ('\u{07C0}', '\u{07FF}'),   // N'Ko
+    ('\u{0840}', '\u{086F}'),   // Mandaic, Syriac Supplement
+    ('\u{0870}', '\u{08FF}'),   // Arabic Extended-B and -A
+    ('\u{0900}', '\u{0DFF}'),   // Devanagari, Bengali … Malayalam, Sinhala
+    ('\u{1000}', '\u{109F}'),   // Myanmar
+    ('\u{1780}', '\u{17FF}'),   // Khmer
+    ('\u{1800}', '\u{18AF}'),   // Mongolian
+    ('\u{FB50}', '\u{FDFF}'),   // Arabic Presentation Forms-A
+    ('\u{FE70}', '\u{FEFE}'),   // Arabic Presentation Forms-B (not U+FEFF)
+    ('\u{1E900}', '\u{1E95F}'), // Adlam
+];
+
+/// A letter or mark from one of [`JOINING_SCRIPTS`].
+fn in_joining_word(c: char) -> bool {
+    use GeneralCategory as G;
+    let letter_or_mark = matches!(
+        c.general_category(),
+        G::UppercaseLetter
+            | G::LowercaseLetter
+            | G::TitlecaseLetter
+            | G::ModifierLetter
+            | G::OtherLetter
+            | G::NonspacingMark
+            | G::SpacingMark
+            | G::EnclosingMark
+    );
+    letter_or_mark
+        && JOINING_SCRIPTS
+            .iter()
+            .any(|&(first, last)| (first..=last).contains(&c))
+}
+
+/// No letter piled high with marks ("zalgo" text, which paints far above and
+/// below its line and over the messages around it).
+///
+/// A mark here is one that stacks on the letter before it: Unicode categories
+/// Mn (non-spacing) and Me (enclosing). Spacing marks (Mc), such as the vowel
+/// signs of Hindi, Tamil and Burmese, sit beside a letter rather than on it,
+/// so they count as a new letter. Two limits: the accent marks every script
+/// shares ([`is_accent`]), which are what zalgo is made of, at
+/// [`MAX_ACCENT_MARKS_PER_LETTER`]; and marks of any kind at
+/// [`MAX_MARKS_PER_LETTER`], which leaves room for scripts that write three or
+/// four marks on a letter as ordinary spelling (Tibetan's stacked consonants,
+/// as in སྒྲོལ་མ, "Dolma").
+fn marks_per_letter(chars: &[char]) -> Result<(), ApiError> {
+    let (mut marks, mut accents) = (0, 0);
+    for &c in chars {
+        if !matches!(
+            c.general_category(),
+            GeneralCategory::NonspacingMark | GeneralCategory::EnclosingMark
+        ) {
+            (marks, accents) = (0, 0);
+            continue;
+        }
+        marks += 1;
+        if is_accent(c) {
+            accents += 1;
+        }
+        if accents > MAX_ACCENT_MARKS_PER_LETTER {
+            return Err(ApiError::validation(
+                "Names can't have more than two accent marks on one letter.",
+            ));
+        }
+        if marks > MAX_MARKS_PER_LETTER {
+            return Err(ApiError::validation(
+                "Names can't stack that many marks on one letter.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The combining accents that belong to no one script: the Combining
+/// Diacritical Marks block with its Extended and Supplement blocks, the marks
+/// for symbols, and the half marks. They are the accents of Latin, Greek and
+/// Cyrillic written as separate characters, and what zalgo text is built from.
+fn is_accent(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}'
+    )
+}
+
+/// Letters that are blank on purpose: the Hangul fillers (U+115F, U+1160,
+/// U+3164, U+FFA0), the empty braille cell (U+2800) and the musical null
+/// notehead (U+1D159). Unicode calls them letters or symbols, so nothing above
+/// catches them, and a name made only of them looks empty. Mixed in with
+/// letters they read as a space, and are allowed.
+const BLANK_LETTERS: [char; 6] = [
+    '\u{115F}',
+    '\u{1160}',
+    '\u{3164}',
+    '\u{FFA0}',
+    '\u{2800}',
+    '\u{1D159}',
+];
+
+/// A character that shows something by itself: not a space, a control or
+/// format character, a mark (which needs a letter under it), or a blank
+/// letter. An unassigned code point counts as seen, since it is most likely an
+/// emoji newer than the Unicode tables this server was built with.
+fn is_seen(c: char) -> bool {
+    use GeneralCategory as G;
+    !c.is_whitespace()
+        && !matches!(
+            c.general_category(),
+            G::Control
+                | G::Format
+                | G::SpaceSeparator
+                | G::LineSeparator
+                | G::ParagraphSeparator
+                | G::NonspacingMark
+                | G::SpacingMark
+                | G::EnclosingMark
+        )
+        && !BLANK_LETTERS.contains(&c)
 }
 
 /// Minimum length only — composition rules are explicitly banned (PROTOCOL §2).
@@ -257,6 +499,199 @@ mod tests {
         assert!(username("Matt").is_err());
         assert!(username("matt guenther").is_err());
         assert!(username(&"x".repeat(25)).is_err());
+    }
+
+    /// The sentence a display name is refused with.
+    fn refusal(name: &str) -> String {
+        display_name(name)
+            .map(|()| format!("{name:?} was allowed"))
+            .unwrap_or_else(|err| err.message)
+    }
+
+    fn allowed(name: &str) {
+        assert!(display_name(name).is_ok(), "{name:?}: {}", refusal(name));
+    }
+
+    const CONTROL: &str = "Names can't have tabs, line breaks or other control characters.";
+    const DIRECTION: &str = "Names can't have characters that change the direction of text.";
+    const INVISIBLE: &str = "Names can't have invisible characters.";
+    const ACCENTS: &str = "Names can't have more than two accent marks on one letter.";
+    const MARKS: &str = "Names can't stack that many marks on one letter.";
+    const LENGTH: &str = "Display names are 1–32 characters.";
+
+    #[test]
+    fn real_names_in_any_script_are_allowed() {
+        for name in [
+            "Justin B",
+            "Matt 💾",
+            "José",
+            "Zoë",
+            "李小龍",
+            "محمد",
+            "Ωmega",
+            "Дмитрий",
+            "שרה",
+            "Nguyễn Thị Ánh",
+            "O'Brien-Smith (she/her)",
+            "Ana_42!",
+            // Accents typed as separate characters: two on one letter, as
+            // Vietnamese writes ễ decomposed.
+            "Nguye\u{0302}\u{0303}n",
+            // Written out, so each mark is its own character. Hebrew with its
+            // points, שִּׁמְעוֹן: three marks on the shin.
+            "\u{05E9}\u{05BC}\u{05B4}\u{05C1}\u{05DE}\u{05B0}\u{05E2}\u{05D5}\u{05B9}\u{05DF}",
+            // Hindi, ज़ेंडाया: a dot, a vowel sign and a nasal mark on one
+            // consonant.
+            "\u{091C}\u{093C}\u{0947}\u{0902}\u{0921}\u{093E}\u{092F}\u{093E}",
+            // Tibetan's stacked consonants, སྒྲོལ་མ: three marks on one letter.
+            "\u{0F66}\u{0F92}\u{0FB2}\u{0F7C}\u{0F63}\u{0F0B}\u{0F58}",
+            // Burmese, မြို့: a spacing vowel sign, then three marks.
+            "\u{1019}\u{103C}\u{102D}\u{102F}\u{1037}",
+            // A letter from a blank-looking set, with real letters beside it.
+            "Matt\u{3164}B",
+        ] {
+            allowed(name);
+        }
+        allowed(&"x".repeat(MAX_DISPLAY_NAME_CHARS));
+        // Trimmed before it is checked, as it is before it is stored.
+        allowed("  Matt\n");
+    }
+
+    #[test]
+    fn emoji_and_their_joiners_are_allowed() {
+        for name in [
+            "💾",
+            "👨‍👩‍👧",
+            "👩🏽‍💻 Callie",
+            "🏳️‍🌈",
+            "❤️‍🔥",
+            "🏃‍♀️",
+            "1️⃣",
+            // The flag of England: 🏴 and the tag characters that spell "gbeng".
+            "🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+        ] {
+            allowed(name);
+        }
+        // Counted as characters, not bytes: 32 floppy disks fit.
+        allowed(&"💾".repeat(MAX_DISPLAY_NAME_CHARS));
+    }
+
+    #[test]
+    fn joiners_are_allowed_inside_words_of_scripts_that_spell_with_them() {
+        // Persian, علی‌رضا (Alireza): a non-joiner keeps ی from joining ر.
+        allowed("\u{0639}\u{0644}\u{06CC}\u{200C}\u{0631}\u{0636}\u{0627}");
+        // Sinhala, ශ්‍රී ("Sri"): a joiner draws the cluster as one shape.
+        allowed("\u{0DC1}\u{0DCA}\u{200D}\u{0DBB}\u{0DD3}");
+        // Hindi, क्‍ष: the half form of क.
+        allowed("\u{0915}\u{094D}\u{200D}\u{0937}");
+        // …but not between Latin or Chinese letters, where they only hide.
+        assert_eq!(refusal("Ma\u{200C}tt"), INVISIBLE);
+        assert_eq!(refusal("Ma\u{200D}tt"), INVISIBLE);
+        assert_eq!(refusal("李\u{200C}小龍"), INVISIBLE);
+    }
+
+    #[test]
+    fn a_name_must_be_one_to_thirty_two_characters() {
+        assert_eq!(refusal(""), LENGTH);
+        assert_eq!(refusal(&"x".repeat(MAX_DISPLAY_NAME_CHARS + 1)), LENGTH);
+        assert_eq!(refusal(&"💾".repeat(MAX_DISPLAY_NAME_CHARS + 1)), LENGTH);
+    }
+
+    #[test]
+    fn control_characters_line_breaks_and_tabs_are_refused() {
+        for name in [
+            "Matt\tB",
+            "Matt\nB",
+            "Matt\r\nB",
+            "Matt\u{0007}",
+            "Matt\u{0085}B",
+            "Matt\u{2028}B",
+            "Matt\u{2029}B",
+            "Matt\u{001B}[31m",
+        ] {
+            assert_eq!(refusal(name), CONTROL, "{name:?}");
+        }
+    }
+
+    #[test]
+    fn characters_that_change_the_direction_of_text_are_refused() {
+        for name in [
+            "\u{202E}ttaM",
+            "Matt\u{202A}B",
+            "Matt\u{202B}B",
+            "Matt\u{202C}",
+            "Matt\u{202D}B",
+            "Matt\u{2066}B\u{2069}",
+            "Matt\u{2067}B",
+            "Matt\u{2068}B",
+            "Matt\u{200E}",
+            "محمد\u{200F}",
+            "محمد\u{061C}",
+        ] {
+            assert_eq!(refusal(name), DIRECTION, "{name:?}");
+        }
+    }
+
+    #[test]
+    fn invisible_characters_are_refused() {
+        for name in [
+            "Ma\u{200B}tt",
+            "Matt\u{2060}",
+            "\u{FEFF}Matt",
+            "Ma\u{00AD}tt",
+            "Ma\u{2062}tt",
+            "Ma\u{034F}tt",
+            "Ma\u{180E}tt",
+            // A joiner only joins between two emoji, never at either end.
+            "\u{200D}💾",
+            "💾\u{200D}",
+            "💾\u{200D}Matt",
+            // Digits are emoji to Unicode, but a joiner between them hides.
+            "Matt1\u{200D}2",
+            // Tag characters with no 🏴 in front of them.
+            "Matt\u{E0067}\u{E0062}",
+            "\u{E0001}Matt",
+        ] {
+            assert_eq!(refusal(name), INVISIBLE, "{name:?}");
+        }
+    }
+
+    #[test]
+    fn a_letter_piled_with_marks_is_refused() {
+        allowed("a\u{0301}\u{0302}");
+        assert_eq!(refusal("a\u{0301}\u{0302}\u{0303}"), ACCENTS);
+        // Zalgo as generators make it.
+        assert_eq!(
+            refusal("M\u{0334}\u{0321}\u{031B}\u{0317}\u{031D}att"),
+            ACCENTS
+        );
+        // Accents count across other marks on the same letter.
+        assert_eq!(refusal("a\u{0301}\u{0E49}\u{0302}\u{0303}"), ACCENTS);
+        // Each letter has its own count.
+        allowed("a\u{0301}\u{0302}b\u{0301}\u{0302}");
+        // Script marks go to four, and stop there: Thai tone marks piled up.
+        allowed("ก\u{0E49}\u{0E49}\u{0E49}\u{0E49}");
+        assert_eq!(refusal("ก\u{0E49}\u{0E49}\u{0E49}\u{0E49}\u{0E49}"), MARKS);
+        // Enclosing marks count too.
+        assert_eq!(refusal("a\u{0488}\u{0489}\u{0488}\u{0489}\u{0488}"), MARKS);
+    }
+
+    #[test]
+    fn a_name_nobody_can_see_is_refused() {
+        for name in [
+            "   ",
+            "\u{3000}",
+            "\u{3164}",
+            "\u{3164} \u{3164}",
+            "\u{2800}",
+            "\u{115F}\u{1160}",
+            "\u{FFA0}",
+            "\u{1D159}",
+            "\u{0301}",
+            "\u{FE0F}",
+        ] {
+            assert_eq!(refusal(name), NAME_UNSEEN, "{name:?}");
+        }
     }
 
     #[test]

@@ -458,7 +458,7 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| SET-1 | Who you are: change your display name (1–32 characters); the username is shown and can't be changed. | Settings → Profile, `PATCH /me` | Same | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
+| SET-1 | Who you are: change your display name (1–32 characters, nothing invisible or direction-flipping, at most two accents on a letter: PROTOCOL §2, #296); the username is shown and can't be changed. | Settings → Profile, `PATCH /me` | Same | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | SET-2 | Change your password (current and new, 8 minimum). | Settings → Account & App, `PATCH /me/password` | Same | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | SET-3 | Settings opens from a gear (today: beside your name). Escape closes panels and returns focus. | `App.tsx` | Its own window, from the list's gear. New: Ctrl+, opens it too. | F | ✅ (next-list-window.spec.ts, next-settings-window.spec.ts) |
 | SET-4 | Every section's copy is short and states effects (for example "Use plain names and message fonts"). | `settings/copy.ts` | Same | U | ✅ (settings.test.ts) |
