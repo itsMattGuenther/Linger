@@ -19,6 +19,13 @@ describe("a conversation's voice strip", () => {
     expect(voiceStrip("r-plans", [], "matt", null)).toEqual({ kind: "quiet", action: "start" });
   });
 
+  it("offers nothing on a server that carries no voice (#306)", () => {
+    expect(voiceStrip("r-plans", [], "matt", null, false)).toEqual({ kind: "off" });
+    expect(voiceStrip("r-plans", [], "matt", "elsewhere", false)).toEqual({ kind: "off" });
+    // A server that hasn't said is given the benefit of the doubt.
+    expect(voiceStrip("r-plans", [], "matt", null)).toEqual({ kind: "quiet", action: "start" });
+  });
+
   it("doesn't count you among the others when your seat is on another server", () => {
     expect(voiceStrip("r-general", ["matt"], "matt", "elsewhere")).toEqual({ kind: "quiet", action: "move" });
   });

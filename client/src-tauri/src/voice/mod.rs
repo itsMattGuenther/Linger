@@ -1,31 +1,29 @@
-//! Voice: peer connections, driven by the gateway's signalling (SPEC §4.14,
-//! ARCHITECTURE §2, T-1402).
+//! Voice: one connection to the server's voice forwarding (SPEC §4.14,
+//! ARCHITECTURE §2, #197).
 //!
 //! Audio lives in Rust rather than in the WebView, and this is where. The
-//! server introduced us (T-1401); this module is what does something with the
-//! introduction — one `RTCPeerConnection` per peer, a full mesh, and the
-//! offer/answer/ICE dance on each of them.
+//! server offers one `RTCPeerConnection` per client: an m-line for the
+//! microphone, and one per other person in the room. This end only answers.
+//! The mesh that came before it, one connection per pair of people, is gone
+//! (#306).
 //!
-//! **The whole path is here now.** Real peer connections, real DTLS, real ICE,
-//! real RTP — and, since the microphone half landed, real sound: `audio::Source`
-//! frames are Opus-encoded once and written to every peer's outbound track,
-//! and every inbound track is decoded and handed to the `audio::Sink`, which
-//! mixes. The devices behind those two traits are `device.rs`; the tests use
-//! the stand-ins in `audio.rs`.
+//! **The whole path is here.** Real DTLS, real ICE, real RTP, real sound:
+//! `audio::Source` frames are Opus-encoded once and written to the outbound
+//! track, and every inbound track is decoded and handed to the `audio::Sink`,
+//! which mixes. The devices behind those two traits are `device.rs`; the tests
+//! use the stand-ins in `audio.rs`.
 //!
-//! **Nothing in here has been across two networks.** AGENTS §"Where you will be
+//! **Loopback proves little about a real network.** AGENTS §"Where you will be
 //! wrong" is explicit that WebRTC written from memory works on localhost and
-//! dies behind carrier-grade NAT, and that warning applies to every line of
-//! this file. What the tests prove is that two peers on one machine negotiate,
-//! carry packets, and that a tone sent by one comes out of the other's sink;
-//! what they cannot prove is anything about a real network, which is what
-//! T-1402's acceptance criterion is for.
+//! dies behind carrier-grade NAT. What the tests prove is that two engines and
+//! the forwarding server on one machine negotiate, carry packets, and that a
+//! tone sent by one comes out of the other's sink; the real-network checks are
+//! what count.
 
 pub mod audio;
 pub mod codec;
 pub mod device;
 pub mod level;
-pub mod mesh;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,14 +31,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use linger_core::gateway::{ClientFrame, VoiceControls, VoicePeer, VoiceSignalKind, VoiceTrack};
+use linger_core::gateway::{ClientFrame, VoiceControls, VoiceTrack};
 use linger_core::RoomId;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_OPUS};
 use webrtc::api::APIBuilder;
-use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 pub use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
 use webrtc::media::Sample;
@@ -56,12 +53,13 @@ use webrtc::track::track_remote::TrackRemote;
 
 use audio::{Devices, Sink, Source};
 
-/// Where a signal goes when this module wants to send one.
+/// Where a frame goes when this module wants to send one: joins, answers and
+/// restarts, on their way to the gateway.
 ///
-/// A trait rather than a channel to the gateway, so the tests can wire two
-/// engines straight to each other and leave the server out of it — the thing
-/// being tested is the negotiation, and a real socket in the middle would only
-/// make a failure harder to read.
+/// A trait rather than a channel to the gateway, so the tests can wire the
+/// engines to a forwarding server in the same process and leave the gateway
+/// out of it — a real socket in the middle would only make a failure harder
+/// to read.
 pub trait Signaller: Send + Sync + 'static {
     fn send(&self, frame: ClientFrame);
 }
@@ -72,7 +70,8 @@ pub trait Signaller: Send + Sync + 'static {
 /// inventing what it wants before it exists is how a callback ends up carrying
 /// three fields nobody reads.
 pub trait Watcher: Send + Sync + 'static {
-    /// A peer's connection changed state — `connected`, `failed`, `closed`.
+    /// The connection carrying somebody's voice changed state — `connected`,
+    /// `failed`, `closed` — named by their session id.
     fn peer_state(&self, peer: &str, state: &str);
 
     /// Our own audio changed state: `sending` when the microphone loop is
@@ -88,32 +87,15 @@ pub trait Watcher: Send + Sync + 'static {
     fn speaking(&self, _peer: Option<&str>, _speaking: bool) {}
 }
 
-/// One remote client, and the connection to it.
-struct Peer {
-    conn: Arc<RTCPeerConnection>,
-    /// What we are sending them. Held so the sending loop can find it.
-    outbound: Arc<TrackLocalStaticSample>,
-    /// Candidates that turned up before the answer did.
-    ///
-    /// ICE trickles: the other end starts sending candidates as soon as it has
-    /// them, which is routinely before its answer has been applied here. Adding
-    /// one to a connection with no remote description is an error, and dropping
-    /// it is a connection that takes the long way round or never connects at
-    /// all — on a good network you never notice, which is what makes it the
-    /// kind of bug this project is warned about.
-    pending: Vec<RTCIceCandidateInit>,
-}
-
-/// The one connection to the server's voice forwarding (#197), when the
-/// server passes this client's voice on rather than the mesh. The server makes
-/// every offer; this end only answers.
+/// The one connection to the server's voice forwarding (#197). The server
+/// makes every offer; this end only answers.
 struct Forward {
     conn: Arc<RTCPeerConnection>,
     /// What we send the server: the microphone, once, for everybody.
     outbound: Arc<TrackLocalStaticSample>,
 }
 
-/// The mesh, and everything it is doing.
+/// Voice, and everything it is doing.
 pub struct Engine<S: Signaller, W: Watcher> {
     signaller: Arc<S>,
     watcher: Arc<W>,
@@ -130,31 +112,23 @@ pub struct Engine<S: Signaller, W: Watcher> {
     /// the key isn't muting yourself, so nobody is shown a mute for it; they
     /// hear you when you hold it, and the "talking" mark follows the audio.
     push_to_talk_closed: Arc<AtomicBool>,
-    /// Whether to ask for voice through the forwarding server (#197). On
-    /// unless the person turned it off in Settings to use the old way; then
-    /// their whole room goes back to the mesh.
-    can_forward: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
 struct Inner {
     controls: VoiceControls,
-    /// Our own session id, once the gateway has told us. Everything about who
-    /// offers depends on it, so nothing happens before it arrives.
+    /// Our own session id, once the gateway has told us. It names the
+    /// microphone's track.
     me: Option<String>,
     room: Option<RoomId>,
-    peers: BTreeMap<String, Peer>,
     /// The microphone and the speakers, while we are in voice. Dropping them
     /// is what closes the devices.
     devices: Option<Devices>,
-    /// The loop that carries microphone frames to every peer.
+    /// The loop that carries microphone frames to the server.
     pump: Option<JoinHandle<()>>,
     /// STUN and TURN for this call, fetched from the server at join (T-1403).
     /// Empty means host candidates only: one network, and nothing beyond it.
     ice_servers: Vec<RTCIceServer>,
-    /// The server forwards our voice (#197): the latest `voice.state` says so.
-    /// While it does, there is no mesh.
-    forwarded: bool,
     /// The connection to the forwarding server, once it has offered one.
     forward: Option<Forward>,
     /// Whose voice each receiving m-line carries, by mid, from the latest
@@ -175,32 +149,6 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             inner: Arc::new(Mutex::new(Inner::default())),
             muted: Arc::new(AtomicBool::new(false)),
             push_to_talk_closed: Arc::new(AtomicBool::new(false)),
-            can_forward: Arc::new(AtomicBool::new(true)),
-        }
-    }
-
-    /// Whether to ask for voice through the forwarding server the next time
-    /// this engine joins (#197). Settings' switch for the old way lands here.
-    pub fn set_can_forward(&self, on: bool) {
-        self.can_forward.store(on, Ordering::Relaxed);
-    }
-
-    /// Settings' switch for the old way, changed in a call (#249): tell the
-    /// server now, with the same join a mute sends, rather than waiting for
-    /// the next one. The server moves the room to the mesh or back, and the
-    /// `voice.state` that follows moves this engine with it (`on_state`).
-    /// Outside a call it is only remembered, as `set_can_forward` does.
-    pub async fn set_forwarding(&self, on: bool) {
-        if self.can_forward.swap(on, Ordering::Relaxed) == on {
-            return;
-        }
-        let inner = self.inner.lock().await;
-        if let Some(room_id) = inner.room {
-            self.signaller.send(ClientFrame::VoiceJoin {
-                room_id,
-                controls: Some(inner.controls),
-                forwarding: Some(on),
-            });
         }
     }
 
@@ -242,7 +190,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
                 self.signaller.send(ClientFrame::VoiceJoin {
                     room_id,
                     controls: Some(controls),
-                    forwarding: Some(self.can_forward.load(Ordering::Relaxed)),
+                    forwarding: Some(true),
                 });
             }
         }
@@ -308,12 +256,12 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
     /// Ask to join voice in a room, with the devices to do it through and the
     /// STUN/TURN servers the host's server handed out for it (T-1403).
     ///
-    /// The mesh is not built here — it is built when the server answers with
-    /// a `voice.state` that has us in it, which is the same path a peer
-    /// arriving later takes. What *does* start here is the sending loop: it
-    /// encodes frames from the moment we join and writes them to whichever
-    /// peers exist, so the first word after a connection comes up is not
-    /// waiting on anything.
+    /// The connection is not built here — it is built when the server's
+    /// `voice.offer` arrives (`on_offer`). What *does* start here is the
+    /// sending loop: it encodes frames from the moment we join and writes them
+    /// to the connection once it exists, so the first word after it comes up
+    /// is not waiting on anything. The join says `forwarding`, which every
+    /// server that carries voice now asks for (#306).
     pub async fn join(&self, room_id: RoomId, devices: Devices, ice_servers: Vec<RTCIceServer>) {
         let source = Arc::clone(&devices.source);
         let previous = {
@@ -347,22 +295,20 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.signaller.send(ClientFrame::VoiceJoin {
             room_id,
             controls: Some(inner.controls),
-            forwarding: Some(self.can_forward.load(Ordering::Relaxed)),
+            forwarding: Some(true),
         });
     }
 
-    /// Leave, and tear the mesh down whether or not the server answers.
+    /// Leave, and close the connection whether or not the server answers.
     ///
     /// The devices go too: leaving voice is the microphone turning off, and
     /// dropping the `Devices` is what closes it.
     pub async fn leave(&self) {
         self.signaller.send(ClientFrame::VoiceLeave);
-        let (peers, devices, pump, forward, tracks) = {
+        let (devices, pump, forward, tracks) = {
             let mut inner = self.inner.lock().await;
             inner.room = None;
-            inner.forwarded = false;
             (
-                std::mem::take(&mut inner.peers),
                 inner.devices.take(),
                 inner.pump.take(),
                 inner.forward.take(),
@@ -384,133 +330,10 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             pump.abort();
             let _ = pump.await;
         }
-        for (id, peer) in peers {
-            let _ = peer.conn.close().await;
-            if let Some(devices) = &devices {
-                devices.sink.forget(&id).await;
-            }
-            self.watcher.peer_state(&id, "closed");
-        }
         // Closing the devices can block briefly while the audio threads are
         // joined, so it is done off the reactor.
         if let Some(devices) = devices {
             let _ = tokio::task::spawn_blocking(move || drop(devices)).await;
-        }
-    }
-
-    /// The server's picture of who is in voice. Reconcile ours with it.
-    pub async fn on_state(&self, room_id: RoomId, peers: &[VoicePeer]) {
-        // Forwarded or mesh first (#197): the server forwards a room's voice
-        // while everybody in it can, and puts it all on the mesh otherwise.
-        let (forwarded_now, was_forwarded) = {
-            let inner = self.inner.lock().await;
-            // A state for a room we are not in is somebody else's business —
-            // we are told about every room we can see, not only ours.
-            if inner.room != Some(room_id) {
-                return;
-            }
-            let Some(me) = inner.me.as_deref() else {
-                return;
-            };
-            (
-                peers
-                    .iter()
-                    .any(|peer| peer.session_id == me && peer.forwarded == Some(true)),
-                inner.forwarded || inner.forward.is_some(),
-            )
-        };
-        if forwarded_now {
-            // No mesh at all, and any we held from before it said so goes.
-            self.become_forwarded().await;
-            return;
-        }
-        if was_forwarded {
-            // Back on the mesh (an older app joined): the forwarding
-            // connection goes first.
-            self.become_mesh().await;
-        }
-
-        let (me, plan) = {
-            let inner = self.inner.lock().await;
-            let Some(me) = inner.me.clone() else { return };
-            // On the mesh, a forwarded peer is out of reach: its voice goes
-            // through the server, which isn't passing ours.
-            let reachable: Vec<VoicePeer> = peers
-                .iter()
-                .filter(|peer| peer.forwarded != Some(true))
-                .cloned()
-                .collect();
-            let held = inner.peers.keys().cloned().collect();
-            let plan = mesh::plan(&me, &held, &reachable);
-            (me, plan)
-        };
-
-        for id in plan.drop {
-            let (peer, sink) = {
-                let mut inner = self.inner.lock().await;
-                (
-                    inner.peers.remove(&id),
-                    inner.devices.as_ref().map(|d| Arc::clone(&d.sink)),
-                )
-            };
-            if let Some(peer) = peer {
-                let _ = peer.conn.close().await;
-                if let Some(sink) = sink {
-                    sink.forget(&id).await;
-                }
-                self.watcher.peer_state(&id, "closed");
-            }
-        }
-        for id in plan.connect {
-            if let Err(error) = self.open(&me, &id).await {
-                // A peer that failed to build is not fatal to the others: a
-                // mesh with a hole in it is still a call, and the next
-                // `voice.state` tries again.
-                self.watcher.peer_state(&id, "failed");
-                tracing_error(&id, &error);
-            }
-        }
-    }
-
-    /// The server forwards our voice now: drop the mesh.
-    async fn become_forwarded(&self) {
-        let (peers, sink) = {
-            let mut inner = self.inner.lock().await;
-            inner.forwarded = true;
-            (
-                std::mem::take(&mut inner.peers),
-                inner.devices.as_ref().map(|d| Arc::clone(&d.sink)),
-            )
-        };
-        for (id, peer) in peers {
-            let _ = peer.conn.close().await;
-            if let Some(sink) = &sink {
-                sink.forget(&id).await;
-            }
-            self.watcher.peer_state(&id, "closed");
-        }
-    }
-
-    /// The room went back to the mesh: close the connection to the
-    /// forwarding server and forget whose voice it carried.
-    async fn become_mesh(&self) {
-        let (forward, tracks, sink) = {
-            let mut inner = self.inner.lock().await;
-            inner.forwarded = false;
-            (
-                inner.forward.take(),
-                std::mem::take(&mut inner.tracks),
-                inner.devices.as_ref().map(|d| Arc::clone(&d.sink)),
-            )
-        };
-        if let Some(forward) = forward {
-            let _ = forward.conn.close().await;
-        }
-        for session in tracks.into_values() {
-            if let Some(sink) = &sink {
-                sink.forget(&session).await;
-            }
-            self.watcher.peer_state(&session, "closed");
         }
     }
 
@@ -681,11 +504,6 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         restart_forward(&self.inner, &*self.signaller, &*self.watcher).await;
     }
 
-    /// Whether the server forwards our voice. For tests and the surface.
-    pub async fn is_forwarded(&self) -> bool {
-        self.inner.lock().await.forwarded
-    }
-
     /// Whether the connection to the forwarding server is up.
     pub async fn is_forward_connected(&self) -> bool {
         let conn = self
@@ -696,224 +514,6 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             .as_ref()
             .map(|forward| Arc::clone(&forward.conn));
         conn.is_some_and(|conn| conn.connection_state() == RTCPeerConnectionState::Connected)
-    }
-
-    /// A signal from one peer.
-    pub async fn on_signal(&self, from: &str, kind: VoiceSignalKind, payload: &str) {
-        if let Err(error) = self.apply_signal(from, kind, payload).await {
-            tracing_error(from, &error);
-        }
-    }
-
-    async fn apply_signal(
-        &self,
-        from: &str,
-        kind: VoiceSignalKind,
-        payload: &str,
-    ) -> Result<(), webrtc::Error> {
-        match kind {
-            VoiceSignalKind::Offer => {
-                // An offer from somebody we have no connection to is the
-                // ordinary case for the side that does not offer: they told us
-                // first and we build on hearing from them.
-                let me = {
-                    let inner = self.inner.lock().await;
-                    let Some(me) = inner.me.clone() else {
-                        return Ok(());
-                    };
-                    me
-                };
-                if !self.inner.lock().await.peers.contains_key(from) {
-                    self.open(&me, from).await?;
-                }
-                let sdp = RTCSessionDescription::offer(payload.to_string())?;
-                let conn = self.conn_of(from).await;
-                let Some(conn) = conn else { return Ok(()) };
-                conn.set_remote_description(sdp).await?;
-                let answer = conn.create_answer(None).await?;
-                conn.set_local_description(answer.clone()).await?;
-                self.signaller.send(ClientFrame::VoiceSignal {
-                    to: from.to_string(),
-                    kind: VoiceSignalKind::Answer,
-                    payload: answer.sdp,
-                });
-                self.drain_pending(from).await?;
-            }
-            VoiceSignalKind::Answer => {
-                let Some(conn) = self.conn_of(from).await else {
-                    return Ok(());
-                };
-                let sdp = RTCSessionDescription::answer(payload.to_string())?;
-                conn.set_remote_description(sdp).await?;
-                self.drain_pending(from).await?;
-            }
-            VoiceSignalKind::Candidate => {
-                let candidate = RTCIceCandidateInit {
-                    candidate: payload.to_string(),
-                    ..Default::default()
-                };
-                let Some(conn) = self.conn_of(from).await else {
-                    return Ok(());
-                };
-                // Before the remote description lands, a candidate has nothing
-                // to attach to. Held rather than dropped — see `Peer::pending`.
-                if conn.remote_description().await.is_none() {
-                    if let Some(peer) = self.inner.lock().await.peers.get_mut(from) {
-                        peer.pending.push(candidate);
-                    }
-                    return Ok(());
-                }
-                conn.add_ice_candidate(candidate).await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn conn_of(&self, peer: &str) -> Option<Arc<RTCPeerConnection>> {
-        self.inner
-            .lock()
-            .await
-            .peers
-            .get(peer)
-            .map(|p| Arc::clone(&p.conn))
-    }
-
-    /// Apply the candidates that arrived before the description they belong to.
-    async fn drain_pending(&self, peer: &str) -> Result<(), webrtc::Error> {
-        let (conn, pending) = {
-            let mut inner = self.inner.lock().await;
-            let Some(held) = inner.peers.get_mut(peer) else {
-                return Ok(());
-            };
-            (Arc::clone(&held.conn), std::mem::take(&mut held.pending))
-        };
-        for candidate in pending {
-            conn.add_ice_candidate(candidate).await?;
-        }
-        Ok(())
-    }
-
-    /// Build one peer connection, and offer if we are the one who offers.
-    async fn open(&self, me: &str, them: &str) -> Result<(), webrtc::Error> {
-        let api = build_api()?;
-        let conn = Arc::new(
-            api.new_peer_connection(RTCConfiguration {
-                ice_servers: self.inner.lock().await.ice_servers.clone(),
-                ..Default::default()
-            })
-            .await?,
-        );
-
-        // One outbound audio track, negotiated as Opus because that is what
-        // WebRTC audio is. The sending loop (`pump`) fills it.
-        let outbound = Arc::new(TrackLocalStaticSample::new(
-            opus_capability(),
-            "audio".to_owned(),
-            format!("linger-{me}"),
-        ));
-        let sender = conn.add_track(Arc::clone(&outbound) as Arc<_>).await?;
-        // The far end sends receiver reports and loss NACKs about our track,
-        // and the interceptors only act on them if somebody reads them.
-        // Nobody here needs the contents; the reading is the point.
-        tokio::spawn(async move {
-            let mut buffer = vec![0u8; 1500];
-            while sender.read(&mut buffer).await.is_ok() {}
-        });
-
-        // Their audio, when it starts arriving. The sink is looked up when
-        // the track appears rather than captured now, so a peer built before
-        // devices exist (the tests do this) is not a peer with no ears.
-        let inner = Arc::clone(&self.inner);
-        let from = them.to_string();
-        let ears = Arc::clone(&self.watcher);
-        conn.on_track(Box::new(move |track, _receiver, _transceiver| {
-            let inner = Arc::clone(&inner);
-            let from = from.clone();
-            let ears = Arc::clone(&ears);
-            Box::pin(async move {
-                let sink = inner
-                    .lock()
-                    .await
-                    .devices
-                    .as_ref()
-                    .map(|d| Arc::clone(&d.sink));
-                let Some(sink) = sink else { return };
-                tokio::spawn(receive(track, from, sink, ears));
-            })
-        }));
-
-        // Trickle: send each candidate as it is found rather than waiting for
-        // gathering to finish. Waiting is a second or more of silence at the
-        // start of every call, and on a bad network it is much worse.
-        let signaller = Arc::clone(&self.signaller);
-        let to = them.to_string();
-        conn.on_ice_candidate(Box::new(move |candidate| {
-            let signaller = Arc::clone(&signaller);
-            let to = to.clone();
-            Box::pin(async move {
-                let Some(candidate) = candidate else { return };
-                let Ok(init) = candidate.to_json() else {
-                    return;
-                };
-                signaller.send(ClientFrame::VoiceSignal {
-                    to,
-                    kind: VoiceSignalKind::Candidate,
-                    payload: init.candidate,
-                });
-            })
-        }));
-
-        let watcher = Arc::clone(&self.watcher);
-        let who = them.to_string();
-        conn.on_peer_connection_state_change(Box::new(move |state| {
-            watcher.peer_state(&who, &state.to_string());
-            Box::pin(async {})
-        }));
-
-        self.inner.lock().await.peers.insert(
-            them.to_string(),
-            Peer {
-                conn: Arc::clone(&conn),
-                outbound,
-                pending: Vec::new(),
-            },
-        );
-
-        if mesh::we_offer(me, them) {
-            let offer = conn.create_offer(None).await?;
-            conn.set_local_description(offer.clone()).await?;
-            self.signaller.send(ClientFrame::VoiceSignal {
-                to: them.to_string(),
-                kind: VoiceSignalKind::Offer,
-                payload: offer.sdp,
-            });
-        }
-        Ok(())
-    }
-
-    /// How many peers we hold. For tests and for the surface T-1404 will draw.
-    pub async fn peer_count(&self) -> usize {
-        self.inner.lock().await.peers.len()
-    }
-
-    /// Whether a peer's connection has reached `connected`.
-    pub async fn is_connected(&self, peer: &str) -> bool {
-        let Some(conn) = self.conn_of(peer).await else {
-            return false;
-        };
-        conn.connection_state()
-            == webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState::Connected
-    }
-
-    /// The track we send to one peer. For tests; the sending loop finds it
-    /// on its own.
-    pub async fn outbound(&self, peer: &str) -> Option<Arc<TrackLocalStaticSample>> {
-        self.inner
-            .lock()
-            .await
-            .peers
-            .get(peer)
-            .map(|p| Arc::clone(&p.outbound))
     }
 }
 
@@ -932,12 +532,10 @@ impl Closed {
     }
 }
 
-/// The sending loop: microphone frames, encoded once, to every peer.
-///
-/// One encoder for the whole mesh rather than one per peer, because every
-/// peer hears the same voice: encoding it eight times would be eight times
-/// the CPU for identical bytes. The loop paces itself on the source — a
-/// microphone delivers a frame every 20 ms, and so do the stand-ins.
+/// The sending loop: microphone frames, encoded once, to the server, which
+/// passes them on to everybody else in the room (#197). The loop paces itself
+/// on the source — a microphone delivers a frame every 20 ms, and so do the
+/// stand-ins.
 ///
 /// Mute and push-to-talk are applied here, by sending a frame of zeros in
 /// place of the real one. Silence rather than nothing, so the far end's
@@ -974,26 +572,18 @@ async fn pump<W: Watcher>(
                 continue;
             }
         };
-        let tracks: Vec<Arc<TrackLocalStaticSample>> = {
-            let inner = inner.lock().await;
-            inner
-                .peers
-                .values()
-                .map(|peer| Arc::clone(&peer.outbound))
-                .chain(
-                    inner
-                        .forward
-                        .as_ref()
-                        .map(|forward| Arc::clone(&forward.outbound)),
-                )
-                .collect()
-        };
+        let track = inner
+            .lock()
+            .await
+            .forward
+            .as_ref()
+            .map(|forward| Arc::clone(&forward.outbound));
         let sample = Sample {
             data: Bytes::from(packet),
             duration: Duration::from_millis(u64::from(audio::FRAME_MS)),
             ..Default::default()
         };
-        for track in tracks {
+        if let Some(track) = track {
             // A track whose connection is not up yet writes to nobody and
             // says so; that is the first second of every call, not an error.
             let _ = track.write_sample(&sample).await;
@@ -1005,71 +595,13 @@ async fn pump<W: Watcher>(
     watcher.audio_state("stopped");
 }
 
-/// The receiving loop for one peer's track: RTP in, frames to the sink.
-///
-/// An Opus RTP payload is one Opus packet (RFC 7587), so there is nothing to
-/// reassemble. Sequence numbers are watched for the one thing worth doing
-/// about a gap: asking the decoder to conceal each missing frame, so a lost
-/// packet is a smear rather than a click, and the far end's clock keeps its
-/// place. A gap of more than a few is a pause, not loss, and is left alone.
-///
-/// The level gate runs on what was decoded, so "they are talking" is judged
-/// on the same samples that reach the speaker.
-async fn receive<W: Watcher>(
-    track: Arc<TrackRemote>,
-    peer: String,
-    sink: Arc<dyn Sink>,
-    watcher: Arc<W>,
-) {
-    let mut decoder = match codec::Decoder::new() {
-        Ok(decoder) => decoder,
-        Err(error) => {
-            eprintln!("voice: peer {peer}: decoder: {error}");
-            return;
-        }
-    };
-    let mut gate = level::Gate::default();
-    let mut expected: Option<u16> = None;
-    while let Ok((packet, _)) = track.read_rtp().await {
-        let sequence = packet.header.sequence_number;
-        if let Some(expected) = expected {
-            let gap = sequence.wrapping_sub(expected);
-            if (1..5).contains(&gap) {
-                for _ in 0..gap {
-                    if let Ok(guess) = decoder.conceal() {
-                        sink.play(&peer, &guess).await;
-                    }
-                }
-            }
-        }
-        expected = Some(sequence.wrapping_add(1));
-        if packet.payload.is_empty() {
-            continue;
-        }
-        match decoder.decode(&packet.payload) {
-            Ok(samples) => {
-                if let Some(talking) = gate.update(level::rms(&samples), Instant::now()) {
-                    watcher.speaking(Some(&peer), talking);
-                }
-                sink.play(&peer, &samples).await;
-            }
-            Err(error) => eprintln!("voice: peer {peer}: decode: {error}"),
-        }
-    }
-    // The track ended — they left, or the connection did. The mark must not
-    // stay lit on somebody who is gone.
-    if gate.is_on() {
-        watcher.speaking(Some(&peer), false);
-    }
-}
-
 /// How long a failed connection to the forwarding server waits before it is
 /// started afresh: long enough not to hammer a server that's restarting.
 const RESTART_AFTER: Duration = Duration::from_secs(3);
 
 /// Close the connection to the forwarding server, forget whose voice it
 /// carried, and ask the server for a new offer. Nothing happens unless we're
-/// in voice and forwarded.
+/// in voice.
 async fn restart_forward<S: Signaller, W: Watcher>(
     inner: &Mutex<Inner>,
     signaller: &S,
@@ -1077,7 +609,7 @@ async fn restart_forward<S: Signaller, W: Watcher>(
 ) {
     let (forward, tracks, sink) = {
         let mut held = inner.lock().await;
-        if held.room.is_none() || !held.forwarded {
+        if held.room.is_none() {
             return;
         }
         (
@@ -1120,11 +652,19 @@ fn opus_capability() -> RTCRtpCodecCapability {
     }
 }
 
-/// The receiving loop for one m-line from the forwarding server (#197): the
-/// same as `receive`, except whose voice it is comes from the latest offer,
+/// The receiving loop for one m-line from the forwarding server (#197): RTP
+/// in, frames to the sink. Whose voice it is comes from the latest offer,
 /// looked up as packets arrive. A stopped m-line the server later reuses for
 /// somebody else starts them with a fresh decoder, and the last person's
 /// "talking" mark goes out.
+///
+/// An Opus RTP payload is one Opus packet (RFC 7587), so there is nothing to
+/// reassemble. Sequence numbers are watched for the one thing worth doing
+/// about a gap: asking the decoder to conceal each missing frame, so a lost
+/// packet is a smear rather than a click, and the far end's clock keeps its
+/// place. A gap of more than a few is a pause, not loss, and is left alone.
+/// The level gate runs on what was decoded, so "they are talking" is judged
+/// on the same samples that reach the speaker.
 async fn receive_forwarded<W: Watcher>(
     track: Arc<TrackRemote>,
     mid: String,
@@ -1190,8 +730,9 @@ async fn receive_forwarded<W: Watcher>(
 
 /// Somewhere for an error to go that is not a panic and not silence.
 ///
-/// A dropped signal is not fatal — the next `voice.state` rebuilds — so a
-/// failure here has to be visible without taking the call down with it.
+/// An offer that couldn't be answered is not fatal — the next offer, or a
+/// restart, tries again — so a failure here has to be visible without taking
+/// the call down with it.
 fn tracing_error(peer: &str, error: &webrtc::Error) {
     eprintln!("voice: peer {peer}: {error}");
 }

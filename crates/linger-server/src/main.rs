@@ -130,16 +130,24 @@ async fn serve() -> anyhow::Result<()> {
         );
     }
 
-    // Same idea for the relay: a server without one is fine and voice on it
-    // works between machines on one network — and fails, looking exactly like
-    // a bug in the app, the first time two people on different networks try.
-    // Said at startup so the host hears it before their friends do.
-    if config.turn.is_none() {
+    // Same idea for voice: a server without forwarding carries none at all
+    // since the mesh was taken out (#306). The app says so to everybody, and
+    // the host should hear it first, here.
+    if config.voice_forwarding.is_none() {
         tracing::warn!(
-            "LINGER_TURN_SECRET is not set, so there is no voice relay. People on the same \
-             network can talk; people on different networks cannot connect at all. Run the \
-             coturn container from deploy/compose.yaml and set the same secret in both — see \
-             docs/host-guide.md."
+            "LINGER_VOICE_ADDRESS is not set, so this server carries no voice: nobody can \
+             join a voice room, and the app says voice isn't set up here. Set it to this \
+             machine's public IP address and open UDP port 3479 — see docs/host-guide.md."
+        );
+    } else if config.turn.is_none() {
+        // The relay is for the people voice can't reach otherwise: a network
+        // that blocks the voice port fails looking exactly like a bug in the
+        // app, the first time somebody tries from one.
+        tracing::warn!(
+            "LINGER_TURN_SECRET is not set, so there is no voice relay. Voice goes through \
+             this server on UDP port 3479; anybody on a network that blocks it (some offices \
+             and public wifi) can't join a call. Run the coturn container from \
+             deploy/compose.yaml and set the same secret in both — see docs/host-guide.md."
         );
     }
 

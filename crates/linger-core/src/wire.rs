@@ -323,6 +323,14 @@ pub struct ServerInfo {
     /// this host turned expiry off. Starred and pinned files never expire, so
     /// this is the answer for everything else (SPEC §4.10).
     pub file_expiry_days: Option<u32>,
+    /// Whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
+    /// and voice goes through the server (#197). Without it nobody can join
+    /// voice here, and the app says so before anybody tries (#306). Always
+    /// sent; a server from before this field leaves it out, which the app
+    /// reads as "maybe".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub voice: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

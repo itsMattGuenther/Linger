@@ -134,7 +134,8 @@ struct WindowEvents {
     server: String,
 }
 
-/// Sends one server's voice signalling back down its gateway connection.
+/// Sends one server's voice frames (joins, answers, restarts) back down its
+/// gateway connection.
 ///
 /// The engine does not know what a server is — it produces `ClientFrame`s and
 /// this puts them on the right socket, which is the same thing the frontend's
@@ -374,9 +375,8 @@ fn engine_for(app: &AppHandle, base_url: &str) -> std::sync::Arc<VoiceEngine> {
 /// in words rather than a seat in voice it cannot use. Opening a device can
 /// block for a moment, so it happens off the reactor.
 ///
-/// The mesh is not built here: it is built when the server answers with a
-/// `voice.state`, which is the same path a peer arriving later takes. One code
-/// path for "I joined" and "somebody joined" is what stops the two drifting.
+/// The connection is not built here: it is built when the server's
+/// `voice.offer` arrives (`voice_frame`).
 // A Tauri command's arguments are the frontend's named fields, so they can't
 // be gathered into a struct without changing every caller's invoke.
 #[allow(clippy::too_many_arguments)]
@@ -389,21 +389,18 @@ async fn voice_join(
     input: Option<String>,
     output: Option<String>,
     ice: Vec<linger_core::wire::IceServer>,
-    forwarding: Option<bool>,
 ) -> Result<(), String> {
     let engine = engine_for(&app, &base_url);
     engine.set_session(session_id).await;
-    // Voice through the server unless Settings says to use the old way (#197).
-    engine.set_can_forward(forwarding.unwrap_or(true));
     let devices = tokio::task::spawn_blocking(move || {
         voice::device::open(input.as_deref(), output.as_deref())
     })
     .await
     .map_err(|error| error.to_string())?
     .map_err(|error| error.to_string())?;
-    // The server's relay for this call (T-1403), in the shape the peer
-    // connections take. Empty when the host runs none, and then it is host
-    // candidates only — one network.
+    // The server's relay for this call (T-1403), in the shape the connection
+    // takes. Empty when the host runs none, and then a client that can't
+    // reach the server's UDP port directly can't be heard.
     let ice = ice
         .into_iter()
         .map(|server| voice::RTCIceServer {
@@ -447,18 +444,6 @@ async fn voice_choose_devices(app: AppHandle, input: Option<String>, output: Opt
         engine
             .choose_devices(input.as_deref(), output.as_deref())
             .await;
-    }
-}
-
-/// Settings' "Voice through the server" switched (#249): it applies to the
-/// call you are in at once, as well as to the next join.
-#[tauri::command]
-async fn voice_forwarding(app: AppHandle, on: bool) {
-    let engines: Vec<_> = app
-        .state::<VoiceEngines>()
-        .with(|held| held.values().map(std::sync::Arc::clone).collect());
-    for engine in engines {
-        engine.set_forwarding(on).await;
     }
 }
 
@@ -515,7 +500,7 @@ async fn voice_devices() -> Result<voice::device::DeviceList, String> {
         .map_err(|error| error.to_string())
 }
 
-/// Leave voice, and tear the mesh down whether or not the server answers.
+/// Leave voice, and close the connection whether or not the server answers.
 #[tauri::command]
 async fn voice_leave(app: AppHandle, base_url: String) {
     let engine = engine_for(&app, &base_url);
@@ -530,22 +515,10 @@ async fn voice_leave(app: AppHandle, base_url: String) {
 #[tauri::command]
 async fn voice_frame(app: AppHandle, base_url: String, frame: ServerFrame) {
     let engine = engine_for(&app, &base_url);
-    match frame.event {
-        linger_core::gateway::ServerEvent::VoiceState { room_id, peers } => {
-            engine.on_state(room_id, &peers).await;
-        }
-        linger_core::gateway::ServerEvent::VoiceSignal {
-            from,
-            kind,
-            payload,
-        } => {
-            engine.on_signal(&from, kind, &payload).await;
-        }
-        linger_core::gateway::ServerEvent::VoiceOffer { sdp, tracks } => {
-            engine.on_offer(&sdp, &tracks).await;
-        }
-        // Everything else is the frontend's business, not the engine's.
-        _ => {}
+    // The forwarding server's offer is the one frame the engine acts on
+    // (#197). Who is in voice is the frontend's to draw.
+    if let linger_core::gateway::ServerEvent::VoiceOffer { sdp, tracks } = frame.event {
+        engine.on_offer(&sdp, &tracks).await;
     }
 }
 
@@ -601,7 +574,6 @@ pub fn run() {
             voice_push_to_talk,
             voice_volume,
             voice_choose_devices,
-            voice_forwarding,
             voice_devices,
             sound_play,
             notifications::show_notification,

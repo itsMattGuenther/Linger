@@ -17,4 +17,12 @@ storage_limit_bytes: number,
  * this host turned expiry off. Starred and pinned files never expire, so
  * this is the answer for everything else (SPEC §4.10).
  */
-file_expiry_days: number | null, };
+file_expiry_days: number | null, 
+/**
+ * Whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
+ * and voice goes through the server (#197). Without it nobody can join
+ * voice here, and the app says so before anybody tries (#306). Always
+ * sent; a server from before this field leaves it out, which the app
+ * reads as "maybe".
+ */
+voice?: boolean, };

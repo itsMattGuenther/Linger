@@ -45,6 +45,7 @@ const {
   disconnect,
   joinVoice,
   leaveVoice,
+  OLD_WAY,
   serverState,
   setVoiceMuted,
   sharedLocalOf,
@@ -54,6 +55,7 @@ const {
   setVoiceVolume,
   voicePeersIn,
 } = await import("./gateway");
+const { startProblemWords, voiceStartProblem } = await import("./voice");
 
 const HOME = "https://home.example";
 const WORK = "https://work.example";
@@ -108,13 +110,14 @@ function ready(data: Partial<ReadyData> = {}): ServerFrame {
   };
 }
 
-function voiceState(roomId: string, seats: [string, string][]): ServerFrame {
+/** Who is in voice in a room, every seat forwarded, as every server that carries voice now says (#306). */
+function voiceState(roomId: string, seats: [string, string][], forwarded = true): ServerFrame {
   return {
     s: 2,
     op: "voice.state",
     d: {
       room_id: roomId,
-      peers: seats.map(([session_id, user_id]) => ({ session_id, user_id })),
+      peers: seats.map(([session_id, user_id]) => (forwarded ? { session_id, user_id, forwarded: true } : { session_id, user_id })),
     },
   };
 }
@@ -225,8 +228,6 @@ describe("voice in the store", () => {
       // The fake server has no `/voice/ice`, which is what a host with no
       // relay looks like: the join goes ahead with no servers.
       ice: [],
-      // Through the server unless Settings says the old way (#197).
-      forwarding: true,
     });
     expect(serverState(HOME).myVoice).toMatchObject({
       roomId: "r-garage",
@@ -334,6 +335,26 @@ describe("voice in the store", () => {
     arrive(HOME, voiceState("r-garage", [["s-1", "u-amy"]]));
     expect(serverState(HOME).myVoice).toBeNull();
     expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
+  });
+
+  // A server from before the mesh was taken out sends a room the old way when
+  // it doesn't forward, or an older app is in it. This app has no old way:
+  // it leaves, and the strip says why (#306).
+  it("leaves, and says why, when the server sends the call the old way", async () => {
+    await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"]]));
+    expect(serverState(HOME).myVoice).not.toBeNull();
+    invoked.length = 0;
+
+    // Another room going the old way is not our business.
+    arrive(HOME, voiceState("r-else", [["s-9", "u-zed"]], false));
+    expect(serverState(HOME).myVoice).not.toBeNull();
+
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"]], false));
+    await vi.waitFor(() => expect(serverState(HOME).voiceFailed).toMatchObject({ roomId: "r-garage", problem: OLD_WAY }));
+    expect(serverState(HOME).myVoice).toBeNull();
+    expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
+    expect(startProblemWords(voiceStartProblem(OLD_WAY, false, DEFAULTS))).toBe("This server needs an update for voice. Ask its host.");
   });
 
   it("folds the core's own events into the seat, and ignores them without one", async () => {

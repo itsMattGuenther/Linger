@@ -5,9 +5,9 @@ import type { VoiceControls } from "./VoiceControls";
 /**
  * One client in a voice room (SPEC §4.14).
  *
- * Keyed by session rather than by person: a peer connection is between two
- * *clients*, and somebody signed in on a laptop and a desktop is two of them.
- * `user_id` is there so a client can draw a name against a peer without
+ * Keyed by session rather than by person: somebody signed in on a laptop and
+ * a desktop is two clients, each with its own connection to the server.
+ * `user_id` is there so a client can draw a name against a session without
  * looking anything up.
  */
 export type VoicePeer = { session_id: string, user_id: UserId, 
@@ -16,7 +16,10 @@ export type VoicePeer = { session_id: string, user_id: UserId,
  */
 controls?: VoiceControls, 
 /**
- * Their voice goes through the server's forwarding (#197), not the mesh.
- * A mesh client can't reach them, and doesn't try.
+ * Their voice goes through the server's forwarding (#197). Always
+ * `true` since the mesh was taken out (#306), because there is no other
+ * way: apps 0.4.1 to 0.4.3 read it to know they're forwarded, and
+ * without it would wait for a mesh nobody offers. An older server leaves
+ * it out for a room on the mesh, which this app can't join.
  */
 forwarded?: boolean, };

@@ -65,9 +65,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   and away messages.
 - **Files and media.** 500 MB uploads, EXIF always stripped. The Media window
   keeps everything ever shared; star things to keep them forever.
-- **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The
-  host's server can pass voice along so up to 25 can talk at once, and a relay
-  the host can run helps friends on different networks.
+- **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
+  goes through the host's server, which passes it on so up to 25 can talk at
+  once, and a relay the host can run lets in friends whose network blocks it.
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.
@@ -83,8 +83,8 @@ is the product.
 
 ## 🔐 Privacy
 
-**The person running the server can read everything on it**, and when their
-server forwards voice, it passes through there too. There is no end-to-end
+**The person running the server can read everything on it**, and voice passes
+through it too. There is no end-to-end
 encryption. Traffic goes over TLS; files and the database are not
 encrypted on the host's disk. Run your own server, or trust the person who
 runs yours. If you need guarantees against your host, use Signal.

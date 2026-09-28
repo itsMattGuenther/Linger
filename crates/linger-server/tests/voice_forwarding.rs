@@ -1,7 +1,8 @@
 //! Voice forwarding over the gateway (#197): a client that can forward, on a
 //! server that does, is offered one connection to the server, and each offer
-//! says whose voice every m-line carries. Anybody else stays on the mesh. The
-//! audio itself is proved in `linger-sfu`'s own tests; this is the wiring.
+//! says whose voice every m-line carries. There is no other way into voice
+//! since the mesh was taken out (#306). The audio itself is proved in
+//! `linger-sfu`'s own tests; this is the wiring.
 
 mod common;
 
@@ -193,8 +194,11 @@ async fn somebody_leaving_is_taken_out_of_the_next_offer() {
     );
 }
 
+/// An app from before 0.4.1 never says it can forward, and spoke only the
+/// mesh, which is gone (#306). It gets no seat, and the room it knocked on
+/// carries on as it was.
 #[tokio::test]
-async fn an_older_client_puts_the_room_on_the_mesh_and_forwarding_returns_when_it_goes() {
+async fn an_app_that_cant_forward_gets_no_seat_and_the_room_carries_on() {
     let (server, host, callie, room) = forwarding_server(true).await;
     let (mut old, old_id) = connect(&server, &host).await;
     let (mut new, new_id) = connect(&server, &callie).await;
@@ -208,85 +212,54 @@ async fn an_older_client_puts_the_room_on_the_mesh_and_forwarding_returns_when_i
     assert_eq!(offers(&frames).len(), 1);
     assert_eq!(forwarded_in(&frames, &new_id), Some(json!(true)));
 
-    // An older app arrives: the whole room goes to the mesh, so everybody can
-    // still hear everybody.
     send_json(&mut old, json!({"op":"voice.join","d":{"room_id":room}})).await;
     let to_old = drain(&mut old, SETTLE).await;
     let to_new = drain(&mut new, SETTLE).await;
     assert!(
         offers(&to_old).is_empty(),
-        "an older client was offered forwarding"
+        "an older app was offered forwarding"
     );
     for frames in [&to_old, &to_new] {
-        assert_eq!(forwarded_in(frames, &old_id), Some(Value::Null));
         assert_eq!(
-            forwarded_in(frames, &new_id),
-            Some(Value::Null),
-            "the newer client stayed forwarded beside a mesh one"
+            forwarded_in(frames, &old_id),
+            None,
+            "an older app got a seat"
         );
     }
     assert!(
-        offers(&to_new).is_empty(),
-        "the newer client was offered forwarding in a mesh room"
-    );
-
-    // It leaves: forwarding comes back, with a fresh offer.
-    send_json(&mut old, json!({"op":"voice.leave"})).await;
-    let to_new = drain(&mut new, SETTLE).await;
-    assert_eq!(forwarded_in(&to_new, &new_id), Some(json!(true)));
-    assert_eq!(
-        offers(&to_new).len(),
-        1,
-        "no fresh offer when forwarding came back: {to_new:?}"
+        to_new.iter().all(|f| f["op"] != "voice.state"),
+        "the room was told something changed: {to_new:?}"
     );
 }
 
-/// Settings' "Voice through the server" switched in a call (#249): it
-/// applies at once, not from the next join. Off puts the room on the mesh for
-/// everybody; on again brings forwarding back with a fresh offer.
+/// Apps 0.4.1 to 0.4.3 had a Settings switch for the old way, and join with
+/// `forwarding: false` when it's off. There is no old way now: they're
+/// forwarded anyway, and their engine follows `voice.state` there (#306).
 #[tokio::test]
-async fn switching_the_old_way_in_a_call_applies_at_once() {
+async fn a_join_that_asks_for_the_old_way_is_forwarded_anyway() {
     let (server, host, callie, room) = forwarding_server(true).await;
     let (mut a, a_id) = connect(&server, &host).await;
     let (mut b, b_id) = connect(&server, &callie).await;
-    for ws in [&mut a, &mut b] {
-        send_json(
-            ws,
-            json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
-        )
-        .await;
-    }
-    let frames = drain(&mut b, SETTLE).await;
+    send_json(
+        &mut a,
+        json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
+    )
+    .await;
     drain(&mut a, SETTLE).await;
-    assert_eq!(forwarded_in(&frames, &b_id), Some(json!(true)));
-
-    // b turns it off while in the call: the same join, with forwarding false.
     send_json(
         &mut b,
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":false}}),
     )
     .await;
-    let to_a = drain(&mut a, SETTLE).await;
     let to_b = drain(&mut b, SETTLE).await;
+    let to_a = drain(&mut a, SETTLE).await;
+    assert_eq!(offers(&to_b).len(), 1, "no offer: {to_b:?}");
     for frames in [&to_a, &to_b] {
-        assert_eq!(forwarded_in(frames, &a_id), Some(Value::Null), "{frames:?}");
-        assert_eq!(forwarded_in(frames, &b_id), Some(Value::Null));
+        assert_eq!(forwarded_in(frames, &a_id), Some(json!(true)), "{frames:?}");
+        assert_eq!(forwarded_in(frames, &b_id), Some(json!(true)));
     }
-    assert!(offers(&to_a).is_empty() && offers(&to_b).is_empty());
 
-    // And on again.
-    send_json(
-        &mut b,
-        json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
-    )
-    .await;
-    let to_b = drain(&mut b, SETTLE).await;
-    assert_eq!(forwarded_in(&to_b, &b_id), Some(json!(true)));
-    assert_eq!(offers(&to_b).len(), 1, "no fresh offer: {to_b:?}");
-    let to_a = drain(&mut a, SETTLE).await;
-    assert_eq!(forwarded_in(&to_a, &a_id), Some(json!(true)));
-
-    // The same join again changes nothing and announces nothing.
+    // Switching it in a call changes nothing and announces nothing.
     send_json(
         &mut b,
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
@@ -299,8 +272,11 @@ async fn switching_the_old_way_in_a_call_applies_at_once() {
     );
 }
 
+/// A server whose host hasn't set `LINGER_VOICE_ADDRESS` carries no voice:
+/// nobody gets a seat, and its info says so, so the app can say it before
+/// anybody tries (#306).
 #[tokio::test]
-async fn a_server_that_doesnt_forward_keeps_everybody_on_the_mesh() {
+async fn a_server_that_doesnt_forward_seats_nobody_and_says_it_has_no_voice() {
     let (server, host, _, room) = forwarding_server(false).await;
     let (mut a, a_id) = connect(&server, &host).await;
     send_json(
@@ -310,7 +286,28 @@ async fn a_server_that_doesnt_forward_keeps_everybody_on_the_mesh() {
     .await;
     let frames = drain(&mut a, SETTLE).await;
     assert!(offers(&frames).is_empty());
-    assert_eq!(forwarded_in(&frames, &a_id), Some(Value::Null));
+    assert_eq!(
+        forwarded_in(&frames, &a_id),
+        None,
+        "somebody got a seat: {frames:?}"
+    );
+    assert_eq!(voice_in_info(&server, &host).await, json!(false));
+
+    let (forwarding, token, _, _) = forwarding_server(true).await;
+    assert_eq!(voice_in_info(&forwarding, &token).await, json!(true));
+}
+
+async fn voice_in_info(server: &common::TestServer, token: &str) -> Value {
+    let info: Value = reqwest::Client::new()
+        .get(server.url("/server"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    info["voice"].clone()
 }
 
 #[tokio::test]
@@ -339,7 +336,7 @@ async fn a_restart_brings_a_fresh_offer_and_the_room_sees_nothing() {
         "the room was told something changed: {to_b:?}"
     );
 
-    // From somebody not forwarded, it's ignored.
+    // From somebody not in voice, it's ignored.
     send_json(&mut b, json!({"op":"voice.restart"})).await;
     assert!(offers(&drain(&mut b, SETTLE).await).is_empty());
 }

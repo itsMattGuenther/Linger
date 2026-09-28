@@ -356,13 +356,11 @@ test.describe("this app", () => {
     await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
   });
 
-  test("voice goes through the server by default, and the old way is one switch away (#197)", async ({ page }) => {
+  // Voice through the server is the only way now (#306): there is nothing to switch.
+  test("Sound & Voice has no switch for the old way", async ({ page }) => {
     await open(page, "?section=sound");
-    const through = page.getByRole("switch", { name: "Voice through the server" });
-    await expect(through).toHaveAttribute("aria-checked", "true");
-    await through.click();
-    const voice = (await did(page)).filter((line) => line.startsWith("voice:"));
-    expect(JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}")).toMatchObject({ forwarding: false });
+    await expect(page.getByRole("switch", { name: "Push to talk" })).toBeVisible();
+    await expect(page.getByRole("switch", { name: /through the server|old way/i })).toHaveCount(0);
   });
 
   test("a person's notification rules open, change, and fold again with Escape", async ({ page }) => {

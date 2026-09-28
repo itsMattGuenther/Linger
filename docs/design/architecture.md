@@ -22,7 +22,8 @@ one connection, and how the pieces are tested.
 Not in M15:
 
 - **No server change**, except the host time zone (see *Open decisions*).
-- **No voice forwarding** (#197) and **no voice encryption** (#200).
+- **No voice forwarding** (#197, shipped separately in 0.4.1) and **no voice
+  encryption** (#200).
 - **No macOS build.**
 - **No light theme.** Decided 2026-09-28: the app is dark only, for good.
 
@@ -197,11 +198,11 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `voice.pushtotalk`: Settings turned push-to-talk on or off, or picked its
   key. Joining only reads the choice, so this applies it to the call you're
   in at once (#231), and tells the list window's voice bar which key to name;
-- `voice.devices` and `voice.forwarding`: Settings picked another microphone
-  or speakers, or switched Voice through the server. They apply to the call
-  you're in at once (#249): the devices are reopened in place, under the
-  call, and the server is told the new forwarding choice. Out of voice they
-  do nothing, since the next join reads what Settings saved;
+- `voice.devices`: Settings picked another microphone or speakers. It applies
+  to the call you're in at once (#249): the devices are reopened in place,
+  under the call. Out of voice it does nothing, since the next join reads what
+  Settings saved. (`voice.forwarding`, Settings' switch for the old way of
+  voice, went with the mesh, #306);
 - `popout` and `tabs`: move a conversation into a window of its own, or back
   into the chat window's tabs (only the owner opens windows);
 - `open`: show a conversation where conversations open, from a window of its

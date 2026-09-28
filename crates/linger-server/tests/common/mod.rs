@@ -271,7 +271,29 @@ pub async fn sign_in(server: &TestServer, username: &str) -> AuthResponse {
 
 /// Host + one room, the most common fixture.
 pub async fn server_with_room(slug: &str) -> (TestServer, AuthResponse, linger_core::wire::Room) {
-    let server = spawn_server().await;
+    room_on(spawn_server().await, slug).await
+}
+
+/// A server that carries voice, through its forwarding server on this
+/// machine (#197), with a host and one room. Voice needs forwarding since the
+/// mesh was taken out (#306).
+pub async fn voice_server_with_room(
+    slug: &str,
+) -> (TestServer, AuthResponse, linger_core::wire::Room) {
+    let server = spawn_tuned(|config| {
+        config.voice_forwarding = Some(linger_server::config::VoiceForwarding {
+            bind: "127.0.0.1:0".parse().unwrap(),
+            public: "127.0.0.1:0".parse().unwrap(),
+        });
+    })
+    .await;
+    room_on(server, slug).await
+}
+
+async fn room_on(
+    server: TestServer,
+    slug: &str,
+) -> (TestServer, AuthResponse, linger_core::wire::Room) {
     let host = bootstrap_host(&server).await;
     let room: linger_core::wire::Room = reqwest::Client::new()
         .post(server.url("/rooms"))

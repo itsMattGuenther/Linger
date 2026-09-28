@@ -17,10 +17,11 @@
 # instead if you would rather pick your moment. Nothing updates on its own.
 # Images are published for x86-64 and ARM64, so a Raspberry Pi works too.
 #
-# Voice (SPEC §4.14): the third container, coturn, is the relay that lets two
-# people on different networks hear each other. It is optional — without it
-# voice works between machines on one network and the server says so at
-# startup. To run it: copy `.env.example` to `.env`, put a long random secret
+# Voice (SPEC §4.14) goes through the linger container: set
+# LINGER_VOICE_ADDRESS below and open UDP 3479. Without it this server carries
+# no voice, and says so at startup. The third container, coturn, is a relay
+# for people whose network blocks UDP (some offices, some public wifi). It is
+# optional, and the server says so at startup when it's missing. To run it: copy `.env.example` to `.env`, put a long random secret
 # in it (`openssl rand -hex 32`), set the realm to your domain below, open
 # port 3478 (TCP and UDP) and UDP 49160–49200 on your firewall, and start with
 # `docker compose --profile voice up -d`. The secret is read from `.env` so it
@@ -66,7 +67,7 @@ services:
       # Voice through this server (#197): everybody sends their voice once,
       # here, and the server passes it to everyone else in the room, up to 25
       # people. Set this to the machine's public IP address (not a name) and
-      # open UDP 3479 on the firewall. Unset, voice stays peer to peer, up to 8.
+      # open UDP 3479 on the firewall. Unset, this server carries no voice.
       # The server passes voice along without keeping it; SPEC §4.14 says what
       # that means for privacy.
       # LINGER_VOICE_ADDRESS: 203.0.113.7

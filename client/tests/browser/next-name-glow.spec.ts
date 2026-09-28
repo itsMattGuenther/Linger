@@ -547,7 +547,7 @@ const everyoneInVoice = (page: Page) =>
       op: "voice.state",
       d: {
         room_id: "r-general",
-        peers: ["u-eli", "u-jules", "u-dave", "u-callie", "u-sam"].map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false } })),
+        peers: ["u-eli", "u-jules", "u-dave", "u-callie", "u-sam"].map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false }, forwarded: true })),
       },
     } as never),
   );

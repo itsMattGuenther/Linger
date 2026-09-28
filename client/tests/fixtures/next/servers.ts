@@ -99,7 +99,7 @@ export const guildPeople = {
 
 const RAID = ["a-kestrel", "a-bramble", "a-oxbow", "a-nyx", "a-grimwald", "a-pip", "a-sable"];
 
-/** Raid night: seven in voice in #raid-night, one short of full. */
+/** Raid night: seven in voice in #raid-night, well short of full (25). */
 export function guild(empty: GatewayState): GatewayState {
   return {
     ...empty,

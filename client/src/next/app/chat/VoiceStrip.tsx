@@ -84,6 +84,14 @@ export const VoiceStrip = memo(function VoiceStrip({
         {showFailed.fix}
       </Button>
     ) : null;
+  if (strip.kind === "off") {
+    return (
+      <div className="nx-strip" data-kind="off" role="group" aria-label="Voice in this conversation">
+        <VoiceGlyph speaking={false} />
+        <p className="nx-strip-words">Voice isn't set up on this server.</p>
+      </div>
+    );
+  }
   if (strip.kind === "quiet") {
     return (
       <div className="nx-strip" data-kind="quiet" role="group" aria-label="Voice in this conversation">

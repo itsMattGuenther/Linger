@@ -310,6 +310,7 @@ WebRTC library, inside `linger-server`:
 (SPEC §4.14 says so; #200 is the layer that stops it), and the server image
 grows by `str0m` and its pure-Rust crypto. Mesh stays for old clients and for
 servers that don't set `LINGER_VOICE_ADDRESS`, until every client forwards.
+(It went on 2026-09-28: see "the previous client and mesh voice are gone".)
 
 **Before it ships:** the real-network check (four people, four networks, an
 hour), a server restart mid-call, and a client that loses UDP and has to come
@@ -386,10 +387,13 @@ new colors.
 
 ---
 
-## Decided — the previous client is gone
+## Decided — the previous client and mesh voice are gone
 
 **Matt, 2026-09-28 (#306).** "The new UI is awesome, so I think we can get rid
-of the old one now." The Buddy list client has been the app since 0.4.0, and
+of the old one now. And the old voice option that was a mesh network is no
+longer needed since the new one is performing well." Two parts, two PRs.
+
+**The previous client.** The Buddy list client has been the app since 0.4.0, and
 the previous client had stayed behind `LINGER_CLASSIC=1` for three releases
 as a way back. It's deleted, with everything only it used:
 
@@ -415,3 +419,24 @@ picture viewer, whole tooltips on the voice bar, the focus ring after a mouse
 open, keeping your place through a resize, rows re-rendered while scrolling,
 nothing moving when somebody talks, the 80-character line, and a few in the
 message box, knocks and Settings.
+
+**Mesh voice.** Voice through the server (#197) shipped in 0.4.1 with the mesh
+kept as the way back, and has carried every call since. The mesh goes:
+
+- **Voice needs forwarding.** A server without `LINGER_VOICE_ADDRESS` carries
+  no voice. It refuses every join, says so at startup, and says `voice: false`
+  in `GET /server`, so the app shows "Voice isn't set up on this server"
+  rather than a call nobody could hear. The host guide makes forwarding part
+  of the normal setup.
+- **Apps before 0.4.1 can't join voice.** They spoke only the mesh. A join
+  from one is refused, and the room carries on as it was. Apps 0.4.1 to 0.4.3
+  keep working: they are forwarded even if their old switch said the old way,
+  and the server keeps marking every seat `forwarded` because they read it.
+- **Gone:** the mesh in the desktop engine, `voice.signal` on the wire, the
+  server's fallback and its room-wide "go the old way" rule, and Settings'
+  Voice through the server switch. A room holds 25, everywhere.
+- **Kept:** the relay (TURN), which forwarding uses to reach people on
+  networks that block UDP. The audio tests that ran two engines over the mesh
+  now run them through the real forwarding server.
+- **An older server** that still puts a room on the mesh leaves this app's
+  seat unmarked; the app leaves voice and says the server needs an update.

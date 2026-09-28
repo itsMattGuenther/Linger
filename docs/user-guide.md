@@ -485,24 +485,23 @@ your microphone, it's already on.
 
 Then press **Start talking** again.
 
-**Voice through the server.** On a server whose host has turned it on, your
-voice goes to the server once and the server passes it on to everyone else in
-the room, which is what lets a room of twenty talk at once. If it ever gives
-you trouble, **Settings → Sound & Voice → Voice through the server** turns it
-off and goes back to the old way, straight to each person. If anybody in a
-room turns it off, or is on an older version of Linger, the whole room uses
-the old way, so everybody can always hear everybody. Switching it applies at
-once, in a call too, on a server that has been updated since Linger 0.4.3; on an
-older server it waits until you next join.
+**Voice goes through the server.** Your voice goes to the server once and the
+server passes it on to everyone else in the room, which is what lets a room of
+up to 25 talk at once. The host has to turn it on. On a server where they
+haven't, a room's voice line says **Voice isn't set up on this server**
+instead of offering to start. Linger 0.4.0 and older sent voice straight to
+each person, a way that is gone now, so people on those versions need to
+update to talk. A server that hasn't been updated either may still send a
+call that old way, and then the voice line says the server needs an update.
 
 **Nothing is recorded.** Not by the server, not by anybody's app, not "for
 transcription". The server passes voice along without keeping it; the person
 who runs it could listen, the same way they could read messages, and Linger
 says so rather than pretending otherwise.
 
-Two things to know: voice between computers on **different networks** needs
-the host to run the relay (the host guide says how), and if your headphones
-come unplugged mid-sentence, Linger moves to whatever your computer now uses
+Two things to know: on a network that blocks voice (some offices and public
+wifi), you need the host to run the relay (the host guide says how), and if
+your headphones come unplugged mid-sentence, Linger moves to whatever your computer now uses
 within a second or two. If nothing comes back for twenty seconds, the voice bar
 says the microphone stopped, and you join again.
 

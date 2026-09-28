@@ -146,11 +146,14 @@ describe("a folded server's one line", () => {
   it("says a voice room is nearly full in words, counting you, and never before", () => {
     const seats = (ids: string[]) =>
       foldedText(header(guild({ voice: { "r-raid": ids.map((id, index) => ({ session_id: `s-${index}`, user_id: id })) } })).folded);
+    // The room holds 25 (#197): 22 more besides the ones this guild has names for.
     const five = ["u-kestrel", "u-bramble", "u-oxbow", "u-morrow", "u-vesper"];
+    const crowd = [...five, ...Array.from({ length: 17 }, (_, n) => `u-guest-${n}`)];
     expect(seats(five)).toBe("#raid-night in voice");
-    expect(seats([...five, "u-halden"])).toBe("#raid-night in voice · room for two more");
-    expect(seats([...five, "u-halden", "u-me"])).toBe("#raid-night in voice · room for one more");
-    expect(seats([...five, "u-halden", "u-me", "u-tansy"])).toBe("#raid-night in voice · full");
+    expect(seats(crowd)).toBe("#raid-night in voice");
+    expect(seats([...crowd, "u-halden"])).toBe("#raid-night in voice · room for two more");
+    expect(seats([...crowd, "u-halden", "u-me"])).toBe("#raid-night in voice · room for one more");
+    expect(seats([...crowd, "u-halden", "u-me", "u-tansy"])).toBe("#raid-night in voice · full");
   });
 
   it("isn't about voice when you're the only one in it", () => {
@@ -229,6 +232,6 @@ describe("your servers", () => {
     expect(serverNames(["A", "B"])).toBe("A and B");
     expect(serverNames(["A", "B", "C"])).toBe("A, B and C");
     expect(namesText([kestrel], true)).toBe("Kestrel and others");
-    expect([5, 6, 7, 8, 9].map(seatsWords)).toEqual([null, "room for two more", "room for one more", "full", "full"]);
+    expect([8, 22, 23, 24, 25, 26].map(seatsWords)).toEqual([null, null, "room for two more", "room for one more", "full", "full"]);
   });
 });

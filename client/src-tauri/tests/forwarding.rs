@@ -1,11 +1,13 @@
 //! Voice through the forwarding server (#197), end to end on this machine: two
 //! real engines, the real forwarding server in-process, and a tone that goes
-//! into one engine's source and comes out of the other's sink.
+//! into one engine's source and comes out of the other's sink. Since the mesh
+//! was taken out (#306), this is the only way voice travels.
 //!
 //! Like `voice.rs`, it proves the negotiation and the audio path, and nothing
 //! about a real network: both ends are on loopback (AGENTS "Where you will be
 //! wrong"). Four people on four networks is still the check that counts.
 
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::{mpsc as std_mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -13,8 +15,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use linger_client_lib::voice::audio::{Devices, Discard, Silence, Sink, Tone};
 use linger_client_lib::voice::{Engine, Signaller, Watcher};
-use linger_core::gateway::{ClientFrame, VoicePeer, VoiceTrack};
-use linger_core::{RoomId, UserId};
+use linger_core::gateway::{ClientFrame, VoiceControls, VoiceTrack};
+use linger_core::RoomId;
 use linger_sfu::{Offer, Sfu};
 use tokio::sync::mpsc;
 
@@ -26,8 +28,13 @@ impl Signaller for Wire {
     }
 }
 
+/// Every connection-state change an engine reported, in order, and who it
+/// said was talking (`None` is the engine's own microphone).
 #[derive(Default)]
-struct Log(Mutex<Vec<(String, String)>>);
+struct Log(
+    Mutex<Vec<(String, String)>>,
+    Mutex<Vec<(Option<String>, bool)>>,
+);
 
 impl Watcher for Log {
     fn peer_state(&self, peer: &str, state: &str) {
@@ -35,6 +42,26 @@ impl Watcher for Log {
             .lock()
             .unwrap()
             .push((peer.to_string(), state.to_string()));
+    }
+
+    fn speaking(&self, peer: Option<&str>, speaking: bool) {
+        self.1
+            .lock()
+            .unwrap()
+            .push((peer.map(str::to_string), speaking));
+    }
+}
+
+impl Log {
+    /// The talking marks for one person, in order.
+    fn talking(&self, peer: Option<&str>) -> Vec<bool> {
+        self.1
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(who, _)| who.as_deref() == peer)
+            .map(|(_, speaking)| *speaking)
+            .collect()
     }
 }
 
@@ -76,57 +103,85 @@ async fn engine(session: &str) -> Rig {
     (engine, rx, log)
 }
 
-fn forwarded(ids: &[&str]) -> Vec<VoicePeer> {
-    ids.iter()
-        .map(|id| VoicePeer {
-            session_id: (*id).to_string(),
-            user_id: UserId::new(),
-            controls: None,
-            forwarded: Some(true),
-        })
-        .collect()
+/// The test's stand-in for the gateway: the forwarding server on this
+/// machine, where its offers arrive, and who has a seat. A join from somebody
+/// without one seats them; a repeated join only carries controls, as the real
+/// gateway treats it, since joining the forwarding server again would start
+/// that person's connection afresh.
+struct Gateway {
+    sfu: Sfu,
+    offers: std_mpsc::Receiver<Offer>,
+    room: RoomId,
+    seated: BTreeSet<String>,
+    /// Every join routed, with the controls it carried, in order.
+    joins: Vec<(String, Option<VoiceControls>)>,
 }
 
-/// The test's stand-in for the gateway: joins and answers go to the
-/// forwarding server, and its offers come back to their engine.
-async fn route(
-    sfu: &Sfu,
-    offers: &std_mpsc::Receiver<Offer>,
-    room: RoomId,
-    rigs: &mut [Routed<'_>],
-) {
-    for (session, _, rx) in rigs.iter_mut() {
-        while let Ok(frame) = rx.try_recv() {
-            match frame {
-                ClientFrame::VoiceJoin { forwarding, .. } => {
-                    assert_eq!(
-                        forwarding,
-                        Some(true),
-                        "the engine didn't say it can forward"
-                    );
-                    sfu.join(session, &room.to_string());
-                }
-                ClientFrame::VoiceAnswer { sdp } => sfu.answer(session, &sdp),
-                // What the gateway does with a restart: join afresh, same room.
-                ClientFrame::VoiceRestart => sfu.join(session, &room.to_string()),
-                _ => {}
-            }
+impl Gateway {
+    fn start(room: RoomId) -> Self {
+        let (sender, offers) = std_mpsc::channel();
+        let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let sfu = Sfu::start(local, local, move |offer: Offer| {
+            let _ = sender.send(offer);
+        })
+        .expect("the forwarding server starts");
+        Self {
+            sfu,
+            offers,
+            room,
+            seated: BTreeSet::new(),
+            joins: Vec::new(),
         }
     }
-    while let Ok(offer) = offers.try_recv() {
-        if let Some((_, engine, _)) = rigs
-            .iter()
-            .find(|(session, _, _)| *session == offer.session)
-        {
-            let tracks: Vec<VoiceTrack> = offer
-                .tracks
+
+    /// Joins and answers go to the forwarding server, and its offers come
+    /// back to their engine.
+    async fn route(&mut self, rigs: &mut [Routed<'_>]) {
+        let room = self.room.to_string();
+        for (session, _, rx) in rigs.iter_mut() {
+            while let Ok(frame) = rx.try_recv() {
+                match frame {
+                    ClientFrame::VoiceJoin {
+                        forwarding,
+                        controls,
+                        ..
+                    } => {
+                        self.joins.push(((*session).to_string(), controls));
+                        assert_eq!(
+                            forwarding,
+                            Some(true),
+                            "the engine didn't say it can forward"
+                        );
+                        if self.seated.insert((*session).to_string()) {
+                            self.sfu.join(session, &room);
+                        }
+                    }
+                    ClientFrame::VoiceAnswer { sdp } => self.sfu.answer(session, &sdp),
+                    // What the gateway does with a restart: join afresh, same room.
+                    ClientFrame::VoiceRestart => self.sfu.join(session, &room),
+                    ClientFrame::VoiceLeave => {
+                        self.seated.remove(*session);
+                        self.sfu.leave(session);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        while let Ok(offer) = self.offers.try_recv() {
+            if let Some((_, engine, _)) = rigs
                 .iter()
-                .map(|track| VoiceTrack {
-                    mid: track.mid.clone(),
-                    session_id: track.session.clone(),
-                })
-                .collect();
-            engine.on_offer(&offer.sdp, &tracks).await;
+                .find(|(session, _, _)| *session == offer.session)
+            {
+                let tracks: Vec<VoiceTrack> = offer
+                    .tracks
+                    .iter()
+                    .map(|track| VoiceTrack {
+                        mid: track.mid.clone(),
+                        session_id: track.session.clone(),
+                    })
+                    .collect();
+                engine.on_offer(&offer.sdp, &tracks).await;
+            }
         }
     }
 }
@@ -136,14 +191,8 @@ const B: &str = "bbb-session";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_tone_crosses_the_forwarding_server() {
-    let (sender, offers) = std_mpsc::channel();
-    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    let sfu = Sfu::start(local, local, move |offer: Offer| {
-        let _ = sender.send(offer);
-    })
-    .expect("the forwarding server starts");
-
     let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
     let (a, mut a_rx, a_log) = engine(A).await;
     let (b, mut b_rx, b_log) = engine(B).await;
     let recorder = Arc::new(Recorder::default());
@@ -166,26 +215,11 @@ async fn a_tone_crosses_the_forwarding_server() {
     )
     .await;
 
-    // The server says both are forwarded: neither builds a mesh.
-    let state = forwarded(&[A, B]);
-    a.on_state(room, &state).await;
-    b.on_state(room, &state).await;
-    assert!(a.is_forwarded().await && b.is_forwarded().await);
-    assert_eq!(
-        a.peer_count().await,
-        0,
-        "a forwarded engine built a mesh connection"
-    );
-
     let mut heard = 0;
     for _ in 0..800 {
-        route(
-            &sfu,
-            &offers,
-            room,
-            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
-        )
-        .await;
+        gateway
+            .route(&mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)])
+            .await;
         heard = recorder
             .0
             .lock()
@@ -234,9 +268,9 @@ async fn a_tone_crosses_the_forwarding_server() {
 
     // A leaves: B's next offer drops A, and B forgets A.
     a.leave().await;
-    sfu.leave(A);
+    gateway.sfu.leave(A);
     for _ in 0..200 {
-        route(&sfu, &offers, room, &mut [(B, &b, &mut b_rx)]).await;
+        gateway.route(&mut [(B, &b, &mut b_rx)]).await;
         if b_log
             .0
             .lock()
@@ -300,14 +334,8 @@ fn longest_gap(clock: &Clock, peer: &str) -> (Duration, Option<std::time::Instan
 /// connection about 15 seconds in, and the app took half a minute to come back.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_conversation_through_the_server_holds_for_half_a_minute() {
-    let (sender, offers) = std_mpsc::channel();
-    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    let sfu = Sfu::start(local, local, move |offer: Offer| {
-        let _ = sender.send(offer);
-    })
-    .expect("the forwarding server starts");
-
     let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
     let (a, mut a_rx, a_log) = engine(A).await;
     let (b, mut b_rx, b_log) = engine(B).await;
     let a_ears = Arc::new(Clock::default());
@@ -324,19 +352,11 @@ async fn a_conversation_through_the_server_holds_for_half_a_minute() {
             )
             .await;
     }
-    let state = forwarded(&[A, B]);
-    a.on_state(room, &state).await;
-    b.on_state(room, &state).await;
-
     let started = std::time::Instant::now();
     while started.elapsed() < Duration::from_secs(30) {
-        route(
-            &sfu,
-            &offers,
-            room,
-            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
-        )
-        .await;
+        gateway
+            .route(&mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)])
+            .await;
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
@@ -364,80 +384,13 @@ async fn a_conversation_through_the_server_holds_for_half_a_minute() {
     }
 }
 
-/// The room goes back to the mesh when an older app joins it: the engine lets
-/// its forwarding connection go and builds the mesh instead, and the next
-/// forwarded state drops the mesh again.
-#[tokio::test(flavor = "multi_thread")]
-async fn back_to_the_mesh_and_forwarded_again() {
-    let (sender, offers) = std_mpsc::channel();
-    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    let sfu = Sfu::start(local, local, move |offer: Offer| {
-        let _ = sender.send(offer);
-    })
-    .expect("the forwarding server starts");
-    let room = RoomId::new();
-    let (a, mut a_rx, a_log) = engine(A).await;
-    a.join(
-        room,
-        Devices {
-            source: Arc::new(Silence),
-            sink: Arc::new(Discard),
-        },
-        Vec::new(),
-    )
-    .await;
-    a.on_state(room, &forwarded(&[A])).await;
-    for _ in 0..40 {
-        route(&sfu, &offers, room, &mut [(A, &a, &mut a_rx)]).await;
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    assert!(a.is_forwarded().await);
-
-    // An older app, "ccc", joins: everybody is on the mesh now.
-    let mut mesh = forwarded(&[A, "ccc-session"]);
-    for peer in &mut mesh {
-        peer.forwarded = None;
-    }
-    a.on_state(room, &mesh).await;
-    assert!(!a.is_forwarded().await, "still forwarded in a mesh room");
-    assert!(
-        !a.is_forward_connected().await,
-        "the forwarding connection stayed open"
-    );
-    assert_eq!(
-        a.peer_count().await,
-        1,
-        "no mesh connection to the older app"
-    );
-
-    // It leaves: forwarded again, and the mesh goes.
-    a.on_state(room, &forwarded(&[A])).await;
-    assert!(a.is_forwarded().await);
-    assert_eq!(
-        a.peer_count().await,
-        0,
-        "the mesh stayed up while forwarded"
-    );
-    let log = a_log.0.lock().unwrap().clone();
-    assert!(
-        log.iter()
-            .any(|(peer, state)| peer == "ccc-session" && state == "closed"),
-        "{log:?}"
-    );
-}
-
 /// A connection to the forwarding server that fails is started afresh without
 /// leaving voice (#197): the engine closes it, asks for a new offer, and the
 /// voice comes back.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_restarted_connection_brings_the_voice_back() {
-    let (sender, offers) = std_mpsc::channel();
-    let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    let sfu = Sfu::start(local, local, move |offer: Offer| {
-        let _ = sender.send(offer);
-    })
-    .expect("the forwarding server starts");
     let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
     let (a, mut a_rx, _) = engine(A).await;
     let (b, mut b_rx, b_log) = engine(B).await;
     let recorder = Arc::new(Recorder::default());
@@ -459,9 +412,6 @@ async fn a_restarted_connection_brings_the_voice_back() {
         Vec::new(),
     )
     .await;
-    let state = forwarded(&[A, B]);
-    a.on_state(room, &state).await;
-    b.on_state(room, &state).await;
     let heard_from_a = |recorder: &Recorder| {
         recorder
             .0
@@ -472,13 +422,9 @@ async fn a_restarted_connection_brings_the_voice_back() {
             .count()
     };
     for _ in 0..400 {
-        route(
-            &sfu,
-            &offers,
-            room,
-            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
-        )
-        .await;
+        gateway
+            .route(&mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)])
+            .await;
         if heard_from_a(&recorder) >= 10 {
             break;
         }
@@ -496,13 +442,9 @@ async fn a_restarted_connection_brings_the_voice_back() {
     );
     let before = heard_from_a(&recorder);
     for _ in 0..400 {
-        route(
-            &sfu,
-            &offers,
-            room,
-            &mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)],
-        )
-        .await;
+        gateway
+            .route(&mut [(A, &a, &mut a_rx), (B, &b, &mut b_rx)])
+            .await;
         if heard_from_a(&recorder) >= before + 10 && b.is_forward_connected().await {
             break;
         }
@@ -517,29 +459,218 @@ async fn a_restarted_connection_brings_the_voice_back() {
         heard_from_a(&recorder) >= before + 10,
         "B didn't hear A again after restarting"
     );
-    assert!(b.is_forwarded().await, "restarting left voice");
 }
 
-/// Settings' switch for the old way: the engine stops asking to forward, which
-/// puts its whole room on the mesh.
+/// How loud a stretch of samples is.
+fn rms(samples: &[i16]) -> f64 {
+    let sum: f64 = samples.iter().map(|s| f64::from(*s).powi(2)).sum();
+    (sum / samples.len().max(1) as f64).sqrt()
+}
+
+/// Everything `recorder` heard from `peer`, frame by frame.
+fn heard(recorder: &Recorder, peer: &str) -> Vec<Vec<i16>> {
+    recorder
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(who, _)| who == peer)
+        .map(|(_, frame)| frame.clone())
+        .collect()
+}
+
+/// Route until B's recorder has `n` more frames from A, or twenty seconds
+/// pass. Answers whether it got them.
+async fn hear(
+    gateway: &mut Gateway,
+    rigs: &mut [Routed<'_>],
+    recorder: &Recorder,
+    n: usize,
+) -> bool {
+    let target = heard(recorder, A).len() + n;
+    for _ in 0..800 {
+        gateway.route(rigs).await;
+        if heard(recorder, A).len() >= target {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    false
+}
+
+/// How loud the last frame from A was.
+fn last(recorder: &Recorder) -> f64 {
+    rms(heard(recorder, A).last().expect("something from A"))
+}
+
+/// Mute sends silence, not nothing, through the server: the frames keep
+/// coming, quiet, and unmuting brings the tone back on the same connection.
+/// Deafen sends silence too. B's engine marks A talking, then quiet when A
+/// mutes, then talking again; and B, which sent only silence, never talks.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_old_way_switch_stops_asking_to_forward() {
+async fn muting_sends_silence_through_the_server_and_the_mark_follows() {
+    let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
     let (a, mut a_rx, _) = engine(A).await;
-    a.set_can_forward(false);
+    let (b, mut b_rx, b_log) = engine(B).await;
+    let recorder = Arc::new(Recorder::default());
     a.join(
-        RoomId::new(),
+        room,
         Devices {
-            source: Arc::new(Silence),
+            source: Arc::new(Tone::default()),
             sink: Arc::new(Discard),
         },
         Vec::new(),
     )
     .await;
-    let mut asked = None;
-    while let Ok(frame) = a_rx.try_recv() {
-        if let ClientFrame::VoiceJoin { forwarding, .. } = frame {
-            asked = Some(forwarding);
-        }
-    }
-    assert_eq!(asked, Some(Some(false)));
+    b.join(
+        room,
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::clone(&recorder) as Arc<dyn Sink>,
+        },
+        Vec::new(),
+    )
+    .await;
+    let mut rigs = [(A, &a, &mut a_rx), (B, &b, &mut b_rx)];
+    assert!(
+        hear(&mut gateway, &mut rigs, &recorder, 25).await,
+        "B never heard A"
+    );
+    assert!(last(&recorder) > 2000.0, "not the tone");
+
+    // Mute: the frames keep arriving and they are quiet.
+    a.set_controls(VoiceControls {
+        muted: true,
+        deafened: false,
+    })
+    .await;
+    assert!(a.is_muted());
+    assert!(
+        hear(&mut gateway, &mut rigs, &recorder, 25).await,
+        "muting stopped the frames"
+    );
+    assert!(
+        last(&recorder) < 200.0,
+        "mute is not silence: rms {}",
+        last(&recorder)
+    );
+
+    // Unmute: the tone is back on the same connection.
+    a.set_controls(VoiceControls::default()).await;
+    assert!(
+        hear(&mut gateway, &mut rigs, &recorder, 25).await,
+        "unmuting stopped the frames"
+    );
+    assert!(
+        last(&recorder) > 2000.0,
+        "the tone did not come back: rms {}",
+        last(&recorder)
+    );
+
+    // Deafen also sends silence, even with the microphone asked to be on.
+    a.set_controls(VoiceControls {
+        muted: false,
+        deafened: true,
+    })
+    .await;
+    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
+    assert!(last(&recorder) < 200.0);
+    a.set_controls(VoiceControls::default()).await;
+    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
+    assert!(last(&recorder) > 2000.0);
+
+    let of_a = b_log.talking(Some(A));
+    assert!(
+        of_a.starts_with(&[true, false, true]),
+        "the talking mark did not follow the audio: {of_a:?}"
+    );
+    assert!(
+        !b_log.talking(None).contains(&true),
+        "a silent microphone was marked as talking"
+    );
+    a.leave().await;
+    b.leave().await;
+}
+
+/// Push-to-talk (#232), through the server: with the key up, what goes out
+/// is silence from the very first frame, and A is never marked talking; held,
+/// the tone goes out and A lights up, for A and for B; let go, silence again.
+/// None of it is a mute: A's only report to the room is the join, saying the
+/// microphone is on.
+#[tokio::test(flavor = "multi_thread")]
+async fn push_to_talk_sends_silence_through_the_server_until_the_key_is_held() {
+    let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
+    let (a, mut a_rx, a_log) = engine(A).await;
+    let (b, mut b_rx, b_log) = engine(B).await;
+    let recorder = Arc::new(Recorder::default());
+    // The key is up before A joins, as the app arranges it.
+    a.set_push_to_talk_closed(true);
+    a.join(
+        room,
+        Devices {
+            source: Arc::new(Tone::default()),
+            sink: Arc::new(Discard),
+        },
+        Vec::new(),
+    )
+    .await;
+    b.join(
+        room,
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::clone(&recorder) as Arc<dyn Sink>,
+        },
+        Vec::new(),
+    )
+    .await;
+    let mut rigs = [(A, &a, &mut a_rx), (B, &b, &mut b_rx)];
+
+    // Key up: B hears A's frames, and every one of them is quiet.
+    assert!(
+        hear(&mut gateway, &mut rigs, &recorder, 25).await,
+        "B never heard A"
+    );
+    let loudest = heard(&recorder, A)
+        .iter()
+        .map(|frame| rms(frame))
+        .fold(0.0, f64::max);
+    assert!(
+        loudest < 200.0,
+        "the tone went out before the key was held: rms {loudest}"
+    );
+    assert!(
+        a_log.talking(None).is_empty(),
+        "A was marked talking with the key up"
+    );
+
+    // Held: the tone arrives, on the same connection.
+    a.set_push_to_talk_closed(false);
+    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
+    assert!(
+        last(&recorder) > 2000.0,
+        "holding the key didn't open the microphone"
+    );
+
+    // Let go: quiet again.
+    a.set_push_to_talk_closed(true);
+    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
+    assert!(
+        last(&recorder) < 200.0,
+        "letting go didn't close the microphone"
+    );
+
+    assert_eq!(a_log.talking(None), vec![true, false]);
+    let of_a = b_log.talking(Some(A));
+    assert!(of_a.starts_with(&[true, false]), "B's mark for A: {of_a:?}");
+    let from_a: Vec<Option<VoiceControls>> = gateway
+        .joins
+        .iter()
+        .filter(|(session, _)| session == A)
+        .map(|(_, controls)| *controls)
+        .collect();
+    assert_eq!(from_a, vec![Some(VoiceControls::default())]);
+    a.leave().await;
+    b.leave().await;
 }

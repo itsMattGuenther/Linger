@@ -367,13 +367,12 @@ async fn handle_client_frame(
             {
                 return;
             }
-            state.gateway.voice_join(
-                session_id,
-                user_id,
-                room_id,
-                controls,
-                forwarding == Some(true),
-            );
+            // Any `forwarding` at all is an app that takes voice through the
+            // server (0.4.1 on); its value is left over from Settings' old
+            // switch and no longer matters (#306).
+            state
+                .gateway
+                .voice_join(session_id, user_id, room_id, controls, forwarding.is_some());
         }
         ClientFrame::VoiceAnswer { sdp } => {
             if sdp.len() > MAX_VOICE_PAYLOAD_BYTES {
@@ -399,41 +398,6 @@ async fn handle_client_frame(
             state.gateway.voice_restart(session_id);
         }
         ClientFrame::VoiceLeave => state.gateway.voice_part(session_id),
-        ClientFrame::VoiceSignal { to, kind, payload } => {
-            if payload.len() > MAX_VOICE_PAYLOAD_BYTES {
-                return;
-            }
-            if state
-                .limiter
-                .check(&format!("voice:{session_id}"), RATE_VOICE_SIGNAL)
-                .is_err()
-            {
-                return;
-            }
-            // Both ends have to be in voice, in the same room. Without this the
-            // frame is a way to hand an arbitrary string to any session on the
-            // server, which is a side channel nothing else here has and nobody
-            // asked for (PROTOCOL §8).
-            let Some((mine, _)) = state.gateway.voice_seat_of(session_id) else {
-                return;
-            };
-            let Some((theirs, _)) = state.gateway.voice_seat_of(&to) else {
-                // Their client closed mid-exchange, which is the ordinary end
-                // of a call. Dropped, not refused.
-                return;
-            };
-            if mine != theirs {
-                return;
-            }
-            state.gateway.publish_to_session(
-                &to,
-                ServerEvent::VoiceSignal {
-                    from: session_id.to_string(),
-                    kind,
-                    payload,
-                },
-            );
-        }
 
         // Handshake ops after the handshake: ignore.
         ClientFrame::Identify { .. } | ClientFrame::Resume { .. } => {}

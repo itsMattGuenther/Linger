@@ -26,8 +26,8 @@ export interface DesktopOptions {
   ownerState: GatewayState;
   /** More servers the owner is signed in to, by address, and what it shares of each. */
   others?: Record<string, GatewayState>;
-  /** Each server's name and color, for `GET /server`. */
-  infos?: Record<string, { name: string; accent: string | null }>;
+  /** Each server's name and color, for `GET /server`, and whether it carries voice (left out: an older server, which doesn't say). */
+  infos?: Record<string, { name: string; accent: string | null; voice?: boolean }>;
   query: URLSearchParams;
   /**
    * Questions the owner answers beyond the snapshot and tokens, by event. An
@@ -268,7 +268,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     if (own) return own;
     const info = infos[url.origin];
     if (path === "/server" && method === "GET" && info) {
-      return json({ name: info.name, accent_key: info.accent, icon_key: null, member_count: 7, created_at: 0 });
+      return json({ name: info.name, accent_key: info.accent, icon_key: null, member_count: 7, created_at: 0, ...(info.voice === undefined ? {} : { voice: info.voice }) });
     }
     if (url.origin !== SERVER) return json(url.pathname.endsWith("/messages") ? [] : {});
 

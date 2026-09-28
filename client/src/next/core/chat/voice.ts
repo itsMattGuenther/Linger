@@ -11,17 +11,22 @@ export type VoiceStrip =
   /** Others are talking here. `action` is how you'd join them. */
   | { kind: "others"; people: string[]; action: "join" | "move" }
   /** Nobody is in voice here. */
-  | { kind: "quiet"; action: "start" | "move" };
+  | { kind: "quiet"; action: "start" | "move" }
+  /** The server carries no voice: its host hasn't set it up (#306). Nothing to offer. */
+  | { kind: "off" };
 
 /**
  * `here` is who is in voice in this room (user ids, server order), `meId`
  * you, and `mineIn` the conversation your own seat is in (on any server),
  * or null when you're not in voice. Moving is offered, never a fresh join,
  * when you're already in voice somewhere else: one voice room at a time.
+ * `carries` is false when the server has said it has no voice (#306); a
+ * server that hasn't said is given the benefit of the doubt.
  */
-export function voiceStrip(conversation: string, here: readonly string[], meId: string | null, mineIn: string | null): VoiceStrip {
+export function voiceStrip(conversation: string, here: readonly string[], meId: string | null, mineIn: string | null, carries = true): VoiceStrip {
   const others = here.filter((id) => id !== meId);
   if (mineIn === conversation) return { kind: "mine", people: [...here] };
+  if (!carries && others.length === 0) return { kind: "off" };
   const elsewhere = mineIn !== null;
   if (others.length > 0) return { kind: "others", people: others, action: elsewhere ? "move" : "join" };
   return { kind: "quiet", action: elsewhere ? "move" : "start" };

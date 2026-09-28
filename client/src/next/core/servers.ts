@@ -16,10 +16,10 @@ import type { User } from "../../generated/User";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
 import type { ListModel, PersonRow, Present } from "./list";
 
-/** `linger-core::limits::MAX_VOICE_PEERS`: voice holds eight a room. */
-export const MAX_VOICE_PEERS = 8;
+/** `linger-core::limits::MAX_VOICE_PEERS`: voice holds 25 a room, through the server (#197). */
+export const MAX_VOICE_PEERS = 25;
 
-const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight"] as const;
+const WORDS = ["no", "one", "two"] as const;
 
 /**
  * How full a voice room is, in words, and only when it's nearly full: a

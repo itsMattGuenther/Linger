@@ -404,12 +404,9 @@ function Settings({ following }: { following: Following }) {
           if (prefs.pushToTalk !== voice.pushToTalk || prefs.pushToTalkKey !== voice.pushToTalkKey) {
             void intend({ kind: "voice.pushtotalk", on: prefs.pushToTalk, key: prefs.pushToTalkKey }).catch(() => undefined);
           }
-          // So do the devices and Voice through the server (#249).
+          // So do the devices (#249).
           if (prefs.devices.input !== voice.devices.input || prefs.devices.output !== voice.devices.output) {
             void intend({ kind: "voice.devices", input: prefs.devices.input, output: prefs.devices.output }).catch(() => undefined);
-          }
-          if (prefs.forwarding !== voice.forwarding) {
-            void intend({ kind: "voice.forwarding", on: prefs.forwarding }).catch(() => undefined);
           }
         },
         devices,

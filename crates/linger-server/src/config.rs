@@ -80,11 +80,12 @@ pub struct Config {
     /// starred or pinned file never expires whatever this says.
     pub file_expiry_days: Option<u32>,
     /// `LINGER_TURN_SECRET` (+ `LINGER_TURN_URLS`) — the voice relay. `None`
-    /// means no relay: voice works between machines on one network and nowhere
-    /// else, and the server says so at startup (SPEC §4.14, T-1403).
+    /// means no relay: somebody on a network that blocks the voice port can't
+    /// join a call, and the server says so at startup (SPEC §4.14, T-1403).
     pub turn: Option<TurnConfig>,
     /// `LINGER_VOICE_ADDRESS` (+ `LINGER_VOICE_BIND`): voice forwarding
-    /// (#197). `None` keeps every voice room on the mesh.
+    /// (#197). `None` means this server carries no voice at all (#306), and
+    /// says so at startup and in its info.
     pub voice_forwarding: Option<VoiceForwarding>,
 }
 

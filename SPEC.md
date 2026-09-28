@@ -616,10 +616,11 @@ someone else's microphone never makes a sound on your computer.
 **Through the host's server, up to 25** (#197). Each person sends their voice once, to
 the host's server, which passes it on to everyone else in the room. It is part of the
 server a host already runs (one UDP port more), so there is nothing new to install, and
-it is what lets a raid night of twenty people talk at once: a full mesh, where every
-laptop sends to every other, stops working somewhere past ten. A server that doesn't
-forward stays on the mesh, up to eight, and so does a room while anybody in it is on an
-app from before forwarding: everybody in a room can always hear everybody.
+it is what lets a raid night of twenty people talk at once. It is the only way voice
+travels (#306): the mesh that came first, where every laptop sent to every other, stopped
+working somewhere past ten and is gone. A server whose host hasn't set forwarding up
+carries no voice, and the app says so in plain words rather than offering a call nobody
+could hear. Apps from before 0.4.1, which spoke only the mesh, can't join voice.
 
 **Voice follows the room's membership.** A voice room inside a DM is as private as the
 DM (§4.13) — who is in voice is a fact about a room, so it reaches the room's members
@@ -634,19 +635,15 @@ on the wire, but each hop ends at the server, which forwards the packets without
 or keeping them. Nothing in Linger stores or plays them there, and nothing ever will; but
 a host who changed the server could listen, the same way they can read every message
 (§7). Linger says so plainly rather than implying otherwise, and never calls it
-end-to-end encryption. A layer that would stop even the host is #200. On the mesh, audio
-never touches the server at all.
+end-to-end encryption. A layer that would stop even the host is #200.
 
-**A network that blocks UDP needs a relay.** With forwarding, every client connects to
-the server's one voice address, which works from behind almost any home router; a strict
-office network that blocks UDP goes through the relay (TURN) instead. On the mesh, most
-pairs connect directly once each has learned its own public address (STUN); the rest,
-carrier-grade NAT or a strict office network, cannot, and the relay carries the packets
-between them. The host
-runs one beside the server, and it is the host's, not a third party's. What it carries is
-the encrypted stream, which it cannot read, and the server's only part is handing a
-member a short-lived password for it at the moment they join. A host who runs no relay
-has voice that works within one network and nowhere else, and is told so at startup.
+**A network that blocks UDP needs a relay.** Every client connects to the server's one
+voice address, which works from behind almost any home router; a strict office network
+that blocks UDP goes through the relay (TURN) instead. The host runs one beside the
+server, and it is the host's, not a third party's. What it carries is the encrypted
+stream, which it cannot read, and the server's only part is handing a member a
+short-lived password for it at the moment they join. A host who runs no relay has voice
+that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's
 microphone on. Mute stops your outgoing voice. Deafen stops all incoming voice
@@ -819,7 +816,7 @@ says what replaced it: a status somebody typed.
 
 ### V2
 
-- Voice rooms (WebRTC mesh + coturn), push-to-talk, per-user gain (§4.14)
+- Voice rooms (WebRTC through the host's server, #197; coturn for strict networks), push-to-talk, per-user gain (§4.14)
 - Ambient voice: a room you leave running, not a call you join
 - DMs and group DMs (§4.13)
 - Search (§4.12)

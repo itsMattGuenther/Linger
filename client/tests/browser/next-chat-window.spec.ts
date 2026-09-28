@@ -242,6 +242,17 @@ test("a knock the server refuses for the hour says, on the card, when you can kn
   expect(await did(page)).toContain("POST /knock as token-1");
 });
 
+// A server whose host hasn't set voice up says so in its info (#306), and
+// the window takes its word: nothing to join, and a plain line why.
+test("a server that says it carries no voice gets no way into voice, and says why", async ({ page }) => {
+  await open(page, "room=r-plans");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await expect(strip.getByRole("button", { name: "Start talking" })).toBeVisible();
+  await open(page, "room=r-plans&novoice");
+  await expect(strip).toHaveText("Voice isn't set up on this server.");
+  await expect(strip.getByRole("button")).toHaveCount(0);
+});
+
 test("the voice strip shows whose microphone is off, as its glyph, and push-to-talk's closed key as nothing (#232)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const here = page.getByRole("list", { name: "In voice here" });
@@ -255,9 +266,9 @@ test("the voice strip shows whose microphone is off, as its glyph, and push-to-t
       d: {
         room_id: "r-general",
         peers: [
-          { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false } },
-          { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
-          { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false } },
+          { session_id: "s-eli", user_id: "u-eli", controls: { muted: true, deafened: false }, forwarded: true },
+          { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false }, forwarded: true },
+          { session_id: "s-matt", user_id: "u-matt", controls: { muted: false, deafened: false }, forwarded: true },
         ],
       },
     }),

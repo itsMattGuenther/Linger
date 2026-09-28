@@ -33,8 +33,8 @@ use async_trait::async_trait;
 /// sample-rate mismatch is one of the three ways audio devices break.)
 pub const SAMPLE_RATE: u32 = 48_000;
 
-/// One channel. Voice is mono — a second channel doubles the bytes on a mesh
-/// and carries nothing anybody can hear on a laptop microphone.
+/// One channel. Voice is mono — a second channel doubles the bytes through the
+/// server and carries nothing anybody can hear on a laptop microphone.
 pub const CHANNELS: u16 = 1;
 
 /// How much audio is in one frame, in milliseconds.
