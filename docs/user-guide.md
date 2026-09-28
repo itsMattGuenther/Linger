@@ -496,7 +496,8 @@ person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
 in your system settings, nothing moves; the card still shows. There is no message and nothing for them to
-answer. Three an hour per person, so it stays a tap. A soft sound accompanies
+answer. Three an hour per person, so it stays a tap; after the third, the card
+says when you can knock again. A soft sound accompanies
 the card unless sounds are muted or quiet hours are on (22:00–08:00 on this
 computer's clock unless you move them). Quiet hours are off until you turn them
 on. They silence the sound, not the card.

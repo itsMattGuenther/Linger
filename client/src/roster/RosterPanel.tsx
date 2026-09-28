@@ -26,6 +26,7 @@ import type { UserId } from "../generated/UserId";
 import { ApiError, TransportError, type AuthedApi } from "../lib/api";
 import { useNow } from "../lib/clock";
 import { useGateway } from "../lib/gateway";
+import { knockLimitLine } from "../lib/knock";
 import { dmWhere } from "../lib/dm";
 import { nameProps, personStyle } from "../lib/names";
 import StatusCard from "../status/StatusCard";
@@ -406,7 +407,7 @@ function KnockAction({ api, user }: { api: AuthedApi; user: User }) {
       setPhase("idle");
       setProblem(
         error instanceof ApiError && error.code === "RATE_LIMITED"
-          ? "That's three this hour. Give them a bit."
+          ? knockLimitLine(error.retryAfterMs)
           : error instanceof ApiError
             ? error.message
             : error instanceof TransportError ? error.message : "Couldn't knock.",

@@ -690,7 +690,9 @@ client must not treat a long `queued` as a failure.
 be a member of this server — a stranger and somebody the host removed are both
 `NOT_FOUND` — and knocking yourself is `VALIDATION_FAILED`. The rate limit is
 `RATE_KNOCK_PER_TARGET`: three per hour **per target**, so knocking five
-different people is five separate buckets.
+different people is five separate buckets. A refused knock is `RATE_LIMITED`
+with `retry_after_ms` set to how long until the next knock at that person is
+allowed; the client says when that is in words (#268).
 
 The server writes nothing. A knock is not a row, and there is no endpoint that
 lists knocks, because there is nothing to list. All it does is put one `knock`

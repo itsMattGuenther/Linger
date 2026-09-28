@@ -85,3 +85,9 @@
   line-height: var(--line-meta);
   color: var(--text-danger);
 }
+
+/* A sentence wraps as a whole where it can: a line breaks between two, not
+   inside one (#268). A sentence longer than the card still wraps inside. */
+.nx-person-sentence {
+  display: inline-block;
+}

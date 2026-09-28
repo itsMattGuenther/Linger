@@ -433,7 +433,9 @@ nothing to dismiss or respond to.
 
 Low-obligation contact is the thing group chats are worst at.
 
-Rate limit: 3 knocks per person per hour.
+Rate limit: 3 knocks per person per hour. A refused knock tells the sender when
+they can knock again ("Three knocks this hour. You can knock again in 20
+minutes."), and never claims the other person heard.
 
 The sender sees `knocked` for three seconds, then the control resets. This
 acknowledges the request, not delivery; it is not knock history. The recipient's

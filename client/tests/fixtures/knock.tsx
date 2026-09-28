@@ -23,7 +23,7 @@ const makeApi = (baseUrl: string): AuthedApi => {
     if (mode === "pending") await new Promise<void>((resolve) => { resolveKnock = resolve; });
     if (mode === "failure") throw new Error("fixture refusal");
     if (mode === "limited") throw new ApiError(429, {
-      code: "RATE_LIMITED", message: "slow down", retry_after_ms: 3_600_000,
+      code: "RATE_LIMITED", message: "Slow down a little.", retry_after_ms: 1_150_000,
     });
   };
   return api;

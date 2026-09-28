@@ -28,7 +28,7 @@ test("sender feedback disappears and the server still controls the rate limit", 
   });
   await page.getByRole("button", { name: "Knock", exact: true }).click();
   await expect(
-    page.getByText("That's three this hour. Give them a bit."),
+    page.getByText("Three knocks this hour. You can knock again in 20 minutes."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Knock", exact: true }),
