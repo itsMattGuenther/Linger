@@ -13,6 +13,8 @@
  * - `?servers`: you're signed in to three servers, so there's Servers.
  * - `?fail`: every save is refused, in the server's words.
  * - `?away`: you're away already.
+ * - `?picture`: your status still has a picture, the way an older server
+ *   hands one back (#269). Profile shows nothing for it, and saves drop it.
  * - `?devices=none`: outside the desktop app; `?devices=looking`: still asking.
  * - `?long`: names and topics far too long for their places.
  * - `?nowindows`: nothing to choose in Windows yet, so there's no Windows.
@@ -56,9 +58,12 @@ function saving(what: string, words = "The server is busy. Try again in a moment
   return new Promise((settle) => window.setTimeout(() => settle(FAIL ? words : null), 120));
 }
 
-const matt: User = query.has("away")
-  ? { ...people.matt, status: people.matt.status && { ...people.matt.status, away_message: "walking the dog 🐕", away_since: NOW - HOUR } }
+const pictured: User = query.has("picture")
+  ? { ...people.matt, status: people.matt.status && { ...people.matt.status, image_id: "img-porch", image_url: "/objects/im/g-/img-porch" } }
   : people.matt;
+const matt: User = query.has("away")
+  ? { ...pictured, status: pictured.status && { ...pictured.status, away_message: "walking the dog 🐕", away_since: NOW - HOUR } }
+  : pictured;
 const cast: User[] = [people.eli, people.jules, people.dave, people.callie, people.sam, people.jen].map((person) =>
   LONG && person.id === "u-eli" ? { ...person, display_name: "Eli Bartholomew-Maximilian the Considerably Long" } : person,
 );
@@ -134,7 +139,6 @@ function Fixture() {
       profile={{
         me,
         plainNames: plain,
-        mediaUrl: (path) => (path.startsWith("data:") ? path : `${SERVER}${path}`),
         actions: {
           saveName: async (name) => {
             const problem = await saving(`name:${name}`);
@@ -146,12 +150,6 @@ function Fixture() {
             if (problem === null) setMe((held) => ({ ...held, status: { ...status, away_since: status.away_message ? NOW : null } }));
             return problem;
           },
-          uploadImage: async (file) => {
-            note(`upload:${file.name}`);
-            await new Promise((settle) => window.setTimeout(settle, 80));
-            return FAIL ? { problem: "That image didn't go up." } : { image: { id: `img-${file.name}`, url: SPEAKERS_THUMB } };
-          },
-          dropImage: (id) => note(`drop:${id}`),
           saveStyle: async (style) => {
             const problem = await saving(`style:${JSON.stringify(style)}`);
             if (problem === null) setMe((held) => ({ ...held, style }));
@@ -370,13 +368,6 @@ function Fixture() {
     />
   );
 }
-
-/** A small picture for the status image, so it needs no file. */
-const SPEAKERS_THUMB =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40"><rect width="80" height="40" fill="#3a2d3f"/><rect x="8" y="10" width="12" height="20" fill="#1c1c24"/><rect x="60" y="10" width="12" height="20" fill="#1c1c24"/><rect x="30" y="4" width="20" height="12" fill="#ffcf7a"/></svg>`,
-  );
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

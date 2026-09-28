@@ -22,10 +22,10 @@
 //!    is given the full expiry window in case a client is holding the id while
 //!    a person types.
 //!
-//! A status image is never taken, whatever its age. It is not on a message, so
-//! rule 3 would otherwise claim it, and a status quietly losing its picture
-//! after a year is not something a person would connect to a file expiry they
-//! never set (T-506).
+//! A status used to carry a picture, and the sweeper skipped any file one
+//! pointed at. Statuses have no pictures now (#269), so a file uploaded for one
+//! is a finished upload that never became a message, and rule 3 takes it like
+//! any other.
 //!
 //! Deleting is bytes first, row second. The other order can lose an object with
 //! nothing left pointing at it — a file nobody can see and nobody can remove.
@@ -124,8 +124,6 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
            FROM attachments a
            LEFT JOIN messages m ON m.id = a.message_id
           WHERE a.state = 'complete'
-            AND a.object_key NOT IN (
-                  SELECT image_key FROM user_status WHERE image_key IS NOT NULL)
             AND (
                   (m.id IS NOT NULL AND m.deleted_at IS NOT NULL)
                OR (a.starred_at IS NULL AND (

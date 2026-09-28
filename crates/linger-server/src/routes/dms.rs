@@ -73,7 +73,7 @@ async fn create(
     // deactivated account too, so a DM cannot be opened with somebody who has
     // been removed from the server.
     for id in &members {
-        repo::users::expect(&state.db.read, &state.config, *id).await?;
+        repo::users::expect(&state.db.read, *id).await?;
     }
 
     let (room, created) =

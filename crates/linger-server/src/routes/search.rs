@@ -70,7 +70,7 @@ async fn search(
         repo::rooms::visible_to(&state.db.read, room_id, auth.id).await?;
     }
     if let Some(author_id) = query.author_id {
-        repo::users::expect(&state.db.read, &state.config, author_id).await?;
+        repo::users::expect(&state.db.read, author_id).await?;
     }
 
     let request = Query {

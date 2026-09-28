@@ -1,0 +1,18 @@
+-- Status pictures are gone (SPEC §4.6, PROTOCOL §5, #269).
+--
+-- A status is words now: the line, the three short fields and the away
+-- message. A photo belongs in a room, where people see it without opening
+-- anybody's card and Media keeps it (`docs/decisions.md`).
+--
+-- This clears every picture a status was still pointing at. Nothing writes the
+-- column again — `PATCH /me` accepts an `image_id` from an older app and
+-- ignores it — so after this no status has a picture, whatever app saved it.
+--
+-- The files themselves are not touched here, because SQL cannot delete bytes
+-- from the object store. They are finished uploads that are on no message,
+-- which is the sweeper's third rule (`expiry.rs`), so they age out after the
+-- expiry window like any upload somebody picked and never posted. The sweeper
+-- used to skip anything a status named; it no longer looks at this table.
+--
+-- The column stays, unused, rather than rebuilding the table to drop it.
+UPDATE user_status SET image_key = NULL WHERE image_key IS NOT NULL;

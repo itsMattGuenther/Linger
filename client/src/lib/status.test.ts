@@ -10,7 +10,6 @@ import {
   awayMessageOf,
   BLANK_DRAFT,
   draftOf,
-  imageProblem,
   isBlank,
   isDirty,
   MAX_FIELD_CHARS,
@@ -89,24 +88,16 @@ describe("statusOf", () => {
     expect(built.reading).toBeNull();
   });
 
-  it("carries the image through, because a save replaces the whole object", () => {
-    // PROTOCOL §5: `status` replaces the whole object, so a field left out is a
-    // field deleted. The editor is the only thing allowed to change the image;
-    // every other save has to hand back the one that was already there.
-    const saved = status({ image_id: "abc123", image_url: "https://cdn.example/objects/ab/c1/abc123" });
+  it("never sends an image, even one an older server still hands back (#269)", () => {
+    const saved = status({
+      line: "at the shop",
+      image_id: "abc123",
+      image_url: "https://cdn.example/objects/ab/c1/abc123",
+    });
     const built = statusOf(draftOf(saved), saved);
-    expect(built.image_id).toBe("abc123");
-    expect(built.image_url).toBe("https://cdn.example/objects/ab/c1/abc123");
-  });
-
-  it("takes the image the editor put on the draft", () => {
-    const saved = status({ image_id: "old", image_url: "https://cdn.example/objects/ol/d0/old" });
-    const swapped = statusOf(
-      { ...draftOf(saved), image: { id: "new", url: "https://cdn.example/objects/ne/w0/new" } },
-      saved,
-    );
-    expect(swapped.image_id).toBe("new");
-    expect(statusOf({ ...draftOf(saved), image: null }, saved).image_id).toBeNull();
+    expect(built.line).toBe("at the shop");
+    expect(built.image_id).toBeNull();
+    expect(built.image_url).toBeNull();
   });
 
   it("carries away_since through even though the server owns it", () => {
@@ -129,7 +120,10 @@ describe("isBlank", () => {
   it("is false once any one field is set", () => {
     expect(isBlank(status({ working_on: "the bike" }))).toBe(false);
     expect(isBlank(status({ away_message: "brb" }))).toBe(false);
-    expect(isBlank(status({ image_id: "abc" }))).toBe(false);
+  });
+
+  it("is true for a status that only has a picture, which nothing shows (#269)", () => {
+    expect(isBlank(status({ image_id: "abc", image_url: "https://cdn.example/abc" }))).toBe(true);
   });
 });
 
@@ -160,39 +154,11 @@ describe("isDirty", () => {
     expect(isDirty(draftOf(saved), saved)).toBe(false);
   });
 
-  it("is true once the image changes, and false when only its URL does", () => {
-    const saved = status({ image_id: "abc", image_url: "https://cdn.example/objects/ab/c0/abc" });
-    const held = draftOf(saved);
-    expect(isDirty({ ...held, image: null }, saved)).toBe(true);
-    expect(isDirty({ ...held, image: { id: "xyz", url: "https://cdn.example/x" } }, saved)).toBe(
-      true,
-    );
-    // The URL is the server's answer, not an edit: a server that moved its
-    // media host must not read as unsaved work.
-    expect(isDirty({ ...held, image: { id: "abc", url: "https://files.example/x" } }, saved)).toBe(
-      false,
-    );
-  });
-});
-
-describe("imageProblem", () => {
-  /** `File` is a browser type; vitest runs with jsdom, so this is a real one. */
-  function file(bytes: number, type: string): File {
-    return new File([new Uint8Array(bytes)], "picture", { type });
-  }
-
-  it("takes an ordinary small image", () => {
-    expect(imageProblem(file(4_000, "image/png"))).toBeNull();
-  });
-
-  it("refuses anything that is not an image", () => {
-    expect(imageProblem(file(4_000, "application/pdf"))).toContain("has to be an image");
-  });
-
-  it("refuses an oversize file in a sentence with both numbers in it", () => {
-    const problem = imageProblem(file(600 * 1024, "image/jpeg"));
-    expect(problem).toContain("512 KB");
-    expect(problem).toContain("600 KB");
+  it("is false when an older server's picture is all that differs (#269)", () => {
+    // Saving would drop it, but nothing shows it, so it is not an edit anybody
+    // made and must not light the save button up.
+    const saved = status({ line: "at the shop", image_id: "abc", image_url: "https://cdn.example/abc" });
+    expect(isDirty(draftOf(saved), saved)).toBe(false);
   });
 });
 

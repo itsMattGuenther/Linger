@@ -23,7 +23,6 @@ pub const ENTRANCE_SOUND_COOLDOWN_MS: u64 = 5 * 60 * 1000;
 /// User-status fields (SPEC §4.6).
 pub const MAX_STATUS_LINE_CHARS: usize = 240;
 pub const MAX_STATUS_FIELD_CHARS: usize = 80;
-pub const MAX_STATUS_IMAGE_BYTES: u64 = 512 * 1024;
 
 /// Message body cap, chars after trim (PROTOCOL §4).
 pub const MAX_MESSAGE_CHARS: usize = 8_000;

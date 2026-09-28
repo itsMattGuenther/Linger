@@ -296,48 +296,6 @@
   font-style: italic;
 }
 
-.nx-set-image {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3-5);
-}
-
-.nx-set-image-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-0-5);
-  min-width: 0;
-}
-
-.nx-set-image-title {
-  color: var(--text-primary);
-  font-size: var(--text-control);
-  font-weight: 500;
-}
-
-.nx-set-image-hint {
-  color: var(--text-muted);
-  font-size: var(--text-meta);
-  line-height: var(--leading-body);
-}
-
-.nx-set-image-buttons {
-  display: flex;
-  flex: none;
-  gap: var(--space-2);
-}
-
-.nx-set-image-shown {
-  display: block;
-  width: min(100%, var(--status-image-w));
-  aspect-ratio: 2 / 1;
-  max-height: var(--status-image-h);
-  object-fit: cover;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-}
-
 /* Appearance: the size preview beside its box. */
 .nx-set-size {
   display: flex;

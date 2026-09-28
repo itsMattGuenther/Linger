@@ -13,10 +13,13 @@ const status: UserStatus = {
   away_since: null,
 };
 
+/** What a save carries: the same status, with no picture (#269). */
+const words: UserStatus = { ...status, image_id: null, image_url: null };
+
 describe("changing your status from the list", () => {
   it("changes the line and keeps everything else", () => {
     const next = withLine(status, "  second coffee  ");
-    expect(next).toEqual({ ...status, line: "second coffee" });
+    expect(next).toEqual({ ...words, line: "second coffee" });
   });
 
   it("clears the line when it's blank", () => {
@@ -25,8 +28,13 @@ describe("changing your status from the list", () => {
 
   it("goes away with a message and comes back, keeping the rest", () => {
     const away = withAway(status, "walking the dog 🐕");
-    expect(away).toEqual({ ...status, away_message: "walking the dog 🐕" });
-    expect(withAway(away, null)).toEqual({ ...status, away_message: null });
+    expect(away).toEqual({ ...words, away_message: "walking the dog 🐕" });
+    expect(withAway(away, null)).toEqual({ ...words, away_message: null });
+  });
+
+  it("never sends a picture, even one an older server still has (#269)", () => {
+    expect(withLine(status, "second coffee")).toMatchObject({ image_id: null, image_url: null });
+    expect(withAway(status, "asleep")).toMatchObject({ image_id: null, image_url: null });
   });
 
   it("works for someone with no status yet", () => {

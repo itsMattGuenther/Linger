@@ -261,7 +261,6 @@ function PersonCard({
           <StatusCard
             user={user}
             awayShown={entry.awayMessage !== null && entry.awayMessage !== ""}
-            baseUrl={api.baseUrl}
           />
           {entry.isMe ? (
             <p className="person-mine">

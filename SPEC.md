@@ -337,8 +337,10 @@ and a joke delivery mechanism in one field.
 A user's **status** is a small card, not a bio field:
 - One line of free text (240 chars, rendered in their name styling)
 - Optional: reading / listening to / working on (three labeled short fields)
-- Optional: one image, max 512 KB, displayed at 400×200
 - Optional: an away message that supersedes the status when set
+
+A status is words. It has no picture: a photo goes in a room, where people see
+it without opening anybody's card and Media keeps it (#269, `docs/decisions.md`).
 
 The list previews the status line under each person. The full status appears in
 the person card opened from their name; opening it does not rearrange the list.

@@ -252,8 +252,8 @@ regrouped, plus the new choices this design needs:
 
 - **Profile:**
   - **Who you are:** display name and username.
-  - **Your status:** status line, reading, listening to, working on, status
-    image, and away message.
+  - **Your status:** status line, reading, listening to, working on, and away
+    message. There is no status picture (#269).
   - **Make yourself at home:** your name's font, weight, italic, one color or
     two blended, effect, and your message font, with a live preview. Saving
     changes your name in the list and in every conversation.

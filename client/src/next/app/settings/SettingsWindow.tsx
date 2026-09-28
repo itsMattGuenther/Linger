@@ -15,10 +15,7 @@ import { inviteUrl, moveRoom } from "../../../lib/host";
 import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
-import { imageProblem } from "../../../lib/status";
 import { appVersion, checkForUpdate, installUpdate, releaseNotesUrl, type UpdateCheck } from "../../../lib/updates";
-import { uploadFile } from "../../../lib/upload";
-import { absoluteUrl } from "../../../lib/url";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
@@ -341,7 +338,6 @@ function Settings({ following }: { following: Following }) {
       profile={{
         me,
         plainNames: plain,
-        mediaUrl: (path) => absoluteUrl(server, path),
         actions: {
           saveName: (name) => said(saveDisplayName(api, displayNameRequest(name)), "Couldn't save your name."),
           saveStatus: async (status) => {
@@ -350,17 +346,6 @@ function Settings({ following }: { following: Following }) {
             if (problem === null) void intend({ kind: "away", server, message: status.away_message ?? null }).catch(() => undefined);
             return problem;
           },
-          uploadImage: async (file) => {
-            const refusal = imageProblem(file);
-            if (refusal !== null) return { problem: refusal };
-            try {
-              const attachment = await uploadFile(api, file);
-              return { image: { id: String(attachment.id), url: attachment.url } };
-            } catch (error: unknown) {
-              return { problem: inWords(error, "That image didn't go up.") };
-            }
-          },
-          dropImage: (id) => void api.cancelUpload(id).catch(() => undefined),
           saveStyle: (style) => said(saveStyle(api, { display_name: null, style, status: null, entrance_sound: null }), "Couldn't save your look."),
         },
       }}

@@ -46,9 +46,9 @@ must respect are in [`lessons.md`](lessons.md).
 
 ## Where things stand (2026-09-26, after the 0.4.0 release)
 
-The Buddy list client is the app from 0.4.0. Of 231 items: **173 done**,
-**50 partly**, **7 to build** and **1 dropped** (the host's time zone,
-decision 3). Every decision is made.
+The Buddy list client is the app from 0.4.0. Of 231 items: **172 done**,
+**50 partly**, **7 to build** and **2 dropped** (the host's time zone,
+decision 3, and status pictures, PPL-10, #269). Every decision is made.
 
 What's left, biggest first:
 
@@ -363,10 +363,10 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | PPL-4 | "Last here …" for offline people; "away 20m" counts from the server's `away_since`. | `roster.ts` | A faint note on the row | U | 🟡 "last here" done (list.test.ts); no "away 20m" |
 | PPL-5 | Clicking or right-clicking a name opens a person card: status in their own styling, reading/listening/working, where they are, Message and Knock. Escape or an outside click closes it and returns focus. | `RosterPanel.tsx`, `status/PersonName.tsx`, `StatusCard.tsx` | Person card beside the list; Enter opens it; double-click opens a DM. Your own name on the top card opens your own card, as friends see it: "This is how friends see you", and Edit profile (Settings → Profile) in place of Message and Knock (#271) | F + G | ✅ (next-list.spec.ts; your own card in list.test.ts and next-list.spec.ts, with Settings asked for in next-list-window.spec.ts) |
 | PPL-6 | A name in the stream opens the same card, drawn in a portal so the virtualized list can't clip it. | `status/PersonName.tsx` | Same | F | ✅ the name heading a run of messages opens the same card beside it, drawn outside the scrolling list; Message opens the DM, Knock knocks; your own name opens your own card, with Edit profile (#271) (next-chat-window.spec.ts) |
-| PPL-7 | Status editor: one line (240), reading/listening/working (80 each), an image (512 KB, shown at 400×200), and an away message. Local preview before save, and the draft survives layout changes. | `status/StatusEditor.tsx`, `status.ts` | Your card's status field plus Settings → Profile | U (exists) + F | ✅ (you.test.ts, next-list.spec.ts, next-settings.spec.ts) |
+| PPL-7 | Status editor: one line (240), reading/listening/working (80 each), and an away message. No picture (#269). Local preview before save, and the draft survives layout changes. | `status/StatusEditor.tsx`, `status.ts` | Your card's status field plus Settings → Profile | U (exists) + F | ✅ (you.test.ts, next-list.spec.ts, next-settings.spec.ts) |
 | PPL-8 | Save order: `PATCH /me` first, then going away on the wire (leave the room, then say away). | `StatusEditor.tsx` | Same | C + U | 🟡 away goes through the list (share.test.ts); the save order is untested |
 | PPL-9 | Typing an away message makes you away; clearing it makes you back. | `StatusEditor.tsx` | An AIM-style editor with saved presets. Away everywhere with a checkbox per server: **decision 14**. | F | ✅ (next-servers.spec.ts, next-list.spec.ts); decision 14: kept as built |
-| PPL-10 | A status image uploads when it's picked; an abandoned one is cleaned up. | `StatusEditor.tsx` | Same | F | ✅ (next-settings.spec.ts) |
+| PPL-10 | A status image uploads when it's picked; an abandoned one is cleaned up. | `StatusEditor.tsx` | Status pictures are gone, from both clients and the server (#269, `docs/decisions.md`). Profile offers none, and a save sends none | F | — dropped (#269); nothing offers one (next-settings.spec.ts, delight.spec.ts) |
 
 ## NAME — how names look
 

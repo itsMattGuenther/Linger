@@ -4,14 +4,11 @@
 
 use linger_core::limits::{
     MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MESSAGE_CHARS, MAX_STATUS_FIELD_CHARS,
-    MAX_STATUS_IMAGE_BYTES, MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
+    MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
 };
 use linger_core::wire::{Fill, Style, UserStatus};
-use linger_core::{AttachmentId, UserId};
-use sqlx::SqlitePool;
 
 use crate::error::ApiError;
-use crate::repo;
 
 /// `[a-z0-9_]{2,24}` — lowercase on the way in is the caller's job; we reject,
 /// not normalize, so people see exactly what their username is.
@@ -164,46 +161,6 @@ pub fn status(status: &UserStatus) -> Result<(), ApiError> {
         "The away message",
     )?;
     Ok(())
-}
-
-/// The image on a status, checked against what is actually stored — and turned
-/// into the object key the `user_status` row holds (T-506).
-///
-/// Everything else on a status is somebody's own words, capped and written. An
-/// image is a name for a file, so all four of the questions worth asking are
-/// asked here: does it exist, is it this person's, is it an image, and is it
-/// small enough. Without them `image_id` is a string a stranger chose that
-/// decides which bytes a roster card loads.
-///
-/// The caller gets back the key rather than a yes, so the id a client sent is
-/// never what reaches a URL: the answer is built from the row the server found.
-pub async fn status_image(
-    db: &SqlitePool,
-    owner: UserId,
-    image_id: Option<AttachmentId>,
-) -> Result<Option<String>, ApiError> {
-    let Some(id) = image_id else {
-        return Ok(None);
-    };
-    let record = repo::attachments::record(db, id)
-        .await?
-        .filter(|record| record.state == "complete")
-        .ok_or_else(|| ApiError::validation("That image isn't on this server."))?;
-    // Not `not_found`: they are telling us about a file that exists and is
-    // somebody else's, and the honest answer is no rather than "no such file".
-    if record.uploader_id != owner {
-        return Err(ApiError::forbidden("That image isn't yours."));
-    }
-    if linger_core::media::kind_of(&record.mime) != "image" {
-        return Err(ApiError::validation("A status image has to be an image."));
-    }
-    if record.size_bytes > MAX_STATUS_IMAGE_BYTES {
-        return Err(ApiError::validation(format!(
-            "Status images are up to {} KB.",
-            MAX_STATUS_IMAGE_BYTES / 1024
-        )));
-    }
-    Ok(Some(record.object_key))
 }
 
 #[cfg(test)]

@@ -3,8 +3,8 @@
  * editor's boxes of text become the object that goes over the wire.
  *
  * SPEC §4.6. A status is a small card, not a bio field: one line of free text
- * in the person's own styling, up to three labeled short fields, an optional
- * image, and an away message that supersedes the line when it is set.
+ * in the person's own styling, up to three labeled short fields, and an away
+ * message that supersedes the line when it is set. It has no picture (#269).
  *
  * All of it is pure and lives here rather than in the form, for the usual
  * reason: the rules about trimming, blanks and "has anything actually changed"
@@ -23,27 +23,6 @@ import type { UserStatus } from "../generated/UserStatus";
 export const MAX_LINE_CHARS = 240;
 export const MAX_FIELD_CHARS = 80;
 
-/**
- * `linger-core::limits::MAX_STATUS_IMAGE_BYTES` (SPEC §4.6). Same arrangement,
- * with more riding on it: this one is checked before the upload starts, so a
- * file that is never going to be accepted is never sent.
- */
-export const MAX_IMAGE_BYTES = 512 * 1024;
-
-/**
- * The image on a status, as the editor holds it: what the server is told, and
- * where to draw it from.
- *
- * Two fields because they are two different things. The id is the client's to
- * set — it names an upload. The URL is the server's answer, built from the
- * object key it stores, and there is no way to work one out from the other on
- * this side (PROTOCOL §6: object URLs are opaque).
- */
-export interface StatusImage {
-  id: string;
-  url: string;
-}
-
 /** The editor's boxes. Strings, because that is what an input holds. */
 export interface StatusDraft {
   line: string;
@@ -51,7 +30,6 @@ export interface StatusDraft {
   listening: string;
   workingOn: string;
   awayMessage: string;
-  image: StatusImage | null;
 }
 
 export const BLANK_DRAFT: StatusDraft = {
@@ -60,7 +38,6 @@ export const BLANK_DRAFT: StatusDraft = {
   listening: "",
   workingOn: "",
   awayMessage: "",
-  image: null,
 };
 
 /**
@@ -86,14 +63,7 @@ export function draftOf(status: UserStatus | null | undefined): StatusDraft {
     listening: status.listening ?? "",
     workingOn: status.working_on ?? "",
     awayMessage: status.away_message ?? "",
-    image: imageOf(status),
   };
-}
-
-/** The image a saved status is wearing, or null. Both halves or neither. */
-export function imageOf(status: UserStatus | null | undefined): StatusImage | null {
-  if (!status || status.image_id === null || status.image_url === null) return null;
-  return { id: status.image_id, url: status.image_url };
 }
 
 /** An empty box means "not set", not "set to nothing". */
@@ -106,15 +76,13 @@ function trimmed(value: string): string | null {
  * The object to send.
  *
  * `PATCH /me` replaces the whole status object (PROTOCOL §5), so a field left
- * out of this is a field deleted. The image is the one that costs something:
- * the draft carries whatever the saved status had, and a save that did not
- * touch it sends it back unchanged. The editor is the only thing allowed to
- * change it, and `status.test.ts` pins that.
+ * out of this is a field deleted.
  *
- * `image_url` and `away_since` are both server-owned — the URL is built from
- * the key the server stores, and `away_since` is stamped when an away message
- * appears or changes — so whatever is sent for either is ignored. They are
- * carried over anyway so the values never round-trip as a lie.
+ * A status has no picture (#269): `image_id` and `image_url` are always sent
+ * as null, even when an older server still hands one back, so a save never
+ * keeps a picture alive. `away_since` is server-owned — stamped when an away
+ * message appears or changes — so whatever is sent for it is ignored. It is
+ * carried over anyway so the value never round-trips as a lie.
  */
 export function statusOf(draft: StatusDraft, previous: UserStatus | null | undefined): UserStatus {
   return {
@@ -122,8 +90,8 @@ export function statusOf(draft: StatusDraft, previous: UserStatus | null | undef
     reading: trimmed(draft.reading),
     listening: trimmed(draft.listening),
     working_on: trimmed(draft.workingOn),
-    image_id: draft.image?.id ?? null,
-    image_url: draft.image?.url ?? null,
+    image_id: null,
+    image_url: null,
     away_message: trimmed(draft.awayMessage),
     away_since: previous?.away_since ?? null,
   };
@@ -137,7 +105,6 @@ export function isBlank(status: UserStatus | null | undefined): boolean {
     status.reading === null &&
     status.listening === null &&
     status.working_on === null &&
-    status.image_id === null &&
     status.away_message === null
   );
 }
@@ -145,8 +112,8 @@ export function isBlank(status: UserStatus | null | undefined): boolean {
 /**
  * Whether saving this draft would change anything the server holds.
  *
- * Compares the fields a person can edit and nothing else, so the reformatting
- * the server does — stamping `away_since`, building `image_url` — never reads
+ * Compares the fields a person can edit and nothing else, so what the server
+ * owns — `away_since`, and the image fields that are always null — never reads
  * as an unsaved change and never leaves the save button lit for no reason.
  */
 export function isDirty(draft: StatusDraft, previous: UserStatus | null | undefined): boolean {
@@ -157,26 +124,8 @@ export function isDirty(draft: StatusDraft, previous: UserStatus | null | undefi
     next.reading !== (now?.reading ?? null) ||
     next.listening !== (now?.listening ?? null) ||
     next.working_on !== (now?.working_on ?? null) ||
-    next.image_id !== (now?.image_id ?? null) ||
     next.away_message !== (now?.away_message ?? null)
   );
-}
-
-/**
- * Whether this file can be a status image, and what to say if it cannot.
- *
- * Asked before the upload starts, not after: the server refuses the same two
- * things, but finding out afterwards means having waited for a file that was
- * never going to be taken. Sizes are said in KB because that is the unit the
- * limit is written in and the one a person's file manager shows.
- */
-export function imageProblem(file: File): string | null {
-  if (!file.type.startsWith("image/")) return "A status image has to be an image.";
-  if (file.size > MAX_IMAGE_BYTES) {
-    const kb = Math.round(file.size / 1024);
-    return `Status images are up to ${MAX_IMAGE_BYTES / 1024} KB, and that one is ${kb} KB.`;
-  }
-  return null;
 }
 
 /**

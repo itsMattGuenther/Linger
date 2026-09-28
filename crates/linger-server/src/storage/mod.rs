@@ -197,20 +197,6 @@ pub fn object_key(id: AttachmentId) -> String {
     format!("{}/{}/{}", &hex[0..2], &hex[2..4], hex)
 }
 
-/// [`object_key`] read backwards: the attachment a stored key belongs to.
-///
-/// Two tables name an object by its key rather than by an id — `user_status`,
-/// so the sweeper can join on it, and nothing else — while the wire names
-/// attachments by id. Somebody has to convert, and doing it here keeps the
-/// layout of a key in the one file that decides it.
-#[must_use]
-pub fn key_owner(key: &str) -> Option<AttachmentId> {
-    let id: AttachmentId = key.rsplit('/').next()?.parse().ok()?;
-    // A poster key ends in `.poster.jpg` and parses as nothing, but a key that
-    // round-trips is the only one this is allowed to claim.
-    (object_key(id) == key).then_some(id)
-}
-
 /// The key of a video's generated poster frame.
 #[must_use]
 pub fn poster_key(id: AttachmentId) -> String {
@@ -220,17 +206,6 @@ pub fn poster_key(id: AttachmentId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_key_names_the_attachment_it_was_built_from() {
-        let id = AttachmentId::new();
-        assert_eq!(key_owner(&object_key(id)), Some(id));
-        // A poster is a different object under a key of its own, and nothing
-        // should mistake one for the file it was made from.
-        assert_eq!(key_owner(&poster_key(id)), None);
-        assert_eq!(key_owner("not/a/key"), None);
-        assert_eq!(key_owner(""), None);
-    }
 
     #[test]
     fn small_files_are_one_put_and_large_ones_are_cut_up() {

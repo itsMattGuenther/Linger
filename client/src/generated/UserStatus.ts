@@ -7,20 +7,16 @@ import type { AttachmentId } from "./AttachmentId";
  */
 export type UserStatus = { line: string | null, reading: string | null, listening: string | null, working_on: string | null, 
 /**
- * The image on this status (SPEC §4.6): the id of a finished upload of
- * this person's, an image, within `MAX_STATUS_IMAGE_BYTES`.
+ * Always null. A status has no picture any more (#269, PROTOCOL §5).
  *
- * An id and not a storage key. The server resolves it to the object key it
- * stores, so the string a client sends never reaches a URL, and object
- * URLs stay opaque to the client the way PROTOCOL §6 says they are.
+ * Kept on the wire so an app from before the removal still reads and
+ * saves statuses: the server accepts an id here and ignores it, checking
+ * and storing nothing. Taking the field out is a later protocol change.
  */
 image_id: AttachmentId | null, 
 /**
- * Where that image is served from, ready to put in an `<img>`.
+ * Always null, like `image_id` and for the same reason (#269).
  *
- * Server-owned like `away_since`: built on the way out and ignored on the
- * way in. A client cannot work it out for itself — uploads are served from
- * a host of their own (ARCHITECTURE §7) and nothing else on the wire names
- * that host.
+ * Server-owned like `away_since`: whatever a client sends is ignored.
  */
 image_url: string | null, away_message: string | null, away_since: number | null, };
