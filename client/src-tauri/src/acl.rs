@@ -156,6 +156,30 @@ fn only_settings_and_the_list_window_change_what_starts_at_sign_in() {
 }
 
 #[test]
+fn only_the_chat_windows_and_the_list_window_read_the_clipboard() {
+    // What somebody copied is theirs until they paste it (#276). The chat
+    // windows ask for an image only when a paste lands in the message box;
+    // Settings, Search and Media have no box to paste into.
+    for (file, windows, commands) in granted() {
+        if !commands.contains("clipboard_image") {
+            continue;
+        }
+        assert!(
+            windows
+                .iter()
+                .all(|window| window == "main" || window == "chat" || window == "chat-*"),
+            "{file} grants reading the clipboard to {windows:?}"
+        );
+    }
+    let chats: BTreeSet<String> = granted()
+        .into_iter()
+        .filter(|(_, windows, _)| windows.iter().any(|window| window == "chat-*"))
+        .flat_map(|(_, _, commands)| commands)
+        .collect();
+    assert!(chats.contains("clipboard_image"));
+}
+
+#[test]
 fn a_capability_for_main_names_no_other_window() {
     // Granting the owner's commands in a file that also names a viewer would
     // hand them to that viewer too.

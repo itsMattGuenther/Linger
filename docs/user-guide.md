@@ -373,6 +373,18 @@ something, reply to it, emoji and all.
 Three ways, all the same thing: the **+** in the message box, drag a file onto
 the box, or paste one from your clipboard.
 
+Pasting works for pictures too. Copy one (take a screenshot to the clipboard,
+use **Copy** in an image viewer, or **Copy Image** in a browser), click the
+message box and press **Ctrl+V**. The picture joins the message as a file,
+just as if you'd picked it with **+**, named for when you pasted it
+(`pasted-image-2026-09-28-143005.png`). Whatever you'd typed stays put.
+
+Some copies hold a picture and words together: a browser's **Copy Image**
+also copies the picture's address, and some programs, spreadsheets among
+them, copy what you selected both ways. Pasting one of those adds the picture
+and leaves the words out, as Discord does. Copied words on their own paste as
+words.
+
 Click a posted image to expand it. It stays centered and fits the window, even
 when you resize it. Press **Escape** or click it to go back.
 

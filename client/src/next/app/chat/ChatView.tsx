@@ -41,7 +41,10 @@ export type ChatStream = Pick<
 export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards" | "openPerson">;
 
 /** What the window does for the box: uploads and sending. */
-export type ChatComposer = Pick<ComposerProps, "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep">;
+export type ChatComposer = Pick<
+  ComposerProps,
+  "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep" | "clipboardImage"
+>;
 
 /** The showing conversation. */
 export interface ChatPane {

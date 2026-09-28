@@ -40,6 +40,7 @@ import {
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
 import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
+import { clipboardImageReader } from "../../core/chat/paste";
 import { voiceStrip } from "../../core/chat/voice";
 import { isSearchKey, isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
@@ -568,7 +569,7 @@ function Conversations({ following }: { following: Following }) {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep }),
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader() }),
     [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
   );
 

@@ -6,6 +6,7 @@ import { useAutoGrow } from "../../../lib/autoGrow";
 import { COMPOSER_EMOJI, insertGlyph } from "../../../lib/composerEmoji";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
+import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
@@ -15,6 +16,16 @@ import { useMentions } from "./useMentions";
 
 /** `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE`, mirrored to refuse the eleventh file up front. */
 export const MAX_ATTACHMENTS = 10;
+
+/**
+ * How long a paste's words wait on the desktop shell for a picture before
+ * going in anyway (core/chat/paste.ts). It answers in a moment; this is for
+ * a clipboard owner that doesn't.
+ */
+const WORDS_WAIT_MS = 1500;
+
+/** A paste this soon after a middle-button press is that click's selection paste. */
+const MIDDLE_PASTE_MS = 1000;
 
 /** A file on its way into the next message. The window uploads it; the composer shows it. */
 export type { DraftFile };
@@ -71,6 +82,13 @@ export interface ComposerProps {
    * everyone on the server with the room's people first, or a DM's people.
    */
   mentionable?: readonly MentionPerson[];
+  /**
+   * Where the page's own paste event can't see a picture on the clipboard
+   * (WebKitGTK, the Linux app): the desktop shell's reader, which the box
+   * asks instead (#276, core/chat/paste.ts). Left out where the engine shows
+   * the paste its files.
+   */
+  clipboardImage?: () => Promise<File | null>;
 }
 
 /**
@@ -85,6 +103,9 @@ export interface ComposerProps {
  *   a keystroke redraws only the box.
  * - An `@` at the start of a word offers people to mention (#267,
  *   `useMentions`); choosing one puts in their `@username`.
+ * - A picture pasted from the clipboard goes on the draft like a file added
+ *   with the + button, and wins over any words copied with it (#276,
+ *   core/chat/paste.ts).
  */
 export const Composer = memo(function Composer({
   conversation,
@@ -105,6 +126,7 @@ export const Composer = memo(function Composer({
   onDraft,
   keep,
   mentionable = NOBODY,
+  clipboardImage,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -117,6 +139,10 @@ export const Composer = memo(function Composer({
   const picker = useRef<HTMLInputElement | null>(null);
   // Where the caret goes once a chosen mention is in the box.
   const caretAfter = useRef<number | null>(null);
+  // When the middle button last went down in the box (a selection paste).
+  const middleAt = useRef(Number.NEGATIVE_INFINITY);
+  // Pastes waiting on the desktop shell, finished in the order they were made.
+  const pasting = useRef<Promise<void>>(Promise.resolve());
 
   const draft = drafts.get(conversation) ?? keep?.load(conversation) ?? "";
   const problem = problems.get(conversation) ?? null;
@@ -278,10 +304,52 @@ export const Composer = memo(function Composer({
   };
 
   const attach = (chosen: File[]) => {
-    const room = MAX_ATTACHMENTS - files.length;
+    const room = MAX_ATTACHMENTS - now.current.fileCount;
     say(chosen.length > room ? `One message carries at most ${MAX_ATTACHMENTS} files.` : null);
     const taking = chosen.slice(0, Math.max(0, room));
     if (taking.length > 0) onAttach(taking);
+  };
+
+  // A paste's words, put in where the engine would have put them: at the
+  // caret, over any selection, cut to the box's length, and one step for
+  // Undo of its own, not merged into the typing before or after.
+  const putWords = (words: string) => {
+    const field = box.current;
+    if (!field) return;
+    field.focus();
+    const text = words.replace(/\r\n?/g, "\n");
+    const seal = () => field.setSelectionRange(field.selectionStart, field.selectionEnd, field.selectionDirection);
+    seal();
+    const put = document.execCommand("insertText", false, text);
+    seal();
+    if (put) return;
+    // An engine without the editing command: the box's own state, with no Undo.
+    const next = insertGlyph(now.current.draft, text, field.selectionStart, field.selectionEnd, MAX_MESSAGE_CHARS);
+    if (next === null) {
+      say(`A message can be at most ${MAX_MESSAGE_CHARS} characters.`);
+      return;
+    }
+    caretAfter.current = next.caret;
+    change(next.text);
+    onTyping();
+  };
+
+  // A paste the engine can't finish: ask the desktop shell for the picture
+  // on the clipboard, then attach it, or put the paste's words in. Pastes
+  // finish in order, and only in the conversation they were made in.
+  const pasteThroughShell = (read: () => Promise<File | null>, words: string) => {
+    const where = conversation;
+    const asked = read().catch(() => null);
+    const answer = words === "" ? asked : Promise.race([asked, new Promise<null>((settle) => window.setTimeout(() => settle(null), WORDS_WAIT_MS))]);
+    pasting.current = pasting.current
+      .then(() => answer)
+      .then((image) => {
+        if (now.current.conversation !== where) return;
+        if (image) attach([image]);
+        else if (words !== "") putWords(words);
+      })
+      // One paste going wrong never holds up the next.
+      .catch(() => undefined);
   };
 
   const putEmoji = (glyph: string) => {
@@ -388,12 +456,17 @@ export const Composer = memo(function Composer({
             if (event.target.value !== "") onTyping();
           }}
           onKeyDown={onKeyDown}
+          onMouseDown={(event) => {
+            if (event.button === 1) middleAt.current = performance.now();
+          }}
           onPaste={(event) => {
-            const pasted = [...event.clipboardData.files];
-            if (pasted.length > 0) {
-              event.preventDefault();
-              attach(pasted);
-            }
+            const selection = performance.now() - middleAt.current < MIDDLE_PASTE_MS;
+            middleAt.current = Number.NEGATIVE_INFINITY;
+            const plan = planPaste(event.clipboardData, { shell: clipboardImage !== undefined, selection, at: new Date() });
+            if (plan.kind === "engine") return;
+            event.preventDefault();
+            if (plan.kind === "files") attach(plan.files);
+            else if (clipboardImage) pasteThroughShell(clipboardImage, plan.words);
           }}
         />
         <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />

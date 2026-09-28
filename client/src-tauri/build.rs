@@ -35,6 +35,7 @@ const COMMANDS: &[&str] = &[
     "next_tray_voice",
     "autostart_state",
     "autostart_set",
+    "clipboard_image",
 ];
 
 fn main() {
