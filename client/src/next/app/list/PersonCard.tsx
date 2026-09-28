@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { paletteKey } from "../../../lib/names";
@@ -24,6 +24,16 @@ export interface PersonCardProps {
   onClose: () => void;
   /** Why a knock from their row didn't go, when that's what opened the card. */
   problem?: string | null;
+}
+
+/**
+ * A note's sentences, so a line breaks between them rather than inside a
+ * short one: "Three knocks this hour." over "You can knock again in 20
+ * minutes." (#268), not "…knock again in" over "20 minutes.". The card is too
+ * narrow for both on one line.
+ */
+function sentencesOf(text: string): string[] {
+  return text.replace(/([.!?]) +/g, "$1\n").split("\n");
 }
 
 /**
@@ -138,7 +148,12 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onCl
         </div>
         {problem ? (
           <p className="nx-person-problem" role="status">
-            {problem}
+            {sentencesOf(problem).map((sentence, at) => (
+              <Fragment key={at}>
+                {at > 0 ? " " : null}
+                <span className="nx-person-sentence">{sentence}</span>
+              </Fragment>
+            ))}
           </p>
         ) : null}
       </div>

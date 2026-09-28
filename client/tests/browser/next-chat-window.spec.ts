@@ -169,6 +169,18 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   expect(await did(page)).toContain("POST /dms as token-1");
 });
 
+test("a knock the server refuses for the hour says, on the card, when you can knock again (#268)", async ({ page }) => {
+  // The fake server refuses as the real one does: 429, RATE_LIMITED, and
+  // retry_after_ms of 19 minutes 10 seconds, read by the real REST client.
+  await open(page, "room=r-general&limit");
+  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const card = page.getByRole("dialog", { name: "Eli" });
+  await card.getByRole("button", { name: "Knock" }).click();
+  await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+  await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+  expect(await did(page)).toContain("POST /knock as token-1");
+});
+
 test("the voice strip shows whose microphone is off, as its glyph, and push-to-talk's closed key as nothing (#232)", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   const here = page.getByRole("list", { name: "In voice here" });

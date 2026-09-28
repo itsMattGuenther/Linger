@@ -66,8 +66,8 @@ export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-export function refuse(status: number, code: string, message: string): Response {
-  return json({ error: { code, message, retry_after_ms: null } }, status);
+export function refuse(status: number, code: string, message: string, retryAfterMs: number | null = null): Response {
+  return json({ error: { code, message, retry_after_ms: retryAfterMs } }, status);
 }
 
 /**
@@ -318,7 +318,9 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       );
     }
     if (path === "/knock") {
-      return query.has("limit") ? refuse(429, "RATE_LIMITED", "That's three this hour.") : new Response(null, { status: 204 });
+      // `limit`: the fourth knock inside an hour, refused as the server does,
+      // with 19 minutes 10 seconds to go.
+      return query.has("limit") ? refuse(429, "RATE_LIMITED", "Slow down a little.", 1_150_000) : new Response(null, { status: 204 });
     }
     if (path === "/links/preview") {
       const urls = Array.isArray(body.urls) ? body.urls.map(String) : [];

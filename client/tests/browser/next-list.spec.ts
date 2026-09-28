@@ -235,9 +235,50 @@ test.describe("a person's card", () => {
     await rows(page, "Away").first().getByRole("button").first().click();
     const card = page.getByRole("dialog", { name: "Sam" });
     await card.getByRole("button", { name: "Knock" }).click();
-    await expect(card.getByRole("status")).toHaveText("That's three this hour. Give them a bit.");
+    await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
     await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
   });
+
+  // Both sentences don't fit on one line in a 340-wide list window (#268:
+  // the card leaves about 276px for about 345px of words), so the line breaks
+  // between them and each sentence stays whole on a line of its own, at 100%
+  // and at 200% interface size. The card is saved for a person to look at.
+  for (const scale of [1, 2]) {
+    test.describe(`at ${scale * 100}%`, () => {
+      test.use({ deviceScaleFactor: scale });
+      test("a refused knock's sentences each sit on one line", async ({ page }) => {
+        await page.goto("/tests/fixtures/next-list.html?limit");
+        await page.evaluate(() => document.fonts.ready);
+        await rows(page, "Away").first().getByRole("button").first().click();
+        const card = page.getByRole("dialog", { name: "Sam" });
+        await card.getByRole("button", { name: "Knock" }).click();
+        const note = card.getByRole("status");
+        await expect(note).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+        await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
+        const laid = await note.evaluate((node) => {
+          const edge = node.getBoundingClientRect();
+          return [...node.children].map((sentence) => {
+            const words = document.createRange();
+            words.selectNodeContents(sentence);
+            const boxes = [...words.getClientRects()];
+            return {
+              text: sentence.textContent,
+              lines: new Set(boxes.map((box) => Math.round(box.top))).size,
+              top: Math.round(words.getBoundingClientRect().top),
+              inside: boxes.every((box) => box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5),
+            };
+          });
+        });
+        expect(laid.map(({ text, lines, inside }) => ({ text, lines, inside }))).toEqual([
+          { text: "Three knocks this hour.", lines: 1, inside: true },
+          { text: "You can knock again in 20 minutes.", lines: 1, inside: true },
+        ]);
+        expect(laid[1]?.top).toBeGreaterThan(laid[0]?.top ?? Infinity);
+        await page.mouse.move(0, 0);
+        await card.screenshot({ path: `test-results/knock-limit/${test.info().project.name}-${scale * 100}.png`, animations: "disabled" });
+      });
+    });
+  }
 
   test("nobody offline can be knocked", async ({ page }) => {
     await page.getByRole("button", { name: /Offline/ }).click();
@@ -306,7 +347,7 @@ test.describe("a person's row", () => {
     await sam.hover();
     await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
     const card = page.getByRole("dialog", { name: "Sam" });
-    await expect(card).toContainText("That's three this hour. Give them a bit.");
+    await expect(card).toContainText("Three knocks this hour. You can knock again in 20 minutes.");
     // Read once, not waited for: a shake would be over in three seconds anyway.
     expect(await sam.getAttribute("data-knocked")).toBeNull();
   });
