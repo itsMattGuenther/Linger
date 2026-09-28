@@ -537,6 +537,10 @@ test("a window opened on a message goes there", async ({ page }) => {
   const row = page.locator('[data-message="l0000300"]');
   await expect(row).toHaveAttribute("data-flash", "yes");
   await expect(row).toBeInViewport();
+  // The room is opened once, at the message. Walking into the tab doesn't
+  // open it again at its newest page, which would leave a gap between the two (#266).
+  const reads = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages"));
+  expect(reads).toEqual(["GET /rooms/r-general/messages?around=l0000300&limit=100 as token-1"]);
 });
 
 test("with one server, tabs and headers say nothing about servers", async ({ page }) => {

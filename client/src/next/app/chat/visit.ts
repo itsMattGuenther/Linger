@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import type { AuthedApi } from "../../../lib/api";
-import { enterRoom, type GatewayState, leaveWindow, openAround, openRoom, releaseOtherRooms, serverState } from "../../../lib/gateway";
+import { enterRoom, type GatewayState, leaveWindow, onStateChange, openAround, openRoom, releaseOtherRooms, serverState } from "../../../lib/gateway";
 import { openingAt } from "../../core/chat/conversation";
 import type { Following } from "../../core/mirror";
 import { keyOf, type TabKey } from "../../core/tabs";
@@ -13,6 +13,13 @@ import { keyOf, type TabKey } from "../../core/tabs";
  * and load the history around where you left off, or the newest. Once per
  * visit, after the read positions are in; again after a reconnect, which may
  * have made the loaded history stale.
+ *
+ * A room that is already being opened when the visit starts is not opened
+ * again. That is a search hit or a media tile opening its room at the
+ * message (ChatWindow's `goToMessage`, just before the tab shows), or the
+ * last visit's first page still on its way. Opening it a second time would
+ * start the room over, and the store drops a page asked for before that
+ * (#266), so the visit waits for the opening already on its way instead.
  */
 export function useLanding(api: AuthedApi | null, roomId: RoomId | null, state: GatewayState | null): { ready: boolean; at: "left-off" | "end" } {
   const readLoaded = state?.readLoaded ?? false;
@@ -25,20 +32,30 @@ export function useLanding(api: AuthedApi | null, roomId: RoomId | null, state: 
     const server = api.baseUrl;
     const here = `${server}#${roomId}`;
     let alive = true;
+    let stopWaiting = (): void => undefined;
     const current = serverState(server);
     const target = openingAt(current, roomId);
     const stream = current.streams[roomId];
     enterRoom(server, roomId);
     releaseOtherRooms(server, roomId);
-    setLand({ key: here, ready: false, at: target === null ? "end" : "left-off" });
-    void (async () => {
-      if (target !== null) await openAround(api, roomId, target);
-      else if (stream && !stream.atEnd) await leaveWindow(api, roomId);
-      else await openRoom(api, roomId);
-      if (alive) setLand({ key: here, ready: true, at: target === null ? "end" : "left-off" });
-    })();
+    const at = target === null ? "end" : "left-off";
+    setLand({ key: here, ready: false, at });
+    const landed = () => {
+      if (alive) setLand({ key: here, ready: true, at });
+    };
+    if (stream && stream.loading && stream.messages.length === 0) {
+      stopWaiting = whenOpened(server, roomId, landed);
+    } else {
+      void (async () => {
+        if (target !== null) await openAround(api, roomId, target);
+        else if (stream && !stream.atEnd) await leaveWindow(api, roomId);
+        else await openRoom(api, roomId);
+        landed();
+      })();
+    }
     return () => {
       alive = false;
+      stopWaiting();
     };
   }, [api, roomId, readLoaded, sessionId]);
 
@@ -46,6 +63,23 @@ export function useLanding(api: AuthedApi | null, roomId: RoomId | null, state: 
   const at = land.key === key ? land.at : "end";
   // One object per change, so the conversation isn't redrawn by every update to the store.
   return useMemo(() => ({ ready, at }), [ready, at]);
+}
+
+/**
+ * Call `landed` once the room's opening on its way has come back, or the room
+ * has been let go of. Answers how to stop waiting.
+ */
+function whenOpened(server: string, roomId: RoomId, landed: () => void): () => void {
+  let stop = (): void => undefined;
+  const check = () => {
+    const stream = serverState(server).streams[roomId];
+    if (stream !== undefined && stream.loading) return;
+    stop();
+    landed();
+  };
+  stop = onStateChange(check);
+  check();
+  return stop;
 }
 
 /**
