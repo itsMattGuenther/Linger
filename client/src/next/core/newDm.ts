@@ -19,13 +19,23 @@ function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase();
 }
 
+/**
+ * Whether what's typed finds this person: anywhere in their name or their
+ * username, ignoring case and accents. Nothing typed finds everyone. One rule
+ * for every place that looks people up: this picker and the message box's @
+ * list (core/chat/mentions.ts).
+ */
+export function findsPerson(user: User, query: string): boolean {
+  const wanted = fold(query.trim());
+  return wanted === "" || fold(user.display_name).includes(wanted) || fold(user.username).includes(wanted);
+}
+
 /** Who can still be picked: not you, not already picked, matching what's typed, by name. */
 export function candidates(users: readonly User[], meId: UserId | null, query: string, picked: readonly UserId[]): User[] {
-  const wanted = fold(query.trim());
   const chosen = new Set(picked);
   return users
     .filter((user) => user.id !== meId && !chosen.has(user.id))
-    .filter((user) => wanted === "" || fold(user.display_name).includes(wanted) || fold(user.username).includes(wanted))
+    .filter((user) => findsPerson(user, query))
     .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
 }
 

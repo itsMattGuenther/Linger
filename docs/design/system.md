@@ -115,7 +115,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Icon boxes | `--icon-sm` 12 · `--icon-md` 16 · `--icon-lg` 20 |
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
-| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
+| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
 | Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--name-inline-max` 14em · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) · `--status-image-w` 400 · `--status-image-h` 200 (a status picture) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
@@ -280,6 +280,9 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
   cover text, and the note steps aside.
 - **The row is a button:** Enter or a click activates, and a double-click opens
   (a DM).
+- **`option`** makes it one choice in an `OptionList` instead: an `option`
+  that never takes focus, lit with the selected look while it's the
+  highlighted one. A plain hover doesn't light it, so only one row is ever lit.
 - **`RowList`** is the `<ul>` with an accessible name.
 
 ### SectionLabel
@@ -343,7 +346,9 @@ message's Reply, Edit and Delete.
 - **Placement:** drawn in a portal, below the trigger with its right edge on
   the trigger's, or above when there is no room below; always inside the
   window. It is measured before it is shown, so it never flashes in the wrong
-  place.
+  place. The rule is one function, `kit/place.ts`, shared with `OptionList`
+  (lessons L-11). A window too short for it either way gives it the side with
+  more room, and it scrolls.
 - **Items** are 32px, with an optional icon, and `tone="danger"` for a
   destructive one. A step that needs confirming (delete) swaps the items for
   the confirm pair rather than opening a second menu.
@@ -354,6 +359,27 @@ message's Reply, Edit and Delete.
 - **Width** is `--menu-w`; a long label ends in "…".
 - **`checked`** makes an item an on/off choice (`menuitemcheckbox`), like a
   server's Quiet: a tick in the lamp at its end when it's on.
+
+### OptionList
+
+A short list of choices that floats by a text box which keeps the keyboard:
+the people the message box offers after an `@` (#267).
+
+- **The box owns the keys.** It is the `combobox` and the list its `listbox`:
+  the box says which choice is highlighted, points at it with
+  `aria-activedescendant` so a screen reader says who it is, and moves it. The
+  list takes no focus, and a press on it never takes the focus from the box.
+- **Rows** are the kit's one-line `Row`s as `option`s: a marker, the name in
+  the person's style, and a small label at the end (`@justin`). The pointer
+  moving over a row highlights it; a list scrolling under a still pointer
+  doesn't.
+- **Placement** is `Menu`'s rule (`kit/place.ts`): below the box, or above it
+  when there's no room below, its start edge on the box's, inside the window.
+  About six rows show (`--row-1` × 6.5), and the rest scroll.
+- **It measures once.** Its row and frame are read when it opens; after that
+  only the number of choices changes its height, so typing that narrows it
+  lays nothing out (L-12).
+- **Width** is `--picker-w`, never wider than the window.
 
 ### TextField
 
@@ -601,7 +627,11 @@ replaces an unread count.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
   then add-a-file, emoji and send (32px each). It grows with its text to
   `--composer-max`, measuring a hidden copy so typing never lays out the
-  conversation (L-12).
+  conversation (L-12). An `@` at the start of a word opens an `OptionList` of
+  people to mention above it (#267, `app/chat/useMentions.tsx`).
+- **Mentions** in a message read as the person's display name (`@Justin B`)
+  in the mention's highlight, never their name's face or color, with the
+  stored `@username` in the tooltip. A mention of you is in the lamp.
 
 **It never moves a reader.** A short conversation hangs from the bottom,
 above the box. At the end, new messages follow, and anything that grows
@@ -675,6 +705,9 @@ built on the rows' own grid so nothing new lines up by eye:
 | A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
 | A press anywhere on a title bar but a control moves the window, in the kit and in every window; in the chat window that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
+| An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
+| Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
+| The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | The conversation: names on one edge, wrapped lines and continuations on another; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |

@@ -36,7 +36,7 @@ function sounds(asked: string[]): string[] {
   return asked.filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
 }
 
-const box = (page: Page) => page.getByRole("textbox", { name: /^Message/ });
+const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
@@ -167,6 +167,18 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   await expect(page.getByRole("tab", { name: "DM with Eli" })).toHaveAttribute("aria-selected", "true");
   await expect(card).toHaveCount(0);
   expect(await did(page)).toContain("POST /dms as token-1");
+});
+
+test("a knock the server refuses for the hour says, on the card, when you can knock again (#268)", async ({ page }) => {
+  // The fake server refuses as the real one does: 429, RATE_LIMITED, and
+  // retry_after_ms of 19 minutes 10 seconds, read by the real REST client.
+  await open(page, "room=r-general&limit");
+  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const card = page.getByRole("dialog", { name: "Eli" });
+  await card.getByRole("button", { name: "Knock" }).click();
+  await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+  await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+  expect(await did(page)).toContain("POST /knock as token-1");
 });
 
 test("the voice strip shows whose microphone is off, as its glyph, and push-to-talk's closed key as nothing (#232)", async ({ page }) => {
@@ -608,6 +620,24 @@ test("Join asks the list window to join voice here", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Join" }).click();
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "voice.join", server: SERVER, roomId: "r-general" });
+});
+
+// A start that failed in the list window reaches this window with the
+// devices it asked for, which decide what the strip says (#261, #273).
+test("a failed start shared by the list window says what fixes it, and Pick yours opens Settings on Sound & Voice", async ({ page }) => {
+  await open(page);
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const microphone = "the microphone wouldn't open: The requested device could not be opened.";
+  await page.evaluate((problem) => window.owner?.voiceFailed("r-general", problem, { input: null, output: null }), microphone);
+  // This browser isn't Windows, so it's "the default".
+  await expect(strip.getByRole("alert")).toHaveText("Couldn't start voice. The default microphone wouldn't open.");
+  await strip.getByRole("button", { name: "Pick yours in Settings" }).click();
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "settings")).toEqual([{ kind: "settings", section: "sound" }]);
+
+  // Asked for by name, there's nothing to pick.
+  await page.evaluate((problem) => window.owner?.voiceFailed("r-general", problem, { input: "USB Microphone", output: null }), microphone);
+  await expect(strip.getByRole("alert")).toHaveText("Couldn't start voice. The microphone wouldn't open.");
+  await expect(strip.getByRole("button", { name: "Pick yours in Settings" })).toHaveCount(0);
 });
 
 test("with push-to-talk on, holding the talk key in this window talks through the list window, and the shortcuts' Ctrl doesn't", async ({ page }) => {

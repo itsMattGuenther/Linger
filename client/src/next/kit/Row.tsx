@@ -42,6 +42,12 @@ export interface RowProps {
   disabled?: boolean;
   onActivate?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDoubleActivate?: (event: MouseEvent<HTMLButtonElement>) => void;
+  /**
+   * One choice in a listbox (`OptionList`) instead of a button. The keyboard
+   * stays in the text box that owns the list, so the row never takes focus:
+   * `active` is the choice that box has highlighted, and a click picks it.
+   */
+  option?: { id: string; active: boolean; onPick: () => void };
 }
 
 function Lead({ lead }: { lead: RowLead }) {
@@ -91,8 +97,45 @@ export function Row({
   disabled = false,
   onActivate,
   onDoubleActivate,
+  option,
 }: RowProps) {
   const count = Math.min(actions?.length ?? 0, 3);
+  const text = (
+    <span className="k-row-text" data-kit-row-text="">
+      <span className="k-row-top">
+        <span className="k-row-title">{title}</span>
+        {trailing ? <span className="k-row-trailing">{trailing}</span> : null}
+        {note ? <span className="k-row-note">{note}</span> : null}
+        {end ? <span className="k-row-end">{end}</span> : null}
+      </span>
+      {/* No second line to show: the row keeps its height and the name sits level with the marker. */}
+      {lines === "two" && detail ? (
+        <span className="k-row-detail" data-away={away ? "yes" : undefined}>
+          {detail}
+        </span>
+      ) : null}
+    </span>
+  );
+  if (option) {
+    return (
+      <li
+        className="k-row"
+        data-kit="Row"
+        data-row-kind={lines}
+        data-active={option.active ? "yes" : undefined}
+        role="option"
+        id={option.id}
+        aria-selected={option.active}
+        aria-label={label}
+        onClick={option.onPick}
+      >
+        <span className="k-row-main">
+          <Lead lead={lead} />
+          {text}
+        </span>
+      </li>
+    );
+  }
   return (
     <li
       className="k-row"
@@ -113,20 +156,7 @@ export function Row({
         onDoubleClick={onDoubleActivate}
       >
         <Lead lead={lead} />
-        <span className="k-row-text" data-kit-row-text="">
-          <span className="k-row-top">
-            <span className="k-row-title">{title}</span>
-            {trailing ? <span className="k-row-trailing">{trailing}</span> : null}
-            {note ? <span className="k-row-note">{note}</span> : null}
-            {end ? <span className="k-row-end">{end}</span> : null}
-          </span>
-          {/* No second line to show: the row keeps its height and the name sits level with the marker. */}
-          {lines === "two" && detail ? (
-            <span className="k-row-detail" data-away={away ? "yes" : undefined}>
-              {detail}
-            </span>
-          ) : null}
-        </span>
+        {text}
       </button>
       {count > 0 ? <span className="k-row-actions">{actions?.slice(0, 3)}</span> : null}
     </li>

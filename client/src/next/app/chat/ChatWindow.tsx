@@ -39,6 +39,7 @@ import {
   micsHere,
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
+import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
 import { voiceStrip } from "../../core/chat/voice";
 import { isSearchKey, isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
@@ -66,6 +67,7 @@ const KNOCKED_MS = 3_000;
 const TYPING_CHECK_MS = 2_000;
 const NO_MESSAGES: readonly Message[] = [];
 const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
+const NO_MENTIONS: readonly MentionPerson[] = [];
 
 /**
  * The chat window: a viewer (docs/design/architecture.md, "Windows and their
@@ -487,6 +489,12 @@ function Conversations({ following }: { following: Following }) {
   const pending = useMemo(() => stream?.pending.map((one) => one.message) ?? NO_MESSAGES, [stream?.pending]);
   const people = useMemo(() => (state ? new Map(state.users.map((user) => [user.id, user])) : NO_PEOPLE), [state?.users]);
   const talking = useMemo(() => (state ? talkingNow(state) : new Set<string>()), [state]);
+  // Who an @ offers: only what it reads, so a message arriving doesn't
+  // redraw the box.
+  const mentionable = useMemo(
+    () => (state && room ? mentionableIn(state, room) : NO_MENTIONS),
+    [state?.users, state?.presence, state?.occupancy, state?.me, room],
+  );
   const previews = useLinkPreviews(active?.server ?? "");
 
   const onNearStart = useCallback(() => {
@@ -583,6 +591,8 @@ function Conversations({ following }: { following: Following }) {
   const onJoin = useCallback(() => {
     if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
   }, [active, intend]);
+  // A system default that wouldn't open is fixed by picking a device by name (#273).
+  const onPickDevice = useCallback(() => void intend({ kind: "settings", section: "sound" }).catch(() => undefined), [intend]);
   // Your voice controls in the room you're in voice in (#216): the list
   // window owns the seat and makes the change, and this window, the one
   // clicked, plays the sound that confirms it once it's done (#241).
@@ -611,6 +621,7 @@ function Conversations({ following }: { following: Following }) {
       voice: {
         strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab),
         onJoin,
+        onPickDevice,
         mics: micsHere(state, room.id),
         controls:
           state.myVoice?.roomId === room.id
@@ -619,13 +630,17 @@ function Conversations({ following }: { following: Following }) {
         // The last try at starting voice here failed (#261): the strip says why.
         failed:
           state.voiceFailed?.roomId === room.id
-            ? { line: voiceStartProblem(state.voiceFailed.problem, onWindows()), detail: state.voiceFailed.problem }
+            ? {
+                ...voiceStartProblem(state.voiceFailed.problem, onWindows(), state.voiceFailed.devices),
+                detail: state.voiceFailed.problem,
+              }
             : undefined,
       },
       people,
       me: state.me,
       speaking: talking,
       typing: typingIn(state, room.id, typingNow),
+      mentionable,
       stream: {
         messages,
         pending,

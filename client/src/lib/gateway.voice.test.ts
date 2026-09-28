@@ -299,10 +299,20 @@ describe("voice in the store", () => {
       /no voice_join today/,
     );
     expect(serverState(HOME).myVoice).toBeNull();
-    // The reason stays, for the room's strip to show (#261), and is shared
-    // with the other windows along with the seat.
-    expect(serverState(HOME).voiceFailed).toEqual({ roomId: "r-garage", problem: expect.stringMatching(/no voice_join today/) });
+    // The reason stays, for the room's strip to show (#261), with the devices
+    // it asked for, which say what fixes it (#273). It is shared with the
+    // other windows along with the seat.
+    expect(serverState(HOME).voiceFailed).toEqual({
+      roomId: "r-garage",
+      problem: expect.stringMatching(/no voice_join today/),
+      devices: DEFAULTS,
+    });
     expect(sharedLocalOf(HOME).voiceFailed?.roomId).toBe("r-garage");
+    expect(sharedLocalOf(HOME).voiceFailed?.devices).toEqual(DEFAULTS);
+    // A try with a device picked by name remembers that one.
+    const picked = { input: "USB Microphone", output: null };
+    await expect(joinVoice(fakeApi(HOME), "r-garage", picked, false)).rejects.toThrow(/no voice_join today/);
+    expect(serverState(HOME).voiceFailed?.devices).toEqual(picked);
 
     // The next try clears it, whether or not it works.
     failing.delete("voice_join");

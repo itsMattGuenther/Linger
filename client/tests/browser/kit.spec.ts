@@ -410,6 +410,60 @@ test("a menu opens on its first item, moves with the arrows, and gives focus bac
   await expect(page.getByTestId("menu-chose")).toHaveText("reply");
 });
 
+test("an option list floats below its opener in the kit's rows, shows about six, and a press keeps the focus (#267)", async ({ page }) => {
+  const trigger = page.getByTestId("options-trigger").getByRole("button", { name: "Who @ offers" });
+  const list = page.getByRole("listbox", { name: "People to mention" });
+  const options = list.getByRole("option");
+
+  await trigger.click();
+  await expect(options).toHaveCount(13);
+  // Below the trigger, its start edge on the trigger's, inside the window (L-11).
+  const [box, button] = [await list.boundingBox(), await trigger.boundingBox()];
+  expect(box && button && box.y >= button.y + button.height && Math.abs(box.x - button.x) < HALF_PIXEL && box.x + box.width <= 1280).toBe(true);
+  // Rows as rows are everywhere: 32px, names starting on one edge.
+  const rows = await options.evaluateAll((all) =>
+    all.map((one) => ({
+      height: one.querySelector(".k-row-main")?.getBoundingClientRect().height,
+      x: one.querySelector("[data-kit-row-text]")?.getBoundingClientRect().left,
+    })),
+  );
+  expect(new Set(rows.map((row) => row.height))).toEqual(new Set([32]));
+  expect(new Set(rows.map((row) => row.x)).size).toBe(1);
+  // About six rows show, and the rest scroll.
+  const sizes = await list.evaluate((node) => ({ shown: node.clientHeight, all: node.scrollHeight }));
+  expect(sizes.all).toBeGreaterThan(sizes.shown);
+  expect(sizes.shown).toBeGreaterThanOrEqual(32 * 6);
+  expect(sizes.shown).toBeLessThan(32 * 7);
+  // The long name ends in an ellipsis, and its @username stays.
+  await list.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  const long = options.last();
+  const cut = await long.evaluate((one) => {
+    const title = one.querySelector('[data-kit="Name"]');
+    return title ? { over: title.scrollWidth > title.clientWidth, ellipsis: getComputedStyle(title).textOverflow } : null;
+  });
+  expect(cut).toEqual({ over: true, ellipsis: "ellipsis" });
+  await expect(long.locator(".k-row-note")).toBeVisible();
+
+  // One highlighted at a time, and the pointer moves it.
+  await list.evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await options.nth(2).hover();
+  await expect(options.nth(2)).toHaveAttribute("aria-selected", "true");
+  await expect(list.locator('[aria-selected="true"]')).toHaveCount(1);
+
+  // A press chooses and never takes the focus from what opened the list.
+  const name = (await options.nth(2).getAttribute("aria-label"))?.split(",")[0] ?? "";
+  await trigger.focus();
+  await options.nth(2).click();
+  await expect(trigger).toBeFocused();
+  await expect(page.getByTestId("options-chose")).toHaveText(name);
+  await expect(list).toHaveCount(0);
+});
+
 test("a name inside a sentence sits on the sentence's own lines (inline names)", async ({ page }) => {
   const sentence = page.getByTestId("inline-names");
   const lines = await sentence.locator("span").first().evaluate((span) => {
@@ -615,5 +669,13 @@ test.describe("in high contrast", () => {
     expect(seen.trackOn).not.toBe(seen.trackOff);
     expect(seen.thumbOff).not.toBe(seen.trackOff);
     expect(seen.talking).toBe(seen.highlight);
+
+    // The highlighted choice in an option list is outlined, the rest aren't.
+    await page.getByTestId("options-trigger").getByRole("button").click();
+    const options = page.getByRole("listbox", { name: "People to mention" }).getByRole("option");
+    await expect(options.first()).toHaveAttribute("aria-selected", "true");
+    const outline = (option: typeof options) => option.locator(".k-row-main").evaluate((node) => getComputedStyle(node).outlineStyle);
+    expect(await outline(options.first())).toBe("solid");
+    expect(await outline(options.nth(1))).toBe("none");
   });
 });

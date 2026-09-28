@@ -14,8 +14,10 @@
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ApiError } from "../../src/lib/api";
 import { apply, serverState } from "../../src/lib/gateway";
 import type { GatewayState } from "../../src/lib/gateway";
+import { knockOn } from "../../src/next/core/knock";
 import { withAway, withLine } from "../../src/next/core/you";
 import { listModel } from "../../src/next/core/list";
 import { moveServer, seatsWords, serverHeader } from "../../src/next/core/servers";
@@ -162,8 +164,13 @@ function OneServer() {
     onHost: (section) => note(`host:${section}`),
     onKnock: async (user) => {
       note(`knock:${user.id}`);
-      // `?limit`: the fourth knock inside an hour (SPEC §4.9).
-      return query.has("limit") ? { ok: false, problem: "That's three this hour. Give them a bit." } : { ok: true };
+      // `?limit`: the fourth knock inside an hour (SPEC §4.9), refused the
+      // way the server refuses it, with 19 minutes 10 seconds to go.
+      return knockOn({
+        knock: async () => {
+          if (query.has("limit")) throw new ApiError(429, { code: "RATE_LIMITED", message: "Slow down a little.", retry_after_ms: 1_150_000 });
+        },
+      }, user.id);
     },
   };
   return (

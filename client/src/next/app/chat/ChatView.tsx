@@ -3,6 +3,7 @@ import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
+import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
 import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
@@ -12,7 +13,7 @@ import { ImageViewer } from "./ImageViewer";
 import type { MessageActions } from "./MessageRow";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
 import { Typing } from "./Typing";
-import { type StripControls, VoiceStrip } from "./VoiceStrip";
+import { type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
 /** What the window supplies about the showing conversation's history. */
@@ -51,10 +52,12 @@ export interface ChatPane {
   voice: {
     strip: VoiceStripModel;
     onJoin: () => void;
+    /** Open Settings on Sound & Voice, to pick a device by name (#273). */
+    onPickDevice: () => void;
     mics?: ReadonlyMap<string, "muted" | "deafened">;
     controls?: StripControls;
-    /** Starting voice here failed last time: why, short, and the whole reason (#261). */
-    failed?: { line: string; detail: string };
+    /** Starting voice here failed last time: why, short, what fixes it, and the whole reason (#261, #273). */
+    failed?: StripProblem;
   } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
@@ -63,6 +66,8 @@ export interface ChatPane {
   speaking: ReadonlySet<string>;
   /** Who is writing here right now, not counting you. */
   typing: readonly User[];
+  /** Who an `@` in the box offers, in order (core/chat/mentions.ts). */
+  mentionable: readonly MentionPerson[];
   stream: ChatStream;
   actions: ChatMessageActions;
   composer: ChatComposer;
@@ -194,7 +199,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={single ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
           {single ? null : <PaneHeader {...pane.header} />}
-          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} controls={pane.voice.controls} failed={pane.voice.failed} /> : null}
+          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} /> : null}
           <Conversation
             key={pane.id}
             id={pane.id}
@@ -219,6 +224,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             onClearReply={onClearReply}
             onRestoreReply={onRestoreReply}
             onEditLast={onEditLast}
+            mentionable={pane.mentionable}
             {...pane.composer}
           />
         </section>

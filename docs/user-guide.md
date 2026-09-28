@@ -336,8 +336,17 @@ A little formatting works, the kind you already type:
 - a list
 ```
 
-Paste a link and it becomes a link. Type `@` and someone's username to mention
-them — that is the one thing that will interrupt them.
+Paste a link and it becomes a link.
+
+To mention somebody, type `@` and start their name or their username. A list
+of people opens by the box: **Up** and **Down** move through it, **Enter** or
+**Tab** (or a click) puts them in, and **Escape** closes it and keeps what you
+typed. With the list open, Enter never sends. In a room the list has everyone on
+the server, the people in the room first; in a DM, only the people in it. A
+mention is the one thing that will interrupt someone.
+
+In messages, a mention shows the person's name as it is now (`@Justin B`).
+Hover it to see their username, which is what the message keeps.
 
 Hover over a message or use Tab to reveal its **⋯** button. Click it or press
 Enter to open the message actions; Escape closes the menu and returns focus.
@@ -441,8 +450,18 @@ in, or won't open, the system default is used and the picker says so.
 
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking: hover it for the whole reason. Joining needs a microphone
-and speakers that open. The usual cause on Windows is Windows' own privacy
-switch for the microphone, which Linger can't turn on for you:
+and speakers that both open.
+
+First, pick your microphone and speakers by name in **Settings → Sound &
+Voice**, instead of leaving them on the system default. That's the likely
+fix: the default can point at something that won't open, like an unplugged
+jack, a monitor or an old headset. When the default is what failed, the
+strip has a **Pick yours in Settings** button that opens Sound & Voice for
+you.
+
+Second, on Windows, check Windows' own privacy switch for the microphone,
+which Linger can't turn on for you. If Discord or another desktop app can use
+your microphone, it's already on.
 
 - Windows 10: **Settings → Privacy → Microphone**, then turn on **Allow apps
   to access your microphone** and **Allow desktop apps to access your
@@ -487,7 +506,8 @@ person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
 in your system settings, nothing moves; the card still shows. There is no message and nothing for them to
-answer. Three an hour per person, so it stays a tap. A soft sound accompanies
+answer. Three an hour per person, so it stays a tap; after the third, the card
+says when you can knock again. A soft sound accompanies
 the card unless sounds are muted or quiet hours are on (22:00–08:00 on this
 computer's clock unless you move them). Quiet hours are off until you turn them
 on. They silence the sound, not the card.
