@@ -51,7 +51,7 @@ test.describe("a long message folds", () => {
         text: fold?.textContent ?? "",
       };
     });
-  /** No row overlaps the next one. */
+  /** No row overlaps the next one, once the rows have been measured. */
   const edgeToEdge = (page: Page) =>
     page.locator(".nx-conv-row").evaluateAll((rows) =>
       rows
@@ -71,18 +71,17 @@ test.describe("a long message folds", () => {
     expect(folded.text).toContain("line 300");
     const showAll = row(page, id).getByRole("button", { name: "Show all" });
     await expect(showAll).toBeVisible();
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
 
     await showAll.click();
     await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
-    const open300 = await drawn(page, id);
-    expect(open300.lines).toBe(300);
-    expect(open300.mask).toBe("none");
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(async () => (await drawn(page, id)).lines).toBe(300);
+    expect((await drawn(page, id)).mask).toBe("none");
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
 
     await row(page, id).getByRole("button", { name: "Show less" }).click();
-    expect((await drawn(page, id)).lines).toBe(20);
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(async () => (await drawn(page, id)).lines).toBe(20);
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
     await expect(row(page, after)).toContainText("lol what was that");
   });
 
