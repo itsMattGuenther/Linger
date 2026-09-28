@@ -8,7 +8,8 @@ export default defineConfig({
   // Stop well inside the CI job's own limit, so a hung run fails here — naming
   // the test still running and uploading evidence — rather than being killed
   // with its log. CI runs each engine in a job of its own, limited to 20
-  // minutes; WebKit, the slower one, took about 12 by 2026-09-28.
+  // minutes; WebKit, the slower one, took about 12 by 2026-09-28, so CI now
+  // runs it as two halves at once (`--shard`, ci.yml), each about 6.
   globalTimeout: process.env.CI ? 16 * 60_000 : undefined,
   workers: process.env.CI ? 2 : undefined,
   reporter: "list",
