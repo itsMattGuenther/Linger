@@ -16,6 +16,10 @@
  *   `window.parity.release()`, so it shows as going up.
  * - `?flakystore`: the file store refuses each part the first time it's sent.
  *
+ * `window.parity.clipboard(bytes)` puts a picture on the desktop shell's
+ * clipboard (`clipboard_image`, which the Linux app's box asks, #276); null
+ * takes it off. Each time the box asks is written down as `clipboard`.
+ *
  * `window.parity.holdReads()` makes every history read from then on wait for
  * `window.parity.answerReads(…)`, so a test decides the order two reads come
  * back in.
@@ -47,6 +51,8 @@ const night = evening(serverState(SERVER));
 const finished = new Map<string, Attachment>();
 const slots = new Map<string, { filename: string; mime: string; size: number }>();
 let uploads = 0;
+/** What the desktop shell would find on the clipboard: a picture's bytes, or nothing. */
+let shellClipboard: Uint8Array | null = null;
 let release: () => void = () => undefined;
 const parts = new Promise<void>((settle) => {
   release = settle;
@@ -83,6 +89,11 @@ const desktop = fakeDesktop({
   },
   commands: {
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
+    clipboard_image: () => {
+      desktop.note("clipboard");
+      // Raw bytes, as the shell answers (tauri::ipc::Response); none for no picture.
+      return shellClipboard ? shellClipboard.slice().buffer : new ArrayBuffer(0);
+    },
   },
   routes: (method, path, _url, body) => {
     if (path === "/uploads" && method === "POST") {
@@ -193,6 +204,8 @@ declare global {
       post: (room: string, author: string, body: string, extra?: Partial<Message>) => string;
       /** With `?holdparts`: the file store takes the bytes. */
       release: () => void;
+      /** The desktop shell's clipboard holds this picture from now on, or nothing. */
+      clipboard: (bytes: number[] | null) => void;
       /** The list window opens a conversation while this window is open. */
       open: (room: string) => void;
       /** From now on, every history read waits to be answered. */
@@ -214,6 +227,9 @@ window.parity = {
     return message.id;
   },
   release: () => release(),
+  clipboard: (bytes) => {
+    shellClipboard = bytes ? Uint8Array.from(bytes) : null;
+  },
   open: (room) => desktop.deliver("next:open", { server: SERVER, room }),
   holdReads: () => {
     holdingReads = true;

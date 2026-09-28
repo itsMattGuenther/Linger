@@ -114,6 +114,10 @@ libc = "0.2"
 # Already in the tree through wry; named here so startup can ask which
 # WebKitGTK it is about to run before GTK exists (#187).
 webkit2gtk-sys = "2.0"
+# Already in the tree through Tauri and wry, which draw every window with
+# it; named here so the message box can read an image off the clipboard,
+# which WebKitGTK never shows the page (#276, `clipboard.rs`).
+gtk = "0.18"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
