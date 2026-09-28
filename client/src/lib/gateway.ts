@@ -238,9 +238,10 @@ export interface GatewayState {
    * The last try at starting voice failed, where, and the shell's reason
    * (#261). Cleared by the next try. A failed start used to leave nothing
    * behind: the strip blinked "opening" and went back, and nobody could tell
-   * why voice wouldn't start.
+   * why voice wouldn't start. `devices` is what that try asked for, `null`
+   * being the system default, which says what fixes it (#273).
    */
-  voiceFailed: { roomId: RoomId; problem: string } | null;
+  voiceFailed: { roomId: RoomId; problem: string; devices: VoiceDeviceChoice } | null;
 }
 
 /** Everything about being in voice that is this client's alone. */
@@ -1921,7 +1922,7 @@ export async function joinVoice(
     applySavedVoiceVolumes(server);
   } catch (error) {
     const problem = error instanceof Error ? error.message : String(error);
-    publish(server, { ...stateOf(server), myVoice: null, voiceFailed: { roomId, problem } });
+    publish(server, { ...stateOf(server), myVoice: null, voiceFailed: { roomId, problem, devices } });
     throw error;
   }
 }

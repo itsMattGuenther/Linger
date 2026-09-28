@@ -622,6 +622,24 @@ test("Join asks the list window to join voice here", async ({ page }) => {
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "voice.join", server: SERVER, roomId: "r-general" });
 });
 
+// A start that failed in the list window reaches this window with the
+// devices it asked for, which decide what the strip says (#261, #273).
+test("a failed start shared by the list window says what fixes it, and Pick yours opens Settings on Sound & Voice", async ({ page }) => {
+  await open(page);
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const microphone = "the microphone wouldn't open: The requested device could not be opened.";
+  await page.evaluate((problem) => window.owner?.voiceFailed("r-general", problem, { input: null, output: null }), microphone);
+  // This browser isn't Windows, so it's "the default".
+  await expect(strip.getByRole("alert")).toHaveText("Couldn't start voice. The default microphone wouldn't open.");
+  await strip.getByRole("button", { name: "Pick yours in Settings" }).click();
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "settings")).toEqual([{ kind: "settings", section: "sound" }]);
+
+  // Asked for by name, there's nothing to pick.
+  await page.evaluate((problem) => window.owner?.voiceFailed("r-general", problem, { input: "USB Microphone", output: null }), microphone);
+  await expect(strip.getByRole("alert")).toHaveText("Couldn't start voice. The microphone wouldn't open.");
+  await expect(strip.getByRole("button", { name: "Pick yours in Settings" })).toHaveCount(0);
+});
+
 test("with push-to-talk on, holding the talk key in this window talks through the list window, and the shortcuts' Ctrl doesn't", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   // The window has set itself up (it reports the room in the same pass that

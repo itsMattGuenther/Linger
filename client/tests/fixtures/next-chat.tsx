@@ -17,7 +17,8 @@
  *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
  * - `?voicefail=<the shell's reason>`: starting voice in the tab showing
- *   failed last time (#261); `&windows` words it for Windows.
+ *   failed last time (#261); `&windows` words it for Windows. It asked for
+ *   the system's default devices, or `&picked` for devices picked by name (#273).
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -48,6 +49,7 @@ const PAGE = 150;
 
 const LONG = query.has("long");
 const VOICE_FAIL = query.get("voicefail");
+const ASKED = query.has("picked") ? { input: "USB Microphone", output: "Headphones" } : { input: null, output: null };
 const everyone: ReadonlyMap<string, User> = new Map(
   Object.values(people).map((user) => [
     user.id,
@@ -322,6 +324,7 @@ function Fixture() {
   const onRestoreFiles = useCallback(() => undefined, []);
   const onTyping = useCallback(() => undefined, []);
   const onJoin = useCallback(() => note("join"), []);
+  const onPickDevice = useCallback(() => note("settings:sound"), []);
   // Your controls in the room you're in voice in (#216), as the chat window passes them.
   const controls = useMemo(
     () => ({ muted: false, deafened: false, onMute: () => note("mute"), onDeafen: () => note("deafen"), onLeave: () => note("leave") }),
@@ -352,8 +355,9 @@ function Fixture() {
           : {
               strip: voiceStrip(id, voice, me.id, myVoice),
               onJoin,
+              onPickDevice,
               controls: myVoice === id ? controls : undefined,
-              failed: VOICE_FAIL === null ? undefined : { line: voiceStartProblem(VOICE_FAIL, query.has("windows")), detail: VOICE_FAIL },
+              failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
             },
       people: everyone,
       me,

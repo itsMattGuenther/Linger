@@ -445,8 +445,10 @@ test.describe("voice here", () => {
     const strip = page.getByRole("group", { name: "Voice in this conversation" });
     const said = strip.getByRole("alert");
     await expect(said).toHaveText("Couldn't start voice. Windows' privacy settings are blocking the microphone.");
-    await expect(said).toHaveAttribute("title", reason);
+    await expect(said).toHaveAttribute("title", `Couldn't start voice. Windows' privacy settings are blocking the microphone.\n${reason}`);
     await expect(strip).not.toContainText("Nobody's talking in here.");
+    // Picking a device wouldn't fix this one, so there's nothing to pick (#273).
+    await expect(strip.getByRole("button", { name: "Pick yours in Settings" })).toHaveCount(0);
     await expect(strip.getByRole("button", { name: "Start talking" })).toBeVisible();
     expect((await rect(strip)).height).toBe(40);
     // It stays on one line, and doesn't push the button out.
@@ -454,6 +456,50 @@ test.describe("voice here", () => {
     const button = await rect(strip.getByRole("button", { name: "Start talking" }));
     expect(words.lines).toBe(1);
     expect(words.right).toBeLessThanOrEqual(button.x);
+  });
+
+  // The Windows 10 friend's default microphone wouldn't open; picking his by
+  // name in Settings fixed it (#273). The strip says so on its one line, at
+  // the chat window's narrowest and a conversation window's, with the fix as
+  // a button that is never cut off: the words give way first.
+  for (const width of [420, 360]) {
+    test(`a default device that wouldn't open says to pick yours, whole, ${width} wide (#273)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 790 });
+      const reason = "the microphone wouldn't open: The requested device could not be opened.";
+      await page.goto(`/tests/fixtures/next-chat.html?voice=off&windows&voicefail=${encodeURIComponent(reason)}`);
+      await page.evaluate(() => document.fonts.ready);
+      const strip = page.getByRole("group", { name: "Voice in this conversation" });
+      const said = strip.getByRole("alert");
+      await expect(said).toHaveText("Couldn't start voice. Windows' default microphone wouldn't open.");
+      await expect(said).toHaveAttribute("title", `Couldn't start voice. Windows' default microphone wouldn't open. Pick yours in Settings.\n${reason}`);
+      const pick = strip.getByRole("button", { name: "Pick yours in Settings" });
+      const start = strip.getByRole("button", { name: "Start talking" });
+      await expect(pick).toBeVisible();
+      await expect(start).toBeVisible();
+      expect((await rect(strip)).height).toBe(40);
+      // One line: the words, then the fix whole, then Start talking, all inside the strip.
+      const words = await said.evaluate((node) => ({ lines: Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)), right: node.getBoundingClientRect().right }));
+      const label = await pick.locator(".k-button-label").evaluate((node) => node.scrollWidth - node.clientWidth);
+      const [edge, fix, again] = [await rect(strip), await rect(pick), await rect(start)];
+      expect(words.lines).toBe(1);
+      expect(words.right).toBeLessThanOrEqual(fix.x);
+      expect(label).toBe(0);
+      expect(fix.x + fix.width).toBeLessThanOrEqual(again.x);
+      expect(again.x + again.width).toBeLessThanOrEqual(edge.x + edge.width);
+      expect(fix.y).toBe(again.y);
+      // It opens Settings on Sound & Voice.
+      await pick.click();
+      expect(await did(page)).toEqual(["settings:sound"]);
+    });
+  }
+
+  test("a device picked by name that wouldn't open says only that (#273)", async ({ page }) => {
+    const reason = "the speakers wouldn't open: The requested device could not be opened.";
+    await page.goto(`/tests/fixtures/next-chat.html?voice=off&picked&voicefail=${encodeURIComponent(reason)}`);
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await expect(strip.getByRole("alert")).toHaveText("Couldn't start voice. The speakers wouldn't open.");
+    await expect(strip.getByRole("button", { name: "Pick yours in Settings" })).toHaveCount(0);
+    await expect(strip.getByRole("button", { name: "Start talking" })).toBeVisible();
   });
 
   test("nobody in voice: offers to start, and the strip keeps its height", async ({ page }) => {

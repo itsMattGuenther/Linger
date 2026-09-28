@@ -144,6 +144,8 @@ declare global {
       pushToTalk: (on: boolean) => void;
       /** With `?hold`: the list window finishes the Mute, Deafen or Leave it's making. */
       finish: () => void;
+      /** Starting voice in a room failed in the list window, which shares why and the devices it asked for (#261, #273). */
+      voiceFailed: (roomId: string, problem: string, devices: { input: string | null; output: string | null }) => void;
     };
   }
 }
@@ -167,6 +169,10 @@ window.owner = {
     const waiting = finishing;
     finishing = [];
     for (const finish of waiting) finish();
+  },
+  voiceFailed: (roomId, problem, devices) => {
+    const { myVoice, read, readLoaded, notifyRules } = serverState(SERVER);
+    desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice, voiceFailed: { roomId, problem, devices }, read, readLoaded, notifyRules } });
   },
   messageFont: (userId, key) => {
     const user = night.users.find((one) => one.id === userId);

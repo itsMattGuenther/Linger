@@ -450,8 +450,18 @@ in, or won't open, the system default is used and the picker says so.
 
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking: hover it for the whole reason. Joining needs a microphone
-and speakers that open. The usual cause on Windows is Windows' own privacy
-switch for the microphone, which Linger can't turn on for you:
+and speakers that both open.
+
+First, pick your microphone and speakers by name in **Settings → Sound &
+Voice**, instead of leaving them on the system default. That's the likely
+fix: the default can point at something that won't open, like an unplugged
+jack, a monitor or an old headset. When the default is what failed, the
+strip has a **Pick yours in Settings** button that opens Sound & Voice for
+you.
+
+Second, on Windows, check Windows' own privacy switch for the microphone,
+which Linger can't turn on for you. If Discord or another desktop app can use
+your microphone, it's already on.
 
 - Windows 10: **Settings → Privacy → Microphone**, then turn on **Allow apps
   to access your microphone** and **Allow desktop apps to access your
