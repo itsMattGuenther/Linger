@@ -11,9 +11,15 @@
   font-style: italic;
 }
 
+/* Cut across only, for the "…", so a glowing name's light reaches past the
+   line above and below; the names come first, so at the start the cut moves
+   out by the light's reach and the margin takes it back (#287). */
 .nx-typing-words {
   min-width: 0;
-  overflow: hidden;
+  margin-inline-start: calc(var(--name-glow-reach) * -1);
+  padding-inline-start: var(--name-glow-reach);
+  overflow-x: clip;
+  overflow-y: visible;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -7,9 +7,9 @@ export default defineConfig({
   retries: 0,
   // Stop well inside the CI job's own limit, so a hung run fails here — naming
   // the test still running and uploading evidence — rather than being killed
-  // with its log. CI runs each engine in a job of its own; one takes about
-  // six minutes.
-  globalTimeout: process.env.CI ? 12 * 60_000 : undefined,
+  // with its log. CI runs each engine in a job of its own, limited to 20
+  // minutes; WebKit, the slower one, took about 12 by 2026-09-28.
+  globalTimeout: process.env.CI ? 16 * 60_000 : undefined,
   workers: process.env.CI ? 2 : undefined,
   reporter: "list",
   use: {

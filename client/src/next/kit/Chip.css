@@ -52,6 +52,12 @@ button.k-chip:hover .k-icon {
   white-space: nowrap;
 }
 
+/* As in a row: a name cuts its own letters and draws its own "…", and its
+   glow reaches past its box, so the text around it doesn't cut it (#287). */
+.k-chip-text:has(> .k-name) {
+  overflow: visible;
+}
+
 .k-chip .k-name {
   height: var(--control-sm);
   font-size: var(--text-control);

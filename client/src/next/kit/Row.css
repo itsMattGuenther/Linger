@@ -116,6 +116,14 @@
   text-overflow: ellipsis;
 }
 
+/* A name cuts its own letters and draws its own "…" (Name.css), so the
+   title around it doesn't cut too. Its glow is a light that reaches past the
+   name's box, and a title that clipped it drew the light as a rectangle
+   (#287). A room's name, which is plain words, is still cut here. */
+.k-row-title:has(> .k-name) {
+  overflow: visible;
+}
+
 .k-row[data-fresh="yes"] .k-row-title {
   color: var(--text-primary);
   font-weight: 700;

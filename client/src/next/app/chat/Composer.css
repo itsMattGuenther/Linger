@@ -129,6 +129,13 @@
   white-space: nowrap;
 }
 
+/* Cut across only, for the "…", so the light of a glowing name ("Replying
+   to Eli:") reaches past the line above and below (#287). */
+.nx-composer-reply-text {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
 .nx-composer-reply-words {
   color: var(--text-muted);
 }
