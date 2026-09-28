@@ -14,6 +14,7 @@ export { GroupMarker, HashMark, Marker, MarkerCluster, MarkerSlot, type ColorKey
 export { Menu, type MenuAnchor, type MenuCloseReason, type MenuItem } from "./Menu";
 export { Name, type NameSize } from "./Name";
 export { NavList, type NavEntry } from "./NavList";
+export { OptionList, optionId, type OptionItem } from "./OptionList";
 export { Notice } from "./Notice";
 export { markerOf, markerStateOf, MARKER_WORDS, type MarkerState } from "./presence";
 export { Row, RowList, type RowLead, type RowProps } from "./Row";

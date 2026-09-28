@@ -10,6 +10,8 @@
   border: 1px solid var(--white-a10);
   background: var(--surface-popover);
   box-shadow: var(--shadow-popover);
+  /* Only in a window too short for it either way: it scrolls (kit/place.ts). */
+  overflow-y: auto;
 }
 
 /* Measured before it is placed; invisible for that one frame. */
@@ -21,6 +23,7 @@
 
 .k-menu-item {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   height: var(--control-md);

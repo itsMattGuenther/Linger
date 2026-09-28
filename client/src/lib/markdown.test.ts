@@ -4,6 +4,7 @@ import {
   type Block,
   type Inline,
   linkTargets,
+  mentionCanStart,
   mentionHandles,
   parseMarkdown,
   plainText,
@@ -287,6 +288,20 @@ describe("mentions", () => {
 
   it("flattens back to the characters that were typed", () => {
     expect(plainText("hey @callie look")).toBe("hey @callie look");
+  });
+
+  it("says where an @ can begin one, by the same rules (#267's @ list)", () => {
+    expect(mentionCanStart("@", 0)).toBe(true);
+    expect(mentionCanStart("hey @Jus", 4)).toBe(true);
+    expect(mentionCanStart("> ask @", 6)).toBe(true);
+    expect(mentionCanStart("**@", 2)).toBe(true);
+    expect(mentionCanStart("you@example.com", 3)).toBe(false);
+    expect(mentionCanStart("`@ju` said", 1)).toBe(false);
+    expect(mentionCanStart("```\n@ju", 4)).toBe(false);
+    expect(mentionCanStart("\\@ju", 1)).toBe(false);
+    expect(mentionCanStart("hey", 1)).toBe(false);
+    // A stand-in the body already holds can't fool it.
+    expect(mentionCanStart("`zz0` @", 6)).toBe(true);
   });
 });
 

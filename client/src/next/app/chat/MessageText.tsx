@@ -4,7 +4,8 @@ import "./MessageText.css";
 
 /**
  * Who a `@handle` is, or null when nobody here answers to it (the characters
- * that were typed are drawn instead).
+ * that were typed are drawn instead). Asked on every draw, so a changed
+ * display name shows in old messages too.
  */
 export type MentionLookup = (handle: string) => { name: string; me: boolean } | null;
 
@@ -103,11 +104,14 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
     case "text":
       return <>{node.text}</>;
     case "mention": {
+      // Read by the name people know (#267): "@Justin B", in the mention's
+      // own highlight rather than their name's style, with the handle that
+      // was typed, and is stored, in the tooltip.
       const person = ctx.mentions(node.handle);
       if (person === null) return <>@{node.handle}</>;
       return (
-        <span className="nx-mention" data-me={person.me ? "yes" : undefined} title={person.name}>
-          @{node.handle}
+        <span className="nx-mention" data-me={person.me ? "yes" : undefined} title={`@${node.handle}`}>
+          @{person.name}
         </span>
       );
     }
