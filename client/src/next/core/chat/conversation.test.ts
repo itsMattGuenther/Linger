@@ -76,6 +76,17 @@ describe("what the chat window shows about a conversation", () => {
     expect(tabModel(tab("r-general"), { ...state, read: { "r-general": "m2" } }, false, new Set())?.fresh).toBe(false);
   });
 
+  it("lights a DM's tab with something new while another shows, never a room's (#291)", () => {
+    const state = evening({ newest: { "r-general": "m2", "d-jules": "m4" }, read: { "r-general": "m1", "d-jules": "m3" } });
+    expect(tabModel(tab("d-jules"), state, false, new Set())).toMatchObject({ fresh: true, lit: true });
+    // Showing, it's being read: neither.
+    expect(tabModel(tab("d-jules"), state, true, new Set())).toMatchObject({ fresh: false, lit: false });
+    // A room with something new is bold only.
+    expect(tabModel(tab("r-general"), state, false, new Set())).toMatchObject({ fresh: true, lit: false });
+    // Read, it goes out.
+    expect(tabModel(tab("d-jules"), { ...state, read: { ...state.read, "d-jules": "m4" } }, false, new Set())?.lit).toBe(false);
+  });
+
   it("says whose voice is in a room, and lights it when someone there is talking", () => {
     const voice = { "r-general": [{ session_id: "s-eli", user_id: "u-eli" }] };
     const state = evening({ voice });

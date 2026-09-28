@@ -59,6 +59,63 @@ test("draws every room's # the same, fresh or not", async ({ page }) => {
   expect(new Set(colors).size).toBe(1);
 });
 
+// A DM is addressed to you, so one you haven't read is lit in the lamp, not
+// only bold (#291). Rooms stay bold only.
+test("a DM you haven't read is lit, rooms are only bold, and reading puts it out (#291)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?live");
+  await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
+  type Live = { said: (roomId: string, authorId: string) => void; read: (roomId: string) => void };
+  const live = (act: (linger: Live) => void) => page.evaluate(`(${act.toString()})(window.linger)`);
+  const look = (row: Locator) =>
+    row.evaluate((item) => {
+      const main = item.querySelector(".k-row-main");
+      const title = item.querySelector(".k-row-title");
+      const style = main ? getComputedStyle(main) : null;
+      return { background: style?.backgroundColor ?? "", edge: style?.boxShadow ?? "", weight: title ? Number(getComputedStyle(title).fontWeight) : 0 };
+    });
+  const jules = rows(page, "DMs").filter({ hasText: "Jules" });
+  const both = rows(page, "DMs").filter({ hasText: "Eli and Sam" });
+  await expect(jules).toHaveAttribute("data-lit", "yes");
+  await expect(both).not.toHaveAttribute("data-lit", "yes");
+  const [lit, plain] = [await look(jules), await look(both)];
+  // Drawn, not only marked: a fill and an edge the unread one alone has, and bold.
+  expect(lit.background).not.toBe(plain.background);
+  expect(lit.edge).not.toBe("none");
+  expect(plain.edge).toBe("none");
+  expect(lit.weight).toBeGreaterThanOrEqual(600);
+  // Rooms with something new are bold, never lit.
+  await expect(rows(page, "Rooms").and(page.locator("[data-lit='yes']"))).toHaveCount(0);
+  await expect(rows(page, "Rooms").and(page.locator("[data-fresh='yes']"))).toHaveCount(2);
+  // Hovered, it stays lit.
+  await jules.hover();
+  expect((await look(jules)).edge).not.toBe("none");
+  // Read, it goes out; somebody writing in the other lights that one.
+  await live((linger) => linger.read("d-jules"));
+  await expect(jules).not.toHaveAttribute("data-lit", "yes");
+  await live((linger) => linger.said("d-eli-sam", "u-eli"));
+  await expect(both).toHaveAttribute("data-lit", "yes");
+});
+
+test("a folded DMs heading is lit while a DM inside hasn't been read (#291)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?live");
+  await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
+  const heading = page.locator(".k-section", { hasText: /^DMs/ });
+  const rooms = page.locator(".k-section", { hasText: /^Rooms/ });
+  // Open, the rows show it and the heading stays plain.
+  await expect(heading).not.toHaveAttribute("data-lit", "yes");
+  await heading.getByRole("button", { name: /DMs/ }).click();
+  await expect(heading).toHaveAttribute("data-lit", "yes");
+  const [lit, plain] = await Promise.all([heading, rooms].map((one) => one.evaluate((node) => getComputedStyle(node).backgroundColor)));
+  expect(lit).not.toBe(plain);
+  // Its "show" stays readable on the lamp: not the muted grey (contrast.test.ts).
+  const hint = await heading.locator(".k-section-hint").evaluate((node) => getComputedStyle(node).color);
+  const muted = await rooms.locator(".k-section-text").evaluate((node) => getComputedStyle(node).color);
+  expect(hint).not.toBe(muted);
+  // Read while folded, it goes out.
+  await page.evaluate(`window.linger.read("d-jules")`);
+  await expect(heading).not.toHaveAttribute("data-lit", "yes");
+});
+
 test("lists DMs by who is in them, with the new one first", async ({ page }) => {
   await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
 });

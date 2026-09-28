@@ -473,6 +473,7 @@ function Conversations({ following }: { following: Following }) {
             stripe: several ? serverTag(tab.server).color : undefined,
             lead: model.lead === null ? undefined : model.lead.kind === "room" ? { kind: "room" } : { kind: "person", person: markerOf(model.lead.user, model.lead.state) },
             fresh: model.fresh,
+            lit: model.lit,
             voice: model.voice ?? undefined,
             speaking: model.speaking,
             closable: true,

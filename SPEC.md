@@ -177,6 +177,11 @@ Replace with:
   past and stays visible for the rest of the session.
 - Rooms with new activity get a **weight change only** — label weight goes from normal to
   bold. No number, no dot, no color. Read rooms must remain readable too.
+- **A DM is the exception** (#291, 2026-09-28). A DM is addressed to you, as a
+  mention is, so one you haven't read is **lit** as well as bold: a soft fill and
+  a thin edge in the lamp, on its row, on the DMs heading while that's folded, on
+  a folded server's header, and on its tab. It goes out when you read the DM.
+  Still no number and no dot, and nothing blinks.
 - Opening a room or DM with new activity lands on **"you left off here"**.
   A caught-up conversation opens at the newest messages. There is no catch-up
   button or band. Live arrivals never move someone reading earlier messages.
@@ -188,6 +193,11 @@ Replace with:
 
 **One exception:** direct mentions produce a real notification and a marker. Mentions
 are person-to-person only. `@everyone` and `@here` do not exist and will not be added.
+**A DM is addressed to you in the same way** (#291): it gets a desktop banner saying
+who it's from, and the desktop is asked to point at Linger (Windows flashes the
+taskbar button until you look; Linux marks the window urgent), unless somebody is
+already using Linger or reading that DM. Both are on unless turned off, on that
+computer (Settings → Notifications). Nothing opens a window by itself.
 
 A mention is stored as `@username`. Usernames never change, so an old mention never
 breaks. People mention each other by the names they know (#267): `@` at the start of
@@ -578,9 +588,11 @@ or occupancy is said about a DM at all. The alternative, dropping the presence u
 entirely, would make them look offline to everybody, which is both wrong and a slower
 way of leaking the same thing.
 
-**No unread counts, still** (§4.2). A DM holding something new gets the same weight
-change a room gets, and no number appears anywhere. Feeling more urgent is not an
-argument; it is exactly the argument that puts a badge on everything.
+**No unread counts, still** (§4.2). A DM holding something new gets bold, as a room
+does, and is lit in the lamp as well, and gets a banner (#291). That's not because a
+DM is more urgent: feeling more urgent is exactly the argument that puts a badge on
+everything. It's because a DM is addressed to you, as a mention is, and a mention
+already had a notification and a marker. No number appears anywhere.
 
 ### 4.14 Voice rooms
 

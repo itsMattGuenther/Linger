@@ -129,6 +129,18 @@
   font-weight: 700;
 }
 
+/* Something new addressed to you, a DM (#291): lit in the lamp, over the
+   selected and hovered looks, until it's read. */
+.k-row[data-lit="yes"] .k-row-main {
+  background: var(--lit-wash);
+  box-shadow: inset 0 0 0 1px var(--lit-edge);
+  color: var(--text-primary);
+}
+
+.k-row[data-lit="yes"]:not([role="option"]) .k-row-main:hover:not(:disabled) {
+  background: var(--lit-wash-hover);
+}
+
 .k-row-trailing {
   display: inline-flex;
   flex: none;
@@ -223,6 +235,12 @@
   .k-row[data-selected="yes"] .k-row-main,
   .k-row[data-active="yes"] .k-row-main {
     outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  /* A lit row's fill is repainted away too: a dashed edge says it instead. */
+  .k-row[data-lit="yes"] .k-row-main {
+    outline: var(--focus-width) dashed Highlight;
     outline-offset: calc(var(--focus-width) * -1);
   }
 }

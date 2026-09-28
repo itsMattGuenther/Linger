@@ -30,6 +30,7 @@ const OWNER_ONLY: &[&str] = &[
     "next_open_tool",
     "next_close_to_tray",
     "next_tray_voice",
+    "next_request_attention",
 ];
 
 const CAPABILITIES: &[(&str, &str)] = &[

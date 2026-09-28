@@ -438,6 +438,60 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     }
 }
 
+/// Which window to point at for a DM (#291), or none. Nothing while any
+/// Linger window has the focus: whoever's using the app sees the DM's row
+/// light up. Otherwise the first that's showing of the DM's own window, the
+/// chat window and the list. A minimized window counts, because its taskbar
+/// button is exactly what should flash; one hidden in the tray doesn't.
+fn attention_target<'a>(
+    order: &[&'a str],
+    showing: impl Fn(&str) -> bool,
+    any_focused: bool,
+) -> Option<&'a str> {
+    if any_focused {
+        return None;
+    }
+    order.iter().copied().find(|label| showing(label))
+}
+
+/// Ask the desktop to point at Linger when a DM arrives (#291): the OS's own
+/// "look here", which it stops by itself once the window is used. Windows
+/// flashes the taskbar button, Linux marks the window urgent (the desktop
+/// decides how that looks) and macOS bounces the dock icon once. Only the
+/// list window may ask, as it's the one that hears messages. Says whether it
+/// asked for anything.
+#[tauri::command]
+pub fn next_request_attention(
+    app: AppHandle,
+    window: WebviewWindow,
+    server: String,
+    room: String,
+) -> Result<bool, String> {
+    if window.label() != OWNER {
+        return Err("only the list window asks for attention".into());
+    }
+    let windows = app.webview_windows();
+    let any_focused = windows
+        .values()
+        .any(|open| open.is_focused().unwrap_or(false));
+    let own = conversation_label(&server, &room);
+    let showing = |label: &str| {
+        windows
+            .get(label)
+            .is_some_and(|open| open.is_visible().unwrap_or(false))
+    };
+    let Some(label) = attention_target(&[own.as_str(), CHAT, OWNER], showing, any_focused) else {
+        return Ok(false);
+    };
+    let Some(target) = windows.get(label) else {
+        return Ok(false);
+    };
+    target
+        .request_user_attention(Some(tauri::UserAttentionType::Informational))
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// The Buddy list client's windows other than the owner: the chat window,
 /// conversations popped out of it, Settings, Search and Media.
 fn is_viewer(label: &str) -> bool {
@@ -488,10 +542,32 @@ mod tests {
         }
     }
     use super::{
-        at_message, buddy_list, chat_url, chosen_client, conversation_label, conversation_size,
-        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window,
-        Client, CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
+        at_message, attention_target, buddy_list, chat_url, chosen_client, conversation_label,
+        conversation_size, conversation_url, escape, is_origin, is_viewer, on_hyprland,
+        settings_url, tool_window, Client, CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
     };
+
+    /// A DM points at its own window, then the chat window, then the list,
+    /// whichever is showing, and at nothing while Linger has the focus
+    /// (#291).
+    #[test]
+    fn a_dm_points_at_the_window_it_would_show_in() {
+        let order = ["chat-0123", CHAT, OWNER];
+        let only = |shown: &'static [&'static str]| move |label: &str| shown.contains(&label);
+        assert_eq!(
+            attention_target(&order, only(&["chat-0123", CHAT, OWNER]), false),
+            Some("chat-0123")
+        );
+        assert_eq!(
+            attention_target(&order, only(&[CHAT, OWNER]), false),
+            Some(CHAT)
+        );
+        assert_eq!(attention_target(&order, only(&[OWNER]), false), Some(OWNER));
+        // The list hidden in the tray and nothing else open: nothing to flash.
+        assert_eq!(attention_target(&order, only(&[]), false), None);
+        // Somebody's using Linger: the DM's row lights up instead.
+        assert_eq!(attention_target(&order, only(&[CHAT, OWNER]), true), None);
+    }
     use std::ffi::OsStr;
     use tauri::WebviewUrl;
 

@@ -16,14 +16,17 @@ export interface NotificationsProps {
   setRule: (rule: NotifyRule, on: boolean) => Promise<string | null>;
   /** Arrival cards (decision 13): on unless turned off, on this computer. */
   arrivals?: { on: boolean; onChange: (on: boolean) => void };
+  /** DM alerts (#291): a banner for every DM, and the taskbar. On unless turned off, on this computer. */
+  dmAlerts?: { on: boolean; onChange: (on: boolean) => void };
 }
 
 /**
- * Notifications: "always notify me when [person] posts", everywhere or in
- * chosen rooms (NOTE-1, NOTE-2). Somebody naming you always reaches you;
- * there is nothing else to turn on, and no @everyone.
+ * Notifications: DMs (#291), and "always notify me when [person] posts",
+ * everywhere or in chosen rooms (NOTE-1, NOTE-2). Somebody naming you always
+ * reaches you, and so does a DM unless DM banners are off. There is no
+ * @everyone.
  */
-export function NotificationsSection({ people, rooms, rules, setRule, arrivals }: NotificationsProps) {
+export function NotificationsSection({ people, rooms, rules, setRule, arrivals, dmAlerts }: NotificationsProps) {
   const [open, setOpen] = useState<string | null>(null);
   const save = useSave();
   const others = [...people].sort((a, b) => a.display_name.localeCompare(b.display_name));
@@ -33,8 +36,15 @@ export function NotificationsSection({ people, rooms, rules, setRule, arrivals }
     <>
       <Block
         heading={HEADINGS.banners}
-        lead="Mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
+        lead="DMs and mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
       >
+        {dmAlerts ? (
+          <SettingRow
+            title="DMs"
+            description="A banner for every DM, saying who it's from, and Linger's taskbar button flashes until you look. Nothing for a DM you're reading. On this computer only."
+            control={<Switch label="Banners for DMs" checked={dmAlerts.on} onChange={dmAlerts.onChange} />}
+          />
+        ) : null}
         {others.length === 0 ? (
           <Note>Nobody else is here yet.</Note>
         ) : (
@@ -53,7 +63,7 @@ export function NotificationsSection({ people, rooms, rules, setRule, arrivals }
           </ul>
         )}
         <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
-        <Note>Somebody naming you always reaches you. Nothing else does, and there is no @everyone to turn on.</Note>
+        <Note>Somebody naming you always reaches you, and so does a DM while DM banners are on. There is no @everyone to turn on.</Note>
       </Block>
       {arrivals ? (
         <Block heading={HEADINGS.arrivals} lead="Who's around, as it happens. On this computer only.">

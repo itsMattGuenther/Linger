@@ -21,7 +21,7 @@ import {
 } from "../../../lib/gateway";
 import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey, talkKeyName } from "../../core/talkKey";
-import { forgetNotifications, resetNotifications, setQuietServers } from "../../../lib/notify";
+import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
@@ -62,6 +62,7 @@ import { ListView } from "./ListView";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
+import { loadDmAlerts } from "../../core/dmAlerts";
 import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadArrivalCards, whereAll, type WhereAll } from "../../core/arrivals";
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
@@ -311,6 +312,14 @@ function Servers({
 
   // A quiet server makes no sound (lib/notify.ts); its knocks still get through.
   useEffect(() => setQuietServers(quiet), [quiet]);
+
+  // DM alerts (#291): a banner for every DM and the taskbar pointing at
+  // Linger, unless turned off in Settings. Read on every DM, from this
+  // computer's storage, so a change in the Settings window counts at once.
+  useEffect(() => {
+    setDmAlerts(() => loadDmAlerts(localStore()));
+    return () => setDmAlerts(null);
+  }, []);
 
   // The owner's half of sharing these connections with the other windows
   // (docs/design/architecture.md): snapshots, lent tokens, intents. It reads

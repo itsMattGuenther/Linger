@@ -67,6 +67,17 @@ test("arrival cards are on unless turned off, kept on this computer (decision 13
   expect(await page.evaluate(() => localStorage.getItem("linger.next.arrivalCards"))).toBe("false");
 });
 
+test("DM banners are on unless turned off, kept on this computer (#291)", async ({ page }) => {
+  await open(page, "?section=notifications");
+  const dms = page.getByRole("switch", { name: "Banners for DMs" });
+  await expect(dms).toHaveAttribute("aria-checked", "true");
+  await dms.click();
+  await expect(dms).toHaveAttribute("aria-checked", "false");
+  expect(await page.evaluate(() => localStorage.getItem("linger.next.dmAlerts"))).toBe("false");
+  await dms.click();
+  expect(await page.evaluate(() => localStorage.getItem("linger.next.dmAlerts"))).toBe("true");
+});
+
 test("the sound volume is kept on this computer, and letting go plays one DM chime at that level (#234)", async ({ page }) => {
   // The page's own speakers stand in: every sound started is measured, not heard.
   await page.addInitScript(() => {

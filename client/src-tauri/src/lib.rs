@@ -617,6 +617,7 @@ pub fn run() {
             window::next_open_tool,
             tray::next_close_to_tray,
             tray::next_tray_voice,
+            window::next_request_attention,
             autostart::autostart_state,
             autostart::autostart_set,
             clipboard::clipboard_image

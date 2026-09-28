@@ -97,7 +97,7 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "sound":
       return "Choose your notification chimes. To silence people in voice, use deafen.";
     case "notifications":
-      return "Desktop banners for mentions and the people you choose, and cards when somebody arrives.";
+      return "Desktop banners for DMs, mentions and the people you choose, and cards when somebody arrives.";
     case "account":
       return "Your password, your archive, updates and this computer.";
     case "servers":
