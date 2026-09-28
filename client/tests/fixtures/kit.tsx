@@ -77,6 +77,7 @@ function person(
       reading: null,
       listening: null,
       working_on: null,
+      fields: [],
       image_id: null,
       image_url: null,
       away_message: opts.away ?? null,

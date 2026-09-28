@@ -38,6 +38,7 @@ function status(fields: Partial<UserStatus> = {}): UserStatus {
     reading: null,
     listening: null,
     working_on: null,
+    fields: null,
     image_id: null,
     image_url: null,
     away_message: null,

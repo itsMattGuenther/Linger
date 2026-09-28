@@ -59,8 +59,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Conversations as tabs** in one chat window, or each in a window of its own.
 - **No unread counts.** A room with something new gets a bolder name, and a
   conversation opens at "you left off here". Never a badge.
-- **Styled names and statuses**: your own font, color, gradient and glow, and
-  away messages.
+- **Styled names and statuses**: your own font, color, gradient and glow; a
+  status with up to three short fields you label yourself, links included;
+  and away messages.
 - **Files and media.** 500 MB uploads, EXIF always stripped. The Media window
   keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The

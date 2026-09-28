@@ -146,6 +146,90 @@ test.describe("profile", () => {
     expect((await did(page)).filter((line) => /^(upload|drop):/.test(line))).toEqual([]);
   });
 
+  // Status fields with labels you choose (#270): a suggestion from the list,
+  // or "Your own…", which turns the list into a box with the list's caret
+  // beside it to go back. What's saved is the whole set, in order, with the
+  // three old keys filled for an older server.
+  test("a field's label is picked from the list or typed, and the fields save whole (#270)", async ({ page }) => {
+    await open(page);
+    const block = page.getByRole("region", { name: "Your Status" });
+    const fields = block.getByRole("group", { name: "Fields" });
+    const labels = fields.getByRole("combobox");
+    await expect(labels).toHaveCount(3);
+    // Your one field first, then blank rows on the suggestions left.
+    expect(await labels.evaluateAll((all) => all.map((one) => (one as HTMLSelectElement).value))).toEqual(["Working on", "Listening to", "Reading"]);
+    await expect(fields.getByRole("textbox", { name: "Working on", exact: true })).toHaveValue("a design for this app");
+    expect(await labels.first().evaluate((one) => [...(one as HTMLSelectElement).options].map((option) => option.text))).toEqual([
+      "Listening to",
+      "Reading",
+      "Working on",
+      "Playing",
+      "Watching",
+      "Your own…",
+    ]);
+
+    // A suggestion: the box beside it is named by it.
+    await fields.getByRole("combobox", { name: "Second field's label" }).selectOption("Playing");
+    await fields.getByRole("textbox", { name: "Playing", exact: true }).fill("Outer Wilds");
+
+    // Your own: the list becomes a box, and the focus goes into it.
+    await fields.getByRole("combobox", { name: "Third field's label" }).selectOption({ label: "Your own…" });
+    const own = fields.getByRole("textbox", { name: "Third field's label" });
+    await expect(own).toBeFocused();
+    await expect(own).toHaveAttribute("maxlength", "24");
+    await page.keyboard.type("GitHub");
+    await fields.getByRole("textbox", { name: "GitHub", exact: true }).fill("github.com/bendthebracket");
+
+    await block.getByRole("button", { name: "Save status" }).click();
+    await expect(said(block)).toHaveText("Saved");
+    const sent = (await did(page)).find((line) => line.startsWith("status:"));
+    expect(JSON.parse(sent?.slice("status:".length) ?? "{}")).toMatchObject({
+      fields: [
+        { label: "Working on", value: "a design for this app" },
+        { label: "Playing", value: "Outer Wilds" },
+        { label: "GitHub", value: "github.com/bendthebracket" },
+      ],
+      working_on: "a design for this app",
+      reading: null,
+      listening: null,
+    });
+    // Saved, your own label is still yours, in a box.
+    await expect(fields.getByRole("textbox", { name: "Third field's label" })).toHaveValue("GitHub");
+  });
+
+  test("your own label goes back to the list with its caret, focus following, and keeps what you typed", async ({ page }) => {
+    await open(page, "?fields");
+    const fields = page.getByRole("region", { name: "Your Status" }).getByRole("group", { name: "Fields" });
+    // Opening Profile on a label of your own doesn't take the focus.
+    await expect(fields.getByRole("textbox", { name: "Second field's label" })).toHaveValue("GitHub");
+    await expect(fields.getByRole("textbox", { name: "Second field's label" })).not.toBeFocused();
+    const back = fields.getByRole("button", { name: "Pick a label from the list" });
+    await expect(back).toHaveCount(1);
+    await back.click();
+    // The first suggestion no other field uses (Listening to and Playing are taken).
+    const list = fields.getByRole("combobox", { name: "Second field's label" });
+    await expect(list).toBeFocused();
+    await expect(list).toHaveValue("Reading");
+    await list.selectOption({ label: "Your own…" });
+    await expect(fields.getByRole("textbox", { name: "Second field's label" })).toHaveValue("GitHub");
+  });
+
+  test("two fields with one label, or a field with no label, say why and can't be saved", async ({ page }) => {
+    await open(page, "?fields");
+    const block = page.getByRole("region", { name: "Your Status" });
+    const fields = block.getByRole("group", { name: "Fields" });
+    await fields.getByRole("combobox", { name: "Third field's label" }).selectOption("Listening to");
+    await expect(said(block)).toHaveText("Two fields are labelled “Listening to”. Give each its own.");
+    await expect(block.getByRole("button", { name: "Save status" })).toBeDisabled();
+    await fields.getByRole("combobox", { name: "Third field's label" }).selectOption("Playing");
+    await expect(block.getByRole("button", { name: "Save status" })).toBeDisabled();
+    await fields.getByRole("textbox", { name: "Second field's label" }).fill("");
+    await expect(said(block)).toHaveText("A field needs a label. Pick one, or type your own.");
+    await expect(block.getByRole("button", { name: "Save status" })).toBeDisabled();
+    await fields.getByRole("textbox", { name: "Second field's label" }).fill("Code");
+    await expect(block.getByRole("button", { name: "Save status" })).toBeEnabled();
+  });
+
   test("a new look shows in the preview first, saves whole, and resets", async ({ page }) => {
     await open(page);
     const block = page.getByRole("region", { name: "Make Yourself at Home" });
@@ -567,6 +651,39 @@ for (const [width, height] of [
         expect(name.y + name.height).toBeLessThan(slug.y);
       }
     });
+
+    // The status fields (#270) at their longest, at 100% and 200%: every
+    // control a kit height, nothing cut off or past the edge; a label beside
+    // what it says while they fit, over it when not. Saved for a person to
+    // look at.
+    for (const scale of [1, 2]) {
+      test.describe(`at ${scale * 100}%`, () => {
+        test.use({ deviceScaleFactor: scale });
+        test("the status fields fit, labels beside what they say while there's room (#270)", async ({ page }) => {
+          for (const query of ["", "&fields", "&fields&long"]) {
+            await open(page, `?section=profile${query}`);
+            expect(await misSized(page), query).toEqual([]);
+            expect(await clipped(page), query).toEqual([]);
+            expect(await page.locator(".nx-set-main").evaluate((node) => node.scrollWidth <= node.clientWidth + 1), query).toBe(true);
+            const rows = await page.locator(".nx-set-status-field").evaluateAll((all) =>
+              all.map((row) => {
+                const label = row.querySelector(".nx-set-status-label [data-kit-control]")?.getBoundingClientRect();
+                const value = row.querySelector(":scope > .k-field [data-kit-control]")?.getBoundingClientRect();
+                const edge = row.getBoundingClientRect();
+                if (!label || !value) return null;
+                return { besides: Math.round(label.top) === Math.round(value.top), under: value.top >= label.bottom, inside: value.right <= edge.right + 0.5 && label.left >= edge.left - 0.5 };
+              }),
+            );
+            expect(rows).toHaveLength(3);
+            for (const row of rows) expect(row, query).toEqual(width >= 720 ? { besides: true, under: false, inside: true } : { besides: false, under: true, inside: true });
+          }
+          const block = page.getByRole("region", { name: "Your Status" });
+          await block.evaluate((node) => node.scrollIntoView());
+          await page.setViewportSize({ width, height: 900 });
+          await block.screenshot({ path: `test-results/status-fields/profile-${test.info().project.name}-${width}-${scale * 100}.png` });
+        });
+      });
+    }
 
     test("labels line up: fields in a row share a top, and every row of choices starts on one edge", async ({ page }) => {
       await open(page, "?section=profile");

@@ -550,9 +550,27 @@ Click someone to open their card, with their status and **Message** and
 ## Your status
 
 Click your status at the top of the list to change the line in your own words.
-**Settings → Profile → Your Status** has the rest: three optional fields
-(*reading*, *listening to*, *working on*). Other people see a change only when
-you save it. A status is words; to share a photo, post it in a room.
+**Settings → Profile → Your Status** has the rest, including up to three
+short **fields**. Each is a label and a few words beside it:
+
+- **Pick a label** from the list: *Listening to*, *Reading*, *Working on*,
+  *Playing* or *Watching*.
+- **Or type your own**, like *GitHub* or *Cooking*: choose **Your own…** and
+  the list turns into a box (24 characters). The caret button beside it brings
+  the list back.
+- **What it says** is up to 80 characters. A field left empty isn't shown.
+
+A web address in a field opens in the browser when somebody clicks it on your
+card, like a link in a message. Write it with `https://`, start it with
+`www.`, or give it a path, like `github.com/you`; a bare name like
+`example.com` stays words, since file names such as `main.rs` look the same.
+
+Other people see a change only when you save it. A status is words; to share
+a photo, post it in a room.
+
+Friends still on an older version of Linger see only the fields labelled
+*Listening to*, *Reading* and *Working on*. If you use an older version
+yourself somewhere, saving your status there keeps the fields it can't show.
 
 To see what friends see, click your own name, at the top of the list or on one
 of your messages. It opens your card exactly as it opens for them: where you

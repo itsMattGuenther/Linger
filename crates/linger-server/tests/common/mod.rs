@@ -39,8 +39,23 @@ pub async fn spawn_server() -> TestServer {
 /// Both are environment variables on a real server (docs/decisions.md), and a
 /// test must not set process environment other tests are also reading.
 pub async fn spawn_tuned(tune: impl FnOnce(&mut Config)) -> TestServer {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let mut config = Config {
+    spawn_in(tempfile::tempdir().expect("tempdir"), tune).await
+}
+
+/// The same server over a data directory that may already hold a database,
+/// as a server that has just been updated finds it: `db::init` runs whatever
+/// migrations that database hasn't had yet. [`data_config`] says where it
+/// lives.
+pub async fn spawn_in(dir: tempfile::TempDir, tune: impl FnOnce(&mut Config)) -> TestServer {
+    let mut config = data_config(&dir);
+    tune(&mut config);
+    spawn_with(dir, config).await
+}
+
+/// The test server's configuration over a data directory.
+#[must_use]
+pub fn data_config(dir: &tempfile::TempDir) -> Config {
+    Config {
         data_dir: dir.path().to_path_buf(),
         bind: "127.0.0.1:0".parse().unwrap(),
         domain: None,
@@ -51,9 +66,7 @@ pub async fn spawn_tuned(tune: impl FnOnce(&mut Config)) -> TestServer {
         file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
         turn: None,
         voice_forwarding: None,
-    };
-    tune(&mut config);
-    spawn_with(dir, config).await
+    }
 }
 
 /// The same server, but named — so uploads are served from their own host and

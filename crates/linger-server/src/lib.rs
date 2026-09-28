@@ -19,6 +19,7 @@ pub mod reset;
 pub mod routes;
 pub mod setup;
 pub mod state;
+pub mod status_fields;
 pub mod storage;
 pub mod turn;
 pub mod validate;

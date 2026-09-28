@@ -183,6 +183,60 @@
   grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-8) * 4.5), 1fr));
 }
 
+/* Profile's status fields (#270): a label and what it says, side by side
+   while they fit, the label over it when the window is narrow. The label is a
+   drop-down, or your own box with the list's caret beside it. */
+.nx-set-status-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.nx-set-group-label {
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nx-set-status-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.nx-set-status-field {
+  display: grid;
+  grid-template-columns: calc(var(--space-8) * 5.5) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.nx-set-status-label {
+  display: flex;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.nx-set-status-label > .k-field,
+.nx-set-status-label > .k-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Stacked, a field's two boxes sit closer to each other than to the next
+   field's, so each label reads with what it says. */
+@container (max-width: 26em) {
+  .nx-set-status-rows {
+    gap: var(--space-3-5);
+  }
+
+  .nx-set-status-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1-5);
+  }
+}
+
 /* Rows of small choices, each with its label in a column of its own. */
 .nx-set-look {
   display: flex;

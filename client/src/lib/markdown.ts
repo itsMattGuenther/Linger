@@ -377,29 +377,52 @@ function matchLink(source: string, at: number, depth: number): Match | null {
 }
 
 function matchAutolink(source: string, at: number): Match | null {
+  const found = autolinkAt(source, at);
+  if (found === null) return null;
+  const { href, text } = found;
+  return {
+    node: { kind: "link", href, text, children: [{ kind: "text", text }] },
+    next: at + text.length,
+  };
+}
+
+/**
+ * A web address typed out in full (`http://` or `https://`) starting at
+ * `at`, or null: the address as it was typed, and where it goes.
+ *
+ * Exported because a status field's value links its addresses by the same
+ * rules as a message (`lib/statusLinks.ts`, #270). The caller decides where
+ * a word starts; this only reads forward.
+ */
+export function autolinkAt(source: string, at: number): { href: string; text: string } | null {
   const found = AUTOLINK.exec(source.slice(at));
   if (!found) return null;
-  let raw = found[0];
-
-  // Sentence punctuation is the sentence's. `look at https://linger.example.`
-  // ends in a full stop, and the full stop is not part of the address.
-  while (raw.length > 0 && ".,;:!?'\"".includes(raw[raw.length - 1] ?? "")) {
-    raw = raw.slice(0, -1);
-  }
-  // A closing paren is only the URL's if the URL opened one — `(see
-  // https://linger.example)` versus a Wikipedia article about a disambiguation.
-  while (raw.endsWith(")") && countOf(raw, ")") > countOf(raw, "(")) {
-    raw = raw.slice(0, -1);
-  }
+  const raw = trimAddress(found[0]);
 
   // `https://` with nothing after it fails to parse, which is the answer we
   // want anyway: it is not an address.
   const href = safeHref(raw);
   if (href === null) return null;
-  return {
-    node: { kind: "link", href, text: raw, children: [{ kind: "text", text: raw }] },
-    next: at + raw.length,
-  };
+  return { href, text: raw };
+}
+
+/**
+ * An address without the sentence around it.
+ *
+ * Sentence punctuation is the sentence's. `look at https://linger.example.`
+ * ends in a full stop, and the full stop is not part of the address. A closing
+ * paren is only the URL's if the URL opened one — `(see
+ * https://linger.example)` versus a Wikipedia article about a disambiguation.
+ */
+export function trimAddress(found: string): string {
+  let raw = found;
+  while (raw.length > 0 && ".,;:!?'\"".includes(raw[raw.length - 1] ?? "")) {
+    raw = raw.slice(0, -1);
+  }
+  while (raw.endsWith(")") && countOf(raw, ")") > countOf(raw, "(")) {
+    raw = raw.slice(0, -1);
+  }
+  return raw;
 }
 
 /**

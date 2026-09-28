@@ -12,7 +12,7 @@ use crate::auth::{self, AuthedUser, HostUser};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
-use crate::{repo, validate};
+use crate::{repo, status_fields, validate};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -242,6 +242,21 @@ async fn patch_me(
             (Some(new), Some((Some(old), Some(since)))) if new == &old => Some(since),
             (Some(_), _) => Some(now_ms()),
         };
+        // The fields (#270). A list is the whole set, trimmed. No list is a
+        // save from an app that predates them: its three keys change the
+        // fields with those labels and every other field stays. Read on the
+        // writer, inside this transaction, so two saves can't interleave.
+        let fields = match &status.fields {
+            Some(fields) => validate::status_fields(fields)?,
+            None => {
+                let held = repo::users::status_fields(&mut *tx, auth.id).await?;
+                status_fields::apply_classic(held, status)?
+            }
+        };
+        repo::users::set_status_fields(&mut tx, auth.id, &fields).await?;
+        // The three old columns are kept in step with the fields, and never
+        // read: statuses are built from the fields (`repo::users`).
+        let classic = status_fields::classic_of(&fields);
         // `image_key` is not written: migration 0006 cleared it and it stays
         // empty (#269).
         sqlx::query(
@@ -257,9 +272,9 @@ async fn patch_me(
         )
         .bind(auth.id.to_vec())
         .bind(&status.line)
-        .bind(&status.reading)
-        .bind(&status.listening)
-        .bind(&status.working_on)
+        .bind(&classic.reading)
+        .bind(&classic.listening)
+        .bind(&classic.working_on)
         .bind(&status.away_message)
         .bind(away_since)
         .bind(now_ms())

@@ -9,7 +9,9 @@ import type { UserStatus } from "../generated/UserStatus";
 import {
   awayMessageOf,
   BLANK_DRAFT,
+  classicOf,
   draftOf,
+  fieldsOf,
   isBlank,
   isDirty,
   MAX_FIELD_CHARS,
@@ -25,6 +27,7 @@ function status(extra: Partial<UserStatus> = {}): UserStatus {
     reading: null,
     listening: null,
     working_on: null,
+    fields: null,
     image_id: null,
     image_url: null,
     away_message: null,
@@ -108,6 +111,59 @@ describe("statusOf", () => {
   it("clearing the away message is how you come back", () => {
     const saved = status({ away_message: "brb", away_since: 1_700_000_000_000 });
     expect(statusOf(draft({ awayMessage: "" }), saved).away_message).toBeNull();
+  });
+
+  it("saves as an app from before labelled fields does, so the server keeps the ones this editor never shows (#270)", () => {
+    const saved = status({
+      reading: "Piranesi",
+      fields: [
+        { label: "Playing", value: "Outer Wilds" },
+        { label: "Reading", value: "Piranesi" },
+      ],
+    });
+    const built = statusOf({ ...draftOf(saved), reading: "Dune" }, saved);
+    expect(built.fields).toBeNull();
+    expect(built.reading).toBe("Dune");
+  });
+});
+
+describe("fieldsOf (#270)", () => {
+  it("is what the server sends, in its order", () => {
+    const fields = [
+      { label: "Playing", value: "Outer Wilds" },
+      { label: "GitHub", value: "github.com/you" },
+    ];
+    expect(fieldsOf(status({ fields, reading: "ignored when fields are there" }))).toEqual(fields);
+    expect(fieldsOf(status({ fields: [] }))).toEqual([]);
+  });
+
+  it("from an older server, is its three keys, in the card's order", () => {
+    expect(fieldsOf(status({ reading: "Piranesi", working_on: "a porch light", listening: "Khruangbin" }))).toEqual([
+      { label: "Listening to", value: "Khruangbin" },
+      { label: "Reading", value: "Piranesi" },
+      { label: "Working on", value: "a porch light" },
+    ]);
+    expect(fieldsOf(status({ reading: "  " }))).toEqual([]);
+    // A server that predates fields leaves the key out altogether.
+    const { fields: _left, ...older } = status({ reading: "Piranesi" });
+    expect(fieldsOf(older)).toEqual([{ label: "Reading", value: "Piranesi" }]);
+  });
+
+  it("is nothing for nobody", () => {
+    expect(fieldsOf(null)).toEqual([]);
+    expect(fieldsOf(undefined)).toEqual([]);
+  });
+});
+
+describe("classicOf (#270)", () => {
+  it("fills the three keys from labels that match exactly, and nothing else", () => {
+    expect(
+      classicOf([
+        { label: "Playing", value: "Outer Wilds" },
+        { label: "Working on", value: "a porch light" },
+        { label: "reading", value: "somebody's own label" },
+      ]),
+    ).toEqual({ listening: null, reading: null, working_on: "a porch light" });
   });
 });
 

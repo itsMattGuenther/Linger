@@ -345,3 +345,26 @@ migration clears every picture a status held; the files are then uploads that
 never became a message, and the sweeper takes them after the expiry window like
 any other. It no longer spares files a status names. Taking the two fields off
 the wire is a later protocol change, for when no older app is left.
+
+---
+
+## Decided — status fields get labels you choose
+
+**Matt, 2026-09-27 (#270).** A status had three fixed fields: Listening to,
+Reading and Working on. A friend who mostly plays games had no "Playing", and
+a web address in a field was text you couldn't click.
+
+- **Three fields at most, each a label and a value.** The label is picked
+  from Listening to, Reading, Working on, Playing and Watching, or typed
+  ("Your own…", about 24 characters). The value is 80 characters, as before.
+  Still a small card, not a bio (SPEC §4.6): no icons or emoji per label.
+- **Web addresses open.** A web address in a value opens in the browser with
+  the same rules and safety as a link in a message. Nothing else in a value
+  is a link. A bare name only counts with a path or `www.` (`github.com/you`,
+  not `main.rs`), because a file name looks exactly like a web address.
+- **Older apps keep working.** Statuses still carry `reading`, `listening` and
+  `working_on`, filled from the fields with exactly those labels. A save from
+  an older app changes only those three fields, in place, and keeps the
+  others; a value that would make a fourth field is refused, since that app
+  can't show the field it would push out (PROTOCOL §5). A migration turns the
+  old three columns into fields, so nobody's status changed on update.

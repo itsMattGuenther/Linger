@@ -208,6 +208,87 @@ test.describe("a person's card", () => {
     await expect(card).toContainText("Khruangbin — Con Todo El Mundo");
   });
 
+  // Fields with labels people chose (#270): each shown as its label and what
+  // it says, in order, and a web address in one drawn as a link that opens
+  // in the browser (window.open outside the desktop app, the opener inside
+  // it), never in this window. Nothing else in a value is a link.
+  test("shows each field's label and what it says, web addresses as links that open in the browser (#270)", async ({ page }) => {
+    await page.addInitScript(() => {
+      const opened: string[] = [];
+      Object.defineProperty(window, "openedLinks", { value: opened });
+      window.open = (url?: string | URL) => {
+        opened.push(String(url));
+        return null;
+      };
+    });
+    await page.goto("/tests/fixtures/next-list.html?fields");
+    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    const card = page.getByRole("dialog", { name: "Jules" });
+    await expect(card.locator("dt")).toHaveText(["Listening to", "GitHub", "Playing"]);
+    await expect(card.locator("dd")).toHaveText(["Khruangbin — Con Todo El Mundo", "github.com/bendthebracket", "Outer Wilds, not main.rs. https://www.mobiusdigitalgames.com"]);
+    const links = card.getByRole("link");
+    await expect(links).toHaveText(["github.com/bendthebracket", "https://www.mobiusdigitalgames.com"]);
+    await expect(links.first()).toHaveAttribute("title", "https://github.com/bendthebracket");
+    const opened = () => page.evaluate(() => Reflect.get(window, "openedLinks"));
+    const at = page.url();
+
+    await links.first().click();
+    expect(await opened()).toEqual(["https://github.com/bendthebracket"]);
+    expect(page.url()).toBe(at);
+    // The words around a link, and a name that only looks like an address, open nothing.
+    await card.getByText("Outer Wilds, not main.rs.").click({ position: { x: 4, y: 4 } });
+    await card.locator("dd").first().click();
+    expect(await opened()).toEqual(["https://github.com/bendthebracket"]);
+    // From the keyboard too.
+    await links.nth(1).focus();
+    await page.keyboard.press("Enter");
+    expect(await opened()).toEqual(["https://github.com/bendthebracket", "https://www.mobiusdigitalgames.com/"]);
+    await expect(card).toBeVisible();
+  });
+
+  // At their longest, in the 340-wide list window at 100% and 200%: the card
+  // fits the window, a long label wraps in its column, a long address wraps
+  // inside the card, and nothing is cut off. Saved for a person to look at.
+  for (const scale of [1, 2]) {
+    test.describe(`at ${scale * 100}%`, () => {
+      test.use({ deviceScaleFactor: scale });
+      test("long fields fit the card, with nothing cut off (#270)", async ({ page }) => {
+        await page.goto("/tests/fixtures/next-list.html?fields&long");
+        await page.evaluate(() => document.fonts.ready);
+        for (const [name, opener] of [
+          ["Jules", rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first()],
+          ["Matt", page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" })],
+        ] as const) {
+          await opener.click();
+          const card = page.getByRole("dialog", { name });
+          await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
+          await expect(card.locator("dt")).toHaveText(["Supercalifragilisticexpi", "Currently obsessing over", "GitHub"]);
+          const box = await card.boundingBox();
+          const size = page.viewportSize();
+          if (!box || !size) throw new Error("the card isn't drawn");
+          expect(box.x).toBeGreaterThanOrEqual(8);
+          expect(box.x + box.width).toBeLessThanOrEqual(size.width - 8);
+          expect(box.y + box.height).toBeLessThanOrEqual(size.height - 8);
+          const laid = await card.evaluate((node) => {
+            const edge = node.getBoundingClientRect();
+            const parts = [...node.querySelectorAll<HTMLElement>(".nx-person-fields dt, .nx-person-fields dd, .nx-person-link")];
+            return {
+              clipped: [...node.querySelectorAll<HTMLElement>(".nx-person *")].filter((one) => one.scrollWidth > one.clientWidth + 1 && getComputedStyle(one).textOverflow !== "ellipsis").map((one) => one.className || one.tagName),
+              outside: parts.filter((one) => [...one.getClientRects()].some((rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5)).map((one) => one.textContent),
+              // What each field says starts on one edge.
+              starts: new Set([...node.querySelectorAll(".nx-person-fields dd")].map((dd) => Math.round(dd.getBoundingClientRect().left))).size,
+            };
+          });
+          expect(laid).toEqual({ clipped: [], outside: [], starts: 1 });
+          await page.mouse.move(0, 0);
+          await card.screenshot({ path: `test-results/status-fields/card-${name.toLowerCase()}-${test.info().project.name}-${scale * 100}.png`, animations: "disabled" });
+          await page.keyboard.press("Escape");
+          await expect(card).toHaveCount(0);
+        }
+      });
+    });
+  }
+
   test("Message starts the DM and closes the card", async ({ page }) => {
     await rows(page, "Away").first().getByRole("button").first().click();
     await page.getByRole("dialog", { name: "Sam" }).getByRole("button", { name: "Message" }).click();

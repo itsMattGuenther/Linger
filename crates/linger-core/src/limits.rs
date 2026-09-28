@@ -22,7 +22,12 @@ pub const ENTRANCE_SOUND_COOLDOWN_MS: u64 = 5 * 60 * 1000;
 
 /// User-status fields (SPEC §4.6).
 pub const MAX_STATUS_LINE_CHARS: usize = 240;
+/// A field's value.
 pub const MAX_STATUS_FIELD_CHARS: usize = 80;
+/// A field's label, chosen from the app's suggestions or typed (#270).
+pub const MAX_STATUS_LABEL_CHARS: usize = 24;
+/// A status is a small card, not a bio: three fields at most (#270).
+pub const MAX_STATUS_FIELDS: usize = 3;
 
 /// Message body cap, chars after trim (PROTOCOL §4).
 pub const MAX_MESSAGE_CHARS: usize = 8_000;
