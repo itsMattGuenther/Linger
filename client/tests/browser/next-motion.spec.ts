@@ -62,7 +62,8 @@ test("a name's shimmer and glow stop under reduced motion, and the name keeps it
       if (!shimmer || !glow) return null;
       const s = getComputedStyle(shimmer);
       const g = getComputedStyle(glow);
-      return { shimmer: s.animationName, shimmerPaint: s.backgroundImage, glow: g.textShadow, glowColor: g.color };
+      // The glow is a drop shadow of the drawn name (kit/Name.css, #272).
+      return { shimmer: s.animationName, shimmerPaint: s.backgroundImage, glow: g.filter, glowColor: g.color };
     });
   await page.goto("/tests/fixtures/kit.html");
   await expect(page.locator("[data-section]").first()).toBeVisible();

@@ -6,9 +6,11 @@
   background: var(--surface-raised);
 }
 
+/* The wash rises from the foot, away from the name at the head: a name
+   on a wash of its own color reads as a different name (#272). */
 .k-card[data-tinted="yes"] {
   background:
-    linear-gradient(180deg, color-mix(in oklch, var(--card-tint) 8%, transparent), transparent 70%),
+    linear-gradient(0deg, color-mix(in oklch, var(--card-tint) 8%, transparent), transparent 70%),
     var(--surface-raised);
 }
 
@@ -26,9 +28,11 @@
   animation: k-pop-in var(--duration-base) var(--ease-out);
 }
 
+/* From the far corner, so the head (a person's name) sits on the plain
+   surface, as their name does everywhere else (#272). */
 .k-popover[data-tinted="yes"] {
   background:
-    radial-gradient(120% 90% at 0% 0%, color-mix(in oklch, var(--card-tint) 13%, transparent), transparent 60%),
+    radial-gradient(120% 90% at 100% 100%, color-mix(in oklch, var(--card-tint) 13%, transparent), transparent 60%),
     var(--surface-popover);
 }
 
