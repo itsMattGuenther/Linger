@@ -61,6 +61,13 @@
   height: var(--row-2);
 }
 
+/* A two-line row centers its marker on both lines, which suits a dot. The
+   💤 is tall and reads with the name, so its big Z lifts to the name's line:
+   half the second line above the row's middle (#259). */
+.k-row[data-row-kind="two"] .k-slot > .k-marker[data-state="idle"] svg {
+  transform: translateY(calc(-30% - var(--line-meta) / 2)) scale(1.75);
+}
+
 /* Half strength, not the icon buttons' third: a row still has words to read. */
 .k-row-main:disabled {
   opacity: 0.5;

@@ -202,7 +202,7 @@ Presence, in the person's palette color:
 |---|---|
 | here (in a room) | a plain solid dot |
 | around | the same plain dot; the words beside it ("in #general", "around") tell them apart |
-| idle | the dot, dimmed a little |
+| idle | 💤, drawn in their color, as wide as the lead column (#259) |
 | away | a crescent moon |
 | offline | a dot, dimmed |
 

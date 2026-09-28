@@ -85,7 +85,7 @@ const hostMe = (me: typeof noDms.me) => (me ? { ...me, is_host: !query.has("memb
 const bare = query.has("bare")
   ? { ...noDms, rooms: [], dms: [], me: hostMe(noDms.me), users: noDms.users.filter((user) => user.id === noDms.me?.id).map((user) => ({ ...user, is_host: !query.has("member") })), presence: noDms.presence.filter((entry) => entry.user_id === noDms.me?.id) }
   : noDms;
-const shown = query.has("many")
+const many = query.has("many")
   ? {
       ...bare,
       rooms: [
@@ -94,6 +94,10 @@ const shown = query.has("many")
       ],
     }
   : bare;
+// `?idle`: Callie hasn't touched anything for ten minutes (#259).
+const shown = query.has("idle")
+  ? { ...many, presence: many.presence.map((entry) => (entry.user_id === people.callie.id ? { ...entry, state: "idle" as const } : entry)) }
+  : many;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
