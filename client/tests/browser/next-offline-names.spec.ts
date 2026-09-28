@@ -258,16 +258,23 @@ test.describe("an idle or away name is the dim grey, glow and all, and an away m
   for (const [state, list] of [["idle", "People here"], ["away", "Away"]] as const) {
     test(state, async ({ page }) => {
       await open(page);
+      // Callie, who isn't in voice: nothing colorful is drawn after her name,
+      // so every colored pixel near it would be hers.
       const look: Look = { fill: SOLID, effect: "glow" };
-      await restyle(page, styled(people.eli, look));
-      await move(page, people.eli.id, state, null, state === "away" ? "back after lunch" : null);
-      const eli = nameIn(page, list, "Eli");
-      await expectDim(page, eli);
+      await restyle(page, styled(people.callie, look));
+      await move(page, people.callie.id, state, null, state === "away" ? "back after lunch" : null);
+      const callie = nameIn(page, list, "Callie");
+      await expectDim(page, callie);
       await page.mouse.move(0, 0);
-      const { pixels, token } = await pixelsAround(page, eli);
+      const { pixels, token } = await pixelsAround(page, callie);
       expect(Math.max(...pixels.map(chroma)), "the most colorful pixel in and beside the name").toBeLessThan(chroma(token) + 0.02);
+      // Around again, the same pixels carry her color, so the check can fail.
+      await move(page, people.callie.id, "around");
+      const lit = await pixelsAround(page, nameIn(page, "People here", "Callie"));
+      expect(Math.max(...lit.pixels.map(chroma))).toBeGreaterThan(0.08);
       if (state === "away") {
-        const note = rows(page, "Away").filter({ hasText: "Eli" }).locator(".k-row-detail");
+        await move(page, people.callie.id, "away", null, "back after lunch");
+        const note = rows(page, "Away").filter({ hasText: "Callie" }).locator(".k-row-detail");
         await expect(note).toHaveText("back after lunch");
         expect(await note.evaluate((node) => getComputedStyle(node).color)).toBe(await computed(page, "--text-away"));
       }
