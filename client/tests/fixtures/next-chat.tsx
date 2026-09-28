@@ -235,6 +235,8 @@ function Fixture() {
       label: room?.kind === "dm" ? `DM with ${dmLabel(room)}` : `#${room?.name ?? "?"}`,
       lead: room?.kind !== "dm" ? { kind: "room" } : dm.length === 1 && only ? { kind: "person", person: markerOf(only, stateOf(only)) } : undefined,
       fresh: fresh.has(tab.roomId),
+      // A DM with something new is lit as well, as tabModel draws it (#291).
+      lit: room?.kind === "dm" && fresh.has(tab.roomId),
       voice: mine ? "mine" : voice.length > 0 ? "others" : undefined,
       speaking: voice.some((id) => SPEAKING.has(id)),
       closable: true,

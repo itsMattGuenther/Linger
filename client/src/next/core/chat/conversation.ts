@@ -39,6 +39,8 @@ export interface TabModel {
   lead: { kind: "room" } | { kind: "person"; user: User; state: PresenceState } | null;
   /** Something new arrived and this tab isn't showing: bold, never a count. */
   fresh: boolean;
+  /** That, in a DM, which is addressed to you: the tab is lit as well (#291). */
+  lit: boolean;
   voice: "mine" | "others" | null;
   speaking: boolean;
 }
@@ -62,6 +64,7 @@ export function tabModel(tab: TabKey, state: GatewayState, showing: boolean, tal
     label: dm ? `DM with ${title}` : `#${room.name}`,
     lead: !dm ? { kind: "room" } : others.length === 1 && only ? { kind: "person", user: only.user, state: only.state } : null,
     fresh: !showing && hasNewActivity(state, room.id),
+    lit: dm && !showing && hasNewActivity(state, room.id),
     voice: mine ? "mine" : inVoice.length > 0 ? "others" : null,
     speaking: inVoice.some((id) => talking.has(id)),
   };

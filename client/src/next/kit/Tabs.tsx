@@ -25,6 +25,11 @@ export interface TabItem {
   label: string;
   /** Something new arrived while another tab was showing: bold, never a count. */
   fresh?: boolean;
+  /**
+   * Something new that's addressed to you, a DM (#291), while another tab is
+   * showing: the tab is lit in the lamp, as well as bold. Never a count.
+   */
+  lit?: boolean;
   /** Voice here: `mine` when you're in it, `others` when only others are. */
   voice?: "mine" | "others";
   speaking?: boolean;
@@ -181,6 +186,7 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
             data-tab-id={tab.id}
             data-active={active ? "yes" : undefined}
             data-fresh={tab.fresh && !active ? "yes" : undefined}
+            data-lit={tab.lit && !active ? "yes" : undefined}
             data-stripe={tab.stripe ? "yes" : undefined}
             data-dragged={drag?.id === tab.id ? "yes" : undefined}
             style={{ ...stripeStyle(tab.stripe), ...(shift === 0 ? {} : { transform: `translateX(${shift}px)` }) }}

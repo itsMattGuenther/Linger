@@ -59,6 +59,23 @@
   text-align: left;
 }
 
+/* Folded over a DM you haven't read (#291): lit in the lamp, like the DM's row. */
+.nx-srv-toggle[data-lit="yes"] {
+  background: var(--lit-wash);
+  box-shadow: inset 0 0 0 1px var(--lit-edge);
+}
+
+.nx-srv-toggle[data-lit="yes"]:hover {
+  background: var(--lit-wash-hover);
+}
+
+@media (forced-colors: active) {
+  .nx-srv-toggle[data-lit="yes"] {
+    outline: var(--focus-width) dashed Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}
+
 .nx-srv-toggle:hover {
   background: var(--surface-hover);
 }

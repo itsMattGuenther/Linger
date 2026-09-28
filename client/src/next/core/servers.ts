@@ -51,6 +51,11 @@ export interface OpenLine {
 export interface ServerHeader {
   /** Something inside is new. Weight only, and never while the server is Quiet. */
   fresh: boolean;
+  /**
+   * A DM inside hasn't been read (#291). Folded, the header is lit, even
+   * while the server is Quiet: a DM is addressed to you, as a mention is.
+   */
+  lit: boolean;
   /** Who's on: in voice, then in a room, then around, then away. Offline isn't on. */
   dots: Present[];
   folded: FoldedLine;
@@ -100,6 +105,7 @@ export function serverHeader(state: GatewayState, model: ListModel, quiet: boole
   const awayMessage = me?.user.status?.away_message ?? null;
   return {
     fresh,
+    lit: model.dms.some((dm) => dm.fresh),
     dots: dotsOf(model),
     folded: foldedOf(state, model),
     open: me

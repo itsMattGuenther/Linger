@@ -204,6 +204,26 @@ describe("contrast of the new client's tokens", () => {
     expect(bad, bad.join("\n")).toEqual([]);
   });
 
+  // A DM you haven't read is lit in the lamp (#291): its row and a folded
+  // heading in the list, and its tab on the title bar. The words on it are
+  // text, so they keep 4.5:1 on the fill, and on the fill a hover makes.
+  // Only the primary and secondary greys are drawn on it: muted text there
+  // is drawn secondary instead (kit/SectionLabel.css), since muted falls
+  // under 4.5:1 on the lamp.
+  it("keeps text at 4.5:1 on a lit row, heading or tab, hovered or not (#291)", () => {
+    const bad: string[] = [];
+    for (const wash of ["--lit-wash", "--lit-wash-hover"]) {
+      for (const surface of ["--surface-window", "--surface-sunken", "--surface-titlebar", "--surface-titlebar-end"]) {
+        const behind = over(color(wash), color(surface));
+        for (const fg of ["--text-primary", "--text-secondary"]) {
+          const value = ratio(color(fg), behind);
+          if (value < 4.5) bad.push(`${fg} on ${wash} over ${surface}: ${value.toFixed(2)}:1, needs 4.5:1`);
+        }
+      }
+    }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
   // Somebody offline has their name drawn in a dim grey in the list, with
   // none of their own color (#274). Dim, but still text: it must read at
   // 4.5:1 on the list and on a row that's hovered or has its card open. The

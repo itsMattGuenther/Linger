@@ -32,6 +32,11 @@ export interface RowProps {
   actions?: ReactNode[];
   /** Something new here: the title goes bold. Weight only, never a count. */
   fresh?: boolean;
+  /**
+   * Something new that's addressed to you, a DM (#291): the row is lit in
+   * the lamp, a soft fill and a thin edge, as well as bold. Never a count.
+   */
+  lit?: boolean;
   /** This row's card or window is open. */
   selected?: boolean;
   /** A knock just went to this person: the row gives one small shake (none for reduced motion). */
@@ -91,6 +96,7 @@ export function Row({
   end,
   actions,
   fresh = false,
+  lit = false,
   selected = false,
   knocked = false,
   label,
@@ -143,6 +149,7 @@ export function Row({
       data-row-kind={lines}
       data-actions={count || undefined}
       data-fresh={fresh ? "yes" : undefined}
+      data-lit={lit ? "yes" : undefined}
       data-selected={selected ? "yes" : undefined}
       data-knocked={knocked ? "yes" : undefined}
     >

@@ -58,7 +58,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   you sign in to the computer (off unless you turn it on).
 - **Conversations as tabs** in one chat window, or each in a window of its own.
 - **No unread counts.** A room with something new gets a bolder name, and a
-  conversation opens at "you left off here". Never a badge.
+  conversation opens at "you left off here". A DM you haven't read is lit in
+  amber as well, with a desktop banner saying who it's from. Never a badge.
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
   and away messages.

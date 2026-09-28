@@ -111,6 +111,22 @@ describe("a server's header in the list", () => {
     });
     expect(header(dmFresh).fresh).toBe(true);
   });
+
+  it("is lit while a DM inside hasn't been read, even while the server is quiet (#291)", () => {
+    const dmFresh = guild({
+      dms: [room("d-nyx", "d-nyx", 0, { kind: "dm", member_ids: ["u-me", "u-kestrel"] })],
+      newest: { "d-nyx": "m5" },
+      readLoaded: true,
+    });
+    expect(header(dmFresh).lit).toBe(true);
+    // A DM is for you, as a mention is: Quiet doesn't hide it.
+    expect(header(dmFresh, true).lit).toBe(true);
+    // Read, it goes out.
+    expect(header({ ...dmFresh, read: { "d-nyx": "m5" } }).lit).toBe(false);
+    // A room with something new is bold, never lit.
+    const roomFresh = guild({ newest: { "r-general": "m9" }, read: { "r-general": "m1" }, readLoaded: true });
+    expect(header(roomFresh).lit).toBe(false);
+  });
 });
 
 describe("a folded server's one line", () => {

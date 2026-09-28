@@ -72,7 +72,9 @@ export function ServerSection({
   if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(-1) });
   if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(1) });
 
-  const toggleLabel = [name, header.fresh ? "something new" : null, quiet ? "quiet" : null].filter(Boolean).join(", ");
+  // Folded over a DM you haven't read, the header is lit (#291) and says so.
+  const lit = folded && header.lit;
+  const toggleLabel = [name, lit ? "a DM for you" : header.fresh ? "something new" : null, quiet ? "quiet" : null].filter(Boolean).join(", ");
 
   return (
     <section
@@ -84,7 +86,15 @@ export function ServerSection({
     >
       <div className="nx-srv-top">
       <div className="nx-srv-head">
-        <button type="button" className="nx-srv-toggle" aria-expanded={!folded} aria-controls={bodyId} aria-label={toggleLabel} onClick={onToggle}>
+        <button
+          type="button"
+          className="nx-srv-toggle"
+          data-lit={lit ? "yes" : undefined}
+          aria-expanded={!folded}
+          aria-controls={bodyId}
+          aria-label={toggleLabel}
+          onClick={onToggle}
+        >
           <span className="nx-srv-caret" aria-hidden="true">
             <Icon name="caret" size="sm" />
           </span>

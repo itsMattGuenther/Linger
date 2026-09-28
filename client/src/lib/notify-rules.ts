@@ -63,13 +63,18 @@ export function peopleList(names: readonly string[]): string {
 /** How much of a message a notification carries before it trails off. */
 const EXCERPT_CHARS = 140;
 
-/** What the notification actually says. */
+/**
+ * What the notification actually says. A room's is "Jules in #general"; a
+ * DM's is only who wrote, "Jules" (#291), since a DM has no name of its own
+ * and its generated slug means nothing to anybody.
+ */
 export function notificationText(
   slug: string,
   names: readonly string[],
   excerpt: string,
+  dm = false,
 ): { title: string; body: string } {
   const trimmed =
     excerpt.length <= EXCERPT_CHARS ? excerpt : `${excerpt.slice(0, EXCERPT_CHARS).trimEnd()}…`;
-  return { title: `${peopleList(names)} in #${slug}`, body: trimmed };
+  return { title: dm ? peopleList(names) : `${peopleList(names)} in #${slug}`, body: trimmed };
 }

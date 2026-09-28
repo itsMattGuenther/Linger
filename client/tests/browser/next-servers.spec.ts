@@ -78,6 +78,21 @@ test("a server's name is bold when something inside is new, and never while it's
   await expect(section(page, "Ashen Lanterns").locator(".nx-srv-quiet")).toBeVisible();
 });
 
+test("a folded server with a DM you haven't read is lit and says so, even while it's quiet (#291)", async ({ page }) => {
+  await open(page, "&folded");
+  // The Good Company holds an unread DM (Jules); its toggle is lit and says so in words, not a number.
+  await expect(toggle(page, "The Good Company")).toHaveAttribute("data-lit", "yes");
+  await expect(toggle(page, "The Good Company")).toHaveAccessibleName(/^The Good Company, a DM for you/);
+  const [lit, plain] = await Promise.all(
+    ["The Good Company", "Ashen Lanterns"].map((name) => toggle(page, name).evaluate((node) => getComputedStyle(node).backgroundColor)),
+  );
+  expect(lit).not.toBe(plain);
+  // Open, the DM's own row shows it instead.
+  await toggle(page, "The Good Company").click();
+  await expect(toggle(page, "The Good Company")).not.toHaveAttribute("data-lit", "yes");
+  await expect(section(page, "The Good Company").locator(".k-row[data-lit='yes']")).toHaveCount(1);
+});
+
 test("folds and unfolds by click and by keyboard, and each server's lists say whose they are", async ({ page }) => {
   await open(page, "&folded");
   await expect(page.getByRole("list", { name: "Rooms on Ashen Lanterns" })).toHaveCount(0);

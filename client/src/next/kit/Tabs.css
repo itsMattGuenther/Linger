@@ -95,6 +95,24 @@
   font-weight: 700;
 }
 
+/* A DM you haven't read, while another tab shows (#291): lit in the lamp. */
+.k-tab[data-lit="yes"] {
+  background: var(--lit-wash);
+  border-color: var(--lit-edge);
+  color: var(--text-primary);
+}
+
+.k-tab[data-lit="yes"]:hover {
+  background: var(--lit-wash-hover);
+}
+
+@media (forced-colors: active) {
+  .k-tab[data-lit="yes"] {
+    outline: var(--focus-width) dashed Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}
+
 .k-tab-close {
   display: inline-flex;
   flex: none;

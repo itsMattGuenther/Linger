@@ -19,6 +19,7 @@ import { appVersion, checkForUpdate, installUpdate, releaseNotesUrl, type Update
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
+import { loadDmAlerts, saveDmAlerts } from "../../core/dmAlerts";
 import { refusal, setStartsAtSignIn, START_GUIDE_URL, type StartAtSignIn, startsAtSignIn, unanswered } from "../../core/autostart";
 import { loadCloseList, saveCloseList } from "../../core/closing";
 import { loadMode } from "../../core/conversations";
@@ -224,6 +225,7 @@ function Settings({ following }: { following: Following }) {
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
   const [arrivalCards, setArrivalCards] = useState(() => loadArrivalCards(localStore()));
+  const [dmAlerts, setDmAlerts] = useState(() => loadDmAlerts(localStore()));
   const [devices, setDevices] = useState<VoiceDeviceList | null | "looking">(isTauri() ? "looking" : null);
   useEffect(() => {
     if (!isTauri()) return;
@@ -426,6 +428,13 @@ function Settings({ following }: { following: Following }) {
           onChange: (on) => {
             saveArrivalCards(localStore(), on);
             setArrivalCards(on);
+          },
+        },
+        dmAlerts: {
+          on: dmAlerts,
+          onChange: (on) => {
+            saveDmAlerts(localStore(), on);
+            setDmAlerts(on);
           },
         },
       }}

@@ -86,6 +86,19 @@ test.describe("what it shows", () => {
     await expect(box(page)).toHaveAttribute("placeholder", "Say something in #general");
   });
 
+  test("a DM's tab with something new is lit as well as bold; a room's is bold only (#291)", async ({ page }) => {
+    const jules = page.getByRole("tab", { name: "DM with Jules" }).locator("xpath=..");
+    const plans = page.getByRole("tab", { name: "#weekend-plans" }).locator("xpath=..");
+    await expect(jules).toHaveAttribute("data-lit", "yes");
+    await expect(plans).toHaveAttribute("data-fresh", "yes");
+    await expect(plans).not.toHaveAttribute("data-lit", "yes");
+    const [lit, plain] = await Promise.all([jules, plans].map((tab) => tab.evaluate((node) => getComputedStyle(node).backgroundColor)));
+    expect(lit).not.toBe(plain);
+    // Showing it, it's being read: no longer lit.
+    await page.getByRole("tab", { name: "DM with Jules" }).click();
+    await expect(jules).not.toHaveAttribute("data-lit", "yes");
+  });
+
   test("a tab with something new is bold and never shows a number", async ({ page }) => {
     const weight = (name: string) =>
       page

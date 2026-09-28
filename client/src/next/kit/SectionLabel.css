@@ -75,3 +75,26 @@ button.k-section-toggle:is(:hover, :focus-visible) .k-section-hint {
   flex: none;
   margin-left: var(--space-1);
 }
+
+/* Folded over a DM you haven't read (#291): lit in the lamp, like its row. */
+.k-section[data-lit="yes"] {
+  border-radius: var(--radius-md);
+  background: var(--lit-wash);
+  box-shadow: inset 0 0 0 1px var(--lit-edge);
+}
+
+.k-section[data-lit="yes"] .k-section-text {
+  color: var(--text-primary);
+}
+
+/* Muted text falls under 4.5:1 on the lamp's fill (contrast.test.ts). */
+.k-section[data-lit="yes"] .k-section-hint {
+  color: var(--text-secondary);
+}
+
+@media (forced-colors: active) {
+  .k-section[data-lit="yes"] {
+    outline: var(--focus-width) dashed Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+}

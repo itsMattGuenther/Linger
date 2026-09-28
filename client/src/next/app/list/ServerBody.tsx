@@ -207,6 +207,8 @@ export function ServerBody({
         open={open("dms")}
         onToggle={() => toggle("dms")}
         controls={id("dms")}
+        // Folded, it's lit while a DM inside hasn't been read (#291).
+        lit={!open("dms") && model.dms.some((dm) => dm.fresh)}
         action={
           onStartDm ? (
             <IconButton
@@ -238,6 +240,8 @@ export function ServerBody({
                   lines="one"
                   title={dm.label}
                   fresh={dm.fresh}
+                  // A DM is addressed to you: unread, it's lit, not only bold (#291).
+                  lit={dm.fresh}
                   onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
                 />
               ))}

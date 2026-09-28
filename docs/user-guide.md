@@ -625,11 +625,16 @@ versions comes back once the new look has an evening version of its own.
 
 ## Being interrupted, or not
 
-Desktop banners appear for **somebody naming you**, or a person you've
-specifically asked to hear about. Open **Settings → Notifications** to choose
+Desktop banners appear for **a DM**, **somebody naming you**, or a person
+you've specifically asked to hear about. A DM's banner says who it's from, and
+Linger's taskbar button flashes until you look (on Linux, the window is marked
+as wanting attention, and your desktop decides how that looks). Nothing happens
+for a DM you're already reading. In the list, a DM you haven't read is lit in
+amber, not only bold, so you can see who wrote at a glance. Turn DM banners off
+in **Settings → Notifications → DMs**. Open **Settings → Notifications** to choose
 those people, either everywhere or in selected rooms. A server you've made
 **Quiet** makes no sounds and no arrival cards, but somebody naming you there
-still gets a banner, and knocks still come through. Clicking a banner opens
+and DMs still get a banner, and knocks still come through. Clicking a banner opens
 that conversation at the message. On Windows that works while the banner is on
 screen; once it has moved to the notification center, clicking it just brings
 Linger up.

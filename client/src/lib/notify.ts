@@ -2,9 +2,10 @@
  * The one thing in Linger allowed to interrupt you.
  *
  * SPEC §4.2 deletes the badge and replaces it with weight and a line in the
- * stream. The single exception is a message that names you, or one from
- * somebody you have explicitly asked to hear from — and that exception is
- * this file.
+ * stream. The exception is a message that names you, one from somebody you
+ * have explicitly asked to hear from, and, in the Buddy list client, a DM,
+ * which is addressed to you just as a mention is (#291) — and that exception
+ * is this file.
  *
  * Three rules shape it.
  *
@@ -67,6 +68,28 @@ export function setQuietServers(servers: ReadonlySet<string>): void {
   quietServers = servers;
 }
 
+/**
+ * DM alerts (#291): whether a DM gets a banner and asks the desktop to point
+ * at Linger (the taskbar button flashes until you look). Asked on every DM,
+ * so a change in Settings counts at once. The Buddy list client sets it; the
+ * previous client never does, so its DMs behave as they always have.
+ */
+let dmAlerts: (() => boolean) | null = null;
+
+export function setDmAlerts(on: (() => boolean) | null): void {
+  dmAlerts = on;
+}
+
+/**
+ * Ask the desktop shell to point at the window a DM would show in. The shell
+ * asks for nothing while any Linger window has the focus, and the OS stops
+ * the flash once the window is used (`src-tauri/src/window.rs`).
+ */
+function askForAttention(server: string, room: RoomId): void {
+  if (!isTauri()) return;
+  void invoke("next_request_attention", { server, room }).catch(() => undefined);
+}
+
 interface Batch {
   server: string;
   roomId: RoomId;
@@ -77,6 +100,8 @@ interface Batch {
   names: string[];
   /** The most recent thing said, as plain words. */
   excerpt: string;
+  /** A DM: its banner is titled by who wrote, with no room. */
+  dm: boolean;
 }
 
 /** Keyed by server and room, because a room id only means anything next to
@@ -114,7 +139,11 @@ export function considerFrame(
   const dm = snapshot.dms.some((room) => room.id === message.room_id);
   // Sound switches are independent of desktop-banner rules and permission.
   if (!replayed && !quietServers.has(server)) void playSound(dm ? "dm" : "room");
-  if (notifyReason(message, me, snapshot.notifyRules) === null) return;
+  // A DM is for you, so with DM alerts on it gets a banner of its own and the
+  // taskbar points at Linger. Like a mention, a Quiet server lets it through.
+  const dmAlert = dm && (dmAlerts?.() ?? false);
+  if (dmAlert) askForAttention(server, message.room_id);
+  if (!dmAlert && notifyReason(message, me, snapshot.notifyRules) === null) return;
 
   const slug = snapshot.rooms.find((room) => room.id === message.room_id)?.slug ?? "a room";
   const name =
@@ -123,7 +152,7 @@ export function considerFrame(
   const key = batchKey(server, message.room_id);
   const held = batches.get(key);
   if (held === undefined) {
-    batches.set(key, { server, roomId: message.room_id, messageId: message.id, slug, names: [name], excerpt: plainText(message.body) });
+    batches.set(key, { server, roomId: message.room_id, messageId: message.id, slug, names: [name], excerpt: plainText(message.body), dm });
   } else {
     if (!held.names.includes(name)) held.names.push(name);
     held.excerpt = plainText(message.body);
@@ -137,7 +166,7 @@ function flush(): void {
   const pending = [...batches.values()];
   batches.clear();
   for (const batch of pending) {
-    const { title, body } = notificationText(batch.slug, batch.names, batch.excerpt);
+    const { title, body } = notificationText(batch.slug, batch.names, batch.excerpt, batch.dm);
     void show(title, body, { server: batch.server, room: batch.roomId, message: batch.messageId });
   }
 }

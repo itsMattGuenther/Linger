@@ -120,3 +120,12 @@ describe("what the notification says", () => {
     expect(peopleList(["Callie", "Dave", "Ash"])).toBe("Callie, Dave and Ash");
   });
 });
+
+describe("a DM's banner (#291)", () => {
+  it("is titled by who wrote it, with no room: a DM's slug means nothing to anybody", () => {
+    expect(notificationText("dm-0192", ["Jules"], "you on tonight?", true)).toEqual({ title: "Jules", body: "you on tonight?" });
+    expect(notificationText("dm-0192", ["Eli", "Sam"], "same", true).title).toBe("Eli and Sam");
+    // A room's keeps its room.
+    expect(notificationText("general", ["Jules"], "hi").title).toBe("Jules in #general");
+  });
+});

@@ -391,7 +391,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| NOTE-1 | Only two things notify: a message that names you (by username), or one from a person you asked to hear from. There's no `@everyone`. | `lib/notify-rules.ts` | Same | U (exists) | ✅ (lib/notify-rules.test.ts) |
+| NOTE-1 | Only two things notify: a message that names you (by username), or one from a person you asked to hear from. There's no `@everyone`. | `lib/notify-rules.ts` | Also every DM, with DM alerts on (#291): a banner titled by who wrote it, and the taskbar pointing at Linger. The previous client is unchanged | U (exists) | ✅ (lib/notify-rules.test.ts, lib/notify.test.ts) |
 | NOTE-2 | "Always notify me when [person] posts": everywhere, or in chosen rooms. | `notify/NotifyRules.tsx`, `GET/PUT/DELETE /me/notify-rules` | Settings → Notifications | F | ✅ (next-settings.spec.ts, next-settings-window.spec.ts) |
 | NOTE-3 | Nothing notifies about the room you're looking at. | `notify.ts` | The focused window's visible tab | U | ✅ (share.test.ts, lib/notify.test.ts) |
 | NOTE-4 | Messages are batched per server and room. A resume's replay makes one notification, and it never says how many. | `notify.ts` | Same, **owner only** | U + C | ✅ (lib/notify.test.ts, core/quietViewers.test.ts) |

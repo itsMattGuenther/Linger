@@ -13,6 +13,11 @@ export interface SectionLabelProps {
   controls?: string;
   /** One small `IconButton` (size sm) at the end, like "New message". */
   action?: ReactNode;
+  /**
+   * Folded over something new that's addressed to you, a DM (#291): lit in
+   * the lamp, as the row would be, so a folded section still shows it.
+   */
+  lit?: boolean;
 }
 
 /**
@@ -20,7 +25,7 @@ export interface SectionLabelProps {
  * sits in the rows' lead column, so carets line up with the markers under
  * them, and it says "show" while folded and "hide" on hover while open.
  */
-export function SectionLabel({ label, level = "section", open, onToggle, controls, action }: SectionLabelProps) {
+export function SectionLabel({ label, level = "section", open, onToggle, controls, action, lit = false }: SectionLabelProps) {
   const foldable = onToggle !== undefined && open !== undefined;
   const inner = (
     <>
@@ -32,7 +37,7 @@ export function SectionLabel({ label, level = "section", open, onToggle, control
     </>
   );
   return (
-    <div className="k-section" data-kit="SectionLabel" data-level={level} data-open={open === false ? "no" : "yes"}>
+    <div className="k-section" data-kit="SectionLabel" data-level={level} data-open={open === false ? "no" : "yes"} data-lit={lit ? "yes" : undefined}>
       {foldable ? (
         <button
           type="button"

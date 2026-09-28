@@ -48,7 +48,9 @@ Then open <http://localhost:1431/tests/fixtures/kit.html>.
    marker or text a row holds.
 5. **Text never hard-clips.** Anything that can run long ends in "…".
 6. **One way to draw each state.** Presence has exactly one marker per state,
-   and new activity is shown by weight, never by a count or a dot.
+   and new activity is shown by weight, never by a count or a dot. A DM you
+   haven't read is also lit (#291): a lamp fill and edge, since a DM is
+   addressed to you. Nothing blinks.
 7. **Accessible by default.** Every control has a name and a visible focus
    ring. Text meets 4.5:1 contrast, and icons meet 3:1.
 8. **Check it where it runs.** The desktop app draws with WebKitGTK on Linux,
@@ -86,6 +88,7 @@ required a change (marked ▲).
 | `--text-offline` | `#8d96a9` | an offline person's name in the list (#274): none of their color, the dimmest text allowed |
 | `--text-accent` / `--accent` | `#f3b55c` | the lamp: primary action, selected choice, your voice |
 | `--text-on-accent` | `#1c1206` | text on the lamp |
+| `--lit-wash` / `--lit-wash-hover` / `--lit-edge` | the lamp at 12%, 16% and 28% | a DM you haven't read, lit (#291) |
 | `--text-danger` / `--danger` | `#f06e6e` | destructive actions, errors |
 | `--text-success` / `--success` | `#7cc98f` | confirmations |
 | `--icon-default` | `#c0c6d2` | icons on filled controls |
@@ -293,6 +296,10 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
   - `detail`, the second line, set `away` for the warm away color.
 - **States:**
   - `fresh` draws the title bold. Weight only, never a count.
+  - `lit` is something new addressed to you, a DM (#291): a soft lamp fill
+    (`--lit-wash`, `--lit-wash-hover` on hover) and a thin lamp edge
+    (`--lit-edge`), on top of `fresh`'s bold. High contrast draws a dashed
+    edge instead. Never a count.
   - `selected` means its card or window is open.
   - `knocked` means you just knocked on this person's door: the row gives one
     small shake (two slow durations long, so none under reduced motion).
@@ -317,6 +324,10 @@ A small uppercase label over part of a list.
 - **Folding:** with `open` and `onToggle` it is a 24px toggle
   (`aria-expanded`). It says "show" while folded and "hide" on hover while
   open.
+- **`lit`**: folded over a DM you haven't read (#291), it is lit in the lamp
+  as the row would be, so a folded section still shows it. Its "show" is drawn
+  in the secondary grey there, because muted text falls under 4.5:1 on the
+  lamp.
 - **`action`** holds one small `IconButton` at the end, like "New message".
 
 ### TabStrip
@@ -326,6 +337,8 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
 - **Tabs:**
   - A tab is 136–232px wide, and its title ends in "…".
   - `fresh` makes a tab bold when something arrives while it isn't showing.
+  - `lit`, a DM's tab with something new while it isn't showing (#291): lit
+    in the lamp as a row is, as well as bold.
   - `voice` adds the voice glyph: `mine` in the lamp, `others` dim.
   - A close button shows on hover, focus and the active tab.
 - **`lead`:** a room's tab leads with its `#`, in the same faint ink as
@@ -754,6 +767,8 @@ built on the rows' own grid so nothing new lines up by eye:
 | Status fields (#270): a label from the list or typed, the list a caret away, focus following a switch; the fields saved whole; a label twice or a field with no label said in words; at 720 and 560 wide, 100% and 200%, a label beside what it says while they fit and over it when not, nothing clipped. On a person's card at 340px: labels and values in order, long labels wrapping in their column, what they say starting on one edge, web addresses as links that open in the browser and nothing else | `next-settings.spec.ts`, `next-list.spec.ts`, `core/status.test.ts`, `lib/statusLinks.test.ts` |
 | Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
 | What a server's header and line say, from its store | `core/servers.test.ts` |
+| A DM you haven't read is lit (its row, the DMs heading while folded, a folded server's header, its tab) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
+| DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing for the previous client | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |
