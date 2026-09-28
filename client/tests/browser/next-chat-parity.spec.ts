@@ -78,6 +78,38 @@ test.describe("what a message says", () => {
     expect(page.url()).toContain("/tests/fixtures/next-chat-parity.html");
   });
 
+  test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
+    await open(page);
+    // Typed as the report did: a line, Shift+Enter, the next line, Enter.
+    await box(page).click();
+    await page.keyboard.type("N I C E");
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type("Nice is how I gotta be");
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type("Nicer than you all for free");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("sent:")).at(-1)).toContain(
+      JSON.stringify({ body: "N I C E\nNice is how I gotta be\nNicer than you all for free" }).slice(1, -1),
+    );
+    const typed = log(page).locator(".nx-text-p", { hasText: "N I C E" });
+    await expect(typed).toBeVisible();
+    // Drawn, not only kept: what the page shows has the breaks, and the
+    // paragraph is three lines tall.
+    const drawn = async (paragraph: typeof typed) =>
+      paragraph.evaluate((node) => ({
+        text: node instanceof HTMLElement ? node.innerText : "",
+        lines: Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)),
+      }));
+    expect(await drawn(typed)).toEqual({ text: "N I C E\nNice is how I gotta be\nNicer than you all for free", lines: 3 });
+
+    // Indentation survives too, and a blank line still starts a new paragraph.
+    const id = await post(page, "the steps:\n  first, the ladder\n    then the bulb\n\nand done");
+    const paragraphs = row(page, id).locator(".nx-text-p");
+    await expect(paragraphs).toHaveCount(2);
+    expect(await drawn(paragraphs.first())).toEqual({ text: "the steps:\n  first, the ladder\n    then the bulb", lines: 3 });
+    expect(await drawn(paragraphs.last())).toEqual({ text: "and done", lines: 1 });
+  });
+
   test("words are drawn in sans, code alone in mono, and names in the face their owner chose (CONV-5)", async ({ page }) => {
     await open(page);
     const id = await post(page, "the words, then `a bit of code`", "u-jules");

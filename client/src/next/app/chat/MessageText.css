@@ -11,6 +11,14 @@
   overflow-wrap: anywhere;
 }
 
+/* The lines and indentation someone typed survive (#289): the parser keeps a
+   paragraph's single newlines as newlines (lib/markdown.ts), and this draws
+   them. Long words still wrap, from `.nx-text`'s overflow-wrap. */
+.nx-text-p,
+.nx-text-list li {
+  white-space: pre-wrap;
+}
+
 .nx-text-p {
   margin: 0;
 }
