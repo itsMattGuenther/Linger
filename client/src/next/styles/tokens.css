@@ -204,6 +204,9 @@
   --marker-gap: 8px;
   --marker-md: 8px; /* even, so it centers on whole pixels in the slot */
   --marker-sm: 6px;
+  /* An offline person's hollow dot (#301): an outline this wide, at each size. */
+  --marker-ring: 1.5px;
+  --marker-ring-sm: 1.25px;
 
   /* Rows: fixed heights, and fixed line boxes inside them, so no name face or
      size can change a row's height. */

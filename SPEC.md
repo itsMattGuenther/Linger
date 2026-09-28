@@ -699,7 +699,7 @@ dark-mode Discord reskin.
 | **No chat bubbles.** Messages are text on the surface. | Bubbles are the iMessage/Discord signature |
 | **No avatars.** Identity is carried by styled names, color and a presence marker. | The whole personalization thesis |
 | **No counts of anything new.** New activity is weight, never a number or a badge. | §4.2 |
-| **One marker per presence state:** a dot here, 💤 idle, a crescent away, a dimmed dot offline. | Nothing relies on shape or color alone: the words are in the row and its label |
+| **One marker per presence state:** a dot here, the dot at half strength idle, a crescent at half strength away, a hollow dot offline (#301). Idle, away and offline names are a dim grey in the list. | Nothing relies on shape or color alone: the words are in the row and its label |
 | **Mono is for labels and metadata.** A message body is never mono. | Mono in a body was the failure of an earlier direction |
 | **Screens are built from the kit.** A color, size or radius is a token, never a literal. | Most polish bugs came from screens sizing their own controls |
 | **Text never hard-clips.** Anything that can run long ends in "…" or wraps. | |

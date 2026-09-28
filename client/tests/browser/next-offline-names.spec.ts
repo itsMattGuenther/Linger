@@ -211,7 +211,10 @@ test.describe("an offline name is drawn in the dim grey, with none of their look
   }
 });
 
-test("going offline takes the color away, and coming back, away or idle brings it back", async ({ page }) => {
+// Only somebody here has the lights on (#301): idle and away are home with
+// the lights off, so their names are the dim grey too, and only around or a
+// room brings their look back.
+test("only somebody here wears their look: idle, away and offline take it away, around or a room brings it back (#301)", async ({ page }) => {
   await open(page);
   const look: Look = { fill: { kind: "gradient", from: "violet", to: "orchid" }, effect: "glow" };
   await restyle(page, styled(people.callie, look));
@@ -233,17 +236,43 @@ test("going offline takes the color away, and coming back, away or idle brings i
   await expect(rows(page, "Offline").filter({ hasText: "Callie" })).toHaveCount(0);
   await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
 
-  // Away is still here enough to wear their colors, and so is idle.
+  // Away and idle are the lights off: dim, in the same face.
   await move(page, people.callie.id, "away", null, "out for a walk");
-  await expectTheirs(page, nameIn(page, "Away", "Callie"), look);
+  const away = nameIn(page, "Away", "Callie");
+  await expectDim(page, away);
+  expect((await paint(away)).font).toBe(face.font);
   await move(page, people.callie.id, "idle");
-  await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
+  await expectDim(page, nameIn(page, "People here", "Callie"));
 
-  // And offline once more, then into a room.
+  // Around again, then offline once more, then into a room.
+  await move(page, people.callie.id, "around");
+  await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
   await move(page, people.callie.id, "offline");
   await expectDim(page, nameIn(page, "Offline", "Callie"));
   await move(page, people.callie.id, "in_room", "r-general");
   await expectTheirs(page, nameIn(page, "People here", "Callie"), look);
+});
+
+test.describe("an idle or away name is the dim grey, glow and all, and an away message keeps its warm color (#301)", () => {
+  test.use({ deviceScaleFactor: 2 });
+  for (const [state, list] of [["idle", "People here"], ["away", "Away"]] as const) {
+    test(state, async ({ page }) => {
+      await open(page);
+      const look: Look = { fill: SOLID, effect: "glow" };
+      await restyle(page, styled(people.eli, look));
+      await move(page, people.eli.id, state, null, state === "away" ? "back after lunch" : null);
+      const eli = nameIn(page, list, "Eli");
+      await expectDim(page, eli);
+      await page.mouse.move(0, 0);
+      const { pixels, token } = await pixelsAround(page, eli);
+      expect(Math.max(...pixels.map(chroma)), "the most colorful pixel in and beside the name").toBeLessThan(chroma(token) + 0.02);
+      if (state === "away") {
+        const note = rows(page, "Away").filter({ hasText: "Eli" }).locator(".k-row-detail");
+        await expect(note).toHaveText("back after lunch");
+        expect(await note.evaluate((node) => getComputedStyle(node).color)).toBe(await computed(page, "--text-away"));
+      }
+    });
+  }
 });
 
 test("with plain names on, an offline name is still the dim grey, and everybody else plain", async ({ page }) => {
