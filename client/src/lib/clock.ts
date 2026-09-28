@@ -8,7 +8,7 @@
  * hands back.
  *
  * Note this returns a moment, never a duration. Callers take `now` as an
- * argument so the arithmetic stays pure and testable (`stream/time.ts`,
+ * argument so the arithmetic stays pure and testable (`lib/time.ts`,
  * `lib/roster.ts`).
  */
 import { useEffect, useState } from "react";

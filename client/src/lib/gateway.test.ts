@@ -51,7 +51,6 @@ vi.mock("./notify", () => ({ considerFrame: () => undefined }));
 vi.mock("./sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const {
-  anyNewActivity,
   connect,
   disconnect,
   dismissKnock,
@@ -64,6 +63,7 @@ const {
   openRoom,
   releaseOtherRooms,
   send,
+  sendMessage,
   serverState,
   trimHistory,
 } = await import("./gateway");
@@ -244,9 +244,8 @@ describe("the gateway store, with two servers", () => {
     // A room with a newest message and no read marker is a room with something
     // in it. Still a boolean — nothing here counts anything.
     expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
-    expect(anyNewActivity(serverState(HOME))).toBe(true);
     // An empty room is not "something new" on the other server.
-    expect(anyNewActivity(serverState(WORK))).toBe(false);
+    expect(hasNewActivity(serverState(WORK), "r-standup")).toBe(false);
   });
 
   it("sends a frame to the server it was meant for", async () => {
@@ -966,7 +965,6 @@ describe("DMs", () => {
 
     // Nothing read in it yet, so there is something new — the same boolean the
     // rooms use, reached by the same route (SPEC §4.2).
-    expect(anyNewActivity(serverState(HOME))).toBe(true);
     expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
   });
 
@@ -980,5 +978,186 @@ describe("DMs", () => {
     const state = serverState(HOME);
     expect(state.dms).toEqual([]);
     expect(state.rooms).toHaveLength(1);
+  });
+});
+
+/**
+ * Sending before the server answers (#128).
+ *
+ * A message shows the moment Enter is pressed, as a stand-in next to the room's
+ * confirmed history, and is swapped for the real one when the server confirms
+ * it. It is confirmed twice, by two routes: the answer to the send, and the
+ * room's live announcement of the new message, which can arrive first.
+ * Whichever lands first clears the stand-in. Getting that wrong shows a message
+ * twice, or loses one, and only under real timing — so each order is driven
+ * here by hand.
+ */
+describe("sending before the server answers", () => {
+  /** One send's answer, held until the test lets it go. */
+  interface Held {
+    path: string;
+    body: unknown;
+    answer: (message: Message) => void;
+    refuse: (error: Error) => void;
+  }
+
+  /** An API whose rooms open empty and whose sends wait to be answered. */
+  function sendingApi(): { api: AuthedApi; held: Held[] } {
+    const held: Held[] = [];
+    const stub = {
+      baseUrl: HOME,
+      accessToken: async () => ({ token: "token", expiresAt: 0 }),
+      get: async () => [],
+      post: (path: string, body: unknown) =>
+        new Promise<Message>((answer, refuse) => held.push({ path, body, answer, refuse })),
+    };
+    // The same confinement as `fakeApi`: the store touches only these members.
+    return { api: stub as unknown as AuthedApi, held };
+  }
+
+  /** The server's copy of a send: a real id, and what was said. */
+  function confirmed(at: number, body: string): Message {
+    return { ...message(at), body };
+  }
+
+  /** What the room draws, top to bottom: confirmed history, then the sends still open. */
+  function shown(): string[] {
+    const stream = serverState(HOME).streams["r-garage"];
+    return [...(stream?.messages ?? []), ...(stream?.pending.map((one) => one.message) ?? [])].map(
+      (one) => one.body,
+    );
+  }
+
+  function stillOpen(): number {
+    return serverState(HOME).streams["r-garage"]?.pending.length ?? 0;
+  }
+
+  async function openGarage(): Promise<{ api: AuthedApi; held: Held[] }> {
+    const sending = sendingApi();
+    await connect(sending.api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), rooms: [room("r-garage", "garage", null)] }));
+    await openRoom(sending.api, "r-garage");
+    return sending;
+  }
+
+  beforeEach(async () => {
+    await disconnect(HOME);
+    invoked.length = 0;
+  });
+
+  it("shows a message the moment it is sent, before the server answers", async () => {
+    const { api, held } = await openGarage();
+
+    const sent = sendMessage(api, "r-garage", "hello");
+
+    expect(shown()).toEqual(["hello"]);
+    expect(serverState(HOME).streams["r-garage"]?.messages).toEqual([]);
+    expect(serverState(HOME).streams["r-garage"]?.pending[0]?.message.author_id).toBe("u-matt");
+    expect(held).toHaveLength(1);
+    expect(held[0]?.path).toBe("/rooms/r-garage/messages");
+    expect(held[0]?.body).toEqual({ body: "hello", reply_to: null, attachment_ids: null });
+
+    held[0]?.answer(confirmed(1, "hello"));
+    await sent;
+
+    expect(shown()).toEqual(["hello"]);
+    expect(stillOpen()).toBe(0);
+    expect(serverState(HOME).streams["r-garage"]?.messages.map((one) => one.id)).toEqual([id(1)]);
+  });
+
+  it("shows two sends at once, in the order they were sent", async () => {
+    const { api, held } = await openGarage();
+
+    const first = sendMessage(api, "r-garage", "one");
+    const second = sendMessage(api, "r-garage", "two");
+
+    // Neither waits on the other: both are on the wire, and both show.
+    expect(held).toHaveLength(2);
+    expect(shown()).toEqual(["one", "two"]);
+
+    held[0]?.answer(confirmed(1, "one"));
+    held[1]?.answer(confirmed(2, "two"));
+    await Promise.all([first, second]);
+
+    expect(shown()).toEqual(["one", "two"]);
+    expect(stillOpen()).toBe(0);
+  });
+
+  it("keeps both, in order and once each, when the second is answered first", async () => {
+    const { api, held } = await openGarage();
+
+    const first = sendMessage(api, "r-garage", "one");
+    const second = sendMessage(api, "r-garage", "two");
+
+    held[1]?.answer(confirmed(2, "two"));
+    await second;
+    // The second is confirmed and the first is still a stand-in: both show.
+    expect(shown()).toEqual(["two", "one"]);
+    expect(stillOpen()).toBe(1);
+
+    held[0]?.answer(confirmed(1, "one"));
+    await first;
+    // Confirmed history is in the server's order, which is the order sent.
+    expect(shown()).toEqual(["one", "two"]);
+    expect(stillOpen()).toBe(0);
+
+    // The live announcements come in afterwards, and change nothing.
+    arrive(HOME, { s: 2, op: "message.create", d: confirmed(1, "one") } as ServerFrame);
+    arrive(HOME, { s: 3, op: "message.create", d: confirmed(2, "two") } as ServerFrame);
+    expect(shown()).toEqual(["one", "two"]);
+  });
+
+  it("shows one message when the live copy beats the answer to the send", async () => {
+    const { api, held } = await openGarage();
+
+    const sent = sendMessage(api, "r-garage", "hello");
+    arrive(HOME, { s: 2, op: "message.create", d: confirmed(1, "hello") } as ServerFrame);
+
+    // The announcement confirmed it: the stand-in has gone, the real one is there.
+    expect(stillOpen()).toBe(0);
+    expect(shown()).toEqual(["hello"]);
+
+    held[0]?.answer(confirmed(1, "hello"));
+    await sent;
+
+    expect(shown()).toEqual(["hello"]);
+    expect(serverState(HOME).streams["r-garage"]?.messages.map((one) => one.id)).toEqual([id(1)]);
+  });
+
+  it("keeps the same words sent twice as two messages", async () => {
+    const { api, held } = await openGarage();
+
+    const first = sendMessage(api, "r-garage", "same");
+    const second = sendMessage(api, "r-garage", "same");
+    expect(shown()).toEqual(["same", "same"]);
+
+    // One announcement clears one stand-in, never both.
+    arrive(HOME, { s: 2, op: "message.create", d: confirmed(1, "same") } as ServerFrame);
+    expect(stillOpen()).toBe(1);
+    expect(shown()).toEqual(["same", "same"]);
+
+    held[0]?.answer(confirmed(1, "same"));
+    await first;
+    expect(shown()).toEqual(["same", "same"]);
+
+    arrive(HOME, { s: 3, op: "message.create", d: confirmed(2, "same") } as ServerFrame);
+    held[1]?.answer(confirmed(2, "same"));
+    await second;
+
+    expect(stillOpen()).toBe(0);
+    expect(serverState(HOME).streams["r-garage"]?.messages.map((one) => one.id)).toEqual([id(1), id(2)]);
+  });
+
+  it("takes a refused send off the screen and throws", async () => {
+    const { api, held } = await openGarage();
+
+    const sent = sendMessage(api, "r-garage", "hello");
+    expect(shown()).toEqual(["hello"]);
+
+    held[0]?.refuse(new Error("refused"));
+    // Thrown, not swallowed: the composer still has the words and can say so.
+    await expect(sent).rejects.toThrow("refused");
+
+    expect(shown()).toEqual([]);
   });
 });

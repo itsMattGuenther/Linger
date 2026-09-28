@@ -71,8 +71,8 @@ export function setQuietServers(servers: ReadonlySet<string>): void {
 /**
  * DM alerts (#291): whether a DM gets a banner and asks the desktop to point
  * at Linger (the taskbar button flashes until you look). Asked on every DM,
- * so a change in Settings counts at once. The Buddy list client sets it; the
- * previous client never does, so its DMs behave as they always have.
+ * so a change in Settings counts at once. Until the app sets it, a DM
+ * alerts nothing.
  */
 let dmAlerts: (() => boolean) | null = null;
 

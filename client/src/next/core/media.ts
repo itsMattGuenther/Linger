@@ -2,9 +2,8 @@
  * The media collection's words and rules (SPEC §4.4, parity MEDIA-1…6).
  * Pure; `app/media/MediaView` draws what these say.
  *
- * The arithmetic shared with today's client (sizes, lengths, the day a date
- * field means, what a tile is called) is in `lib/media.ts`. This file is the
- * new client's side: the filters, what a tile says, the order several
+ * The shared arithmetic (sizes, lengths, the day a date field means, what a
+ * tile is called) is in `lib/media.ts`. This file is the window's side: the filters, what a tile says, the order several
  * servers merge in, and the lines that say how a star or a page went.
  */
 import type { MediaItem } from "../../generated/MediaItem";

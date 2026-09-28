@@ -15,7 +15,7 @@ pub mod palette;
 pub mod wire;
 
 pub use id::{AttachmentId, ExportId, MessageId, RoomId, UploadId, UserId};
-pub use palette::{Theme, PALETTE};
+pub use palette::PALETTE;
 
 /// The curated bundled font set (SPEC §5.7). `font_key` / `msg_font_key` on the wire
 /// must be one of these; the server rejects anything else with `VALIDATION_FAILED`.

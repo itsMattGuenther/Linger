@@ -816,6 +816,21 @@ test("with push-to-talk on, holding the talk key in this window talks through th
   await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk")).toHaveLength(4);
 });
 
+test("with push-to-talk on, the window losing focus lets go of the talk key, so the microphone never sticks open", async ({ page }) => {
+  await open(page, "room=r-general&ptt");
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });
+  const talks = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk");
+  await page.keyboard.down("ControlRight");
+  await expect.poll(talks).toEqual([{ kind: "voice.talk", down: true }]);
+  // Alt+Tab away with the key still down: this window never hears it come up.
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect.poll(talks).toEqual([
+    { kind: "voice.talk", down: true },
+    { kind: "voice.talk", down: false },
+  ]);
+  await page.keyboard.up("ControlRight");
+});
+
 test("push-to-talk turned on or off mid-call starts or stops this window listening for the key, without rejoining (#231)", async ({ page }) => {
   await open(page, "room=r-general&talking");
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });

@@ -8,7 +8,7 @@
  *     once, and nothing that draws a name has to know about it;
  *   - reduced motion stops the shimmer band rather than freezing it.
  *
- * `.k-name` adds what the old client never had: a fixed line box per size, so
+ * `.k-name` adds what the previous client never had: a fixed line box per size, so
  * no face can change a row's height, and a box exactly as wide as the letters.
  * The glow differs too: a light behind the letters sized in the name's own
  * ems, not a fixed text shadow (see "Glow" below). And `data-dim` draws

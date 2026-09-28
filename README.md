@@ -151,8 +151,8 @@ addresses and invite links. If you use a coding agent, the
 crates/linger-core/    shared types, IDs and the palette: the wire contract
 crates/linger-server/  the server: REST and WebSocket gateway, SQLite, file storage
 client/                the desktop app: Tauri 2 shell (src-tauri) and React
-                       (src/next is the app; the rest of src is the previous
-                       client, kept for one release behind LINGER_CLASSIC=1)
+                       (src/next is the app; src/lib is the logic its windows
+                       share, and src/generated the wire types)
 deploy/                Dockerfile, compose and Caddyfile
 packaging/arch/        the Arch/Omarchy package and its repository
 docs/                  guides, decisions, design, release notes

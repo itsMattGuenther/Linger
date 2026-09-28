@@ -581,10 +581,8 @@ pub fn run() {
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
             window::create(app)?;
-            // The Buddy list keeps running in the tray when its list closes.
-            if window::this_client() == window::Client::BuddyList {
-                tray::install(app);
-            }
+            // Linger keeps running in the tray when its list closes.
+            tray::install(app);
             Ok(())
         })
         .on_window_event(window::on_event)

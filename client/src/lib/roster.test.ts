@@ -4,7 +4,7 @@ import type { PresenceEntry } from "../generated/PresenceEntry";
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
 import type { UserStatus } from "../generated/UserStatus";
-import { buildRoster, hasStatus, shortAgo, stateWord } from "./roster";
+import { buildRoster, shortAgo } from "./roster";
 
 const NOW = 1_700_000_000_000;
 const MINUTE = 60_000;
@@ -214,42 +214,5 @@ describe("shortAgo", () => {
 
   it("never counts a clock that is ahead of ours as the future", () => {
     expect(shortAgo(NOW + HOUR, NOW)).toBe("now");
-  });
-});
-
-describe("the small pieces", () => {
-  it("says every state out loud", () => {
-    expect(stateWord("in_room")).toBe("in a room");
-    expect(stateWord("around")).toBe("around");
-    expect(stateWord("idle")).toBe("idle");
-    expect(stateWord("away")).toBe("away");
-    expect(stateWord("offline")).toBe("offline");
-  });
-
-  it("only opens a card that has something under it", () => {
-    const [plain] = roster({ users: [person("u-1", "Jen")] });
-    expect(plain && hasStatus(plain)).toBe(false);
-
-    const [empty] = roster({ users: [person("u-1", "Jen", { status: status() })] });
-    expect(empty && hasStatus(empty)).toBe(false);
-
-    const [blank] = roster({ users: [person("u-1", "Jen", { status: status({ line: "" }) })] });
-    expect(blank && hasStatus(blank)).toBe(false);
-
-    const [lined] = roster({
-      users: [person("u-1", "Jen", { status: status({ line: "at the shop" }) })],
-    });
-    expect(lined && hasStatus(lined)).toBe(true);
-
-    const [field] = roster({
-      users: [person("u-1", "Jen", { status: status({ listening: "Bill Evans" }) })],
-    });
-    expect(field && hasStatus(field)).toBe(true);
-
-    const [away] = roster({
-      users: [person("u-1", "Jen")],
-      presence: [here("u-1", { state: "away", away_message: "back after work" })],
-    });
-    expect(away && hasStatus(away)).toBe(true);
   });
 });

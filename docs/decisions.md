@@ -378,7 +378,40 @@ version left as an open question (parity decision 2, 2026-09-26). It's closed
 now: "We can scrap the light theme from the spec. I think we're going to pass
 on that." The app is dark only, and no light version is planned.
 
-The previous client (`LINGER_CLASSIC=1`) still has its dark, light and
-follow-the-system choice, and `linger-core`'s palette still carries the light
-lightness it uses. Both go when that client is deleted. Evening warmth is a
-separate question and still waits for an evening version of the new colors.
+The previous client (`LINGER_CLASSIC=1`) had its dark, light and
+follow-the-system choice, and `linger-core`'s palette carried the light
+lightness it used. Both went when that client was deleted (#306). Evening
+warmth is a separate question and still waits for an evening version of the
+new colors.
+
+---
+
+## Decided — the previous client is gone
+
+**Matt, 2026-09-28 (#306).** "The new UI is awesome, so I think we can get rid
+of the old one now." The Buddy list client has been the app since 0.4.0, and
+the previous client had stayed behind `LINGER_CLASSIC=1` for three releases
+as a way back. It's deleted, with everything only it used:
+
+- **The window chooser.** The shell always opens the Buddy list;
+  `LINGER_CLASSIC` does nothing. The list window's size and frame are in
+  `tauri.conf.json`, not patched in at startup.
+- **Its screens, styles, test pages and browser tests,** and the parts of
+  `client/src/lib/` only its screens called. What the windows share stays in
+  `lib/`, as logic only; `discipline.test.ts` keeps it that way.
+- **The light palette** in `linger-core`, and the theme picker the new
+  client's Settings could draw but never did.
+- **Its checks.** The packaged audio checks keep testing sound inside the
+  installed app, now on the Buddy list; their layout part measured the
+  previous client's screens and went with it. The new client's start-up in
+  the packaged app is `linux-next-check.py` and `windows-next-check.mjs`.
+  `scripts/desktop-check.py`, the three-person walk-through that drove the
+  previous client's screens, is retired; a Buddy list version is T-1820.
+
+Before deleting its browser tests, each one was checked against the new
+client's. Where a behavior had no test there, one was added: sending before
+the server answers, push-to-talk letting go when a window loses focus, the
+picture viewer, whole tooltips on the voice bar, the focus ring after a mouse
+open, keeping your place through a resize, rows re-rendered while scrolling,
+nothing moving when somebody talks, the 80-character line, and a few in the
+message box, knocks and Settings.

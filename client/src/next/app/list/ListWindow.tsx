@@ -179,8 +179,8 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
 
 /**
  * One server's connection, owned by this window and closed when it goes: no
- * UI of its own. The same shape as today's client (App.tsx, ServerLink), which
- * is what keeps a StrictMode remount from leaving a socket nobody follows.
+ * UI of its own. Owning it here is what keeps a StrictMode remount from
+ * leaving a socket nobody follows.
  */
 function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void }) {
   const { api, baseUrl } = session;
@@ -382,8 +382,8 @@ function Servers({
   const voiceState = voiceServer === null ? undefined : states[voiceServer];
   const pushToTalk = voiceState?.myVoice?.pushToTalk ?? false;
 
-  // Push-to-talk while the list has focus, as today's client does; a chat
-  // window reports its own key presses (core/share.ts, "voice.talk").
+  // Push-to-talk while the list has focus; a chat window reports its own
+  // key presses (core/share.ts, "voice.talk").
   useEffect(() => {
     if (!pushToTalk || voiceServer === null) return;
     const down = (event: KeyboardEvent) => {

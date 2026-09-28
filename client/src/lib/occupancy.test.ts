@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PresenceEntry } from "../generated/PresenceEntry";
 import type { User } from "../generated/User";
-import { occupancyLine, occupantsOf } from "./occupancy";
+import { occupantsOf } from "./occupancy";
 
 function person(id: string, name: string): User {
   return {
@@ -91,17 +91,5 @@ describe("occupantsOf", () => {
         users,
       ).map((person) => person.display_name),
     ).toEqual(["Callie", "Dave", "Matt"]);
-  });
-});
-
-describe("occupancyLine", () => {
-  it("is empty when the room is empty, so the header stays just the name", () => {
-    expect(occupancyLine([])).toBe("");
-  });
-
-  it("is a comma list, not a sentence, matching SPEC §4.1", () => {
-    expect(occupancyLine([matt])).toBe("Matt");
-    expect(occupancyLine([matt, callie])).toBe("Matt, Callie");
-    expect(occupancyLine([matt, callie, dave])).toBe("Matt, Callie, Dave");
   });
 });

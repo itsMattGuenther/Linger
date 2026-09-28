@@ -38,9 +38,7 @@ try {
     assert.equal(changed.status, 0, changed.stderr);
     policyKeys.push(key);
   }
-  const env = { ...process.env };
-  delete env.LINGER_CLASSIC;
-  app = spawn(resolve(exe), [], { stdio: "ignore", env });
+  app = spawn(resolve(exe), [], { stdio: "ignore" });
   let launchError;
   app.on("error", (error) => { launchError = error; });
   let connectionError;

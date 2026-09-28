@@ -80,10 +80,9 @@ function watchFor(server: string): Watch {
 // The window's own state, shared by every server.
 let focused = false;
 /**
- * The app's other windows, by label, and whether each has focus: the Buddy
- * list client's chat windows report here (docs/design/architecture.md). The
- * person is at Linger when any of its windows has focus; today's client has
- * one window and never reports, so for it this stays empty.
+ * The app's other windows, by label, and whether each has focus: the chat
+ * windows report here (docs/design/architecture.md). The person is at Linger
+ * when any of its windows has focus.
  */
 const otherWindows = new Map<string, boolean>();
 let lastInputAt = 0;
@@ -263,11 +262,6 @@ export function setAway(server: string, message: string | null): void {
   if (next === watch.wantAway) return;
   watch.wantAway = next;
   void tick(server);
-}
-
-/** Whether this client currently believes it is away on one server. */
-export function isAway(server: string): boolean {
-  return watches.get(server)?.wantAway != null;
 }
 
 /**

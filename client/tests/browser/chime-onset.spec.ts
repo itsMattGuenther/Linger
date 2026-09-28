@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 for (const rate of [44100, 48000]) {
   test(`prepared chimes preserve the score and a silent lead at ${rate} Hz`, async ({ page }) => {
-    await page.goto("/tests/fixtures/sounds.html");
+    await page.goto("/tests/fixtures/kit.html");
     const results = await page.evaluate(async (sampleRate) => {
       const path = "/src/lib/chimes.ts";
       const { renderChime, scheduleChime, CHIMES }: typeof import("../../src/lib/chimes") = await import(path);
@@ -42,7 +42,7 @@ for (const rate of [44100, 48000]) {
   // voice-move, is 0.052); the knock stops at KNOCK_TOP_VOLUME, about 0.77,
   // and every other cue goes on to 400%, clear of clipping.
   test(`the sound volume scales every cue alike, and none clips at the top, at ${rate} Hz`, async ({ page }) => {
-    await page.goto("/tests/fixtures/sounds.html");
+    await page.goto("/tests/fixtures/kit.html");
     const { max, knockTop, results } = await page.evaluate(async (sampleRate) => {
       const chimesPath = "/src/lib/chimes.ts";
       const soundPath = "/src/lib/sound.ts";
@@ -85,3 +85,39 @@ for (const rate of [44100, 48000]) {
     }
   });
 }
+
+// Every cue, rendered offline with the real synthesizer and no audio device:
+// each one different, short and quiet, starting and ending in silence, with
+// no click in the middle.
+test("every chime renders offline, stays short and quiet, and ends in silence", async ({ page }) => {
+  await page.goto("/tests/fixtures/kit.html");
+  const rendered = await page.evaluate(async () => {
+    const path = "/src/lib/chimes.ts";
+    const { scheduleChime, CHIMES }: typeof import("../../src/lib/chimes") = await import(path);
+    const cues = [...Object.keys(CHIMES), "knock"] as import("../../src/lib/sound").SoundCue[];
+    const results = [];
+    for (const cue of cues) {
+      const context = new OfflineAudioContext(1, 32_000, 32_000);
+      scheduleChime(context, cue, 0.04);
+      const samples = Array.from((await context.startRendering()).getChannelData(0));
+      results.push({
+        cue,
+        peak: Math.max(...samples.map(Math.abs)),
+        beginning: samples.slice(0, 1000).every((sample) => sample === 0),
+        end: samples.slice(32_000 * 0.6).every((sample) => sample === 0),
+        discontinuity: Math.max(...samples.slice(1).map((sample, index) => Math.abs(sample - (samples[index] ?? 0)))),
+        fingerprint: samples.reduce((sum, sample, index) => sum + sample * index, 0),
+      });
+    }
+    return results;
+  });
+  expect(rendered).toHaveLength(13);
+  expect(new Set(rendered.map((cue) => cue.fingerprint)).size).toBe(13);
+  for (const cue of rendered) {
+    expect(cue.peak, cue.cue).toBeGreaterThan(0.01);
+    // The knock plays at twice its first level (#252).
+    expect(cue.peak, cue.cue).toBeLessThan(cue.cue === "knock" ? 0.4 : 0.2);
+    expect(cue.beginning && cue.end, cue.cue).toBe(true);
+    expect(cue.discontinuity, cue.cue).toBeLessThan(0.02);
+  }
+});

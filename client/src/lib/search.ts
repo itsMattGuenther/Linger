@@ -12,7 +12,6 @@
  * with no caption, found by its filename — so the fallback line is not an edge
  * case, it is the whole reason `matched_filenames` is on the wire.
  */
-import type { SearchHit } from "../generated/SearchHit";
 import type { SearchSnippetPart } from "../generated/SearchSnippetPart";
 
 /**
@@ -38,48 +37,6 @@ export const PAGE = 25;
 /** The snippet as one line of plain text, for a label a screen reader reads. */
 export function snippetText(parts: SearchSnippetPart[]): string {
   return parts.map((part) => part.text).join("");
-}
-
-/**
- * Which file a hit matched on, in words.
- *
- * Only drawn when the words are not in the message text, because that is the
- * case where the hit looks like it has nothing to do with what was typed. Two
- * filenames get an "and"; more than that would be a list nobody reads, so it
- * stops at three and says how many are left.
- */
-export function fileLine(names: string[]): string | null {
-  const [first, second, third, ...rest] = names;
-  if (first === undefined) return null;
-  if (second === undefined) return `file: ${first}`;
-  if (third === undefined) return `files: ${first} and ${second}`;
-  if (rest.length === 0) return `files: ${first}, ${second} and ${third}`;
-  return `files: ${first}, ${second} and ${rest.length + 1} more`;
-}
-
-/**
- * What a result button announces.
- *
- * The visible line is who, where, when and a few words, and every one of those
- * is a separate element that a screen reader would otherwise read as four
- * unrelated fragments. This is the sentence version.
- */
-export function hitLabel(
-  hit: SearchHit,
-  who: string,
-  room: string | undefined,
-  when: string,
-): string {
-  const words = snippetText(hit.snippet).trim();
-  const file = fileLine(hit.matched_filenames);
-  // `room` arrives already written out — `#garage`, or the people in a DM
-  // (SPEC §4.13). It used to arrive as a bare slug and get its `#` here, which
-  // stopped being right the moment a hit could come from a conversation that
-  // is not a channel.
-  const where = room === undefined ? "" : ` in ${room}`;
-  const said = words === "" ? (file ?? "no text") : words;
-  const also = words === "" || file === null ? "" : `, ${file}`;
-  return `${who}${where}, ${when}: ${said}${also}`;
 }
 
 /**

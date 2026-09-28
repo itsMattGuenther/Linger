@@ -36,19 +36,3 @@ export function occupantsOf(
       a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }),
     );
 }
-
-/**
- * The occupancy clause of a room header: `Matt, Callie`. Empty when nobody
- * is in the room, so the header can stay just `#garage`.
- *
- * Commas, not "and". SPEC §4.1 draws `#garage · Matt, Callie`, and "and"
- * would make two people sound like a sentence rather than a list. A long
- * list is the header's problem to ellipsis, not this function's to count.
- */
-export function occupancyLine(people: readonly User[]): string {
-  if (people.length === 0) return "";
-  return people.map((person) => person.display_name).join(", ");
-}
-
-/** How many faces the rail stack will actually draw. The rest live in the label. */
-export const STACK_VISIBLE = 5;

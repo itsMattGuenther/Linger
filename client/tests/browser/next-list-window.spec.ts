@@ -476,6 +476,65 @@ async function elisView(page: Page) {
   return { told, you };
 }
 
+test("somebody talking or you talking moves no chip and no row, and a mute glyph moves no row (VOICE-5)", async ({ page }) => {
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const peers = (eliMuted: boolean) => [
+    { session_id: "s-eli", user_id: "u-eli", controls: { muted: eliMuted, deafened: false } },
+    { session_id: "s-jules", user_id: "u-jules", controls: { muted: false, deafened: false } },
+    { session_id: "s-good-company.example", user_id: "u-matt", controls: { muted: false, deafened: false } },
+  ];
+  const voiceState = (eliMuted: boolean) =>
+    page.evaluate((list) => window.core?.frame("https://good-company.example", { op: "voice.state", d: { room_id: "r-general", peers: list } } as never), peers(eliMuted));
+  await voiceState(false);
+  const chips = bar.getByRole("list", { name: "Who's in voice" }).locator("[data-kit='Chip']");
+  await expect(chips).toHaveCount(3);
+  const layout = () =>
+    page.evaluate(() => {
+      const boxes = (selector: string) =>
+        [...document.querySelectorAll(selector)].map((node) => {
+          const box = node.getBoundingClientRect();
+          return [box.x, box.y, box.width, box.height].map((n) => Math.round(n * 10) / 10);
+        });
+      return { chips: boxes("[data-kit='Chip']"), rows: boxes(".nx-list-scroll [data-kit='Row']"), bar: boxes("[role='region'][aria-label^='In voice']") };
+    });
+  const before = await layout();
+  expect(before.rows.length).toBeGreaterThan(4);
+
+  // Eli starts talking: his chip lights, and nothing moves.
+  await page.evaluate(() => window.core?.speaking("https://good-company.example", "s-eli", true));
+  await expect(chips.filter({ hasText: "Eli" })).toHaveAttribute("data-active", "yes");
+  expect(await layout()).toEqual(before);
+  // So do you.
+  await page.evaluate(() => window.core?.speaking("https://good-company.example", null, true));
+  await expect(chips.filter({ hasText: "you" })).toHaveAttribute("data-active", "yes");
+  expect(await layout()).toEqual(before);
+  // Both stop.
+  await page.evaluate(() => window.core?.speaking("https://good-company.example", "s-eli", false));
+  await page.evaluate(() => window.core?.speaking("https://good-company.example", null, false));
+  await expect(bar.locator("[data-kit='Chip'][data-active='yes']")).toHaveCount(0);
+  expect(await layout()).toEqual(before);
+  // Eli mutes: the glyph shows on his chip, which grows to hold it, and the
+  // bar and the list under it stay where they were.
+  await voiceState(true);
+  await expect(chips.filter({ hasText: "Eli" }).locator(".k-chip-state")).toBeVisible();
+  const muted = await layout();
+  expect({ rows: muted.rows, bar: muted.bar }).toEqual({ rows: before.rows, bar: before.bar });
+});
+
+test("with push-to-talk on, the list losing focus closes the microphone, even with the key still down", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await open(page, "?one");
+  await joinGeneral(page);
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
+  await page.keyboard.down("ControlRight");
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: false });
+  // Alt+Tab away with the key still down: the list never hears it come up.
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
+  await page.keyboard.up("ControlRight");
+});
+
 test("push-to-talk with the key up shows no mute, to you or to anyone else; a mute you choose shows to both (#232)", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
   await open(page, "?one");

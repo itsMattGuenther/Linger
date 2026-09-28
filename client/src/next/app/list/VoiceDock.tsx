@@ -19,7 +19,7 @@ export interface VoiceDockPerson {
   volume?: number;
 }
 
-/** A person's shared microphone state as their chip's glyph, in today's client's words. */
+/** A person's shared microphone state as their chip's glyph, and its word. */
 function stateOf(person: VoiceDockPerson): { icon: "micOff" | "headOff"; word: string } | undefined {
   if (person.controls === "deafened") return { icon: "headOff", word: "Deafened" };
   if (person.controls === "muted") return { icon: "micOff", word: "Muted" };

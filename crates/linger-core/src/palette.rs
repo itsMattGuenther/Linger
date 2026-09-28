@@ -1,49 +1,35 @@
 //! The 16-color name palette (SPEC §5.4) — the replacement for free color picking.
 //!
 //! Colors travel as *named keys* (`"azure"`), never as hex or OKLCH literals. Each
-//! key maps to one OKLCH hue with theme-mirrored lightness, so contrast against both
-//! theme backgrounds is guaranteed by construction and nothing is clamped at runtime.
-//! The property test at the bottom asserts ≥4.5:1 for all 16 keys × 2 themes and runs
-//! in CI — it is the guard against someone "improving" a value later.
+//! key maps to one OKLCH hue at one lightness, so contrast against the background is
+//! guaranteed by construction and nothing is clamped at runtime. The app is dark
+//! only (SPEC §5.3). The property test at the bottom asserts ≥4.5:1 for all 16 keys,
+//! against the background and its evening version, and runs in CI — it is the guard
+//! against someone "improving" a value later.
 
-use serde::{Deserialize, Serialize};
-
-/// dark: oklch(0.76 0.13 hue) · light: oklch(0.50 0.14 hue) · slate: chroma 0.02.
-const DARK_L: f64 = 0.76;
-const DARK_C: f64 = 0.13;
-const LIGHT_L: f64 = 0.50;
-const LIGHT_C: f64 = 0.14;
+/// oklch(0.76 0.13 hue) · slate: chroma 0.02.
+const LIGHTNESS: f64 = 0.76;
+const CHROMA: f64 = 0.13;
 const SLATE_C: f64 = 0.02;
 
-/// Theme backgrounds the palette must hold ≥4.5:1 against (SPEC §5.3 surface-0).
+/// The background the palette must hold ≥4.5:1 against (SPEC §5.3 surface-0).
 pub const DARK_BG: &str = "#16181C";
-pub const LIGHT_BG: &str = "#F7F8F9";
 
-/// The same two surfaces after the post-sunset warmth shift (SPEC §4.7), which
-/// mirrors `[data-warmth="warm"]` in `client/src/styles/tokens.css`.
+/// The same surface after the post-sunset warmth shift (SPEC §4.7).
 ///
-/// They are here for one reason: warmth changes what the palette is read
-/// against, so the contrast guarantee has to be checked against these too or it
-/// is only true until dusk. The shift keeps each token's OKLab lightness and
-/// rotates its hue to the amber side, which is exactly why the guarantee
-/// survives it — a temperature change, not a brightness change.
+/// It is here for one reason: warmth changes what the palette is read against,
+/// so the contrast guarantee has to be checked against it too or it is only
+/// true until dusk. The shift keeps each token's OKLab lightness and rotates
+/// its hue to the amber side, which is exactly why the guarantee survives it —
+/// a temperature change, not a brightness change.
 pub const DARK_BG_WARM: &str = "#1A1714";
-pub const LIGHT_BG_WARM: &str = "#FBF7F2";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export)]
-pub enum Theme {
-    Dark,
-    Light,
-}
 
 /// One named palette entry: a key and its OKLCH hue.
 #[derive(Debug, Clone, Copy)]
 pub struct PaletteColor {
     pub key: &'static str,
     pub hue: f64,
-    /// slate is the one desaturated entry (chroma 0.02 instead of 0.13/0.14).
+    /// slate is the one desaturated entry (chroma 0.02 instead of 0.13).
     pub muted: bool,
 }
 
@@ -91,29 +77,18 @@ pub fn get(key: &str) -> Option<&'static PaletteColor> {
 }
 
 impl PaletteColor {
-    /// The OKLCH components for this color in the given theme.
+    /// The OKLCH components for this color.
     #[must_use]
-    pub fn oklch(&self, theme: Theme) -> (f64, f64, f64) {
-        let chroma = if self.muted {
-            SLATE_C
-        } else {
-            match theme {
-                Theme::Dark => DARK_C,
-                Theme::Light => LIGHT_C,
-            }
-        };
-        let lightness = match theme {
-            Theme::Dark => DARK_L,
-            Theme::Light => LIGHT_L,
-        };
-        (lightness, chroma, self.hue)
+    pub fn oklch(&self) -> (f64, f64, f64) {
+        let chroma = if self.muted { SLATE_C } else { CHROMA };
+        (LIGHTNESS, chroma, self.hue)
     }
 
     /// sRGB hex fallback (`#rrggbb`), gamut-clipped. The build ships these in case
     /// the target WebKitGTK's `oklch()` support falls through (SPEC §5.4).
     #[must_use]
-    pub fn hex(&self, theme: Theme) -> String {
-        let (l, ch, h) = self.oklch(theme);
+    pub fn hex(&self) -> String {
+        let (l, ch, h) = self.oklch();
         let (r, g, b) = oklch_to_srgb(l, ch, h);
         format!(
             "#{:02X}{:02X}{:02X}",
@@ -123,39 +98,37 @@ impl PaletteColor {
         )
     }
 
-    /// The `oklch()` CSS literal for this color in the given theme.
+    /// The `oklch()` CSS literal for this color.
     #[must_use]
-    pub fn css_oklch(&self, theme: Theme) -> String {
-        let (l, ch, h) = self.oklch(theme);
+    pub fn css_oklch(&self) -> String {
+        let (l, ch, h) = self.oklch();
         format!("oklch({l} {ch} {h})")
     }
 }
 
-/// CSS custom properties for every palette entry in one theme, e.g.
+/// CSS custom properties for every palette entry, e.g.
 /// `--name-azure: oklch(0.76 0.13 255);`. This is what the client build emits,
 /// so the palette is defined exactly once — here.
 ///
 /// The values are `oklch()` literals rather than the hex fallbacks because T-002
 /// answered that question against a real engine: WebKitGTK 2.52.3 rendered all
-/// 16 keys x 2 themes byte-identically to [`PaletteColor::hex`]. Hex would also
+/// 16 keys byte-identically to [`PaletteColor::hex`]. Hex would also
 /// have been safe, but it is clipped to sRGB, and a custom property cannot carry
 /// a fallback declaration the way a normal property can — an unparsable value in
 /// `--name-azure` is not dropped at parse time, it fails later at substitution.
 /// So there is exactly one value per key and it is the wider-gamut one.
 #[must_use]
-pub fn css_variables(theme: Theme) -> String {
+pub fn css_variables() -> String {
     PALETTE
         .iter()
-        .map(|p| format!("--name-{}: {};", p.key, p.css_oklch(theme)))
+        .map(|p| format!("--name-{}: {};", p.key, p.css_oklch()))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-/// The whole generated stylesheet: both themes, every key, one file.
+/// The whole generated stylesheet: every key, on `:root`, one file.
 ///
-/// The client imports the result as `palette.generated.css`. Dark is primary and
-/// sits on `:root`; light overrides it under `[data-theme="light"]`, which is the
-/// same shape `client/src/styles/tokens.css` uses for every other themed value.
+/// The client imports the result as `palette.generated.css`.
 #[must_use]
 pub fn stylesheet() -> String {
     const HEADER: &str = r#"/*
@@ -171,20 +144,12 @@ pub fn stylesheet() -> String {
  * only reason `var(--name-azure)` draws anything.
  */"#;
 
-    fn block(selector: &str, theme: Theme) -> String {
-        let body = css_variables(theme)
-            .lines()
-            .map(|line| format!("  {line}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("{selector} {{\n{body}\n}}\n")
-    }
-
-    format!(
-        "{HEADER}\n\n{}\n{}",
-        block(":root", Theme::Dark),
-        block("[data-theme=\"light\"]", Theme::Light),
-    )
+    let body = css_variables()
+        .lines()
+        .map(|line| format!("  {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("{HEADER}\n\n:root {{\n{body}\n}}\n")
 }
 
 /// Where the generated stylesheet is written, next to the ts-rs bindings.
@@ -273,31 +238,25 @@ mod tests {
     use super::*;
 
     /// The CI guard from PROTOCOL §5 / AGENTS.md: every palette key must hold
-    /// ≥4.5:1 against its theme background. If this fails, a palette value was
+    /// ≥4.5:1 against the background. If this fails, a palette value was
     /// changed in a way that breaks structural contrast safety — fix the value,
     /// never this test.
     ///
     /// The ratios here are only as trustworthy as [`PaletteColor::hex`], so that
-    /// conversion was checked against a real engine during T-002: all 16 keys ×
-    /// 2 themes were rendered as `oklch()` by WebKitGTK 2.52.3 and read back
-    /// from a canvas, agreeing with this code exactly (0/255 per channel).
+    /// conversion was checked against a real engine during T-002: all 16 keys
+    /// were rendered as `oklch()` by WebKitGTK 2.52.3 and read back from a
+    /// canvas, agreeing with this code exactly (0/255 per channel).
     #[test]
-    fn all_16_keys_hold_contrast_in_both_themes() {
+    fn all_16_keys_hold_contrast() {
         for color in &PALETTE {
-            // Both themes, and both of each theme's surfaces: the neutral one
-            // and the one after dusk (SPEC §4.7). A guarantee that lapses at
-            // sunset is not a guarantee.
-            for (theme, bg) in [
-                (Theme::Dark, DARK_BG),
-                (Theme::Dark, DARK_BG_WARM),
-                (Theme::Light, LIGHT_BG),
-                (Theme::Light, LIGHT_BG_WARM),
-            ] {
-                let hex = color.hex(theme);
+            // Both surfaces: the neutral one and the one after dusk (SPEC
+            // §4.7). A guarantee that lapses at sunset is not a guarantee.
+            for bg in [DARK_BG, DARK_BG_WARM] {
+                let hex = color.hex();
                 let ratio = contrast_ratio(&hex, bg);
                 assert!(
                     ratio >= 4.5,
-                    "{} in {theme:?} theme is {hex} → {ratio:.2}:1 against {bg}, below 4.5:1",
+                    "{} is {hex} → {ratio:.2}:1 against {bg}, below 4.5:1",
                     color.key
                 );
             }
@@ -328,25 +287,23 @@ mod tests {
 
     #[test]
     fn css_variables_emit_all_keys() {
-        let css = css_variables(Theme::Dark);
+        let css = css_variables();
         assert_eq!(css.lines().count(), 16);
         assert!(css.contains("--name-azure: oklch(0.76 0.13 255);"));
         assert!(css.contains("--name-slate: oklch(0.76 0.02 250);"));
-        // Light mirrors the lightness rather than repeating it (SPEC §5.4).
-        assert!(css_variables(Theme::Light).contains("--name-azure: oklch(0.5 0.14 255);"));
         // A hex literal in this file would mean somebody re-introduced the
         // sRGB-clipped values as the shipped ones. `hex()` stays, for contrast.
         assert!(!css.contains('#'));
     }
 
     #[test]
-    fn stylesheet_carries_both_themes() {
+    fn stylesheet_defines_every_key_once() {
         let css = stylesheet();
         assert!(css.contains(":root {"));
-        assert!(css.contains("[data-theme=\"light\"] {"));
+        assert!(!css.contains("data-theme"));
         for color in &PALETTE {
             let count = css.matches(&format!("--name-{}:", color.key)).count();
-            assert_eq!(count, 2, "{} is not defined in both themes", color.key);
+            assert_eq!(count, 1, "{} is not defined exactly once", color.key);
         }
     }
 

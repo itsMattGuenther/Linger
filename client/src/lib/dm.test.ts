@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
-import { conversationLabel, dmLabel, dmWhere, orderDms, others, peopleIn } from "./dm";
+import { conversationLabel, dmLabel, orderDms, others, peopleIn } from "./dm";
 
 function person(id: string, name: string): User {
   return {
@@ -156,43 +156,6 @@ describe("orderDms", () => {
     const input = [quiet, busy];
     orderDms(input, () => false, {});
     expect(input.map((one) => one.id)).toEqual(["d1", "d2"]);
-  });
-});
-
-describe("dmWhere", () => {
-  const oneToOne = dm("d1", ["u-matt", "u-callie"]);
-
-  // The reader is always a member here — the server sends `null` for the room
-  // to anybody else, so this line never draws for a stranger.
-  it("calls the reader 'you' rather than by name", () => {
-    // Matt, looking at Callie's card, while Callie is in their DM.
-    expect(dmWhere(oneToOne, everyone, "u-callie", "u-matt")).toBe("in a message with you");
-  });
-
-  it("names the other people in a group DM", () => {
-    const group = dm("d2", ["u-matt", "u-callie", "u-dave"]);
-    expect(dmWhere(group, everyone, "u-callie", "u-matt")).toBe(
-      "in a message with you and 1 other",
-    );
-  });
-
-  it("pluralises", () => {
-    const group = dm("d2", ["u-matt", "u-callie", "u-dave", "u-jen"]);
-    expect(dmWhere(group, everyone, "u-callie", "u-matt")).toBe(
-      "in a message with you and 2 others",
-    );
-  });
-
-  // This is the mistake the function exists to avoid: `dmLabel` answers "what
-  // is this called to me", which on somebody else's card reads as nonsense —
-  // Callie's card saying she is "in Callie".
-  it("is not the same answer dmLabel gives", () => {
-    expect(dmLabel(oneToOne, everyone, "u-matt")).toBe("Callie");
-    expect(dmWhere(oneToOne, everyone, "u-callie", "u-matt")).not.toContain("Callie");
-  });
-
-  it("says something rather than nothing when it knows nobody", () => {
-    expect(dmWhere(dm("d3", ["u-ghost"]), everyone, "u-ghost", "u-matt")).toBe("in a message");
   });
 });
 

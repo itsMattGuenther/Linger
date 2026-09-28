@@ -26,7 +26,7 @@ import { PROTOCOL, tauriBus } from "./bus";
 /** Settings changed how things look; every window applies it. */
 export const APPEARANCE = "next:appearance";
 
-/** The same key as today's client, so switching clients keeps the size. */
+/** The same key the previous client used, so an update keeps the size. */
 const SCALE_KEY = "linger.interface.scale";
 
 export function loadScale(): number {

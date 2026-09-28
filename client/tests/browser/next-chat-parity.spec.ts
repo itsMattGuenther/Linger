@@ -51,7 +51,7 @@ test.describe("a long message folds", () => {
         text: fold?.textContent ?? "",
       };
     });
-  /** No row overlaps the next one. */
+  /** No row overlaps the next one, once the rows have been measured. */
   const edgeToEdge = (page: Page) =>
     page.locator(".nx-conv-row").evaluateAll((rows) =>
       rows
@@ -71,18 +71,17 @@ test.describe("a long message folds", () => {
     expect(folded.text).toContain("line 300");
     const showAll = row(page, id).getByRole("button", { name: "Show all" });
     await expect(showAll).toBeVisible();
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
 
     await showAll.click();
     await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
-    const open300 = await drawn(page, id);
-    expect(open300.lines).toBe(300);
-    expect(open300.mask).toBe("none");
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(async () => (await drawn(page, id)).lines).toBe(300);
+    expect((await drawn(page, id)).mask).toBe("none");
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
 
     await row(page, id).getByRole("button", { name: "Show less" }).click();
-    expect((await drawn(page, id)).lines).toBe(20);
-    expect(await edgeToEdge(page)).toBe(true);
+    await expect.poll(async () => (await drawn(page, id)).lines).toBe(20);
+    await expect.poll(() => edgeToEdge(page)).toBe(true);
     await expect(row(page, after)).toContainText("lol what was that");
   });
 
@@ -783,6 +782,124 @@ test.describe("files in the conversation", () => {
     const other = row(page, id).locator(".nx-att-card").filter({ hasText: "wiring.pdf" });
     await expect(other.locator("iframe, embed, object, img, video, audio")).toHaveCount(0);
     await expect(other.getByRole("button", { name: /Download/ })).toBeVisible();
+  });
+
+  // The picture viewer (FILE-4): over the whole window, fitted without
+  // cropping or blowing a small picture up, centered with its name, refitted
+  // when the window changes size, and closed by Escape, a click or its button
+  // with focus handed back.
+  const PICTURES = [
+    { id: "fit-portrait", filename: "portrait.png", width: 1200, height: 2400 },
+    { id: "fit-landscape", filename: "landscape.png", width: 2400, height: 600 },
+    { id: "fit-small", filename: "small.png", width: 96, height: 64 },
+    { id: "fit-long", filename: `${"long-filename-".repeat(16)}.png`, width: 1200, height: 900 },
+  ];
+
+  async function showPictures(page: Page) {
+    await open(page);
+    await page.route(`${SERVER}/media/fit-*`, (route) => {
+      const found = PICTURES.find((picture) => route.request().url().endsWith(picture.id));
+      const [w, h] = found ? [found.width, found.height] : [8, 5];
+      return route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#445"/></svg>` });
+    });
+    for (const picture of PICTURES) {
+      await post(page, `look at ${picture.id}`, "u-eli", {
+        attachments: [attachment(picture.id, picture.filename, "image/png", { width: picture.width, height: picture.height })],
+      });
+    }
+  }
+
+  /** Where the picture is drawn inside its box (object-fit: contain), its name, and the viewer. */
+  const viewerGeometry = (page: Page) =>
+    page.getByRole("dialog").evaluate((dialog) => {
+      const image = dialog.querySelector("img");
+      const name = dialog.querySelector(".nx-viewer-name");
+      if (!(image instanceof HTMLImageElement) || !name) throw new Error("no picture or name in the viewer");
+      const box = image.getBoundingClientRect();
+      const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+      const drawn = { width: image.naturalWidth * scale, height: image.naturalHeight * scale };
+      const picture = { x: box.x + (box.width - drawn.width) / 2, y: box.y + (box.height - drawn.height) / 2, ...drawn };
+      const label = name.getBoundingClientRect();
+      const overlay = dialog.getBoundingClientRect();
+      const style = getComputedStyle(dialog);
+      const top = overlay.y + parseFloat(style.paddingTop);
+      const bottom = overlay.bottom - parseFloat(style.paddingBottom);
+      return {
+        viewport: { width: innerWidth, height: innerHeight },
+        overlay: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+        picture,
+        scale,
+        name: { x: label.x, right: label.right, bottom: label.bottom },
+        middle: (top + bottom) / 2,
+        groupMiddle: (box.y + label.bottom) / 2,
+      };
+    });
+
+  async function expectFitted(page: Page) {
+    const at = await viewerGeometry(page);
+    expect(at.overlay).toEqual({ x: 0, y: 0, ...at.viewport });
+    expect(at.picture.x).toBeGreaterThanOrEqual(-0.5);
+    expect(at.picture.y).toBeGreaterThanOrEqual(-0.5);
+    expect(at.picture.x + at.picture.width).toBeLessThanOrEqual(at.viewport.width + 0.5);
+    expect(at.picture.y + at.picture.height).toBeLessThanOrEqual(at.viewport.height + 0.5);
+    expect(at.name.x).toBeGreaterThanOrEqual(0);
+    expect(at.name.right).toBeLessThanOrEqual(at.viewport.width);
+    expect(at.name.bottom).toBeLessThanOrEqual(at.viewport.height);
+    // Never enlarged past its own size.
+    expect(at.scale).toBeLessThanOrEqual(1.001);
+    // Centered across the window, and the picture and its name together
+    // centered down it.
+    expect(Math.abs(at.picture.x + at.picture.width / 2 - at.viewport.width / 2)).toBeLessThan(1);
+    expect(Math.abs(at.groupMiddle - at.middle)).toBeLessThan(1);
+    return at;
+  }
+
+  for (const picture of PICTURES) {
+    test(`the viewer fits ${picture.filename.slice(0, 24)} in the window, and again when it changes size (FILE-4)`, async ({ page }) => {
+      await showPictures(page);
+      await page.getByRole("button", { name: `Open ${picture.filename}` }).click();
+      const expanded = page.getByRole("dialog").locator("img");
+      await expect(expanded).toBeVisible();
+      await expect.poll(() => expanded.evaluate((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0)).toBe(true);
+      const first = await expectFitted(page);
+      if (picture.id === "fit-small") expect(first.scale).toBeCloseTo(1, 3);
+      await page.setViewportSize({ width: 760, height: 480 });
+      await expectFitted(page);
+      await page.setViewportSize({ width: 480, height: 320 });
+      await expectFitted(page);
+    });
+  }
+
+  test("the viewer closes by Escape, a click on the picture, the backdrop or its button, keeps Tab inside, and hands focus back (FILE-4)", async ({ page }) => {
+    await showPictures(page);
+    const opener = page.getByRole("button", { name: "Open small.png" });
+    const viewer = page.getByRole("dialog", { name: "small.png" });
+    const close = viewer.getByRole("button", { name: "Close the picture" });
+    await opener.focus();
+    await opener.press("Enter");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    await opener.press("Enter");
+    await viewer.locator("img").click();
+    await expect(viewer).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    await opener.press("Enter");
+    await viewer.click({ position: { x: 2, y: 2 } });
+    await expect(viewer).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    await opener.press("Enter");
+    await close.click();
+    await expect(viewer).toHaveCount(0);
+    await expect(opener).toBeFocused();
   });
 });
 

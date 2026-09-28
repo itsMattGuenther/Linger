@@ -6,8 +6,8 @@ covers the parts it is built from, the values they use, and the rules that keep
 them consistent. SPEC §5 keeps only the rules that are product decisions and
 points here for the rest.
 
-It applies to code under `client/src/next/`. The previous client, kept one
-release behind `LINGER_CLASSIC=1`, followed the old "Console" rules.
+It applies to code under `client/src/next/`. The previous client, deleted
+after 0.4.3 (#306), followed the old "Console" rules.
 
 ## Where it lives
 
@@ -811,11 +811,11 @@ built on the rows' own grid so nothing new lines up by eye:
 | Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
 | What a server's header and line say, from its store | `core/servers.test.ts` |
 | A DM you haven't read is lit (its row, the DMs heading while folded, a folded server's header, its tab) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
-| DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing for the previous client | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
+| DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |
-| `src/next` imports only `src/lib` logic (`.ts`), `src/generated` and `src/fonts` from the old client, never its screens, styles or UI components | `discipline.test.ts` › imports nothing from the old client's UI |
+| `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
 | Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
 
@@ -863,10 +863,10 @@ look at it in WebKitGTK:
 - **The gallery in WebKitGTK's own browser:**
   `/usr/lib/webkit2gtk-4.1/MiniBrowser http://localhost:1431/tests/fixtures/kit.html`,
   on a machine where opening a window is fine.
-- **Headless, without anyone's screen:** use the desktop-check setup in
-  [`../desktop-checks.md`](../desktop-checks.md), with Xvfb,
-  `dbus-run-session` and the native WebKit driver. It needs
-  `xorg-server-xvfb` installed.
+- **Headless, without anyone's screen:** `scripts/linux-next-check.py` runs
+  a built app on a private virtual display (Xvfb, `dbus-run-session`, an
+  empty profile) and checks the list draws. It needs `xorg-server-xvfb`
+  installed; see [`../development.md`](../development.md).
 
 Keep effects cheap so WebKitGTK stays fast: animate only `transform`,
 `opacity` and colors, and add no backdrop blur behind text.

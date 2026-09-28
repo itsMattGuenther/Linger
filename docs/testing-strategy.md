@@ -18,22 +18,16 @@ Test the combined release candidate: separately green PRs can disagree.
 | --- | --- | --- |
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
-| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, native navigation layout, knock and sending | Every distro, physical speakers, real-network voice |
+| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size | Signed-in use, every distro, physical speakers, real-network voice |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
-The existing package audio harness also injects a test-only bundle of the real
-Console fixture. It deliberately discards that bundle's CSS: measurements use
-the package's shipped stylesheet. It tests long server/room/DM names, a reserved
-vertical scrollbar gutter, short scroll areas, both themes and all six interface
-sizes in WebView2 and WebKitGTK. The synthetic fixture replaces the empty test
-page only; it never loads personal accounts. Layout results are retained beside
-audio results. The same native fixture tests a second knock and immediate
-composer clearing in rooms and DMs while a send is held, preserving the next draft.
-This is not a live-server or full-app startup test.
-The Linux harness disables overlay scrollbars only in its isolated test process
-using [GTK's scrollbar setting](https://docs.gtk.org/gtk3/property.Settings.gtk-overlay-scrolling.html).
-The test requires a measurable native gutter and rejects the negative-margin
-scroll box that caused #100, as well as checking actual text and row bounds.
+The package audio harness injects a test-only bundle of the real sound player
+into the installed app, signed in nowhere, and records what reaches a private
+virtual speaker. Until 0.4.3 it also measured the previous client's layout in
+the package; that part went with the previous client (#306). The Buddy list's
+own start-up and layout in the package are `scripts/linux-next-check.py` and
+`client/scripts/windows-next-check.mjs`. None of these is a live-server test;
+a signed-in desktop check is T-1820.
 
 Run the existing `scripts/linux-audio-check.py` and Windows package scripts as
 documented in [packaged audio checks](packaged-audio-checks.md). They require a

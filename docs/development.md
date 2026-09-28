@@ -59,12 +59,11 @@ Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
 for seven days. Docs-only follow-up commits to a source PR still test its full
 scope; a green last commit must not conceal an untested earlier change.
 
-For real desktop interaction, `python3 scripts/desktop-check.py` runs three
-isolated Linux clients through live styling, private messages, uploads and a
-browser-downloaded export. It needs additional test tools and built debug
-binaries; see [desktop checks](desktop-checks.md) for setup. Its steps drive
-the previous client (it sets `LINGER_CLASSIC=1`) until the Buddy list gets its
-own (T-1812). It does not replace checks on separate computers and networks.
+There is no automated signed-in desktop check yet. The three-person
+walk-through that drove the previous client (`scripts/desktop-check.py`) was
+retired with it (#306); a Buddy list version is T-1820. Until then, the
+packaged checks below prove the app starts and plays sound, and the rest is
+tried by hand in the real app.
 
 ## Packaged audio
 
@@ -76,9 +75,7 @@ Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
 the media runtime. See [packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
-bundles the current sound player before running it inside each package. The same
-isolated run checks the previous client's layout against the package's shipped
-CSS at all six interface sizes (with `LINGER_CLASSIC=1`, until T-1812).
+bundles the current sound player before running it inside each package.
 `scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs` check
 the Buddy list client itself starts in the packaged app, signed in nowhere,
 and the Windows one keeps a screenshot of it. The Windows check also opens
@@ -109,20 +106,18 @@ GL drawing crashed there when a Linger window was resized with another open
 choices happen before GTK and change no desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
-## The Buddy list client and today's client
+## The Buddy list client
 
-The Buddy list client (`client/src/next/`, [architecture](design/architecture.md),
-[design system](design/system.md)) is the app from 0.4.0. Today's client
-(`client/src/`, outside `next/`) stays in the build for one release as a
-fallback, and gets bug fixes only:
+The app is the Buddy list client (`client/src/next/`,
+[architecture](design/architecture.md), [design system](design/system.md)),
+from 0.4.0. `client/src/lib/` is the logic its windows share, and
+`client/src/generated/` the wire types. The previous client, kept behind
+`LINGER_CLASSIC=1` through 0.4.3, was deleted (#306); that variable does
+nothing now.
 
 ```bash
-cd client && pnpm tauri dev                     # the Buddy list
-cd client && LINGER_CLASSIC=1 pnpm tauri dev    # today's client
+cd client && pnpm tauri dev
 ```
-
-`LINGER_CLASSIC=1` works in an installed copy too. Both clients share the
-sign-ins in the keyring, the servers and the `linger.*` preferences.
 
 Closing the list window keeps Linger running in the tray (and in voice) until
 you pick Quit from the tray menu; Settings → Windows can make closing it quit

@@ -155,13 +155,3 @@ export function itemLabel(item: MediaItem): string {
   if (item.link) return item.link.title ?? item.link.domain;
   return item.excerpt ?? "a pinned message";
 }
-
-/**
- * The accessible name of a tile: what it is, who shared it, and whether it is
- * starred. A screen reader gets the sentence the layout is drawing.
- */
-export function itemDescription(item: MediaItem, who: string): string {
-  const noun = item.kind === "pin" ? "pinned message" : item.kind;
-  const starred = item.starred_at === null ? "" : ", starred";
-  return `${noun}, ${itemLabel(item)}, shared by ${who}${starred}`;
-}

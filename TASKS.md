@@ -26,9 +26,9 @@ default.
 
 **0.4.3 release — ⏳ Matt, 2026-09-27.** Fixes and small things from the
 first weekend of real use (#221–#241); notes in `docs/releases/0.4.3.md`. The
-Buddy list client (M15, #198) has been the app since 0.4.0; today's client stays
-behind `LINGER_CLASSIC=1`. Earlier releases' notes, with what each closed, are
-in `docs/releases/`.
+Buddy list client (M15, #198) has been the app since 0.4.0, and the previous
+client that stayed behind `LINGER_CLASSIC=1` was deleted after 0.4.3 (#306).
+Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
 agent's contract is `AGENTS.md`; tools that insist on their own filename get a
@@ -215,9 +215,9 @@ out of using the app. Each one is small enough that it lands in a single session
 with its note written here. The closed ones are archived in
 [`v1-polish.md`](docs/tasks/v1-polish.md).
 
-Since 0.4.0 the Buddy list client is the app, and today's client gets bug fixes
-only. A task below that names the old client's screens applies to the new one
-where it still makes sense, and is otherwise closed with a note.
+Since 0.4.0 the Buddy list client is the app, and the old client is deleted
+(#306). A task below that names the old client's screens applies to the new
+one where it still makes sense, and is otherwise closed with a note.
 
 - ⏳ **T-925 · Use the selected app icon on every desktop surface** — effort:
   **medium** — Matt, 2026-09-17. The running Windows app was reported without the chosen icon;
@@ -342,12 +342,11 @@ where it still makes sense, and is otherwise closed with a note.
 
 ## M15 — the Buddy list client (#198)
 
-**In progress on `feat/198-buddy-list`, started 2026-09-25.** Matt chose the
-Buddy list design and asked for the client to be rebuilt around it as
-intentionally crafted software: long-term stability, easy maintenance and
-thorough tests. It is built next to today's client, in `client/src/next/`, and
-opens only behind a hidden switch until it can do everything the old one does.
-The released app keeps shipping from the old client until the switch.
+**Started 2026-09-25; the app from 0.4.0.** Matt chose the Buddy list design
+and asked for the client to be rebuilt around it as intentionally crafted
+software: long-term stability, easy maintenance and thorough tests. It was
+built next to the old client, in `client/src/next/`, and replaced it in 0.4.0;
+the old client was deleted after 0.4.3 (#306).
 
 Read these before touching it, in this order:
 1. [`docs/design/buddy-list.md`](docs/design/buddy-list.md): the design.
@@ -360,19 +359,19 @@ Read these before touching it, in this order:
 5. [`docs/design/parity.md`](docs/design/parity.md): the gate for switching.
 
 Rules for this milestone:
-- **New-client code lives in `client/src/next/`.** It reuses the shared core
-  in `client/src/lib/`, `client/src/generated/` and `client/src/fonts/`. It
-  never imports the old client's UI (`discipline.test.ts`).
+- **The app's code lives in `client/src/next/`.** It shares the core in
+  `client/src/lib/` (logic only), `client/src/generated/` and
+  `client/src/fonts/`, and imports nothing else in `src/`
+  (`discipline.test.ts`). The previous client is deleted (#306).
 - **Screens are built only from the kit.** A size, color or spacing that the
   tokens don't have is a change to the tokens and `system.md` first.
-- **The old client is frozen:** bug fixes only, no features.
-- **SPEC §3 and §5 still describe the shipping client.** They are rewritten
-  from `system.md` at the switch (T-1810), not before.
+- **SPEC §3 and §5 still describe the previous client in places.** They are
+  rewritten from `system.md` as part of T-1810.
 
 - 🟡 **T-1801 · Foundations** — the design docs, tokens, the kit, the gallery
   (`tests/fixtures/kit.html`), and the discipline, contrast and geometry tests.
 - 🟡 **T-1802 · The switch and the owner window** — the shell opens
-  `next.html` as `main` (`LINGER_CLASSIC=1` for today's client, one release). It signs in with the existing sessions and shows real
+  `next.html` as `main`. It signs in with the existing sessions and shows real
   rooms, DMs and people from the kit. Signed in nowhere, it opens on its own
   sign-in screen (paste box, sign in, join from an invite, first-run setup;
   decision 16's default). "Add a server" in Settings shows the same screen in
@@ -410,16 +409,14 @@ Rules for this milestone:
   event, so no other window can make one up (architecture.md, "Still open").
   The app's own commands are already limited per window (`build.rs`,
   `capabilities/`, `src-tauri/src/acl.rs`).
-- 🟡 **T-1812 · A packaged layout check for the Buddy list** — the package
-  checks (`scripts/linux-audio-check.py`, `client/scripts/windows-audio-check.mjs`)
-  inject a layout probe into the installed app and measure today's client
-  against its own stylesheet, so since 0.4.0 they run with
-  `LINGER_CLASSIC=1`. A first check is in: `client/scripts/next-smoke-probe.js`,
-  run by `scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs`,
-  proves the list window starts in the packaged WebKitGTK and WebView2 with its
-  stylesheet, fonts and mark, at every interface size, and keeps a Windows
-  screenshot. Still to do before today's client is deleted: the list, chat and
-  Settings windows signed in, against a throwaway server.
+- 🟡 **T-1812 · A packaged layout check for the Buddy list** —
+  `client/scripts/next-smoke-probe.js`, run by `scripts/linux-next-check.py`
+  and `client/scripts/windows-next-check.mjs`, proves the list window starts
+  in the packaged WebKitGTK and WebView2 with its stylesheet, fonts and mark,
+  at every interface size, and keeps a Windows screenshot. The packaged audio
+  checks run on the Buddy list too; the layout probe they carried measured the
+  previous client and went with it (#306). Still to do: the list, chat and
+  Settings windows signed in, against a throwaway server (with T-1820).
 - ✅ **T-1813 · Choose the push-to-talk key** — parity decision 6. A "press a
   key" picker in Settings → Sound & Voice, Right Ctrl by default, so the Ctrl
   shortcuts never open the microphone. Push-to-talk stays off by default.
@@ -443,9 +440,22 @@ Rules for this milestone:
 - ✅ **T-1819 · Many rooms fold** — decision 22. Past eight rooms on a server,
   the ones with nobody in them and nothing new fold under "More rooms", in the
   host's order, with no number.
-- ⬜ **T-1810 · Parity and the switch** — every `parity.md` item is proved. The
-  new client becomes the default, the old one stays one release as a fallback,
-  then is deleted. SPEC §3/§5 are rewritten from `system.md`.
+- ⬜ **T-1820 · A desktop check for the Buddy list** — the three-person
+  walk-through `scripts/desktop-check.py` drove the previous client's screens
+  and was retired with it (#306); read it at commit `218cc2b` for a start.
+  The new one runs isolated Linux clients against a throwaway server, each
+  with its own virtual display (Xvfb), private D-Bus session and empty
+  profile, driven through `tauri-driver` and the native `WebKitWebDriver`.
+  It proves, in the real app: a message and an uploaded picture cross real
+  gateway connections; a styled name draws on the other client; a DM reaches
+  only its people (not the list, media or search of somebody outside it);
+  and the export builds an archive a browser downloads, holding the DM for
+  its people and leaving it out for everyone else. It never touches a saved
+  Linger server or the normal desktop. Local and optional, alongside
+  `scripts/check.sh`; it doesn't replace the release checks.
+- 🟡 **T-1810 · Parity and the switch** — the new client became the default in
+  0.4.0 and the old one was deleted after 0.4.3 (#306). Still to do: every
+  `parity.md` item proved, and SPEC §3/§5 rewritten from `system.md`.
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * What a refused knock says (SPEC §4.9, #268), in both clients' words.
+ * What a refused knock says (SPEC §4.9, #268).
  *
  * Three knocks an hour per person, and the fourth is a `RATE_LIMITED` refusal
  * carrying `retry_after_ms`: how long until the server takes the next one. The

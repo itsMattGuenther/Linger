@@ -35,9 +35,7 @@ try {
     assert.equal(changed.status, 0, changed.stderr);
     policyKeys.push(key);
   }
-  // Today's client, the fallback that still ships (0.4.0): the layout probe
-  // measures it against its own stylesheet. The audio is the same in either.
-  app = spawn(resolve(exe), [], { stdio: "ignore", env: { ...process.env, LINGER_CLASSIC: "1" } });
+  app = spawn(resolve(exe), [], { stdio: "ignore" });
   let launchError;
   app.on("error", (error) => { launchError = error; });
   let connectionError;

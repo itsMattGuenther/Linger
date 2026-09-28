@@ -316,8 +316,8 @@ Each user controls the rendering of their own display name:
 
 1. **Colors come from the named 16-color palette (§5.4), never from a picker.** The wire
    format is a palette key (`"azure"`), not a color value. Contrast safety is structural
-   — the palette is defined once with theme-mirrored lightness, so there is nothing to
-   clamp at runtime and no way to produce an unreadable name.
+   — the palette is defined once at a lightness chosen for the background, so there is
+   nothing to clamp at runtime and no way to produce an unreadable name.
 2. **No arbitrary fonts.** Curated bundled set only. Arbitrary font URLs are a
    fingerprinting vector and a remote-load dependency.
 3. **Gradient angle is fixed at 92°**, not user-configurable.
@@ -726,9 +726,8 @@ Evening warmth waits for an evening version of these colors.
 
 **This replaces free color picking.** Users choose a *named* color, not a hex or a wheel.
 
-Derived from the IRC 16, remapped through OKLCH. Each color is one hue with a
-theme-mirrored lightness, so contrast is guaranteed by construction and no runtime
-clamping is needed.
+Derived from the IRC 16, remapped through OKLCH. Each color is one hue at one
+lightness, so contrast is guaranteed by construction and no runtime clamping is needed.
 
 ```
 ember 32   rust 50    amber 68   brass 90
@@ -739,12 +738,8 @@ violet 295 orchid 320 rose 350   slate 250*
 *(numbers are OKLCH hue; slate uses chroma 0.02, the rest 0.13)*
 
 ```
-dark theme:   oklch(0.76 0.13 <hue>)
-light theme:  oklch(0.50 0.14 <hue>)
+oklch(0.76 0.13 <hue>)
 ```
-
-The light line serves only the previous client (`LINGER_CLASSIC=1`), which still
-has a light theme; it goes when that client is deleted. The app is dark only (§5.3).
 
 Build generates hex fallbacks from these. **Verify `oklch()` renders in the target
 WebKitGTK version during M0** — if it doesn't, ship the generated hex and drop the

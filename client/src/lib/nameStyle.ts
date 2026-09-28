@@ -14,7 +14,6 @@
  * client can second-guess the server.
  */
 import type { Style } from "../generated/Style";
-import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
 import type { User } from "../generated/User";
 import { isFontKey, isMessageFontKey } from "./fonts";
 import { isPaletteKey } from "./palette";
@@ -93,16 +92,6 @@ export function styleOf(draft: StyleDraft): Style {
       : { kind: "solid", color: draft.from },
     effect: draft.effect,
     msg_font_key: draft.msgFontKey,
-  };
-}
-
-/** A `PATCH /me` that touches the style and nothing else. */
-export function styleRequest(draft: StyleDraft): UpdateMeRequest {
-  return {
-    display_name: null,
-    style: styleOf(draft),
-    status: null,
-    entrance_sound: null,
   };
 }
 

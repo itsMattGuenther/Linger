@@ -38,6 +38,15 @@ import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 // doesn't share its microphone (VOICE-6, VOICE-7). `&muted`, `&deafened`: your
 // own controls pressed (deafening mutes too, as `setVoiceDeafened` does).
 const query = new URLSearchParams(location.search);
+// `?holdknock`: a knock waits until the test answers it with
+// `window.answerKnock(true)` (it went through) or `(false)` (it didn't).
+const heldKnocks: ((ok: boolean) => void)[] = [];
+declare global {
+  interface Window {
+    answerKnock?: (ok: boolean) => void;
+  }
+}
+window.answerKnock = (ok) => heldKnocks.shift()?.(ok);
 // `?away`: you're away already, so the top card offers "I'm back", and the
 // server says so to everyone, as it does once an away message is saved.
 const night = evening(serverState(SERVER));
@@ -200,6 +209,9 @@ function OneServer() {
       return knockOn({
         knock: async () => {
           if (query.has("limit")) throw new ApiError(429, { code: "RATE_LIMITED", message: "Slow down a little.", retry_after_ms: 1_150_000 });
+          if (query.has("holdknock")) {
+            await new Promise<void>((settle, fail) => heldKnocks.push((ok) => (ok ? settle() : fail(new Error("the server didn't answer")))));
+          }
         },
       }, user.id);
     },

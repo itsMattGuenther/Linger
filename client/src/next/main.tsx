@@ -14,8 +14,7 @@ import { refuseStrayDrops } from "../lib/drops";
 import { unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
-// Plain names and interface size, kept under the same keys as today's client
-// so switching clients keeps them, and the same in every window
+// Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
 

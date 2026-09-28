@@ -2,9 +2,9 @@
  * Search's words (SPEC §4.12, parity SRCH-1…5). Pure; `app/search/SearchView`
  * draws what these say.
  *
- * What a query is and how it's cut short live in `lib/search.ts`, shared with
- * today's client: whole words, all of them, "quoted phrases", 200 characters,
- * a pause before asking. This file is the new client's side: the filters'
+ * What a query is and how it's cut short live in `lib/search.ts`: whole
+ * words, all of them, "quoted phrases", 200 characters, a pause before
+ * asking. This file is the window's side: the filters'
  * choices, what one hit says, and the line that says how a search went.
  *
  * Nothing here draws a count as a number (AGENTS rule 3): three matching

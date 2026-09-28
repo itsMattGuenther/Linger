@@ -24,7 +24,7 @@ const ESTIMATE_PX = 24;
  * How a landing or a jump knows it has arrived. Rows are estimates until drawn, so a jump
  * re-aims every frame until the aim and the measured height both hold still,
  * after a floor of frames for the first measurements to land, with a cap as
- * a seatbelt. Today's client learned each of the three (`Stream.tsx`).
+ * a seatbelt. The previous client learned each of the three.
  */
 const JUMP_STILL_FRAMES = 5;
 const JUMP_MIN_FRAMES = 20;
