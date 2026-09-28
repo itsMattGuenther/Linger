@@ -40,8 +40,8 @@ use std::time::Duration;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use linger_core::limits::{
-    LINK_FETCH_TIMEOUT_MS, MAX_LINKS_PER_MESSAGE, MAX_LINK_ICON_BYTES, MAX_LINK_PAGE_BYTES,
-    MAX_LINK_REDIRECTS, MAX_LINK_TITLE_CHARS,
+    LINK_FETCH_TIMEOUT_MS, MAX_LINKS_PER_MESSAGE, MAX_LINK_ICON_BYTES, MAX_LINK_OEMBED_BYTES,
+    MAX_LINK_PAGE_BYTES, MAX_LINK_REDIRECTS, MAX_LINK_TITLE_CHARS,
 };
 use reqwest::Url;
 
@@ -344,6 +344,9 @@ pub async fn fetch(url: &Url) -> Fetched {
 }
 
 async fn fetch_inner(url: &Url) -> Fetched {
+    if let Some(video) = youtube_video(url) {
+        return fetch_youtube(&video).await;
+    }
     let Some((final_url, content_type, body)) =
         guarded_get(url, "text/html,application/xhtml+xml", MAX_LINK_PAGE_BYTES).await
     else {
@@ -368,6 +371,92 @@ async fn fetch_inner(url: &Url) -> Fetched {
     let icon = match icon_url {
         Some(candidate) => fetch_icon(&candidate).await,
         None => None,
+    };
+    Fetched { title, icon }
+}
+
+// ---------------------------------------------------------------------------
+// YouTube (#300)
+// ---------------------------------------------------------------------------
+//
+// A YouTube video's page is about 1.3 MB, and its title starts about 700 KB in,
+// far past `MAX_LINK_PAGE_BYTES`, so reading the page finds no title and the
+// card was only "youtube.com". YouTube answers the question directly at its
+// oEmbed address: a few hundred bytes of JSON with the title, and no key or
+// account. The request goes through `guarded_get` like every other fetch, so
+// the address checks, the pinning and the caps all still apply, and it is the
+// server asking, never the reader. Nothing but `title` is read from it: no
+// thumbnail, no player, no embed.
+
+/// A YouTube video's own id, when the link is to one video:
+/// `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`,
+/// `/live/…` and `/embed/…`, on `www.`, `m.` and `music.` too. A channel, a
+/// playlist or the home page isn't a video, and reads as any other page.
+pub fn youtube_video(url: &Url) -> Option<String> {
+    let host = url.host_str()?.to_ascii_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(&host);
+    let id = match host {
+        "youtu.be" => url.path_segments()?.next().map(str::to_string),
+        "youtube.com" | "m.youtube.com" | "music.youtube.com" => {
+            let mut segments = url.path_segments()?;
+            match segments.next()? {
+                "watch" => url
+                    .query_pairs()
+                    .find(|(key, _)| key == "v")
+                    .map(|(_, value)| value.into_owned()),
+                "shorts" | "live" | "embed" => segments.next().map(str::to_string),
+                _ => None,
+            }
+        }
+        _ => None,
+    }?;
+    // Every video id is eleven of these; anything else isn't one, and isn't
+    // passed on to YouTube.
+    let valid = id.len() == 11
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    valid.then_some(id)
+}
+
+/// Where to ask YouTube about one video. The video goes in as its plain
+/// watch address, whichever form was linked.
+fn youtube_oembed_url(video: &str) -> Option<Url> {
+    let mut url = Url::parse("https://www.youtube.com/oembed").ok()?;
+    url.query_pairs_mut()
+        .append_pair("url", &format!("https://www.youtube.com/watch?v={video}"))
+        .append_pair("format", "json");
+    Some(url)
+}
+
+/// The video's title out of an oEmbed answer, on one line and bounded like
+/// any page's. Anything that isn't JSON with a non-empty `title` string is no
+/// title, and the card keeps its domain.
+fn oembed_title(body: &[u8]) -> Option<String> {
+    let answer: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let title = answer.get("title")?.as_str()?;
+    let title = shorten(
+        &title.split_whitespace().collect::<Vec<_>>().join(" "),
+        MAX_LINK_TITLE_CHARS,
+    );
+    (!title.is_empty()).then_some(title)
+}
+
+async fn fetch_youtube(video: &str) -> Fetched {
+    let title = match youtube_oembed_url(video) {
+        Some(ask) => guarded_get(&ask, "application/json", MAX_LINK_OEMBED_BYTES)
+            .await
+            .and_then(|(_, content_type, body)| {
+                (content_type.contains("json") || content_type.is_empty())
+                    .then(|| oembed_title(&body))
+                    .flatten()
+            }),
+        None => None,
+    };
+    // The site's own icon, from the address every browser tries.
+    let icon = match Url::parse("https://www.youtube.com/favicon.ico") {
+        Ok(at) => fetch_icon(&at).await,
+        Err(_) => None,
     };
     Fetched { title, icon }
 }
@@ -764,5 +853,119 @@ mod tests {
         assert_eq!(domain_of("https://www.example.com/a/b"), "example.com");
         assert_eq!(domain_of("https://news.example.com/"), "news.example.com");
         assert_eq!(domain_of("nonsense"), "");
+    }
+
+    fn video_of(raw: &str) -> Option<String> {
+        youtube_video(&Url::parse(raw).expect("a url"))
+    }
+
+    #[test]
+    fn a_youtube_video_is_known_in_every_form_it_is_linked_in() {
+        let id = Some("dQw4w9WgXcQ".to_string());
+        for raw in [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?v=dQw4w9WgXcQ&t=42s",
+            "https://www.youtube.com/watch?list=PL1&v=dQw4w9WgXcQ",
+            "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtu.be/dQw4w9WgXcQ",
+            "https://youtu.be/dQw4w9WgXcQ?si=abc&t=10",
+            "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+            "https://www.youtube.com/live/dQw4w9WgXcQ",
+            "https://www.youtube.com/embed/dQw4w9WgXcQ",
+            "http://WWW.YouTube.com/watch?v=dQw4w9WgXcQ",
+        ] {
+            assert_eq!(video_of(raw), id, "{raw}");
+        }
+    }
+
+    #[test]
+    fn anything_else_on_youtube_is_an_ordinary_page() {
+        for raw in [
+            "https://www.youtube.com/",
+            "https://www.youtube.com/@RickAstleyYT",
+            "https://www.youtube.com/playlist?list=PL1",
+            "https://www.youtube.com/watch",
+            "https://www.youtube.com/watch?v=",
+            "https://www.youtube.com/watch?v=short",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQtoolong",
+            "https://www.youtube.com/watch?v=dQw4w9Wg%2FcQ",
+            "https://youtu.be/",
+            "https://notyoutube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com.example.net/watch?v=dQw4w9WgXcQ",
+            "https://example.com/watch?v=dQw4w9WgXcQ",
+        ] {
+            assert_eq!(video_of(raw), None, "{raw}");
+        }
+    }
+
+    #[test]
+    fn youtube_is_asked_about_the_plain_watch_address() {
+        let ask = youtube_oembed_url("dQw4w9WgXcQ").expect("an address");
+        assert_eq!(ask.host_str(), Some("www.youtube.com"));
+        assert_eq!(ask.path(), "/oembed");
+        let pairs: Vec<(String, String)> = ask
+            .query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                (
+                    "url".to_string(),
+                    "https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string()
+                ),
+                ("format".to_string(), "json".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_oembed_answer_gives_its_title_and_nothing_else() {
+        let answer = br#"{"title":"Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)","author_name":"Rick Astley","thumbnail_url":"https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg","html":"<iframe></iframe>"}"#;
+        assert_eq!(
+            oembed_title(answer).as_deref(),
+            Some("Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)")
+        );
+        // One line, like any page's title.
+        assert_eq!(
+            oembed_title(br#"{"title":"  a\n  b\t c  "}"#).as_deref(),
+            Some("a b c")
+        );
+        // Bounded, like any page's title.
+        let long = format!(r#"{{"title":"{}"}}"#, "x".repeat(400));
+        assert_eq!(
+            oembed_title(long.as_bytes()).map(|title| title.chars().count()),
+            Some(MAX_LINK_TITLE_CHARS)
+        );
+        // No title, an empty one, a title that isn't words, or not JSON at all.
+        for bad in [
+            &br#"{"author_name":"Rick Astley"}"#[..],
+            br#"{"title":"   "}"#,
+            br#"{"title":42}"#,
+            br#"[]"#,
+            b"<html>Not Found</html>",
+            b"",
+        ] {
+            assert_eq!(oembed_title(bad), None, "{}", String::from_utf8_lossy(bad));
+        }
+    }
+
+    /// The whole path, against the real YouTube: a title through oEmbed, and
+    /// the site's icon. It reaches the internet, so it never runs on its own;
+    /// run it by hand with `cargo test -p linger-server -- --ignored youtube`.
+    #[tokio::test]
+    #[ignore = "reaches the real YouTube; run by hand"]
+    async fn a_real_youtube_link_gets_its_title_and_icon() {
+        let url = Url::parse("https://youtu.be/dQw4w9WgXcQ").expect("a url");
+        let found = fetch(&url).await;
+        assert_eq!(
+            found.title.as_deref(),
+            Some("Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)")
+        );
+        assert!(found
+            .icon
+            .as_deref()
+            .is_some_and(|icon| icon.starts_with("data:image/")));
     }
 }

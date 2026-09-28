@@ -38,6 +38,23 @@ impl Cached {
         }
     }
 
+    /// Whether to fetch this URL again now. As [`Cached::stale`], and a
+    /// YouTube video's card that has no title is asked about again after an
+    /// hour rather than a week (#300). Cards from before YouTube titles were
+    /// read have only an icon, which counts as a success; this is what gives
+    /// links already posted their titles. A video oEmbed can't name (a private
+    /// or removed one) is retried hourly, like a failure, never on every read.
+    #[must_use]
+    pub fn wants_another_look(&self, url: &str, now: i64) -> bool {
+        self.stale(now)
+            || (self.title.is_none()
+                && now - self.fetched_at > LINK_PREVIEW_RETRY_MS
+                && links::previewable(url)
+                    .as_ref()
+                    .and_then(links::youtube_video)
+                    .is_some())
+    }
+
     /// The card this row draws. A refusal keeps its domain and loses everything
     /// else, so a failed fetch never puts a stale or wrong title on screen.
     #[must_use]
@@ -132,4 +149,49 @@ pub async fn store(
     .execute(db)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cached;
+    use linger_core::limits::{LINK_PREVIEW_RETRY_MS, LINK_PREVIEW_TTL_MS};
+
+    fn row(state: &str, title: Option<&str>, fetched_at: i64) -> Cached {
+        Cached {
+            state: state.to_string(),
+            title: title.map(str::to_string),
+            icon: Some("data:image/png;base64,AAAA".to_string()),
+            fetched_at,
+        }
+    }
+
+    const VIDEO: &str = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    const PAGE: &str = "https://example.com/an-article";
+    const HOUR: i64 = LINK_PREVIEW_RETRY_MS;
+
+    /// Cards remembered from before #300 have YouTube's icon and no title,
+    /// which counts as a success for a week. They're asked about again after
+    /// an hour, so links already posted get their titles.
+    #[test]
+    fn a_youtube_card_with_no_title_is_asked_about_again_after_an_hour() {
+        let now = 10 * LINK_PREVIEW_TTL_MS;
+        assert!(row("ok", None, now - HOUR - 1).wants_another_look(VIDEO, now));
+        assert!(row("ok", None, now - 3 * 24 * HOUR).wants_another_look(VIDEO, now));
+        // Not every time somebody reads it: an hour at the most.
+        assert!(!row("ok", None, now - HOUR + 1).wants_another_look(VIDEO, now));
+        // With its title, a week, like any page.
+        assert!(!row("ok", Some("A video"), now - 3 * 24 * HOUR).wants_another_look(VIDEO, now));
+        assert!(row("ok", Some("A video"), now - LINK_PREVIEW_TTL_MS - 1)
+            .wants_another_look(VIDEO, now));
+    }
+
+    #[test]
+    fn any_other_card_keeps_its_week() {
+        let now = 10 * LINK_PREVIEW_TTL_MS;
+        assert!(!row("ok", None, now - 3 * 24 * HOUR).wants_another_look(PAGE, now));
+        assert!(row("ok", None, now - LINK_PREVIEW_TTL_MS - 1).wants_another_look(PAGE, now));
+        // A failure is retried after an hour, as before.
+        assert!(row("failed", None, now - HOUR - 1).wants_another_look(PAGE, now));
+        assert!(!row("failed", None, now - HOUR + 1).wants_another_look(PAGE, now));
+    }
 }

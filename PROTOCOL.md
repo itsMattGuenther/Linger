@@ -615,6 +615,18 @@ client asks about the links it is drawing; the server answers from its cache and
 fetches whatever is missing or stale (a week for a success, an hour for a
 failure).
 
+A card's title is the page's `og:title`, or its `<title>`, from the first
+256 KB of the page. A **YouTube video** is the exception (#300): its page is
+far bigger than that, with the title a long way in, so the server asks
+YouTube's oEmbed address instead (`https://www.youtube.com/oembed?url=…`) and
+reads only the `title` from the answer, never a thumbnail or a player. A video
+is a `watch?v=` link on `youtube.com` (with or without `www.`, `m.` or
+`music.`), a `youtu.be` link, or a `/shorts/`, `/live/` or `/embed/` one, with
+an eleven-character id. The request goes through the same guard as every
+other fetch. A YouTube video's card that has no title is asked about again
+after an hour rather than a week, so cards remembered before this, and videos
+oEmbed couldn't name at the time, get their titles.
+
 **The client never fetches a preview itself, and neither does the reader's
 browser.** If it did, every site anyone linked would collect the IP of everyone
 who scrolled past the message — a remote favicon `<img>` alone would do it. So

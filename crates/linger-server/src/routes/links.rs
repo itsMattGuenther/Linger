@@ -69,7 +69,7 @@ async fn preview(
     let mut wanted = Vec::new();
     for url in &request.urls {
         let known = cached.get(url);
-        let stale = known.is_none_or(|row| row.stale(now));
+        let stale = known.is_none_or(|row| row.wants_another_look(url, now));
         if stale && links::previewable(url).is_some() && !wanted.contains(url) {
             wanted.push(url.clone());
         }
