@@ -73,7 +73,7 @@ test("icons and markers sit exactly in the middle of their boxes (#144, #164, #1
 });
 
 // Idle was the here dot, a little dimmed, and easy to miss beside it (#259).
-test("idle is 💤 in the person's own color, drawn like the away moon, inside the lead column", async ({ page }) => {
+test("idle is 💤 in the person's own color, its big Z where a dot's middle is, inside the lead column", async ({ page }) => {
   for (const size of ["md", "sm"]) {
     const idle = page.getByRole("img", { name: `Eli (${size}), idle` });
     await expect(idle).toHaveCount(1);
@@ -81,7 +81,7 @@ test("idle is 💤 in the person's own color, drawn like the away moon, inside t
       const here = node.parentElement?.querySelector('.k-marker[data-state="here"]');
       const svg = node.querySelector("svg");
       const box = (el: Element | null | undefined) => el?.getBoundingClientRect();
-      const [mine, marker] = [box(svg), box(node)];
+      const [mine, marker, bigZ] = [box(svg), box(node), box(svg?.querySelector("path"))];
       const slot = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--marker-slot"));
       return {
         glyph: svg?.querySelector("path") !== null && svg !== null,
@@ -90,7 +90,9 @@ test("idle is 💤 in the person's own color, drawn like the away moon, inside t
         background: getComputedStyle(node).backgroundColor,
         opacity: getComputedStyle(node).opacity,
         withinSlot: mine ? mine.width <= slot + 0.01 && mine.height <= slot + 0.01 : false,
-        centered: mine && marker ? Math.abs(mine.x + mine.width / 2 - (marker.x + marker.width / 2)) < 0.5 && Math.abs(mine.y + mine.height / 2 - (marker.y + marker.height / 2)) < 0.5 : false,
+        centered: mine && marker ? Math.abs(mine.x + mine.width / 2 - (marker.x + marker.width / 2)) < 0.5 : false,
+        // The small letters rise above; the big Z sits where a dot would (#259).
+        bigZLevel: bigZ && marker ? Math.abs(bigZ.y + bigZ.height / 2 - (marker.y + marker.height / 2)) < 0.5 : false,
       };
     });
     expect(drawn.glyph, size).toBe(true);
@@ -99,6 +101,7 @@ test("idle is 💤 in the person's own color, drawn like the away moon, inside t
     expect(drawn.opacity, size).toBe("1");
     expect(drawn.withinSlot, size).toBe(true);
     expect(drawn.centered, size).toBe(true);
+    expect(drawn.bigZLevel, size).toBe(true);
   }
 });
 

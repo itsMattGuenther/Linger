@@ -56,8 +56,11 @@ export function Marker({
       ) : state === "idle" ? (
         // 💤, drawn rather than typed: an emoji keeps its own color and looks
         // different on every system, and this is their color everywhere (#259).
+        // The big Z first: it is the part that sits where a dot would.
         <svg viewBox="0 0 16 16" focusable="false">
-          <path d="M0 6 9 6 9 8.6 4 12.9 9 12.9 9 15.5 0 15.5 0 12.9 5 8.6 0 8.6zM8.5 2.2 13.5 2.2 13.5 3.9 10.9 5.5 13.5 5.5 13.5 7.2 8.5 7.2 8.5 5.5 11.1 3.9 8.5 3.9zM13 0 16 0 16 1.1 14.5 1.9 16 1.9 16 3 13 3 13 1.9 14.5 1.1 13 1.1z" />
+          <path d="M0 6 9 6 9 8.6 4 12.9 9 12.9 9 15.5 0 15.5 0 12.9 5 8.6 0 8.6z" />
+          <path d="M8.5 2.2 13.5 2.2 13.5 3.9 10.9 5.5 13.5 5.5 13.5 7.2 8.5 7.2 8.5 5.5 11.1 3.9 8.5 3.9z" />
+          <path d="M13 0 16 0 16 1.1 14.5 1.9 16 1.9 16 3 13 3 13 1.9 14.5 1.1 13 1.1z" />
         </svg>
       ) : null}
     </span>

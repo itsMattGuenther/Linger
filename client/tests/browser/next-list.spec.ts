@@ -92,8 +92,21 @@ test("somebody idle shows 💤 in their color, and says idle in words (#259)", a
   const callie = rows(page, "People").filter({ hasText: "Callie" });
   const marker = callie.locator('[data-kit="Marker"]');
   await expect(marker).toHaveAttribute("data-state", "idle");
-  await expect(marker.locator("svg path")).toHaveCount(1);
+  await expect(marker.locator("svg path")).toHaveCount(3);
   await expect(callie).toContainText("idle");
+  // Her row has a second line, and the big Z sits level with her name, not
+  // down between the two lines where the dots are centered.
+  const level = await callie.evaluate((row) => {
+    const title = row.querySelector(".k-row-title");
+    const bigZ = row.querySelector('[data-kit="Marker"] svg path')?.getBoundingClientRect();
+    if (!title || !bigZ) return null;
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const name = range.getBoundingClientRect();
+    return Math.abs(bigZ.top + bigZ.height / 2 - (name.top + name.height / 2));
+  });
+  expect(level).not.toBeNull();
+  expect(level ?? Infinity).toBeLessThanOrEqual(1);
 });
 
 test("with no DMs yet, the heading and its New message button are still there", async ({ page }) => {

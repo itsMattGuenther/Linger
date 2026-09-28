@@ -48,8 +48,11 @@
   transform: scale(1.18);
 }
 
+/* The big Z, not the whole 💤, sits where a dot's middle would: the two
+   small letters rise above it, as they do in the emoji. 30% of the marker is
+   how far the big Z's middle sits below the glyph's, once scaled. */
 .k-marker[data-state="idle"] svg {
-  transform: scale(1.75);
+  transform: translateY(-30%) scale(1.75);
 }
 
 .k-marker[data-typing="yes"] {
