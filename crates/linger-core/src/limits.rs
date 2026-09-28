@@ -52,6 +52,9 @@ pub const LINK_PREVIEW_RETRY_MS: i64 = 60 * 60 * 1000;
 /// Caps on what a preview fetch will pull down (the SSRF guard's other half).
 pub const MAX_LINK_PAGE_BYTES: u64 = 256 * 1024;
 pub const MAX_LINK_ICON_BYTES: u64 = 32 * 1024;
+/// A YouTube oEmbed answer (#300) is a few hundred bytes of JSON; anything
+/// much bigger isn't one.
+pub const MAX_LINK_OEMBED_BYTES: u64 = 16 * 1024;
 pub const LINK_FETCH_TIMEOUT_MS: u64 = 5_000;
 /// Redirects are followed by hand so every hop is checked again.
 pub const MAX_LINK_REDIRECTS: usize = 3;
