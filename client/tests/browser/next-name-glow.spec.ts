@@ -203,14 +203,18 @@ async function lightOf(page: Page, name: Locator, places: Record<string, Rect> =
   const n = w * h;
   const scale = w / clip.width;
   const [left, top, right, bottom] = [box.x, box.y, box.x + box.width, box.y + box.height];
-  // Letters are drawn only inside the name's box (it cuts them), in white on
-  // the box's black. Any trace of one counts, so what's read as light starts
+  // Letters are drawn inside the name's box (it cuts them), in white on the
+  // box's black. Any trace of one counts, so what's read as light starts
   // past a letter's softened edge.
   const ink: boolean[] = [];
   for (let i = 0; i < n; i += 1) {
     const [cx, cy] = [clip.x + ((i % w) + 0.5) / scale, clip.y + (Math.floor(i / w) + 0.5) / scale];
     const inBox = cx >= left && cx < right && cy >= top && cy < bottom;
-    ink.push(inBox && (mask.data[i * 4] ?? 0) >= 16);
+    // A letter can lean a pixel past a name with no room at its end (one
+    // in a sentence): there, what's white in the letters' shot and not in
+    // what's behind counts too.
+    const past = (mask.data[i * 4] ?? 0) - (behind.data[i * 4] ?? 0) >= 16 && (mask.data[i * 4 + 2] ?? 0) - (behind.data[i * 4 + 2] ?? 0) >= 16;
+    ink.push(inBox ? (mask.data[i * 4] ?? 0) >= 16 : past);
   }
   const away = distances(ink, w, h);
   const bands = Object.fromEntries(SIDES.map((side) => [side, { inside: { sum: 0, count: 0 }, outside: { sum: 0, count: 0 }, far: { sum: 0, count: 0 } }])) as Record<
@@ -672,12 +676,17 @@ for (const width of [420, 360]) {
       const list = await page.locator(".nx-strip-people").boundingBox();
       const whole = await strip(page).boundingBox();
       if (!list || !whole) throw new Error("nothing to measure");
-      const past = { x: list.x + list.width, y: whole.y, width: whole.x + whole.width - (list.x + list.width), height: whole.height };
+      // From the first whole pixel past its end (the edge itself can fall
+      // inside a pixel, which the cut chip then partly covers).
+      const end = Math.ceil(list.x + list.width) + 1;
+      const past = { x: end, y: whole.y, width: whole.x + whole.width - end, height: whole.height };
       const shown = await shoot(page, past);
       const gone = await page.addStyleTag({ content: ".nx-strip-people > li { visibility: hidden !important; }" });
       const hidden = await shoot(page, past);
       await gone.evaluate((node: Element) => node.remove());
-      expect(Buffer.from(shown.data).equals(Buffer.from(hidden.data)), "a chip is painted past the strip's list of people").toBe(true);
+      const differ: number[] = [];
+      for (let i = 0; i < shown.w * shown.h; i += 1) if ([0, 1, 2].some((c) => shown.data[i * 4 + c] !== hidden.data[i * 4 + c])) differ.push(i % shown.w);
+      expect(differ.length, `a chip is painted past the strip's list of people, in ${differ.length} pixels, at x ${[...new Set(differ)].slice(0, 12).join(" ")} (device pixels from ${end})`).toBe(0);
       await expect(strip(page).getByRole("button", { name: /Join|Start talking/ })).toBeInViewport({ ratio: 1 });
 
       // The sheet, for a person to look at: the strip, and the lines at the foot.
