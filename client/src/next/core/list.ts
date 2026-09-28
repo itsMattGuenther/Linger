@@ -25,12 +25,12 @@ export interface ListModel {
   people: PeopleGroups;
 }
 
-export interface MeCard {
-  user: User;
-  state: PresenceState;
-  /** Where you are, said plainly: "in #general", "around". */
-  where: string;
-}
+/**
+ * You, as a friend's list shows you: the same note ("in #general",
+ * "around") and second line as anybody's row. The list draws it as its top
+ * card, never among People, and your own card is opened from it (#271).
+ */
+export type MeCard = PersonRow;
 
 export interface RoomRow {
   id: RoomId;
@@ -123,10 +123,6 @@ export function listModel(state: GatewayState, now: number): ListModel {
   const people: PeopleGroups = { here: [], away: [], offline: [] };
   let me: MeCard | null = null;
   for (const entry of roster) {
-    if (entry.isMe) {
-      me = { user: entry.user, state: entry.state, where: noteFor(entry, now) };
-      continue;
-    }
     const row: PersonRow = {
       user: entry.user,
       state: entry.state,
@@ -134,7 +130,8 @@ export function listModel(state: GatewayState, now: number): ListModel {
       line: entry.awayMessage ?? entry.user.status?.line ?? null,
       inVoice: entry.inVoice,
     };
-    if (entry.state === "away") people.away.push(row);
+    if (entry.isMe) me = row;
+    else if (entry.state === "away") people.away.push(row);
     else if (entry.state === "offline") people.offline.push(row);
     else people.here.push(row);
   }
@@ -166,10 +163,12 @@ function noteFor(entry: RosterEntry, now: number): string {
 /**
  * One person as their row in the list shows them, for their card opened from
  * anywhere else (a name in a conversation, PPL-6): the same note, the same
- * words. Null for you, or for somebody this server doesn't list.
+ * words. You too, as the top card has you, so your own name opens your card
+ * as friends see it (#271). Null for somebody this server doesn't list.
  */
 export function personRow(state: GatewayState, userId: string, now: number): PersonRow | null {
-  const { people } = listModel(state, now);
+  const { me, people } = listModel(state, now);
+  if (me?.user.id === userId) return me;
   return [...people.here, ...people.away, ...people.offline].find((row) => row.user.id === userId) ?? null;
 }
 

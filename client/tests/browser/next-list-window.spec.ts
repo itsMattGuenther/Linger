@@ -199,6 +199,18 @@ test("the gear and Ctrl+, open Settings", async ({ page }) => {
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_settings"))).toHaveLength(2);
 });
 
+test("your own card's Edit profile asks the shell for Settings, on Profile (#271)", async ({ page }) => {
+  await open(page, "?one");
+  await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" }).click();
+  const card = page.getByRole("dialog", { name: "Matt" });
+  await expect(card).toContainText("This is how friends see you");
+  await card.getByRole("button", { name: "Edit profile" }).click();
+  await expect(card).toHaveCount(0);
+  await expect
+    .poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_settings")))
+    .toEqual([`next_open_settings:${JSON.stringify({ section: "profile" })}`]);
+});
+
 test("Search and Media open from the foot, and Ctrl+K opens Search", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Media" }).click();

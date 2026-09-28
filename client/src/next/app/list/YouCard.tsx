@@ -4,6 +4,7 @@ import { lineProblem } from "../../core/you";
 import { Button, Icon, Marker, MARKER_WORDS, markerStateOf, Name, TextField } from "../../kit";
 import { markerFor } from "../markers";
 import { AwayEditor } from "./AwayEditor";
+import { PersonCard } from "./PersonCard";
 import "./YouCard.css";
 
 /** What the list's top card can change, each answering with a problem in words, or null. */
@@ -19,8 +20,11 @@ export interface YouActions {
  * You, at the top of the list (docs/design/buddy-list.md): your name in your
  * own style, where you are, your status line (click to change it), and Away,
  * which opens the away-message editor, or I'm back when you are away.
+ *
+ * Your name opens your own card, the one friends see (#271), with Edit
+ * profile (`onEditProfile`, Settings → Profile) in place of Message and Knock.
  */
-export function YouCard({ me, actions }: { me: MeCard; actions?: YouActions }) {
+export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: YouActions; onEditProfile?: () => void }) {
   const status = me.user.status;
   const awayMessage = status?.away_message ?? null;
   const away = awayMessage !== null && awayMessage !== "";
@@ -31,6 +35,14 @@ export function YouCard({ me, actions }: { me: MeCard; actions?: YouActions }) {
   const [awayOpen, setAwayOpen] = useState<{ top: number; bottom: number } | null>(null);
   const lineButton = useRef<HTMLButtonElement | null>(null);
   const awayButton = useRef<HTMLDivElement | null>(null);
+  // Your own card, and where your name was when it opened.
+  const [card, setCard] = useState<{ top: number; bottom: number } | null>(null);
+  const nameButton = useRef<HTMLButtonElement | null>(null);
+  const closeCard = () => {
+    setCard(null);
+    // Focus goes back to your name, as it does to a person's row.
+    nameButton.current?.focus();
+  };
 
   const startEditing = () => {
     setDraft(status?.line ?? "");
@@ -61,10 +73,26 @@ export function YouCard({ me, actions }: { me: MeCard; actions?: YouActions }) {
     <section className="nx-you" aria-label="You">
       <div className="nx-you-top">
         <div className="nx-you-who">
-          <Name person={me.user} size="display" />
+          {onEditProfile ? (
+            <button
+              ref={nameButton}
+              type="button"
+              className="nx-you-name"
+              aria-haspopup="dialog"
+              aria-expanded={card !== null}
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setCard({ top: box.top, bottom: box.bottom });
+              }}
+            >
+              <Name person={me.user} size="display" />
+            </button>
+          ) : (
+            <Name person={me.user} size="display" />
+          )}
           <span className="nx-you-where">
             <Marker {...markerFor(me.user, me.state)} size="sm" label={MARKER_WORDS[markerStateOf(me.state)]} />
-            <span className="nx-you-text">{me.where}</span>
+            <span className="nx-you-text">{me.note}</span>
           </span>
         </div>
         {actions ? (
@@ -145,6 +173,20 @@ export function YouCard({ me, actions }: { me: MeCard; actions?: YouActions }) {
             if (refused === null) setAwayOpen(null);
             return refused;
           }}
+        />
+      ) : null}
+
+      {card && onEditProfile ? (
+        <PersonCard
+          user={me.user}
+          state={me.state}
+          note={me.note}
+          anchor={card}
+          onEditProfile={() => {
+            closeCard();
+            onEditProfile();
+          }}
+          onClose={closeCard}
         />
       ) : null}
     </section>

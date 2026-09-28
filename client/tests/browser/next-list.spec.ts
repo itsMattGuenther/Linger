@@ -304,6 +304,119 @@ test.describe("a person's card", () => {
   });
 });
 
+// Your own name opens your card, the one friends see (#271): the real
+// person card, saying whose view it is, with Edit profile in place of
+// Message and Knock.
+test.describe("your own card", () => {
+  const yourName = (page: Page) => page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" });
+
+  test("your name opens your card as friends see it, and focus goes in and comes back", async ({ page }) => {
+    const name = yourName(page);
+    await expect(name).toHaveAttribute("aria-haspopup", "dialog");
+    await name.focus();
+    await page.keyboard.press("Enter");
+    const card = page.getByRole("dialog", { name: "Matt" });
+    await expect(card).toBeVisible();
+    await expect(name).toHaveAttribute("aria-expanded", "true");
+    await expect(card.locator(".nx-person-yours")).toHaveText("This is how friends see you");
+    // What friends see: where you are, your status, your fields.
+    await expect(card).toContainText("in #general");
+    await expect(card).toContainText("fixing the porch light (the real one)");
+    await expect(card).toContainText("Working on");
+    await expect(card).toContainText("a design for this app");
+    // Edit profile, and nothing that makes no sense on yourself.
+    await expect(card.getByRole("button", { name: "Edit profile" })).toBeFocused();
+    await expect(card.getByRole("button", { name: "Message" })).toHaveCount(0);
+    await expect(card.getByRole("button", { name: /Knock/ })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(name).toBeFocused();
+    await expect(name).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("Edit profile opens Settings on Profile and closes the card", async ({ page }) => {
+    await yourName(page).click();
+    await page.getByRole("dialog", { name: "Matt" }).getByRole("button", { name: "Edit profile" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "settings:profile");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(yourName(page)).toBeFocused();
+  });
+
+  test("away, it shows your away message where your status was, as friends see it", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?away");
+    await yourName(page).click();
+    const card = page.getByRole("dialog", { name: "Matt" });
+    await expect(card).toContainText("away");
+    await expect(card.locator(".nx-person-status")).toHaveText("walking the dog 🐕");
+    await expect(card.locator(".nx-person-status")).toHaveAttribute("data-away", "yes");
+    await expect(card).not.toContainText("fixing the porch light");
+  });
+
+  test("follows plain names, as everyone's card does", async ({ page }) => {
+    const painted = () =>
+      page
+        .getByRole("dialog", { name: "Matt" })
+        .locator("[data-kit='Name']")
+        .evaluate((node) => {
+          const style = getComputedStyle(node);
+          return { color: style.color, weight: style.fontWeight };
+        });
+    const plain = await page.locator("body").evaluate((node) => getComputedStyle(node).color);
+    await yourName(page).click();
+    // Your own style: bold, in your color.
+    expect(await painted()).not.toEqual({ color: plain, weight: "500" });
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => document.documentElement.setAttribute("data-normalize", "true"));
+    await yourName(page).click();
+    expect(await painted()).toEqual({ color: plain, weight: "500" });
+  });
+
+  // The 340-wide list window, at 100% and 200%: the card fits inside it,
+  // centred, its quiet line on one line level with the close button, and
+  // nothing cut off. The card is saved for a person to look at.
+  for (const scale of [1, 2]) {
+    test.describe(`at ${scale * 100}%`, () => {
+      test.use({ deviceScaleFactor: scale });
+      test("your card fits the list window, with nothing cut off", async ({ page }) => {
+        await yourName(page).click();
+        const card = page.getByRole("dialog", { name: "Matt" });
+        await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
+        const box = await card.boundingBox();
+        const size = page.viewportSize();
+        expect(box && size).toBeTruthy();
+        if (!box || !size) return;
+        expect(box.x).toBeGreaterThanOrEqual(8);
+        expect(box.x + box.width).toBeLessThanOrEqual(size.width - 8);
+        expect(Math.abs(box.x - (size.width - box.x - box.width))).toBeLessThanOrEqual(1);
+        const laid = await card.evaluate((node) => {
+          const line = node.querySelector(".nx-person-yours");
+          const close = node.querySelector(".k-popover-close button");
+          const name = node.querySelector(".nx-person-head [data-kit='Name']");
+          if (!line || !close || !name) return null;
+          const words = document.createRange();
+          words.selectNodeContents(line);
+          const lines = new Set([...words.getClientRects()].map((one) => Math.round(one.top))).size;
+          const [at, button, head] = [line.getBoundingClientRect(), close.getBoundingClientRect(), name.getBoundingClientRect()];
+          const clipped = [...node.querySelectorAll<HTMLElement>(".nx-person *")].filter((one) => one.scrollWidth > one.clientWidth + 1 && getComputedStyle(one).textOverflow !== "ellipsis");
+          return {
+            lines,
+            // Its middle level with the close button's, and clear of it.
+            level: Math.abs(at.top + at.height / 2 - (button.top + button.height / 2)),
+            clear: words.getBoundingClientRect().right <= button.left,
+            // Your name starts under the close button, not beside it.
+            below: head.top >= button.bottom,
+            clipped: clipped.map((one) => one.className),
+          };
+        });
+        expect(laid).toEqual({ lines: 1, level: expect.any(Number), clear: true, below: true, clipped: [] });
+        expect(laid?.level).toBeLessThanOrEqual(1);
+        await page.mouse.move(0, 0);
+        await card.screenshot({ path: `test-results/your-card/list-${test.info().project.name}-${scale * 100}.png`, animations: "disabled" });
+      });
+    });
+  }
+});
+
 test.describe("a person's row", () => {
   test("shows Message and Knock on hover and focus; nobody offline can be knocked", async ({ page }) => {
     const sam = rows(page, "Away").first();

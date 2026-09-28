@@ -360,7 +360,7 @@ Enter to open the message actions; Escape closes the menu and returns focus.
 - **Delete**: asks once, then it's gone.
 
 Click anybody's name in a conversation to open their card, with **Message**
-and **Knock**.
+and **Knock**. Your own name opens your card, as friends see it.
 
 The **smile** on the right of the box opens a small set of ordinary emoji to
 drop into what you are typing. Hover it for **Emoji**. There are no custom emoji.
@@ -553,6 +553,11 @@ Click your status at the top of the list to change the line in your own words.
 **Settings → Profile → Your Status** has the rest: three optional fields
 (*reading*, *listening to*, *working on*) and one image. Other people see a
 change only when you save it.
+
+To see what friends see, click your own name, at the top of the list or on one
+of your messages. It opens your card exactly as it opens for them: where you
+are, your status or away message, and your fields. **Edit profile** on it
+opens Settings → Profile.
 
 There's also an **away message**: **Away** at the top of the list. Pick a
 recent one or write your own; setting one is what makes you away, and it shows

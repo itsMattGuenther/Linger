@@ -342,6 +342,8 @@ A user's **status** is a small card, not a bio field:
 
 The list previews the status line under each person. The full status appears in
 the person card opened from their name; opening it does not rearrange the list.
+Your own name opens your own card, exactly as friends see it, with Edit profile
+where Message and Knock would be (#271).
 
 ### 4.7 Text presentation
 

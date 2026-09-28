@@ -5,13 +5,27 @@
   gap: var(--space-2-5);
 }
 
-/* Only the head shares a row with the close button, so only it leaves room. */
+/* Only the first line shares a row with the close button, so only it leaves
+   room: the head, or on your own card the line above it. */
+.nx-person > :first-child {
+  padding-right: var(--space-6);
+}
+
+/* Your own card says whose view it is (#271): one quiet line, the card's
+   faintest words, so your name under it still leads. */
+.nx-person-yours {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-muted);
+}
+
 .nx-person-head {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  padding-right: var(--space-6);
 }
 
 .nx-person-where {

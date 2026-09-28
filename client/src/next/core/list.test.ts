@@ -10,7 +10,7 @@ vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { apply, serverState } = await import("../../lib/gateway");
-const { listModel, splitRooms } = await import("./list");
+const { listModel, personRow, splitRooms } = await import("./list");
 type RoomRow = import("./list").RoomRow;
 type GatewayState = import("../../lib/gateway").GatewayState;
 
@@ -158,9 +158,29 @@ describe("the buddy list for one server", () => {
   it("puts you in your own card, not among the people", () => {
     const model = listModel(evening(), NOW);
     expect(model.me?.user.id).toBe("u-matt");
-    expect(model.me?.where).toBe("in #general");
+    expect(model.me?.note).toBe("in #general");
     const everyone = [...model.people.here, ...model.people.away, ...model.people.offline];
     expect(everyone.map((row) => row.user.id)).not.toContain("u-matt");
+  });
+
+  it("gives your own card the row a friend's list has for you, and still keeps you out of People (#271)", () => {
+    // What a friend's list says about you: their `me` is somebody else, you are one of their people.
+    const theirs = listModel({ ...evening(), me: eli }, NOW).people.here.find((row) => row.user.id === "u-matt");
+    expect(theirs?.note).toBe("in #general");
+    expect(personRow(evening(), "u-matt", NOW)).toEqual(theirs);
+    expect(personRow(evening(), "u-matt", NOW)).toEqual(listModel(evening(), NOW).me);
+
+    // Away with a message: the same note and words friends see.
+    const away = {
+      ...evening(),
+      presence: [presence("u-matt", "away", null, "walking the dog"), ...evening().presence.filter((entry) => entry.user_id !== "u-matt")],
+    };
+    expect(personRow(away, "u-matt", NOW)).toMatchObject({ state: "away", note: "away", line: "walking the dog" });
+    const { people } = listModel(away, NOW);
+    expect([...people.here, ...people.away, ...people.offline].map((row) => row.user.id)).not.toContain("u-matt");
+
+    // Somebody the server doesn't list has no card.
+    expect(personRow(evening(), "u-nobody", NOW)).toBeNull();
   });
 
   it("groups everyone else into here, away and offline, with where they are as a note", () => {

@@ -135,7 +135,7 @@ From top to bottom, for each server:
 
 1. **You:** your styled name, where you are, your status (click to edit), and an
    **Away** button. It opens an AIM-style away-message editor with saved
-   presets. There is no picture.
+   presets. There is no picture. Click your name to see your own card (below).
 2. **Rooms,** right under you, because they're where the activity shows:
    - the room's name, bold when something new arrives (weight only, no number);
    - the dots of who's in it;
@@ -171,6 +171,13 @@ The card has two clear buttons: **Message** and **Knock**. A knock makes their
 row wiggle, and the button says "knocked" for three seconds. Offline people
 can't be knocked. Hovering a row still shows the small Knock and Message
 buttons, and a double-click still goes straight to a DM, the old AIM habit.
+
+**Your own name opens your own card** (#271), at the top of the list and on
+your messages in a conversation. It is the same card friends see, not a
+look-alike, so it can't drift from what they see: your presence and where you
+are, your status or away message, and your fields, following plain names like
+everyone's. A quiet line at the top says "This is how friends see you", and
+**Edit profile** (Settings → Profile) takes the place of Message and Knock.
 
 ![The new-message picker](buddy-list/buddy-list-12-new-dm.webp)
 

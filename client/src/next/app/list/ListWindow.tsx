@@ -681,6 +681,7 @@ function Servers({
         servers={listings}
         voice={voice}
         you={you}
+        onEditProfile={() => shell.settings("profile")}
         everywhere={everywhere}
         onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
         onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
