@@ -87,6 +87,12 @@ pub trait Sink: Send + Sync + 'static {
     /// `None` (#249). Everybody's volume stays as it was. The stand-ins have
     /// no device and ignore it.
     fn choose(&self, _name: Option<&str>) {}
+
+    /// Play one of Linger's own sounds over the voices (#250): mono at
+    /// [`SAMPLE_RATE`]. True when it was played; a sink with no device can't.
+    fn cue(&self, _samples: &[i16]) -> bool {
+        false
+    }
 }
 
 /// The two ends, together. What [`crate::voice::Engine::join`] takes: a

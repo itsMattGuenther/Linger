@@ -21,6 +21,7 @@ const COMMANDS: &[&str] = &[
     "voice_choose_devices",
     "voice_forwarding",
     "voice_devices",
+    "sound_play",
     "show_notification",
     "app_version",
     "update_check",

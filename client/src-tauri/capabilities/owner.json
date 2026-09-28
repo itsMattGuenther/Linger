@@ -22,6 +22,7 @@
     "allow-voice-choose-devices",
     "allow-voice-forwarding",
     "allow-voice-devices",
+    "allow-sound-play",
     "allow-show-notification",
     "allow-app-version",
     "allow-update-check",

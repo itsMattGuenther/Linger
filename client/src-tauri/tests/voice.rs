@@ -259,6 +259,43 @@ async fn devices_chosen_in_a_call_reach_the_call() {
     assert_eq!(mic.0.lock().unwrap().len(), 2, "a left call was changed");
 }
 
+/// A sink that remembers the sounds it was handed (#250).
+#[derive(Default)]
+struct Cued(Mutex<Vec<Vec<i16>>>);
+
+#[async_trait]
+impl Sink for Cued {
+    async fn play(&self, _peer: &str, _samples: &[i16]) {}
+
+    fn cue(&self, samples: &[i16]) -> bool {
+        self.0.lock().unwrap().push(samples.to_vec());
+        true
+    }
+}
+
+/// In a call, Linger's own sounds go into the call's own speakers (#250).
+/// Outside one there is nowhere here to put them, and the engine says so.
+#[tokio::test]
+async fn a_sound_in_a_call_goes_into_the_calls_speakers() {
+    let (engine, _rx, _) = engine("a").await;
+    assert!(!engine.cue(&[1, 2, 3]).await, "played with no call");
+    let speakers = Arc::new(Cued::default());
+    engine
+        .join(
+            RoomId::new(),
+            Devices {
+                source: Arc::new(Silence),
+                sink: Arc::clone(&speakers) as Arc<dyn Sink>,
+            },
+            vec![],
+        )
+        .await;
+    assert!(engine.cue(&[1, 2, 3]).await);
+    assert_eq!(*speakers.0.lock().unwrap(), vec![vec![1, 2, 3]]);
+    engine.leave().await;
+    assert!(!engine.cue(&[4]).await, "played into a call that ended");
+}
+
 /// Settings' "Voice through the server" switched during a call tells the
 /// server at once, with the join a mute sends (#249). Switching it to what it
 /// already is, or outside a call, sends nothing.

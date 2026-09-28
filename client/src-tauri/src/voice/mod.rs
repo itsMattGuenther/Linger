@@ -273,6 +273,19 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.push_to_talk_closed.load(Ordering::Relaxed)
     }
 
+    /// One of Linger's own sounds, into the call's own speakers, over the
+    /// voices (#250). Answers whether there was a call to play it in.
+    pub async fn cue(&self, samples: &[i16]) -> bool {
+        let sink = self
+            .inner
+            .lock()
+            .await
+            .devices
+            .as_ref()
+            .map(|d| Arc::clone(&d.sink));
+        sink.is_some_and(|sink| sink.cue(samples))
+    }
+
     /// How loud one peer plays for you. Nothing crosses the wire.
     pub async fn set_volume(&self, peer: &str, volume: f32) {
         let sink = self

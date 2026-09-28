@@ -432,8 +432,10 @@ middle of a call: turned off, your microphone opens, unless you'd muted
 yourself. It's off by default, because a room you leave running is the point,
 and a key you have to hold is the opposite of that.
 
-Which microphone and speakers to use is also in **Settings → Sound & Voice**. A
-change applies at once, even in the middle of a call: you carry on talking
+Which microphone and speakers to use is also in **Settings → Sound & Voice**.
+Linger's own sounds (chimes, knocks, the voice and mute sounds) come out of the
+speakers you pick too, in a call and out of one. A change applies at once,
+even in the middle of a call: you carry on talking
 through the new device without leaving. If a device you picked isn't plugged
 in, or won't open, the system default is used and the picker says so.
 

@@ -4,6 +4,17 @@ import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
 
 (() => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // In the app, Linger's sounds go to the shell, which plays them on the
+  // chosen speakers (#250). This probe measures the webview's own audio, the
+  // fallback when the shell can't. Its bundled Tauri API talks to this
+  // stand-in bridge rather than the app's (build-audio-probe.mjs), and the
+  // bridge says the shell couldn't play, so every cue goes through Web Audio.
+  window.__LINGER_AUDIO_INTERNALS__ = {
+    invoke: async (cmd) => {
+      if (cmd === "sound_play") return false;
+      throw new Error(`the audio probe has no ${cmd}`);
+    },
+  };
   const NativeContext = window.AudioContext;
   let context;
   let analyser;
