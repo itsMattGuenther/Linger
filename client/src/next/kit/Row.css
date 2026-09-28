@@ -73,14 +73,23 @@
   opacity: 0.5;
 }
 
-.k-row-main:hover:not(:disabled),
-.k-row[data-selected="yes"] .k-row-main {
+/* An option lights only when it's the highlighted one, which the pointer
+   moves as it goes over: a plain hover would light a second row while the
+   keyboard is on another. */
+.k-row:not([role="option"]) .k-row-main:hover:not(:disabled),
+.k-row[data-selected="yes"] .k-row-main,
+.k-row[data-active="yes"] .k-row-main {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
 
-.k-row[data-selected="yes"] .k-row-main {
+.k-row[data-selected="yes"] .k-row-main,
+.k-row[data-active="yes"] .k-row-main {
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+.k-row[role="option"] .k-row-main {
+  cursor: pointer;
 }
 
 .k-row-text {
@@ -200,10 +209,11 @@
   display: none;
 }
 
-/* High contrast: a selected row's wash is repainted away, so it's outlined
-   in the system's highlight instead. */
+/* High contrast: a selected row's wash (or a highlighted option's) is
+   repainted away, so it's outlined in the system's highlight instead. */
 @media (forced-colors: active) {
-  .k-row[data-selected="yes"] .k-row-main {
+  .k-row[data-selected="yes"] .k-row-main,
+  .k-row[data-active="yes"] .k-row-main {
     outline: var(--focus-width) solid Highlight;
     outline-offset: calc(var(--focus-width) * -1);
   }

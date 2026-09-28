@@ -531,6 +531,26 @@ export function mentionHandles(source: string): string[] {
 }
 
 /**
+ * Whether the `@` at `at` begins a mention: whether a handle typed there, in
+ * place of the word after it, would be drawn as one and notify. The
+ * composer's people list (#267) opens only where this says yes, so it never
+ * offers to mention somebody inside an address (`you@example.com`), a code
+ * span or an escape.
+ *
+ * It asks the parser itself, with a stand-in handle, rather than restating
+ * `matchMention`'s rules, so the two cannot drift apart.
+ */
+export function mentionCanStart(source: string, at: number): boolean {
+  if (source[at] !== "@") return false;
+  let end = at + 1;
+  while (end < source.length && isWordChar(source[end])) end += 1;
+  // A stand-in the body doesn't already mention.
+  let probe = "zz0";
+  for (let n = 1; source.includes(probe); n += 1) probe = `zz${n}`;
+  return mentionHandles(`${source.slice(0, at)}@${probe}${source.slice(end)}`).includes(probe);
+}
+
+/**
  * Mirrors `linger-core::limits::MAX_LINKS_PER_MESSAGE`. A message with a dozen
  * URLs in it is a link dump, and a dozen one-line cards under it is a wall.
  */

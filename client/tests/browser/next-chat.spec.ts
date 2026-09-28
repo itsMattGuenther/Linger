@@ -24,7 +24,7 @@ function log(page: Page): Locator {
 }
 
 function box(page: Page): Locator {
-  return page.getByRole("textbox", { name: /^Message/ });
+  return page.getByRole("combobox", { name: /^Message/ });
 }
 
 /** The row holding a message, found by its words. */

@@ -39,6 +39,7 @@ import {
   micsHere,
 } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
+import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
 import { voiceStrip } from "../../core/chat/voice";
 import { isSearchKey, isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
@@ -66,6 +67,7 @@ const KNOCKED_MS = 3_000;
 const TYPING_CHECK_MS = 2_000;
 const NO_MESSAGES: readonly Message[] = [];
 const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
+const NO_MENTIONS: readonly MentionPerson[] = [];
 
 /**
  * The chat window: a viewer (docs/design/architecture.md, "Windows and their
@@ -487,6 +489,12 @@ function Conversations({ following }: { following: Following }) {
   const pending = useMemo(() => stream?.pending.map((one) => one.message) ?? NO_MESSAGES, [stream?.pending]);
   const people = useMemo(() => (state ? new Map(state.users.map((user) => [user.id, user])) : NO_PEOPLE), [state?.users]);
   const talking = useMemo(() => (state ? talkingNow(state) : new Set<string>()), [state]);
+  // Who an @ offers: only what it reads, so a message arriving doesn't
+  // redraw the box.
+  const mentionable = useMemo(
+    () => (state && room ? mentionableIn(state, room) : NO_MENTIONS),
+    [state?.users, state?.presence, state?.occupancy, state?.me, room],
+  );
   const previews = useLinkPreviews(active?.server ?? "");
 
   const onNearStart = useCallback(() => {
@@ -626,6 +634,7 @@ function Conversations({ following }: { following: Following }) {
       me: state.me,
       speaking: talking,
       typing: typingIn(state, room.id, typingNow),
+      mentionable,
       stream: {
         messages,
         pending,
