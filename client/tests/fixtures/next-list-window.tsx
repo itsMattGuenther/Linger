@@ -37,7 +37,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
-import { type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
+import { apply, type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
@@ -204,7 +204,15 @@ declare global {
 window.core = {
   frame: (server, frame) => {
     seq[server] = (seq[server] ?? 1) + 1;
-    deliver("gateway:frame", { server, frame: { ...frame, s: seq[server] } });
+    const numbered = { ...frame, s: seq[server] } as ServerFrame;
+    // The server's own state moves on too, as a real server's would, so a
+    // later `ready` carries it. In development React starts the list twice
+    // (StrictMode), and the second connection's `ready` could land after a
+    // test's first frame and undo it: a restyle that added a glow was lost
+    // that way (#339).
+    const state = states[server];
+    if (state) states[server] = apply(state, numbered);
+    deliver("gateway:frame", { server, frame: numbered });
   },
   status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
