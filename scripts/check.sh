@@ -26,6 +26,7 @@ git diff --exit-code client/src/generated
 
 echo "== client: typecheck + tests =="
 (cd client && pnpm check && pnpm test)
+node --test scripts/csp-assets.test.mjs
 
 echo "== desktop shell (outside the workspace, needs GUI deps) =="
 if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
