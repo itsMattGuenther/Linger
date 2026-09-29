@@ -24,10 +24,11 @@ default.
 
 ## How to run a task
 
-**0.4.3 release — ⏳ Matt, 2026-09-27.** Fixes and small things from the
-first weekend of real use (#221–#241); notes in `docs/releases/0.4.3.md`. The
-Buddy list client (M15, #198) has been the app since 0.4.0, and the previous
-client that stayed behind `LINGER_CLASSIC=1` was deleted after 0.4.3 (#306).
+**0.4.4 release — ⏳ Matt, 2026-09-28.** A day of real use (#246–#306):
+@ mentions by name, pasted pictures, lit DMs, status fields, lights off for
+idle, away and offline, and voice through the server only; notes in
+`docs/releases/0.4.4.md`. The Buddy list client (M15, #198) has been the app
+since 0.4.0, and the previous client was deleted (#306).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
