@@ -1446,6 +1446,9 @@ test.describe("reading far back", () => {
   });
 
   test("reading back down brings the rest back with no gap (CONV-15)", async ({ page }) => {
+    // Long by design: it scrolls through 900 messages half a screen at a
+    // time, about 20 seconds on CI of the usual 30 (#328).
+    test.slow();
     await readFarBack(page);
     const seen = new Set<string>();
     for (let step = 0; step < 400; step += 1) {
