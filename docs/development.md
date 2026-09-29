@@ -25,10 +25,14 @@ sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-p
 
 ## Checks
 
-**Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
-order CI runs it — rules lint, version check, the update script's test, fmt,
-clippy, workspace tests, bindings drift, frontend, and the desktop shell. Green there should mean green
-in CI. Separate checks need additional services or browser engines:
+**Before pushing, run `scripts/check.sh`.** It runs what CI runs for your
+branch's changes, sorted the way CI sorts them: a docs change runs the rules
+lint in under a second; a client change adds the typecheck, unit tests,
+Chromium browser tests and the build's CSP check; a server change adds fmt,
+clippy, the Rust tests and bindings drift. `--all` runs everything. Green there
+should mean green in CI. The [testing strategy](testing-strategy.md) has what
+runs where, and which kind of test a change needs. Separate checks need
+additional services or browser engines:
 
 - `scripts/minio-test.sh` tests S3 against a throwaway MinIO. The workspace
   tests skip S3 without that service. MinIO no longer publishes downloads, so
@@ -43,10 +47,10 @@ in CI. Separate checks need additional services or browser engines:
   `scripts/update-test.sh`, in `check.sh`, covers the rest against a stand-in
   `docker`. CI runs both, and shellcheck on all three.
 - In `client`, run `pnpm exec playwright install --with-deps chromium webkit`
-  once, then `pnpm test:browser` for the browser tests: layout at every
-  interface size, keyboard use, the list, chat, Settings, Search and Media
-  windows, voice controls, downloads and knocks, on fixture pages with the
-  desktop shell and the servers faked. They don't exercise Linux dictation
+  once (`check.sh` needs Chromium), then `pnpm test:browser` for the browser
+  tests: layout at every interface size, keyboard use, the list, chat,
+  Settings, Search and Media windows, voice controls, downloads and knocks, on
+  fixture pages with the desktop shell and the servers faked. They don't exercise Linux dictation
   drivers; see [Linux input checks](linux-input-checks.md) for the native
   comparison (`scripts/linux-input-check.sh`). Playwright is a
   development-only dependency; its browsers are not shipped in Linger. CI
@@ -54,15 +58,12 @@ in CI. Separate checks need additional services or browser engines:
   `LINGER_CHROMIUM_PATH=/usr/bin/chromium pnpm test:browser --project=chromium`.
   None of this replaces trying a packaged app on a real desktop.
 
-For a **documentation-only** change, run `scripts/lint-rules.sh` and
-`scripts/version-check.sh`. CI still runs those quick checks, but skips the
-Rust, S3, web, desktop, and relay jobs. `scripts/ci-scope.mjs` selects affected
-jobs from the full PR: frontend changes run browser and Linux/Windows package
-checks; server changes run Rust and real S3 tests; shell changes run its Rust
-tests and packages. Shared types, CI changes and unknown paths run everything.
+CI picks its jobs with the same sorting (`scripts/ci-scope.mjs`), from the
+whole PR rather than its last commit, so a docs-only follow-up to a code PR
+still tests the code. The
+[testing strategy](testing-strategy.md#what-a-change-sets-off) has the table.
 Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
-for seven days. Docs-only follow-up commits to a source PR still test its full
-scope; a green last commit must not conceal an untested earlier change.
+for seven days.
 
 There is no automated signed-in desktop check yet. The three-person
 walk-through that drove the previous client (`scripts/desktop-check.py`) was

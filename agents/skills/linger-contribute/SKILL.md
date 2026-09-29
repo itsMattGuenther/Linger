@@ -38,9 +38,10 @@ breaking any of them.
   a feature, `docs/...` for documentation.
 - Use the project's words (`SPEC.md` §1): a *room*, never a channel; a
   *server*; a *status*.
-- Write the test that fails without the fix. `AGENTS.md` lists the areas where
-  code that looks right is often wrong (reconnects, voice, SQLite); test those
-  harder.
+- Write the test that fails without the fix, at the lowest level that can
+  prove it (`docs/testing-strategy.md` says which). `AGENTS.md` lists the
+  areas where code that looks right is often wrong (reconnects, voice,
+  SQLite); test those harder.
 - Update the docs **in the same commit** as the behavior they describe: SPEC,
   ARCHITECTURE, PROTOCOL, the user guide, and the README when running,
   installing or what the product does changes.
@@ -48,14 +49,17 @@ breaking any of them.
 ## Checking it
 
 ```bash
-scripts/check.sh origin/main
+scripts/check.sh
 ```
 
-That runs what CI runs: the rules lint, the update script's test, formatting,
-clippy, the Rust and client tests, and the desktop shell when its system
-libraries are installed. The
-browser tests need Playwright (`cd client && pnpm exec playwright test`); the
-development guide (`docs/development.md`) says how to set them up. Report failures honestly;
+That runs what CI runs for what your branch changed since `origin/main`
+(pass another base, such as `upstream/main`, if your fork's `origin` isn't the
+project): the rules lint and your commits always; formatting, clippy and the
+Rust tests for server changes; the typecheck, unit tests and Chromium browser
+tests for client changes; the desktop shell when its system libraries are
+installed. `--all` runs everything. The Chromium tests need Playwright's
+browser once: `cd client && pnpm exec playwright install chromium`.
+`docs/testing-strategy.md` has what CI adds on top. Report failures honestly;
 never call a failing change done.
 
 ## No AI attribution: turn it off first
