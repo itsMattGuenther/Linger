@@ -132,7 +132,7 @@ no voice until you set it, or that `LINGER_TURN_SECRET` is not set, which is
 about the optional voice relay. Neither stops the server or text chat.
 
 From **your own computer**, check the address before opening the app:
-`curl -f https://linger.example.com/health` (replace the example name with
+`curl -f https://linger.example.com/api/v1/health` (replace the example name with
 yours). If it does not return a short JSON response, use
 [the connection checklist](#the-app-cannot-reach-the-server) first.
 
@@ -437,7 +437,7 @@ It prints a new password. Send it to them; they can change it in the app under
 ### The app cannot reach the server
 
 Check that both DNS records point to the server's *current* public IP, then
-try `curl -f https://linger.example.com/health` with your own name substituted.
+try `curl -f https://linger.example.com/api/v1/health` with your own name substituted.
 If that fails, check `docker compose ps` and `docker compose logs caddy`.
 Caddy needs inbound access for its certificate checks, and the app needs HTTPS
 on TCP 443. Allow TCP 80 and 443. On a VPS check the provider and machine
