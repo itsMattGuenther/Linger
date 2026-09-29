@@ -51,13 +51,22 @@ additional services or browser engines:
   once (`check.sh` needs Chromium), then `pnpm test:browser` for the browser
   tests: layout at every interface size, keyboard use, the list, chat,
   Settings, Search and Media windows, voice controls, downloads and knocks, on
-  fixture pages with the desktop shell and the servers faked. They don't exercise Linux dictation
-  drivers; see [Linux input checks](linux-input-checks.md) for the native
-  comparison (`scripts/linux-input-check.sh`). Playwright is a
-  development-only dependency; its browsers are not shipped in Linger. CI
-  tests Chromium and WebKit. To use an existing Chromium, run
+  fixture pages with the desktop shell and the servers faked. They don't
+  exercise Linux dictation drivers; see
+  [Linux input checks](linux-input-checks.md) for the native comparison
+  (`scripts/linux-input-check.sh`). Playwright is a development-only
+  dependency; its browsers are not shipped in Linger. CI tests Chromium and
+  WebKit. To use an existing Chromium, run
   `LINGER_CHROMIUM_PATH=/usr/bin/chromium pnpm test:browser --project=chromium`.
   None of this replaces trying a packaged app on a real desktop.
+- On Linux, Playwright's WebKit won't start outside Debian and Ubuntu (it
+  needs their libraries), so `scripts/webkit.sh` runs it in Playwright's own
+  Ubuntu image and the tests against it; `check.sh` does this whenever Docker
+  works. On macOS and Windows it runs natively. It
+  needs Docker Engine and permission to use it: on most Linux systems,
+  `sudo usermod -aG docker $USER`, then sign out and back in (membership of
+  that group amounts to root on the machine; rootless Docker works too). The
+  image is about 3.5 GB, downloaded on first use.
 
 CI picks its jobs with the same sorting (`scripts/ci-scope.mjs`), from the
 whole PR rather than its last commit, so a docs-only follow-up to a code PR

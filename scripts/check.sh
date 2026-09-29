@@ -12,6 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 all=0
+webkit_here=0
 if [ "${1:-}" = "--all" ]; then all=1; shift; fi
 base="${1:-}"
 if [ -z "$base" ]; then
@@ -80,6 +81,16 @@ if on web; then
     echo "== client: the ${#new_tests[@]} browser test(s) this branch added or edited, ten times =="
     (cd client && pnpm exec playwright test --project=chromium --retries=0 --repeat-each=10 --workers=4 --reporter=dot "${new_tests[@]}")
   fi
+  # WebKit, in Playwright's Ubuntu image, on Linux where Docker works (#325).
+  if [ "$(uname -s)" = Linux ] && docker info >/dev/null 2>&1; then
+    webkit_here=1
+    echo "== client: browser tests (WebKit, in a container) =="
+    scripts/webkit.sh --forbid-only --reporter=dot
+    if [ "${#new_tests[@]}" -gt 0 ]; then
+      echo "== client: the ${#new_tests[@]} added or edited, ten times in WebKit =="
+      scripts/webkit.sh --retries=0 --repeat-each=10 --workers=4 --reporter=dot "${new_tests[@]}"
+    fi
+  fi
   echo "== client: the build embeds nothing the shipped CSP refuses =="
   (cd client && pnpm exec vite build --logLevel warn && node ../scripts/csp-assets.mjs dist)
 fi
@@ -97,7 +108,9 @@ fi
 extra=()
 on s3 && extra+=("the S3 storage tests (scripts/minio-test.sh runs them here)")
 on coturn && extra+=("the relay and a real server update, in Docker (docs/development.md)")
-on web && extra+=("the WebKit browser tests, and this branch's new or edited ones ten times")
+if on web && [ "$webkit_here" = 0 ]; then
+  extra+=("the WebKit browser tests, and this branch's new or edited ones ten times (scripts/webkit.sh runs them here, with Docker)")
+fi
 on packages && extra+=("the desktop packages on Linux and Windows")
 if [ "${#extra[@]}" -gt 0 ]; then
   echo "== CI also runs =="
