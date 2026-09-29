@@ -78,19 +78,24 @@ async function joinGeneral(page: Page): Promise<Locator> {
 
 const inChip = (bar: Locator, who: string) => bar.getByRole("list", { name: "Who's in voice" }).getByRole("listitem").filter({ hasText: who }).locator("[data-kit='Name']");
 
+/** Wait until something is where it was a moment ago. */
+async function still(target: Locator, every = 100) {
+  let last = "";
+  await expect
+    .poll(async () => {
+      const now = JSON.stringify(await target.boundingBox());
+      const same = now === last;
+      last = now;
+      return same;
+    }, { intervals: [every] })
+    .toBe(true);
+}
+
 /** Wait until a name glows in its own face and has stopped moving. */
 async function settled(page: Page, name: Locator) {
   await expect(name).toHaveAttribute("data-name-effect", "glow");
   await page.evaluate(() => document.fonts.ready);
-  let last = "";
-  await expect
-    .poll(async () => {
-      const now = JSON.stringify(await name.boundingBox());
-      const still = now === last;
-      last = now;
-      return still;
-    }, { intervals: [200] })
-    .toBe(true);
+  await still(name, 200);
   await page.mouse.move(0, 0);
 }
 
@@ -193,8 +198,26 @@ interface Rect {
  * The light a name gives off, around its letters and across the edges of its
  * box, and in any other `places` (in CSS pixels, near the name).
  */
+/**
+ * The light around a name. Bringing it into view can set the conversation
+ * moving as it keeps your place, and a page that moves between the pictures
+ * below reads as light: once in CI the glowing picture was a few pixels
+ * lower than the plain one, and the light "past the edge" was the shift
+ * (#331). So it waits for the name to stop, and measures again if the name
+ * moved while the pictures were taken.
+ */
 async function lightOf(page: Page, name: Locator, places: Record<string, Rect> = {}): Promise<Light> {
-  await name.scrollIntoViewIfNeeded();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await name.scrollIntoViewIfNeeded();
+    await still(name);
+    const light = await lightOnce(page, name, places);
+    if (light) return light;
+  }
+  throw new Error("the name kept moving while its light was measured");
+}
+
+/** One measurement, or null if the name moved while it was taken. */
+async function lightOnce(page: Page, name: Locator, places: Record<string, Rect>): Promise<Light | null> {
   const { box, em } = await name.evaluate((node: HTMLElement) => {
     const rect = node.getBoundingClientRect();
     return { box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, em: Number.parseFloat(getComputedStyle(node).fontSize) };
@@ -221,6 +244,11 @@ async function lightOf(page: Page, name: Locator, places: Record<string, Rect> =
   const mask = await shoot(page, clip);
   await name.evaluate((node: HTMLElement) => delete node.dataset.probe);
   await letters.evaluate((node: Element) => node.remove());
+  const moved = await name.evaluate((node: HTMLElement, was) => {
+    const rect = node.getBoundingClientRect();
+    return rect.x !== was.x || rect.y !== was.y || rect.width !== was.width || rect.height !== was.height;
+  }, box);
+  if (moved) return null;
 
   const { w, h } = painted;
   const n = w * h;
@@ -681,6 +709,7 @@ for (const width of [420, 360]) {
         });
         expect(cut, selector).toEqual({ over: true, ellipsis: "ellipsis", across: "clip", nowrap: "nowrap" });
         await line.scrollIntoViewIfNeeded();
+        await still(line);
         const box = await line.boundingBox();
         if (!box) throw new Error("nothing to measure");
         await line.evaluate((node: HTMLElement) => (node.dataset.probe = "letters"));
