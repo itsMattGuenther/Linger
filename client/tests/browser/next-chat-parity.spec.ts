@@ -1430,6 +1430,23 @@ test.describe("reading far back", () => {
     const asked = async (part: string) => (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?") && line.includes(part)).length;
     const newestPage = "?limit=100 as token-1";
     await readFarBack(page);
+    // Reading back scrolls to the top again and again, and its last scroll can
+    // still have a page of older history on its way. Held, that page kept the
+    // room loading, so the read forwards below never started (#347): so the
+    // room is quiet first, nothing on its way and nothing new asked for over
+    // two looks a quarter of a second apart.
+    let asks = -1;
+    await expect
+      .poll(
+        async () => {
+          const now = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?")).length;
+          const quiet = now === asks && (await page.evaluate(() => window.parity?.reading())) === 0;
+          asks = now;
+          return quiet;
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
     // From here every read waits for the test, which fixes the order two of them come back in.
     await page.evaluate(() => window.parity?.holdReads());
     const forwards = await asked("around=");
