@@ -60,8 +60,9 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
 - **Drafts** are kept per conversation, across closing a tab and restarts
   (decision 11). **Clicking a banner** opens its conversation at the message
   (decision 20).
-- **Dark only** for now (decision 2). **Message fading** and the comfortable
-  line width stay (decision 10). **Window sizes** stay as built (decision 19).
+- **Dark only** for now (decision 2). **Message fading** stays (decision 10);
+  the 80ch line width went in #334, and a message's words now run to its time
+  column. **Window sizes** stay as built (decision 19).
 - **Empty places** get one quiet sentence each (decision 17).
 - **Arrival cards** ("Callie came into #general") are on by default and quiet:
   they never take focus, and stay silent in quiet hours and on a Quiet server

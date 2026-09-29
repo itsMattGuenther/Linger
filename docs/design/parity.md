@@ -137,6 +137,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     SPEC §4.7) and the **80ch line limit**. Neither appears in the design. Keep
     or drop? *(CONV-6, CONV-7)*
     **Decided (2026-09-26):** keep both, as built.
+    **Changed (2026-09-29, #334):** the 80ch limit is dropped. On a wide window it left most of the row empty beside a long message; a message's words now run to its time column. Aging stays.
 11. **Drafts.** Today a half-typed line is dropped when you switch rooms, and
     files carry over (`Stream.tsx`). With tabs, each conversation has its own
     composer. Should drafts survive closing a tab, or a restart?
@@ -273,7 +274,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-4 | Grouping: consecutive messages from one person group, and a 10-minute gap breaks the group. | `rows.ts`, SPEC §4.7 | The name on its own line, once per run (**decision 9**, changed by #295) | U + F | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-5 | Styled sender names; message bodies in sans, with mono only for code. | `MarkdownBody.tsx`, `lib/names.ts` | Same | F + G | ✅ (next-chat-parity.spec.ts) |
 | CONV-6 | Message aging: body opacity 100% under an hour, 88% under a day, 78% after (name and time never fade). | `time.ts`, SPEC §4.7, §5.6 | **Decision 10** | U (exists) | ✅ kept as built (lib/time.test.ts, decision 10) |
-| CONV-7 | Bodies stop at 80ch on wide windows. | SPEC §5.6 | **Decision 10** | G | ✅ kept as built (`--measure`, decision 10); a long message on a 1600-wide window wraps at 80ch (next-chat.spec.ts) |
+| CONV-7 | Bodies stop at 80ch on wide windows. **Changed (#334):** bodies run to the time column, however wide the window. | SPEC §5.6 | **Decision 10** | G | ✅ changed in #334: a long message's words reach the time column at 780 and 1600 wide, at 100% and 200% (next-chat.spec.ts) |
 | CONV-8 | Markdown subset: bold, italic, strike, inline and fenced code, quotes, lists, links, escapes. No headings, tables, images or raw HTML. Anything ambiguous stays literal. The line breaks and indentation someone typed are drawn as typed (#289). | `lib/markdown.ts`, `stream.css` `.md-p` | Same | C (tests exist) + F | ✅ (lib/markdown.test.ts, next-chat-parity.spec.ts; line breaks since #289) |
 | CONV-9 | Replies: a short, clickable quote that jumps to the original. It belongs to the reply, not the message above (#116, #181). An unloaded original says so. | `Stream.tsx` `ReplyLine`, SPEC §4.7 | The quote above the reply's name (**decision 9**, #295) | F + G (spacing) | ✅ (rows.test.ts, next-chat.spec.ts) |
 | CONV-10 | Deleting a reply hides its quote too; the original and other replies are unchanged (#115). A deleted message stays as "deleted". | `Stream.tsx` | Same | F | ✅ (rows.test.ts, next-chat.spec.ts) |
