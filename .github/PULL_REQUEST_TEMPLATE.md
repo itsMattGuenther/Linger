@@ -9,6 +9,13 @@
      Verify closingIssuesReferences or the Development section; bare mentions
      do not create the required links. Omit only when there is no issue. -->
 
+## Tests
+
+<!-- What rule does this change, and which test proves it? For a bug fix: the
+     test that fails without the fix. Name the test, and say what still needs
+     a real computer to confirm. docs/testing-strategy.md says which kind of
+     test fits. -->
+
 ## Checklist
 
 - [ ] Every issue this PR proposes to resolve is formally linked and verified,
@@ -16,6 +23,8 @@
 - [ ] **No AI attribution anywhere** — commits, comments, metadata, or this PR.
       Every commit's author is me, under my own git identity.
 - [ ] `scripts/check.sh` passes locally
+- [ ] The rule this changes has a test that proves it, or the bug fix has a
+      test that fails without the fix
 - [ ] The task's acceptance criteria all pass
 - [ ] Docs updated in the same commit as the behavior they describe
 - [ ] Regenerated TS bindings committed, if any `linger-core` type changed
