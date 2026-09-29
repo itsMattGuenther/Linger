@@ -270,31 +270,53 @@ test.describe("built on the system", () => {
     });
   }
 
-  test("on a wide window a message's lines stop at 80 characters (CONV-7)", async ({ page }) => {
-    await page.setViewportSize({ width: 1600, height: 800 });
-    await open(page);
-    const words = "the porch light is on and the kettle is warm, come sit a while ".repeat(8).trim();
-    await page.evaluate((body) => window.chat?.arrive("r-general", "u-dave", body), words);
-    const text = message(page, "the porch light is on").locator(".nx-text");
-    await expect(text).toBeInViewport();
-    const measured = await text.evaluate((node) => {
-      const probe = document.createElement("span");
-      probe.textContent = "0".repeat(80);
-      probe.style.font = getComputedStyle(node).font;
-      probe.style.position = "absolute";
-      probe.style.whiteSpace = "pre";
-      document.body.append(probe);
-      const eighty = probe.getBoundingClientRect().width;
-      probe.remove();
-      const row = node.closest(".nx-msg")?.getBoundingClientRect().width ?? 0;
-      return { width: node.getBoundingClientRect().width, eighty, row, lines: Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)) };
-    });
-    // The row has room for far more, and the words wrap anyway, at 80ch.
-    expect(measured.row).toBeGreaterThan(measured.eighty + 100);
-    expect(measured.lines).toBeGreaterThan(1);
-    expect(measured.width).toBeLessThanOrEqual(measured.eighty + 0.5);
-    expect(measured.width).toBeGreaterThan(measured.eighty * 0.85);
-  });
+  // A message's words run to its time column, however wide the window: the
+  // 80-character limit left most of a wide row empty beside a long message
+  // (#334, CONV-7). At 780 wide the words already filled the line; they
+  // still do.
+  for (const scale of [1, 2])
+    for (const width of [780, 1600])
+      test(`at ${scale * 100}%, ${width} wide, a long message's words run to its time column (CONV-7, #334)`, async ({ browser }) => {
+        const page = await browser.newPage({ viewport: { width, height: 800 }, deviceScaleFactor: scale });
+        await open(page);
+        const words = "the porch light is on and the kettle is warm, come sit a while ".repeat(12).trim();
+        await page.evaluate((body) => window.chat?.arrive("r-general", "u-dave", body), words);
+        const row = message(page, "the porch light is on");
+        await expect(row.locator(".nx-text")).toBeInViewport();
+        const laid = await row.evaluate((node) => {
+          const text = node.querySelector(".nx-text");
+          const time = node.querySelector(".nx-msg-time");
+          if (!text || !time) throw new Error("no words or no time");
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+          const probe = document.createElement("span");
+          probe.textContent = "0".repeat(80);
+          probe.style.font = getComputedStyle(text).font;
+          probe.style.position = "absolute";
+          probe.style.whiteSpace = "pre";
+          document.body.append(probe);
+          const eighty = probe.getBoundingClientRect().width;
+          probe.remove();
+          const box = text.getBoundingClientRect();
+          return {
+            box: { left: box.left, right: box.right },
+            timeLeft: time.getBoundingClientRect().left,
+            gap: Number.parseFloat(getComputedStyle(node).columnGap),
+            widest: Math.max(...lines.map((line) => line.right)) - box.left,
+            tops: new Set(lines.map((line) => Math.round(line.top))).size,
+            eighty,
+          };
+        });
+        // The words' box ends where the time column's gap begins, not short of it...
+        expect(Math.abs(laid.timeLeft - laid.gap - laid.box.right)).toBeLessThan(1);
+        // ...and its lines use it: they wrap, and the widest comes within about
+        // a word of the edge.
+        expect(laid.tops).toBeGreaterThan(1);
+        expect(laid.widest).toBeGreaterThan(laid.box.right - laid.box.left - 80);
+        if (width === 1600) expect(laid.widest).toBeGreaterThan(laid.eighty + 100);
+        await page.close();
+      });
 
   test("rows sit edge to edge, groups have one gap, and a one-line continuation is 24px", async ({ page }) => {
     const rows = await page.locator(".nx-conv-row").evaluateAll((elements) =>

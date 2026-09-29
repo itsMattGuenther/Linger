@@ -762,8 +762,8 @@ holds. The values are tokens (`system.md`, "Scales"); the geometry tests measure
 - **Message aging** applies to the message *body only*, never the name or time.
   Steps: under an hour 100%, under a day 88%, older 78%. Do not go lower.
 - **Message presentation:** a comfortable sans body, names inline once per run of
-  messages from one person, and bodies limited to 80ch on wide windows. One layout,
-  no density modes.
+  messages from one person, and bodies as wide as the window allows, up to the
+  time column (#334). One layout, no density modes.
 - **Connection trouble** is said in words at the foot of the list, only while it is
   true and only after a few seconds: "Can't reach Pinecone. Still trying." Never
   protocol text, never a permanent status bar.

@@ -119,7 +119,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -595,8 +595,8 @@ message is one grid:
 
 ```
 a run's first message:   padding 8 | name                         | gap 8 | time | gap 8 | actions 24 | padding 4
-                         padding 8 | indent 16 | words (to --measure)
-a later message:         padding 8 | indent 16 | words (to --measure) | gap 8 | time | gap 8 | actions 24 | padding 4
+                         padding 8 | indent 16 | words                        (the time column stays empty)
+a later message:         padding 8 | indent 16 | words                        | gap 8 | time | gap 8 | actions 24 | padding 4
 ```
 
 - **The name has a line of its own** at the start of a run, in the person's

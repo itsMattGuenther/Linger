@@ -224,7 +224,7 @@
   --message-fold: calc(20 * var(--line-body));
   --pane-head: 40px;
   --voice-strip: 40px;
-  --measure: 80ch; /* the longest a line of a message runs (SPEC §4.7) */
+  --measure: 80ch; /* the longest a line of a search result runs; a message's words run to its time column (#334) */
   --message-indent: var(--space-4); /* a message's words, in from its sender's name (#295) */
   --media-max-w: 320px;
   --media-max-h: 400px; /* SPEC §4.7: images are capped at 400px tall */

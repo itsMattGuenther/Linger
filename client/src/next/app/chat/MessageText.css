@@ -1,7 +1,6 @@
 /* A message body. Sans for everything people wrote; mono only for code. */
 .nx-text {
   min-width: 0;
-  max-width: var(--measure);
   color: var(--text-primary);
   /* The sender's message face (NAME-3): one of the four sans faces, set on the
      row by lib/fonts.ts messageFontVar; anything else draws in the body face. */
