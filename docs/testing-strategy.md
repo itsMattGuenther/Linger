@@ -121,8 +121,9 @@ a retry that passes hides both.
 2. Open an issue the same day with the test's name, the run, and the error.
 3. Fix whichever is wrong. Fixtures deliver events explicitly and in order;
    a test waits for the thing itself, never for a fixed time. A test that
-   needs over half its 30-second limit on CI is one busy runner away from
-   failing: split it, or mark it `test.slow()` if it is long by design (#328).
+   takes over 15 seconds on CI (half the usual limit) is one busy runner away
+   from failing: split it, or mark it `test.slow()` if it is long by design
+   (#328).
 4. If it can't be fixed that day and it is failing other people's pull
    requests, mark it `test.fixme` with the issue number, so it stops blocking
    them. The issue stays open until the test is back.
@@ -156,6 +157,10 @@ Two things catch these before they bite:
   `scripts/webkit.sh tests/browser/next-media.spec.ts --repeat-each=10`.
   The whole WebKit suite takes about 2 minutes this way, against about 8 on
   CI. The image is about 3.5 GB and downloads on first use.
+- **WebKit on CI gets 60 seconds a test, not 30.** A freshly started WebKit
+  there once took 25.5 seconds to open its first tab, before the test had
+  done anything (#335); every other tab opens in well under a second. The
+  15-second rule above still applies.
 - The tests run on UTC, as CI does (`webkit.sh` sets it; the container is on
   UTC). A test that works out a date in the machine's own time zone will
   expect the wrong day somewhere.
