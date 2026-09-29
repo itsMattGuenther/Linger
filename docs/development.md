@@ -26,8 +26,8 @@ sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-p
 ## Checks
 
 **Before pushing code, run `scripts/check.sh`.** It runs what CI runs, in the
-order CI runs it — rules lint, version check, fmt, clippy, workspace tests,
-bindings drift, frontend, and the desktop shell. Green there should mean green
+order CI runs it — rules lint, version check, the update script's test, fmt,
+clippy, workspace tests, bindings drift, frontend, and the desktop shell. Green there should mean green
 in CI. Separate checks need additional services or browser engines:
 
 - `scripts/minio-test.sh` tests S3 against a throwaway MinIO. The workspace
@@ -37,6 +37,11 @@ in CI. Separate checks need additional services or browser engines:
   that the shipped voice relay starts and refuses an empty secret, without
   opening host ports or using your server data. CI runs this too; it does not
   replace the voice checks on separate networks.
+- `bash scripts/update-docker-test.sh` needs Docker and network access to
+  ghcr.io. It runs `deploy/update.sh` on a real 0.4.2 server, checks it comes
+  back as 0.4.3 with a database backup, then runs it again with nothing new.
+  `scripts/update-test.sh`, in `check.sh`, covers the rest against a stand-in
+  `docker`. CI runs both, and shellcheck on all three.
 - In `client`, run `pnpm exec playwright install --with-deps chromium webkit`
   once, then `pnpm test:browser` for the browser tests: layout at every
   interface size, keyboard use, the list, chat, Settings, Search and Media
