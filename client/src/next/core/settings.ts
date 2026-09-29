@@ -109,7 +109,7 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "people":
       return "Manage who can use this server. Removing someone asks you first.";
     case "server":
-      return "Its name and its color, as everyone sees them.";
+      return "The version it runs, and its name and color as everyone sees them.";
   }
 }
 
@@ -137,6 +137,7 @@ export const HEADINGS = {
   links: "Links You Have Made",
   members: "Members",
   removed: "Removed",
+  serverVersion: "Version",
   serverName: "Name",
   accent: "Accent",
 } as const;

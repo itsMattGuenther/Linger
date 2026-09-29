@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { releaseNotesUrl, updateLine, type UpdateCheck } from "./updates";
+import { isOlderVersion, releaseNotesUrl, serverVersionLine, updateLine, type UpdateCheck } from "./updates";
 
 describe("updateLine", () => {
   it("says what it is doing while it is doing it", () => {
@@ -62,5 +62,51 @@ describe("a copy the system updates", () => {
     expect(updateLine({ kind: "managed", by: "dnf" }, false)).toBe(
       "This copy updates with your system, through dnf.",
     );
+  });
+});
+
+describe("isOlderVersion (#314)", () => {
+  it("compares each part as a number, not as text", () => {
+    expect(isOlderVersion("0.4.3", "0.4.4")).toBe(true);
+    expect(isOlderVersion("0.4.9", "0.4.10")).toBe(true);
+    expect(isOlderVersion("0.9.0", "0.10.0")).toBe(true);
+    expect(isOlderVersion("0.4.10", "0.4.9")).toBe(false);
+  });
+
+  it("is false for the same release, and for a newer one", () => {
+    expect(isOlderVersion("0.4.4", "0.4.4")).toBe(false);
+    expect(isOlderVersion("0.5.0", "0.4.4")).toBe(false);
+  });
+
+  it("takes a v in front", () => {
+    expect(isOlderVersion("v0.4.3", "0.4.4")).toBe(true);
+    expect(isOlderVersion("0.4.3", "v0.4.4")).toBe(true);
+  });
+
+  it("never calls a server behind on an answer it can't read", () => {
+    expect(isOlderVersion("", "0.4.4")).toBe(false);
+    expect(isOlderVersion("0.4", "0.4.4")).toBe(false);
+    expect(isOlderVersion("0.4.3-dev", "0.4.4")).toBe(false);
+    expect(isOlderVersion("0.4.3", "latest")).toBe(false);
+  });
+});
+
+describe("serverVersionLine (#314)", () => {
+  it("says it's asking, and says so when it couldn't", () => {
+    expect(serverVersionLine({ kind: "looking" }, "0.4.4")).toEqual({ words: "Asking the server which version it runs…", behind: false });
+    expect(serverVersionLine({ kind: "unknown" }, "0.4.4")).toEqual({ words: "Couldn't ask the server which version it runs.", behind: false });
+  });
+
+  it("names both versions when the server is behind", () => {
+    expect(serverVersionLine({ kind: "known", version: "0.4.3" }, "0.4.4")).toEqual({ words: "This server runs Linger 0.4.3, and 0.4.4 is out.", behind: true });
+  });
+
+  it("says it's the newest only when it is", () => {
+    expect(serverVersionLine({ kind: "known", version: "0.4.4" }, "0.4.4")).toEqual({ words: "This server runs Linger 0.4.4, the newest.", behind: false });
+    expect(serverVersionLine({ kind: "known", version: "0.5.0" }, "0.4.4")).toEqual({ words: "This server runs Linger 0.5.0.", behind: false });
+  });
+
+  it("gives the server's version alone when the newest couldn't be read", () => {
+    expect(serverVersionLine({ kind: "known", version: "0.4.3" }, null)).toEqual({ words: "This server runs Linger 0.4.3.", behind: false });
   });
 });

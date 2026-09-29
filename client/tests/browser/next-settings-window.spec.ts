@@ -340,3 +340,30 @@ test("push-to-talk and its key are told to the list window as they change, for t
   expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.pushToTalk"))).toBe("false");
   expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.pushToTalkKey"))).toBe("AltRight");
 });
+
+test.describe("the server's version, for its host (#314)", () => {
+  test("asks the server without the sign-in, says it's behind, and opens the host guide and the release notes", async ({ page }) => {
+    await open(page, "?section=server&serverVersion=0.4.3");
+    const version = page.getByRole("region", { name: "Version" });
+    await expect(version).toContainText("This server runs Linger 0.4.3, and 0.4.4 is out.");
+    // Health needs no account, so the borrowed sign-in isn't sent with it.
+    expect(await did(page)).toContain("GET /health");
+    await version.getByRole("button", { name: "How to update" }).click();
+    await expect.poll(() => did(page)).toContain("open:https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server");
+    await version.getByRole("button", { name: "What's new" }).click();
+    await expect.poll(() => did(page)).toContain("open:https://github.com/itsMattGuenther/Linger/releases/tag/v0.4.4");
+  });
+
+  test("a server on the newest release says so, with nothing to press", async ({ page }) => {
+    await open(page, "?section=server");
+    const version = page.getByRole("region", { name: "Version" });
+    await expect(version).toContainText("This server runs Linger 0.4.4, the newest.");
+    await expect(version.getByRole("button")).toHaveCount(0);
+  });
+
+  test("a member's Settings never asks the server which version it runs", async ({ page }) => {
+    await open(page, "?member");
+    await expect.poll(() => did(page)).toContain("GET /server as token-1");
+    expect((await did(page)).filter((line) => line.startsWith("GET /health"))).toEqual([]);
+  });
+});

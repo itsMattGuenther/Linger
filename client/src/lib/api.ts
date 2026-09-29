@@ -20,6 +20,7 @@ import type { ErrorCode } from "../generated/ErrorCode";
 import type { ExportId } from "../generated/ExportId";
 import type { ExportJob } from "../generated/ExportJob";
 import type { ExportStarted } from "../generated/ExportStarted";
+import type { Health } from "../generated/Health";
 import type { Invite } from "../generated/Invite";
 import type { InvitePreview } from "../generated/InvitePreview";
 import type { KnockRequest } from "../generated/KnockRequest";
@@ -283,6 +284,14 @@ export class PublicApi {
   /** Cheap "is there a Linger server at this address" probe. */
   async health(signal?: AbortSignal): Promise<void> {
     await requestVoid(this.baseUrl, "GET", "/health", { signal });
+  }
+
+  /**
+   * The same probe's answer: whether its database answers, and which release
+   * the server runs, for telling a host it's behind (#314). Needs no sign-in.
+   */
+  healthReport(signal?: AbortSignal): Promise<Health> {
+    return requestJson(this.baseUrl, "GET", "/health", { signal });
   }
 
   invitePreview(code: string): Promise<InvitePreview> {

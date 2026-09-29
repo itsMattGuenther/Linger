@@ -1000,6 +1000,16 @@ told the thing.
 
 ## 9. Versioning
 
+```
+GET /health              → { ok, version }              # no sign-in
+```
+
+`ok` says the server is up and its database answers; `version` is the release
+it runs, like `0.4.4` (`wire::Health`). It needs no account, so the app uses it
+to check a pasted address is a Linger server, and a host's app compares
+`version` with the newest release to say when their server is behind (#314).
+Every server since 0.2 answers with exactly these two fields.
+
 The path carries the major version. Within v1, additive changes only: new optional
 fields, new `op` values, new error codes. Clients must ignore unknown fields and unknown
 `op` values rather than erroring.
