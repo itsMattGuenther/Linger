@@ -94,6 +94,12 @@ pass.
   resume replays with no gaps and no duplicates.
 - The 16-color palette gets a property test asserting ≥4.5:1 for all 16 keys
   against the background and its evening version. It must run in CI.
+- A bug fix comes with a test that fails without the fix, and a new rule with a
+  test that proves it, at the lowest level that can
+  (`docs/testing-strategy.md` says which).
+- A test that fails at random gets an issue the same day, not a re-run and a
+  shrug. Sometimes it is the app (#266). No blanket retries (L-31);
+  `docs/testing-strategy.md` has the steps.
 
 **Commits**
 - Conventional-ish: `feat(gateway): resume with sequence replay`
@@ -150,10 +156,16 @@ nothing, so when a feature moves or gets cut, fix the README in the same commit.
 
 ## Build and check
 
-`scripts/check.sh` runs the whole local gate in the order CI runs it — rules
-lint, the version check, the update script's test, fmt, clippy, workspace
-tests, bindings drift, client typecheck + tests, and the desktop-shell pass. Green here should mean green
-there. The pieces:
+`scripts/check.sh` runs what CI runs for your branch's changes, sorted the way
+CI sorts them (`scripts/ci-scope.mjs`). The rules lint and version check always
+run; a server change adds fmt, clippy, the workspace tests and bindings drift; a
+client change adds the typecheck, unit tests, **the browser tests** in
+Chromium and, where Docker works, WebKit (`scripts/webkit.sh`), with any the
+branch added or edited run ten times over, and the build's CSP check; a shell
+change adds the desktop-shell pass; `deploy/` adds the update script's test. A
+docs-only change takes under a second. `--all` runs everything. Green here should mean green there, and
+`docs/testing-strategy.md` has what runs where and which test a change needs.
+The pieces:
 
 ```bash
 cargo test --workspace          # core + server; also regenerates TS bindings
@@ -171,6 +183,10 @@ Things that trip people up, whatever machine or agent you're on:
   fetch a newer pnpm your system corepack can't execute.
 - **`pkill -f "tauri dev"` kills your own shell** — the pattern matches your own
   command line. Kill by exact PID, or `pkill -x linger-client`.
+- **On Linux, Playwright's WebKit only starts on Debian and Ubuntu.** On
+  others (Arch, Omarchy, Fedora) `scripts/webkit.sh` runs it in Playwright's
+  Ubuntu image, which needs Docker; `check.sh` uses it whenever Docker works.
+  The browser tests run on UTC there, as in CI.
 - **`client/src-tauri` is outside the workspace**, so `cargo fmt`/`clippy`/`test`
   at the root never touch it. It needs its own pass; CI runs one, and
   `scripts/check.sh` runs it when the GUI deps are installed.

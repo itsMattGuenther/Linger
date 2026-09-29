@@ -913,6 +913,10 @@ const PIECE = 8 * 1024;
  * #222: one byte range at a time, with `206` and `Content-Range`. It sends at
  * most `PIECE` bytes per answer, which a server may, so reaching the end of
  * the file takes a range that starts partway in, the request a seek makes.
+ * A range that starts at or past the end is `416`, its `Content-Range`
+ * giving only the file's length, as the server answers it
+ * (routes/objects.rs). This used to answer an impossible `206` instead,
+ * which hid that WebKit takes that `416` as a failed load (#336, #343).
  * While `down`, every request fails.
  */
 async function byteStore(page: Page, prefix: string, bytes: Buffer, contentType: string) {
@@ -924,6 +928,8 @@ async function byteStore(page: Page, prefix: string, bytes: Buffer, contentType:
     if (!range || !asked) return route.fulfill({ status: 200, contentType, headers: { "accept-ranges": "bytes" }, body: bytes });
     store.ranges.push(range);
     const start = Number(asked[1]);
+    if (start >= bytes.length)
+      return route.fulfill({ status: 416, headers: { "accept-ranges": "bytes", "content-range": `bytes */${bytes.length}`, "cache-control": "no-store" } });
     const end = Math.min(bytes.length - 1, start + PIECE - 1, asked[2] ? Number(asked[2]) : Number.POSITIVE_INFINITY);
     await route.fulfill({
       status: 206,
@@ -1242,7 +1248,12 @@ test.describe("a shared audio file (#247)", () => {
     const timeline = card(page, id).getByRole("slider", { name: "Timeline" });
 
     await timeline.focus();
+    // The end itself, which in WebKit used to ask for bytes past the last one,
+    // take the server's 416 as a failed load, and give up (#343).
     await page.keyboard.press("End");
+    await expect(timeline).toHaveAttribute("aria-valuetext", "0:04 of 0:04");
+    await expect(timeline).toBeFocused();
+    await expect(row(page, id).getByRole("alert")).toHaveCount(0);
     for (let step = 0; step < 5; step += 1) await page.keyboard.press("ArrowLeft");
     await expect(timeline).toHaveAttribute("aria-valuetext", "0:03 of 0:04");
     await expect.poll(() => read(page, id, (audio) => audio.currentTime)).toBeCloseTo(3.5, 1);
@@ -1446,6 +1457,9 @@ test.describe("reading far back", () => {
   });
 
   test("reading back down brings the rest back with no gap (CONV-15)", async ({ page }) => {
+    // Long by design: it scrolls through 900 messages half a screen at a
+    // time, about 20 seconds on CI of the usual 30 (#328).
+    test.slow();
     await readFarBack(page);
     const seen = new Set<string>();
     for (let step = 0; step < 400; step += 1) {

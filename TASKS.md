@@ -57,7 +57,8 @@ works in every tool:
    (`ARCHITECTURE.md` §10). Do not pull work from a later milestone "while
    you're in there."
 5. When done: all listed acceptance criteria pass, `scripts/check.sh` is green
-   locally, CI is green after push, the task is flipped ⏳ → ✅ here with a
+   locally (it runs what your branch touched; `docs/testing-strategy.md`), CI
+   is green after push, the task is flipped ⏳ → ✅ here with a
    dated landing note, and any surprises are recorded under the task. The
    landing note is not optional — it is what makes the next fresh session work.
 6. **Never add AI attribution anywhere — no exceptions, ever.** Not in commits,

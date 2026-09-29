@@ -641,6 +641,9 @@ for (const [width, height] of [
     test.use({ viewport: { width, height } });
 
     test("every control is 24, 32 or 40px tall, and nothing is cut off or runs past the edge", async ({ page }) => {
+      // Long by design: it opens every section, about thirty pages, which
+      // takes about 16 seconds on CI of the usual 30 (#328).
+      test.slow();
       for (const query of ["", "&long", "&servers", "&away"]) {
         for (const section of [...SECTIONS, "servers"]) {
           if (section === "servers" && query !== "&servers") continue;

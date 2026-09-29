@@ -9,6 +9,8 @@ name: desktop
 # client/src-tauri.
 on:
   workflow_dispatch:
+  # nightly.yml builds both every night, so a break shows up the next morning.
+  workflow_call:
 
 jobs:
   shell-windows:

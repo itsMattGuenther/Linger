@@ -26,7 +26,22 @@ export default defineConfig({
         launchOptions: { executablePath: process.env.LINGER_CHROMIUM_PATH },
       },
     },
-    { name: "webkit", use: { browserName: "webkit" } },
+    {
+      name: "webkit",
+      // On CI, a freshly started WebKit once took 25.5 seconds to open its
+      // first tab, before the test had done anything, and two knock tests ran
+      // out of their 30 (#335). Every other tab there opens in well under a
+      // second. Sixty is room for that, and costs nothing unless something
+      // hangs; slow tests are still held to 15 seconds by the testing strategy.
+      timeout: process.env.CI ? 60_000 : undefined,
+      use: {
+        browserName: "webkit",
+        // scripts/webkit.sh runs WebKit in Playwright's Ubuntu image, for the
+        // systems its WebKit won't start on, and connects here. The container
+        // shares this machine's network, so the pages load directly.
+        connectOptions: process.env.LINGER_WEBKIT_WS ? { wsEndpoint: process.env.LINGER_WEBKIT_WS } : undefined,
+      },
+    },
   ],
   webServer: {
     command: "pnpm exec vite --host 127.0.0.1 --port 1421",

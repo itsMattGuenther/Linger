@@ -51,6 +51,25 @@ export function seekStep(duration: number | null): number {
   return duration !== null && duration >= 60 ? 1 : 0.1;
 }
 
+/**
+ * How far short of the end a seek to the end lands, in seconds: less than
+ * anybody hears.
+ */
+export const END_MARGIN = 0.05;
+
+/**
+ * Where the sound actually goes for a seek to `to`. To seek, WebKit (the
+ * Linux app) asks for the file from that point on, and a seek to the exact
+ * end asks for a range starting past the last byte. The server rightly
+ * answers 416, and WebKit takes that as a failed load, so End on the
+ * timeline said "Couldn't load this audio" (#343). A seek to the end lands a
+ * hair before it; the timeline still shows the end.
+ */
+export function seekTarget(to: number, duration: number): number {
+  if (!Number.isFinite(duration) || duration <= 0) return Math.max(0, to);
+  return Math.min(Math.max(0, to), Math.max(0, duration - END_MARGIN));
+}
+
 /** A position on the timeline's steps, so its thumb and its lit part agree. */
 export function onStep(position: number, duration: number | null): number {
   const step = seekStep(duration);
@@ -63,9 +82,10 @@ export function onStep(position: number, duration: number | null): number {
 /**
  * A position as words: whole seconds gone by, as players count, so 3.6s in
  * is still "0:03"; at the end it is the length, however that was rounded.
+ * Within END_MARGIN of it counts as the end, where a seek to the end lands.
  */
 function positionText(position: number, duration: number | null): string {
-  if (duration !== null && position >= duration) return durationText(duration * 1000);
+  if (duration !== null && position >= duration - END_MARGIN) return durationText(duration * 1000);
   return durationText(Math.floor(Math.max(0, position)) * 1000);
 }
 

@@ -160,7 +160,7 @@ client/                the desktop app: Tauri 2 shell (src-tauri) and React
 deploy/                Dockerfile, compose and Caddyfile
 packaging/arch/        the Arch/Omarchy package and its repository
 docs/                  guides, decisions, design, release notes
-scripts/               check.sh (the whole local gate) and what it calls
+scripts/               check.sh (the local gate) and what it calls
 ```
 
 ```bash
@@ -173,7 +173,8 @@ The desktop app needs a webview, ALSA headers, cmake, the GStreamer plugins
 for sound, and the appindicator library for the tray; the packages for each
 distribution are in [docs/development.md](docs/development.md), with
 everything else about building and testing. **Run `scripts/check.sh` before
-pushing**; it runs what CI runs.
+pushing**; it runs what CI runs for your change, and
+[docs/testing-strategy.md](docs/testing-strategy.md) says what runs where.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). The
 docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),

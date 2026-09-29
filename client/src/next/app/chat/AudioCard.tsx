@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { volumeLabel } from "../../../lib/voice";
-import { knownSeconds, loadAudioVolume, onStep, saveAudioVolume, seekStep, timeSizer, timeText, timeWords } from "../../core/audioPlayer";
+import { knownSeconds, loadAudioVolume, onStep, saveAudioVolume, seekStep, seekTarget, timeSizer, timeText, timeWords } from "../../core/audioPlayer";
 import { Button, Icon, IconButton, Slider } from "../../kit";
 import "./AudioCard.css";
 
@@ -84,7 +84,8 @@ export function AudioCard({ name, src, durationMs }: { name: string; src: string
   const seek = (to: number) => {
     scrubbing.current = false;
     setPosition(to);
-    if (player.current) player.current.currentTime = to;
+    const audio = player.current;
+    if (audio) audio.currentTime = seekTarget(to, audio.duration);
   };
 
   const toggleMute = () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { knownSeconds, loadAudioVolume, onStep, saveAudioVolume, seekStep, timeSizer, timeText, timeWords } from "./audioPlayer";
+import { END_MARGIN, knownSeconds, loadAudioVolume, onStep, saveAudioVolume, seekStep, seekTarget, timeSizer, timeText, timeWords } from "./audioPlayer";
 import type { ModeStore } from "./conversations";
 
 function memory(): ModeStore & { items: Map<string, string> } {
@@ -50,6 +50,29 @@ describe("how loud shared audio starts (#247)", () => {
     expect(loadAudioVolume(refusing)).toBe(1);
     expect(() => saveAudioVolume(refusing, 0.5)).not.toThrow();
     expect(() => saveAudioVolume(null, 0.5)).not.toThrow();
+  });
+});
+
+describe("where a seek lands (#343)", () => {
+  it("never at the exact end, which asks the server for bytes past the last one", () => {
+    expect(seekTarget(4, 4)).toBeCloseTo(4 - END_MARGIN, 10);
+    expect(seekTarget(9, 4)).toBeCloseTo(4 - END_MARGIN, 10);
+    expect(seekTarget(4 - END_MARGIN / 2, 4)).toBeCloseTo(4 - END_MARGIN, 10);
+  });
+  it("anywhere else, exactly where it was asked", () => {
+    expect(seekTarget(3.5, 4)).toBe(3.5);
+    expect(seekTarget(0, 4)).toBe(0);
+    expect(seekTarget(-1, 4)).toBe(0);
+  });
+  it("still reads as the end, where a seek to the end lands", () => {
+    expect(timeText(seekTarget(4, 4), 4)).toBe("0:04 / 0:04");
+    expect(timeWords(seekTarget(4, 4), 4)).toBe("0:04 of 0:04");
+    expect(timeText(3.9, 4)).toBe("0:03 / 0:04");
+  });
+  it("as asked while the length isn't known, and never below the start", () => {
+    expect(seekTarget(2, Number.NaN)).toBe(2);
+    expect(seekTarget(2, Number.POSITIVE_INFINITY)).toBe(2);
+    expect(seekTarget(0.03, 0.02)).toBe(0);
   });
 });
 
