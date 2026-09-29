@@ -64,8 +64,16 @@ try {
     if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Installed app did not open a window' }
     # Tao's window icon uses ICON_SMALL; ICON_BIG is a separate taskbar override
     # and may be unset. Its absence does not mean the window has no icon.
-    $icon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]::Zero, [IntPtr]::Zero)
-    if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($app.MainWindowHandle, -34) }
+    # Tao sets the icon just after the window appears, so one look the moment
+    # it does can find none (#348): keep looking for up to ten seconds.
+    $icon = [IntPtr]::Zero
+    for ($i = 0; $i -lt 50; $i++) {
+        $icon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]::Zero, [IntPtr]::Zero)
+        if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($app.MainWindowHandle, -34) }
+        if ($icon -ne [IntPtr]::Zero) { break }
+        Start-Sleep -Milliseconds 200
+        $app.Refresh()
+    }
     if ($icon -eq [IntPtr]::Zero) { throw 'Running app has no caption icon' }
     $taskbarIcon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]1, [IntPtr]::Zero)
     Write-Output "Separate taskbar icon override present: $($taskbarIcon -ne [IntPtr]::Zero)"
