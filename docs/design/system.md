@@ -662,8 +662,10 @@ between them.
 - **Keys:** the timeline moves a second per arrow (a tenth of one in a clip
   under a minute), Page Up and Down a tenth of the file, Home and End to
   either end. It shows where it's being moved to and seeks once it's let go
-  of, so the engine asks the server for just that part (#222). The volume
-  moves in steps of 5%.
+  of, so the engine asks the server for just that part (#222). A seek to the
+  end lands 50 ms short of it and still reads as the end: at the exact end
+  WebKit asks for bytes past the last one and takes the server's `416` as a
+  failed load (#343). The volume moves in steps of 5%.
 - **Muting** keeps the level: the slider shows nothing while muted, and
   moving it brings the sound back. The last level let go of is kept on this
   computer (`linger.next.audioVolume`, `core/audioPlayer.ts`) for the next
@@ -795,7 +797,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Presence marks (#301): idle is the dot at half strength with no 💤, away the moon at half strength, offline the dot's outline in their color at both sizes, painted hollow at 6px and 8px at 100% and 200%; in the list an idle dot sits where any dot does, with or without a status line; an away name is grey with its message warm, and your own card stays lit | `kit.spec.ts` › idle and away are their mark at half strength; an offline dot is painted hollow; `next-list.spec.ts` › somebody idle; somebody away |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
-| A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
+| A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, End reaching the end without a failed load, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | A long message folds: past twenty lines its words are drawn twenty lines tall, fading out, with Show all, and all of it stays in the page; Show all and Show less draw it whole and fold it again, with no row overlapping the next; a long paragraph folds too, and twenty lines or fewer never do; unfolded, it stays unfolded after its row is scrolled away and back; Show all is reachable by keyboard | `next-chat-parity.spec.ts` › a long message folds |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |
