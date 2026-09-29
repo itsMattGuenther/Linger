@@ -13,7 +13,9 @@
  *   server carries no voice at all; its host hasn't set it up (#306).
  * - `?big`: #general holds 5,000 messages, all at once. `&paged`: loaded
  *   150 at a time from the newest, as the store pages them.
- * - `?fail`: every send is refused.
+ * - `?fail`: every send is refused, 120 ms after it's sent. `?fail=held`:
+ *   each refusal waits until the test calls `window.chat.refuse()`, so a
+ *   test decides what happens first (#341).
  * - `?file`: Sam shares a PDF in #general; `&downloadfail` has the desktop
  *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
@@ -45,6 +47,9 @@ const query = new URLSearchParams(location.search);
 const BIG = query.has("big");
 const PAGED = BIG && query.has("paged");
 const FAIL = query.has("fail");
+const HOLD_REFUSALS = query.get("fail") === "held";
+/** Sends waiting for `window.chat.refuse()`, with `?fail=held`. */
+const refusals: (() => void)[] = [];
 const VOICE = query.get("voice") ?? "others";
 const PAGE = 150;
 
@@ -152,6 +157,8 @@ declare global {
       arrive: (roomId: string, authorId: string, body: string) => void;
       /** Who is typing in a room. */
       typing: (roomId: string, userIds: string[]) => void;
+      /** With `?fail=held`, refuse every send still waiting. */
+      refuse: () => void;
     };
   }
 }
@@ -222,6 +229,7 @@ function Fixture() {
       });
     },
     typing: (roomId, userIds) => setTyping((all) => ({ ...all, [roomId]: userIds })),
+    refuse: () => refusals.splice(0).forEach((refuse) => refuse()),
   };
 
   const items: TabItem[] = tabs.open.map((tab) => {
@@ -303,7 +311,8 @@ function Fixture() {
       created_at: NOW,
     };
     setPending((all) => ({ ...all, [roomId]: [...(all[roomId] ?? []), draft] }));
-    await new Promise((settle) => window.setTimeout(settle, FAIL ? 120 : 40));
+    if (HOLD_REFUSALS) await new Promise<void>((refuse) => refusals.push(refuse));
+    else await new Promise((settle) => window.setTimeout(settle, FAIL ? 120 : 40));
     setPending((all) => ({ ...all, [roomId]: (all[roomId] ?? []).filter((one) => one.id !== draft.id) }));
     if (FAIL) throw new Error("Couldn't reach the server. Your message is kept here.");
     arrive(roomId, { ...draft, id: `s${submission.key}` });

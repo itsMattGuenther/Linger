@@ -561,11 +561,16 @@ test.describe("a send the server refuses", () => {
   });
 
   test("waits apart with a retry when you've already typed the next thing", async ({ page }) => {
-    await open(page, "?fail");
+    // The refusal waits for the test, so the next thing is surely typed
+    // first: on a 120 ms timer a busy machine sometimes typed it after, and
+    // the refusal found an empty box (#341).
+    await open(page, "?fail=held");
     await box(page).click();
     await page.keyboard.type("first");
     await page.keyboard.press("Enter");
     await page.keyboard.type("second, still typing");
+    await expect(box(page)).toHaveValue("second, still typing");
+    await page.evaluate(() => window.chat?.refuse());
     const unsent = page.getByRole("group", { name: "Unsent message" });
     await expect(unsent).toContainText("first");
     await expect(box(page)).toHaveValue("second, still typing");
