@@ -61,12 +61,7 @@ pass.
     in a message body is a defect.
 12. **Colors are palette keys, never hex or OKLCH literals**, on the wire and in the
     database. The 16-color palette is defined once in `linger-core::PALETTE`.
-13. **The product has no AI features.** Nothing to build here — no participants, no
-    suggested replies, no summaries, no semantic search, no model endpoint. It is a
-    scope line like the rest of SPEC §2's anti-goals, not a position the project
-    argues for; adding one is Matt's call. (Rule 1 is separate and still applies:
-    no AI attribution in this repo, ever.)
-14. **No payment surface.** No paid tier, no store, no cosmetics for sale, nothing held
+13. **No payment surface.** No paid tier, no store, no cosmetics for sale, nothing held
     back to sell later. The scope discipline is the product, and a price list is how
     that discipline dies.
 

@@ -12,8 +12,8 @@ project needs:
   fix and opens a pull request the way [`AGENTS.md`](../AGENTS.md) requires.
 
 These are documents for tools you run yourself, on your own computer, under
-your own GitHub account. Linger itself has no AI features and never calls a
-model, and nothing here sends anything anywhere on its own.
+your own GitHub account. Linger itself never runs them, and nothing here
+sends anything anywhere on its own.
 
 ## Getting them
 

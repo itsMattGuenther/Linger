@@ -39,9 +39,6 @@ CI runs `scripts/lint-rules.sh` on every PR and rejects commits that carry
 attribution. If it fires on your branch, rewrite the commits (`git rebase`),
 don't just add a new one on top.
 
-(Unrelated rule, easy to confuse with this one: the *product* has no AI
-features — AGENTS.md rule 13. That is about scope, not about attribution.)
-
 ## Which model for which task
 
 Every task in `TASKS.md` carries an effort label — **low**, **medium**,

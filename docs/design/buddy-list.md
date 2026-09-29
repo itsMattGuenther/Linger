@@ -354,7 +354,7 @@ The principles don't change:
 - no counts or badges;
 - new activity shows as weight only;
 - nothing about which apps anyone has open;
-- no AI, no telemetry;
+- no telemetry;
 - no avatars;
 - the same vocabulary.
 

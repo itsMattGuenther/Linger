@@ -173,22 +173,25 @@ This is a "when the desktop app is boring" item, not a "next quarter" item.
 
 ---
 
-## Decided — no AI features, said once
+## Decided — no "no AI" line
 
-**Matt, 2026-08-28.** The product has no AI features. That has been true since
-2026-08-19, when an earlier plan for local-only, opt-in features was dropped
-before anything was built.
+**Matt, 2026-09-29.** Linger has no AI features and none are planned. What goes
+is the line saying so. On 2026-08-28 the case had already been cut from a SPEC
+section, a README section and a user-guide paragraph down to one anti-goal in
+SPEC §2 and one AGENTS rule; today those go too, with the README's "never"
+list entry and the mentions in the idea form, the agent skills and the design
+notes.
 
-What changed today is the *volume*, not the decision. There was a SPEC section,
-a README section, and a paragraph in the user guide arguing the case at length —
-which turned "we don't have that feature" into a position the project campaigned
-on. It was never meant to be a differentiator. It is now one bullet in SPEC §2's
-anti-goals, alongside threads and algorithmic ordering, and one line in AGENTS
-rule 13.
+**Why:** none of the apps Linger is compared with uses AI in a way that calls
+for an answer, so the line read as a position the project was taking, and it
+isn't one. The anti-goals are things a chat app would be expected to grow.
 
-Kept here only so nobody restores the deleted sections thinking they were lost.
-Adding an AI feature is still Matt's call rather than a maintenance decision;
-there is just no need to explain that at length.
+Nothing is opened up by this. An AI feature would be a feature outside the
+spec, and AGENTS rule 10 already says to stop and ask before building one. Rule
+1, no AI attribution in commits, pull requests or metadata, is a separate rule
+and stays as it is.
+
+Kept here so nobody restores the line thinking it was lost.
 
 ---
 

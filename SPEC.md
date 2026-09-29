@@ -88,7 +88,6 @@ Every feature decision resolves against these, in order.
 - Any algorithmic ordering
 - Analytics or telemetry of any kind, opt-in or otherwise
 - Ephemeral-by-default messaging (fights principle 3)
-- AI features of any kind
 - A paid tier, a storefront, cosmetics for sale, or any payment surface at all
 
 ---
