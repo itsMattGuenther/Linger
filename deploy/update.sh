@@ -100,11 +100,14 @@ port="${port:-8420}"
 
 # The server's own /health answer, asked from inside its container, so it works
 # whatever the DNS or the router does. The image has bash and no curl, so the
-# request is written by hand.
+# request is written by hand. What went wrong with the last try is kept in
+# $health_errors, for the report when the server never answers.
+health_errors="$(mktemp)"
+trap 'rm -f "$health_errors"' EXIT
 health() {
   timeout 10 docker compose exec -T linger bash -c \
     "exec 3<>/dev/tcp/127.0.0.1/$port && printf 'GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
-    2>/dev/null || true
+    2>"$health_errors" </dev/null || true
 }
 version_in() { sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1; }
 
@@ -114,6 +117,10 @@ before=""
 if [[ -n "$old_container" ]]; then
   old_image_id="$(docker inspect --format '{{.Image}}' "$old_container" 2>/dev/null || true)"
   before="$(health | version_in)"
+  if [[ -z "$before" ]]; then
+    before="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
+      "$old_container" 2>/dev/null || true)"
+  fi
 fi
 
 # --- Download -----------------------------------------------------------------
@@ -164,24 +171,26 @@ fi
 
 step "Starting the server"
 after=""
-waited=0
+deadline=$((SECONDS + WAIT_SECONDS))
 if ! compose up -d; then
-  waited="$WAIT_SECONDS"
+  deadline=0
 fi
-while ((waited < WAIT_SECONDS)); do
+while ((SECONDS < deadline)); do
   answer="$(health)"
   if grep -q '"ok":true' <<<"$answer"; then
     after="$(version_in <<<"$answer")"
     break
   fi
   sleep 3
-  waited=$((waited + 3))
 done
 
 if [[ -z "$after" ]]; then
   printf '\nupdate.sh: the server did not start and answer within %s seconds. Its last lines:\n\n' \
     "$WAIT_SECONDS" >&2
   compose logs --tail 30 linger >&2 || true
+  if [[ -s "$health_errors" ]]; then
+    printf '\nAsking it for its version said:\n%s\n' "$(tail -5 "$health_errors")" >&2
+  fi
   if [[ -n "$backup" && -n "$before" ]]; then
     if [[ "$image" == "$IMAGE_REPO:latest" ]]; then
       pin="sed -i 's#$IMAGE_REPO:latest#$IMAGE_REPO:$before#' compose.yaml"

@@ -19,6 +19,9 @@ cp "$repo/deploy/update.sh" "$dir/"
 cd "$dir"
 
 cleanup() {
+  # The server's files belong to its own user, so they go from inside.
+  docker compose run --rm --no-deps --user root --entrypoint sh linger \
+    -c 'rm -rf /data/* /data/.[!.]*' >/dev/null 2>&1 || true
   docker compose down --volumes >/dev/null 2>&1 || true
   docker image rm "$REPO:0.4.3" "$REPO:0.4.2" >/dev/null 2>&1 || true
   rm -rf "$(dirname "$dir")"
@@ -56,6 +59,14 @@ for _ in $(seq 30); do
   sleep 1
 done
 [[ -f data/linger.db ]] || fail "the 0.4.2 server never made its database"
+
+# The same question update.sh asks, with nothing hidden, so a failure here
+# says why rather than leaving the script to time out.
+echo "== the 0.4.2 server's version, asked from inside its container"
+docker compose exec -T linger bash -c \
+  "exec 3<>/dev/tcp/127.0.0.1/8420 && printf 'GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
+  </dev/null || fail "asking the server for its version failed"
+echo
 
 echo "== the update"
 out="$(LINGER_UPDATE_WAIT=90 ./update.sh 2>&1)" || fail "update.sh failed:
