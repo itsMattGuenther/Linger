@@ -7,7 +7,8 @@ name: image
 #
 # Same shape as release.yml, for the same reason: **only a tag publishes.**
 #
-#   tag v0.2.0            build and push 0.2.0, 0.2, latest
+#   tag v0.2.0            run every CI check on the commit, then build and
+#                         push 0.2.0, 0.2, latest
 #   Actions tab (manual)  build, push nothing — proves the image still builds
 #                         without shipping anything
 #   pull request          build, push nothing, and only when a file the image
@@ -51,8 +52,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  tests:
+    # A tag publishes only a commit that passes every CI check, as
+    # release.yml does: `latest` is what hosts pull. A pull request has its
+    # own ci.yml run, and a manual run pushes nothing, so neither waits here.
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/ci.yml
+    with:
+      all: true
+
   image:
     # About five minutes from the cache; a cold build is longer.
+    needs: tests
+    # Runs when the tests passed, or were skipped because this isn't a tag.
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

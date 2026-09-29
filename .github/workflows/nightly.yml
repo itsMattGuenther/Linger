@@ -1,0 +1,115 @@
+name: nightly
+
+# Everything, on main, every night (docs/testing-strategy.md): the checks a
+# pull request only runs for what it touched, the package checks, the Windows
+# and macOS shell builds that otherwise run by hand, and every browser test
+# three times over with no retries. Separately green PRs can disagree once
+# merged, and a test that fails one run in twenty rarely shows on one PR; this
+# is where both surface. A failure opens an issue, or comments on the one
+# already open, so it can't go unread.
+on:
+  schedule:
+    # 08:23 UTC is the small hours in the US, off the hour when GitHub's
+    # scheduler is busiest.
+    - cron: "23 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+    with:
+      all: true
+
+  packages:
+    uses: ./.github/workflows/package-check.yml
+    with:
+      all: true
+
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+
+  repeat:
+    # Every browser test three times, in parts at once so each part takes
+    # about as long as a normal run of one engine.
+    name: browser tests, three times (${{ matrix.engine }} ${{ matrix.shard }}/${{ matrix.shards }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { engine: chromium, shard: 1, shards: 3 }
+          - { engine: chromium, shard: 2, shards: 3 }
+          - { engine: chromium, shard: 3, shards: 3 }
+          - { engine: webkit, shard: 1, shards: 4 }
+          - { engine: webkit, shard: 2, shards: 4 }
+          - { engine: webkit, shard: 3, shards: 4 }
+          - { engine: webkit, shard: 4, shards: 4 }
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: enable pnpm
+        run: corepack enable
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: browser engine
+        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
+      - name: every browser test three times, with no retries
+        run: >
+          pnpm test:browser --project=${{ matrix.engine }} --retries=0 --repeat-each=3
+          --shard=${{ matrix.shard }}/${{ matrix.shards }} --global-timeout=1800000
+      - name: browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-browser-failures-${{ matrix.engine }}-${{ matrix.shard }}
+          path: client/test-results
+          retention-days: 7
+
+  report:
+    needs: [tests, packages, desktop, repeat]
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: open or update the nightly issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Nightly checks are failing"
+        run: |
+          body=$(cat <<EOF
+          The nightly run on \`main\` (${GITHUB_SHA::7}) failed: $RUN_URL
+
+          | Part | Result |
+          |---|---|
+          | Every CI check | ${{ needs.tests.result }} |
+          | Packages on Linux and Windows | ${{ needs.packages.result }} |
+          | Shell builds on Windows and macOS | ${{ needs.desktop.result }} |
+          | Every browser test, three times | ${{ needs.repeat.result }} |
+
+          Only the repeated browser tests failing usually means a test that fails at random. The failed job names it, and [the testing strategy](https://github.com/${{ github.repository }}/blob/main/docs/testing-strategy.md#a-test-that-fails-at-random) says what to do. Close this once the nightly run is green again.
+          EOF
+          )
+          existing=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title \
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label bug --body "$body"
+          fi

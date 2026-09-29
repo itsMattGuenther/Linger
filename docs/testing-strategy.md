@@ -14,9 +14,10 @@ when the client changed, and says what CI adds on top.
 | Where | When | What | How long |
 |---|---|---|---|
 | Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 1½ minutes for a client change; a Rust change also rebuilds, which is slow in a fresh copy |
-| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests; `package-check.yml` builds the desktop packages on Linux and Windows | About 7 minutes; the packages about 10 |
+| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows | About 5 minutes; the packages about 10 |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
-| A release | A `v*` tag | `release.yml` builds and signs the packages and checks their audio and Windows shortcuts; `image.yml` builds the server image | About 15 minutes |
+| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
+| A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
 | Real computers | Before a release, when an area changes | The [release checks](tasks/release-checks.md): several computers, real networks, audio devices, installs | By hand |
 
 ## Layers
@@ -63,6 +64,14 @@ Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`).
+
+**One required check.** GitHub requires only `all green` before a merge. It
+waits for every other `ci.yml` job and passes when each passed or was skipped
+because the change didn't touch it, and fails when any failed or was
+cancelled. A new job joins by being listed in its `needs`, and
+`scripts/ci-gate.test.mjs` fails if one isn't. The package checks run in their
+own workflow and don't block a merge; the nightly run and every release run
+them.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
@@ -115,8 +124,17 @@ a retry that passes hides both.
    requests, mark it `test.fixme` with the issue number, so it stops blocking
    them. The issue stays open until the test is back.
 
-Before a new or changed browser spec lands, run it repeatedly:
-`cd client && pnpm exec playwright test tests/browser/<spec> --repeat-each=10`.
+Two things catch these before they bite:
+
+- **A browser test a branch adds or edits runs ten times before it lands**
+  (L-31). `scripts/changed-tests.mjs` finds the tests from the lines the
+  branch changed: an edit inside a test picks that test and the next one; an
+  edit above every test in a file (imports, helpers) picks the whole file.
+  `check.sh` runs them ten times in Chromium; CI's `new tests, repeated` jobs
+  in both engines, with fewer repeats (never under two) when a PR touches many
+  tests, to stay near 300 runs per engine.
+- **Every night, every browser test runs three times** with no retries
+  (`nightly.yml`). A test that fails there opens the nightly issue.
 
 ## Browser tests
 

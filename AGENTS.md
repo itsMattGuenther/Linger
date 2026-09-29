@@ -164,9 +164,10 @@ nothing, so when a feature moves or gets cut, fix the README in the same commit.
 `scripts/check.sh` runs what CI runs for your branch's changes, sorted the way
 CI sorts them (`scripts/ci-scope.mjs`). The rules lint and version check always
 run; a server change adds fmt, clippy, the workspace tests and bindings drift; a
-client change adds the typecheck, unit tests, **the Chromium browser tests** and
-the build's CSP check; a shell change adds the desktop-shell pass; `deploy/`
-adds the update script's test. A docs-only change takes under a second.
+client change adds the typecheck, unit tests, **the Chromium browser tests**
+(and any the branch added or edited, ten times over) and the build's CSP
+check; a shell change adds the desktop-shell pass; `deploy/` adds the update
+script's test. A docs-only change takes under a second.
 `--all` runs everything. Green here should mean green there, and
 `docs/testing-strategy.md` has what runs where and which test a change needs.
 The pieces:

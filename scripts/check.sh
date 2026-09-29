@@ -40,8 +40,12 @@ scripts/lint-rules.sh "$base"
 
 echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
-node --test --test-reporter=dot scripts/ci-scope.test.mjs
+node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs
+if docker info >/dev/null 2>&1; then
+  echo "== workflow files =="
+  docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
+fi
 
 if on rust; then
   echo "== rust: fmt =="
@@ -66,6 +70,16 @@ if on web; then
   # First time: `cd client && pnpm exec playwright install chromium`, or point
   # LINGER_CHROMIUM_PATH at a Chromium you already have.
   (cd client && pnpm exec playwright test --project=chromium --forbid-only --reporter=dot)
+  # L-31: a test this branch adds or edits runs ten times before it lands; CI
+  # does the same in both engines. Four at a time: ten copies of one heavy
+  # test at once (a Settings sweep opens thirty pages) exhaust the local page
+  # server, which says nothing about the test (#328).
+  new_tests=()
+  if [ -n "$base" ]; then mapfile -t new_tests < <(node scripts/changed-tests.mjs "$base"); fi
+  if [ "${#new_tests[@]}" -gt 0 ]; then
+    echo "== client: the ${#new_tests[@]} browser test(s) this branch added or edited, ten times =="
+    (cd client && pnpm exec playwright test --project=chromium --retries=0 --repeat-each=10 --workers=4 --reporter=dot "${new_tests[@]}")
+  fi
   echo "== client: the build embeds nothing the shipped CSP refuses =="
   (cd client && pnpm exec vite build --logLevel warn && node ../scripts/csp-assets.mjs dist)
 fi
@@ -83,7 +97,7 @@ fi
 extra=()
 on s3 && extra+=("the S3 storage tests (scripts/minio-test.sh runs them here)")
 on coturn && extra+=("the relay and a real server update, in Docker (docs/development.md)")
-on web && extra+=("the WebKit browser tests")
+on web && extra+=("the WebKit browser tests, and this branch's new or edited ones ten times")
 on packages && extra+=("the desktop packages on Linux and Windows")
 if [ "${#extra[@]}" -gt 0 ]; then
   echo "== CI also runs =="

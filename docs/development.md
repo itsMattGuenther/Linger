@@ -28,7 +28,8 @@ sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-p
 **Before pushing, run `scripts/check.sh`.** It runs what CI runs for your
 branch's changes, sorted the way CI sorts them: a docs change runs the rules
 lint in under a second; a client change adds the typecheck, unit tests,
-Chromium browser tests and the build's CSP check; a server change adds fmt,
+Chromium browser tests (and any the branch added or edited, ten times) and the
+build's CSP check; a server change adds fmt,
 clippy, the Rust tests and bindings drift. `--all` runs everything. Green there
 should mean green in CI. The [testing strategy](testing-strategy.md) has what
 runs where, and which kind of test a change needs. Separate checks need
