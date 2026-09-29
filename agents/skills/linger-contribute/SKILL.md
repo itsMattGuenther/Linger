@@ -58,8 +58,9 @@ project): the rules lint and your commits always; formatting, clippy and the
 Rust tests for server changes; the typecheck, unit tests and Chromium browser
 tests for client changes, with any browser test you added or edited run ten
 times; the desktop shell when its system libraries are
-installed. `--all` runs everything. The Chromium tests need Playwright's
-browser once: `cd client && pnpm exec playwright install chromium`.
+installed. With Docker it also runs the WebKit browser tests, in a container
+(`scripts/webkit.sh`). `--all` runs everything. The Chromium tests need
+Playwright's browser once: `cd client && pnpm exec playwright install chromium`.
 `docs/testing-strategy.md` has what CI adds on top. Report failures honestly;
 never call a failing change done.
 

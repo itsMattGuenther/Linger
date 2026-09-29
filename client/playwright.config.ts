@@ -26,7 +26,16 @@ export default defineConfig({
         launchOptions: { executablePath: process.env.LINGER_CHROMIUM_PATH },
       },
     },
-    { name: "webkit", use: { browserName: "webkit" } },
+    {
+      name: "webkit",
+      use: {
+        browserName: "webkit",
+        // scripts/webkit.sh runs WebKit in Playwright's Ubuntu image, for the
+        // systems its WebKit won't start on, and connects here. The container
+        // shares this machine's network, so the pages load directly.
+        connectOptions: process.env.LINGER_WEBKIT_WS ? { wsEndpoint: process.env.LINGER_WEBKIT_WS } : undefined,
+      },
+    },
   ],
   webServer: {
     command: "pnpm exec vite --host 127.0.0.1 --port 1421",

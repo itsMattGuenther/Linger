@@ -6,14 +6,15 @@ each kind of problem at the cheapest place that can catch it. Setting up the
 tools is in [development.md](development.md#checks).
 
 The short version: **run `scripts/check.sh` before you push.** It runs the
-checks for what your branch changed, including the Chromium browser tests
-when the client changed, and says what CI adds on top.
+checks for what your branch changed, including the browser tests in
+Chromium, and in WebKit where Docker works, when the client changed. It says
+what CI adds on top.
 
 ## Where checks run
 
 | Where | When | What | How long |
 |---|---|---|---|
-| Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 1½ minutes for a client change; a Rust change also rebuilds, which is slow in a fresh copy |
+| Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 3 minutes for a client change with WebKit, 1½ without, more when the branch edits browser tests (each runs ten times); a Rust change also rebuilds, which is slow in a fresh copy |
 | A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows | About 5 minutes; the packages about 10 |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
@@ -54,8 +55,8 @@ only changes documentation.
 |---|---|---|
 | Only docs: `docs/`, any `*.md`, `LICENSE` | The rules lint and version check | Nothing |
 | The server, `crates/linger-server/` | fmt, clippy, the Rust tests, bindings drift | S3 against a real MinIO |
-| The client, `client/` | Typecheck, unit tests, the Chromium browser tests, the production build's CSP check | The WebKit browser tests; the packages on Linux and Windows |
-| Only browser tests, `client/tests/browser/` | As the client | WebKit (no packages) |
+| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check | The packages on Linux and Windows, and WebKit when `check.sh` couldn't run it |
+| Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
 | The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages |
 | `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
 | Shared types (`crates/linger-core/`, `client/src/generated/`), CI, `scripts/`, anything else | Everything | Everything |
@@ -119,7 +120,9 @@ a retry that passes hides both.
 1. Re-run the failed job once, to be sure it is random and not your change.
 2. Open an issue the same day with the test's name, the run, and the error.
 3. Fix whichever is wrong. Fixtures deliver events explicitly and in order;
-   a test waits for the thing itself, never for a fixed time.
+   a test waits for the thing itself, never for a fixed time. A test that
+   needs over half its 30-second limit on CI is one busy runner away from
+   failing: split it, or mark it `test.slow()` if it is long by design (#328).
 4. If it can't be fixed that day and it is failing other people's pull
    requests, mark it `test.fixme` with the issue number, so it stops blocking
    them. The issue stays open until the test is back.
@@ -144,8 +147,18 @@ Two things catch these before they bite:
 - Locally, `check.sh` runs Chromium. Once, run
   `cd client && pnpm exec playwright install chromium`, or set
   `LINGER_CHROMIUM_PATH` to a Chromium you already have.
-- Playwright's WebKit only runs on the Linux systems Playwright supports
-  (Debian and Ubuntu), so on other systems WebKit failures show up in CI.
+- On Linux, Playwright's WebKit only starts on Debian and Ubuntu, so
+  **`scripts/webkit.sh`** runs it in Playwright's own Ubuntu image with
+  Docker, on any Linux (#325). Only the browser is in the container; the tests
+  and pages stay on your machine, and the container shares its network.
+  `check.sh` runs it whenever Docker works, and says so when it doesn't. On
+  macOS and Windows, Playwright's WebKit runs natively. Any arguments go to Playwright:
+  `scripts/webkit.sh tests/browser/next-media.spec.ts --repeat-each=10`.
+  The whole WebKit suite takes about 2 minutes this way, against about 8 on
+  CI. The image is about 3.5 GB and downloads on first use.
+- The tests run on UTC, as CI does (`webkit.sh` sets it; the container is on
+  UTC). A test that works out a date in the machine's own time zone will
+  expect the wrong day somewhere.
 - When a browser test fails in CI, look at its screenshot and trace before
   changing code. They are kept for seven days in the run's
   `browser-failures…` artifacts; `pnpm exec playwright show-trace` opens a
