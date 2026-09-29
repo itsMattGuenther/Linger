@@ -120,7 +120,9 @@ the app checks the signature before installing one.
 ## 🚀 Running a server
 
 [The host guide](docs/host-guide.md) is the step-by-step path: a VPS or a
-computer at home, Docker, DNS, voice, backups and updates.
+computer at home, Docker, DNS, voice, backups and updates. The server runs on
+Intel or AMD (x86-64) machines only; there's no ARM build, so not a Raspberry
+Pi.
 [Creating your first VPS](docs/vps-setup.md) covers the cloud side. The short
 version, for someone who already has Docker and two DNS names pointing at the
 machine:

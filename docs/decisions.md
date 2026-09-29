@@ -440,3 +440,29 @@ kept as the way back, and has carried every call since. The mesh goes:
   now run them through the real forwarding server.
 - **An older server** that still puts a room on the mesh leaves this app's
   seat unmarked; the app leaves voice and says the server needs an update.
+
+---
+
+## Decided — the server image is x86-64 only
+
+**Matt, 2026-09-28.** The server image was built for x86-64 and ARM64, so a
+Raspberry Pi or an ARM cloud server could host. The ARM64 half was built under
+emulation on GitHub's x86-64 machines, which took 77–83 minutes of every
+release, against about five for x86-64, and publishing waited on it. "I don't
+think anyone I know is going to be running this on a Raspberry Pi... I think
+we should consider not supporting that, especially if it speeds up our release
+times because it's painfully slow."
+
+- **From 0.4.5 the image is x86-64 only.** 0.4.4 and every image before it
+  stay on ghcr for both. `image.yml` builds `linux/amd64` for tags, pull
+  requests and manual runs alike, with no emulation step.
+- **An ARM host** pulling `latest` after 0.4.5 gets "no matching manifest for
+  linux/arm64" and keeps running what it has; pinning
+  `ghcr.io/itsmattguenther/linger:0.4.4` in `compose.yaml` keeps it on the last
+  image built for it. The 0.4.5 release notes say so.
+- **The host guide** asks for an Intel or AMD machine, and `compose.yaml` says
+  the same.
+- **Not taken:** building ARM64 on GitHub's native ARM runners (free for public
+  repositories), a second job pushing by digest and a manifest joining the two.
+  It would have kept ARM in minutes, not an hour, but for hosts nobody has. If
+  one turns up, that's the way back, not emulation.

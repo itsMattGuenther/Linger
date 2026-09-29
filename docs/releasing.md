@@ -61,9 +61,9 @@ git tag -a v0.3.6 -m "Linger 0.3.6" && git push origin v0.3.6
 That builds Linux and Windows, signs the updater artifacts, checks the packaged
 audio and the Windows upgrade path, and opens a **draft** release carrying
 `latest.json`. The same tag publishes the server image to
-`ghcr.io/itsmattguenther/linger` as `0.3.6`, `0.3` and `latest`, for x86-64 and
-ARM64. Nothing about the image is signed and nothing auto-updates; a host
-chooses when to `docker compose pull`.
+`ghcr.io/itsmattguenther/linger` as `0.3.6`, `0.3` and `latest`, for x86-64
+only (ARM64 went after 0.4.4, `docs/decisions.md`). Nothing about the image is
+signed and nothing auto-updates; a host chooses when to `docker compose pull`.
 
 **3. Check the draft.** All ten files are there (the `.exe`, `.msi`, AppImage,
 `.deb` and `.rpm`, each with its `.sig`), and `latest.json` lists the new version
