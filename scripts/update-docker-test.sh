@@ -63,10 +63,11 @@ done
 # The same question update.sh asks, with nothing hidden, so a failure here
 # says why rather than leaving the script to time out.
 echo "== the 0.4.2 server's version, asked from inside its container"
-docker compose exec -T linger bash -c \
-  "exec 3<>/dev/tcp/127.0.0.1/8420 && printf 'GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
-  </dev/null || fail "asking the server for its version failed"
-echo
+answer="$(docker compose exec -T linger bash -c \
+  "exec 3<>/dev/tcp/127.0.0.1/8420 && printf 'GET /api/v1/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
+  </dev/null)" || fail "asking the server for its version failed"
+echo "$answer"
+grep -qF '"version":"0.4.2"' <<<"$answer" || fail "the server didn't say it was 0.4.2"
 
 echo "== the update"
 out="$(LINGER_UPDATE_WAIT=90 ./update.sh 2>&1)" || fail "update.sh failed:

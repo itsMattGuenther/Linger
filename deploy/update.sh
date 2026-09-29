@@ -98,7 +98,7 @@ compose() { docker compose ${profiles[@]+"${profiles[@]}"} "$@"; }
 port="$(sed -En 's/^[[:space:]]+LINGER_BIND:[[:space:]]*"?[^"]*:([0-9]+)"?[[:space:]]*$/\1/p' <<<"$config" | head -1)"
 port="${port:-8420}"
 
-# The server's own /health answer, asked from inside its container, so it works
+# The server's own /api/v1/health answer, asked from inside its container, so it works
 # whatever the DNS or the router does. The image has bash and no curl, so the
 # request is written by hand. What went wrong with the last try is kept in
 # $health_errors, for the report when the server never answers.
@@ -106,7 +106,7 @@ health_errors="$(mktemp)"
 trap 'rm -f "$health_errors"' EXIT
 health() {
   timeout 10 docker compose exec -T linger bash -c \
-    "exec 3<>/dev/tcp/127.0.0.1/$port && printf 'GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
+    "exec 3<>/dev/tcp/127.0.0.1/$port && printf 'GET /api/v1/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
     2>"$health_errors" </dev/null || true
 }
 version_in() { sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1; }

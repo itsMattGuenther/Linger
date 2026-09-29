@@ -46,6 +46,12 @@ case "${args[*]}" in
     touch "$S/running" ;;
   "exec -T linger bash -c "*)
     [[ -f "$S/running" ]] || exit 1
+    # The server's health is under /api/v1, like the rest of its API; any
+    # other address gets an empty 404, as the real one does.
+    if [[ "${args[*]}" != *"GET /api/v1/health "* ]]; then
+      printf 'HTTP/1.0 404 Not Found\r\ncontent-length: 0\r\n\r\n'
+      exit 0
+    fi
     image="$(cat "$S/running_image")"
     if [[ -f "$S/broken" && "$image" == "$(cat "$S/remote_image")" ]]; then exit 1; fi
     printf 'HTTP/1.0 200 OK\r\ncontent-type: application/json\r\n\r\n{"ok":true,"version":"%s"}' \
