@@ -99,16 +99,27 @@ const computed = (page: Page, value: string) =>
     return color;
   }, value);
 
+/**
+ * Wait for the whole look at once, and name each part that's still wrong. One
+ * part alone proves nothing: Callie's own style is already the violet-orchid
+ * gradient, so a wait on her color passed before a restyle adding a glow had
+ * landed, and the glow read "none" when WebKit was slow to draw it (#339).
+ */
+async function expectLook(name: Locator, wrong: (now: Painted) => string[]) {
+  await expect.poll(async () => wrong(await paint(name))).toEqual([]);
+}
+
 /** The dim, flat look: the token's color and nothing else. */
 async function expectDim(page: Page, name: Locator, color?: string) {
   const want = color ?? (await computed(page, "--text-offline"));
-  await expect.poll(async () => (await paint(name)).color).toBe(want);
-  const now = await paint(name);
-  expect(now.fill).toBe(want);
-  expect(now.image).toBe("none");
-  expect(now.filter).toBe("none");
-  expect(now.shadow).toBe("none");
-  expect(now.animation).toBe("none");
+  await expectLook(name, (now) => [
+    ...(now.color === want ? [] : [`color ${now.color}`]),
+    ...(now.fill === want ? [] : [`fill ${now.fill}`]),
+    ...(now.image === "none" ? [] : [`image ${now.image}`]),
+    ...(now.filter === "none" ? [] : [`filter ${now.filter}`]),
+    ...(now.shadow === "none" ? [] : [`shadow ${now.shadow}`]),
+    ...(now.animation === "none" ? [] : [`animation ${now.animation}`]),
+  ]);
 }
 
 /**
@@ -120,16 +131,15 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const [first, second] = look.fill.kind === "solid" ? [look.fill.color, look.fill.color] : [look.fill.from, look.fill.to];
   const [from, to] = [await computed(page, `--name-${first}`), await computed(page, `--name-${second}`)];
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
-  await expect.poll(async () => (await paint(name)).color).toBe(throughLetters ? "rgba(0, 0, 0, 0)" : from);
-  const now = await paint(name);
-  if (throughLetters) {
-    expect(now.image).toContain("linear-gradient");
-    expect(now.image).toContain(from);
-    expect(now.image).toContain(to);
-  } else expect(now.image).toBe("none");
-  if (look.effect === "glow") expect(now.filter).toContain(`drop-shadow(${from}`);
-  else expect(now.filter).toBe("none");
-  expect(now.animation).toBe(look.effect === "shimmer" ? "k-name-shimmer" : "none");
+  const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
+  const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
+  const animation = look.effect === "shimmer" ? "k-name-shimmer" : "none";
+  await expectLook(name, (now) => [
+    ...(now.color === color ? [] : [`color ${now.color}`]),
+    ...((throughLetters ? painted(now.image) : now.image === "none") ? [] : [`image ${now.image}`]),
+    ...((look.effect === "glow" ? now.filter.includes(`drop-shadow(${from}`) : now.filter === "none") ? [] : [`filter ${now.filter}`]),
+    ...(now.animation === animation ? [] : [`animation ${now.animation}`]),
+  ]);
 }
 
 // --- Reading pixels --------------------------------------------------------
@@ -324,11 +334,13 @@ test("in high contrast, an offline name takes the system's color for dim text", 
   await showOffline(page);
   await page.emulateMedia({ forcedColors: "active" });
   const jen = nameIn(page, "Offline", "Jen");
-  await expect.poll(async () => (await paint(jen)).color).toBe(await computed(page, "GrayText"));
-  const now = await paint(jen);
-  expect(now.fill).toBe(now.color);
-  expect(now.image).toBe("none");
-  expect(now.filter).toBe("none");
+  const gray = await computed(page, "GrayText");
+  await expectLook(jen, (now) => [
+    ...(now.color === gray ? [] : [`color ${now.color}`]),
+    ...(now.fill === gray ? [] : [`fill ${now.fill}`]),
+    ...(now.image === "none" ? [] : [`image ${now.image}`]),
+    ...(now.filter === "none" ? [] : [`filter ${now.filter}`]),
+  ]);
   // Everybody else's name is repainted by the system itself, in its text
   // color. That is the engine's doing, not ours: Chromium does it, while
   // WebKit only answers the media query and repaints nothing, so it isn't
