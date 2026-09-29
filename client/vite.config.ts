@@ -30,6 +30,12 @@ export default defineConfig({
   build: {
     // WebKitGTK is the floor (ARCHITECTURE §2): keep output conservative.
     target: ["es2022", "safari15"],
+    // Never embed an asset in the code as a `data:` URL, which Vite does to
+    // any file under 4 KB. The shipped CSP allows only 'self' for fonts and
+    // media, so an embedded one is refused: both Silkscreen faces were, in
+    // every installed build, while dev mode served them as files and looked
+    // fine (#318). `scripts/csp-assets.mjs` checks each build in CI.
+    assetsInlineLimit: 0,
     // The app's one page, `next.html`, which every window opens
     // (`src-tauri/src/window.rs`).
     rollupOptions: {

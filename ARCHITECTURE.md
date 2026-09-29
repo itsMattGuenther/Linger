@@ -499,6 +499,12 @@ E2EE launders a false promise, which is worse than an honest limitation.
   channel — `invoke()` is a `fetch` at one of them — and blocking them does not stop
   IPC, it drops it silently onto a slower `postMessage` fallback.
   `client/src-tauri/tests/csp.rs` holds both policies to this.
+- **Nothing the bundler produces is embedded as a `data:` URL**
+  (`build.assetsInlineLimit: 0`). Vite embeds files under 4 KB by default, and
+  the shipped policy allows `data:` for images only, so an embedded font or sound
+  is refused in every installed app while `pnpm tauri dev`, which serves files,
+  looks fine. Both Silkscreen faces went that way (#318). CI's web job runs
+  `scripts/csp-assets.mjs` on each build to hold it.
 - Markdown rendering: allowlist-based sanitizer, no raw HTML passthrough, ever.
 
 **The origin split is enforced, not just advertised.** `LINGER_MEDIA_DOMAIN` defaults to

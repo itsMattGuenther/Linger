@@ -164,6 +164,10 @@ jobs:
         run: pnpm test:browser --project=chromium
       - name: build
         run: pnpm exec vite build
+      - name: the build embeds nothing the shipped CSP refuses
+        # Dev mode serves every asset as a file, so only a production build
+        # shows an embedded font or sound the CSP blocks (#318).
+        run: node ../scripts/csp-assets.mjs dist
       - name: browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -268,3 +272,5 @@ jobs:
         run: scripts/version-check.sh
       - name: test CI selection
         run: node --test scripts/ci-scope.test.mjs
+      - name: test the build's CSP check
+        run: node --test scripts/csp-assets.test.mjs
