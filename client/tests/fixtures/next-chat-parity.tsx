@@ -160,6 +160,8 @@ const desktop = fakeDesktop({
 // server at once, so it shows in `data-did`, and answered when the test says.
 let holdingReads = false;
 const heldReads: { query: string; answer: () => void }[] = [];
+/** History reads asked and not yet answered, held or not (`window.parity.reading`). */
+let reading = 0;
 
 // The store's bytes and a send that never comes back sit outside `routes`,
 // which can't wait: they're answered here, before the fake server sees them.
@@ -168,10 +170,15 @@ const refusedOnce = new Set<string>();
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const method = init?.method ?? "GET";
-  if (holdingReads && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "GET") {
-    const answer = fakeFetch(input, init);
-    await new Promise<void>((settle) => heldReads.push({ query: url.search, answer: settle }));
-    return answer;
+  if (url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "GET") {
+    reading += 1;
+    try {
+      const answer = fakeFetch(input, init);
+      if (holdingReads) await new Promise<void>((settle) => heldReads.push({ query: url.search, answer: settle }));
+      return await answer;
+    } finally {
+      reading -= 1;
+    }
   }
   if (url.origin === SERVER && url.pathname.startsWith("/api/v1/store/") && method === "PUT") {
     desktop.note(`PUT ${url.pathname.slice("/api/v1".length)}`);
@@ -210,6 +217,8 @@ declare global {
       open: (room: string) => void;
       /** From now on, every history read waits to be answered. */
       holdReads: () => void;
+      /** How many history reads are on their way, held or not. */
+      reading: () => number;
       /**
        * Answer the held reads whose query has `part` in it; without one,
        * answer them all and stop holding. Says how many were answered.
@@ -234,6 +243,7 @@ window.parity = {
   holdReads: () => {
     holdingReads = true;
   },
+  reading: () => reading,
   answerReads: (part) => {
     if (part === undefined) holdingReads = false;
     const answering = heldReads.filter((read) => part === undefined || read.query.includes(part));
