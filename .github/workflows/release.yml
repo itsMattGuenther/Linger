@@ -9,8 +9,8 @@ name: release
 #      client/src-tauri/tauri.conf.json and the root Cargo.toml — all four,
 #      `scripts/version-check.sh` says so if you miss one
 #   2. commit, then `git tag v0.2.0 && git push origin v0.2.0`
-#   3. this builds Linux and Windows bundles and opens a **draft** release with
-#      `latest.json`
+#   3. this runs every CI check on the tagged commit, then builds Linux and
+#      Windows bundles and opens a **draft** release with `latest.json`
 #   4. read it, then publish it — publishing is what ships the update, and it is
 #      a human's click on purpose
 #
@@ -19,8 +19,8 @@ name: release
 # installed copy until you publish it.
 #
 # Running it from the Actions tab (workflow_dispatch) does the checks and stops:
-# it proves the signing secrets are right without cutting a release. Only a tag
-# builds anything.
+# it proves the signing secrets are right, and the tests pass, without cutting a
+# release. Only a tag builds anything.
 on:
   push:
     tags: ["v*"]
@@ -30,6 +30,16 @@ permissions:
   contents: write
 
 jobs:
+  tests:
+    # Every CI check, on exactly the commit this tag ships, and nothing is
+    # built unless it passes. A release used to build whatever was tagged:
+    # 0.4.3 shipped from a commit whose WebKit check had failed (a real bug,
+    # #266), and a `main` run can be cancelled by a newer merge, leaving a
+    # commit that was never tested at all.
+    uses: ./.github/workflows/ci.yml
+    with:
+      all: true
+
   preflight:
     name: the tag and the key agree with the tree
     runs-on: ubuntu-latest
@@ -59,7 +69,7 @@ jobs:
 
   bundle:
     name: ${{ matrix.label }}
-    needs: preflight
+    needs: [preflight, tests]
     # A manual run is a check, not a release. Only a tag builds and publishes.
     if: github.ref_type == 'tag'
     runs-on: ${{ matrix.os }}
@@ -205,6 +215,15 @@ jobs:
           python3 scripts/linux-audio-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/audio-appimage
           python3 scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python3 scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
+      - name: The Buddy list starts in the signed Linux packages
+        # The PR package check runs this on debug builds; this is the build
+        # people install. Windows gets the same from windows-icon-check.ps1.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/linux-next-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
+          python3 scripts/linux-next-check.py package-check/deb/usr/bin/linger-client --output package-check/next-deb
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -221,5 +240,6 @@ jobs:
             package-check/audio-*/*.log
             package-check/audio-*/*.json
             package-check/audio-*/*.f32
+            package-check/next-*/result.json
             package-check/updates/*.log
           retention-days: 7

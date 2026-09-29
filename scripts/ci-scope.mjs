@@ -59,8 +59,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const scope = classify(paths);
     console.log([`changed=${paths.length}`, ...Object.entries(scope).map(([key, value]) => `${key}=${value}`)].join("\n"));
   } else {
+    // A manual run, or a caller asking for everything (a release, the
+    // nightly run: CI_SCOPE_ALL), checks every domain.
     let paths = [];
-    if (process.env.GITHUB_EVENT_NAME !== "workflow_dispatch") {
+    if (process.env.GITHUB_EVENT_NAME !== "workflow_dispatch" && process.env.CI_SCOPE_ALL !== "true") {
       try {
         paths = changedPaths(process.env.BASE_SHA, process.env.HEAD_SHA,
           process.env.GITHUB_EVENT_NAME === "pull_request");

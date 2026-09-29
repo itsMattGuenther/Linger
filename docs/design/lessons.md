@@ -549,8 +549,10 @@ check through `tauri-driver` (T-1820).
   - Fixtures deliver events explicitly and in order: no sleeps, no "wait and
     hope".
   - A new spec is run repeatedly before it lands.
-- **Check:** CI runs new and changed specs with `--repeat-each` (for example
-  10), and blanket retries stay off (`docs/testing-strategy.md`).
+- **Check:** a browser test a PR adds or edits runs ten times in both engines
+  before it lands (CI's `new tests, repeated`; `scripts/check.sh` does it in
+  Chromium), every browser test runs three times each night (`nightly.yml`),
+  and blanket retries stay off (`docs/testing-strategy.md`).
 
 ### L-32 · Unfinished work was shown as finished
 

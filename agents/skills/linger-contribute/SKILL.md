@@ -56,7 +56,8 @@ That runs what CI runs for what your branch changed since `origin/main`
 (pass another base, such as `upstream/main`, if your fork's `origin` isn't the
 project): the rules lint and your commits always; formatting, clippy and the
 Rust tests for server changes; the typecheck, unit tests and Chromium browser
-tests for client changes; the desktop shell when its system libraries are
+tests for client changes, with any browser test you added or edited run ten
+times; the desktop shell when its system libraries are
 installed. `--all` runs everything. The Chromium tests need Playwright's
 browser once: `cd client && pnpm exec playwright install chromium`.
 `docs/testing-strategy.md` has what CI adds on top. Report failures honestly;

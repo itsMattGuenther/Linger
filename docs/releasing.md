@@ -61,9 +61,12 @@ scripts/version-check.sh v0.3.6
 git tag -a v0.3.6 -m "Linger 0.3.6" && git push origin v0.3.6
 ```
 
-That builds Linux and Windows, signs the updater artifacts, checks the packaged
-audio and the Windows upgrade path, and opens a **draft** release carrying
-`latest.json`. The same tag publishes the server image to
+That first runs every CI check on the tagged commit, whatever it changed
+(`ci.yml`, called from `release.yml`); nothing is built unless it passes. Then
+it builds Linux and Windows, signs the updater artifacts, checks the packaged
+audio, that the Buddy list starts in the Linux packages, and the Windows
+upgrade path, and opens a **draft** release carrying `latest.json`. The same
+tag, after its own full CI run, publishes the server image to
 `ghcr.io/itsmattguenther/linger` as `0.3.6`, `0.3` and `latest`, for x86-64
 only (ARM64 went after 0.4.4, `docs/decisions.md`). Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.

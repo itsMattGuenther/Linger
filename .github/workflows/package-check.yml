@@ -4,9 +4,16 @@ name: package check
 on:
   pull_request:
   workflow_dispatch:
+  # nightly.yml runs every check here on main.
+  workflow_call:
+    inputs:
+      all:
+        description: Build and check the packages whatever changed
+        type: boolean
+        default: false
 
 concurrency:
-  group: package-check-${{ github.event.pull_request.number || github.ref }}
+  group: package-check-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -27,6 +34,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_SCOPE_ALL: ${{ inputs.all }}
         run: node scripts/ci-scope.mjs
   packages:
     needs: changes
