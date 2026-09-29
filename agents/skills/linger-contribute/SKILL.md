@@ -51,8 +51,9 @@ breaking any of them.
 scripts/check.sh origin/main
 ```
 
-That runs what CI runs: the rules lint, formatting, clippy, the Rust and client
-tests, and the desktop shell when its system libraries are installed. The
+That runs what CI runs: the rules lint, the update script's test, formatting,
+clippy, the Rust and client tests, and the desktop shell when its system
+libraries are installed. The
 browser tests need Playwright (`cd client && pnpm exec playwright test`); the
 development guide (`docs/development.md`) says how to set them up. Report failures honestly;
 never call a failing change done.

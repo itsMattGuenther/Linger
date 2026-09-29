@@ -131,6 +131,7 @@ machine:
 mkdir linger && cd linger
 curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml
 curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/Caddyfile
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh && chmod +x update.sh
 # put your two names (yours, and cdn. in front of it) in both files
 docker compose run --rm --user root --entrypoint chown linger linger:linger /data
 docker compose up -d
@@ -138,7 +139,8 @@ docker compose logs linger   # prints a one-time setup link
 ```
 
 Paste the setup link into the app. It makes your account, makes you the host
-and names the server. To update later: `docker compose pull && docker compose up -d`.
+and names the server. To update later, run `./update.sh` in the same folder: it
+backs up the database, updates and restarts, and prints the version it's on.
 
 ## 🐞 Reporting a problem
 

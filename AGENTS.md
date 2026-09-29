@@ -156,8 +156,8 @@ nothing, so when a feature moves or gets cut, fix the README in the same commit.
 ## Build and check
 
 `scripts/check.sh` runs the whole local gate in the order CI runs it — rules
-lint, the version check, fmt, clippy, workspace tests, bindings drift, client
-typecheck + tests, and the desktop-shell pass. Green here should mean green
+lint, the version check, the update script's test, fmt, clippy, workspace
+tests, bindings drift, client typecheck + tests, and the desktop-shell pass. Green here should mean green
 there. The pieces:
 
 ```bash

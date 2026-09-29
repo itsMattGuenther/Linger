@@ -12,7 +12,9 @@
 # Backup = ./data/linger.db + ./data/objects/. That's the whole server. (With
 # LINGER_STORAGE=s3, the bucket replaces ./data/objects/.)
 #
-# Updating = `docker compose pull && docker compose up -d`. The image below
+# Updating = `./update.sh`, from deploy/ next to this file: it backs up the
+# database, pulls, restarts, and says which version runs. By hand it's
+# `docker compose pull && docker compose up -d`. The image below
 # follows `latest`, which moves when a version is tagged; write `:0.2.0`
 # instead if you would rather pick your moment. Nothing updates on its own.
 # Images are published for x86-64 (Intel or AMD) only. A Raspberry Pi or an
@@ -25,8 +27,9 @@
 # optional, and the server says so at startup when it's missing. To run it: copy `.env.example` to `.env`, put a long random secret
 # in it (`openssl rand -hex 32`), set the realm to your domain below, open
 # port 3478 (TCP and UDP) and UDP 49160–49200 on your firewall, and start with
-# `docker compose --profile voice up -d`. The secret is read from `.env` so it
-# is never in this file, which people share.
+# `docker compose up -d`: `.env.example`'s COMPOSE_PROFILES=voice starts the
+# relay too. The secret is read from `.env` so it is never in this file, which
+# people share.
 
 services:
   linger:
@@ -94,8 +97,8 @@ services:
     image: coturn/coturn:4
     restart: unless-stopped
     # Behind a profile so a plain `docker compose up -d` still works with no
-    # `.env` and no relay. Start the relay with `docker compose --profile voice
-    # up -d` once the secret is in place.
+    # `.env` and no relay. `.env.example` turns the profile on
+    # (COMPOSE_PROFILES=voice), so the relay starts once `.env` is in place.
     profiles: ["voice"]
     network_mode: host
     environment:

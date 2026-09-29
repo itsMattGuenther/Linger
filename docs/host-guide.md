@@ -71,13 +71,16 @@ instead.
 ## 3. Get the server files
 
 Run these commands **on the server**, in a terminal. They make a `linger`
-folder in your current directory and put two setup files inside it:
+folder in your current directory and put three files inside it: the two setup
+files, and the script that updates the server later:
 
 ```bash
 mkdir linger
 cd linger
 curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml
 curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/Caddyfile
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh
+chmod +x update.sh
 ```
 
 The Docker images download automatically later. The app on the Releases page
@@ -316,10 +319,12 @@ Run these steps **on the server**, inside the `linger` folder containing
    put your public IP there.)
 5. Start Linger and the relay together so both read the secret:
    ```bash
-   docker compose --profile voice up -d
+   docker compose up -d
    ```
-   Without `--profile voice` the relay does not start, which is fine for a
-   server that does not want one.
+   The `.env` from step 1 has `COMPOSE_PROFILES=voice`, which tells Docker to
+   start the relay with everything else. A `.env` made before 0.4.5 doesn't
+   have it: add it once with `echo COMPOSE_PROFILES=voice >> .env`, or type
+   `--profile voice` after `docker compose` every time.
 6. Check that it **stays running**, not just that Docker printed `Started`:
 
    ```bash
@@ -355,6 +360,10 @@ docker compose start linger
 
 That is a few seconds of downtime. Put it in a scheduled job and keep the copies
 somewhere that is not this machine.
+
+`update.sh` also saves the database into `backups/` whenever it updates the
+server. That copy is for going back after an update: it has the messages but
+not the uploaded files, and it's on the same machine. It doesn't replace this.
 
 To restore: stop everything, put the `data` folder back, start again.
 
@@ -396,23 +405,46 @@ backup is the `data` folder, above.
 
 ## Updating the server
 
+Inside the `linger` folder:
+
+```bash
+./update.sh
+```
+
+It downloads the new version while the server keeps running, then stops it
+for a few seconds to save the database into `backups/` (it keeps the last
+five). It starts everything again, the relay too if you run one, and prints
+the version before and after. If the new version doesn't start, it prints the
+commands that put the old one back. When there's nothing new, it says so and
+changes nothing.
+
+Nothing updates itself. You decide when. If you type `sudo` before `docker`
+commands, run `sudo ./update.sh`.
+
+**No `update.sh` in your folder?** Servers set up before 0.4.5 get it once:
+
+```bash
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh
+chmod +x update.sh
+```
+
+**By hand**, the update is:
+
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Nothing updates itself. You decide when. These commands use the image name
-already in your `compose.yaml`. If that line still says
-`ghcr.io/matthewguenther/linger`, change it to
-`ghcr.io/itsmattguenther/linger:latest` (all lowercase) before pulling. GitHub
-pages follow the username change; the container registry does not.
+Without `update.sh` nothing makes a backup first; see [Backups](#backups).
+These commands use the image name already in your `compose.yaml`. If that line
+still says `ghcr.io/matthewguenther/linger`, change it to
+`ghcr.io/itsmattguenther/linger:latest` (all lowercase) before pulling.
+`update.sh` stops and says so. GitHub pages follow the username change; the
+container registry does not.
 
-If you use voice, include the profile in both commands so the relay updates too:
-
-```bash
-docker compose --profile voice pull
-docker compose --profile voice up -d
-```
+If you run the relay and your `.env` has no `COMPOSE_PROFILES=voice` line, add
+`--profile voice` after `docker compose` in both commands, or the relay stays
+on its old version.
 
 Repeat the [relay check](#the-voice-relay) after updating.
 

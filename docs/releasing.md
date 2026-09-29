@@ -44,7 +44,10 @@ produces a green release that no installed copy will accept.
 - Write `docs/releases/<version>.md`: what changed for people, with issue
   numbers; how to install or update; whether hosts need to update the server
   (check `git diff --stat v<previous> -- crates deploy`); and the checklist for
-  installed clients.
+  installed clients. Hosts update with `./update.sh` (#312), so the notes'
+  host section says that, plus only what's unusual about this release: a new
+  setting, a change to `compose.yaml`, or a database change worth a backup
+  somewhere else first.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
   new notes, and record the release in `TASKS.md`.
 

@@ -37,15 +37,23 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/ci-scope.mjs
 
+  # What hosts run from deploy/: the relay, and the update script (#312).
   coturn:
+    name: deploy
     needs: changes
     if: ${{ needs.changes.outputs.coturn == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: shipped relay starts and refuses an empty secret
         run: bash scripts/coturn-test.sh
+      - name: update script passes shellcheck
+        run: shellcheck deploy/update.sh scripts/update-test.sh scripts/update-docker-test.sh
+      - name: update script, against a stand-in docker
+        run: bash scripts/update-test.sh
+      - name: update script, updating a real 0.4.2 server to 0.4.3
+        run: bash scripts/update-docker-test.sh
 
   rust:
     needs: changes

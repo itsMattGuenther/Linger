@@ -12,6 +12,9 @@ echo "== version check =="
 scripts/version-check.sh
 node --test scripts/ci-scope.test.mjs
 
+echo "== update script =="
+bash scripts/update-test.sh
+
 echo "== rust: fmt =="
 cargo fmt --all --check
 echo "== rust: clippy =="
