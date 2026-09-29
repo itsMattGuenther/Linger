@@ -10,7 +10,9 @@ is a server installer.
 
 ## Before you start
 
-- **A Linux computer reachable from the internet.** For a first try, follow
+- **A Linux computer reachable from the internet**, with an Intel or AMD
+  processor (x86-64). The server isn't built for ARM, so a Raspberry Pi or an
+  ARM cloud server won't run it. For a first try, follow
   [Create an Ubuntu VPS](vps-setup.md): choosing a server, SSH keys, connecting,
   and firewall rules. Already have a server? Start at step 1 below. At home,
   you must also [set up your router](#hosting-at-home).

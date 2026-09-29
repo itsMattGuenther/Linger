@@ -15,7 +15,8 @@
 # Updating = `docker compose pull && docker compose up -d`. The image below
 # follows `latest`, which moves when a version is tagged; write `:0.2.0`
 # instead if you would rather pick your moment. Nothing updates on its own.
-# Images are published for x86-64 and ARM64, so a Raspberry Pi works too.
+# Images are published for x86-64 (Intel or AMD) only. A Raspberry Pi or an
+# ARM cloud server can't run them.
 #
 # Voice (SPEC §4.14) goes through the linger container: set
 # LINGER_VOICE_ADDRESS below and open UDP 3479. Without it this server carries
