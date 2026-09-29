@@ -788,7 +788,7 @@ run again when its area changes.
   no-rounded-panels rules, the design system is advice rather than the product
   (SPEC §5.1). *How far sharing goes:* a theme as a file people send each other
   costs nothing and is probably the whole feature; a gallery inside the app is a
-  store without prices and a moderation surface, and rule 14 plus SPEC §6's
+  store without prices and a moderation surface, and rule 13 plus SPEC §6's
   "must never be load-bearing" both point at it.
 - Bundle identifier is `com.linger.desktop` — fine? Changing after M7 is painful.
 - **Mobile push goes through Apple and Google, or it does not exist.** There is

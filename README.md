@@ -77,9 +77,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 
 **What it will never have:** XP, streaks or engagement metrics. Federation,
 bots, roles, threads, `@everyone`, algorithmic ordering, unread badges.
-Telemetry or analytics of any kind. A paid tier or a store. AI features.
-Anything that watches which applications you have open. The scope discipline
-is the product.
+Telemetry or analytics of any kind. A paid tier or a store. Anything that
+watches which applications you have open. The scope discipline is the
+product.
 
 ## 🔐 Privacy
 

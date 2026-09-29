@@ -255,8 +255,8 @@ A feature idea is welcome as an issue labelled `enhancement`. First check it
 against what Linger has chosen **not** to be: [the "never" list in the
 README](https://github.com/itsMattGuenther/Linger#what-it-does) and
 [SPEC §2](https://github.com/itsMattGuenther/Linger/blob/main/SPEC.md#2-design-thesis).
-No unread counts, no telemetry, no AI features, no roles, threads or
-federation, nothing for sale. If the idea is one of those, say so kindly and
+No unread counts, no telemetry, no roles, threads or federation,
+nothing for sale. If the idea is one of those, say so kindly and
 don't file it.
 
 If the user wants to fix the problem themselves, the `linger-contribute` skill
