@@ -24,6 +24,7 @@ const COMMANDS: &[&str] = &[
     "show_notification",
     "app_version",
     "update_check",
+    "newest_version",
     "update_install",
     "graphics_started",
     "next_open_chat",

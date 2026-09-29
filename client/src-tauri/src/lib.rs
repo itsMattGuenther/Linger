@@ -579,6 +579,7 @@ pub fn run() {
             notifications::show_notification,
             updates::app_version,
             updates::update_check,
+            updates::newest_version,
             updates::update_install,
             graphics::graphics_started,
             window::next_open_chat,

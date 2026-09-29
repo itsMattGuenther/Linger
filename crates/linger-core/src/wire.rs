@@ -302,6 +302,19 @@ pub struct InvitePreview {
 // The server and its rooms (PROTOCOL §3)
 // ---------------------------------------------------------------------------
 
+/// `GET /health` (PROTOCOL §9): whether the server is up with its database
+/// answering, and which release it runs. It needs no sign-in, so the app can
+/// probe an address before anybody has an account, and it tells a host their
+/// server is behind the newest release (#314). Every server since 0.2 answers
+/// with exactly these two fields.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Health {
+    pub ok: bool,
+    /// The server's release, like `0.4.4`: the version its image was built as.
+    pub version: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ServerInfo {

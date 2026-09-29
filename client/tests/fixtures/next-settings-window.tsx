@@ -14,6 +14,8 @@
  * `?autostart=ignores` has it take the change without keeping it,
  * `?autostart=none` is a computer where it isn't offered, and
  * `?autostart=hyprland` is a desktop that won't start it by itself.
+ * The server runs 0.4.4 and so does the newest release; `?serverVersion=0.4.3`
+ * has the server answer an older one (#314).
  * `window.shell.prefs(prefs)` is the list window saying your servers'
  * order or Quiet changed.
  * What the window asked for is written to `body[data-did]`, `|`-separated.
@@ -64,6 +66,7 @@ const desktop = fakeDesktop({
     "plugin:window|set_size": (args) => desktop.note(`size:${JSON.stringify(args.value)}`),
     app_version: () => "0.3.6",
     update_check: () => ({ kind: "current" }),
+    newest_version: () => "0.4.4",
     autostart_state: () => (startup === "none" ? null : { on: startsAtSignIn, ignored_by: startup === "hyprland" ? "Hyprland" : null }),
     autostart_set: (args) => {
       desktop.note(`autostart:${String(args.on)}`);
@@ -78,6 +81,7 @@ const desktop = fakeDesktop({
   routes: (method, path, url, body) => {
     // The other servers answer from the shared fake: their names, and nothing else.
     if (url.origin !== SERVER) return null;
+    if (path === "/health" && method === "GET") return json({ ok: true, version: query.get("serverVersion") ?? "0.4.4" });
     if (path === "/server" && method === "GET") return json(info);
     if (path === "/server" && method === "PATCH") {
       info = { ...info, name: String(body.name ?? info.name), accent_key: (body.accent_key ?? null) as ServerInfo["accent_key"] };

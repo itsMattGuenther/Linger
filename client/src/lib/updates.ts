@@ -96,3 +96,69 @@ export function updateLine(check: UpdateCheck | null, busy: boolean): string {
         : `This copy updates with your system, through ${check.by}.`;
   }
 }
+
+/**
+ * The newest published release, whatever installed this copy (#314). A copy
+ * the package manager owns still asks, since a host on Omarchy needs to know
+ * their server is behind as much as anybody. `null` outside the shell, or when
+ * the release feed couldn't be read.
+ */
+export async function newestVersion(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const version: string | null = await invoke("newest_version");
+  return version;
+}
+
+/** Where the host guide says how to update a server (#314). */
+export const HOST_UPDATE_GUIDE_URL = "https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server";
+
+/** `1.2.3` (or `v1.2.3`) as three numbers, or `null` for anything else. */
+function versionParts(version: string): [number, number, number] | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/**
+ * Whether `version` is an older release than `than`. False when either isn't
+ * a plain release number, so an odd answer never tells a host they're behind.
+ */
+export function isOlderVersion(version: string, than: string): boolean {
+  const a = versionParts(version);
+  const b = versionParts(than);
+  if (a === null || b === null) return false;
+  const [aMajor, aMinor, aPatch] = a;
+  const [bMajor, bMinor, bPatch] = b;
+  if (aMajor !== bMajor) return aMajor < bMajor;
+  if (aMinor !== bMinor) return aMinor < bMinor;
+  return aPatch < bPatch;
+}
+
+/** Whether two versions are the same release, both readable. */
+function sameVersion(a: string, b: string): boolean {
+  const x = versionParts(a);
+  const y = versionParts(b);
+  return x !== null && y !== null && x[0] === y[0] && x[1] === y[1] && x[2] === y[2];
+}
+
+/** What a host's app knows of their server's release: still asking, couldn't ask, or the answer. */
+export type ServerVersion = { kind: "looking" } | { kind: "unknown" } | { kind: "known"; version: string };
+
+/**
+ * The sentence Settings → Hosting → Server shows about the server's release,
+ * and whether there's a newer one to update to (#314). Pure, so every case has
+ * words a test can read.
+ */
+export function serverVersionLine(server: ServerVersion, newest: string | null): { words: string; behind: boolean } {
+  switch (server.kind) {
+    case "looking":
+      return { words: "Asking the server which version it runs…", behind: false };
+    case "unknown":
+      return { words: "Couldn't ask the server which version it runs.", behind: false };
+    case "known": {
+      const runs = `This server runs Linger ${server.version}`;
+      if (newest === null) return { words: `${runs}.`, behind: false };
+      if (isOlderVersion(server.version, newest)) return { words: `${runs}, and ${newest} is out.`, behind: true };
+      return { words: sameVersion(server.version, newest) ? `${runs}, the newest.` : `${runs}.`, behind: false };
+    }
+  }
+}

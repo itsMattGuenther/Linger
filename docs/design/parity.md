@@ -498,6 +498,7 @@ there or where the design puts it.
 | HOST-9 | The server's accent: a palette key or none. | `HostPanel.tsx` | Same; its use in the design is **decision 18** | F | ✅ (next-settings.spec.ts); decision 18: the server's color for everybody |
 | HOST-10 | Every host action is enforced by the server; the client only decides what's drawn. | server `FORBIDDEN` | Same | C (server tests) | ✅ (server tests) |
 | HOST-11 | A locked-out host recovers with `linger-server reset-password` on the server (no email, no link). | `crates/linger-server/src/reset.rs`, host guide | Same (docs only) | — | ✅ (docs; nothing to build) |
+| HOST-12 | The release the server runs, and when a newer one is out, with how to update and what's new. Only the host sees it; the server says on `/health`, and the newest comes from the release feed, whoever installed the app (#314). | new | Settings → Hosting → Server, "Version" | U + F | ✅ (lib/updates.test.ts; next-settings.spec.ts and next-settings-window.spec.ts "the server's version") |
 
 ## MULTI — several servers
 

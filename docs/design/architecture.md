@@ -317,7 +317,8 @@ one.
   `sound_play` (#241) and `clipboard_image`, which reads a picture off the
   clipboard when one is pasted into the message box on Linux, since
   WebKitGTK never shows the page one (#276, `src-tauri/src/clipboard.rs`).
-  Settings gets `graphics_started`, `voice_devices`, the three update commands, and
+  Settings gets `graphics_started`, `voice_devices`, the three update commands,
+  `newest_version` for the version note in Hosting → Server (#314), and
   `autostart_state` and `autostart_set` for starting Linger when you sign in
   to the computer (#228). That last is a setting of this computer that no
   other window shares, so Settings asks the operating system itself rather

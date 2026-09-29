@@ -167,6 +167,10 @@ Then **Hosting → Invites → New Invite**. You choose how many people the invi
 is good for and when it expires; the link is copied for you the moment it is
 made. Send it however you normally talk to your friends.
 
+**Hosting → Server** shows which version your server runs, and says when a
+newer one is out, with a link to [updating the server](#updating-the-server).
+Only you see it.
+
 An invite link is the only way to get an account. There is no public sign-up.
 Text chat is ready, and so is voice if you set `LINGER_VOICE_ADDRESS`. For
 friends on networks that block voice (some offices, some public wifi), also set

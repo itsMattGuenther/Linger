@@ -474,13 +474,26 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
 // The server
 
 export interface HostServerProps {
+  /**
+   * The release the server runs, in words, and whether a newer one is out
+   * (#314): `serverVersionLine` in lib/updates.ts. Only a host sees it.
+   */
+  version: {
+    words: string;
+    behind: boolean;
+    /** The newest release, when known: what "What's new" opens. */
+    newest: string | null;
+    openNotes: (version: string) => void;
+    /** The host guide's "Updating the server". */
+    openGuide: () => void;
+  };
   name: string;
   /** A palette key, or null for none (HOST-9). */
   accent: string | null;
   save: (change: { name: string; accent: string | null }) => Promise<string | null>;
 }
 
-export function ServerSection({ name: savedName, accent: savedAccent, save: saveServer }: HostServerProps) {
+export function ServerSection({ version, name: savedName, accent: savedAccent, save: saveServer }: HostServerProps) {
   const [name, setName] = useState(savedName);
   const [accent, setAccent] = useState<string | null>(savedAccent);
   const save = useSave();
@@ -503,8 +516,22 @@ export function ServerSection({ name: savedName, accent: savedAccent, save: save
     if (next.accent !== undefined) setAccent(next.accent);
     save.reset();
   };
+  const newest = version.newest;
   return (
     <>
+      <Block heading={HEADINGS.serverVersion}>
+        <Note tone="status">{version.words}</Note>
+        {version.behind && newest !== null ? (
+          <Actions start>
+            <Button icon="go" onClick={version.openGuide}>
+              How to update
+            </Button>
+            <Button variant="quiet" icon="go" onClick={() => version.openNotes(newest)}>
+              What's new
+            </Button>
+          </Actions>
+        ) : null}
+      </Block>
       <Block heading={HEADINGS.serverName}>
         <TextField label="Server name" hideLabel value={name} hint="What the list says, and what an invite link tells a stranger." onChange={(value) => change({ name: value })} onEnter={submit} />
       </Block>

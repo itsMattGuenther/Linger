@@ -6,7 +6,7 @@ import type { Room } from "../../../generated/Room";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 import { displayNameRequest } from "../../../lib/account";
-import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
+import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
@@ -15,7 +15,17 @@ import { inviteUrl, moveRoom } from "../../../lib/host";
 import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
-import { appVersion, checkForUpdate, installUpdate, releaseNotesUrl, type UpdateCheck } from "../../../lib/updates";
+import {
+  appVersion,
+  checkForUpdate,
+  HOST_UPDATE_GUIDE_URL,
+  installUpdate,
+  newestVersion,
+  releaseNotesUrl,
+  type ServerVersion,
+  serverVersionLine,
+  type UpdateCheck,
+} from "../../../lib/updates";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
@@ -320,6 +330,35 @@ function Settings({ following }: { following: Following }) {
   }, [api, host]);
   useEffect(readHostLists, [readHostLists]);
 
+  // Which release the server runs, and the newest there is, so a host hears
+  // when theirs is behind (#314). The server says on /health, which needs no
+  // sign-in and every server answers; nobody but the host is asked or told.
+  const [serverVersion, setServerVersion] = useState<ServerVersion>({ kind: "looking" });
+  const [newest, setNewest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!server || !host) return;
+    const abort = new AbortController();
+    setServerVersion({ kind: "looking" });
+    new PublicApi(server).healthReport(abort.signal).then(
+      (report) => setServerVersion({ kind: "known", version: report.version }),
+      () => {
+        if (!abort.signal.aborted) setServerVersion({ kind: "unknown" });
+      },
+    );
+    return () => abort.abort();
+  }, [server, host]);
+  useEffect(() => {
+    if (!host) return;
+    let alive = true;
+    newestVersion().then(
+      (version) => alive && setNewest(version),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [host]);
+
   if (!state || !api || !server || !state.me) {
     return (
       <WindowMessage onClose={closeWindow}>
@@ -553,6 +592,12 @@ function Settings({ following }: { following: Following }) {
                 },
               },
               server: {
+                version: {
+                  ...serverVersionLine(serverVersion, newest),
+                  newest,
+                  openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
+                  openGuide: () => openExternal(HOST_UPDATE_GUIDE_URL),
+                },
                 name: serverName,
                 accent: info?.accent_key ?? null,
                 save: async (change) => {

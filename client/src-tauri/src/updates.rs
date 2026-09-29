@@ -127,6 +127,31 @@ pub async fn update_check(app: AppHandle) -> UpdateCheck {
     }
 }
 
+/// The newest published release, whatever installed this copy (#314).
+///
+/// A host's app compares it with the version their server reports, to tell
+/// them when the server is behind. So unlike `update_check` it asks even when
+/// a package manager owns this copy, which only decides who installs updates,
+/// not whether a host deserves to know about one. The comparator accepts every
+/// release, so the answer is what the feed publishes rather than "nothing newer
+/// than me", which a build ahead of the feed would otherwise say. `None` when
+/// the build can't ask or the feed couldn't be read: the note just says less.
+#[tauri::command]
+pub async fn newest_version(app: AppHandle) -> Option<String> {
+    if !ready(&app) {
+        return None;
+    }
+    let updater = app
+        .updater_builder()
+        .version_comparator(|_current, _published| true)
+        .build()
+        .ok()?;
+    match updater.check().await {
+        Ok(Some(published)) => Some(published.version),
+        Ok(None) | Err(_) => None,
+    }
+}
+
 /// Download, verify, install, restart.
 ///
 /// The check is run again here rather than carrying an `Update` across two IPC

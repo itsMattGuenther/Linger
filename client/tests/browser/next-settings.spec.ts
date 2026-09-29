@@ -563,6 +563,25 @@ test.describe("hosting", () => {
     await expect.poll(() => did(page)).toEqual(expect.arrayContaining(["server:The Good Company:teal", "server:The Good Co.:none"]));
   });
 
+  test("says which version the server runs, and when it's behind, how to update (#314)", async ({ page }) => {
+    const version = page.getByRole("region", { name: "Version" });
+    await open(page, "?section=server");
+    await expect(version).toContainText("This server runs Linger 0.4.4, the newest.");
+    await expect(version.getByRole("button")).toHaveCount(0);
+
+    await open(page, "?section=server&server=behind");
+    await expect(version).toContainText("This server runs Linger 0.4.3, and 0.4.4 is out.");
+    await version.getByRole("button", { name: "How to update" }).click();
+    await version.getByRole("button", { name: "What's new" }).click();
+    await expect.poll(() => did(page)).toEqual(expect.arrayContaining(["host-guide", "notes:0.4.4"]));
+
+    await open(page, "?section=server&server=looking");
+    await expect(version).toContainText("Asking the server which version it runs…");
+    await open(page, "?section=server&server=unknown");
+    await expect(version).toContainText("Couldn't ask the server which version it runs.");
+    await expect(version.getByRole("button")).toHaveCount(0);
+  });
+
   test("a save that lands while you're choosing again doesn't undo your new choice", async ({ page }) => {
     await page.clock.install();
     await open(page, "?section=server");
@@ -631,6 +650,14 @@ for (const [width, height] of [
           expect(await page.locator(".nx-set-main").evaluate((node) => node.scrollWidth <= node.clientWidth + 1), `${section}${query}`).toBe(true);
         }
       }
+    });
+
+    test("a server behind the newest release: its note and both buttons fit, and nothing is cut off (#314)", async ({ page }) => {
+      await open(page, "?section=server&server=behind");
+      await expect(page.getByRole("button", { name: "How to update" })).toBeVisible();
+      expect(await misSized(page)).toEqual([]);
+      expect(await clipped(page)).toEqual([]);
+      expect(await page.locator(".nx-set-main").evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     });
 
     test("starting at sign-in: on a desktop that ignores it, the note and its link sit on the section's edge", async ({ page }) => {

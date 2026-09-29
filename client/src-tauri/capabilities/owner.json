@@ -25,6 +25,7 @@
     "allow-show-notification",
     "allow-app-version",
     "allow-update-check",
+    "allow-newest-version",
     "allow-update-install",
     "allow-graphics-started",
     "allow-next-open-chat",

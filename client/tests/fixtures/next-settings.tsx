@@ -22,6 +22,9 @@
  * - `?nowindows`: nothing to choose in Windows yet, so there's no Windows.
  * - `?nostart`: starting at sign-in isn't offered (a browser, macOS);
  *   `?hyprland`: it is, on a desktop that won't start it by itself.
+ * - `?server=behind`: Hosting → Server says the server runs an older release
+ *   than the newest (#314); `?server=looking` is still asking, and
+ *   `?server=unknown` couldn't ask. Otherwise it runs the newest.
  *
  * What the page was asked to do is written to `body[data-did]`, `|`-separated.
  */
@@ -35,7 +38,7 @@ import { type ExportPhase } from "../../src/lib/export";
 import { inviteUrl } from "../../src/lib/host";
 import { DEFAULT_SOUND_PREFS, type SoundPrefs } from "../../src/lib/sound";
 import { DEFAULT_VOICE_PREFS, type VoicePrefs } from "../../src/lib/voice";
-import type { UpdateCheck } from "../../src/lib/updates";
+import { serverVersionLine, type ServerVersion, type UpdateCheck } from "../../src/lib/updates";
 import { type SettingsKey } from "../../src/next/core/settings";
 import { SettingsView } from "../../src/next/app/settings/SettingsView";
 import type { CloseList, ConversationMode } from "../../src/next/app/settings/WindowsSection";
@@ -43,6 +46,13 @@ import "../../src/next/styles/app.css";
 import { NOW, SERVER, SERVER_NAME, ownFields, people, rooms as eveningRooms, withFields } from "./next/evening";
 
 const query = new URLSearchParams(location.search);
+
+/** What Hosting → Server knows of the server's release, from `?server=` (#314). */
+function serverVersionOf(option: string | null): ServerVersion {
+  if (option === "looking") return { kind: "looking" };
+  if (option === "unknown") return { kind: "unknown" };
+  return { kind: "known", version: option === "behind" ? "0.4.3" : "0.4.4" };
+}
 const FAIL = query.has("fail");
 const LONG = query.has("long");
 const HOUR = 3_600_000;
@@ -355,6 +365,12 @@ function Fixture() {
                 },
               },
               server: {
+                version: {
+                  ...serverVersionLine(serverVersionOf(query.get("server")), "0.4.4"),
+                  newest: "0.4.4",
+                  openNotes: (version) => note(`notes:${version}`),
+                  openGuide: () => note("host-guide"),
+                },
                 name: server.name,
                 accent: server.accent,
                 save: async (change) => {
