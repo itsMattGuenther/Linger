@@ -329,6 +329,7 @@ test("the sound settings rule the voice strip's sounds as they do the voice bar'
   await page.evaluate(() => localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: false })));
   await yours.getByRole("button", { name: "Mute" }).click();
   await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
+  await expect.poll(async () => (await did(page)).filter((line) => line === "answered:next:voicecontrol").length).toBe(1);
   // Back on, but every sound muted.
   await page.evaluate(() => {
     localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: true }));
@@ -336,6 +337,9 @@ test("the sound settings rule the voice strip's sounds as they do the voice bar'
   });
   await yours.getByRole("button", { name: "Muted" }).click();
   await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
+  // The sound is the list window's answer, which comes a moment after the
+  // button changes: settled before the settings change again.
+  await expect.poll(async () => (await did(page)).filter((line) => line === "answered:next:voicecontrol").length).toBe(2);
   // Quiet hours all day: they hush what arrives on its own, not what you press (#186).
   await page.evaluate(() => {
     localStorage.setItem("linger.sound.muted", "false");
