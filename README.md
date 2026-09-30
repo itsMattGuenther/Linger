@@ -8,8 +8,8 @@
 
 One person runs a server; their friends install the app and connect to it.
 Text rooms, voice rooms, DMs, file sharing, and a buddy list that shows who's
-around. Not federated, not a platform, no company in the middle. Built for a
-dinner party of eight, not a stadium of fifty thousand strangers.
+around. Not federated, not a platform, no company in the middle. Built for
+people who already know each other, not a stadium of fifty thousand strangers.
 
 > To linger is to stay somewhere with no agenda and no obligation to be doing
 > anything. That is the product thesis in one word.

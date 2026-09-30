@@ -79,7 +79,7 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
 
 ## The idea
 
-Eight friends don't need Discord's four columns; they need a buddy list. The
+Friends don't need Discord's four columns; they need a buddy list. The
 spec already calls name styling "the AIM feature" and the status "the AIM away
 message". This goes all the way: the main window is a tall list of your
 friends, and conversations open beside it.
@@ -384,6 +384,5 @@ The principles don't change:
   is the kind of obligation Linger avoids, but some people will miss it.
 - **Many rooms.** The narrow list suits three to six rooms per server, not
   fifteen.
-- **Big groups.** Voice rooms above eight people and servers of 50–60 are a
-  separate piece of work, tracked in #197. (Voice rooms now hold 25, through
-  the host's server.)
+- **Big groups.** Voice rooms hold 25, through the host's server. Bigger voice
+  rooms, and servers of 50–60 or more, haven't been tried; that work is #197.
