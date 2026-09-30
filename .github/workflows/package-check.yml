@@ -90,7 +90,8 @@ jobs:
         shell: bash
         run: |
           # The AppImage bundler takes FFmpeg from here, not the system (#358).
-          if [ "$RUNNER_OS" = Linux ]; then export LD_LIBRARY_PATH="$RUNNER_TEMP/ffmpeg/lib"; fi
+          # Ahead of what's there: setup-python puts its own library directory on it.
+          if [ "$RUNNER_OS" = Linux ]; then export LD_LIBRARY_PATH="$RUNNER_TEMP/ffmpeg/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; fi
           pnpm tauri build --debug --config '{"bundle":{"createUpdaterArtifacts":false}}'
       - name: Linux package contents
         if: runner.os == 'Linux'
