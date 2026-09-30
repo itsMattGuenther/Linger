@@ -58,6 +58,20 @@ The unsigned Linux/Windows package workflow runs these checks:
   Each AppImage, extracted DEB executable and extracted RPM executable runs
   separately. This proves playback on the Ubuntu runner, not installation on
   every Linux distribution.
+- `scripts/linux-audio-check.py APPIMAGE --appimage --video` plays a shared
+  video's kind of file in the packaged WebKitGTK instead: a 0.8 second 440 Hz
+  tone in AAC over a 32 px H.264 picture (`scripts/fixtures/tone-h264-aac.mp4`,
+  played by `scripts/video-runtime-probe.js`). It requires `avdec_aac` and
+  `avdec_h264` from inside the AppImage and at least 0.6 seconds of the tone at
+  the virtual speaker. The AppImage carries the build machine's GStreamer
+  plugins, so this fails when the build machine lacks `gstreamer1.0-libav`
+  (#358). The DEB and RPM take the decoders from the system, and
+  `package-audio-deps.py` checks they ask for them.
+- `scripts/appimage-ffmpeg-check.py APPIMAGE` checks the AppImage's FFmpeg is
+  the trimmed one `scripts/appimage-ffmpeg.sh` builds (H.264, H.265, AAC and MP3
+  decoders, about 4 MB): its libraries link nothing but each other and the C
+  library, and `libavcodec` is under 6 MB. The video check can't tell the two
+  apart, since Ubuntu's full FFmpeg plays video too, at 45 MB more.
 - `scripts/windows-icon-check.ps1` also runs the installed NSIS executable
   and MSI-extracted executable with separate empty WebView2 profiles. A real
   button click starts the same ten-cue probe. Its analyser checks peak level,

@@ -542,3 +542,37 @@ of it at real size and decided:
   shrink by itself. Too narrow for both, the conversation takes the window;
   a slim list there means floating the window, which is the desktop's
   setting, not Linger's (don't fight the desktop, #226).
+
+## Decided — the AppImage brings its own decoders for shared videos, trimmed
+
+**Matt, 2026-09-30 (#358).** A video shared in a room played without sound on
+Omarchy. Linux plays media through GStreamer, and the sound in most videos
+(AAC) and their picture (H.264) need its libav plugin, which Linger's packages
+never asked for. #362 made the Arch, Debian/Ubuntu and Fedora packages ask the
+system for it: about 100 KB on a computer that already has FFmpeg. The
+AppImage couldn't be fixed that way. It carries its own GStreamer, copied from
+the machine that builds it, and ignores the computer's, so its users had
+nothing to install.
+
+- **The AppImage carries the libav plugin**, over the 2 MB line AGENTS.md
+  asks about first: shared media is half of what Linger is for.
+- **On a trimmed FFmpeg, not Ubuntu's.** Ubuntu's FFmpeg is built with
+  everything, and bundling it made the AppImage 45.3 MB bigger (109.0 to
+  154.3 MB, in the package check's debug build): an H.265 encoder, a ham radio
+  codec, speech synthesis voices and a maths library, none of which plays a
+  shared video. Matt chose the trimmed build when he saw the number.
+  `scripts/appimage-ffmpeg.sh` builds FFmpeg 4.4.2, the release Ubuntu 22.04's
+  plugin was built against, with the H.264, H.265, AAC and MP3 decoders: 4 MB,
+  and the AppImage grew 1.4 MB (to 110.4). The source is ffmpeg.org's tarball
+  against a pinned checksum, and no GPL parts are enabled, so it's LGPL.
+- **What the trimmed build doesn't play in the AppImage:** AV1, and older
+  formats such as DivX. WebM (VP8, VP9, Opus, Vorbis) never needed libav. The
+  other packages use the system's full FFmpeg.
+- **Checked every build:** `linux-audio-check.py --video` plays an H.264 and
+  AAC clip in the packaged AppImage and listens for its sound, and
+  `appimage-ffmpeg-check.py` fails an AppImage carrying the build machine's
+  FFmpeg instead of the trimmed one.
+- **Worth knowing:** the AppImage now ships an H.264 decoder itself, where
+  the other packages leave that to the system and Windows to Microsoft. H.264
+  is still under patents in some countries; plenty of free apps' AppImages
+  carry the same decoder.
