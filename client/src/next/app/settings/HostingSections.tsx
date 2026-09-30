@@ -20,7 +20,7 @@ import {
   slugTyped,
 } from "../../core/settings";
 import { Button, HashMark, IconButton, Marker, markerOf, Name, Swatch, TextField } from "../../kit";
-import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useSave } from "./parts";
+import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useFollowSaved, useSave } from "./parts";
 
 /**
  * Hosting: running the server from Settings (HOST-1 to HOST-9). A member
@@ -498,15 +498,10 @@ export function ServerSection({ version, name: savedName, accent: savedAccent, s
   const [accent, setAccent] = useState<string | null>(savedAccent);
   const save = useSave();
   const dirty = name.trim() !== savedName || accent !== savedAccent;
-  useEffect(() => {
-    // Follow what's saved only while you haven't changed anything since: a
-    // save that lands while you're choosing again must not undo your choice.
-    if (!dirty) {
-      setName(savedName);
-      setAccent(savedAccent);
-    }
-    // `dirty` is left out on purpose: this follows the saved values, not the form.
-  }, [savedName, savedAccent]);
+  // Follow what's saved, each only while you haven't changed it since: a
+  // save that lands while you're choosing again must not undo your choice.
+  useFollowSaved(savedName, setName, (held, saved) => held.trim() !== saved, (saved) => saved);
+  useFollowSaved(savedAccent, setAccent, (held, saved) => held !== saved, (saved) => saved);
   const ready = dirty && name.trim() !== "" && save.phase.kind !== "saving";
   const submit = () => {
     if (ready) void save.run(saveServer({ name: name.trim(), accent }));

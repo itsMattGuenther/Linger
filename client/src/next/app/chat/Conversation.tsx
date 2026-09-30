@@ -103,6 +103,16 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   );
 
   const scroller = useRef<HTMLDivElement | null>(null);
+  // Follow what arrives at the bottom only while the room holds its newest
+  // messages, and held them at the last render too. Reading forwards out of
+  // history adds a page at a time at the bottom; followed, each page moved
+  // the view to the new bottom, which asked for the next, and a reader was
+  // carried to the newest in half a second (#369). The page that makes the
+  // room whole again leaves them where they are too.
+  const heldNewest = useRef(atEnd);
+  useEffect(() => {
+    heldNewest.current = atEnd;
+  }, [atEnd]);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller.current,
@@ -110,7 +120,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     getItemKey: (index) => rows[index]?.key ?? index,
     overscan: 12,
     anchorTo: "end",
-    followOnAppend: true,
+    followOnAppend: atEnd && heldNewest.current,
     // React 19 refuses a synchronous flush from inside the commit that
     // measured a row; the landing and follow loops re-aim each frame anyway.
     useFlushSync: false,

@@ -1,5 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
+// The page server's port. LINGER_TEST_PORT moves it, so a second copy of the
+// repository (a git worktree) can run its tests while this one runs its own:
+// with one fixed port, the second run's server can't start.
+const port = Number(process.env.LINGER_TEST_PORT ?? 1421);
+
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: true,
@@ -14,7 +19,7 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:1421",
+    baseURL: `http://127.0.0.1:${port}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -31,9 +36,12 @@ export default defineConfig({
       // On CI, a freshly started WebKit once took 25.5 seconds to open its
       // first tab, before the test had done anything, and two knock tests ran
       // out of their 30 (#335). Every other tab there opens in well under a
-      // second. Sixty is room for that, and costs nothing unless something
-      // hangs; slow tests are still held to 15 seconds by the testing strategy.
-      timeout: process.env.CI ? 60_000 : undefined,
+      // second. Locally, scripts/webkit.sh runs every worker's WebKit in one
+      // container, and a test that takes 9 seconds on CI took a median 25
+      // there; two ran out of their 30 (#368). Sixty is room for both, and
+      // costs nothing unless something hangs; slow tests are still held to
+      // 15 seconds on CI by the testing strategy.
+      timeout: 60_000,
       use: {
         browserName: "webkit",
         // scripts/webkit.sh runs WebKit in Playwright's Ubuntu image, for the
@@ -44,8 +52,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm exec vite --host 127.0.0.1 --port 1421",
-    url: "http://127.0.0.1:1421/tests/fixtures/kit.html",
+    command: `pnpm exec vite --host 127.0.0.1 --port ${port}`,
+    url: `http://127.0.0.1:${port}/tests/fixtures/kit.html`,
     reuseExistingServer: false,
     timeout: 30_000,
   },

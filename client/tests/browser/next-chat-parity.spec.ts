@@ -1415,6 +1415,27 @@ test.describe("reading far back", () => {
         { timeout: 20_000 },
       )
       .toBeGreaterThanOrEqual(pages);
+    // That counts pages asked for, and the last can still be on its way.
+    // Landing above a test already scrolling down, it moved the view past
+    // messages the test never saw (#366); held, it kept the room loading, so
+    // a read forwards never started (#347). So the room is quiet first.
+    await quiet(page);
+  }
+
+  /** Nothing on its way and nothing new asked for, over two looks a quarter of a second apart. */
+  async function quiet(page: Page) {
+    let asks = -1;
+    await expect
+      .poll(
+        async () => {
+          const now = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?")).length;
+          const still = now === asks && (await page.evaluate(() => window.parity?.reading())) === 0;
+          asks = now;
+          return still;
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
   }
 
   /** Back far enough to hold more than a room keeps (800), then stop: the newest end is let go. */
@@ -1438,27 +1459,27 @@ test.describe("reading far back", () => {
     expect((await did(page)).filter((line) => line === "GET /rooms/r-general/messages?limit=100 as token-1").length).toBe(newestPages + 1);
   });
 
+  test("reaching the bottom of what's held reads one page on, and leaves you where you are (CONV-15, #369)", async ({ page }) => {
+    await readFarBack(page);
+    const forwards = async () => (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?around=")).length;
+    const before = await forwards();
+    await log(page).evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect.poll(forwards).toBeGreaterThan(before);
+    await quiet(page);
+    // One page on, below you. Followed, each page moved the view to the new
+    // bottom, which asked for the next, all the way to the newest.
+    expect(await forwards()).toBe(before + 1);
+    await expect(newest(page)).toBeVisible();
+    await expect(row(page, "m000016")).toHaveCount(0);
+  });
+
   test("a read forwards that comes back after Back to the newest leaves the newest page to finish (CONV-14, #266)", async ({ page }) => {
     const asked = async (part: string) => (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?") && line.includes(part)).length;
     const newestPage = "?limit=100 as token-1";
+    // readFarBack leaves the room quiet, so no older page is still on its way (#347).
     await readFarBack(page);
-    // Reading back scrolls to the top again and again, and its last scroll can
-    // still have a page of older history on its way. Held, that page kept the
-    // room loading, so the read forwards below never started (#347): so the
-    // room is quiet first, nothing on its way and nothing new asked for over
-    // two looks a quarter of a second apart.
-    let asks = -1;
-    await expect
-      .poll(
-        async () => {
-          const now = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?")).length;
-          const quiet = now === asks && (await page.evaluate(() => window.parity?.reading())) === 0;
-          asks = now;
-          return quiet;
-        },
-        { intervals: [250] },
-      )
-      .toBe(true);
     // From here every read waits for the test, which fixes the order two of them come back in.
     await page.evaluate(() => window.parity?.holdReads());
     const forwards = await asked("around=");

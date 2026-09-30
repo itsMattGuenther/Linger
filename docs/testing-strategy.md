@@ -64,7 +64,8 @@ only changes documentation.
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
-(`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`).
+(`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
+`scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -140,6 +141,41 @@ Two things catch these before they bite:
 - **Every night, every browser test runs three times** with no retries
   (`nightly.yml`). A test that fails there opens the nightly issue.
 
+## Waiting in a browser test
+
+Most of the random failures so far were a test acting a moment too soon. The
+rules that came out of them:
+
+- **Wait until it holds still before you click it or measure it.** Before a
+  click, Playwright waits until the target is where it was one animation
+  frame ago. In Linger that isn't enough: a conversation keeps moving after it
+  first appears (a link card loads above and pushes the messages down, the log
+  scrolls a new message into place), and so does a window making room for a
+  side pane. A click aimed at where a name was lands beside it (#331, #361).
+  `still(locator)` in `tests/browser/still.ts` waits until the thing's box is
+  the same on two looks 100 ms apart. Call it before clicking anything in a
+  conversation and before any `boundingBox()` whose numbers you compare.
+- **Measure against the thing's own container, not the screen.** A position
+  on the page moves whenever anything above it does; a video's place in its
+  own row doesn't (#357).
+- **Wait for the fixture to say it's ready.** The fixtures write what the page
+  asked of the fake shell and servers into `document.body.dataset.did`, in
+  order: a `ready` for each connection (React's development mode opens two,
+  #355), and `answered:<event>` once the fake shell has handled a request.
+  Wait for the line, then act. The list and side specs' `settled(page)` waits
+  until every connection has had its `ready`.
+- **A clock you mean to stop needs `pauseAt`.** `page.clock.install()` on its
+  own swaps in a fake clock that still runs at real speed, so a timer the
+  test means to hold back fires anyway, at a random moment (#367). Install
+  it, open the page, `pauseAt` a time well ahead (opening can take a second
+  of that clock), then move it on with `runFor` or `fastForward`.
+- **A blank page with `net::ERR_NETWORK_CHANGED` in the trace is your machine,
+  not the test.** Chromium drops every request in flight when a network
+  interface comes or goes, and Docker adds one each time it starts a container
+  on its own network (a VPN or Wi-Fi change does the same). Don't start
+  containers while the Chromium tests run. `webkit.sh`'s container shares the
+  machine's network and adds nothing.
+
 ## Browser tests
 
 - The same tests run in Chromium, the engine of WebView2 on Windows, and in
@@ -157,13 +193,27 @@ Two things catch these before they bite:
   `scripts/webkit.sh tests/browser/next-media.spec.ts --repeat-each=10`.
   The whole WebKit suite takes about 2 minutes this way, against about 8 on
   CI. The image is about 3.5 GB and downloads on first use.
-- **WebKit on CI gets 60 seconds a test, not 30.** A freshly started WebKit
-  there once took 25.5 seconds to open its first tab, before the test had
-  done anything (#335); every other tab opens in well under a second. The
-  15-second rule above still applies.
+- **WebKit gets 60 seconds a test, not 30, on CI and locally.** On CI a
+  freshly started WebKit once took 25.5 seconds to open its first tab, before
+  the test had done anything (#335); every other tab opens in well under a
+  second. Locally, `webkit.sh` runs every worker's WebKit in one container,
+  about 2.7 times slower than CI: a glow test that takes 9 seconds on CI took
+  25 there, and ran out of 30 when the machine was busy (#368). The
+  15-second rule above still applies, measured on CI.
 - The tests run on UTC, as CI does (`webkit.sh` sets it; the container is on
   UTC). A test that works out a date in the machine's own time zone will
   expect the wrong day somewhere.
+- **CI runs the browser tests inside Playwright's own image**
+  (`mcr.microsoft.com/playwright`), which has both browsers and every library
+  they need. Installing those from Ubuntu's mirror each run took the whole
+  20-minute limit on slow days and cancelled jobs before a test ran. The
+  image's version has to be the client's `@playwright/test` version;
+  `scripts/playwright-image.test.mjs` checks it, so bump both together. It
+  also checks those jobs say `shell: bash`: in a container GitHub runs steps
+  with `sh` unless told otherwise, and their steps are bash.
+- The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
+  moves it, so a second copy of the repository, such as a git worktree, can
+  run its browser tests while the first runs its own.
 - When a browser test fails in CI, look at its screenshot and trace before
   changing code. They are kept for seven days in the run's
   `browser-failures…` artifacts; `pnpm exec playwright show-trace` opens a

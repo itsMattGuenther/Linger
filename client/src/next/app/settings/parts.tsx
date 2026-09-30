@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Icon, Spinner } from "../../kit";
 
 /**
@@ -37,6 +37,30 @@ export function useSave(): {
   const reset = useCallback(() => setPhase({ kind: "idle" }), []);
   const fail = useCallback((words: string) => setPhase({ kind: "problem", words }), []);
   return { phase, run, reset, fail };
+}
+
+/**
+ * Keep a form on what's saved while nobody has changed it: a name changed
+ * elsewhere shows up, and a save that lands shows what it saved. The form
+ * follows a new saved value only if it still holds the one before, and it
+ * decides on the form as it is at that moment. Deciding on what the last
+ * render knew undid a choice made in the moment between a save landing on
+ * screen and the form looking (#367).
+ */
+export function useFollowSaved<Saved, Draft>(
+  saved: Saved,
+  setDraft: Dispatch<SetStateAction<Draft>>,
+  changed: (draft: Draft, saved: Saved) => boolean,
+  draftOf: (saved: Saved) => Draft,
+) {
+  const last = useRef(saved);
+  useEffect(() => {
+    const was = last.current;
+    if (Object.is(was, saved)) return;
+    last.current = saved;
+    setDraft((draft) => (changed(draft, was) ? draft : draftOf(saved)));
+    // Follows the saved value only; the functions are the caller's rules, fixed per form.
+  }, [saved]);
 }
 
 /**
