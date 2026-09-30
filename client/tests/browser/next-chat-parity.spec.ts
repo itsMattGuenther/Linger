@@ -998,7 +998,15 @@ test.describe("a shared video (#222)", () => {
     const store = await openWithVideo(page);
     store.down = true;
     const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
-    const frame = await player(page, id).boundingBox();
+    // Where it sits in its row, not on screen: the conversation may still be
+    // scrolling to the new message, which moves every row alike (#357).
+    const inRow = (selector: string) =>
+      row(page, id).evaluate((node, wanted) => {
+        const base = node.getBoundingClientRect();
+        const box = node.querySelector(wanted)?.getBoundingClientRect();
+        return box ? { x: box.x - base.x, y: box.y - base.y, width: box.width, height: box.height } : null;
+      }, selector);
+    const frame = await inRow("video");
     const rowHeight = await row(page, id).evaluate((node) => node.getBoundingClientRect().height);
 
     const note = row(page, id).getByRole("alert");
@@ -1006,7 +1014,8 @@ test.describe("a shared video (#222)", () => {
     const again = row(page, id).getByRole("button", { name: "Load again" });
     await expect(again).toBeVisible();
     // Over the player's own frame, exactly: nothing below it moves.
-    expect(await row(page, id).locator(".nx-att-video-failed").boundingBox()).toEqual(frame);
+    expect(frame).not.toBeNull();
+    expect(await inRow(".nx-att-video-failed")).toEqual(frame);
     expect(await row(page, id).evaluate((node) => node.getBoundingClientRect().height)).toBe(rowHeight);
 
     store.down = false;
