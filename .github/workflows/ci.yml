@@ -218,6 +218,9 @@ jobs:
     defaults:
       run:
         working-directory: client
+        # In a container, GitHub runs steps with sh unless told otherwise,
+        # and these steps use bash: (( )) arithmetic and mapfile.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -261,6 +264,9 @@ jobs:
     defaults:
       run:
         working-directory: client
+        # In a container, GitHub runs steps with sh unless told otherwise,
+        # and these steps use bash: (( )) arithmetic and mapfile.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:

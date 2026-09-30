@@ -205,7 +205,9 @@ rules that came out of them:
   they need. Installing those from Ubuntu's mirror each run took the whole
   20-minute limit on slow days and cancelled jobs before a test ran. The
   image's version has to be the client's `@playwright/test` version;
-  `scripts/playwright-image.test.mjs` checks it, so bump both together.
+  `scripts/playwright-image.test.mjs` checks it, so bump both together. It
+  also checks those jobs say `shell: bash`: in a container GitHub runs steps
+  with `sh` unless told otherwise, and their steps are bash.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.

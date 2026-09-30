@@ -29,6 +29,19 @@ test("the browser jobs run in Playwright's image", () => {
   assert.ok(names.has("nightly.yml"), "nightly.yml names no Playwright image");
 });
 
+test("a job in Playwright's image runs its steps with bash", () => {
+  // In a container, GitHub runs a step with sh unless the job says otherwise,
+  // and the browser jobs' steps are bash: under sh, picking the tests to
+  // repeat failed with "mapfile: not found" and its (( )) limits never ran.
+  for (const { name, text } of workflows) {
+    for (const job of text.split(/\n(?=  [\w-]+:\n)/)) {
+      if (!job.includes("mcr.microsoft.com/playwright:")) continue;
+      const id = job.trim().split(":")[0];
+      assert.match(job, /\n {8}shell: bash\n/, `${name}'s ${id} runs in Playwright's image without shell: bash`);
+    }
+  }
+});
+
 test("every Playwright image is the client's Playwright version", () => {
   for (const { name, version } of images) {
     assert.equal(version, playwright, `${name} runs the v${version} image, and the client has Playwright ${playwright}`);
