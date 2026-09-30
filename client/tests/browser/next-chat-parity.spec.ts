@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
+import { still } from "./still";
 
 // The conversation's items in docs/design/parity.md that had no test in the
 // new client, proved on the real chat window (tests/fixtures/next-chat-parity.tsx):
@@ -101,7 +102,10 @@ test.describe("a long message folds", () => {
   test("unfolded stays unfolded after scrolling far away and back (#304)", async ({ page }) => {
     await open(page, "room=r-general&many=600");
     const id = await post(page, lines(120));
-    await row(page, id).getByRole("button", { name: "Show all" }).click();
+    // Once the new message has finished scrolling into place (#361).
+    const showAll = row(page, id).getByRole("button", { name: "Show all" });
+    await still(showAll);
+    await showAll.click();
     await expect(row(page, id).getByRole("button", { name: "Show less" })).toBeVisible();
     // Far enough up that the row is dropped from the page: older history
     // loads as the view nears the top, so it takes a few goes.

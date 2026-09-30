@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { still } from "./still";
 import type { Style } from "../../src/generated/Style";
 import type { User } from "../../src/generated/User";
 import { people } from "../fixtures/next/evening";
@@ -77,19 +78,6 @@ async function joinGeneral(page: Page): Promise<Locator> {
 }
 
 const inChip = (bar: Locator, who: string) => bar.getByRole("list", { name: "Who's in voice" }).getByRole("listitem").filter({ hasText: who }).locator("[data-kit='Name']");
-
-/** Wait until something is where it was a moment ago. */
-async function still(target: Locator, every = 100) {
-  let last = "";
-  await expect
-    .poll(async () => {
-      const now = JSON.stringify(await target.boundingBox());
-      const same = now === last;
-      last = now;
-      return same;
-    }, { intervals: [every] })
-    .toBe(true);
-}
 
 /** Wait until a name glows in its own face and has stopped moving. */
 async function settled(page: Page, name: Locator) {

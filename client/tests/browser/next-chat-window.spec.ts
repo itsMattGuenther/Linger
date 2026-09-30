@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { still } from "./still";
 
 // A conversation in a window of its own, with its wiring
 // (tests/fixtures/next-chat-window.tsx): the real ChatWindow, the store and
@@ -111,6 +112,8 @@ test("a send the server refuses says why and keeps the words", async ({ page }) 
 test("a name in a conversation opens that person's card beside it; Escape gives the name the keyboard back", async ({ page }) => {
   await open(page);
   const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  // Once the link card above has come in and nothing is moving (#361).
+  await still(name);
   await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await expect(card).toBeVisible();
