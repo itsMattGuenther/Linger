@@ -1,5 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
+// The page server's port. LINGER_TEST_PORT moves it, so a second copy of the
+// repository (a git worktree) can run its tests while this one runs its own:
+// with one fixed port, the second run's server can't start.
+const port = Number(process.env.LINGER_TEST_PORT ?? 1421);
+
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: true,
@@ -14,7 +19,7 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:1421",
+    baseURL: `http://127.0.0.1:${port}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -44,8 +49,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm exec vite --host 127.0.0.1 --port 1421",
-    url: "http://127.0.0.1:1421/tests/fixtures/kit.html",
+    command: `pnpm exec vite --host 127.0.0.1 --port ${port}`,
+    url: `http://127.0.0.1:${port}/tests/fixtures/kit.html`,
     reuseExistingServer: false,
     timeout: 30_000,
   },
