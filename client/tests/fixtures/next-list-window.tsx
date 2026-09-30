@@ -168,6 +168,10 @@ mockIPC((cmd, args) => {
         seq[server] = 1;
         deliver("gateway:status", { server, status: { kind: "ready", latency_ms: 20 } });
         deliver("gateway:frame", { server, frame: ready(server) });
+        // Written down, so a spec can wait for every connection's `ready`:
+        // React's development mode connects twice, and a second `ready`
+        // clears what the first one's rooms had loaded (#339, #355).
+        note(`ready ${server}`);
       }, 20);
       return null;
     }

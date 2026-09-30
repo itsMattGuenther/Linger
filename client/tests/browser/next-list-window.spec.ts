@@ -16,7 +16,26 @@ async function open(page: Page, query = "") {
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await settled(page);
 }
+
+/**
+ * Every connection the page opened has had its `ready`. In development React
+ * starts the list twice, so each server is connected twice, and a `ready`
+ * clears what the rooms had loaded. The page's fake gives both the same
+ * session, where a real server's second would be new, so a room opened
+ * between the two would sit empty (#355): tests start once both are in.
+ */
+async function settled(page: Page) {
+  await expect
+    .poll(async () => {
+      const lines = await did(page);
+      const connects = lines.filter((line) => line.startsWith("connect ")).length;
+      return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
+    })
+    .toBe(true);
+}
+
 
 async function did(page: Page): Promise<string[]> {
   return (await page.evaluate(() => document.body.dataset.did ?? "")).split("|");

@@ -15,7 +15,26 @@ const HOME = "https://good-company.example";
 async function open(page: Page, query = "?one") {
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await settled(page);
 }
+
+/**
+ * Every connection the page opened has had its `ready`. In development React
+ * starts the list twice, so each server is connected twice, and a `ready`
+ * clears what the rooms had loaded. The page's fake gives both the same
+ * session, where a real server's second would be new, so a room opened
+ * between the two would sit empty (#355): tests start once both are in.
+ */
+async function settled(page: Page) {
+  await expect
+    .poll(async () => {
+      const lines = await did(page);
+      const connects = lines.filter((line) => line.startsWith("connect ")).length;
+      return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
+    })
+    .toBe(true);
+}
+
 
 /** Everything the window asked of the shell and the servers, in order. */
 async function did(page: Page): Promise<string[]> {
@@ -228,11 +247,13 @@ test("the tabs and the fold come back after a restart as they were left", async 
   await dm(page, "Jules").click();
   await expect(page.getByRole("tab")).toHaveCount(2);
   await page.reload();
+  await settled(page);
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
   await expect(showing(page)).toHaveAccessibleName("DM with Jules");
   // Folded, it comes back folded, with them kept.
   await page.getByRole("button", { name: "Fold back to your list" }).click();
   await page.reload();
+  await settled(page);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show your conversations" })).toBeVisible();
@@ -251,6 +272,7 @@ test("a half-typed line outlasts its tab and a restart, and goes once it's sent 
   await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
   await expect(box(page)).toHaveValue("see you at the");
   await page.reload();
+  await settled(page);
   await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
   await expect(box(page)).toHaveValue("see you at the");
   await box(page).fill("see you at the porch");
@@ -411,6 +433,7 @@ test("Media and Search tabs come back after a restart with the rest", async ({ p
   await foot(page).getByRole("button", { name: "Media" }).click();
   await expect(page.getByRole("tab")).toHaveText([/general/, /Media/]);
   await page.reload();
+  await settled(page);
   await expect(page.getByRole("tab")).toHaveText([/general/, /Media/]);
   await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
 });
