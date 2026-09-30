@@ -1418,17 +1418,20 @@ test.describe("reading far back", () => {
     // That counts pages asked for, and the last can still be on its way.
     // Landing above a test already scrolling down, it moved the view past
     // messages the test never saw (#366); held, it kept the room loading, so
-    // a read forwards never started (#347). So the room is quiet first:
-    // nothing on its way and nothing new asked for over two looks a quarter
-    // of a second apart.
+    // a read forwards never started (#347). So the room is quiet first.
+    await quiet(page);
+  }
+
+  /** Nothing on its way and nothing new asked for, over two looks a quarter of a second apart. */
+  async function quiet(page: Page) {
     let asks = -1;
     await expect
       .poll(
         async () => {
           const now = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?")).length;
-          const quiet = now === asks && (await page.evaluate(() => window.parity?.reading())) === 0;
+          const still = now === asks && (await page.evaluate(() => window.parity?.reading())) === 0;
           asks = now;
-          return quiet;
+          return still;
         },
         { intervals: [250] },
       )
@@ -1454,6 +1457,22 @@ test.describe("reading far back", () => {
     await expect(newest(page)).toHaveCount(0);
     // Home is the newest page again, asked for afresh.
     expect((await did(page)).filter((line) => line === "GET /rooms/r-general/messages?limit=100 as token-1").length).toBe(newestPages + 1);
+  });
+
+  test("reaching the bottom of what's held reads one page on, and leaves you where you are (CONV-15, #369)", async ({ page }) => {
+    await readFarBack(page);
+    const forwards = async () => (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages?around=")).length;
+    const before = await forwards();
+    await log(page).evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect.poll(forwards).toBeGreaterThan(before);
+    await quiet(page);
+    // One page on, below you. Followed, each page moved the view to the new
+    // bottom, which asked for the next, all the way to the newest.
+    expect(await forwards()).toBe(before + 1);
+    await expect(newest(page)).toBeVisible();
+    await expect(row(page, "m000016")).toHaveCount(0);
   });
 
   test("a read forwards that comes back after Back to the newest leaves the newest page to finish (CONV-14, #266)", async ({ page }) => {
