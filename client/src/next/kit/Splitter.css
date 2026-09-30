@@ -1,0 +1,30 @@
+/* The line between two panes, moved by dragging it (#337). What's drawn is
+   the 1px hairline every pane edge is; what takes a press is wider, a step
+   either side, so it can be caught without aiming at a single pixel. */
+.k-splitter {
+  position: relative;
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  background: var(--hairline);
+  cursor: col-resize;
+  touch-action: none;
+  transition: background-color var(--duration-fast);
+}
+
+.k-splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--space-1));
+  z-index: 1;
+}
+
+.k-splitter:hover,
+.k-splitter[data-dragging="yes"] {
+  background: var(--edge-hover);
+}
+
+/* Focused from the keyboard: the ring sits on the line itself. */
+.k-splitter:focus-visible {
+  outline-offset: 0;
+}

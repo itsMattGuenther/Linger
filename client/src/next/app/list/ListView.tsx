@@ -98,7 +98,8 @@ export function ListView(props: ListViewProps) {
     onSettings || onUnfold ? (
       <>
         {onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : null}
-        {onUnfold ? <IconButton icon="unfold" tone="accent" label="Show your conversations" onClick={onUnfold} /> : null}
+        {/* Neutral, not the lamp: amber is for something new (a lit DM), and this is only a way back. */}
+        {onUnfold ? <IconButton icon="unfold" tone="filled" label="Show your conversations" onClick={onUnfold} /> : null}
       </>
     ) : undefined;
   const bottom = (

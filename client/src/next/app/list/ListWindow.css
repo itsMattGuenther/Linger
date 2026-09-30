@@ -23,11 +23,11 @@
   overflow: clip;
 }
 
-/* Side by side: the list keeps its width, and the conversations take the rest. */
+/* Side by side: the list keeps its width, and the conversations take the
+   rest. The line between them is the kit's Splitter, which moves. */
 .nx-app[data-side="beside"] .nx-app-list {
   flex: none;
   width: var(--list-width);
-  border-right: 1px solid var(--hairline);
 }
 
 /* Too narrow for both (a narrow tile, a small screen): the conversation has

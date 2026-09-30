@@ -548,6 +548,18 @@ It's used for a person's volume, over their chip in the voice bar
 Voice, which plays one chime when let go of, and for a shared audio file's
 timeline and volume (`app/chat/AudioCard.tsx`).
 
+### Splitter
+
+The line between two panes, moved by dragging it: the buddy list's width
+beside the conversations (#337). It draws the 1px `--hairline` every pane
+edge is, brightening to `--edge-hover` under the pointer and while dragged,
+and takes presses its whole length and 4px either side of the line. That's
+the one exception to 24px hit targets: any wider, it would cover the list's
+scrollbar and the fold button beside it. It's a separator with a value
+(`role="separator"`), so the keyboard moves it too: the arrows a step at a
+time, Home and End to either end, and Enter, like a double press, back to
+where it started out.
+
 ### Card and Popover
 
 - **`Card`** is a raised block with a hairline edge. `tint` washes it faintly
@@ -782,7 +794,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | One-line rows are 32px and two-line rows 48px, in all twelve faces; every name line is 20px | `kit.spec.ts` › rows of a kind are one height |
 | In a list, text starts at one x whether the lead is a marker, a group, a `#` or empty, and section labels start there too | `kit.spec.ts` › names in a list start at one x |
 | Overflowing text ends in a drawn ellipsis (not on a flex or grid box, where it never draws) and never runs under an edge | `kit.spec.ts` › text that does not fit ends in an ellipsis |
-| Hit targets are at least 24×24 | `kit.spec.ts` › every hit target is at least 24px |
+| Hit targets are at least 24×24, but for a splitter's 8px across its whole length | `kit.spec.ts` › every hit target is at least 24px; a splitter moves with the pointer and the keys |
 | Every interactive element has an accessible name | `kit.spec.ts` › every interactive element has an accessible name |
 | Everything the keyboard reaches shows the focus ring | `kit.spec.ts` › the focus ring shows on everything the keyboard reaches |
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |

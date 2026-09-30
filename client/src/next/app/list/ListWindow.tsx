@@ -40,7 +40,7 @@ import { loadScale } from "../../core/appearance";
 import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
-import { folding, layoutOf, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding } from "../../core/side";
+import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
 import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
@@ -65,7 +65,7 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
-import { Button, Spinner } from "../../kit";
+import { Button, Spinner, Splitter } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
@@ -430,17 +430,20 @@ function Servers({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const layout = layoutOf(width, side.list);
+  // Side by side, the list at its width or squeezed to leave the
+  // conversations their room; too narrow for both, the conversation has it.
+  const shown = beside(width, side.list);
+  const layout = shown.layout;
 
   // Folding keeps how wide the conversations were, and unfolding how wide
   // the list was, so each comes back the size it was left.
   const fold = useCallback(() => {
     setFirst(null);
-    setSide((held) =>
-      held.unfolded
-        ? { ...held, unfolded: false, pane: layoutOf(window.innerWidth, held.list) === "beside" ? paneWidth(window.innerWidth - held.list) : held.pane }
-        : held,
-    );
+    setSide((held) => {
+      if (!held.unfolded) return held;
+      const now = beside(window.innerWidth, held.list);
+      return { ...held, unfolded: false, pane: now.layout === "beside" ? paneWidth(window.innerWidth - now.list) : held.pane };
+    });
   }, []);
   const unfold = useCallback((opening: SideOpen | null) => {
     setFirst(opening);
@@ -856,7 +859,7 @@ function Servers({
       {signedIn.map((session) => (
         <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
       ))}
-      <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${side.list}px` } as CSSProperties}>
+      <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
         <div className="nx-app-list">
           {adding ? (
             <SignInView
@@ -887,6 +890,19 @@ function Servers({
             />
           )}
         </div>
+        {unfolded && layout === "beside" ? (
+          // Dragged, or moved with the arrows: the list's width, kept on this
+          // computer, and the one folding goes back to. The window stays
+          // the size it is; the conversations take what's left.
+          <Splitter
+            label="Width of your list"
+            value={shown.list}
+            min={LIST_MIN}
+            max={widestList(width)}
+            reset={LIST_WIDTH}
+            onChange={(list) => setSide((held) => ({ ...held, list }))}
+          />
+        ) : null}
         {unfolded ? (
           <SidePane
             apis={apisRef.current}

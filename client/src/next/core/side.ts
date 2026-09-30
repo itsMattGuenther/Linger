@@ -15,10 +15,11 @@ export const LIST_WIDTH = 340;
 /** The narrowest the list window may be (`tauri.conf.json`, `minWidth`). */
 export const LIST_MIN = 300;
 /**
- * The widest the list is kept beside a conversation. A list folded on a wide
- * tile (a tiling desktop sizes the window, not Linger) is still a list.
+ * The widest the list is kept beside a conversation, dragged or not. A list
+ * folded on a wide tile (a tiling desktop sizes the window, not Linger) is
+ * still a list.
  */
-export const LIST_MAX = 440;
+export const LIST_MAX = 560;
 /** A conversation's room, as the chat window opened it. */
 export const PANE_WIDTH = 780;
 /** Narrower than this and the conversation takes the window rather than sit beside the list. */
@@ -83,12 +84,20 @@ export function saveSide(store: SideStore | null, side: Side): void {
 }
 
 /**
- * How a window this wide shows the list and a conversation: side by side
- * when both fit, or the conversation over the whole window when they don't
- * (a narrow tile, a small screen), with a way back to the list.
+ * How a window this wide shows the list and a conversation. Side by side
+ * while both fit, the list at the width it was left at, or narrower where
+ * the window can't spare it: the conversation keeps at least `PANE_MIN`.
+ * Too narrow even for the narrowest list (a narrow tile, a small screen),
+ * the conversation takes the whole window, with a way back to the list.
  */
-export function layoutOf(windowWidth: number, list: number): "beside" | "over" {
-  return windowWidth >= list + PANE_MIN ? "beside" : "over";
+export function beside(windowWidth: number, list: number): { layout: "beside" | "over"; list: number } {
+  if (windowWidth < LIST_MIN + PANE_MIN) return { layout: "over", list };
+  return { layout: "beside", list: Math.round(Math.max(LIST_MIN, Math.min(list, windowWidth - PANE_MIN, LIST_MAX))) };
+}
+
+/** How wide the list may be dragged in a window this wide (`Splitter`): the conversation keeps its room. */
+export function widestList(windowWidth: number): number {
+  return Math.max(LIST_MIN, Math.min(LIST_MAX, windowWidth - PANE_MIN));
 }
 
 /** A window's or a screen's left edge and width, in the desktop's pixels. */

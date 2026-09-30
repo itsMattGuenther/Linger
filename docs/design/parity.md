@@ -199,8 +199,10 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     Settings 560×480, Search and Media 360×420; interface size applies to every
     window.
     **Changed (2026-09-30, #337):** the tabs are beside the list, in its window.
-    The list keeps 300–440 wide beside them and the conversations at least 420;
-    narrower than both, the conversation takes the window (`core/side.ts`). A
+    The list keeps 300–560 wide beside them, dragged with the line between
+    them, and the conversations at least 420; a narrower window squeezes the
+    list first, and narrower than both the conversation takes the window
+    (`core/side.ts`). A
     conversation in its own window stays at least 360×360.
 20. **Notification clicks.** What does clicking a desktop banner do: focus
     the list, or open the conversation in a tab? *(NOTE-7)*

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FOLDED, folding, layoutOf, LIST_MAX, LIST_MIN, LIST_WIDTH, listWidth, loadSide, PANE_MIN, PANE_WIDTH, paneWidth, saveSide, unfolding } from "./side";
+import { beside, FOLDED, folding, LIST_MAX, LIST_MIN, LIST_WIDTH, listWidth, loadSide, PANE_MIN, PANE_WIDTH, paneWidth, saveSide, unfolding, widestList } from "./side";
 
 function memory(): { getItem(key: string): string | null; setItem(key: string, value: string): void; held: Map<string, string> } {
   const held = new Map<string, string>();
@@ -26,6 +26,9 @@ describe("what's kept of the side", () => {
     expect(loadSide(store)).toEqual(FOLDED);
     store.setItem("linger.next.side", JSON.stringify({ unfolded: true, list: 2000, pane: 10 }));
     expect(loadSide(store)).toEqual({ unfolded: true, list: LIST_MAX, pane: PANE_MIN });
+    // One dragged wide comes back as wide.
+    store.setItem("linger.next.side", JSON.stringify({ unfolded: true, list: 520, pane: 780 }));
+    expect(loadSide(store).list).toBe(520);
   });
 
   it("keeps a list between its narrowest and its widest, and a pane no narrower than it can be", () => {
@@ -51,11 +54,27 @@ describe("what's kept of the side", () => {
 });
 
 describe("the list and a conversation in one window", () => {
-  it("sit side by side when both fit, and the conversation takes the window when they don't", () => {
-    expect(layoutOf(LIST_WIDTH + PANE_MIN, LIST_WIDTH)).toBe("beside");
-    expect(layoutOf(LIST_WIDTH + PANE_MIN - 1, LIST_WIDTH)).toBe("over");
+  it("sit side by side when both fit, the list at the width it was left", () => {
+    expect(beside(1120, LIST_WIDTH)).toEqual({ layout: "beside", list: LIST_WIDTH });
+    expect(beside(1400, 520)).toEqual({ layout: "beside", list: 520 });
+  });
+
+  it("squeeze the list before the conversation, which keeps its room", () => {
+    // A list dragged wide, in a window that has since got narrower.
+    expect(beside(900, 520)).toEqual({ layout: "beside", list: 900 - PANE_MIN });
+    expect(beside(LIST_MIN + PANE_MIN, 520)).toEqual({ layout: "beside", list: LIST_MIN });
+  });
+
+  it("give the conversation the whole window when even the narrowest list doesn't fit", () => {
+    expect(beside(LIST_MIN + PANE_MIN - 1, LIST_WIDTH).layout).toBe("over");
     // A narrow tile, as a tiling desktop may leave the window.
-    expect(layoutOf(357, LIST_WIDTH)).toBe("over");
+    expect(beside(357, LIST_WIDTH).layout).toBe("over");
+  });
+
+  it("let the list be dragged as wide as leaves the conversation its room, and never past the widest list", () => {
+    expect(widestList(900)).toBe(900 - PANE_MIN);
+    expect(widestList(2000)).toBe(LIST_MAX);
+    expect(widestList(600)).toBe(LIST_MIN);
   });
 });
 

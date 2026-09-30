@@ -378,7 +378,9 @@ one.
   Folding shrinks it back to the list's width. A maximized window keeps its
   size, and so does one a tiling desktop sizes: Linger asks, and the desktop
   may say no. Too narrow for both, the conversation takes the window
-  (`layoutOf`). A conversation opened from elsewhere (a banner, a
+  (`beside`), and a narrower window squeezes the list before that. The line
+  between the list and the conversations drags (the kit's `Splitter`): the
+  list's width, kept with the rest. A conversation opened from elsewhere (a banner, a
   conversation's own window, Search) brings the list window forward, out of
   the tray if it was there, but only when it doesn't have the focus: some
   desktops move the pointer to a window an app focuses (#226). There's

@@ -135,7 +135,8 @@ This list is what makes an empty server feel like a house with the lights on.
 list and what you're reading move, snap, minimize and tile as one window. Opening one
 unfolds the window to the right (leftwards where the screen ends); ◧ at the
 conversations' edge folds it back to just the list, keeping the tabs, and the list's
-title bar brings them back. Too narrow for both (a narrow tile), the conversation
+title bar brings them back. The line between the list and the conversations drags to
+make the list wider or narrower. Too narrow for both (a narrow tile), the conversation
 takes the window, and ◧ goes back to the list. A tab can be popped out into a window
 of its own and put back, and Settings → Windows can open every conversation in a
 window of its own instead.

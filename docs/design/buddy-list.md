@@ -223,14 +223,22 @@ moves whatever is open straight away.
 
 - **Opening a room or DM unfolds the window** to the right by the
   conversation's width (leftwards where its screen ends) and adds a tab, or
-  shows it if it's already open. The list keeps its width, with a hairline
-  between them. A maximized window, or one a tiling desktop sizes, keeps its
-  size, and the conversations fit what they get.
+  shows it if it's already open. The list keeps its width. A maximized
+  window, or one a tiling desktop sizes, keeps its size, and the
+  conversations fit what they get.
+- **The line between the list and the conversations drags** (Matt,
+  2026-09-30): wider list, narrower conversations, the window the same size.
+  The arrow keys move it too, and Enter or a double press puts it back to
+  340. The width is kept, and it's the width folding goes back to. The list
+  goes 300–560 wide and the conversations keep at least 420; a narrower
+  window squeezes the list before it gives the conversation the window.
 - **The fold button (◧) is at the conversations' left edge**, in their title
   bar. It folds the window back to just the list and keeps the tabs; folding
   takes that button away, so a second click can't land on the list's close
-  button. Folded with tabs kept, the list's title bar has a lit button beside
-  the gear that brings them back. Closing the last tab folds it too.
+  button. Folded with tabs kept, the list's title bar has a button beside the
+  gear that brings them back: a neutral one, not the lamp (Matt, 2026-09-30:
+  amber read as a notification, since it's what a DM nobody has read is lit
+  in). Closing the last tab folds it too.
 - **Too narrow for both** (a narrow tile, a small screen), the conversation
   takes the window, and ◧ goes back to the list.
 - **One title bar across the window:** the list's (mark, name, gear) over the

@@ -24,6 +24,7 @@ export { SettingRow } from "./SettingRow";
 export { Spinner } from "./Spinner";
 export { Swatch } from "./Swatch";
 export { Slider } from "./Slider";
+export { Splitter } from "./Splitter";
 export { Switch } from "./Switch";
 export { TabStrip, type TabItem, type TabLead, type TabStripProps } from "./Tabs";
 export { TextField, type TextFieldProps } from "./TextField";

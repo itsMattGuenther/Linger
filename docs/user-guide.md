@@ -269,8 +269,12 @@ window grows to the right to make room (to the left if your screen ends
 there), and the list and the conversation move, snap and minimize together.
 Each conversation gets a tab; **Ctrl+Tab** moves between them and **Ctrl+W**
 closes one. The fold button at the conversations' left edge folds the window
-back to just your list and keeps your tabs; the lit button beside the gear
+back to just your list and keeps your tabs; the button beside the gear
 brings them back. Closing the last tab folds it too.
+
+Drag the line between your list and the conversations to make the list wider
+or narrower. The window stays the same size, and Linger remembers the width.
+Double-click the line to put it back.
 
 On a tiling desktop like Hyprland, the desktop decides how big a window is,
 so Linger's doesn't grow or shrink. If its tile is too narrow for both, the

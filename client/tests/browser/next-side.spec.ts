@@ -103,8 +103,9 @@ test("folding shrinks the window to the list and keeps the tabs; unfolding bring
   await expect.poll(() => sizes(page)).toEqual(["size 1120x820", "size 340x820"]);
   await page.setViewportSize({ width: 340, height: 820 });
 
+  // Neutral: amber is for something new, like a DM nobody has read, and this is only a way back.
   const unfold = page.getByRole("button", { name: "Show your conversations" });
-  await expect(unfold).toHaveAttribute("data-tone", "accent");
+  await expect(unfold).toHaveAttribute("data-tone", "filled");
   await unfold.click();
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
   await expect(showing(page)).toHaveAccessibleName("DM with Jules");
@@ -437,3 +438,67 @@ test("Media and Search tabs come back after a restart with the rest", async ({ p
   await expect(page.getByRole("tab")).toHaveText([/general/, /Media/]);
   await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
 });
+
+const line = (page: Page) => page.getByRole("separator", { name: "Width of your list" });
+const listWide = async (page: Page) => (await page.locator("[data-screen='list']").boundingBox())?.width;
+
+/** Drag the line between the list and the conversations by `by` pixels. */
+async function drag(page: Page, by: number) {
+  const box = await line(page).boundingBox();
+  const x = box?.x ?? 0;
+  const y = (box?.y ?? 0) + 400;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + by, y, { steps: 5 });
+  await page.mouse.up();
+}
+
+test("dragging the line beside the list resizes the list; the window keeps its size, and folds back to the new width", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "340");
+  await drag(page, 100);
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "440");
+  expect(await listWide(page)).toBe(440);
+  // The window didn't change size: the conversations took what was left.
+  expect(await sizes(page)).toEqual(["size 1120x820"]);
+  await page.getByRole("button", { name: "Fold back to your list" }).click();
+  await expect.poll(() => sizes(page)).toEqual(["size 1120x820", "size 440x820"]);
+  // And unfolds to the same whole: the list as dragged, the conversations as left.
+  await page.setViewportSize({ width: 440, height: 820 });
+  await page.getByRole("button", { name: "Show your conversations" }).click();
+  await expect.poll(() => sizes(page)).toEqual(["size 1120x820", "size 440x820", "size 1120x820"]);
+});
+
+test("the line moves from the keyboard too, is kept after a restart, and Enter puts it back", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await line(page).focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "372");
+  await page.reload();
+  await settled(page);
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "372");
+  expect(await listWide(page)).toBe(372);
+  await line(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "340");
+});
+
+test("a list dragged wide is squeezed, not lost, when the window gets narrower", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await drag(page, 200);
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "540");
+  // Narrower: the conversation keeps its room, and the list gives way.
+  await page.setViewportSize({ width: 900, height: 820 });
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "480");
+  // Wider again: back to where it was dragged.
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await expect(line(page)).toHaveAttribute("aria-valuenow", "540");
+});
+

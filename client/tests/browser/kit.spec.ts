@@ -270,6 +270,10 @@ test("every hit target is at least 24px", async ({ page }) => {
     els.flatMap((el) => {
       const style = getComputedStyle(el);
       if (style.visibility === "hidden" || style.display === "none") return [];
+      // A splitter is the one exception (docs/design/system.md, "Splitter"):
+      // its target is its whole length, 8px across, so it never covers the
+      // scrollbar or the controls beside it. Its own test measures that.
+      if (el.getAttribute("role") === "separator") return [];
       // An input's target is its box or its label, not the bare element.
       const target = el.closest("label") ?? el.closest("[data-kit-control]") ?? el;
       const r = target.getBoundingClientRect();
@@ -766,3 +770,43 @@ test.describe("in high contrast", () => {
     expect(await outline(options.nth(1))).toBe("none");
   });
 });
+
+test("a splitter moves with the pointer and the keys, stays between its ends, and Enter puts it back (#337)", async ({ page }) => {
+  const split = page.getByTestId("split");
+  const line = split.getByRole("separator", { name: "Width of the list" });
+  await line.scrollIntoViewIfNeeded();
+  await expect(line).toHaveAttribute("aria-valuenow", "200");
+  await expect(line).toHaveAttribute("aria-orientation", "vertical");
+  // Drawn as a hairline, and taken a little either side of it: its whole
+  // length, and 8px across besides the line.
+  const box = await line.boundingBox();
+  expect(box?.width).toBe(1);
+  const takes = await page.evaluate(
+    ({ x, y }) => [-7, -3, 3, 7].map((dx) => document.elementFromPoint(x + dx, y)?.getAttribute("data-kit") === "Splitter"),
+    { x: box?.x ?? 0, y: (box?.y ?? 0) + 60 },
+  );
+  expect(takes).toEqual([false, true, true, false]);
+  await page.mouse.move((box?.x ?? 0) + 3, (box?.y ?? 0) + 60);
+  await page.mouse.down();
+  await page.mouse.move((box?.x ?? 0) + 63, (box?.y ?? 0) + 60, { steps: 4 });
+  await page.mouse.up();
+  await expect(line).toHaveAttribute("aria-valuenow", "260");
+  await expect(split).toContainText("The list, 260 wide");
+  // Never past its ends, however far it's dragged.
+  const now = await line.boundingBox();
+  await page.mouse.move((now?.x ?? 0), (now?.y ?? 0) + 60);
+  await page.mouse.down();
+  await page.mouse.move((now?.x ?? 0) + 500, (now?.y ?? 0) + 60, { steps: 4 });
+  await page.mouse.up();
+  await expect(line).toHaveAttribute("aria-valuenow", "360");
+  await line.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(line).toHaveAttribute("aria-valuenow", "340");
+  await page.keyboard.press("Home");
+  await expect(line).toHaveAttribute("aria-valuenow", "120");
+  await page.keyboard.press("End");
+  await expect(line).toHaveAttribute("aria-valuenow", "360");
+  await page.keyboard.press("Enter");
+  await expect(line).toHaveAttribute("aria-valuenow", "200");
+});
+

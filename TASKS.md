@@ -462,7 +462,8 @@ Rules for this milestone:
   just the list; the separate chat window of tabs is gone, and "Each in its
   own window" stays. Built and tested against faked servers, with the
   window's size faked (`next-side.spec.ts`). Media and Search are tabs
-  beside the list too (Matt's call, same PR). Still to do: trying it on
+  beside the list too (Matt's call, same PR), and the line between the list
+  and the conversations drags (after he tried it). Still to do: trying it on
   Windows 11 and Hyprland (unfolding near a screen's edge, a snapped window,
   a tiled one).
 - 🟡 **T-1810 · Parity and the switch** — the new client became the default in

@@ -526,7 +526,12 @@ of it at real size and decided:
   gear as the first mockup drew it: folding shrinks the window, and a second
   click on a button beside the gear landed on the list's close button, which
   sends Linger to the tray. Folding takes the edge button away with the
-  conversations. Unfolding is a lit button beside the gear.
+  conversations. Unfolding is a button beside the gear, neutral rather than
+  the lamp: in amber it read as a notification (Matt, trying it the same
+  day), since amber is what a DM nobody has read is lit in.
+- **The line between the list and the conversations drags** (Matt, the
+  same day): the list's width, kept on this computer, with the window
+  staying its size. The kit's `Splitter` draws it.
 - **Not taken:** gluing two windows together (impossible on Wayland, wobbly
   on Windows) and two webviews in one window (Tauri still marks it unstable,
   and WebKitGTK is its weak spot). Both are in #337.
