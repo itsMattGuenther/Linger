@@ -10,7 +10,7 @@ import { MAX_FIELD_CHARS, MAX_LABEL_CHARS, MAX_LINE_CHARS, SUGGESTED_LABELS } fr
 import { HEADINGS, leftOf } from "../../core/settings";
 import { draftOf, type FieldRow, isDirty, type LabelChoice, labelOf, OWN, problemOf, type StatusDraft, statusOf, type SuggestedLabel } from "../../core/status";
 import { Button, IconButton, Name, Select, Swatch, TextField } from "../../kit";
-import { Actions, Block, ChoiceRow, Fields, Note, useSave } from "./parts";
+import { Actions, Block, ChoiceRow, Fields, Note, useFollowSaved, useSave } from "./parts";
 
 /** What Profile saves. Each resolves to the problem in words, or null once saved. */
 export interface ProfileActions {
@@ -45,10 +45,7 @@ function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveN
   const save = useSave();
   const dirty = name.trim() !== me.display_name;
   // Follow a name changed elsewhere, but never under somebody's typing.
-  useEffect(() => {
-    if (!dirty) setName(me.display_name);
-    // `dirty` is left out on purpose: this follows the saved name, not the box.
-  }, [me.display_name]);
+  useFollowSaved(me.display_name, setName, (held, saved) => held.trim() !== saved, (saved) => saved);
   const ready = displayNameReady(name, me.display_name) && save.phase.kind !== "saving";
   const submit = () => {
     if (ready) void save.run(saveName(name.trim()));
@@ -86,10 +83,7 @@ function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["
   const save = useSave();
   const dirty = isDirty(draft, saved);
 
-  useEffect(() => {
-    if (!dirty) setDraft(draftOf(saved));
-    // Follows the saved status, not the draft (as the name does).
-  }, [saved]);
+  useFollowSaved(saved, setDraft, isDirty, draftOf);
 
   const edit = (change: Partial<StatusDraft>) => {
     setDraft((held) => ({ ...held, ...change }));
@@ -260,10 +254,7 @@ function YourLook({ me, plainNames, saveStyle }: { me: User; plainNames: boolean
   const save = useSave();
   const dirty = lookChanged(draft, me.style);
 
-  useEffect(() => {
-    if (!dirty) setDraft(lookOf(me.style));
-    // Follows the saved style, not the draft.
-  }, [me.style]);
+  useFollowSaved(me.style, setDraft, lookChanged, lookOf);
 
   const change = (next: StyleDraft) => {
     setDraft(next);

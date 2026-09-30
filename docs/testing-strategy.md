@@ -164,6 +164,11 @@ rules that came out of them:
   #355), and `answered:<event>` once the fake shell has handled a request.
   Wait for the line, then act. The list and side specs' `settled(page)` waits
   until every connection has had its `ready`.
+- **A clock you mean to stop needs `pauseAt`.** `page.clock.install()` on its
+  own swaps in a fake clock that still runs at real speed, so a timer the
+  test means to hold back fires anyway, at a random moment (#367). Install
+  it, open the page, `pauseAt` a time well ahead (opening can take a second
+  of that clock), then move it on with `runFor` or `fastForward`.
 - **A blank page with `net::ERR_NETWORK_CHANGED` in the trace is your machine,
   not the test.** Chromium drops every request in flight when a network
   interface comes or goes, and Docker adds one each time it starts a container

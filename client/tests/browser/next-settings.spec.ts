@@ -19,6 +19,9 @@ async function did(page: Page): Promise<string[]> {
   return (await page.evaluate(() => document.body.dataset.did ?? "")).split("|");
 }
 
+/** When the tests that control the page's clock open it. */
+const OPENED = new Date("2026-09-25T22:52:00");
+
 const nav = (page: Page) => page.getByRole("tablist", { name: "Settings sections" });
 const panel = (page: Page) => page.getByRole("tabpanel");
 const said = (scope: Locator) => scope.locator(".nx-set-said");
@@ -583,8 +586,12 @@ test.describe("hosting", () => {
   });
 
   test("a save that lands while you're choosing again doesn't undo your new choice", async ({ page }) => {
-    await page.clock.install();
+    // Installed alone, the page's clock still runs, and the fixture's save
+    // lands 120 ms after it starts: one WebKit run in 25 chose again just
+    // as it did (#367). Paused, it lands only when the test says.
+    await page.clock.install({ time: OPENED });
     await open(page, "?section=server");
+    await page.clock.pauseAt(new Date(OPENED.getTime() + 60_000));
     await page.getByRole("group", { name: "Accent color" }).getByRole("button", { name: "teal" }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     // Still saving: you change your mind.
@@ -592,6 +599,30 @@ test.describe("hosting", () => {
     await expect(page.locator(".nx-set-accent-name")).toHaveText("No accent");
     // The first save lands.
     await page.clock.fastForward(500);
+    await expect(page.locator(".nx-set-accent-name")).toHaveText("No accent");
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  });
+
+  test("a choice made the moment a save lands isn't undone by it (#367)", async ({ page }) => {
+    await page.clock.install({ time: OPENED });
+    await open(page, "?section=server");
+    await page.clock.pauseAt(new Date(OPENED.getTime() + 60_000));
+    await page.getByRole("group", { name: "Accent color" }).getByRole("button", { name: "teal" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    // The instant the save shows as saved, before anything else on the page
+    // runs, you choose again. The form followed the saved color a moment
+    // later, on what it had known before your click, and put teal back.
+    await page.evaluate(() => {
+      const line = document.querySelector("[aria-label='Accent color']")?.closest("section")?.querySelector(".nx-set-said");
+      if (!line) throw new Error("no save line under the accent");
+      new MutationObserver((_, watch) => {
+        if (line.getAttribute("data-kind") !== "saved") return;
+        watch.disconnect();
+        [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "No accent")?.click();
+      }).observe(line, { attributes: true });
+    });
+    await page.clock.runFor(200);
+    // Only the save landing clicks No accent, so seeing it proves the order.
     await expect(page.locator(".nx-set-accent-name")).toHaveText("No accent");
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   });
