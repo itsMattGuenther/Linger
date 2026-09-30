@@ -50,15 +50,12 @@ pub fn create(app: &App) -> tauri::Result<()> {
 /// windows (docs/design/architecture.md, "Window management").
 const OWNER: &str = "main";
 
-/// The chat window's label, in tabs mode (the default): one window, one tab
-/// per conversation.
-const CHAT: &str = "chat";
-
-/// The page for a chat window opened on one conversation. The address is
-/// built here from a fixed pattern, never taken from the page, so no window
-/// can be told to load something else. `server` must be a plain origin and
-/// `room` an id; anything else is refused.
-fn chat_url(server: &str, room: &str) -> Result<String, String> {
+/// The page for one conversation in a window of its own: popped out of the
+/// tabs beside the list, or every conversation when each opens in its own
+/// (#337). The address is built here from a fixed pattern, never taken from
+/// the page, so no window can be told to load something else. `server` must
+/// be a plain origin and `room` an id; anything else is refused.
+fn conversation_url(server: &str, room: &str) -> Result<String, String> {
     if !is_origin(server) {
         return Err("not a server address".into());
     }
@@ -116,12 +113,6 @@ fn settings_url(section: Option<&str>) -> Result<String, String> {
     }
 }
 
-/// The page for one conversation in a window of its own: popped out of the
-/// tabs, or every conversation in windows mode.
-fn conversation_url(server: &str, room: &str) -> Result<String, String> {
-    chat_url(server, room).map(|url| url + "&single=1")
-}
-
 /// One window per conversation: the label is made from the conversation, so
 /// asking again brings the same window forward rather than opening a second.
 /// FNV-1a, because it gives the same label in every run and every build,
@@ -177,8 +168,8 @@ fn escape(value: &str) -> String {
     out
 }
 
-/// What an already-open chat window is told when asked to show a
-/// conversation, and the message to show in it, if any.
+/// What a conversation's own window, already open, is told when asked to
+/// show a message in it.
 #[derive(Clone, serde::Serialize)]
 struct OpenConversation<'a> {
     server: &'a str,
@@ -186,57 +177,15 @@ struct OpenConversation<'a> {
     message: Option<&'a str>,
 }
 
-/// Open the chat window on a conversation, or, if it is already open, bring it
-/// forward and tell it to show that conversation (it adds a tab or selects
-/// one). Only the list window may ask.
+/// Open one conversation in a window of its own, or bring its window forward.
+/// Only the list window may ask; the tabs beside the list are in it, and a
+/// conversation's own window asks it (an intent).
 ///
 /// **Every command here that builds a window is `async`, and must stay so.**
 /// On Windows, building a WebView2 window from a synchronous command
 /// deadlocks: the new window comes up white and never answers, which is what
 /// 0.4.0 shipped (tauri-apps/wry#583). Async commands run off the main thread,
 /// and the build hands the window to it properly.
-#[tauri::command]
-pub async fn next_open_chat(
-    app: AppHandle,
-    window: WebviewWindow,
-    server: String,
-    room: String,
-    message: Option<String>,
-) -> Result<(), String> {
-    if window.label() != OWNER {
-        return Err("only the list window opens windows".into());
-    }
-    let url = at_message(chat_url(&server, &room)?, message.as_deref())?;
-    if let Some(chat) = app.get_webview_window(CHAT) {
-        let _ = chat.unminimize();
-        let _ = chat.set_focus();
-        return app
-            .emit_to(
-                CHAT,
-                "next:open",
-                OpenConversation {
-                    server: &server,
-                    room: &room,
-                    message: message.as_deref(),
-                },
-            )
-            .map_err(|e| e.to_string());
-    }
-    WebviewWindowBuilder::new(&app, CHAT, WebviewUrl::App(url.into()))
-        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
-        .disable_drag_drop_handler()
-        .title("Linger")
-        .inner_size(780.0, 820.0)
-        .min_inner_size(420.0, 360.0)
-        .decorations(false)
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-/// Open one conversation in a window of its own, or bring its window forward.
-/// Only the list window may ask; a chat window asks the list window (an
-/// intent) to pop a tab out.
 #[tauri::command]
 pub async fn next_open_conversation(
     app: AppHandle,
@@ -392,8 +341,8 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 
 /// Which window to point at for a DM (#291), or none. Nothing while any
 /// Linger window has the focus: whoever's using the app sees the DM's row
-/// light up. Otherwise the first that's showing of the DM's own window, the
-/// chat window and the list. A minimized window counts, because its taskbar
+/// light up. Otherwise the first that's showing of the DM's own window and
+/// the list, where the tabs are (#337). A minimized window counts, because its taskbar
 /// button is exactly what should flash; one hidden in the tray doesn't.
 fn attention_target<'a>(
     order: &[&'a str],
@@ -432,7 +381,7 @@ pub fn next_request_attention(
             .get(label)
             .is_some_and(|open| open.is_visible().unwrap_or(false))
     };
-    let Some(label) = attention_target(&[own.as_str(), CHAT, OWNER], showing, any_focused) else {
+    let Some(label) = attention_target(&[own.as_str(), OWNER], showing, any_focused) else {
         return Ok(false);
     };
     let Some(target) = windows.get(label) else {
@@ -444,14 +393,10 @@ pub fn next_request_attention(
     Ok(true)
 }
 
-/// The Buddy list client's windows other than the owner: the chat window,
-/// conversations popped out of it, Settings, Search and Media.
+/// The Buddy list client's windows other than the owner: conversations in
+/// windows of their own, Settings, Search and Media.
 fn is_viewer(label: &str) -> bool {
-    label == CHAT
-        || label == SETTINGS
-        || label == SEARCH
-        || label == MEDIA
-        || label.starts_with("chat-")
+    label == SETTINGS || label == SEARCH || label == MEDIA || label.starts_with("chat-")
 }
 
 /// Hyprland exports its instance signature to every client it starts;
@@ -494,31 +439,27 @@ mod tests {
         }
     }
     use super::{
-        at_message, attention_target, chat_url, conversation_label, conversation_size,
-        conversation_url, escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window,
-        CHAT, MEDIA, OWNER, SEARCH, SETTINGS,
+        at_message, attention_target, conversation_label, conversation_size, conversation_url,
+        escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window, MEDIA, OWNER, SEARCH,
+        SETTINGS,
     };
 
-    /// A DM points at its own window, then the chat window, then the list,
-    /// whichever is showing, and at nothing while Linger has the focus
-    /// (#291).
+    /// A DM points at its own window, then the list, where the tabs are
+    /// (#337), whichever is showing, and at nothing while Linger has the
+    /// focus (#291).
     #[test]
     fn a_dm_points_at_the_window_it_would_show_in() {
-        let order = ["chat-0123", CHAT, OWNER];
+        let order = ["chat-0123", OWNER];
         let only = |shown: &'static [&'static str]| move |label: &str| shown.contains(&label);
         assert_eq!(
-            attention_target(&order, only(&["chat-0123", CHAT, OWNER]), false),
+            attention_target(&order, only(&["chat-0123", OWNER]), false),
             Some("chat-0123")
-        );
-        assert_eq!(
-            attention_target(&order, only(&[CHAT, OWNER]), false),
-            Some(CHAT)
         );
         assert_eq!(attention_target(&order, only(&[OWNER]), false), Some(OWNER));
         // The list hidden in the tray and nothing else open: nothing to flash.
         assert_eq!(attention_target(&order, only(&[]), false), None);
         // Somebody's using Linger: the DM's row lights up instead.
-        assert_eq!(attention_target(&order, only(&[CHAT, OWNER]), true), None);
+        assert_eq!(attention_target(&order, only(&[OWNER]), true), None);
     }
     use std::ffi::OsStr;
 
@@ -573,7 +514,7 @@ mod tests {
     #[test]
     fn every_window_linger_opens_may_be_moved_by_its_title_bar() {
         let conversation = conversation_label("https://home.example", "r-general");
-        for label in [OWNER, CHAT, conversation.as_str(), SETTINGS, SEARCH, MEDIA] {
+        for label in [OWNER, conversation.as_str(), SETTINGS, SEARCH, MEDIA] {
             let granted = permissions_of(label);
             assert!(
                 granted
@@ -619,12 +560,12 @@ mod tests {
     }
 
     #[test]
-    fn a_chat_window_opens_only_our_page_with_a_real_server_and_room() {
+    fn a_conversation_window_opens_only_our_page_with_a_real_server_and_room() {
         assert_eq!(
-            chat_url("https://linger.example", "0193a2b4-7c1d-7000-8000-000000000001").as_deref(),
+            conversation_url("https://linger.example", "0193a2b4-7c1d-7000-8000-000000000001").as_deref(),
             Ok("next.html?window=chat&server=https%3A%2F%2Flinger.example&room=0193a2b4-7c1d-7000-8000-000000000001")
         );
-        assert!(chat_url("http://localhost:8080", "r-general").is_ok());
+        assert!(conversation_url("http://localhost:8080", "r-general").is_ok());
         for server in [
             "",
             "linger.example",
@@ -634,11 +575,11 @@ mod tests {
             "file:///etc/passwd",
             "https://",
         ] {
-            assert!(chat_url(server, "r-general").is_err(), "{server:?}");
+            assert!(conversation_url(server, "r-general").is_err(), "{server:?}");
         }
         for room in ["", "r general", "../x", "r&x=1", "r?x", &"r".repeat(65)] {
             assert!(
-                chat_url("https://linger.example", room).is_err(),
+                conversation_url("https://linger.example", room).is_err(),
                 "{room:?}"
             );
         }
@@ -686,10 +627,11 @@ mod tests {
 
     #[test]
     fn only_the_buddy_list_windows_other_than_the_owner_are_viewers() {
-        for label in ["chat", "chat-2", "chat-r-general", "settings"] {
+        for label in ["chat-2", "chat-r-general", "settings", "search", "media"] {
             assert!(is_viewer(label), "{label}");
         }
-        for label in ["main", "", "chatty", "settings-2", "Chat"] {
+        // `chat` was the tabs window, gone since the tabs moved beside the list (#337).
+        for label in ["main", "", "chat", "chatty", "settings-2", "Chat"] {
             assert!(!is_viewer(label), "{label}");
         }
     }
@@ -722,13 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn a_conversation_window_opens_only_on_a_real_conversation() {
-        assert_eq!(
-            conversation_url("https://home.example", "r-general").as_deref(),
-            Ok("next.html?window=chat&server=https%3A%2F%2Fhome.example&room=r-general&single=1")
-        );
-        assert!(conversation_url("javascript:alert(1)", "r-general").is_err());
-        assert!(conversation_url("https://home.example", "../settings").is_err());
+    fn a_conversation_window_is_sized_for_what_it_shows() {
         assert_eq!(conversation_size("room"), Ok((560.0, 760.0)));
         assert_eq!(conversation_size("dm"), Ok((460.0, 500.0)));
         assert!(conversation_size("settings").is_err());
@@ -736,7 +672,7 @@ mod tests {
 
     #[test]
     fn a_conversation_opens_at_a_message_only_when_it_is_an_id() {
-        let url = chat_url("https://home.example", "r-general").unwrap();
+        let url = conversation_url("https://home.example", "r-general").unwrap();
         assert_eq!(at_message(url.clone(), None).unwrap(), url);
         assert_eq!(
             at_message(url.clone(), Some("m000123")).unwrap(),

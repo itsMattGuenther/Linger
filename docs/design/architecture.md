@@ -35,7 +35,7 @@ Not in M15:
 | `client/src/next/styles/` | Design tokens and base styles (`system.md`). |
 | `client/src/next/kit/` | The kit of parts: every button, row, marker, tab, title bar and field. Screens build only from these. |
 | `client/src/next/core/` | New logic with no UI: window roles, the catch-up protocol, borrowed tokens, intents, view models. Pure where possible, and unit-tested. |
-| `client/src/next/app/` | Screens: the list window, the chat window (tabs), Settings, the person card, the new-message picker. |
+| `client/src/next/app/` | Screens: the list window with the conversations beside it, a conversation's own window, Settings, the person card, the new-message picker. |
 | `client/src/lib/`, `client/src/generated/`, `client/src/fonts/` | **The shared core:** the REST client, sessions, the gateway store and its pure `apply`, IPC, sounds, updates, name styling, the palette, and the wire types from `linger-core`. `lib/` is logic only, no components. |
 
 `client/src/next/kit/discipline.test.ts` fails the build if code under
@@ -64,10 +64,30 @@ Two terms first:
 
 | Window | Tauri label | Role |
 |---|---|---|
-| The buddy list | `main` | **Owner** |
-| The chat window (tabs mode, one window) | `chat` | Viewer |
+| The buddy list, and the conversations beside it (#337) | `main` | **Owner** |
 | A popped-out or separate conversation (windows mode) | `chat-<server>-<room>` | Viewer |
 | Settings | `settings` | Viewer |
+
+**The conversations beside the list are the owner's, not a viewer** (#337,
+`app/chat/SidePane.tsx`). They're drawn in the list window's own page, so
+there's nothing to catch up on and no sign-in to borrow: they read the same
+store and use the owner's own sign-ins. What they'd ask of the owner goes
+straight to the same handler every window's intents reach (`Sharing.local` in
+`core/share.ts`), without a trip through the shell, and reports as `side`
+(`SIDE`), so presence and the notifier treat it like a window showing a
+conversation (`core/showing.ts`). Folded away, it isn't drawn, so it says
+it's closing and you're around rather than in its room. Mute, Deafen and
+Leave on its voice lines act directly, as the voice bar does.
+
+- **The cost, taken knowingly:** other people's messages and links are now
+  drawn in the window that holds the keyring, the connections and voice,
+  where before only viewers with fewer permissions drew them (`acl.rs`). The
+  split was a second wall, not the only one: the client inserts no raw HTML
+  anywhere (`lib/markdown.ts` builds elements, never markup) and the page's
+  content security policy runs no script Linger didn't ship (`script-src
+  'self'`, `tauri.conf.json`). Anything that loosens either of those has to
+  put the split back first, as a second webview in the same window
+  (issue #337 has why that wasn't done now).
 
 **The owner is the only window that:**
 
@@ -104,7 +124,7 @@ work in the Rust shell.
 server ⇄ Rust gateway (one connection per server)
             │  app.emit("gateway:frame")   — every window receives every frame, in order
             ├──────────────► list window (owner):  apply(state, frame) + side effects
-            └──────────────► chat window (viewer): apply(state, frame), no side effects
+            └──────────────► other windows (viewers): apply(state, frame), no side effects
 ```
 
 Every window keeps its own copy of the store and updates it with the same pure
@@ -204,11 +224,11 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   Settings saved. (`voice.forwarding`, Settings' switch for the old way of
   voice, went with the mesh, #306);
 - `popout` and `tabs`: move a conversation into a window of its own, or back
-  into the chat window's tabs (only the owner opens windows);
+  beside the list as a tab (only the owner opens windows);
 - `open`: show a conversation where conversations open, from a window of its
   own (Message on a person's card). It says whether it's a room or a DM, since
   a DM made a moment ago may not have reached the owner yet;
-- `conversations`: tabs or windows, from Settings;
+- `conversations`: beside the list or each in its own window, from Settings;
 - `settings`: open Settings (Ctrl+, in any window), on a section;
 - `away`: you went away or came back from Settings (presence is the owner's);
 - `signout`: sign out of a server on this computer;
@@ -224,8 +244,9 @@ for up to fifteen minutes. Whenever a server leaves the owner's signed-in list
 (Settings, a sign-in that ran out, signing out of everything), the owner
 tells every window (`next:signedout`). Each drops that server's borrowed
 token, state and frames at once, and never takes it up from a snapshot that
-was already on its way. The chat window closes that server's tabs, and closes
-when none are left; Settings closes when no server is left.
+was already on its way. A conversation's own window on that server closes, the
+tabs beside the list lose that server's tabs, and Settings closes when no
+server is left.
 
 **So does signing in.** A server signed in to while windows are open (Add a
 server, or back after a sign-out) is announced too (`next:signedin`). Each open
@@ -240,7 +261,7 @@ signing straight back in with the new password, since a change ends every
 other sign-in.
 
 **A voice control's sound plays where it was pressed (#241).** Mute, Deafen
-and Leave on a chat window's voice line are questions too
+and Leave on the voice line of a conversation in its own window are questions too
 (`next:voicecontrol`). The owner makes the change exactly as it does for its
 own voice bar, but doesn't play the sound that confirms it. Once the voice
 engine has taken the change, it answers with that sound, and the window that
@@ -249,8 +270,10 @@ answered with the problem, and nothing plays.
 
 - **Why there:** a sound is the answer to a click. The window just clicked
   has had a gesture, so its audio is awake. The list window may be hidden or
-  behind, and on Linux its sound for a click in the chat window came several
-  seconds late, though the mute itself was instant.
+  behind, and on Linux its sound for a click in another window came several
+  seconds late, though the mute itself was instant. Beside the list the click
+  is in the list window itself, which acts and plays the sound as its voice
+  bar does.
 - **Never two:** the owner never plays a sound it has answered with.
 - **Never late:** the pressed window waits at most a second
   (`CONFIRM_WITHIN_MS`). A later answer plays nothing, since a sound that late
@@ -301,19 +324,19 @@ one.
 ## Window management
 
 - **Opening windows.** The owner asks Rust to open or focus a window through a
-  command: `next_open_chat { server, room }` for the tabs,
-  `next_open_settings { section }` for Settings, and
+  command: `next_open_settings { section }` for Settings, and
   `next_open_conversation { server, room, kind }` for a conversation in its
   own window, labelled from the conversation so asking again brings the same
   window forward. Opening a conversation from the list shows it in its own
-  window if it has one (`Sharing.open` in `core/share.ts`). Rust builds the URL from a fixed pattern: no page can open
+  window if it has one, and otherwise where conversations open: beside the
+  list, or a window of its own (`Sharing.open` in `core/share.ts`). Rust builds the URL from a fixed pattern: no page can open
   an arbitrary URL, and only `main` may call the command. That is least privilege, as ARCHITECTURE §7 asks. The
   capability file lists each window's permissions. Viewers get what they need
   to read events and open links, and nothing more.
 - **The app's own commands are checked too.** `build.rs` declares every
   command, which turns on Tauri's access checks for them: a window may call
   only what its capability file grants. `owner.json` gives `main` all of them.
-  The chat windows get `gateway_send` (typing), `graphics_started`,
+  A conversation's own window (`chat-*`) gets `gateway_send` (typing), `graphics_started`,
   `sound_play` (#241) and `clipboard_image`, which reads a picture off the
   clipboard when one is pasted into the message box on Linux, since
   WebKitGTK never shows the page one (#276, `src-tauri/src/clipboard.rs`).
@@ -326,7 +349,7 @@ one.
   notifications and window opening stay the owner's, and
   `src-tauri/src/acl.rs` fails the build's tests if a capability ever hands
   one to another window, starting at sign-in to any window but Settings
-  and the list, or the clipboard to any but the chat windows and the list.
+  and the list, or the clipboard to any but a conversation's window and the list.
 - **Still open:** any window may send any event, and the owner can't tell a
   `gateway:frame` the Rust core sent from one a viewer made up. A viewer that
   renders a hostile message can't reach this without a way to run script,
@@ -334,25 +357,29 @@ one.
   (a Tauri `Channel`) instead of a broadcast event (T-1811).
 - **Search and Media** (decision 15) are windows of their own, `search` and
   `media`, opened by the owner (`next_open_tool`) from the foot of the list.
-  They are viewers: they catch up like the chat window, ask the server with
-  the borrowed sign-in, and ask the owner (the `open` intent, with a message)
-  to show what was found. The chat window then jumps to that message if it's
-  loaded, or reopens the room around it (`openAround`) and goes there.
+  They are viewers: they catch up like a conversation's own window, ask the
+  server with the borrowed sign-in, and ask the owner (the `open` intent, with
+  a message) to show what was found. The conversation then jumps to that
+  message if it's loaded, or reopens the room around it (`openAround`) and
+  goes there.
   Walking into the tab doesn't open the room a second time: the visit waits
   for the opening already on its way, because the store drops a page asked
   for under an earlier opening of the room (#266).
-- **Tabs mode** (the default): one `chat` window. Opening a conversation adds a
-  tab or shows it. When the window is already open, Rust hands it the
-  conversation as an event (`next:open`), which a window still catching up
-  isn't listening for yet. So the owner also keeps every conversation it sends
-  the tabs until the window asks what it missed (`next:opens`), once it is
-  listening, and forgets them when the window closes. It keeps them ten
-  seconds at most, so a tabs window that never came up doesn't open old
-  rooms whenever the next one does, and a tabs window starting again (its
-  snapshot for every server) counts as not listening until it asks.
-  One narrow case is still open: the tabs window is always labelled `chat`,
-  so if the desktop's "closed" notice for an old one reached the owner after
-  a new one had started, the owner would take the new one for gone. A tab can be popped out into its own window, and put back.
+- **Beside the list** (the default, #337): the list window holds the tabs
+  (`linger.next.tabs`) and whether it's unfolded to show them
+  (`linger.next.side`, with how wide the list and the conversations were
+  left). Opening a conversation adds a tab or shows it, and unfolds the
+  window: it grows to the right by the conversations' width, and moves left
+  where its screen ends (`core/side.ts`, `growBeside` in `ListWindow.tsx`).
+  Folding shrinks it back to the list's width. A maximized window keeps its
+  size, and so does one a tiling desktop sizes: Linger asks, and the desktop
+  may say no. Too narrow for both, the conversation takes the window
+  (`layoutOf`). A conversation opened from elsewhere (a banner, a
+  conversation's own window, Search) brings the list window forward, out of
+  the tray if it was there, but only when it doesn't have the focus: some
+  desktops move the pointer to a window an app focuses (#226). There's
+  nothing to hand over and nothing to miss, since the tabs are in the
+  owner's own page. A tab can be popped out into its own window, and put back.
   A half-typed message goes along, through this computer's storage, taken
   once and thrown away after a minute (`core/handoff.ts`). Files waiting to
   be sent stay behind.
@@ -361,15 +388,17 @@ one.
   (`core/conversations.ts`); Settings asks the owner to change it (the
   `conversations` intent), and the owner tells every window (`next:mode`).
   Switching moves what's open at once: every tab into a window of its own,
-  the showing one last so it lands on top, or every such window back into the
-  tabs.
+  the showing one last so it lands on top, or every such window back beside
+  the list. The list window doesn't hear its own broadcast, so the owner tells
+  it directly (`ListControls.conversations`).
 - **Title bars.** Every new-client window is frameless and draws its own title
   bar from the kit, with a drag region and window controls where the desktop
   has none. Windows 11 shadows and resizing on frameless windows need checking
   early on Windows.
 - **Remembering.** Open tabs and their order are remembered on this computer
-  (`linger.next.tabs`). Closing the last tab closes the chat window, and the
-  next conversation opened starts a fresh set. Every new-client window's size,
+  (`linger.next.tabs`), and whether the list was unfolded (`linger.next.side`).
+  Closing the last tab folds the list window back, and the next conversation
+  opened starts a fresh set. Every new-client window's size,
   position and maximized state are remembered by the desktop shell
   (`tauri-plugin-window-state`, `remembered_windows` in `window.rs`). They are written to
   disk when Linger quits and whenever a window other than the list closes,
@@ -403,7 +432,7 @@ fixed gets a test at that layer.
 | Contrast | text tokens and all 16 name colors against every surface | vitest (`contrast.test.ts`) | `pnpm test`, CI |
 | Kit geometry and access | the three control heights, centered icons, identical row heights across all 12 faces, aligned names, ellipsis instead of clipping, 24px hit targets, visible focus, accessible names, keyboard roving | Playwright on the kit gallery | Chromium locally; Chromium and WebKit in CI |
 | Screens | tabs, the voice bar, the person card, the new-message picker, Settings, driven with a fake store | Playwright on fixture pages | local and CI |
-| Several windows | catch-up, borrowed tokens and every intent end to end: two copies of the store in one test sharing an in-memory bus (`core/share.test.ts`), and the real chat window against a faked shell, owner and server (`tests/fixtures/next-chat-window.html`) | vitest; Playwright | local and CI |
+| Several windows | catch-up, borrowed tokens and every intent end to end: two copies of the store in one test sharing an in-memory bus (`core/share.test.ts`), a conversation's own window against a faked shell, owner and server (`tests/fixtures/next-chat-window.html`), and the tabs beside the list in the real list window, with its size faked (`next-side.spec.ts`) | vitest; Playwright | local and CI |
 | Real WebKitGTK and WebView2 | the packaged app starts and draws its list at every interface size, and plays sound | `scripts/linux-next-check.py`, `client/scripts/windows-next-check.mjs`, the packaged audio checks (`docs/packaged-audio-checks.md`) | CI's package check |
 | Real windows, signed in | real windows and title bars, fonts, typing latency, scrolling, several windows at once, against a real server | a `tauri-driver` desktop check under Xvfb (T-1820, not built yet) | local, before a release |
 | Real world | the parity checklist, then the release checks on real computers and networks | people | before the switch |

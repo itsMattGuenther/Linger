@@ -545,7 +545,7 @@ const CHAT = "/tests/fixtures/next-chat-window.html?room=r-general";
 
 async function openChat(page: Page) {
   await page.goto(CHAT);
-  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".nx-pane")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 }
 

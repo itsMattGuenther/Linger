@@ -13,7 +13,7 @@ const PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5"><rect w
 async function open(page: Page, query = "room=r-general") {
   await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
   await page.goto(`/tests/fixtures/next-chat-parity.html?${query}`);
-  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".nx-pane")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -1347,12 +1347,11 @@ test.describe("a shared audio file (#247)", () => {
   }
 });
 
-test.describe("voice and the tabs", () => {
-  test("closing the tab of the room you're in voice in, and so the window, never leaves voice (VOICE-3)", async ({ page }) => {
+test.describe("voice and closing", () => {
+  test("closing the window of the room you're in voice in never leaves voice (VOICE-3)", async ({ page }) => {
     await open(page, "room=r-general&ptt");
-    await expect(page.getByRole("tab", { name: /#general/ })).toBeVisible();
-    // The only tab: closing it closes the window too.
-    await page.getByRole("button", { name: "Close #general" }).click();
+    await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
+    await page.getByRole("button", { name: "Close window" }).click();
     await expect.poll(() => did(page)).toContain("window:close");
     const voice = intents(await did(page)).filter((intent) => String(intent.kind).startsWith("voice."));
     expect(voice).toEqual([]);
@@ -1496,20 +1495,6 @@ test.describe("reading far back", () => {
     const missing = ORDER.slice(first).filter((id) => !seen.has(id));
     expect(missing).toEqual([]);
   });
-
-  test("a room you've left keeps only its newest page, and you come back to the newest (CONV-14)", async ({ page }) => {
-    // Six pages back: seven hundred held, all the way to the newest, too few to let go of while you're in it.
-    await readBack(page, 6);
-    await page.waitForTimeout(800);
-    await expect(newest(page)).toHaveCount(0);
-    const heldHeight = await log(page).evaluate((node) => node.scrollHeight);
-    await page.evaluate(() => window.parity?.open("r-listening"));
-    await expect(page.getByRole("tab", { name: "#listening-room" })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "#general" }).click();
-    await expect(row(page, "m000016")).toBeVisible();
-    await expect(newest(page)).toHaveCount(0);
-    // A hundred messages' worth, not the seven hundred it held.
-    const backHeight = await log(page).evaluate((node) => node.scrollHeight);
-    expect(backHeight).toBeLessThan(heldHeight / 3);
-  });
+  // A room you've left keeps only its newest page (CONV-14): next-side.spec.ts,
+  // where leaving a room is showing another tab beside the list.
 });

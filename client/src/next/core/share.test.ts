@@ -138,7 +138,7 @@ function fakeOwnerApi(tokens: string[]) {
   return api;
 }
 
-/** The owner and one viewer; `viewerLabel` is the viewer's window (`chat`, the tabs, by default). */
+/** The owner and one viewer; `viewerLabel` is the viewer's window (`chat`, one conversation in its own, by default). */
 async function windows(viewerLabel = "chat") {
   const { memoryHub } = await import("./bus.memory");
   const hub = memoryHub();
@@ -333,7 +333,7 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.gateway.connect(api as never);
     const done: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      opener: { chat: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`), tool: () => undefined },
+      opener: { side: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`), tool: () => undefined },
       accounts: {
         reauthenticate: async (server, auth) => void done.push(`signed back in to ${server} as ${auth.user.username}`),
         signOut: async (server) => void done.push(`signed out of ${server}`),
@@ -432,7 +432,7 @@ describe("a viewer window sharing the owner's connection", () => {
     const opened: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
       opener: {
-        chat: (server, roomId) => opened.push(`chat ${server} ${roomId}`),
+        side: (server, roomId) => opened.push(`side ${server} ${roomId}`),
         conversation: (server, roomId, kind) => opened.push(`own ${server} ${roomId} ${kind}`),
         settings: (section) => opened.push(`settings ${section ?? ""}`),
         tool: () => undefined,
@@ -441,9 +441,9 @@ describe("a viewer window sharing the owner's connection", () => {
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
 
-    // Nothing popped out: the list opens conversations as tabs.
+    // Nothing popped out: the list opens conversations beside itself.
     sharing.open(HOME, "r-general");
-    expect(opened).toEqual([`chat ${HOME} r-general`]);
+    expect(opened).toEqual([`side ${HOME} r-general`]);
 
     await follower.intend({ kind: "popout", server: HOME, roomId: "r-general" });
     await vi.waitFor(() => expect(opened.at(-1)).toBe(`own ${HOME} r-general room`));
@@ -455,7 +455,7 @@ describe("a viewer window sharing the owner's connection", () => {
     });
 
     await follower.intend({ kind: "tabs", server: HOME, roomId: "r-general" });
-    await vi.waitFor(() => expect(opened.at(-1)).toBe(`chat ${HOME} r-general`));
+    await vi.waitFor(() => expect(opened.at(-1)).toBe(`side ${HOME} r-general`));
     // Nobody can pop out a conversation on a server the owner isn't signed in to, or one that doesn't exist.
     const before = opened.length;
     await follower.intend({ kind: "popout", server: "https://elsewhere.example", roomId: "r-general" });
@@ -473,14 +473,17 @@ describe("a viewer window sharing the owner's connection", () => {
     const opened: string[] = [];
     const items = new Map<string, string>();
     const store = { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) };
+    const modes: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
       opener: {
-        chat: (_server, roomId) => opened.push(`chat ${roomId}`),
+        side: (_server, roomId) => opened.push(`side ${roomId}`),
         conversation: (_server, roomId, kind) => opened.push(`own ${roomId} ${kind}`),
         settings: () => undefined,
         tool: () => undefined,
       },
       store,
+      // The list window hears it too, to move its own tabs (it doesn't hear its own broadcast).
+      list: { addServer: () => undefined, setPrefs: () => undefined, conversations: (mode) => modes.push(mode) },
     });
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
@@ -497,8 +500,9 @@ describe("a viewer window sharing the owner's connection", () => {
     await follower.intend({ kind: "conversations", mode: "stacked" as never });
     await follower.intend({ kind: "conversations", mode: "tabs" });
     await vi.waitFor(() => expect(heard).toEqual([{ v: 1, mode: "windows" }, { v: 1, mode: "tabs" }]));
+    expect(modes).toEqual(["windows", "tabs"]);
     sharing.open(HOME, "r-general");
-    expect(opened.at(-1)).toBe("chat r-general");
+    expect(opened.at(-1)).toBe("side r-general");
     sharing.stop();
     follower.stop();
   });
@@ -675,7 +679,7 @@ describe("a viewer window sharing the owner's connection", () => {
   });
 
   it("a window asking to show a conversation gets it where conversations open, even a DM this window hasn't heard of", async () => {
-    const { hub, owner, viewer, core } = await windows("chat-5f1e");
+    const { owner, viewer, core } = await windows("chat-5f1e");
     const api = fakeOwnerApi(["token-1"]);
     await owner.gateway.connect(api as never);
     const opened: string[] = [];
@@ -683,7 +687,7 @@ describe("a viewer window sharing the owner's connection", () => {
     const store = { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) };
     await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
       opener: {
-        chat: (_server, roomId, messageId) => opened.push(`tabs ${roomId}${messageId ? ` at ${messageId}` : ""}`),
+        side: (_server, roomId, messageId) => opened.push(`side ${roomId}${messageId ? ` at ${messageId}` : ""}`),
         conversation: (_server, roomId, kind, messageId) => opened.push(`own ${roomId} ${kind}${messageId ? ` at ${messageId}` : ""}`),
         settings: () => undefined,
         tool: (which) => opened.push(`tool ${which}`),
@@ -692,20 +696,17 @@ describe("a viewer window sharing the owner's connection", () => {
     });
     evening().slice(0, 3).forEach(core);
     const follower = await viewer.mirror.followOwner(viewer.bus);
-    // Search and Media, and a hit opened at its message: in tabs, and kept for a tabs window not yet listening.
+    // Search and Media, and a hit opened at its message: beside the list.
     await follower.intend({ kind: "tool", which: "search" });
     await follower.intend({ kind: "tool", which: "settings" as never });
     await follower.intend({ kind: "open", server: HOME, roomId: "r-general", conversation: "room", messageId: "m000005" });
-    await vi.waitFor(() => expect(opened).toEqual(["tool search", "tabs r-general at m000005"]));
-    await expect(ask(hub.bus("chat"), "main", owner.share.OPENS, {})).resolves.toEqual({
-      opens: [{ server: HOME, roomId: "r-general", messageId: "m000005" }],
-    });
+    await vi.waitFor(() => expect(opened).toEqual(["tool search", "side r-general at m000005"]));
     opened.length = 0;
     await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm" });
-    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new"]));
+    await vi.waitFor(() => expect(opened).toEqual(["side d-new"]));
     items.set("linger.next.conversations", "windows");
     await follower.intend({ kind: "open", server: HOME, roomId: "d-new", conversation: "dm", messageId: "m000009" });
-    await vi.waitFor(() => expect(opened).toEqual(["tabs d-new", "own d-new dm at m000009"]));
+    await vi.waitFor(() => expect(opened).toEqual(["side d-new", "own d-new dm at m000009"]));
     // A server this computer isn't signed in to opens nothing.
     await follower.intend({ kind: "open", server: "https://elsewhere.example", roomId: "d-new", conversation: "dm" });
     await new Promise((settle) => setTimeout(settle, 10));
@@ -721,62 +722,40 @@ describe("a viewer window sharing the owner's connection", () => {
     });
   });
 
-  it("keeps what the tabs window was sent before it was listening, and hands it over once", async () => {
-    const { hub, owner, viewer, core } = await windows();
+  it("the tabs beside the list count as where you are, as a window would, and are never taken for a conversation's own window (#337)", async () => {
+    const { owner, core } = await windows();
+    const presence = owner.presence;
     const api = fakeOwnerApi(["token-1"]);
     await owner.gateway.connect(api as never);
     const opened: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      opener: { chat: (_server, roomId) => opened.push(roomId), conversation: () => undefined, settings: () => undefined, tool: () => undefined },
+      opener: {
+        side: (_server, roomId) => opened.push(`side ${roomId}`),
+        conversation: (_server, roomId) => opened.push(`own ${roomId}`),
+        settings: () => undefined,
+        tool: () => undefined,
+      },
     });
+    const stopPresence = presence.startPresence();
     evening().slice(0, 3).forEach(core);
-    const opens = (label = "chat") => ask<{ opens: unknown[] }>(label === "chat" ? viewer.bus : hub.bus(label), "main", owner.share.OPENS, {});
+    presence.setPresenceLive(HOME, true);
 
-    // Two rooms clicked while the tabs window is still catching up, and one
-    // coming back from a window of its own.
+    // Unfolded on #general: you're in it, with nothing sent through the shell.
+    sharing.local({ kind: "window", focused: true, input: true });
+    sharing.local({ kind: "room", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(sentFrames()).toContainEqual({ op: "room.focus", d: { room_id: "r-general" } }));
+    // Opened again from the list: it stays beside the list, not in a window of its own.
     sharing.open(HOME, "r-general");
-    sharing.open(HOME, "r-weekend");
-    const follower = await viewer.mirror.followOwner(viewer.bus);
-    await follower.intend({ kind: "tabs", server: HOME, roomId: "r-listening" });
-    await vi.waitFor(() => expect(opened).toEqual(["r-general", "r-weekend", "r-listening"]));
+    expect(opened).toEqual(["side r-general"]);
+    // What it asks for is done, as any window's asking is.
+    sharing.local({ kind: "read", server: HOME, roomId: "r-general", messageId: "m000016" });
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledWith("/rooms/r-general/read", { last_read_id: "m000016" }));
 
-    // Another window asking is told nothing, and takes nothing.
-    await expect(opens("settings")).resolves.toEqual({ opens: [] });
-    // Listening now: every one of them, in order, and only once.
-    await expect(opens()).resolves.toEqual({
-      opens: [
-        { server: HOME, roomId: "r-general" },
-        { server: HOME, roomId: "r-weekend" },
-        { server: HOME, roomId: "r-listening" },
-      ],
-    });
-    await expect(opens()).resolves.toEqual({ opens: [] });
-    // While it listens, the shell's own delivery is enough.
-    sharing.open(HOME, "r-general");
-    await expect(opens()).resolves.toEqual({ opens: [] });
-
-    // Closed: a new tabs window starts from nothing, and missed opens are kept again.
-    hub.broadcast(owner.share.CLOSED, "chat");
-    sharing.open(HOME, "r-weekend");
-    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-weekend" }] });
-
-    // A tabs window starting again (a reload, say) isn't listening until it says so...
-    await ask(viewer.bus, "main", owner.share.SNAPSHOT, {});
-    sharing.open(HOME, "r-general");
-    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-general" }] });
-    // ...though one catching up on a single new server still is.
-    await ask(viewer.bus, "main", owner.share.SNAPSHOT, { only: HOME });
-    sharing.open(HOME, "r-listening");
-    await expect(opens()).resolves.toEqual({ opens: [] });
-
-    // Kept only a little while: a window that never came up doesn't open old rooms later.
-    hub.broadcast(owner.share.CLOSED, "chat");
-    sharing.open(HOME, "r-weekend");
-    vi.setSystemTime(Date.now() + owner.share.MISSED_KEEP_MS + 1_000);
-    sharing.open(HOME, "r-general");
-    await expect(opens()).resolves.toEqual({ opens: [{ server: HOME, roomId: "r-general" }] });
+    // Folded away: out of the room.
+    sharing.local({ kind: "closing" });
+    await vi.waitFor(() => expect(sentFrames().at(-1)).toEqual({ op: "room.focus", d: { room_id: null } }));
+    stopPresence();
     sharing.stop();
-    follower.stop();
   });
 
   it("joins, talks and leaves voice through the owner, and every window sees the seat", async () => {

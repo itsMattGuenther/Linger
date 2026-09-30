@@ -426,7 +426,7 @@ Rules for this milestone:
   line is kept on this computer across closing its tab and restarting Linger,
   and cleared when sent.
 - ✅ **T-1815 · A banner opens its conversation** — decision 20. Clicking a
-  desktop notification opens that room or DM in the chat window, at the message.
+  desktop notification opens that room or DM beside the list, at the message.
   Built and tested up to the desktop; clicking a real banner on Linux and
   Windows is still to be checked by hand.
 - ✅ **T-1816 · Empty places say so** — decision 17. One quiet sentence each for
@@ -455,6 +455,15 @@ Rules for this milestone:
   its people and leaving it out for everyone else. It never touches a saved
   Linger server or the normal desktop. Local and optional, alongside
   `scripts/check.sh`; it doesn't replace the release checks.
+- 🟡 **T-1821 · Conversations beside the list** — #337, decided with Matt on
+  2026-09-30: the list is the one core window. Rooms and DMs open as tabs
+  beside it, in its own window, which unfolds to show them and folds back to
+  just the list; the separate chat window of tabs is gone, and "Each in its
+  own window" stays. Built and tested against faked servers, with the
+  window's size faked (`next-side.spec.ts`). Still to do: Media and Search
+  as tabs beside the list too (Matt's call, same PR), and trying it on
+  Windows 11 and Hyprland (unfolding near a screen's edge, a snapped window,
+  a tiled one).
 - 🟡 **T-1810 · Parity and the switch** — the new client became the default in
   0.4.0 and the old one was deleted after 0.4.3 (#306). Still to do: every
   `parity.md` item proved, and SPEC §3/§5 rewritten from `system.md`.

@@ -4,6 +4,7 @@ import { Button, Checkbox, Marker, Name, Popover, TextField } from "../../kit";
 import { markerFor } from "../markers";
 import "./AwayEditor.css";
 import { serverColor } from "./ServerSection";
+import { centredOnList } from "./listSpan";
 
 /** A server the away message can show on, and who you are there. */
 export interface AwayServer {
@@ -59,7 +60,7 @@ export function AwayEditor({
     const card = box.current?.parentElement;
     if (!card) return;
     const { width } = card.getBoundingClientRect();
-    const x = Math.max(8, Math.round((window.innerWidth - width) / 2));
+    const x = centredOnList(width, 8);
     setAt((held) => (held.x === x ? held : { x, y: held.y }));
   }, []);
 

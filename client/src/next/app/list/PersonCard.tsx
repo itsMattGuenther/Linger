@@ -9,6 +9,7 @@ import { Button, Marker, MARKER_WORDS, markerStateOf, Name, Popover } from "../.
 import { knockOfflineLine, sentencesOf, type KnockResult } from "../../core/knock";
 import { markerFor } from "../markers";
 import "./PersonCard.css";
+import { centredOnList } from "./listSpan";
 
 
 interface CardBase {
@@ -79,7 +80,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
     const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
     const x =
       anchor.left === undefined
-        ? Math.max(EDGE, Math.round((window.innerWidth - width) / 2))
+        ? centredOnList(width, EDGE)
         : Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
     setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
   }, [anchor.top, anchor.bottom, anchor.left]);

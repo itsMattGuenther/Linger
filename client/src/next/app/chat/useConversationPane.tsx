@@ -34,7 +34,7 @@ import { clipboardImageReader } from "../../core/chat/paste";
 import { voiceStrip } from "../../core/chat/voice";
 import { knockOfflineLine, knockOn } from "../../core/knock";
 import { personRow } from "../../core/list";
-import type { Intent } from "../../core/share";
+import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { keyOf, type TabKey } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
 import { pressVoiceControl } from "../../core/voiceControl";
@@ -90,6 +90,12 @@ export interface PaneHost {
   firstSeed?: { conversation: string; text: string } | null;
   /** The message the first conversation was opened on (a search hit, a banner), if any. */
   firstMessage?: { tab: TabKey; id: MessageId } | null;
+  /**
+   * Mute, Deafen and Leave on the voice line. A window of its own asks the
+   * list window, which answers with the sound to play (#241); beside the
+   * list, the list window acts itself, as its voice bar does.
+   */
+  voiceControl?: (press: VoiceControlQuestion) => void;
 }
 
 export interface ConversationPane {
@@ -122,7 +128,7 @@ export interface ConversationPane {
  * name opens. The place that holds it decides which conversation shows and
  * what surrounds it.
  */
-export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null }: PaneHost): ConversationPane {
+export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList }: PaneHost): ConversationPane {
   const servers = useServers();
   const now = useNow();
   // Its own clock, so the conversation isn't redrawn every two seconds.
@@ -355,11 +361,10 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   // A system default that wouldn't open is fixed by picking a device by name (#273).
   const onPickDevice = useCallback(() => void intend({ kind: "settings", section: "sound" }).catch(() => undefined), [intend]);
   // Your voice controls in the room you're in voice in (#216): the list
-  // window owns the seat and makes the change, and the window clicked plays
-  // the sound that confirms it once it's done (#241).
-  const onMute = useCallback((muted: boolean) => void pressVoiceControl(tauriBus(), { control: "mute", on: muted }), []);
-  const onDeafen = useCallback((deafened: boolean) => void pressVoiceControl(tauriBus(), { control: "deafen", on: deafened }), []);
-  const onLeave = useCallback(() => void pressVoiceControl(tauriBus(), { control: "leave" }), []);
+  // window owns the seat and makes the change.
+  const onMute = useCallback((muted: boolean) => voiceControl({ control: "mute", on: muted }), [voiceControl]);
+  const onDeafen = useCallback((deafened: boolean) => voiceControl({ control: "deafen", on: deafened }), [voiceControl]);
+  const onLeave = useCallback(() => voiceControl({ control: "leave" }), [voiceControl]);
 
   const pane = ((): ChatPane | null => {
     if (!active || !state || !room || paneId === null) return null;
@@ -477,6 +482,11 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     ) : null;
 
   return { pane, card: cardView, servers, several, serverTag, tabItem, goToMessage, askFocus, seedDraft, draftOf };
+}
+
+/** A window of its own asks the list window, and plays the sound it answers with (#241). */
+function askTheList(press: VoiceControlQuestion): void {
+  void pressVoiceControl(tauriBus(), press);
 }
 
 /** A store or network failure, as a sentence for the message it was about. */

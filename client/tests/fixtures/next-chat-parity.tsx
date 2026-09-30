@@ -65,7 +65,7 @@ function unanswered(signal: AbortSignal | null | undefined): Promise<Response> {
 }
 
 const desktop = fakeDesktop({
-  label: "chat",
+  label: "chat-5f1e",
   query,
   infos: { [SERVER]: { name: SERVER_NAME, accent: "amber" } },
   ownerState: {

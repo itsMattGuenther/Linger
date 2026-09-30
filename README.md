@@ -15,7 +15,7 @@ people who already know each other, not a stadium of fifty thousand strangers.
 > anything. That is the product thesis in one word.
 
 <div align="center">
-<img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
+<img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list with a conversation open beside it, in one window">
 </div>
 
 **Status: 0.4.4, testing with friends.** It works day to day; voice across
@@ -56,7 +56,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   DMs, and everyone on the server, here, away (with their away message) or
   offline. Closing it keeps Linger running in the tray, and it can start when
   you sign in to the computer (off unless you turn it on).
-- **Conversations as tabs** in one chat window, or each in a window of its own.
+- **Conversations beside the list**, as tabs in the list's own window, which
+  folds back to just the list when you want it slim. Or each in a window of its own.
 - **No unread counts.** A room with something new gets a bolder name, and a
   conversation opens at "you left off here". A DM you haven't read is lit in
   amber as well, with a desktop banner saying who it's from. Never a badge.

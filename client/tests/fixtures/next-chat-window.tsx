@@ -1,19 +1,20 @@
 /**
- * The real chat window (`src/next/app/chat/ChatWindow.tsx`), wired end to end
- * with the desktop shell, the list window and the server all faked in the
- * page (`next/desktop.ts`), so `tests/browser/next-chat-window.spec.ts` can
- * drive the wiring: catching up with the owner, borrowing its sign-in,
- * loading history, sending, reading, tabs, presence and voice intents.
+ * The real chat window (`src/next/app/chat/ChatWindow.tsx`): a conversation
+ * in a window of its own, popped out of the tabs beside the list (#337),
+ * wired end to end with the desktop shell, the list window and the server
+ * all faked in the page (`next/desktop.ts`), so
+ * `tests/browser/next-chat-window.spec.ts` can drive the wiring: catching up
+ * with the owner, borrowing its sign-in, loading history, sending, reading,
+ * presence and voice intents. The tabs beside the list are the list
+ * window's (`next-list-window.tsx`, `next-side.spec.ts`).
  *
  * Open it at /tests/fixtures/next-chat-window.html?room=r-general. Options:
  * `?fail` refuses every send; `?noowner` has the owner never answer;
  * `?expired` has the server refuse the first lent token, as if it ran out;
  * `?ptt` puts you in voice in #general with push-to-talk on; `?limit`
- * refuses knocks, as the fourth in an hour; `&single=1` is the conversation
- * in a window of its own; `?servers` signs in to the guild too;
- * `?as=eli` is Eli's window, not yours, to see how the room shows you;
- * `?missed=r-listening,…` has the list window hand over rooms it sent
- * before this window was listening; `?many=600` puts that many older
+ * refuses knocks, as the fourth in an hour; `?servers` signs in to the
+ * guild too; `?as=eli` is Eli's window, not yours, to see how the room shows
+ * you; `?many=600` puts that many older
  * messages before the evening in #general; `&message=` opens at one. The photo
  * loads only where something serves
  * `PHOTO_PATH` (the spec does). Mute, Deafen and Leave are made by the list
@@ -42,9 +43,6 @@ if (!query.has("server")) query.set("server", SERVER);
 history.replaceState(null, "", `${location.pathname}?${query.toString()}`);
 
 const night = evening(serverState(SERVER));
-// Rooms the list window sent before this window was listening (`?missed=`),
-// handed over when it asks, once.
-let missed = (query.get("missed") ?? "").split(",").filter((room) => room !== "");
 // Your voice seat, as the list window shares it (`?ptt`, `?talking`).
 const seat =
   query.has("ptt") || query.has("talking")
@@ -64,14 +62,9 @@ const seat =
       }
     : null;
 const desktop = fakeDesktop({
-  label: query.get("single") === "1" ? "chat-5f1e" : "chat",
+  label: "chat-5f1e",
   query,
   asks: {
-    "next:opens": () => {
-      const opens = missed.map((roomId) => ({ server: SERVER, roomId }));
-      missed = [];
-      return { opens };
-    },
     "next:voicecontrol": (question) => voiceControl(question),
   },
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)) } : {},
@@ -125,7 +118,7 @@ declare global {
     owner?: {
       /** A gateway frame reaches every window, as the core sends it. */
       frame: (frame: Unnumbered) => void;
-      /** The list window opens a conversation while this window is open, on a server (the main one if left out), at a message if one is named. */
+      /** The list window brings this window forward on its conversation, on a server (the main one if left out), at a message if one is named. */
       open: (room: string, server?: string, message?: string) => void;
       /** Somebody says something in a room, arriving as a frame. */
       say: (room: string, author: string, body: string) => string;

@@ -41,8 +41,12 @@ import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } fr
 import { prefsFrom, type ServerPrefs } from "./serverPrefs";
 import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
 
-/** The chat window's label, in tabs mode (src-tauri/src/window.rs). */
-const CHAT = "chat";
+/**
+ * What the conversations beside the list report as, to presence and the
+ * notifier (core/showing.ts): not a window of its own, but a place that
+ * shows a conversation, inside the list window (#337).
+ */
+export const SIDE = "side";
 
 /**
  * How long a window that's opening waits for a server's token to be renewed
@@ -63,8 +67,6 @@ export const SHARED = "next:shared";
 export const CLOSED = "next:closed";
 /** The owner tells every window how conversations open now (core/conversations.ts). */
 export const MODE = "next:mode";
-/** The tabs window, now listening, asks what it was sent to open before it was. */
-export const OPENS = "next:opens";
 /** A server was signed out of, however it happened: every window lets it go. */
 export const SIGNED_OUT = "next:signedout";
 /** A server was signed in to (added, or back after a sign-out): every open window takes it up. */
@@ -130,14 +132,6 @@ export interface SnapshotQuestion {
   only?: string;
 }
 
-/** How long the owner keeps a conversation sent to a tabs window that isn't listening yet. */
-export const MISSED_KEEP_MS = 10_000;
-
-/** What the tabs window was sent to open before it was listening, oldest first. */
-export interface OpensAnswer {
-  opens: { server: string; roomId: RoomId; messageId?: MessageId }[];
-}
-
 export interface ModeMessage {
   v: number;
   mode: ConversationsMode;
@@ -193,9 +187,9 @@ export type Intent =
   | { kind: "voice.devices"; input: string | null; output: string | null }
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
-  /** A conversation in its own window goes back into the chat window's tabs. */
+  /** A conversation in its own window goes back beside the list, as a tab. */
   | { kind: "tabs"; server: string; roomId: RoomId }
-  /** Show a conversation where conversations open (tabs or its own window), as the list would, at a message if one is named. */
+  /** Show a conversation where conversations open (beside the list, or its own window), as the list would, at a message if one is named. */
   | { kind: "open"; server: string; roomId: RoomId; conversation: "room" | "dm"; messageId?: MessageId }
   /** Open Search or Media (their own windows, decision 15). */
   | { kind: "tool"; which: "search" | "media" }
@@ -224,6 +218,8 @@ export interface ListControls {
   closeToTray?(on: boolean): void;
   /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
   talkKey?(code: string): void;
+  /** Settings changed how conversations open: the tabs beside the list move into windows of their own. */
+  conversations?(mode: ConversationsMode): void;
 }
 
 /**
@@ -231,8 +227,8 @@ export interface ListControls {
  * (src-tauri/src/window.rs; only the owner may call them), fakes in tests.
  */
 export interface WindowOpener {
-  /** The chat window, adding a tab for this conversation or showing it, at a message if one is named. */
-  chat(server: string, roomId: RoomId, messageId?: MessageId): void;
+  /** Beside the list, in the list window: a tab for this conversation, or it showing, at a message if one is named (#337). */
+  side(server: string, roomId: RoomId, messageId?: MessageId): void;
   /** This conversation in a window of its own, or that window brought forward, at a message if one is named. */
   conversation(server: string, roomId: RoomId, kind: "room" | "dm", messageId?: MessageId): void;
   /** The Settings window, on a section if one is named. */
@@ -253,9 +249,14 @@ export interface Sharing {
   stop(): void;
   /**
    * Show a conversation: in the window it was popped out into, if it has one,
-   * otherwise in the chat window's tabs.
+   * otherwise where conversations open (beside the list, or a window of its own).
    */
   open(server: string, roomId: RoomId, messageId?: MessageId): void;
+  /**
+   * An intent from the conversations beside the list: the same as any
+   * window's, from the list window itself, without a trip through the shell.
+   */
+  local(intent: Intent): void;
   /**
    * The sign-ins changed (a server added, or signed back into after a
    * password change, which starts its presence afresh): put you back in the
@@ -347,21 +348,6 @@ export async function shareAsOwner(
     looked = key;
     setViewing(now);
   };
-  // The shell hands an open tabs window each conversation as an event
-  // (window.rs, `next_open_chat`), and a window still catching up isn't
-  // listening yet: two rooms clicked quickly, or several windows going back
-  // into the tabs at once, would lose all but the first. So every open is
-  // also kept here until the tabs window says it's listening (OPENS), and it
-  // is handed what it missed.
-  // Kept only a little while: a tabs window that never came up shouldn't
-  // open old rooms whenever the next one does.
-  let tabsListening = false;
-  let missed: (OpensAnswer["opens"][number] & { at: number })[] = [];
-  const toTabs = (server: string, roomId: RoomId, messageId?: MessageId) => {
-    if (!tabsListening) missed.push({ server, roomId, messageId, at: Date.now() });
-    opener?.chat(server, roomId, messageId);
-  };
-
   // The windows holding the push-to-talk key down right now. A window that
   // closes with it held (Ctrl+W, with Ctrl being the key) never says it let
   // go, so its going closes the microphone.
@@ -372,10 +358,6 @@ export async function shareAsOwner(
   };
 
   const gone = (label: string) => {
-    if (label === CHAT) {
-      tabsListening = false;
-      missed = [];
-    }
     if (holdingTalk.delete(label)) letGoOfTalk();
     forgetWindow(label);
     showing = close(showing, label);
@@ -383,9 +365,9 @@ export async function shareAsOwner(
     look();
   };
 
-  // A conversation's own window, if one shows it: any window but the tabs.
+  // A conversation's own window, if one shows it: anything showing it but the tabs beside the list.
   const ownWindow = (server: string, roomId: RoomId): boolean =>
-    [...showing].some(([label, shown]) => label !== CHAT && shown.server === server && shown.roomId === roomId);
+    [...showing].some(([label, shown]) => label !== SIDE && shown.server === server && shown.roomId === roomId);
   const kindOf = (server: string, roomId: RoomId): "room" | "dm" | null => {
     const state = serverState(server);
     if (state.dms.some((dm) => dm.id === roomId)) return "dm";
@@ -397,14 +379,123 @@ export async function shareAsOwner(
   };
   const open = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm") => {
     if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId, messageId, known);
-    else toTabs(server, roomId, messageId);
+    else opener?.side(server, roomId, messageId);
+  };
+
+  // What a window asked for: the same for any window, the tabs beside the
+  // list included (`local`), which ask without going through the shell.
+  const carryOut = (intent: Intent & Envelope) => {
+    switch (intent.kind) {
+      case "read": {
+        const api = sessions().get(intent.server);
+        if (api) markRead(api, intent.roomId, intent.messageId);
+        return;
+      }
+      case "window":
+        reportWindow(intent.from, { focused: intent.focused, input: intent.input });
+        showing = intent.focused ? focus(showing, intent.from, Date.now()) : blur(showing, intent.from);
+        place();
+        look();
+        return;
+      case "room":
+        if (!sessions().has(intent.server)) return;
+        showing = show(showing, intent.from, intent.server, intent.roomId);
+        place();
+        look();
+        return;
+      case "closing":
+        gone(intent.from);
+        return;
+      case "popout":
+        if (sessions().has(intent.server)) inOwnWindow(intent.server, intent.roomId);
+        return;
+      case "tabs":
+        if (sessions().has(intent.server)) opener?.side(intent.server, intent.roomId);
+        return;
+      case "open": {
+        // A DM made a moment ago may not have reached this window yet, so
+        // the asking window says which kind it is. A message named (a
+        // search hit, a media tile) is where the conversation opens.
+        if (!sessions().has(intent.server)) return;
+        const messageId = typeof intent.messageId === "string" ? intent.messageId : undefined;
+        open(intent.server, intent.roomId, messageId, intent.conversation === "dm" ? "dm" : "room");
+        return;
+      }
+      case "settings":
+        opener?.settings(typeof intent.section === "string" ? intent.section : undefined);
+        return;
+      case "tool":
+        if (intent.which === "search" || intent.which === "media") opener?.tool(intent.which);
+        return;
+      case "tray":
+        if (typeof intent.on === "boolean") list?.closeToTray?.(intent.on);
+        return;
+      case "away":
+        if (sessions().has(intent.server)) setAway(intent.server, typeof intent.message === "string" ? intent.message : null);
+        return;
+      case "signout":
+        if (sessions().has(intent.server)) void accounts?.signOut(intent.server).catch(() => undefined);
+        return;
+      case "addserver":
+        list?.addServer();
+        return;
+      case "serverprefs":
+        list?.setPrefs(prefsFrom(intent));
+        return;
+      case "conversations": {
+        if (!isMode(intent.mode)) return;
+        saveMode(store, intent.mode);
+        const message: ModeMessage = { v: PROTOCOL, mode: intent.mode };
+        void bus.broadcast(MODE, message);
+        list?.conversations?.(intent.mode);
+        return;
+      }
+      case "voice.pushtotalk": {
+        // Kept on this computer by Settings already; this is for the call
+        // you're in, which only read it when you joined (#231).
+        if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
+        list?.talkKey?.(intent.key);
+        // Whoever held the key before doesn't hold it for the new setting.
+        holdingTalk.clear();
+        const server = voiceServer(sessions().keys());
+        if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
+        return;
+      }
+      case "voice.devices": {
+        // Saved on this computer by Settings already; this is for the call
+        // you're in, which opened its devices when you joined (#249).
+        const named = (value: unknown): value is string | null => value === null || typeof value === "string";
+        if (!named(intent.input) || !named(intent.output)) return;
+        if (voiceServer(sessions().keys()) === null) return;
+        void voiceChooseDevices({ input: intent.input, output: intent.output }).catch(() => undefined);
+        return;
+      }
+      case "voice.join": {
+        const api = sessions().get(intent.server);
+        if (!api) return;
+        // The devices and push-to-talk choice from Settings. A device
+        // that can't be opened leaves you out of voice, and the list
+        // window's voice bar says so.
+        const prefs = loadVoicePrefs();
+        void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
+        return;
+      }
+      case "voice.talk": {
+        const server = voiceServer(sessions().keys());
+        if (server === null) return;
+        // Push-to-talk only means something when it is on: the key opens
+        // the microphone while held and closes it on release, without
+        // muting you (#232). The store ignores it otherwise.
+        if (intent.down === true) holdingTalk.add(intent.from);
+        else holdingTalk.delete(intent.from);
+        void setVoiceTalking(server, intent.down === true).catch(() => undefined);
+        return;
+      }
+    }
   };
 
   const stops = await Promise.all([
-    answer<SnapshotQuestion, SnapshotAnswer>(bus, SNAPSHOT, async ({ from, only }) => {
-      // The tabs window starting (or starting again) isn't listening for opens
-      // until it says so; one catching up on a single new server still is.
-      if (from === CHAT && only === undefined) tabsListening = false;
+    answer<SnapshotQuestion, SnapshotAnswer>(bus, SNAPSHOT, async ({ only }) => {
       const wanted = [...sessions()].filter(([server]) => only === undefined || server === only);
       return {
         servers: await Promise.all(
@@ -448,127 +539,13 @@ export async function shareAsOwner(
         return { problem: "Password changed. Sign out and back in with the new one." };
       }
     }),
-    answer<Record<string, never>, OpensAnswer>(bus, OPENS, async ({ from }) => {
-      if (from !== CHAT) return { opens: [] };
-      tabsListening = true;
-      const fresh = Date.now() - MISSED_KEEP_MS;
-      const opens = missed.filter((open) => open.at >= fresh).map(({ server, roomId, messageId }) => ({ server, roomId, messageId }));
-      missed = [];
-      return { opens };
-    }),
     answer<TokenQuestion, Lent>(bus, TOKEN, async ({ server, stale }) => {
       const api = sessions().get(server);
       if (!api) throw new Error(`not signed in to ${server}`);
       return lend(api, stale);
     }),
     bus.listen<Intent & Envelope>(INTENT, (intent) => {
-      if (intent.v !== PROTOCOL) return;
-      switch (intent.kind) {
-        case "read": {
-          const api = sessions().get(intent.server);
-          if (api) markRead(api, intent.roomId, intent.messageId);
-          return;
-        }
-        case "window":
-          reportWindow(intent.from, { focused: intent.focused, input: intent.input });
-          showing = intent.focused ? focus(showing, intent.from, Date.now()) : blur(showing, intent.from);
-          place();
-          look();
-          return;
-        case "room":
-          if (!sessions().has(intent.server)) return;
-          showing = show(showing, intent.from, intent.server, intent.roomId);
-          place();
-          look();
-          return;
-        case "closing":
-          gone(intent.from);
-          return;
-        case "popout":
-          if (sessions().has(intent.server)) inOwnWindow(intent.server, intent.roomId);
-          return;
-        case "tabs":
-          if (sessions().has(intent.server)) toTabs(intent.server, intent.roomId);
-          return;
-        case "open": {
-          // A DM made a moment ago may not have reached this window yet, so
-          // the asking window says which kind it is. A message named (a
-          // search hit, a media tile) is where the conversation opens.
-          if (!sessions().has(intent.server)) return;
-          const messageId = typeof intent.messageId === "string" ? intent.messageId : undefined;
-          open(intent.server, intent.roomId, messageId, intent.conversation === "dm" ? "dm" : "room");
-          return;
-        }
-        case "settings":
-          opener?.settings(typeof intent.section === "string" ? intent.section : undefined);
-          return;
-        case "tool":
-          if (intent.which === "search" || intent.which === "media") opener?.tool(intent.which);
-          return;
-        case "tray":
-          if (typeof intent.on === "boolean") list?.closeToTray?.(intent.on);
-          return;
-        case "away":
-          if (sessions().has(intent.server)) setAway(intent.server, typeof intent.message === "string" ? intent.message : null);
-          return;
-        case "signout":
-          if (sessions().has(intent.server)) void accounts?.signOut(intent.server).catch(() => undefined);
-          return;
-        case "addserver":
-          list?.addServer();
-          return;
-        case "serverprefs":
-          list?.setPrefs(prefsFrom(intent));
-          return;
-        case "conversations": {
-          if (!isMode(intent.mode)) return;
-          saveMode(store, intent.mode);
-          const message: ModeMessage = { v: PROTOCOL, mode: intent.mode };
-          void bus.broadcast(MODE, message);
-          return;
-        }
-        case "voice.pushtotalk": {
-          // Kept on this computer by Settings already; this is for the call
-          // you're in, which only read it when you joined (#231).
-          if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
-          list?.talkKey?.(intent.key);
-          // Whoever held the key before doesn't hold it for the new setting.
-          holdingTalk.clear();
-          const server = voiceServer(sessions().keys());
-          if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
-          return;
-        }
-        case "voice.devices": {
-          // Saved on this computer by Settings already; this is for the call
-          // you're in, which opened its devices when you joined (#249).
-          const named = (value: unknown): value is string | null => value === null || typeof value === "string";
-          if (!named(intent.input) || !named(intent.output)) return;
-          if (voiceServer(sessions().keys()) === null) return;
-          void voiceChooseDevices({ input: intent.input, output: intent.output }).catch(() => undefined);
-          return;
-        }
-        case "voice.join": {
-          const api = sessions().get(intent.server);
-          if (!api) return;
-          // The devices and push-to-talk choice from Settings. A device
-          // that can't be opened leaves you out of voice, and the list
-          // window's voice bar says so.
-          const prefs = loadVoicePrefs();
-          void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
-          return;
-        }
-        case "voice.talk": {
-          const server = voiceServer(sessions().keys());
-          if (server === null) return;
-          // Push-to-talk only means something when it is on: the key opens
-          // the microphone while held and closes it on release, without
-          // muting you (#232). The store ignores it otherwise.
-          if (intent.down === true) holdingTalk.add(intent.from);
-          else holdingTalk.delete(intent.from);
-          void setVoiceTalking(server, intent.down === true).catch(() => undefined);
-          return;
-        }
-      }
+      if (intent.v === PROTOCOL) carryOut(intent);
     }),
     // Mute, Deafen and Leave pressed in another window. The owner makes the
     // change, as it does for its own voice bar, but doesn't play the sound
@@ -612,6 +589,7 @@ export async function shareAsOwner(
       for (const stop of stops) stop();
     },
     open,
+    local: (intent) => carryOut({ ...intent, v: PROTOCOL, id: "", from: SIDE }),
     signInsChanged: place,
   };
 }

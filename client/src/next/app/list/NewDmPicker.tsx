@@ -5,6 +5,7 @@ import { candidates, existingDm, MAX_PICKS, pickedLabel } from "../../core/newDm
 import { Button, Chip, Name, Popover, Row, RowList, TextField } from "../../kit";
 import { markerFor } from "../markers";
 import "./NewDmPicker.css";
+import { centredOnList } from "./listSpan";
 
 export interface NewDmPickerProps {
   /** Everyone else on the server, with where they are, from the list model. */
@@ -38,7 +39,7 @@ export function NewDmPicker({ people, meId, dms, anchor, onStart, onCancel }: Ne
     if (!card) return;
     // Layout sizes, not the drawn box: the card is still scaled down by its opening animation here.
     const { offsetWidth: width, offsetHeight: height } = card;
-    const x = Math.max(8, Math.round((window.innerWidth - width) / 2));
+    const x = centredOnList(width, 8);
     const y = Math.max(8, Math.min(anchor.bottom + 4, window.innerHeight - 8 - height));
     setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
   }, [anchor.bottom, picked.length]);

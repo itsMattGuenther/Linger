@@ -27,7 +27,6 @@ const COMMANDS: &[&str] = &[
     "newest_version",
     "update_install",
     "graphics_started",
-    "next_open_chat",
     "next_open_conversation",
     "next_open_settings",
     "next_open_tool",

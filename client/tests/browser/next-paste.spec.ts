@@ -27,7 +27,7 @@ const PASTED = /^pasted-image-\d{4}-\d{2}-\d{2}-\d{6}\.png$/;
 async function open(page: Page, query = "room=r-general") {
   await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
   await page.goto(`/tests/fixtures/next-chat-parity.html?${query}`);
-  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".nx-pane")).toBeVisible();
 }
 
 async function did(page: Page): Promise<string[]> {

@@ -10,7 +10,7 @@ export interface Choice<V extends string> {
 }
 
 /**
- * A few big choices where one must be picked, like "As tabs in one window" or
+ * A few big choices where one must be picked, like "Beside your list, in one window" or
  * "Each in its own window". Radio buttons underneath, so arrows move between
  * them and screen readers hear a group.
  */

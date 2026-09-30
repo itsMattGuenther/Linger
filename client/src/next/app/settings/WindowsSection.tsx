@@ -20,7 +20,7 @@ export function hasWindowsChoices(props: WindowsProps | undefined): boolean {
   return props?.conversations !== undefined || props?.closing !== undefined;
 }
 
-/** Windows: how Linger sits on your desktop (docs/design/buddy-list.md, "Conversations: tabs or windows"). */
+/** Windows: how Linger sits on your desktop (docs/design/buddy-list.md, "Conversations beside the list"). */
 export function WindowsSection({ conversations, closing }: WindowsProps) {
   return (
     <>
@@ -34,9 +34,9 @@ export function WindowsSection({ conversations, closing }: WindowsProps) {
             choices={[
               {
                 value: "tabs",
-                title: "As tabs in one window",
-                description: "The first room you open gets a window; the next ones join it as tabs. Pop a tab out when you want two side by side.",
-                art: "intoTabs",
+                title: "Beside your list, in one window",
+                description: "Rooms and DMs open as tabs next to your list, and the whole thing moves as one window. Fold it back to just the list whenever you like, and pop a tab out when you want it somewhere else.",
+                art: "beside",
               },
               {
                 value: "windows",
@@ -48,7 +48,7 @@ export function WindowsSection({ conversations, closing }: WindowsProps) {
           />
           <p className="nx-set-callout">
             <Icon name="speaker" size="sm" />
-            <span>Voice stays on when you switch tabs or close a window. Mute, deafen and leave are in the voice bar at the bottom of your list.</span>
+            <span>Voice stays on when you switch tabs, fold your list or close a window. Mute, deafen and leave are in the voice bar at the bottom of your list.</span>
           </p>
         </Plain>
       ) : null}

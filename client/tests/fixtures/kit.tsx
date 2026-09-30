@@ -717,9 +717,9 @@ function Gallery() {
           choices={[
             {
               value: "tabs",
-              title: "As tabs in one window",
-              description: "The default, on any desktop. Pop a tab out when you want two side by side.",
-              art: "intoTabs",
+              title: "Beside your list, in one window",
+              description: "The default, on any desktop. Fold it back to just the list whenever you like.",
+              art: "beside",
             },
             {
               value: "windows",
@@ -728,7 +728,7 @@ function Gallery() {
               art: "windows",
             },
           ]}
-          note="Voice stays on when you switch tabs or close a window."
+          note="Voice stays on when you switch tabs, fold your list or close a window."
         />
         <div className="g-compact">
           <ChoiceCards

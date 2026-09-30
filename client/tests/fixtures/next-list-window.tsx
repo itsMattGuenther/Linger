@@ -27,6 +27,13 @@
  * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
  * version waiting (0.4.1); otherwise this is the newest.
  *
+ * Conversations open beside the list (#337): The Good Company's rooms and
+ * DMs answer with the evening's messages, and take new ones. The window's
+ * own size is faked too (`?many=600` puts that many older messages before
+ * the evening in #general): it starts 340 wide at x=100 on a 1920-wide screen
+ * (`?maximized` has it maximized), and every resize and move is written down
+ * as `size <w>x<h>` and `position <x>,<y>`.
+ *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
@@ -41,8 +48,9 @@ import { apply, type GatewayState, type GatewayStatus, serverState } from "../..
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
-import { json } from "./next/desktop";
-import { SERVER, SERVER_NAME, evening } from "./next/evening";
+import type { Message } from "../../src/generated/Message";
+import { json, PHOTO_PATH } from "./next/desktop";
+import { SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
@@ -83,6 +91,22 @@ function ready(server: string): ServerFrame {
 }
 
 // --- the shell -------------------------------------------------------------
+
+/** The list window's box on the screen, in the desktop's pixels. */
+const box = { x: 100, y: 40, width: 340, height: 820 };
+/** A size or position as the window API sends it: `{ Logical: {…} }`, or bare. */
+function logical(value: unknown): { width: number; height: number; x: number; y: number } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const wrapped: unknown = Reflect.get(value, "size") ?? Reflect.get(value, "position") ?? value;
+  if (typeof wrapped !== "object" || wrapped === null) return null;
+  const inner: unknown = Reflect.get(wrapped, "Logical") ?? Reflect.get(wrapped, "Physical") ?? wrapped;
+  if (typeof inner !== "object" || inner === null) return null;
+  const read = (key: string) => {
+    const found: unknown = Reflect.get(inner, key);
+    return typeof found === "number" ? found : 0;
+  };
+  return { width: read("width"), height: read("height"), x: read("x"), y: read("y") };
+}
 
 const listeners = new Map<string, number[]>();
 interface Internals {
@@ -159,7 +183,35 @@ mockIPC((cmd, args) => {
     case "gateway_send":
       note(`send ${String(a.baseUrl)}:${JSON.stringify(a.frame)}`);
       return true;
-    case "next_open_chat":
+    // The list window's own size and place (#337): unfolding grows it, folding shrinks it.
+    case "plugin:window|is_maximized":
+      return query.has("maximized");
+    case "plugin:window|scale_factor":
+      return 1;
+    case "plugin:window|inner_size":
+      return { width: box.width, height: box.height };
+    case "plugin:window|outer_position":
+      return { x: box.x, y: box.y };
+    case "plugin:window|current_monitor":
+      return { name: "screen", scaleFactor: 1, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, workArea: { position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 } } };
+    case "plugin:window|set_size": {
+      const size = logical(a.value);
+      if (size) {
+        box.width = size.width;
+        box.height = size.height;
+        note(`size ${size.width}x${size.height}`);
+      }
+      return null;
+    }
+    case "plugin:window|set_position": {
+      const at = logical(a.value);
+      if (at) {
+        box.x = at.x;
+        box.y = at.y;
+        note(`position ${at.x},${at.y}`);
+      }
+      return null;
+    }
     case "next_open_conversation":
     case "next_open_settings":
     case "next_open_tool":
@@ -244,6 +296,51 @@ const held = new Promise<void>((settle) => {
   release = settle;
 });
 
+/** The Good Company's history, room by room, as its server holds it. */
+const history: Record<string, Message[]> = Object.fromEntries(
+  Object.entries(structuredClone(messages)).map(([room, list]) => [
+    room,
+    list.map((message) => ({ ...message, attachments: message.attachments.map((file) => (file.url.startsWith("data:") ? { ...file, url: PHOTO_PATH } : file)) })),
+  ]),
+);
+// `?many=600`: that many older messages before the evening in #general, an
+// hour apart, for reading back and letting go.
+const many = Number(query.get("many") ?? "0");
+if (many > 0) {
+  const held = history["r-general"] ?? [];
+  const first = held[0]?.created_at ?? Date.now();
+  history["r-general"] = [
+    ...Array.from({ length: many }, (_, index): Message => ({
+      id: `l${String(index + 1).padStart(7, "0")}`,
+      room_id: "r-general",
+      author_id: index % 2 === 0 ? people.eli.id : people.jules.id,
+      body: `older message ${index + 1}`,
+      reply_to: null,
+      attachments: [],
+      reactions: [],
+      pinned_at: null,
+      edited_at: null,
+      deleted_at: null,
+      created_at: first - (many - index) * 60_000,
+    })),
+    ...held,
+  ];
+}
+let serial = 900_000;
+function page(room: string, params: URLSearchParams): Message[] {
+  const all = history[room] ?? [];
+  const limit = Number(params.get("limit") ?? "100");
+  const around = params.get("around");
+  const before = params.get("before");
+  if (around !== null) {
+    const older = all.filter((message) => message.id <= around).slice(-Math.ceil(limit / 2));
+    const newer = all.filter((message) => message.id > around).slice(0, Math.floor(limit / 2));
+    return [...older, ...newer];
+  }
+  const upTo = before === null ? all : all.filter((message) => message.id < before);
+  return upTo.slice(-limit);
+}
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -293,6 +390,44 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return signedIn();
   }
   if (path === "/read") return json(state.read);
+  // Conversations beside the list (#337).
+  const messagesOf = /^\/rooms\/([^/]+)\/messages$/.exec(path);
+  if (messagesOf && method === "GET") {
+    note(`history ${decodeURIComponent(messagesOf[1] ?? "")}${url.search}`);
+    return json(server === SERVER ? page(decodeURIComponent(messagesOf[1] ?? ""), url.searchParams) : []);
+  }
+  if (messagesOf && method === "POST") {
+    serial += 1;
+    const room = decodeURIComponent(messagesOf[1] ?? "");
+    const message: Message = {
+      id: `m${String(serial).padStart(6, "0")}`,
+      room_id: room,
+      author_id: people.matt.id,
+      body: String(body.body ?? ""),
+      reply_to: null,
+      attachments: [],
+      reactions: [],
+      pinned_at: null,
+      edited_at: null,
+      deleted_at: null,
+      created_at: Date.now(),
+    };
+    history[room] = [...(history[room] ?? []), message];
+    return json(message, 201);
+  }
+  if (/^\/rooms\/[^/]+\/read$/.test(path)) return new Response(null, { status: 204 });
+  if (path === "/links/preview") return json([]);
+  if (path === "/knock") return new Response(null, { status: 204 });
+  if (path === "/dms" && method === "POST") {
+    // The DM you already have with exactly these people, or a new one.
+    const me = state.me?.id ?? "";
+    const wanted = [me, ...(Array.isArray(body.user_ids) ? body.user_ids.map(String) : [])].sort();
+    const held = state.dms.find((dm) => [...(dm.member_ids ?? [])].sort().join() === wanted.join());
+    return json(
+      held ?? { id: `d-${wanted.filter((id) => id !== me).join("-")}`, slug: "", name: "", topic: null, kind: "dm", member_ids: wanted, position: 0, archived_at: null, last_message_id: null },
+      held ? 200 : 201,
+    );
+  }
   if (path === "/me/notify-rules") return json([]);
   if (path === "/server" && query.has("noinfo") && server === LISBON) return json({ error: { code: "UNAVAILABLE", message: "Busy.", retry_after_ms: null } }, 503);
   if (path === "/server") return json({ name: names[server]?.name ?? server, accent_key: names[server]?.accent ?? null, icon_key: null, member_count: state.users.length, created_at: 0 });
