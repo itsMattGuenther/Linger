@@ -1,83 +1,28 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Attachment } from "../../../generated/Attachment";
-import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
-import type { User } from "../../../generated/User";
-import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
-import { useNow } from "../../../lib/clock";
-import { dmLabel } from "../../../lib/dm";
-import { openExternal, openExternalChecked } from "../../../lib/external";
-import {
-  deleteMessage,
-  editMessage,
-  pinMessage,
-  leaveWindow,
-  loadNewer,
-  loadOlder,
-  noteDm,
-  openAround,
-  serverState,
-  startedTyping,
-  trimHistory,
-  useServers,
-} from "../../../lib/gateway";
-import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
-import { absoluteUrl } from "../../../lib/url";
-import { loadVoicePrefs, onWindows, voiceStartProblem } from "../../../lib/voice";
+import type { RoomId } from "../../../generated/RoomId";
+import type { AuthedApi } from "../../../lib/api";
+import { serverState } from "../../../lib/gateway";
+import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey } from "../../core/talkKey";
-import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
-import {
-  conversationIn,
-  dmPeople,
-  peopleInRoom,
-  tabModel,
-  typingIn,
-  voiceHere,
-  micsHere,
-} from "../../core/chat/conversation";
+import { conversationIn } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
-import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
-import { clipboardImageReader } from "../../core/chat/paste";
-import { voiceStrip } from "../../core/chat/voice";
 import { isSearchKey, isSettingsKey, tabCommand } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage, OPENS, type OpensAnswer } from "../../core/share";
 import { closeTab, keepOnly, keyOf, loadTabs, moveTab, openTab, same, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
-import { talkingNow } from "../../core/voice";
-import { pressVoiceControl } from "../../core/voiceControl";
-import { Button, markerOf, Spinner, type TabItem } from "../../kit";
-import { knockOfflineLine, knockOn } from "../../core/knock";
-import { personRow } from "../../core/list";
-import { PersonCard } from "../list/PersonCard";
+import { Button, Spinner, type TabItem } from "../../kit";
 import { useFollowing } from "../useFollowing";
-import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
-import { type ChatPane, ChatView } from "./ChatView";
-import { useFileDrafts } from "./useFileDrafts";
-import { useLanding, useReading } from "./visit";
+import { ChatView } from "./ChatView";
+import { draftStore, useConversationPane } from "./useConversationPane";
 
 /** Open tabs and their order, on this computer (docs/design/architecture.md, "Remembering"). */
 const TABS_KEY = "linger.next.tabs";
-/** How long a knock's button says "Knocked" (SPEC §4.9), as on the person card. */
-const KNOCKED_MS = 3_000;
-/**
- * How long a refused knock's reason stays in a DM's header before their
- * status comes back (#288): long enough to read two short sentences, and the
- * same as the knock card a person gets.
- */
-const REFUSED_MS = 8_000;
-
-/** A knock from a DM's header, while there's something to show for it. */
-type HeaderKnockNow = { phase: "knocking" | "knocked"; problem?: undefined } | { phase: "idle"; problem: string };
-/** "Typing…" goes a few seconds after the last keystroke (`TYPING_TTL_MS`); checked this often. */
-const TYPING_CHECK_MS = 2_000;
-const NO_MESSAGES: readonly Message[] = [];
-const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
-const NO_MENTIONS: readonly MentionPerson[] = [];
 
 /**
  * The chat window: a viewer (docs/design/architecture.md, "Windows and their
@@ -113,15 +58,6 @@ export function ChatWindow() {
 /** This window shows one conversation in a window of its own (window.rs, `next_open_conversation`). */
 const SINGLE = new URLSearchParams(window.location.search).get("single") === "1";
 
-/** Where drafts wait while their conversation moves between windows (core/handoff.ts). */
-function handoffStore(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 /** The tabs this window starts with: the ones remembered, and the one it was opened on. */
 function firstTabs(apis: ReadonlyMap<string, AuthedApi>): Tabs {
   let remembered: string | null = null;
@@ -153,38 +89,16 @@ function unseenAtOpen(apis: ReadonlyMap<string, AuthedApi>): Set<string> {
 
 function Conversations({ following }: { following: Following }) {
   const { apis, intend } = following;
-  const servers = useServers();
-  const now = useNow();
-  // Its own clock, so the conversation isn't redrawn every two seconds.
-  const typingNow = useNow(TYPING_CHECK_MS);
   const [tabs, setTabs] = useState<Tabs>(() => firstTabs(apis));
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
   const find = useCallback((id: string): TabKey | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
-  // Bumped when the window should put the cursor in the box: it opened, or a
-  // conversation was opened from the list.
-  const [focusAsk, setFocusAsk] = useState(1);
-  // Each person's knock from a DM's header, by user id, until it has nothing left to say.
-  const [knocks, setKnocks] = useState<ReadonlyMap<string, HeaderKnockNow>>(new Map());
   const reporter = useRef<Reporter | null>(null);
   const intendNow = useRef(intend);
   intendNow.current = intend;
-  // What each conversation's box holds, so a draft can go with it to another window.
-  const typed = useRef(new Map<string, string>());
-  const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
-  // Half-typed lines outlast their tab and a restart (decision 11).
-  const keep = useMemo(() => {
-    const store = handoffStore();
-    return store
-      ? {
-          load: (conversation: string) => keptDraft(store, conversation, Date.now()),
-          save: (conversation: string, text: string) => keepDraft(store, conversation, text, Date.now()),
-        }
-      : undefined;
-  }, []);
-  // A draft that came with a conversation from another window.
-  const [seed, setSeed] = useState<{ conversation: string; text: string } | null>(() => {
-    const store = handoffStore();
+  // A draft that came with the first conversation from another window.
+  const [firstSeed] = useState(() => {
+    const store = draftStore();
     const first = tabs.active;
     const text = store && first ? takeDraft(store, keyOf(first), Date.now()) : null;
     return first && text !== null ? { conversation: keyOf(first), text } : null;
@@ -195,30 +109,31 @@ function Conversations({ following }: { following: Following }) {
   // for it. Such a tab waits for it rather than being taken for gone.
   const [waiting] = useState(() => unseenAtOpen(apis));
 
+  const openedRef = useRef<(server: string, roomId: string, messageId?: MessageId | null) => void>(() => undefined);
+  // A DM opened from a person's card shows here: as a tab, or, in a window of
+  // its own, wherever conversations open.
+  const show = useCallback(
+    (server: string, roomId: RoomId) => {
+      if (SINGLE) void intend({ kind: "open", server, roomId, conversation: "dm" }).catch(() => undefined);
+      else openedRef.current(server, roomId);
+    },
+    [intend],
+  );
+  // Opened on a message: the address says which (window.rs, `at_message`).
+  const [firstMessage] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const server = query.get("server");
+    const room = query.get("room");
+    const message = query.get("message");
+    return server !== null && room !== null && message !== null && apis.has(server) ? { tab: { server, roomId: room }, id: message } : null;
+  });
+  const active = tabs.active;
+  const view = useConversationPane({ apis, intend, active, find, show, firstSeed, firstMessage });
+  const { servers, goToMessage, askFocus, seedDraft, draftOf } = view;
+
   // Opened from the list while this window is already open (window.rs,
   // `next_open_chat`). Once listening, the tabs window asks the list window
   // for anything it was sent before it was (OPENS in core/share.ts).
-  // Where a search hit or a media tile asked to open (CONV-17): the tab and
-  // the message, handed to the conversation once the message is in reach.
-  // One already loaded is jumped to; one further back reopens the room
-  // around it first (`openAround`), which falls back to the newest page if
-  // the message is gone.
-  const [goTo, setGoTo] = useState<{ tab: string; id: MessageId } | null>(null);
-  const onWentTo = useCallback(() => setGoTo(null), []);
-  const goToMessage = useCallback(
-    (tab: TabKey, id: MessageId) => {
-      const api = apis.get(tab.server);
-      if (!api) return;
-      const held = serverState(tab.server).streams[tab.roomId];
-      if (held?.messages.some((one) => one.id === id)) {
-        setGoTo({ tab: keyOf(tab), id });
-        return;
-      }
-      void openAround(api, tab.roomId, id).then(() => setGoTo({ tab: keyOf(tab), id }));
-    },
-    [apis],
-  );
-
   const opened = useCallback(
     (server: string, roomId: string, messageId?: MessageId | null) => {
       if (!apis.has(server)) return;
@@ -228,26 +143,16 @@ function Conversations({ following }: { following: Following }) {
       // Before the tab shows, so its first load is the window around the message.
       if (messageId) goToMessage(tab, messageId);
       setTabs((held) => openTab(held, tab));
-      setFocusAsk((ask) => ask + 1);
+      askFocus();
       // Back from a window of its own, perhaps with a draft.
-      const store = handoffStore();
+      const store = draftStore();
       const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
-      if (text !== null) setSeed({ conversation: keyOf(tab), text });
+      if (text !== null) seedDraft(keyOf(tab), text);
     },
-    [apis, waiting, goToMessage],
+    [apis, waiting, goToMessage, askFocus, seedDraft],
   );
+  openedRef.current = opened;
 
-  // Opened on a message: the address says which (window.rs, `at_message`).
-  const openedAt = useRef(false);
-  useEffect(() => {
-    if (openedAt.current) return;
-    openedAt.current = true;
-    const query = new URLSearchParams(window.location.search);
-    const server = query.get("server");
-    const room = query.get("room");
-    const message = query.get("message");
-    if (server !== null && room !== null && message !== null && apis.has(server)) goToMessage({ server, roomId: room }, message);
-  }, [apis, goToMessage]);
   useEffect(() => {
     if (!isTauri()) return;
     let stop: (() => void) | null = null;
@@ -314,7 +219,6 @@ function Conversations({ following }: { following: Following }) {
       if (reporter.current === reporting) reporter.current = null;
     };
   }, [intend]);
-  const active = tabs.active;
   useEffect(() => {
     if (active) reporter.current?.showing(active.server, active.roomId);
   }, [active]);
@@ -329,22 +233,22 @@ function Conversations({ following }: { following: Following }) {
   const popOut = useCallback(
     (id: string) => {
       const tab = find(id);
-      const store = handoffStore();
+      const store = draftStore();
       if (!tab) return;
-      if (store) leaveDraft(store, id, typed.current.get(id) ?? "", Date.now());
+      if (store) leaveDraft(store, id, draftOf(id), Date.now());
       void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
       setTabs((held) => closeTab(held, tab));
     },
-    [find, intend],
+    [find, intend, draftOf],
   );
   const backToTabs = useCallback(() => {
     const tab = tabsNow.current.active;
-    const store = handoffStore();
+    const store = draftStore();
     if (!tab) return;
-    if (store) leaveDraft(store, keyOf(tab), typed.current.get(keyOf(tab)) ?? "", Date.now());
+    if (store) leaveDraft(store, keyOf(tab), draftOf(keyOf(tab)), Date.now());
     void intend({ kind: "tabs", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
     closeWindow();
-  }, [intend, closeWindow]);
+  }, [intend, closeWindow, draftOf]);
 
   // Settings changed how conversations open, and whatever is open moves at
   // once: every tab into a window of its own (the one showing last, so it
@@ -357,9 +261,9 @@ function Conversations({ following }: { following: Following }) {
     }
     if (mode !== "windows" || SINGLE) return;
     const { open, active } = tabsNow.current;
-    const store = handoffStore();
+    const store = draftStore();
     for (const tab of [...open.filter((held) => !same(held, active)), ...open.filter((held) => same(held, active))]) {
-      if (store) leaveDraft(store, keyOf(tab), typed.current.get(keyOf(tab)) ?? "", Date.now());
+      if (store) leaveDraft(store, keyOf(tab), draftOf(keyOf(tab)), Date.now());
       void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
     }
     setTabs({ open: [], active: null });
@@ -442,280 +346,18 @@ function Conversations({ following }: { following: Following }) {
     };
   }, [pushToTalk, intend]);
 
-  // Where your voice seat is, as a tab id, on whichever server has it.
-  const voiceTab = useMemo(() => {
-    for (const [server, state] of Object.entries(servers)) {
-      if (state.myVoice) return keyOf({ server, roomId: state.myVoice.roomId });
-    }
-    return null;
-  }, [servers]);
-
-  // With several servers every conversation says where it's from: a stripe
-  // on its tab in the server's color, and its name in the header (MULTI-6).
-  const infos = useServerInfos(apis);
-  const several = apis.size > 1;
-  const serverTag = useCallback(
-    (server: string) => ({ name: infos[server]?.name ?? hostOf(server), color: infos[server]?.accent ?? "slate" }),
-    [infos],
-  );
-
+  const { tabItem } = view;
   const items = useMemo(
-    () =>
-      tabs.open.flatMap((tab): TabItem[] => {
-        const state = servers[tab.server];
-        const model = state ? tabModel(tab, state, same(tab, tabs.active), talkingNow(state)) : null;
-        if (!model) return [];
-        return [
-          {
-            id: model.id,
-            title: model.title,
-            label: several ? `${model.label}, ${serverTag(tab.server).name}` : model.label,
-            stripe: several ? serverTag(tab.server).color : undefined,
-            lead: model.lead === null ? undefined : model.lead.kind === "room" ? { kind: "room" } : { kind: "person", person: markerOf(model.lead.user, model.lead.state) },
-            fresh: model.fresh,
-            lit: model.lit,
-            voice: model.voice ?? undefined,
-            speaking: model.speaking,
-            closable: true,
-          },
-        ];
-      }),
-    [tabs, servers, several, serverTag],
+    () => tabs.open.flatMap((tab): TabItem[] => {
+      const item = tabItem(tab, same(tab, tabs.active));
+      return item ? [item] : [];
+    }),
+    [tabs, tabItem],
   );
-
-
-  // ------------------------------------------------------------------
-  // The showing conversation.
-
-  const api = active ? (apis.get(active.server) ?? null) : null;
-  const state = active ? (servers[active.server] ?? null) : null;
-  const roomId = active?.roomId ?? null;
-  const room = state && roomId !== null ? conversationIn(state, roomId) : null;
-  const paneId = active ? keyOf(active) : null;
-
-  const land = useLanding(api, roomId, state);
-  const read = useReading(intend, active, state, land.ready);
-
-  const stream = state && roomId !== null ? state.streams[roomId] : undefined;
-  const messages = stream?.messages ?? NO_MESSAGES;
-  const pending = useMemo(() => stream?.pending.map((one) => one.message) ?? NO_MESSAGES, [stream?.pending]);
-  const people = useMemo(() => (state ? new Map(state.users.map((user) => [user.id, user])) : NO_PEOPLE), [state?.users]);
-  const talking = useMemo(() => (state ? talkingNow(state) : new Set<string>()), [state]);
-  // Who an @ offers: only what it reads, so a message arriving doesn't
-  // redraw the box.
-  const mentionable = useMemo(
-    () => (state && room ? mentionableIn(state, room) : NO_MENTIONS),
-    [state?.users, state?.presence, state?.occupancy, state?.me, room],
-  );
-  const previews = useLinkPreviews(active?.server ?? "");
-
-  const onNearStart = useCallback(() => {
-    if (api && roomId !== null) void loadOlder(api, roomId);
-  }, [api, roomId]);
-  const onNearEnd = useCallback(() => {
-    if (api && roomId !== null) void loadNewer(api, roomId);
-  }, [api, roomId]);
-  const onLetGo = useCallback(
-    (first: MessageId, last: MessageId) => {
-      if (api && roomId !== null) trimHistory(api.baseUrl, roomId, first, last);
-    },
-    [api, roomId],
-  );
-  const onBackToNewest = useCallback(() => {
-    if (api && roomId !== null) void leaveWindow(api, roomId);
-  }, [api, roomId]);
-  const mediaUrl = useCallback((path: string) => (api ? absoluteUrl(api.baseUrl, path) : path), [api]);
-
-  const save = useCallback(
-    async (message: Message, body: string) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await editMessage(api, message, body).catch(rethrowInWords("Couldn't save the edit."));
-    },
-    [api],
-  );
-  const remove = useCallback(
-    async (message: Message) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await deleteMessage(api, message).catch(rethrowInWords("Couldn't delete it."));
-    },
-    [api],
-  );
-  const pin = useCallback(
-    async (message: Message, pinned: boolean) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await pinMessage(api, message, pinned).catch(rethrowInWords(pinned ? "Couldn't pin it." : "Couldn't take the pin off."));
-    },
-    [api],
-  );
-  const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
-  const wantCards = useCallback(
-    (urls: readonly string[]) => {
-      if (api) wantPreviews(api, [...urls]);
-    },
-    [api],
-  );
-  // A name in a conversation opens that person's card (PPL-6), the same card
-  // the list shows, beside the name. Your own opens yours, as friends see it
-  // (#271).
-  const [card, setCard] = useState<{ server: string; userId: string; anchor: { top: number; bottom: number; left: number } } | null>(null);
-  // The name that opened it gets the keyboard back when it closes.
-  const cardOpener = useRef<HTMLElement | null>(null);
-  const openPerson = useCallback((user: User, anchor: { top: number; bottom: number; left: number }) => {
-    const showing = tabsNow.current.active;
-    if (!showing) return;
-    cardOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setCard({ server: showing.server, userId: user.id, anchor });
-  }, []);
-  const closeCard = useCallback(() => {
-    setCard(null);
-    if (cardOpener.current?.isConnected) cardOpener.current.focus();
-  }, []);
-  const actions = useMemo(
-    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson }),
-    [save, remove, pin, download, wantCards, openPerson],
-  );
-
-  const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
-  const onTyping = useCallback(() => {
-    if (api && roomId !== null) startedTyping(api, roomId);
-  }, [api, roomId]);
-  const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader() }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
-  );
-
-  const knock = useCallback(
-    (user: User) => {
-      if (!api) return;
-      // Each step replaces the last, and a step's timer clears only itself,
-      // so an old timer never ends a newer knock early.
-      const show = (now: HeaderKnockNow, forMs?: number) => {
-        setKnocks((held) => new Map(held).set(user.id, now));
-        if (forMs === undefined) return;
-        window.setTimeout(
-          () =>
-            setKnocks((held) => {
-              if (held.get(user.id) !== now) return held;
-              const next = new Map(held);
-              next.delete(user.id);
-              return next;
-            }),
-          forMs,
-        );
-      };
-      show({ phase: "knocking" });
-      // "Knocked" only once the server has taken it: a refused knock (three
-      // an hour, SPEC §4.9) never says it, and says why instead (#288).
-      void knockOn(api, user.id).then((result) =>
-        result.ok ? show({ phase: "knocked" }, KNOCKED_MS) : show({ phase: "idle", problem: result.problem }, REFUSED_MS),
-      );
-    },
-    [api],
-  );
-
-  const onJoin = useCallback(() => {
-    if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
-  }, [active, intend]);
-  // A system default that wouldn't open is fixed by picking a device by name (#273).
-  const onPickDevice = useCallback(() => void intend({ kind: "settings", section: "sound" }).catch(() => undefined), [intend]);
-  // Your voice controls in the room you're in voice in (#216): the list
-  // window owns the seat and makes the change, and this window, the one
-  // clicked, plays the sound that confirms it once it's done (#241).
-  const onMute = useCallback((muted: boolean) => void pressVoiceControl(tauriBus(), { control: "mute", on: muted }), []);
-  const onDeafen = useCallback((deafened: boolean) => void pressVoiceControl(tauriBus(), { control: "deafen", on: deafened }), []);
-  const onLeave = useCallback(() => void pressVoiceControl(tauriBus(), { control: "leave" }), []);
-
-  const pane = ((): ChatPane | null => {
-    if (!active || !state || !room || paneId === null) return null;
-    const dm = room.kind === "dm";
-    const others = dm ? dmPeople(state, room) : [];
-    const [only] = others;
-    const header: ChatPane["header"] = dm
-      ? {
-          kind: "dm",
-          label: dmLabel(room, state.users, state.me?.id ?? null),
-          people: others,
-          knock:
-            others.length === 1 && only
-              ? {
-                  onKnock: () => knock(only.user),
-                  phase: knocks.get(only.user.id)?.phase ?? "idle",
-                  problem: knocks.get(only.user.id)?.problem ?? null,
-                  // Offline, Knock stays in the header, greyed out, and says why (#288).
-                  unavailable: only.state === "offline" ? knockOfflineLine(only.user.display_name) : undefined,
-                }
-              : undefined,
-          server: several ? serverTag(active.server) : undefined,
-        }
-      : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id), server: several ? serverTag(active.server) : undefined };
-    return {
-      id: paneId,
-      header,
-      voice: {
-        strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false),
-        onJoin,
-        onPickDevice,
-        mics: micsHere(state, room.id),
-        controls:
-          state.myVoice?.roomId === room.id
-            ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, onMute, onDeafen, onLeave }
-            : undefined,
-        // The last try at starting voice here failed (#261): the strip says why.
-        failed:
-          state.voiceFailed?.roomId === room.id
-            ? {
-                ...voiceStartProblem(state.voiceFailed.problem, onWindows(), state.voiceFailed.devices),
-                detail: state.voiceFailed.problem,
-              }
-            : undefined,
-      },
-      people,
-      me: state.me,
-      speaking: talking,
-      typing: typingIn(state, room.id, typingNow),
-      mentionable,
-      stream: {
-        messages,
-        pending,
-        atStart: stream?.atStart ?? false,
-        atEnd: stream?.atEnd ?? true,
-        leftOff: state.leftOff[room.id] ?? null,
-        land,
-        now,
-        previews,
-        mediaUrl,
-        onNearStart,
-        onNearEnd,
-        onSeenNewest: read,
-        onLetGo,
-        onBackToNewest,
-        goTo: goTo !== null && goTo.tab === paneId ? goTo.id : null,
-        onWentTo,
-      },
-      actions,
-      composer,
-    };
-  })();
-
-  const cardState = card ? servers[card.server] : undefined;
-  const cardRow = card && cardState ? personRow(cardState, card.userId, now) : null;
-  const messageFromCard = async (server: string, user: User) => {
-    const cardApi = apis.get(server);
-    if (!cardApi) return;
-    try {
-      // The server finds the DM you already have, or makes it (SPEC §4.13).
-      const dm = await cardApi.openDm([user.id]);
-      noteDm(server, dm);
-      setCard(null);
-      if (SINGLE) void intend({ kind: "open", server, roomId: dm.id, conversation: "dm" }).catch(() => undefined);
-      else opened(server, dm.id);
-    } catch (error: unknown) {
-      console.error("could not open a DM", error);
-    }
-  };
 
   if (empty) return null;
 
+  const paneId = active ? keyOf(active) : null;
   return (
     <>
       <ChatView
@@ -736,40 +378,9 @@ function Conversations({ following }: { following: Following }) {
         onPopOut={SINGLE ? undefined : popOut}
         single={SINGLE ? { onBackToTabs: backToTabs } : undefined}
         onCloseWindow={isTauri() ? closeWindow : undefined}
-        pane={pane}
+        pane={view.pane}
       />
-      {card && cardRow ? (
-        <PersonCard
-          key={`${card.server} ${card.userId}`}
-          user={cardRow.user}
-          state={cardRow.state}
-          note={cardRow.note}
-          anchor={card.anchor}
-          onClose={closeCard}
-          {...(cardRow.user.id === cardState?.me?.id
-            ? {
-                // Your own card (#271): Settings → Profile, through the list window.
-                onEditProfile: () => {
-                  closeCard();
-                  void intend({ kind: "settings", section: "profile" }).catch(() => undefined);
-                },
-              }
-            : {
-                onMessage: () => void messageFromCard(card.server, cardRow.user),
-                onKnock: () => {
-                  const cardApi = apis.get(card.server);
-                  return cardApi ? knockOn(cardApi, cardRow.user.id) : Promise.resolve({ ok: false, problem: "You're not signed in to that server any more." });
-                },
-              })}
-        />
-      ) : null}
+      {view.card}
     </>
   );
-}
-
-/** A store or network failure, as a sentence for the message it was about. */
-function rethrowInWords(fallback: string): (error: unknown) => never {
-  return (error: unknown) => {
-    throw new Error(error instanceof ApiError || error instanceof TransportError ? error.message : fallback);
-  };
 }
