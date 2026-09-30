@@ -309,8 +309,14 @@ function Servers({
   const unseen = useRef(new Set<string>());
   // The side while it's out, to hand it a conversation or read a draft.
   const handle = useRef<SideHandle | null>(null);
+  // Conversations opened in the moment between the side being drawn and it
+  // taking them (#355): handed over as soon as it does, message and all.
+  const waitingOpens = useRef<SideOpen[]>([]);
   const bind = useCallback((held: SideHandle) => {
     handle.current = held;
+    const queued = waitingOpens.current;
+    waitingOpens.current = [];
+    for (const opening of queued) held.open(opening);
     return () => {
       if (handle.current === held) handle.current = null;
     };
@@ -411,6 +417,8 @@ function Servers({
   // Beside the list (#337).
 
   const unfolded = side.unfolded && tabs.open.length > 0;
+  const unfoldedNow = useRef(unfolded);
+  unfoldedNow.current = unfolded;
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     const measure = () => setWidth(window.innerWidth);
@@ -483,6 +491,7 @@ function Servers({
     if (conversationIn(serverState(server), roomId) === null) unseen.current.add(keyOf(tab));
     const opening = { tab, message: messageId ?? null };
     if (handle.current) handle.current.open(opening);
+    else if (unfoldedNow.current) waitingOpens.current.push(opening);
     else {
       setTabs((held) => openTab(held, tab));
       unfold(opening);
