@@ -51,15 +51,17 @@ the process that hosts an instance, never the instance itself.
 
 ## 2. Design thesis
 
-Discord's interface is built for a stadium of 50,000 strangers. Linger is built for a
-dinner party of eight. Nearly every complaint about Discord traces back to that
-mismatch:
+Discord's interface is built for a stadium of 50,000 strangers. Linger is built for
+people who already know each other: five friends or a whole guild. How many is the
+host's call. A limit that remains is what the software can carry today (a voice room
+holds 25, #197), never a verdict on how big a group should be. Nearly every complaint
+about Discord traces back to that mismatch:
 
-| Stadium feature | Effect on 8 friends |
+| Stadium feature | Effect among friends |
 |---|---|
 | Unread badge counts | Turns friends into a to-do list |
 | Role colors and hierarchy | Invents status where none existed |
-| `@everyone` | A weapon nobody should have in a group of 8 |
+| `@everyone` | A weapon nobody should have among friends |
 | Infinite scroll, no archive | Everything you shared is functionally destroyed |
 | "Online" member list | Meaningless — everyone is always online |
 
@@ -518,8 +520,8 @@ the text somebody wrote around it, which is theirs.
 **What it refuses.**
 
 - **No ranking that is not time.** Results are newest first. Relevance ordering is an
-  algorithm deciding what matters, and §2 rules those out; with eight people and one
-  server, recency is the ordering anybody can predict.
+  algorithm deciding what matters, and §2 rules those out; recency is the ordering
+  anybody can predict.
 - **No search history, no saved searches, no suggestions.** Nothing about a search is
   written down anywhere, on either side.
 - **Nothing a deleted message can be found by.** A deleted message is deleted — its
@@ -559,8 +561,9 @@ conversations with the same three people. Adding somebody later would mean decid
 whether they can read what was said before they arrived, and that question is a
 permission system in its first disguise: a new set of people is a new DM.
 
-**Two to eight people.** The same ceiling as the rest of the product (§2's dinner party
-of eight), and a group DM that wants to be bigger is a room. You cannot DM yourself —
+**Two to eight people.** A DM has no host and its members are fixed when it is made,
+so it stays a conversation on the side; a group that wants to be bigger is a room, where
+the host decides who is in it. You cannot DM yourself —
 a note to yourself is a text file, and every messaging app that added one did it
 because it had somewhere to put a feature, not because anybody asked.
 
@@ -852,7 +855,7 @@ the next two years.
 
 **The scope discipline is the product.** The moment a role editor appears, the rebuild
 of the thing you left has begun. When someone requests a feature, the question is not
-"is this good?" but "does this belong at a dinner party?"
+"is this good?" but "does this belong among friends?"
 
 **The hardest parts are not chat.** Code-signed multi-platform distribution was one,
 and it took M7 plus a decision to ship two operating systems instead of three. Voice

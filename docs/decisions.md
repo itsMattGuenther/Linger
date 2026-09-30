@@ -469,3 +469,32 @@ times because it's painfully slow."
   repositories), a second job pushing by digest and a manifest joining the two.
   It would have kept ARM in minutes, not an hour, but for hosts nobody has. If
   one turns up, that's the way back, not emulation.
+
+## Decided — Linger is for people who know each other, not for eight
+
+**Matt, 2026-09-30.** SPEC §2 said Linger was built for "a dinner party of
+eight", and the README said the same. It read as a ceiling on who the product
+is for, and that stopped being true: voice rooms go through the host's server
+and hold 25, and groups like a game guild are bigger than eight. "Who am I to
+be the arbiter of how many people you're allowed to put in your room? It's
+yours. Maybe you want to use it for a hundred people, or maybe you just want
+to use it for five people." And: "the dinner party of 8 language needs to go.
+We're beyond that."
+
+- **The thesis is who, not how many.** Discord is built for strangers; Linger
+  is built for people who already know each other. The anti-goals stand as
+  they were. No roles, no `@everyone`, no counts: they are about how people
+  treat each other, not about a headcount.
+- **How many people a server holds is the host's call.** There is no cap on
+  members, and none is added.
+- **A limit that remains is what the software carries today**, not a verdict
+  on group size. A voice room holds 25 because the forwarding server sends
+  every voice to every listener, all on one thread. Forwarding only the people
+  talking is what would lift it. That, a load test for servers of 50–60 and
+  hardware guidance for hosts are #197.
+- **Group DMs stay at two to eight.** The ceiling no longer leans on §2: a DM
+  has no host and fixed members, so a bigger group is a room.
+- **Earlier entries here and the task archives** say "eight" in places. They
+  are records of their time and stay as written; the decisions in them stand.
+- Changed together: SPEC §2, §4.12, §4.13 and §7, the README, the buddy list
+  design, the idea form, and code comments that argued from "eight friends".

@@ -301,8 +301,8 @@ pub async fn revoke_all_for_user(db: &SqlitePool, user_id: UserId) -> anyhow::Re
 /// answer — let the access token lapse on its own — buys that read back at the
 /// price of up to fifteen minutes in which somebody the host just removed can
 /// still post, and those fifteen minutes are the exact thing the host was
-/// trying to stop. On a server of eight friends the read is not the expensive
-/// half of anything.
+/// trying to stop. One read by primary key is not the expensive half of any
+/// request, however many people the server has.
 #[derive(Debug, Clone, Copy)]
 pub struct AuthedUser {
     pub id: UserId,

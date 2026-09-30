@@ -10,7 +10,7 @@ body:
     id: idea
     attributes:
       label: The idea
-      description: What you'd like, and what it would make better for a small group of friends.
+      description: What you'd like, and what it would make better for the people on your server.
     validations:
       required: true
   - type: textarea

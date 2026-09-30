@@ -105,8 +105,10 @@ fn with_fields(mut user: User, fields: Vec<StatusField>) -> User {
     user
 }
 
-/// Users from rows, each with their fields. One more query for the lot, since
-/// there are three fields at most per person and a server is a few friends.
+/// Users from rows, each with their fields. One more query for the lot, rather
+/// than one per person. It reads everybody's fields, not only these rows', which
+/// stays small because there are three fields at most per person: a few hundred
+/// rows on a server of a hundred.
 async fn users_of(db: &SqlitePool, rows: &[SqliteRow]) -> Result<Vec<User>, ApiError> {
     let found: Vec<(Vec<u8>, String, String)> = sqlx::query_as(
         "SELECT user_id, label, value FROM user_status_fields ORDER BY user_id, position",

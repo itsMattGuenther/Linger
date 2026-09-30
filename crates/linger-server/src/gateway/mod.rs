@@ -270,10 +270,10 @@ impl Gateway {
 
     /// Reload who is in every DM, from the database.
     ///
-    /// Called at startup and after anything that changes membership. Cheap at
-    /// this scale — a handful of DMs with a handful of people each — and doing
-    /// it wholesale rather than incrementally means there is no "update the
-    /// index" step for a future change to forget.
+    /// Called at startup and after anything that changes membership. Cheap,
+    /// because a DM holds at most `MAX_DM_MEMBERS`: even hundreds of DMs are a
+    /// few thousand rows. Doing it wholesale rather than incrementally means
+    /// there is no "update the index" step for a future change to forget.
     pub async fn reload_dms(&self, db: &sqlx::SqlitePool) -> Result<(), crate::error::ApiError> {
         let loaded = crate::repo::rooms::all_dm_members(db).await?;
         let fresh: Vec<RoomId> = loaded.iter().map(|(id, _)| *id).collect();
