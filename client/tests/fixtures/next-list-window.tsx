@@ -51,6 +51,8 @@ import { hearSounds } from "./next/audio";
 import type { Message } from "../../src/generated/Message";
 import { json, PHOTO_PATH } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
+import { collections, fakeMedia, fakeSearch } from "./next/finds";
+import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
@@ -417,6 +419,26 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   if (/^\/rooms\/[^/]+\/read$/.test(path)) return new Response(null, { status: 204 });
   if (path === "/links/preview") return json([]);
+  // Media and Search beside the list (#337), from the same finds as their own windows' page.
+  if (path === "/search" && method === "GET") {
+    const params = url.searchParams;
+    return json(fakeSearch(server, { q: params.get("q") ?? "", room: params.get("room_id"), author: params.get("author_id"), before: params.get("before"), limit: Number(params.get("limit") ?? "30") }));
+  }
+  if (path === "/media" && method === "GET") {
+    const params = url.searchParams;
+    const kind = params.get("kind");
+    const number = (value: string | null) => (value === null ? null : Number(value));
+    return json(
+      fakeMedia(collections[server] ?? [], {
+        kind: kind === null ? null : (kind as MediaKind),
+        author: params.get("author"),
+        since: number(params.get("since")),
+        until: number(params.get("until")),
+        before: params.get("before"),
+        limit: Number(params.get("limit") ?? "60"),
+      }),
+    );
+  }
   if (path === "/knock") return new Response(null, { status: 204 });
   if (path === "/dms" && method === "POST") {
     // The DM you already have with exactly these people, or a new one.
@@ -430,7 +452,18 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   if (path === "/me/notify-rules") return json([]);
   if (path === "/server" && query.has("noinfo") && server === LISBON) return json({ error: { code: "UNAVAILABLE", message: "Busy.", retry_after_ms: null } }, 503);
-  if (path === "/server") return json({ name: names[server]?.name ?? server, accent_key: names[server]?.accent ?? null, icon_key: null, member_count: state.users.length, created_at: 0 });
+  if (path === "/server") {
+    return json({
+      name: names[server]?.name ?? server,
+      accent_key: names[server]?.accent ?? null,
+      icon_key: null,
+      member_count: state.users.length,
+      created_at: 0,
+      storage_used_bytes: 1_200_000_000,
+      storage_limit_bytes: 50_000_000_000,
+      file_expiry_days: 90,
+    });
+  }
   if (path === "/me" && method === "GET") return json(state.me);
   if (path === "/me" && method === "PATCH") return json({ ...state.me, status: body.status ?? state.me?.status ?? null });
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);

@@ -355,8 +355,12 @@ one.
   renders a hostile message can't reach this without a way to run script,
   but the fix is for Rust to hand the owner its frames on a private channel
   (a Tauri `Channel`) instead of a broadcast event (T-1811).
-- **Search and Media** (decision 15) are windows of their own, `search` and
-  `media`, opened by the owner (`next_open_tool`) from the foot of the list.
+- **Search and Media** (decision 15) open as tabs beside the list (#337):
+  the list window draws them (`app/tools/panels.tsx`) and they ask each
+  server with its own sign-in. When everything opens in a window of its own,
+  or one is popped out, they're windows of their own, `search` and `media`,
+  opened by the owner (`next_open_tool`), which come back as a tab with the
+  `tool` intent.
   They are viewers: they catch up like a conversation's own window, ask the
   server with the borrowed sign-in, and ask the owner (the `open` intent, with
   a message) to show what was found. The conversation then jumps to that

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTab, keepOnly, loadTabs, moveTab, NO_TABS, openTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
+import { closeTab, isTool, keepOnly, keyOf, loadTabs, moveTab, NO_TABS, openTab, same, type SideTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
 
 const HOME = "https://home.example";
 const WORK = "https://work.example";
@@ -13,10 +13,10 @@ function names(tabs: Tabs): string[] {
 }
 
 function opened(...tabs: TabKey[]): Tabs {
-  return tabs.reduce(openTab, NO_TABS);
+  return tabs.reduce<Tabs>((held, tab) => openTab(held, tab), NO_TABS);
 }
 
-describe("the chat window's tabs", () => {
+describe("the tabs beside the list", () => {
   it("adds a conversation at the end and shows it", () => {
     const tabs = opened(general, listening);
     expect(names(tabs)).toEqual(["r-general", "r-listening"]);
@@ -78,5 +78,22 @@ describe("the chat window's tabs", () => {
       open: [general],
       active: general,
     });
+  });
+
+  it("hold Media and Search too, one of each, kept apart from every conversation (#337)", () => {
+    const media: SideTab = { tool: "media" };
+    const search: SideTab = { tool: "search" };
+    let tabs: Tabs<SideTab> = NO_TABS;
+    for (const tab of [general, media, search, { tool: "media" } satisfies SideTab]) tabs = openTab(tabs, tab);
+    expect(tabs.open.map(keyOf)).toEqual([`${HOME}#r-general`, "tool:media", "tool:search"]);
+    expect(tabs.active).toEqual(media);
+    expect(same(media, { tool: "media" })).toBe(true);
+    expect(same(media, search)).toBe(false);
+    expect(same(media, general)).toBe(false);
+    expect(isTool(search)).toBe(true);
+    expect(isTool(general)).toBe(false);
+    // Kept on this computer with the conversations, and read back defensively.
+    expect(loadTabs(saveTabs(tabs))).toEqual(tabs);
+    expect(loadTabs('{"v":1,"open":[{"tool":"media"},{"tool":"settings"},{"tool":1}],"active":{"tool":"media"}}')).toEqual({ open: [media], active: media });
   });
 });

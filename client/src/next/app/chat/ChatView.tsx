@@ -100,6 +100,11 @@ export interface ChatViewProps {
   single?: { onBackBeside: () => void };
   /** The showing conversation, or null when no tab is open. */
   pane: ChatPane | null;
+  /**
+   * The showing tab when it isn't a conversation (Media or Search beside the
+   * list, #337): its id, its name and what it shows.
+   */
+  other?: { id: string; label: string; body: ReactNode } | null;
 }
 
 /** "#general", or the people in a DM: what the box and the log are named by. */
@@ -118,7 +123,7 @@ function titleOf(header: PaneHeaderProps): string {
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, pane }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, pane, other = null }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -233,6 +238,10 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             mentionable={pane.mentionable}
             {...pane.composer}
           />
+        </section>
+      ) : other ? (
+        <section className="nx-pane nx-pane-other" id={`nx-pane-${other.id}`} role="tabpanel" aria-label={other.label}>
+          {other.body}
         </section>
       ) : (
         <p className="nx-chat-none">Nothing open. Pick a room or a person in the list.</p>

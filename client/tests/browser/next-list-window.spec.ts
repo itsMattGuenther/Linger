@@ -213,16 +213,22 @@ test("your own card's Edit profile asks the shell for Settings, on Profile (#271
     .toEqual([`next_open_settings:${JSON.stringify({ section: "profile" })}`]);
 });
 
-test("Search and Media open from the foot, and Ctrl+K opens Search", async ({ page }) => {
+test("Search and Media open from the foot as tabs beside the list, and Ctrl+K opens Search (#337)", async ({ page }) => {
+  // Room for both: in a list-sized window the tab would take the whole window.
+  await page.setViewportSize({ width: 1120, height: 820 });
   await open(page);
-  await page.getByRole("button", { name: "Media" }).click();
-  await page.getByRole("button", { name: "Search" }).click();
+  const foot = page.getByRole("navigation", { name: "Media and search" });
+  await foot.getByRole("button", { name: "Media" }).click();
+  await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
+  await foot.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Media" }).click();
   await page.keyboard.press("Control+k");
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([
-    `next_open_tool:${JSON.stringify({ which: "media" })}`,
-    `next_open_tool:${JSON.stringify({ which: "search" })}`,
-    `next_open_tool:${JSON.stringify({ which: "search" })}`,
-  ]);
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search", exact: true })).toBeFocused();
+  // One of each, in this window: the shell is asked for no other.
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  expect((await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([]);
 });
 
 test("a window that asks for a snapshot gets every server, each with a lent token", async ({ page }) => {
@@ -337,7 +343,8 @@ test.describe("adding a server you're already on", () => {
   });
 });
 
-test("Media and Search at the foot of the list open their own windows", async ({ page }) => {
+test("with each in its own window, Media and Search at the foot of the list open their own windows", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.next.conversations", "windows"));
   await open(page, "?one");
   const foot = page.getByRole("navigation", { name: "Media and search" });
   await foot.getByRole("button", { name: "Media" }).click();

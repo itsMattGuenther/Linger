@@ -38,9 +38,10 @@ import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
 import { loadScale } from "../../core/appearance";
 import { conversationIn } from "../../core/chat/conversation";
+import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { folding, layoutOf, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding } from "../../core/side";
-import { keepOnly, keyOf, loadTabs, NO_TABS, openTab, same, saveTabs, type Tabs } from "../../core/tabs";
+import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -298,7 +299,7 @@ function Servers({
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
   // Conversations beside the list (#337): the tabs, kept here so they
   // outlast folding, and whether the window is unfolded to show them.
-  const [tabs, setTabs] = useState<Tabs>(() => loadTabs(stored(TABS_KEY)));
+  const [tabs, setTabs] = useState<Tabs<SideTab>>(() => loadTabs(stored(TABS_KEY)));
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
   const [side, setSide] = useState<Side>(() => loadSide(localStore()));
@@ -340,6 +341,10 @@ function Servers({
       const { open, active } = tabsNow.current;
       const store = localStore();
       for (const tab of [...open.filter((held) => !same(held, active)), ...open.filter((held) => same(held, active))]) {
+        if (isTool(tab)) {
+          openToolWindow(tab.tool);
+          continue;
+        }
         const held = handle.current;
         if (store && held) leaveDraft(store, keyOf(tab), held.draftOf(keyOf(tab)), Date.now());
         sharing?.local({ kind: "popout", server: tab.server, roomId: tab.roomId });
@@ -461,6 +466,8 @@ function Servers({
     const servers = new Set(signedIn.map((session) => session.baseUrl));
     setTabs((held) =>
       keepOnly(held, (tab) => {
+        // Media and Search look through every server, as long as there's one.
+        if (isTool(tab)) return servers.size > 0;
         if (!servers.has(tab.server)) return false;
         const state = states[tab.server];
         if (state === undefined || state.me === null) return true;
@@ -498,10 +505,24 @@ function Servers({
     }
     bringForward();
   };
+  // Media or Search beside the list (#337): its tab, and Search's box ready
+  // for typing whenever it's asked for again (Ctrl+K).
+  const [searchAsk, setSearchAsk] = useState(1);
+  const openToolBeside = useRef<(which: "media" | "search") => void>(() => undefined);
+  openToolBeside.current = (which) => {
+    if (apisRef.current.size === 0) return;
+    const tab: SideTab = { tool: which };
+    setTabs((held) => openTab(held, tab));
+    if (which === "search") setSearchAsk((count) => count + 1);
+    if (!unfoldedNow.current) unfold(null);
+    bringForward();
+  };
   useEffect(() => {
     showBeside = (server, roomId, messageId) => openBeside.current(server, roomId, messageId);
+    showToolBeside = (which) => openToolBeside.current(which);
     return () => {
       showBeside = null;
+      showToolBeside = null;
     };
   }, []);
   // What the side asks of the owner it's in: the same as any window, without the trip.
@@ -874,7 +895,9 @@ function Servers({
             setTabs={setTabs}
             first={first}
             bind={bind}
-            show={(server, roomId) => openChat(server, roomId)}
+            show={(server, roomId, messageId) => openChat(server, roomId, messageId)}
+            searchAsk={searchAsk}
+            onPopOutTool={openToolWindow}
             voiceControl={voiceControl}
             onFold={fold}
             onClose={closeList}
@@ -964,11 +987,19 @@ const shell: WindowOpener = {
     if (!isTauri()) return;
     void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
+  // Media and Search open where conversations do: beside the list, or in
+  // a window of their own when everything opens in its own (#337).
   tool: (which) => {
-    if (!isTauri()) return;
-    void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
+    if (showToolBeside && loadMode(localStore()) !== "windows") showToolBeside(which);
+    else openToolWindow(which);
   },
 };
+
+/** Media or Search in a window of its own (decision 15): popped out, or every conversation in its own window. */
+function openToolWindow(which: "media" | "search"): void {
+  if (!isTauri()) return;
+  void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
+}
 
 /** This computer's storage, or none where it's refused. */
 function localStore(): Storage | null {
@@ -983,6 +1014,8 @@ function localStore(): Storage | null {
 let sharing: Sharing | null = null;
 /** Beside the list, once the list is drawn (`openBeside` in `Servers`). */
 let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId) => void) | null = null;
+/** Media or Search beside the list, once it's drawn. */
+let showToolBeside: ((which: "media" | "search") => void) | null = null;
 
 /**
  * Show a conversation: in its own window if it was popped out into one,

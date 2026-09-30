@@ -395,7 +395,8 @@ Rules for this milestone:
   evening version of the new colors. There is no light theme (decision 2).
 - ✅ **T-1807 · Media, search and uploads.** Search and Media are windows of
   their own (decision 15), opened from the foot of the list; a hit or a tile
-  opens its conversation at that message.
+  opens its conversation at that message. Since #337 they're tabs beside the
+  list (T-1821).
 - 🟡 **T-1808 · Windows mode** — separate windows, pop-out and back, positions
   remembered, and the tray. Pop-out and back are built (with the draft going
   along), and so is switching between tabs and windows (Settings → Windows).
@@ -460,8 +461,8 @@ Rules for this milestone:
   beside it, in its own window, which unfolds to show them and folds back to
   just the list; the separate chat window of tabs is gone, and "Each in its
   own window" stays. Built and tested against faked servers, with the
-  window's size faked (`next-side.spec.ts`). Still to do: Media and Search
-  as tabs beside the list too (Matt's call, same PR), and trying it on
+  window's size faked (`next-side.spec.ts`). Media and Search are tabs
+  beside the list too (Matt's call, same PR). Still to do: trying it on
   Windows 11 and Hyprland (unfolding near a screen's edge, a snapped window,
   a tiled one).
 - 🟡 **T-1810 · Parity and the switch** — the new client became the default in

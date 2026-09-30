@@ -64,8 +64,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
   and away messages.
-- **Files and media.** 500 MB uploads, EXIF always stripped. The Media window
-  keeps everything ever shared; star things to keep them forever.
+- **Files and media.** 500 MB uploads, EXIF always stripped. Media, a tab
+  beside your list, keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
   goes through the host's server, which passes it on so up to 25 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.

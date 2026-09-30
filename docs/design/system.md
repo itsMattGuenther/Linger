@@ -586,7 +586,7 @@ said, but only while it's true (decision 1, `core/notes.ts`,
 
 With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
 ("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the
-Media window, beside how long the server keeps files.
+Media tab, beside how long the server keeps files.
 
 ## The conversation
 

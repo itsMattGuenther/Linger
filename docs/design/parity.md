@@ -166,6 +166,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     window, or a panel of the list? *(MEDIA-1, SRCH-1)*
     **Decided (2026-09-25): their own windows**, as in the prototype, opened
     from Media and Search at the foot of the list.
+    **Changed (2026-09-30, #337):** tabs beside the list, like a conversation,
+    and their own windows only when everything opens in its own. Either way
+    they pop out and come back.
 16. **Sign-in and first run in the new shell.** The design shows only the
     signed-in list. Is the paste box a small list-sized window, and where does
     "+ Add a server" open? *(SIGN-1, SIGN-8)* Built for now as the list
@@ -262,7 +265,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | LIST-3 | Room order is the host's order ("The Rail"). | `HostPanel.tsx` `move`, `PATCH /rooms/:id` | Same order; the host section is renamed "Your rooms, in order". Many rooms: **decision 22**. | F | ✅ (list.test.ts, next-list.spec.ts); quiet rooms fold under More rooms past eight (list.test.ts, next-list.spec.ts "past eight rooms"; decision 22) |
 | LIST-4 | DMs are their own section, named by who's in them, never by a slug. Something new first, then the latest message, live (#248). | `lib/dm.ts`, SPEC §4.13 | Same, plus a new-message button (NEW-2) | C (dm.ts) + F | ✅ (dm.test.ts, list.test.ts, next-list.spec.ts "a new message moves its DM to the top") |
 | LIST-5 | Voice activity shows in the room list. | `App.tsx` rail | Moving sound bars on the room row | F + G | ✅ (list.test.ts, next-list.spec.ts) |
-| LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | ✅ Media and Search at the foot of the list, each opening its own window (next-list-window.spec.ts, next-tool-window.spec.ts) |
+| LIST-6 | Media and Search sit at the bottom. | `App.tsx` rail | Same; where they open is decision 15 | F | ✅ Media and Search at the foot of the list, each opening as a tab beside it, or its own window (next-list-window.spec.ts, next-tool-window.spec.ts) |
 | LIST-7 | Every row's names line up: one marker column, fixed row heights for every name face, ellipsis instead of clipping. | new (lessons L-01 to L-06) | The design's rule | G (all 12 faces, both marker counts) | ✅ (kit.spec.ts, next-list.spec.ts, next-servers.spec.ts) |
 | LIST-8 | Room names are the same color: no amber `#` for open rooms (Matt, 2026-09-25). | new | Rule | G | ✅ (next-list.spec.ts) |
 | LIST-9 | Empty states for no rooms (with "Make the first room" for the host), no DMs, nobody else here. | `App.tsx` `EmptyState`, `settings/copy.ts` | **Silent** (decision 17) | F | ✅ one quiet line in each empty place, with Make the first room and Invite people for the host (next-list.spec.ts "a brand-new server"; decision 17) |

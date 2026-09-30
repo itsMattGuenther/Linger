@@ -6,8 +6,9 @@ import { leaveDraft, takeDraft } from "../../core/handoff";
 import { tabCommand } from "../../core/keys";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
-import { closeTab, keyOf, moveTab, openTab, same, selectTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
+import { closeTab, isTool, keyOf, moveTab, openTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { IconButton, type TabItem } from "../../kit";
+import { MediaPanel, type OpenFound, SearchPanel } from "../tools/panels";
 import { ChatView } from "./ChatView";
 import { draftStore, useConversationPane } from "./useConversationPane";
 
@@ -28,9 +29,9 @@ export interface SidePaneProps {
   apis: ReadonlyMap<string, AuthedApi>;
   /** What only the owner may do, asked of it directly (`Sharing.local`). */
   intend: (intent: Intent) => Promise<void>;
-  /** The open tabs, kept by the list window so they outlast folding. */
-  tabs: Tabs;
-  setTabs: Dispatch<SetStateAction<Tabs>>;
+  /** The open tabs, conversations and Media or Search, kept by the list window so they outlast folding. */
+  tabs: Tabs<SideTab>;
+  setTabs: Dispatch<SetStateAction<Tabs<SideTab>>>;
   /** The conversation the side unfolded on, if it unfolded to show one. */
   first: SideOpen | null;
   /**
@@ -39,8 +40,12 @@ export interface SidePaneProps {
    * of its own. Called with the side's own; hand back a way to let it go.
    */
   bind: (side: SideHandle) => () => void;
-  /** Show a conversation, as the list would: here, or in its own window. */
-  show: (server: string, roomId: RoomId) => void;
+  /** Show a conversation, as the list would: here, or in its own window, at a message if one is named. */
+  show: (server: string, roomId: RoomId, messageId?: MessageId) => void;
+  /** Changes when Search's box should get the cursor again (Ctrl+K). */
+  searchAsk: number;
+  /** Media's or Search's tab into a window of its own. */
+  onPopOutTool: (which: "media" | "search") => void;
   /** Mute, Deafen and Leave on a voice line: the list window acts itself, as its voice bar does. */
   voiceControl: (press: VoiceControlQuestion) => void;
   /**
@@ -60,10 +65,15 @@ export interface SidePaneProps {
  * it counts towards where you are, and holds back the chime for what you're
  * looking at, only while it's there to be seen.
  */
-export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, voiceControl, onFold, onClose }: SidePaneProps) {
+export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose }: SidePaneProps) {
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
-  const find = useCallback((id: string): TabKey | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
+  const findTab = useCallback((id: string): SideTab | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
+  // A conversation's tab, for uploads that finish after their tab was left.
+  const find = useCallback((id: string): TabKey | undefined => {
+    const tab = findTab(id);
+    return tab && !isTool(tab) ? tab : undefined;
+  }, [findTab]);
   // A draft that came with the first conversation, back from a window of its own.
   const [firstSeed] = useState(() => {
     const store = draftStore();
@@ -72,7 +82,9 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, voice
   });
   const [firstMessage] = useState(() => (first?.message ? { tab: first.tab, id: first.message } : null));
   const active = tabs.active;
-  const view = useConversationPane({ apis, intend, active, find, show, firstSeed, firstMessage, voiceControl });
+  const conversation = active && !isTool(active) ? active : null;
+  const tool = active && isTool(active) ? active.tool : null;
+  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl });
   const { goToMessage, askFocus, seedDraft, draftOf, tabItem } = view;
 
   // A conversation opened while the side is out: to the message first, so
@@ -103,23 +115,31 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, voice
       if (reporter.current === reporting) reporter.current = null;
     };
   }, [intend]);
+  // Media or Search shows no conversation: you're around, not in a room.
+  const anyServer = apis.keys().next().value;
   useEffect(() => {
-    if (active) reporter.current?.showing(active.server, active.roomId);
-  }, [active]);
+    if (conversation) reporter.current?.showing(conversation.server, conversation.roomId);
+    else if (tool !== null && anyServer !== undefined) reporter.current?.showing(anyServer, null);
+  }, [conversation, tool, anyServer]);
 
   // A tab into a window of its own: the owner opens windows, and the draft
   // goes along (core/handoff.ts).
   const popOut = useCallback(
     (id: string) => {
-      const tab = find(id);
-      const store = draftStore();
+      const tab = findTab(id);
       if (!tab) return;
-      if (store) leaveDraft(store, id, draftOf(id), Date.now());
-      void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
+      if (isTool(tab)) onPopOutTool(tab.tool);
+      else {
+        const store = draftStore();
+        if (store) leaveDraft(store, id, draftOf(id), Date.now());
+        void intend({ kind: "popout", server: tab.server, roomId: tab.roomId }).catch(() => undefined);
+      }
       setTabs((held) => closeTab(held, tab));
     },
-    [find, intend, draftOf, setTabs],
+    [findTab, intend, draftOf, setTabs, onPopOutTool],
   );
+  // A search hit or a media tile: its conversation, at the message, where conversations open.
+  const onFound = useCallback<OpenFound>((server, roomId, messageId) => show(server, roomId, messageId), [show]);
 
   // Tab shortcuts (core/keys.ts), taken before the focused control sees
   // them, so they work from the message box too. Ctrl+, and Ctrl+K are the
@@ -147,6 +167,10 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, voice
   const items = useMemo(
     () =>
       tabs.open.flatMap((tab): TabItem[] => {
+        if (isTool(tab)) {
+          const name = tab.tool === "media" ? "Media" : "Search";
+          return [{ id: keyOf(tab), title: name, label: name, lead: { kind: "icon", icon: tab.tool }, closable: true }];
+        }
         const item = tabItem(tab, same(tab, tabs.active));
         return item ? [item] : [];
       }),
@@ -159,21 +183,28 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, voice
         tabs={items}
         activeId={active ? keyOf(active) : null}
         onSelectTab={(id) => {
-          const tab = find(id);
+          const tab = findTab(id);
           if (tab) setTabs((held) => selectTab(held, tab));
         }}
         onCloseTab={(id) => {
-          const tab = find(id);
+          const tab = findTab(id);
           if (tab) setTabs((held) => closeTab(held, tab));
         }}
         onMoveTab={(id, to) => {
-          const tab = find(id);
+          const tab = findTab(id);
           if (tab) setTabs((held) => moveTab(held, tab, to));
         }}
         onPopOut={popOut}
         leading={<IconButton icon="fold" label="Fold back to your list" onClick={onFold} />}
         onCloseWindow={onClose}
         pane={view.pane}
+        other={
+          tool === "media"
+            ? { id: keyOf({ tool }), label: "Media", body: <MediaPanel apis={apis} onOpen={onFound} /> }
+            : tool === "search"
+              ? { id: keyOf({ tool }), label: "Search", body: <SearchPanel apis={apis} onOpen={onFound} focusRequest={searchAsk} /> }
+              : null
+        }
       />
       {view.card}
     </div>

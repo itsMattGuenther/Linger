@@ -282,8 +282,10 @@ tab in a window of its own, and the same box with the arrow coming in,
 **Back beside your list**, puts it back. If you'd rather every conversation had its own window, choose
 that in **Settings → Windows**.
 
-At the foot of the list are **Media** and **Search**, each in a window of its
-own. When you're in voice, the voice bar sits just above them.
+At the foot of the list are **Media** and **Search**. Each opens as a tab
+beside the list, like a conversation (**Ctrl+K** opens Search from anywhere),
+and pops out into a window of its own the same way. When you're in voice, the
+voice bar sits just above them.
 
 **Closing the list doesn't quit Linger.** It keeps running in the tray (the
 little door icon near your clock), so voice, knocks and notifications carry

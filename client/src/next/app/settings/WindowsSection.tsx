@@ -35,13 +35,13 @@ export function WindowsSection({ conversations, closing }: WindowsProps) {
               {
                 value: "tabs",
                 title: "Beside your list, in one window",
-                description: "Rooms and DMs open as tabs next to your list, and the whole thing moves as one window. Fold it back to just the list whenever you like, and pop a tab out when you want it somewhere else.",
+                description: "Rooms, DMs, Media and Search open as tabs next to your list, and the whole thing moves as one window. Fold it back to just the list whenever you like, and pop a tab out when you want it somewhere else.",
                 art: "beside",
               },
               {
                 value: "windows",
                 title: "Each in its own window",
-                description: "Every room and DM gets a window of its own. Good on a tiling desktop, which lays them out for you.",
+                description: "Every room and DM gets a window of its own, and so do Media and Search. Good on a tiling desktop, which lays them out for you.",
                 art: "windows",
               },
             ]}

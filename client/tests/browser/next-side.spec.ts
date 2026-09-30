@@ -334,3 +334,83 @@ test("a room you've left keeps only its newest page, and you come back to the ne
   const backHeight = await log.evaluate((node) => node.scrollHeight);
   expect(backHeight).toBeLessThan(heldHeight / 2);
 });
+
+const foot = (page: Page) => page.getByRole("navigation", { name: "Media and search" });
+const searchBox = (page: Page) => page.getByRole("textbox", { name: "Search", exact: true });
+
+test("Media and Search open as tabs beside the list, and a search hit opens its conversation there, at the message", async ({ page }) => {
+  await open(page);
+  await foot(page).getByRole("button", { name: "Media" }).click();
+  await grown(page);
+  await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Media" })).toBeVisible();
+  // Media and Search don't put you in a room.
+  await page.waitForTimeout(200);
+  expect((await placedIn(page)) ?? null).toBeNull();
+  await foot(page).getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await searchBox(page).fill("khruangbin");
+  await page.getByRole("tabpanel", { name: "Search" }).getByText("Khruangbin", { exact: false }).first().click();
+  // Another tab, beside the others, around the message.
+  await expect(showing(page)).toHaveAccessibleName("#general");
+  await expect(page.getByRole("tab")).toHaveText([/Media/, /Search/, /general/]);
+  await expect.poll(async () => (await did(page)).filter((line) => /^history r-general\?around=/.test(line)).length).toBe(1);
+  await expect.poll(() => placedIn(page)).toBe("r-general");
+});
+
+test("Ctrl+K opens Search beside the list, and puts the cursor back in its box when asked again", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await box(page).click();
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await expect(searchBox(page)).toBeFocused();
+  await page.getByRole("tab", { name: "#general" }).click();
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await expect(searchBox(page)).toBeFocused();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+});
+
+test("a Media tab pops out into its own window, and comes back when that window asks", async ({ page }) => {
+  await open(page);
+  await foot(page).getByRole("button", { name: "Media" }).click();
+  await grown(page);
+  await page.getByRole("button", { name: "Open in its own window" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([`next_open_tool:${JSON.stringify({ which: "media" })}`]);
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  // Its window's Back beside your list, as the owner hears it.
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "tool", which: "media" }));
+  await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
+});
+
+test("with each in its own window, Media and Search open in windows of their own, and switching there moves their tabs too", async ({ page }) => {
+  await open(page);
+  await foot(page).getByRole("button", { name: "Search" }).click();
+  await grown(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "conversations", mode: "windows" }));
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect.poll(async () => (await did(page)).filter((line) => /^next_open_(tool|conversation)/.test(line)).map((line) => line.split(":")[0])).toEqual([
+    "next_open_tool",
+    "next_open_conversation",
+  ]);
+  // From now on, Media opens a window of its own.
+  await page.setViewportSize({ width: 340, height: 820 });
+  await foot(page).getByRole("button", { name: "Media" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool")).at(-1)).toBe(`next_open_tool:${JSON.stringify({ which: "media" })}`);
+  await expect(page.getByRole("tab")).toHaveCount(0);
+});
+
+test("Media and Search tabs come back after a restart with the rest", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await foot(page).getByRole("button", { name: "Media" }).click();
+  await expect(page.getByRole("tab")).toHaveText([/general/, /Media/]);
+  await page.reload();
+  await expect(page.getByRole("tab")).toHaveText([/general/, /Media/]);
+  await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
+});

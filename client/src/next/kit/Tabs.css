@@ -90,6 +90,13 @@
   font-weight: 400;
 }
 
+/* Media's or Search's icon: the same faint ink as a room's #. */
+.k-tab-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-faint);
+}
+
 .k-tab[data-fresh="yes"] .k-tab-title {
   color: var(--text-primary);
   font-weight: 700;

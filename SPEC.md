@@ -127,7 +127,8 @@ the server with their marker, where they are, and their status. Offline people s
 when they were last here and their away message, and their name is a dim grey in its
 own face rather than their colors until they are back. With several servers, each is a
 folding section of the list. When you are in voice, the voice bar sits at the bottom,
-and under everything are **Media** and **Search**, each opening a window of its own.
+and under everything are **Media** and **Search**, each opening as a tab beside the
+list, like a conversation (a window of its own when everything opens in its own).
 This list is what makes an empty server feel like a house with the lights on.
 
 **Conversations open beside the list**, a tab each, in the list's own window, so the
@@ -299,7 +300,8 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
-- A window of its own, opened from the foot of the list, not a search result.
+- Opened from the foot of the list, not a search result: a tab beside the list, like a
+  conversation, or a window of its own when everything opens in its own (#337).
 
 This fixes the deepest wound: you shared something great eight months ago and it is
 gone. For a friend group, that collection *is* the relationship.

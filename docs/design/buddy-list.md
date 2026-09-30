@@ -44,7 +44,9 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
   and every other server stays connected.
 - **Media and Search open in windows of their own** (decision 15), from the
   foot of the list, as in the prototype. A search hit or a media tile opens
-  its conversation at that message.
+  its conversation at that message. **Since 2026-09-30 (#337)** they open as
+  tabs beside the list, like a conversation, and in windows of their own
+  only when everything does; either can pop out and come back.
 - **A server's color is its host's accent** (decision 18), the same for
   everybody. Each person's own color is their name's, chosen per server in
   Profile. A newcomer starts on the color the fewest people there wear, so a
