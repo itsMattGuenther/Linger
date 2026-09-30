@@ -204,6 +204,16 @@ jobs:
           - { engine: webkit, shard: 2, shards: 3 }
           - { engine: webkit, shard: 3, shards: 3 }
     runs-on: ubuntu-latest
+    # In Playwright's own image, which has both browsers and every library
+    # they need. Installing those libraries from Ubuntu's mirror
+    # (`playwright install --with-deps`) could take the whole 20 minutes on a
+    # slow day and cancel the job with no test run: a WebKit part on #356 and
+    # the nightly run, 2026-09-30. User 1001 is the runner's own, so the files
+    # the job writes are the runner's. `scripts/version-check.sh` holds the
+    # tag to the client's @playwright/test.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     timeout-minutes: 20
     defaults:
       run:
@@ -217,8 +227,6 @@ jobs:
         run: corepack enable
       - name: install
         run: pnpm install --frozen-lockfile
-      - name: browser engine
-        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - name: browser layout and keyboard checks (${{ matrix.engine }}, part ${{ matrix.shard }} of ${{ matrix.shards }})
         run: pnpm test:browser --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/${{ matrix.shards }}
       - name: browser failure evidence
@@ -245,6 +253,10 @@ jobs:
       matrix:
         engine: [chromium, webkit]
     runs-on: ubuntu-latest
+    # Playwright's image, as web-browser above.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     timeout-minutes: 20
     defaults:
       run:
@@ -273,9 +285,6 @@ jobs:
           echo "$n test(s) added or edited; repeating each $repeat times"
           cat "$RUNNER_TEMP/tests.txt"
           echo "repeat=$repeat" >> "$GITHUB_OUTPUT"
-      - name: browser engine
-        if: steps.pick.outputs.repeat != '0'
-        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - name: the new and edited tests, repeated, with no retries
         if: steps.pick.outputs.repeat != '0'
         run: |
@@ -351,6 +360,8 @@ jobs:
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).
         run: node --test scripts/package-deps.test.mjs
+      - name: the browser jobs' Playwright image is the client's Playwright
+        run: node --test scripts/playwright-image.test.mjs
       - name: workflow files
         # A broken workflow doesn't fail; it just doesn't run, and the
         # required check waits forever. actionlint also shellchecks each step.

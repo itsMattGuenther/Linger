@@ -51,6 +51,11 @@ jobs:
           - { engine: webkit, shard: 3, shards: 4 }
           - { engine: webkit, shard: 4, shards: 4 }
     runs-on: ubuntu-latest
+    # Playwright's image, as ci.yml's web-browser: nothing to install from
+    # Ubuntu's mirror, which could take the job's whole limit.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     timeout-minutes: 40
     defaults:
       run:
@@ -64,8 +69,6 @@ jobs:
         run: corepack enable
       - name: install
         run: pnpm install --frozen-lockfile
-      - name: browser engine
-        run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - name: every browser test three times, with no retries
         run: >
           pnpm test:browser --project=${{ matrix.engine }} --retries=0 --repeat-each=3

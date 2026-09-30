@@ -64,7 +64,8 @@ only changes documentation.
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
-(`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`).
+(`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
+`scripts/playwright-image.test.mjs`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -164,6 +165,12 @@ Two things catch these before they bite:
 - The tests run on UTC, as CI does (`webkit.sh` sets it; the container is on
   UTC). A test that works out a date in the machine's own time zone will
   expect the wrong day somewhere.
+- **CI runs the browser tests inside Playwright's own image**
+  (`mcr.microsoft.com/playwright`), which has both browsers and every library
+  they need. Installing those from Ubuntu's mirror each run took the whole
+  20-minute limit on slow days and cancelled jobs before a test ran. The
+  image's version has to be the client's `@playwright/test` version;
+  `scripts/playwright-image.test.mjs` checks it, so bump both together.
 - When a browser test fails in CI, look at its screenshot and trace before
   changing code. They are kept for seven days in the run's
   `browser-failures…` artifacts; `pnpm exec playwright show-trace` opens a
