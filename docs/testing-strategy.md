@@ -141,6 +141,36 @@ Two things catch these before they bite:
 - **Every night, every browser test runs three times** with no retries
   (`nightly.yml`). A test that fails there opens the nightly issue.
 
+## Waiting in a browser test
+
+Most of the random failures so far were a test acting a moment too soon. The
+rules that came out of them:
+
+- **Wait until it holds still before you click it or measure it.** Before a
+  click, Playwright waits until the target is where it was one animation
+  frame ago. In Linger that isn't enough: a conversation keeps moving after it
+  first appears (a link card loads above and pushes the messages down, the log
+  scrolls a new message into place), and so does a window making room for a
+  side pane. A click aimed at where a name was lands beside it (#331, #361).
+  `still(locator)` in `tests/browser/still.ts` waits until the thing's box is
+  the same on two looks 100 ms apart. Call it before clicking anything in a
+  conversation and before any `boundingBox()` whose numbers you compare.
+- **Measure against the thing's own container, not the screen.** A position
+  on the page moves whenever anything above it does; a video's place in its
+  own row doesn't (#357).
+- **Wait for the fixture to say it's ready.** The fixtures write what the page
+  asked of the fake shell and servers into `document.body.dataset.did`, in
+  order: a `ready` for each connection (React's development mode opens two,
+  #355), and `answered:<event>` once the fake shell has handled a request.
+  Wait for the line, then act. The list and side specs' `settled(page)` waits
+  until every connection has had its `ready`.
+- **A blank page with `net::ERR_NETWORK_CHANGED` in the trace is your machine,
+  not the test.** Chromium drops every request in flight when a network
+  interface comes or goes, and Docker adds one each time it starts a container
+  on its own network (a VPN or Wi-Fi change does the same). Don't start
+  containers while the Chromium tests run. `webkit.sh`'s container shares the
+  machine's network and adds nothing.
+
 ## Browser tests
 
 - The same tests run in Chromium, the engine of WebView2 on Windows, and in
@@ -171,6 +201,9 @@ Two things catch these before they bite:
   20-minute limit on slow days and cancelled jobs before a test ran. The
   image's version has to be the client's `@playwright/test` version;
   `scripts/playwright-image.test.mjs` checks it, so bump both together.
+- The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
+  moves it, so a second copy of the repository, such as a git worktree, can
+  run its browser tests while the first runs its own.
 - When a browser test fails in CI, look at its screenshot and trace before
   changing code. They are kept for seven days in the run's
   `browser-failures…` artifacts; `pnpm exec playwright show-trace` opens a
