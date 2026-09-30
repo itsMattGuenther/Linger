@@ -89,6 +89,34 @@ static gboolean start(gpointer unused) {
     return G_SOURCE_REMOVE;
 }
 
+/* The element exists and, in an AppImage, comes from inside it. */
+static gboolean needed(const char *name) {
+    GstElementFactory *factory = gst_element_factory_find(name);
+    if (!factory) {
+        gchar *message = g_strdup_printf("{\"status\":\"failed\",\"error\":\"Missing GStreamer element: %s\"}", name);
+        save_result(message);
+        g_free(message);
+        return FALSE;
+    }
+    const char *appdir = g_getenv("APPDIR");
+    if (appdir) {
+        GstPlugin *plugin = gst_plugin_feature_get_plugin(GST_PLUGIN_FEATURE(factory));
+        const char *file = plugin ? gst_plugin_get_filename(plugin) : NULL;
+        gchar *prefix = g_strconcat(appdir, "/", NULL);
+        gboolean bundled = file && g_str_has_prefix(file, prefix);
+        g_free(prefix);
+        if (plugin) gst_object_unref(plugin);
+        if (!bundled) {
+            gchar *message = g_strdup_printf("{\"status\":\"failed\",\"error\":\"GStreamer element %s loaded from outside the AppImage\"}", name);
+            save_result(message);
+            g_free(message);
+            gst_object_unref(factory);
+            return FALSE;
+        }
+    }
+    gst_object_unref(factory);
+    return TRUE;
+}
 G_MODULE_EXPORT void gtk_module_init(gint *argc, gchar ***argv) {
     (void)argc; (void)argv;
     if (!g_getenv("LINGER_AUDIO_RESULT") || !g_getenv("LINGER_AUDIO_SCRIPT")) return;
@@ -103,29 +131,16 @@ G_MODULE_EXPORT void gtk_module_init(gint *argc, gchar ***argv) {
     gst_init(NULL, NULL);
     const char *elements[] = {"appsrc", "audioconvert", "audioresample", "queue",
         "interleave", "autoaudiosink", "pulsesink"};
-    for (guint i = 0; i < G_N_ELEMENTS(elements); i++) {
-        GstElementFactory *factory = gst_element_factory_find(elements[i]);
-        if (!factory) {
-            gchar *message = g_strdup_printf("{\"status\":\"failed\",\"error\":\"Missing GStreamer element: %s\"}", elements[i]);
-            save_result(message);
-            g_free(message);
+    for (guint i = 0; i < G_N_ELEMENTS(elements); i++)
+        if (!needed(elements[i])) return;
+    /* The video check adds the decoders a shared video needs (#358). */
+    const char *more = g_getenv("LINGER_AUDIO_REQUIRE");
+    gchar **extra = more ? g_strsplit(more, ",", -1) : NULL;
+    for (guint i = 0; extra && extra[i]; i++)
+        if (*extra[i] && !needed(extra[i])) {
+            g_strfreev(extra);
             return;
         }
-        const char *appdir = g_getenv("APPDIR");
-        if (appdir) {
-            GstPlugin *plugin = gst_plugin_feature_get_plugin(GST_PLUGIN_FEATURE(factory));
-            const char *file = plugin ? gst_plugin_get_filename(plugin) : NULL;
-            gchar *prefix = g_strconcat(appdir, "/", NULL);
-            gboolean bundled = file && g_str_has_prefix(file, prefix);
-            g_free(prefix);
-            if (plugin) gst_object_unref(plugin);
-            if (!bundled) {
-                save_result("{\"status\":\"failed\",\"error\":\"Audio plugin loaded from outside the AppImage\"}");
-                gst_object_unref(factory);
-                return;
-            }
-        }
-        gst_object_unref(factory);
-    }
+    g_strfreev(extra);
     g_timeout_add(1000, start, NULL);
 }

@@ -90,7 +90,12 @@ voice engine. AppImages bundle GStreamer playback plugins; DEB/RPM packages
 require them through the package manager. Both Windows installers install
 WebView2 if it is missing (an internet connection is required for that step).
 Build distributable AppImages on Ubuntu 22.04, where Tauri supports bundling
-the media runtime. See [packaged audio checks](packaged-audio-checks.md)
+the media runtime. The AppImage plays shared videos with the libav GStreamer
+plugin on a trimmed FFmpeg (#358): install `gstreamer1.0-libav` and `nasm`, run
+`scripts/appimage-ffmpeg.sh /tmp/ffmpeg`, and build with
+`LD_LIBRARY_PATH=/tmp/ffmpeg/lib`, or the AppImage takes Ubuntu's full FFmpeg
+and grows by about 45 MB (`scripts/appimage-ffmpeg-check.py` catches it). See
+[packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
 bundles the current sound player before running it inside each package.

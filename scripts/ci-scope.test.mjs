@@ -18,6 +18,11 @@ test("UI changes test both browser and native packages, not unrelated server job
 test("browser assertions alone need no package rebuild", () => {
   assert.deepEqual(active(["client/tests/browser/console.spec.ts"]), ["web"]);
 });
+test("the packaged audio and video checks' own files rebuild only the packages", () => {
+  for (const path of ["scripts/linux-audio-check.py", "scripts/video-runtime-probe.js", "scripts/fixtures/tone-h264-aac.mp4",
+    "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.py"])
+    assert.deepEqual(active([path]), ["packages"], path);
+});
 test("server changes include real storage tests", () => {
   assert.deepEqual(active(["crates/linger-server/src/storage.rs"]), ["rust", "s3"]);
 });
