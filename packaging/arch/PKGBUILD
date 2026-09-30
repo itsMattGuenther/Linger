@@ -24,6 +24,9 @@ depends=(
   'glib2'
   'gst-plugins-base'
   'gst-plugins-good'
+  # The decoders for the sound (AAC) and picture (H.264) most shared videos
+  # are made of: without them a video plays silent, or not at all (#358).
+  'gst-libav'
   'gtk3'
   'libsoup3'
   'webkit2gtk-4.1'

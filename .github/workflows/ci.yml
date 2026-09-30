@@ -347,6 +347,10 @@ jobs:
         run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
       - name: test the build's CSP check
         run: node --test scripts/csp-assets.test.mjs
+      - name: the Linux packages ask for the media plugins shared videos need
+        # Without the AAC and H.264 decoders a shared video plays silent, or
+        # not at all (#358).
+        run: node --test scripts/package-deps.test.mjs
       - name: workflow files
         # A broken workflow doesn't fail; it just doesn't run, and the
         # required check waits forever. actionlint also shellchecks each step.
