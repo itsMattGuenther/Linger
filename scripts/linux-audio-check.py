@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Check a packaged Linux WebView against a private, recorded virtual speaker.
 
+By default it plays Linger's own sounds. With --video it plays a shared
+video's kind of file instead, H.264 with AAC sound, and requires the libav
+decoders that play it (#358).
+
 No accounts, real desktop, microphone or physical speaker are used. Requires
 cc, pkg-config, WebKitGTK/GStreamer headers, Xvfb, D-Bus and PulseAudio tools.
 """
 
 import argparse
 import array
+import base64
 import json
 import os
 from pathlib import Path
@@ -18,6 +23,10 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
+# Under a second of a 440 Hz tone in AAC, over a 32 px H.264 picture: what a
+# phone or a screen recorder makes, in miniature.
+VIDEO_CLIP = ROOT / "scripts/fixtures/tone-h264-aac.mp4"
+VIDEO_DECODERS = "avdec_aac,avdec_h264"
 
 
 def stop(process):
@@ -43,7 +52,33 @@ def segments(samples, gap=4800):
     return spans
 
 
-def check(program, output, appimage):
+def heard(recorder, output, result, program):
+    """The clip's tone reached the virtual speaker, whole: about 0.8 seconds."""
+    tone = 0
+    peak = 0
+    for _ in range(50):
+        assert recorder.poll() is None, "Virtual-speaker recorder exited; see record.log"
+        samples = array.array("f")
+        data = (output / "output.f32").read_bytes()
+        samples.frombytes(data[:len(data) // 4 * 4])
+        if sys.byteorder != "little":
+            samples.byteswap()
+        peak = max((abs(sample) for sample in samples), default=0)
+        tone = max(((end - start) / 48000 for start, end in segments(samples)), default=0)
+        if peak > 0.05 and tone >= 0.6:
+            break
+        time.sleep(0.1)
+    stop(recorder)
+    assert peak > 0.05, f"The video played but its sound didn't reach the virtual speaker: peak={peak}; see {output}"
+    assert tone >= 0.6, f"Only {tone:.2f} s of the video's 0.8 s tone reached the virtual speaker; see {output}"
+    result["speaker_peak"] = peak
+    result["speaker_tone_seconds"] = tone
+    (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(f"PASS {program.name}: a shared video's H.264 and AAC played, and its sound reached the virtual speaker "
+          f"({tone:.2f} s, peak={peak:.4f})")
+
+
+def check(program, output, appimage, video=False):
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
     for key in tuple(env):
@@ -58,7 +93,12 @@ def check(program, output, appimage):
     env.update(GDK_BACKEND="x11", LINGER_LINUX_BACKEND="x11", NO_AT_BRIDGE="1", XDG_CURRENT_DESKTOP="GNOME",
                WEBKIT_DISABLE_DMABUF_RENDERER="1", WEBKIT_DISABLE_COMPOSITING_MODE="1")
     script = output / "probe.js"
-    subprocess.run(["node", str(ROOT / "client/scripts/build-audio-probe.mjs"), str(script)], check=True)
+    if video:
+        clip = base64.b64encode(VIDEO_CLIP.read_bytes()).decode()
+        script.write_text((ROOT / "scripts/video-runtime-probe.js").read_text().replace("__LINGER_VIDEO_CLIP__", clip))
+        env["LINGER_AUDIO_REQUIRE"] = VIDEO_DECODERS
+    else:
+        subprocess.run(["node", str(ROOT / "client/scripts/build-audio-probe.mjs"), str(script)], check=True)
     module = output / "probe.so"
     flags = shlex.split(subprocess.check_output(
         ["pkg-config", "--cflags", "--libs", "webkit2gtk-4.1", "gstreamer-1.0"], text=True))
@@ -119,6 +159,9 @@ def check(program, output, appimage):
             assert app.poll() is None, "Packaged client exited; see app.log"
             time.sleep(0.1)
         assert result and result.get("status") == "passed", f"Packaged audio failed: {result}; see {output}"
+        if video:
+            heard(recorder, output, result, program)
+            return
         # PulseAudio's recording transport may deliver after the Web Audio
         # callback finishes. Wait for samples, not an arbitrary short sleep.
         peak = 0
@@ -176,10 +219,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("program", type=Path)
     parser.add_argument("--appimage", action="store_true")
+    parser.add_argument("--video", action="store_true", help="play an H.264 and AAC clip instead of Linger's sounds")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.output:
-        check(args.program.resolve(), args.output.resolve(), args.appimage)
+        check(args.program.resolve(), args.output.resolve(), args.appimage, args.video)
     else:
         with tempfile.TemporaryDirectory(prefix="linger-audio-") as area:
-            check(args.program.resolve(), Path(area) / "check", args.appimage)
+            check(args.program.resolve(), Path(area) / "check", args.appimage, args.video)
