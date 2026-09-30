@@ -413,6 +413,11 @@ with the slider beside the speaker; the speaker mutes it. Linger remembers
 that level on this computer for the next file. Videos play with their own
 controls.
 
+Your keyboard's media keys, and other programs that pause "all media" (some
+dictation tools do, while you talk), can pause a song or video that's playing
+and resume it afterwards. They never start one you paused yourself, or one
+nobody played.
+
 For other files, **Download** hands the file to your browser, which may save
 it straight to Downloads without asking; Linger says so when it has. If it
 fails, **Try again**. A file may have expired. Treat download links as

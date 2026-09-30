@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
 import { refuseStrayDrops } from "../lib/drops";
+import { followMediaKeys } from "../lib/mediaKeys";
 import { unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
@@ -28,6 +29,11 @@ window.addEventListener("keydown", armAudio);
 // A file dropped anywhere but a drop zone is refused, not opened in place of
 // the window (lib/drops.ts).
 refuseStrayDrops(window);
+
+// The desktop's play and pause (media keys, MPRIS on Linux, the media
+// controls on Windows) resume only what they paused, and never start a song
+// you paused yourself (#353, lib/mediaKeys.ts).
+followMediaKeys("mediaSession" in navigator ? navigator.mediaSession : undefined, document);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
