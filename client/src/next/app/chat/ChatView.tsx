@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
@@ -77,7 +77,7 @@ export interface ChatPane {
 }
 
 export interface ChatViewProps {
-  /** The window's tabs, in order. */
+  /** The tabs, in order. */
   tabs: TabItem[];
   /** The showing tab, or null when none is open. */
   activeId: string | null;
@@ -89,15 +89,22 @@ export interface ChatViewProps {
   onPopOut?: (id: string) => void;
   /** Draws Linger's own close button, where the desktop draws none. */
   onCloseWindow?: () => void;
+  /** Before the tabs: beside the list, the button that folds them away. */
+  leading?: ReactNode;
   /** The window has focus: full-strength title bar. */
   focused?: boolean;
   /**
    * One conversation in a window of its own: no tabs, the header in the
-   * title bar, and a way back into the chat window's tabs.
+   * title bar, and a way back beside the list, as a tab.
    */
-  single?: { onBackToTabs: () => void };
+  single?: { onBackBeside: () => void };
   /** The showing conversation, or null when no tab is open. */
   pane: ChatPane | null;
+  /**
+   * The showing tab when it isn't a conversation (Media or Search beside the
+   * list, #337): its id, its name and what it shows.
+   */
+  other?: { id: string; label: string; body: ReactNode } | null;
 }
 
 /** "#general", or the people in a DM: what the box and the log are named by. */
@@ -106,16 +113,17 @@ function titleOf(header: PaneHeaderProps): string {
 }
 
 /**
- * The chat window (docs/design/buddy-list.md, "Conversations: tabs or
- * windows"): tabs in the title bar, and under them the showing conversation
- * with its header, its voice, its messages, who's typing and the box.
+ * Conversations (docs/design/buddy-list.md, "Conversations beside the
+ * list"): tabs in the title bar, and under them the showing conversation
+ * with its header, its voice, its messages, who's typing and the box. Beside
+ * the list, in the list window; or one conversation in a window of its own.
  *
  * It holds only what the screen itself decides: which message you're
  * replying to or editing in each tab, and the picture that's open. Everything
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, focused = true, single, pane }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, pane, other = null }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -183,11 +191,11 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
 
   const popOut = onPopOut && activeId !== null ? <IconButton icon="popout" label="Open in its own window" onClick={() => onPopOut(activeId)} /> : undefined;
   // The pop-out button's opposite, drawn as its mirror (#214).
-  const backToTabs = single ? <IconButton icon="popin" label="Back to tabs" onClick={single.onBackToTabs} /> : undefined;
+  const backBeside = single ? <IconButton icon="popin" label="Back beside your list" onClick={single.onBackBeside} /> : undefined;
 
   return (
     <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined}>
-      <TitleBar focused={focused} actions={single ? backToTabs : popOut} onClose={onCloseWindow}>
+      <TitleBar leading={leading} focused={focused} actions={single ? backBeside : popOut} onClose={onCloseWindow}>
         {single ? (
           pane ? (
             <PaneHeader {...pane.header} place="title" />
@@ -230,6 +238,10 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             mentionable={pane.mentionable}
             {...pane.composer}
           />
+        </section>
+      ) : other ? (
+        <section className="nx-pane nx-pane-other" id={`nx-pane-${other.id}`} role="tabpanel" aria-label={other.label}>
+          {other.body}
         </section>
       ) : (
         <p className="nx-chat-none">Nothing open. Pick a room or a person in the list.</p>

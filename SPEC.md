@@ -98,26 +98,26 @@ Every feature decision resolves against these, in order.
 
 Discord's layout is `[server rail] [channel list] [messages] [member list]`. Linger
 inverts the priority. **People are the primary surface, not a gutter.** The app is a
-buddy list, like AIM's, with conversations in windows of their own
-(`docs/design/buddy-list.md` is the design).
+buddy list, like AIM's: one window that unfolds to show conversations beside the list
+and folds back to just the list (`docs/design/buddy-list.md` is the design, #337).
 
 ```
-┌─ The Good Company ─ ⚙ ×┐   ┌─ #general × │ Jules × ─────────────── ⧉ × ┐
-│ Matt           ☾ Away  │   │ #general ●●● Good company. No hurry.       │
-│ ● in #general          │   │ ◂)) Eli, Jules are talking         Join    │
-│ ✎ fixing the porch …   │   │                                            │
-├────────────────────────┤   │ ───────────── TONIGHT ─────────────        │
-│ ROOMS                  │   │ Eli: A bit of Khruangbin.         10:34 PM │
-│ # general    ◂)) ●●●   │   │ Matt: This is exactly what I…     10:37 PM │
-│ # listening-room   ●   │   │ you left off here ─────────────────        │
-│ DMS                  ✎ │   │ Jules: Saturday walk?             10:43 PM │
-│ ● Jules                │   │                                            │
-│ PEOPLE                 │   │ ┌────────────────────────────────────────┐ │
-│ ● Dave  in #listening… │   │ │ › Say something in #general       + → │ │
-│   side two. nobody…    │   │ └────────────────────────────────────────┘ │
-├────────────────────────┤   └────────────────────────────────────────────┘
-│ Media        Search    │
-└────────────────────────┘
+┌─ The Good Company ─── ⚙ ┬ ◧ #general × │ Jules × ─────────────────── ⧉ × ┐
+│ Matt           ☾ Away   │ #general ●●● Good company. No hurry.            │
+│ ● in #general           │ ◂)) Eli, Jules are talking              Join    │
+│ ✎ fixing the porch …    │                                                 │
+├─────────────────────────┤ ─────────────── TONIGHT ───────────────         │
+│ ROOMS                   │ Eli: A bit of Khruangbin.              10:34 PM │
+│ # general    ◂)) ●●●    │ Matt: This is exactly what I…          10:37 PM │
+│ # listening-room   ●    │ you left off here ──────────────────────        │
+│ DMS                   ✎ │ Jules: Saturday walk?                  10:43 PM │
+│ ● Jules                 │                                                 │
+│ PEOPLE                  │ ┌─────────────────────────────────────────────┐ │
+│ ● Dave  in #listening…  │ │ › Say something in #general            + → │ │
+│   side two. nobody…     │ └─────────────────────────────────────────────┘ │
+├─────────────────────────┤                                                 │
+│ Media        Search     │                                                 │
+└─────────────────────────┴─────────────────────────────────────────────────┘
 ```
 
 **The list window** is the app. From the top: you (your name, where you are, your
@@ -127,11 +127,19 @@ the server with their marker, where they are, and their status. Offline people s
 when they were last here and their away message, and their name is a dim grey in its
 own face rather than their colors until they are back. With several servers, each is a
 folding section of the list. When you are in voice, the voice bar sits at the bottom,
-and under everything are **Media** and **Search**, each opening a window of its own.
+and under everything are **Media** and **Search**, each opening as a tab beside the
+list, like a conversation (a window of its own when everything opens in its own).
 This list is what makes an empty server feel like a house with the lights on.
 
-**Conversations open in the chat window**, a tab each, or each in a window of its own
-(Settings → Windows). A tab can be popped out into its own window and put back.
+**Conversations open beside the list**, a tab each, in the list's own window, so the
+list and what you're reading move, snap, minimize and tile as one window. Opening one
+unfolds the window to the right (leftwards where the screen ends); ◧ at the
+conversations' edge folds it back to just the list, keeping the tabs, and the list's
+title bar brings them back. The line between the list and the conversations drags to
+make the list wider or narrower. Too narrow for both (a narrow tile), the conversation
+takes the window, and ◧ goes back to the list. A tab can be popped out into a window
+of its own and put back, and Settings → Windows can open every conversation in a
+window of its own instead.
 Closing the list keeps Linger running in the tray, with its sounds and voice; a
 setting makes closing it quit instead. Another starts Linger when you sign in to
 the computer (Windows and Linux); it is off until you turn it on. **Settings** is
@@ -293,7 +301,8 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
-- A window of its own, opened from the foot of the list, not a search result.
+- Opened from the foot of the list, not a search result: a tab beside the list, like a
+  conversation, or a window of its own when everything opens in its own (#337).
 
 This fixes the deepest wound: you shared something great eight months ago and it is
 gone. For a friend group, that collection *is* the relationship.

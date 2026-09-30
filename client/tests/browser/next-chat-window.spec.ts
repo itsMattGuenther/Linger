@@ -1,9 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
+import { still } from "./still";
 
-// The chat window with its wiring (tests/fixtures/next-chat-window.tsx): the
-// real ChatWindow, the store and the sharing code, with the desktop shell,
-// the list window and the server faked in the page. The views are measured in
-// next-chat.spec.ts; this is about what the window asks for and when.
+// A conversation in a window of its own, with its wiring
+// (tests/fixtures/next-chat-window.tsx): the real ChatWindow, the store and
+// the sharing code, with the desktop shell, the list window and the server
+// faked in the page. The views are measured in next-chat.spec.ts; this is
+// about what the window asks for and when. The tabs beside the list are
+// next-side.spec.ts's (#337).
 
 test.use({ viewport: { width: 780, height: 820 } });
 
@@ -13,7 +16,7 @@ const PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5"><rect w
 async function open(page: Page, query = "room=r-general") {
   await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
   await page.goto(`/tests/fixtures/next-chat-window.html?${query}`);
-  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".nx-pane")).toBeVisible();
 }
 
 /** Everything the window asked of the shell, the owner and the server, in order. */
@@ -41,7 +44,7 @@ const log = (page: Page) => page.getByRole("log");
 
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
   await open(page);
-  await expect(page.getByRole("tab", { name: "#general" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
   await expect(log(page)).toContainText("Putting it on now. Door's open if anyone wants to drop into voice.");
   expect(await did(page)).toContain("GET /rooms/r-general/messages?limit=100 as token-1");
   // It tells the owner which room it shows, for presence.
@@ -106,33 +109,11 @@ test("a send the server refuses says why and keeps the words", async ({ page }) 
   await expect(box(page)).toHaveValue("is this thing on");
 });
 
-test("rooms sent while it was still opening aren't lost: each gets a tab, the last one showing", async ({ page }) => {
-  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&missed=r-listening,r-plans");
-  await expect(page.getByRole("tab", { name: "#weekend-plans" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tab")).toHaveText([/#general/, /#listening-room/, /#weekend-plans/]);
-  // Asked once, after it was listening.
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("ask:next:opens"))).toHaveLength(1);
-});
-
-test("a conversation opened from the list gets a tab, and the cursor", async ({ page }) => {
-  await open(page);
-  // The cursor is somewhere else, as it would be after reading for a while.
-  await page.getByRole("tab", { name: "#general" }).focus();
-  await expect(box(page)).not.toBeFocused();
-  await page.evaluate(() => window.owner?.open("d-jules"));
-  await expect(page.getByRole("tab", { name: "DM with Jules" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Jules");
-  await expect(box(page)).toBeFocused();
-  // Reads and presence arrive in any order: the last room reported is the DM.
-  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "room").at(-1)).toEqual({ kind: "room", server: SERVER, roomId: "d-jules" });
-  // Opening it again shows the same tab rather than adding another.
-  await page.evaluate(() => window.owner?.open("r-general"));
-  await expect(page.getByRole("tab")).toHaveCount(2);
-});
-
 test("a name in a conversation opens that person's card beside it; Escape gives the name the keyboard back", async ({ page }) => {
   await open(page);
   const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  // Once the link card above has come in and nothing is moving (#361).
+  await still(name);
   await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await expect(card).toBeVisible();
@@ -217,7 +198,7 @@ for (const scale of [1, 2]) {
   });
 }
 
-test("from a name's card, Message opens the DM here and Knock knocks", async ({ page }) => {
+test("from a name's card, Message asks the list window to show the DM and Knock knocks", async ({ page }) => {
   await open(page);
   await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
   const card = page.getByRole("dialog", { name: "Eli" });
@@ -225,7 +206,8 @@ test("from a name's card, Message opens the DM here and Knock knocks", async ({ 
   await expect(card.getByRole("button", { name: "Knocked" })).toBeVisible();
   await expect.poll(() => did(page)).toContain("POST /knock as token-1");
   await card.getByRole("button", { name: "Message" }).click();
-  await expect(page.getByRole("tab", { name: "DM with Eli" })).toHaveAttribute("aria-selected", "true");
+  // Shown where conversations open: beside the list, or a window of its own.
+  await expect.poll(async () => intents(await did(page)).find((intent) => intent.kind === "open")).toMatchObject({ kind: "open", server: SERVER, conversation: "dm" });
   await expect(card).toHaveCount(0);
   expect(await did(page)).toContain("POST /dms as token-1");
 });
@@ -350,6 +332,7 @@ test("the sound settings rule the voice strip's sounds as they do the voice bar'
   await page.evaluate(() => localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: false })));
   await yours.getByRole("button", { name: "Mute" }).click();
   await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
+  await expect.poll(async () => (await did(page)).filter((line) => line === "answered:next:voicecontrol").length).toBe(1);
   // Back on, but every sound muted.
   await page.evaluate(() => {
     localStorage.setItem("linger.sound.categories", JSON.stringify({ controls: true }));
@@ -357,6 +340,9 @@ test("the sound settings rule the voice strip's sounds as they do the voice bar'
   });
   await yours.getByRole("button", { name: "Muted" }).click();
   await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
+  // The sound is the list window's answer, which comes a moment after the
+  // button changes: settled before the settings change again.
+  await expect.poll(async () => (await did(page)).filter((line) => line === "answered:next:voicecontrol").length).toBe(2);
   // Quiet hours all day: they hush what arrives on its own, not what you press (#186).
   await page.evaluate(() => {
     localStorage.setItem("linger.sound.muted", "false");
@@ -396,24 +382,6 @@ test("a message is drawn in its sender's message face, and only ever a sans one"
   expect(await face()).not.toContain("mono");
 });
 
-test("a brand new DM opened into the tabs waits for its conversation rather than vanishing", async ({ page }) => {
-  await open(page);
-  // The list opened a DM the server has only just made: this window hears of it after.
-  await page.evaluate(() => window.owner?.open("d-dave"));
-  // Something else changes first.
-  await page.evaluate(() =>
-    window.owner?.frame({ op: "presence.update", d: { user_id: "u-eli", state: "away", room_id: null, away_message: "back soon" } }),
-  );
-  await page.evaluate(() =>
-    window.owner?.frame({
-      op: "room.create",
-      d: { id: "d-dave", slug: "d-dave", name: "", topic: null, kind: "dm", member_ids: ["u-matt", "u-dave"], position: 0, archived_at: null, last_message_id: null },
-    }),
-  );
-  await expect(page.getByRole("tab", { name: "DM with Dave" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tab")).toHaveCount(2);
-});
-
 test("a window opened on a DM it hasn't heard of yet waits for it rather than closing", async ({ page }) => {
   await page.goto("/tests/fixtures/next-chat-window.html?room=d-dave");
   await page.waitForTimeout(300);
@@ -424,36 +392,17 @@ test("a window opened on a DM it hasn't heard of yet waits for it rather than cl
       d: { id: "d-dave", slug: "d-dave", name: "", topic: null, kind: "dm", member_ids: ["u-matt", "u-dave"], position: 0, archived_at: null, last_message_id: null },
     }),
   );
-  await expect(page.getByRole("tab", { name: "DM with Dave" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("region", { name: "Dave" })).toBeVisible();
   expect(await did(page)).not.toContain("window:close");
 });
 
-test("moves between tabs and closes them from the keyboard, even while typing", async ({ page }) => {
+test("Ctrl+W closes the window, even while typing, as it closes a tab", async ({ page }) => {
   await open(page);
-  await page.evaluate(() => {
-    window.owner?.open("d-jules");
-    window.owner?.open("r-plans");
-  });
-  const showing = page.getByRole("tab", { selected: true });
-  await expect(showing).toHaveAccessibleName("#weekend-plans");
   await box(page).click();
-  await page.keyboard.press("Control+Tab");
-  await expect(showing).toHaveAccessibleName("#general");
-  await page.keyboard.press("Control+Shift+Tab");
-  await expect(showing).toHaveAccessibleName("#weekend-plans");
-  await page.keyboard.press("Control+PageUp");
-  await expect(showing).toHaveAccessibleName("DM with Jules");
-  await page.keyboard.press("Alt+1");
-  await expect(showing).toHaveAccessibleName("#general");
-  await page.keyboard.press("Alt+9");
-  await expect(showing).toHaveAccessibleName("#weekend-plans");
-  await page.keyboard.press("Control+Shift+PageUp");
-  await expect(page.getByRole("tab")).toHaveText([/general/, /weekend-plans/, /Jules/]);
-  await page.keyboard.press("Control+Shift+PageDown");
-  await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
+  await page.keyboard.type("never mind");
   await page.keyboard.press("Control+w");
-  await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
-  await expect(showing).toHaveAccessibleName("DM with Jules");
+  await expect.poll(() => did(page)).toContain("window:close");
+  expect(intents(await did(page)).at(-1)).toEqual({ kind: "closing" });
 });
 
 test("Ctrl+K asks the list window for Search, and Ctrl+, for Settings, even while typing", async ({ page }) => {
@@ -468,20 +417,7 @@ test("Ctrl+K asks the list window for Search, and Ctrl+, for Settings, even whil
   await expect(box(page)).toHaveValue("");
 });
 
-test("pops the showing tab out into its own window, and its draft goes with it", async ({ page }) => {
-  await open(page);
-  await page.evaluate(() => window.owner?.open("d-jules"));
-  await page.getByRole("tab", { name: "#general" }).click();
-  await box(page).click();
-  await page.keyboard.type("half a thought");
-  await page.getByRole("button", { name: "Open in its own window" }).click();
-  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "popout", server: SERVER, roomId: "r-general" });
-  await expect(page.getByRole("tab")).toHaveText([/Jules/]);
-  const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#r-general`);
-  expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "half a thought" });
-});
-
-test("a conversation in its own window: its header is the title bar, and Back to tabs takes it and its draft back", async ({ page }) => {
+test("a conversation in its own window: its header is the title bar, and Back beside your list takes it and its draft back", async ({ page }) => {
   await page.addInitScript((key) => {
     if (!sessionStorage.getItem("seeded")) {
       localStorage.setItem(key, JSON.stringify({ text: "carried over", at: Date.now() }));
@@ -489,7 +425,7 @@ test("a conversation in its own window: its header is the title bar, and Back to
     }
   }, `linger.next.handoff.${SERVER}#r-general`);
   await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
-  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&single=1");
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general");
   const pane = page.getByRole("region", { name: "#general" });
   await expect(pane).toBeVisible();
   await expect(page.getByRole("tablist")).toHaveCount(0);
@@ -499,11 +435,11 @@ test("a conversation in its own window: its header is the title bar, and Back to
   // The draft that came with it is in the box, and the cursor is there.
   await expect(box(page)).toHaveValue("carried over");
   await expect(box(page)).toBeFocused();
-  // It doesn't take over the tabs remembered for the chat window.
+  // It doesn't take over the tabs remembered beside the list.
   expect(await page.evaluate(() => window.localStorage.getItem("linger.next.tabs"))).toBeNull();
 
-  // The pop-out button's mirror: a symbol named Back to tabs, with no words showing (#214).
-  const back = page.getByRole("button", { name: "Back to tabs" });
+  // The pop-out button's mirror: a symbol named Back beside your list, with no words showing (#214).
+  const back = page.getByRole("button", { name: "Back beside your list" });
   await expect(back).toHaveAttribute("data-kit", "IconButton");
   await expect(back).toHaveText("");
   await page.keyboard.type(", and more");
@@ -514,92 +450,34 @@ test("a conversation in its own window: its header is the title bar, and Back to
   expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "carried over, and more" });
 });
 
-test("a conversation back from its own window arrives with its draft", async ({ page }) => {
-  await open(page);
-  await page.evaluate((key) => window.localStorage.setItem(key, JSON.stringify({ text: "still typing", at: Date.now() })), `linger.next.handoff.${SERVER}#d-jules`);
-  await page.evaluate(() => window.owner?.open("d-jules"));
-  await expect(page.getByRole("tab", { name: "DM with Jules" })).toHaveAttribute("aria-selected", "true");
-  await expect(box(page)).toHaveValue("still typing");
-  // Taken once: it isn't waiting to turn up again.
-  expect(await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#d-jules`)).toBeNull();
-});
-
-test("switching to windows moves every tab into its own window, the one showing last", async ({ page }) => {
-  await open(page);
-  await page.evaluate(() => {
-    window.owner?.open("d-jules");
-    window.owner?.open("r-plans");
-  });
-  await page.getByRole("tab", { name: "DM with Jules" }).click();
-  await box(page).click();
-  await page.keyboard.type("for jules");
-  // Already tabs: nothing moves. Proving nothing happens takes a moment's wait.
-  await page.evaluate(() => window.owner?.mode("tabs"));
-  await page.waitForTimeout(300);
-  await expect(page.getByRole("tab")).toHaveCount(3);
-  expect(await did(page)).not.toContain("window:close");
-  await page.evaluate(() => window.owner?.mode("windows"));
-  await expect.poll(() => did(page)).toContain("window:close");
-  expect(intents(await did(page)).filter((intent) => intent.kind === "popout")).toEqual([
-    { kind: "popout", server: SERVER, roomId: "r-general" },
-    { kind: "popout", server: SERVER, roomId: "r-plans" },
-    { kind: "popout", server: SERVER, roomId: "d-jules" },
-  ]);
-  const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${SERVER}#d-jules`);
-  expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "for jules" });
-});
-
-test("switching back to tabs sends a conversation's own window home", async ({ page }) => {
-  await page.goto("/tests/fixtures/next-chat-window.html?room=d-jules&single=1");
+test("switching back to beside the list sends a conversation's own window home", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-chat-window.html?room=d-jules");
   await expect(page.getByRole("region", { name: "Jules" })).toBeVisible();
   await page.evaluate(() => window.owner?.mode("tabs"));
   await expect.poll(() => did(page)).toContain("window:close");
   expect(intents(await did(page))).toContainEqual({ kind: "tabs", server: SERVER, roomId: "d-jules" });
 });
 
-test("with several servers, a tab carries its server's stripe and name, and the header says which", async ({ page }) => {
-  await open(page, "room=r-general&servers");
-  await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
-  const raid = page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" });
-  await expect(raid).toHaveAttribute("aria-selected", "true");
-  // Two servers, two tabs, each striped in its own server's color.
-  await expect(page.getByRole("tab", { name: "#general, The Good Company" })).toBeVisible();
-  const stripes = await page.locator(".k-tab[data-stripe='yes']").evaluateAll((tabs) => tabs.map((tab) => getComputedStyle(tab).getPropertyValue("--tab-stripe").trim()));
-  const palette = await page.evaluate(() => ["amber", "violet"].map((key) => getComputedStyle(document.documentElement).getPropertyValue(`--name-${key}`).trim()));
-  expect(stripes).toEqual(palette);
+test("with several servers, the title bar says which server the conversation is on", async ({ page }) => {
+  await open(page, "room=a-raid-night&server=https://ashen-lanterns.example&servers");
+  await expect(page.getByRole("region", { name: "#raid-night" })).toBeVisible();
   await expect(page.locator(".nx-pane-server")).toHaveText("Ashen Lanterns");
 });
 
-test("a server signed out of takes its tabs with it, and with nothing left the window closes", async ({ page }) => {
+test("signed out of its server, the window closes; another server's going is nothing to it", async ({ page }) => {
   await open(page, "room=r-general&servers");
-  await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
-  await expect(page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" })).toHaveAttribute("aria-selected", "true");
   await page.evaluate(() => window.owner?.signedOut("https://ashen-lanterns.example"));
-  await expect(page.getByRole("tab")).toHaveCount(1);
-  await expect(page.getByRole("tab", { name: /#general/ })).toHaveAttribute("aria-selected", "true");
+  await page.waitForTimeout(200);
   expect(await did(page)).not.toContain("window:close");
+  await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
   await page.evaluate((server) => window.owner?.signedOut(server), SERVER);
   await expect.poll(() => did(page)).toContain("window:close");
 });
 
-test("a server signed in to while the window is open can be opened in it", async ({ page }) => {
-  await open(page);
-  await page.evaluate(() => window.owner?.signInGuild());
-  // Once this window has caught up with it, a room there opens as a tab.
-  await expect
-    .poll(async () => {
-      await page.evaluate(() => window.owner?.open("a-raid-night", "https://ashen-lanterns.example"));
-      return page.getByRole("tab", { name: /#raid-night/ }).count();
-    })
-    .toBe(1);
-  await expect(page.getByRole("tab", { name: "#raid-night, Ashen Lanterns" })).toHaveAttribute("aria-selected", "true");
-});
-
-test("a search hit opens its conversation at the message: one in reach is jumped to and marked", async ({ page }) => {
-  await open(page);
+test("brought forward on a search hit, it goes to the message: one in reach is jumped to and marked", async ({ page }) => {
+  await open(page, "room=r-listening");
   const first = (await page.evaluate(() => window.owner?.held("r-listening") ?? []))[0]?.id ?? "";
   await page.evaluate((id) => window.owner?.open("r-listening", undefined, id), first);
-  await expect(page.getByRole("tab", { name: /#listening-room/ })).toHaveAttribute("aria-selected", "true");
   const row = page.locator(`[data-message="${first}"]`);
   await expect(row).toHaveAttribute("data-flash", "yes");
   await expect(row).toBeInViewport();
@@ -627,31 +505,15 @@ test("a window opened on a message goes there", async ({ page }) => {
   expect(reads).toEqual(["GET /rooms/r-general/messages?around=l0000300&limit=100 as token-1"]);
 });
 
-test("with one server, tabs and headers say nothing about servers", async ({ page }) => {
+test("with one server, the title bar says nothing about servers", async ({ page }) => {
   await open(page);
-  await expect(page.getByRole("tab", { name: "#general" })).toBeVisible();
-  await expect(page.locator(".k-tab[data-stripe='yes']")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
   await expect(page.locator(".nx-pane-server")).toHaveCount(0);
 });
 
-test("remembers open tabs across a restart", async ({ page }) => {
+test("a half-typed line outlasts a restart, and goes once it's sent (decision 11)", async ({ page }) => {
   await open(page);
-  await page.evaluate(() => window.owner?.open("d-jules"));
-  await expect(page.getByRole("tab", { name: "DM with Jules" })).toBeVisible();
-  await page.goto("/tests/fixtures/next-chat-window.html?room=r-plans");
-  await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
-});
-
-test("a half-typed line outlasts its tab and a restart, and goes once it's sent (decision 11)", async ({ page }) => {
-  await open(page);
-  await page.evaluate(() => window.owner?.open("d-jules"));
-  await page.getByRole("tab", { name: "#general" }).click();
   await box(page).fill("see you at the");
-  await page.getByRole("button", { name: "Close #general" }).click();
-  await expect(page.getByRole("tab", { name: "#general" })).toHaveCount(0);
-  await page.evaluate(() => window.owner?.open("r-general"));
-  await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
-  await expect(box(page)).toHaveValue("see you at the");
   // A restart.
   await page.goto("/tests/fixtures/next-chat-window.html?room=r-general");
   await expect(box(page)).toHaveValue("see you at the");
@@ -713,8 +575,8 @@ test("a knock the server refuses says why in the DM's header, never Knocked, the
 });
 
 for (const [width, query, where] of [
-  [420, "", "the chat window at its narrowest"],
-  [360, "&single=1", "a conversation's own window"],
+  [420, "", "a conversation at its narrowest beside the list"],
+  [360, "&narrow", "a conversation's own window at its narrowest"],
 ] as const) {
   test(`in ${where}, a refused knock's reason is in Knock's bubble, whole, and goes on its own (#288)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
@@ -876,9 +738,9 @@ test("push-to-talk turned on or off mid-call starts or stops this window listeni
   expect(intents(await did(page)).filter((intent) => intent.kind === "voice.join")).toEqual([]);
 });
 
-test("closing the last tab closes the window and tells the list window", async ({ page }) => {
+test("closing the window tells the list window", async ({ page }) => {
   await open(page);
-  await page.getByRole("button", { name: "Close #general" }).click();
+  await page.getByRole("button", { name: "Close window" }).click();
   await expect.poll(() => did(page)).toContain("window:close");
   expect(intents(await did(page)).at(-1)).toEqual({ kind: "closing" });
 });
@@ -898,5 +760,5 @@ test("says so when the list window doesn't answer, and asks again when told to",
   // It was only busy.
   await page.evaluate(() => window.owner?.wake());
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByRole("tab", { name: /#general/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
 });

@@ -179,9 +179,17 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
         if (!answer) return;
         const { v: _v, id: _id, from: _from, ...asked } = question;
         note(`ask:${event}:${JSON.stringify(asked)}`);
+        // Written down once the answer has reached the window, so a test can
+        // wait for what the answer causes (a sound played, or not) rather
+        // than for something drawn a moment before it.
+        const answered = (sent: unknown) =>
+          window.setTimeout(() => {
+            deliver(`${event}:answer`, { v: 1, id: question.id, from: "main", answer: sent });
+            note(`answered:${event}`);
+          }, 5);
         void Promise.resolve()
           .then(() => answer(asked))
-          .then(reply, (error: unknown) => refuse(error instanceof Error && error.message !== "" ? error.message : "something went wrong"));
+          .then(answered, (error: unknown) => refuse(error instanceof Error && error.message !== "" ? error.message : "something went wrong"));
       }
     }
   }

@@ -33,6 +33,9 @@ export const ICON_NAMES = [
   "quiet",
   "popout",
   "popin",
+  "fold",
+  "unfold",
+  "beside",
   "plus",
   "more",
   "up",
@@ -186,6 +189,25 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
     </>
   ),
   /* Popout's mirror (#214): the same box, the arrow coming in. */
+  // The list window's side (#337): a window with the list down its left,
+  // and a chevron pointing where the conversations go.
+  fold: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" fill="none" /><path d="M6 3v10M11 6.5L9.5 8L11 9.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  unfold: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" fill="none" /><path d="M6 3v10M9.5 6.5L11 8L9.5 9.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Conversations beside the list (#337), for Settings → Windows: one
+  // window, the list down its left and a conversation's lines beside it.
+  beside: (
+    <>
+      <rect x="1.8" y="2.5" width="12.4" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.35" fill="none" /><path d="M6 2.5v11M3.4 5.5h1.2M3.4 8h1.2M3.4 10.5h1.2M8 9.5h4M8 11.5h2.6" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinecap="round" />
+    </>
+  ),
   popin: (
     <>
       <path d="M7.5 4.5v4h4M13.3 2.7L7.7 8.3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />

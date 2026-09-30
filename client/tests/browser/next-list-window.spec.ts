@@ -16,7 +16,26 @@ async function open(page: Page, query = "") {
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await settled(page);
 }
+
+/**
+ * Every connection the page opened has had its `ready`. In development React
+ * starts the list twice, so each server is connected twice, and a `ready`
+ * clears what the rooms had loaded. The page's fake gives both the same
+ * session, where a real server's second would be new, so a room opened
+ * between the two would sit empty (#355): tests start once both are in.
+ */
+async function settled(page: Page) {
+  await expect
+    .poll(async () => {
+      const lines = await did(page);
+      const connects = lines.filter((line) => line.startsWith("connect ")).length;
+      return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
+    })
+    .toBe(true);
+}
+
 
 async function did(page: Page): Promise<string[]> {
   return (await page.evaluate(() => document.body.dataset.did ?? "")).split("|");
@@ -185,11 +204,13 @@ test("a rock never gives the page anything to scroll (#251)", async ({ page }) =
   }
 });
 
-test("opening a room asks the shell for the chat window, on that server", async ({ page }) => {
+test("opening a room shows it beside the list, on that server (#337)", async ({ page }) => {
   await open(page);
   await toggle(page, "Casa da Ribeira").click();
   await section(page, "Casa da Ribeira").getByRole("list", { name: /Rooms/ }).getByRole("button").first().click();
-  await expect.poll(async () => (await did(page)).find((line) => line.startsWith("next_open_chat"))).toContain(`"server":"${LISBON}"`);
+  await expect(page.getByRole("tab", { name: /, Casa da Ribeira$/, selected: true })).toBeVisible();
+  // In this window: the shell is asked for no other.
+  expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
 test("the gear and Ctrl+, open Settings", async ({ page }) => {
@@ -211,16 +232,22 @@ test("your own card's Edit profile asks the shell for Settings, on Profile (#271
     .toEqual([`next_open_settings:${JSON.stringify({ section: "profile" })}`]);
 });
 
-test("Search and Media open from the foot, and Ctrl+K opens Search", async ({ page }) => {
+test("Search and Media open from the foot as tabs beside the list, and Ctrl+K opens Search (#337)", async ({ page }) => {
+  // Room for both: in a list-sized window the tab would take the whole window.
+  await page.setViewportSize({ width: 1120, height: 820 });
   await open(page);
-  await page.getByRole("button", { name: "Media" }).click();
-  await page.getByRole("button", { name: "Search" }).click();
+  const foot = page.getByRole("navigation", { name: "Media and search" });
+  await foot.getByRole("button", { name: "Media" }).click();
+  await expect(page.getByRole("tab", { name: "Media", selected: true })).toBeVisible();
+  await foot.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Media" }).click();
   await page.keyboard.press("Control+k");
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([
-    `next_open_tool:${JSON.stringify({ which: "media" })}`,
-    `next_open_tool:${JSON.stringify({ which: "search" })}`,
-    `next_open_tool:${JSON.stringify({ which: "search" })}`,
-  ]);
+  await expect(page.getByRole("tab", { name: "Search", selected: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search", exact: true })).toBeFocused();
+  // One of each, in this window: the shell is asked for no other.
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  expect((await did(page)).filter((line) => line.startsWith("next_open_tool"))).toEqual([]);
 });
 
 test("a window that asks for a snapshot gets every server, each with a lent token", async ({ page }) => {
@@ -335,7 +362,8 @@ test.describe("adding a server you're already on", () => {
   });
 });
 
-test("Media and Search at the foot of the list open their own windows", async ({ page }) => {
+test("with each in its own window, Media and Search at the foot of the list open their own windows", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.next.conversations", "windows"));
   await open(page, "?one");
   const foot = page.getByRole("navigation", { name: "Media and search" });
   await foot.getByRole("button", { name: "Media" }).click();
@@ -346,19 +374,19 @@ test("Media and Search at the foot of the list open their own windows", async ({
   ]);
 });
 
-test("a search hit asked for from another window opens the chat window at that message", async ({ page }) => {
+test("a search hit asked for from another window opens beside the list, at that message", async ({ page }) => {
   await open(page, "?one");
   await expect
     .poll(async () => {
       await page.evaluate(() =>
         window.core?.ask("next:intent", { kind: "open", server: "https://good-company.example", roomId: "r-general", conversation: "room", messageId: "m000005" }),
       );
-      return (await did(page)).filter((line) => line.startsWith("next_open_chat")).length;
+      return page.getByRole("tab", { name: "#general", selected: true }).count();
     })
-    .toBeGreaterThan(0);
-  expect((await did(page)).find((line) => line.startsWith("next_open_chat"))).toBe(
-    `next_open_chat:${JSON.stringify({ server: "https://good-company.example", room: "r-general", message: "m000005" })}`,
-  );
+    .toBe(1);
+  // Opened once, around the message.
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("history r-general"))).toEqual(["history r-general?around=m000005&limit=100"]);
+  await expect(page.locator('[data-message="m000005"]')).toHaveAttribute("data-flash", "yes");
 });
 
 test("a clicked desktop banner opens its conversation at the message; one from a server you've left does nothing (decision 20)", async ({ page }) => {
@@ -368,15 +396,16 @@ test("a clicked desktop banner opens its conversation at the message; one from a
     window.core?.banner({ server: "https://good-company.example", room: 7 });
     window.core?.banner({ server: "https://elsewhere.example", room: "r-general", message: "m000001" });
   });
+  await page.waitForTimeout(200);
+  await expect(page.getByRole("tab")).toHaveCount(0);
   await expect
     .poll(async () => {
       await page.evaluate(() => window.core?.banner({ server: "https://good-company.example", room: "r-general", message: "m000005" }));
-      return (await did(page)).filter((line) => line.startsWith("next_open_chat"));
+      return page.getByRole("tab", { name: "#general", selected: true }).count();
     })
-    .not.toEqual([]);
-  expect(new Set((await did(page)).filter((line) => line.startsWith("next_open_chat")))).toEqual(
-    new Set([`next_open_chat:${JSON.stringify({ server: HOME, room: "r-general", message: "m000005" })}`]),
-  );
+    .toBe(1);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("history r-general"))).toContain("history r-general?around=m000005&limit=100");
+  await expect(page.locator('[data-message="m000005"]')).toHaveAttribute("data-flash", "yes");
 });
 
 test("the list tells the desktop what closing it does: the tray by default, and what Settings changes it to", async ({ page }) => {
@@ -448,14 +477,14 @@ async function reported(page: Page): Promise<Controls | undefined> {
 }
 
 /**
- * Eli's chat window on #general (tests/fixtures/next-chat-window.tsx, `as=eli`),
+ * Eli's window on #general (tests/fixtures/next-chat-window.tsx, `as=eli`),
  * and a way to hand it the room's voice as the server would pass on what your
  * engine reported: the controls it was last told.
  */
 async function elisView(page: Page) {
   const eli = await page.context().newPage();
   await eli.goto("/tests/fixtures/next-chat-window.html?room=r-general&as=eli");
-  await expect(eli.getByRole("tabpanel")).toBeVisible();
+  await expect(eli.getByRole("region", { name: "#general" })).toBeVisible();
   const told = async (controls: Controls | undefined) => {
     if (controls === undefined) throw new Error("nothing was reported");
     await eli.evaluate((mine) => {

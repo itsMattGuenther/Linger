@@ -15,7 +15,7 @@ people who already know each other, not a stadium of fifty thousand strangers.
 > anything. That is the product thesis in one word.
 
 <div align="center">
-<img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list beside a chat window">
+<img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list with a conversation open beside it, in one window">
 </div>
 
 **Status: 0.4.4, testing with friends.** It works day to day; voice across
@@ -56,15 +56,16 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   DMs, and everyone on the server, here, away (with their away message) or
   offline. Closing it keeps Linger running in the tray, and it can start when
   you sign in to the computer (off unless you turn it on).
-- **Conversations as tabs** in one chat window, or each in a window of its own.
+- **Conversations beside the list**, as tabs in the list's own window, which
+  folds back to just the list when you want it slim. Or each in a window of its own.
 - **No unread counts.** A room with something new gets a bolder name, and a
   conversation opens at "you left off here". A DM you haven't read is lit in
   amber as well, with a desktop banner saying who it's from. Never a badge.
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
   and away messages.
-- **Files and media.** 500 MB uploads, EXIF always stripped. The Media window
-  keeps everything ever shared; star things to keep them forever.
+- **Files and media.** 500 MB uploads, EXIF always stripped. Media, a tab
+  beside your list, keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
   goes through the host's server, which passes it on so up to 25 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.

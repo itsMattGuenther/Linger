@@ -264,15 +264,32 @@ Linger is one tall window: your **list**. From the top:
 - **People**: everyone on the server, with where they are and their status.
   **Away** and **Offline** fold up under them.
 
-Click a room or a DM and it opens in the **chat window**. Each conversation
-gets a tab there; **Ctrl+Tab** moves between them and **Ctrl+W** closes one.
+Click a room or a DM and it opens **beside the list**, in the same window: the
+window grows to the right to make room (to the left if your screen ends
+there), and the list and the conversation move, snap and minimize together.
+Each conversation gets a tab; **Ctrl+Tab** moves between them and **Ctrl+W**
+closes one. The fold button at the conversations' left edge folds the window
+back to just your list and keeps your tabs; the button beside the gear
+brings them back. Closing the last tab folds it too.
+
+Drag the line between your list and the conversations to make the list wider
+or narrower. The window stays the same size, and Linger remembers the width.
+Double-click the line to put it back.
+
+On a tiling desktop like Hyprland, the desktop decides how big a window is,
+so Linger's doesn't grow or shrink. If its tile is too narrow for both, the
+conversation takes the whole window and the fold button takes you back to
+the list. Float the window if you'd like the slim list back.
+
 The pop-out button in the title bar (a box with an arrow leaving it) puts a
 tab in a window of its own, and the same box with the arrow coming in,
-**Back to tabs**, puts it back. If you'd rather every conversation had its own window, choose
+**Back beside your list**, puts it back. If you'd rather every conversation had its own window, choose
 that in **Settings → Windows**.
 
-At the foot of the list are **Media** and **Search**, each in a window of its
-own. When you're in voice, the voice bar sits just above them.
+At the foot of the list are **Media** and **Search**. Each opens as a tab
+beside the list, like a conversation (**Ctrl+K** opens Search from anywhere),
+and pops out into a window of its own the same way. When you're in voice, the
+voice bar sits just above them.
 
 **Closing the list doesn't quit Linger.** It keeps running in the tray (the
 little door icon near your clock), so voice, knocks and notifications carry
@@ -825,11 +842,13 @@ different promise from Signal, and you should know which one you are getting.
 **Nothing is collected about you.** No telemetry, no analytics, no crash
 reports. Not anonymous ones either. There is nothing to opt out of.
 
-**On Hyprland, including Omarchy, the mouse pointer jumps into the chat
-window when you open a conversation.** That's Hyprland, not Linger. When an
-app brings one of its windows forward, Hyprland moves the pointer to the
-middle of it, and Linger brings the chat window forward so you can start
-typing. Linger leaves this to your desktop rather than working around it. If
+**On Hyprland, including Omarchy, the mouse pointer jumps into a
+conversation's window when it opens in a window of its own** (popped out, or
+with **Each in its own window**). That's Hyprland, not Linger. When an app
+brings one of its windows forward, Hyprland moves the pointer to the middle
+of it, and Linger brings the conversation's window forward so you can start
+typing. Conversations opened beside the list don't do this: they're in the
+window you're already in. Linger leaves this to your desktop rather than working around it. If
 you'd rather the pointer stayed put, turn the behaviour off in Hyprland. On
 Omarchy, add this to `~/.config/hypr/looknfeel.lua`:
 

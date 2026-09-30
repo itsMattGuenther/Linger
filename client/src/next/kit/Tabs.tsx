@@ -1,4 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
+import type { IconName } from "./icons";
 import { IconButton } from "./IconButton";
 import { Marker, type MarkerPerson } from "./Marker";
 import { VoiceGlyph } from "./VoiceGlyph";
@@ -13,8 +15,8 @@ function stripeStyle(key: string | undefined): CSSProperties | undefined {
   return { "--tab-stripe": `var(--name-${key})` } as CSSProperties;
 }
 
-/** What leads a tab's title: a room's #, or a one-to-one DM's person. */
-export type TabLead = { kind: "room" } | { kind: "person"; person: MarkerPerson };
+/** What leads a tab's title: a room's #, a one-to-one DM's person, or the icon of a tab that isn't a conversation (Media, Search). */
+export type TabLead = { kind: "room" } | { kind: "person"; person: MarkerPerson } | { kind: "icon"; icon: IconName };
 
 export interface TabItem {
   id: string;
@@ -212,6 +214,11 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
               onClick={() => onSelect(tab.id)}
             >
               {tab.lead?.kind === "person" ? <Marker {...tab.lead.person} size="sm" /> : null}
+              {tab.lead?.kind === "icon" ? (
+                <span className="k-tab-icon" aria-hidden="true">
+                  <Icon name={tab.lead.icon} size="sm" />
+                </span>
+              ) : null}
               <span className="k-tab-title">
                 {tab.lead?.kind === "room" ? (
                   <span className="k-tab-hash" aria-hidden="true">

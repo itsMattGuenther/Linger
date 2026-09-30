@@ -95,7 +95,7 @@ bundles the current sound player before running it inside each package.
 `scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs` check
 the Buddy list client itself starts in the packaged app, signed in nowhere,
 and the Windows one keeps a screenshot of it. The Windows check also opens
-Settings and a chat window the way the list does and waits for each to draw:
+Settings and a conversation's own window the way the list does and waits for each to draw:
 a window built from a synchronous command deadlocks WebView2 (#205), so every
 window-building command in `src-tauri/src/window.rs` is `async`. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
@@ -151,7 +151,7 @@ and open any of these pages:
   folded), with `&folded` or `&open` to start them all one way, `&quiet` to
   quiet the guild, `&awayfail` to have one server refuse an away message, and
   `&voice` to be in voice;
-- `/tests/fixtures/next-chat.html`: the chat window on the same evening. Add
+- `/tests/fixtures/next-chat.html`: the conversations' view on the same evening. Add
   `?voice=mine`, `?voice=elsewhere` or `?voice=off` for the voice strip's
   states, `?tab=d-jules` to open another tab first, `?big` for a room of 5,000
   messages (`&paged` to load it a page at a time), and `?fail` to have every
@@ -190,8 +190,9 @@ Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
 `next-servers.spec.ts`, `next-chat.spec.ts`, `next-settings.spec.ts`,
 `next-search.spec.ts`, `next-media.spec.ts`) measure the rules in
 `docs/design/system.md`;
-`next-chat-window.spec.ts` checks what the chat window asks of the list window
-and the server.
+`next-chat-window.spec.ts` checks what a conversation's own window asks of the
+list window and the server, and `next-side.spec.ts` the tabs beside the list in
+the real list window: unfolding, folding and the window's size (#337).
 
 ## Icons and Windows packaging
 

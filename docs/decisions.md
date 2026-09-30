@@ -498,3 +498,47 @@ We're beyond that."
   are records of their time and stay as written; the decisions in them stand.
 - Changed together: SPEC §2, §4.12, §4.13 and §7, the README, the buddy list
   design, the idea form, and code comments that argued from "eight friends".
+
+## Decided — the list is the one window, and conversations unfold beside it
+
+**Matt, 2026-09-30 (#337).** A friend asked for the chat window to dock onto
+the buddy list, so the two would move as one. On 2026-09-29 that was planned
+as a third choice in Settings → Windows. Starting it, Matt asked two
+questions: whether a third way of opening conversations would be harder to
+keep from breaking, and whether the list should simply become the core
+window, with the rest of the app unfolding from it and folding back to just
+the list, which would also look nothing like Discord. He looked at a mockup
+of it at real size and decided:
+
+- **The docked window is the design, not a third choice.** Conversations
+  open as tabs beside the list, in the list's own window, and the separate
+  chat window of tabs is gone. A third choice would have kept every branch
+  between the two old ways and added a third to each: where a conversation
+  opens, which room you count as in, when the chime keeps quiet, what closing
+  does. Replacing the tabs window instead deletes its fiddliest code, the
+  catch-up it needed when it opened and the ten-second queue of
+  conversations the list kept for it (`next:opens`).
+- **"Each in its own window" stays**, for tiling desktops and several
+  monitors. Pop-out is the same kind of window, so it costs little.
+- **Media and Search become tabs beside the list too**, in the same pull
+  request.
+- **The fold button is at the conversations' left edge**, not beside the
+  gear as the first mockup drew it: folding shrinks the window, and a second
+  click on a button beside the gear landed on the list's close button, which
+  sends Linger to the tray. Folding takes the edge button away with the
+  conversations. Unfolding is a button beside the gear, neutral rather than
+  the lamp: in amber it read as a notification (Matt, trying it the same
+  day), since amber is what a DM nobody has read is lit in.
+- **The line between the list and the conversations drags** (Matt, the
+  same day): the list's width, kept on this computer, with the window
+  staying its size. The kit's `Splitter` draws it.
+- **Not taken:** gluing two windows together (impossible on Wayland, wobbly
+  on Windows) and two webviews in one window (Tauri still marks it unstable,
+  and WebKitGTK is its weak spot). Both are in #337.
+- **What it costs:** messages are now drawn in the window that holds the
+  keyring and the connections. `docs/design/architecture.md` ("Windows and
+  their roles") says why that's acceptable and what would change it.
+- **On a tiling desktop** the desktop sizes the window, so it can't grow or
+  shrink by itself. Too narrow for both, the conversation takes the window;
+  a slim list there means floating the window, which is the desktop's
+  setting, not Linger's (don't fight the desktop, #226).

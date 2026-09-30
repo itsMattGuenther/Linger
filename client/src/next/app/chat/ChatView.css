@@ -34,3 +34,10 @@
   color: var(--text-muted);
   font-size: var(--text-control);
 }
+
+/* Media or Search beside the list (#337): the view fills the pane, as it
+   fills its own window. */
+.nx-pane-other > * {
+  flex: 1;
+  min-height: 0;
+}

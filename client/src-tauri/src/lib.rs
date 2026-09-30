@@ -582,7 +582,6 @@ pub fn run() {
             updates::newest_version,
             updates::update_install,
             graphics::graphics_started,
-            window::next_open_chat,
             window::next_open_conversation,
             window::next_open_settings,
             window::next_open_tool,

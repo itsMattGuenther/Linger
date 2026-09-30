@@ -81,7 +81,9 @@ try {
     ]);
   for (const [name, command, args, marker] of [
     ["Settings", "next_open_settings", { section: null }, "window=settings"],
-    ["the chat window", "next_open_chat", { server: "https://linger.invalid", room: "r-general", message: null }, "window=chat"],
+    // Conversations beside the list are in the list's own window (#337); a
+    // conversation in a window of its own is built by a command, like Settings.
+    ["a conversation's own window", "next_open_conversation", { server: "https://linger.invalid", room: "r-general", kind: "room", message: null }, "window=chat"],
   ]) {
     await within(60000, `${name} opening and drawing (a white window that never answers is #205)`, (async () => {
       // Not awaited in the page: a command that deadlocks never answers.

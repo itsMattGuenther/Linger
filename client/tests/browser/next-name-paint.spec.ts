@@ -49,7 +49,7 @@ function eliIn(look: Look, face = "silkscreen"): User {
 async function open(page: Page, eli: User) {
   await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
   await page.goto(`/tests/fixtures/next-chat-window.html?room=r-general`);
-  await expect(page.getByRole("tabpanel")).toBeVisible();
+  await expect(page.locator(".nx-pane")).toBeVisible();
   await page.evaluate((user) => window.owner?.frame({ op: "user.update", d: user } as never), eli);
   await page.mouse.move(0, 0);
   await settled(page, inChat(page).locator("[data-kit='Name']"), eli.style);

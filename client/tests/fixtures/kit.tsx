@@ -39,6 +39,7 @@ import {
   SettingRow,
   Swatch,
   Slider,
+  Splitter,
   Switch,
   TabStrip,
   TextField,
@@ -117,6 +118,22 @@ const dave = person("Dave", "jetbrains-mono", solid("cyan"), { line: "side two. 
 const callie = person("Callie", "newsreader", blend("violet", "orchid"), { italic: true, weight: 700 });
 const sam = person("Sam", "silkscreen", solid("rose"), { away: "back after work" });
 const longName = person("Bartholomew-Maximilian the Considerably Long", "inter", solid("sky"));
+
+/** Two panes and the line between them, which drags (the list beside the conversations, #337). */
+function SplitPanes() {
+  const [left, setLeft] = useState(200);
+  return (
+    <div className="g-window" data-testid="split" style={{ display: "flex", height: 120, width: 520 }}>
+      <div className="g-window-body" style={{ width: left, flex: "none" }}>
+        The list, {left} wide
+      </div>
+      <Splitter label="Width of the list" value={left} min={120} max={360} step={20} reset={200} onChange={setLeft} />
+      <div className="g-window-body" style={{ flex: 1 }}>
+        The rest
+      </div>
+    </div>
+  );
+}
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -642,6 +659,7 @@ function Gallery() {
           </TitleBar>
           <div className="g-window-body">Unfocused: the title dims.</div>
         </div>
+        <SplitPanes />
       </Section>
 
       <Section id="menus" title="Menus">
@@ -717,9 +735,9 @@ function Gallery() {
           choices={[
             {
               value: "tabs",
-              title: "As tabs in one window",
-              description: "The default, on any desktop. Pop a tab out when you want two side by side.",
-              art: "intoTabs",
+              title: "Beside your list, in one window",
+              description: "The default, on any desktop. Fold it back to just the list whenever you like.",
+              art: "beside",
             },
             {
               value: "windows",
@@ -728,7 +746,7 @@ function Gallery() {
               art: "windows",
             },
           ]}
-          note="Voice stays on when you switch tabs or close a window."
+          note="Voice stays on when you switch tabs, fold your list or close a window."
         />
         <div className="g-compact">
           <ChoiceCards

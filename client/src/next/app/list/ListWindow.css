@@ -1,0 +1,56 @@
+/* The list window (#337): the list, and beside it the conversations while
+   it's unfolded. One window to the desktop, so it moves, snaps and tiles as
+   one. Sizes and colors are tokens; the list's width is the one it was left
+   at (core/side.ts), set on the element as --list-width. */
+
+.nx-app {
+  display: flex;
+  height: 100vh;
+  background: var(--surface-window);
+}
+
+/* As the list alone: whatever rocks past the window's edge (#251) is clipped,
+   and the page never has anything to scroll. */
+#root:has(> .nx-app) {
+  overflow: clip;
+}
+
+.nx-app-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: clip;
+}
+
+/* Side by side: the list keeps its width, and the conversations take the
+   rest. The line between them is the kit's Splitter, which moves. */
+.nx-app[data-side="beside"] .nx-app-list {
+  flex: none;
+  width: var(--list-width);
+}
+
+/* Too narrow for both (a narrow tile, a small screen): the conversation has
+   the window, and its title bar has the way back to the list. */
+.nx-app[data-side="over"] .nx-app-list {
+  display: none;
+}
+
+.nx-app .nx-list {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.nx-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nx-side .nx-chat {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}

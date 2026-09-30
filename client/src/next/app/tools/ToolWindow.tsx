@@ -1,31 +1,36 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { tauriBus } from "../../core/bus";
+import { PROTOCOL, tauriBus } from "../../core/bus";
+import { loadMode } from "../../core/conversations";
 import { isSearchKey, isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
-import { Button, Icon, type IconName, Spinner, TitleBar } from "../../kit";
+import { MODE, type ModeMessage } from "../../core/share";
+import { Button, Icon, IconButton, type IconName, Spinner, TitleBar } from "../../kit";
 import { useFollowing } from "../useFollowing";
 import { WindowMessage } from "../WindowMessage";
 import "./ToolWindow.css";
 
 /**
- * Search's and Media's windows (decision 15): viewers, like the chat window
- * (docs/design/architecture.md). The frame they share: catching up with the
- * list window, the title bar, counting towards you being here, closing once
- * no server is left, and coming forward with the cursor where it belongs
- * when the list asks again (`next:shown`).
+ * Search's and Media's windows (decision 15): viewers, like a conversation's
+ * own window (docs/design/architecture.md). The frame they share: catching
+ * up with the list window, the title bar, counting towards you being here,
+ * closing once no server is left, coming forward with the cursor where it
+ * belongs when the list asks again (`next:shown`), and going back beside the
+ * list as a tab (#337).
  */
 export function ToolWindow({
   title,
   icon,
   screen,
+  which,
   children,
 }: {
   title: string;
   icon: IconName;
   screen: string;
+  which: "media" | "search";
   children: (following: Following, shown: number) => ReactNode;
 }) {
   const held = useFollowing();
@@ -49,7 +54,7 @@ export function ToolWindow({
     );
   }
   return (
-    <Frame following={held.following} title={title} icon={icon} screen={screen}>
+    <Frame following={held.following} title={title} icon={icon} screen={screen} which={which}>
       {children}
     </Frame>
   );
@@ -60,12 +65,14 @@ function Frame({
   title,
   icon,
   screen,
+  which,
   children,
 }: {
   following: Following;
   title: string;
   icon: IconName;
   screen: string;
+  which: "media" | "search";
   children: (following: Following, shown: number) => ReactNode;
 }) {
   const { intend } = following;
@@ -133,12 +140,52 @@ function Frame({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [intend, screen]);
 
+  // Back beside the list, as a tab: the list window opens it there (the
+  // `tool` intent), and this window closes. Settings changing how things
+  // open to beside the list does the same.
+  const backBeside = useCallback(() => {
+    void intend({ kind: "tool", which }).catch(() => undefined);
+    close();
+  }, [intend, which, close]);
+  const rearrange = useRef<(mode: ModeMessage["mode"]) => void>(() => undefined);
+  rearrange.current = (mode) => {
+    if (mode === "tabs") backBeside();
+  };
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<ModeMessage>(MODE, (message) => {
+        if (message.v === PROTOCOL) rearrange.current(message.mode);
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
+  // Only where there's a beside to go back to: not when everything opens in windows of its own.
+  const beside = storedMode() === "tabs" ? <IconButton icon="popin" label="Back beside your list" onClick={backBeside} /> : undefined;
+
   return (
     <div className="nx-tool" data-screen={screen}>
-      <TitleBar leading={<Icon name={icon} size="md" />} onClose={isTauri() ? close : undefined}>
+      <TitleBar leading={<Icon name={icon} size="md" />} actions={beside} onClose={isTauri() ? close : undefined}>
         {title}
       </TitleBar>
       <div className="nx-tool-body">{children(following, shown)}</div>
     </div>
   );
+}
+
+/** How things open on this computer, as the list window keeps it (core/conversations.ts). */
+function storedMode(): "tabs" | "windows" {
+  try {
+    return loadMode(window.localStorage);
+  } catch {
+    return "tabs";
+  }
 }

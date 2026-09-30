@@ -86,3 +86,23 @@ test.describe("the Media window", () => {
     });
   });
 });
+
+test.describe("going back beside the list (#337)", () => {
+  test.use({ viewport: { width: 560, height: 680 } });
+
+  test("Back beside your list asks the list window for its tab, and the window closes", async ({ page }) => {
+    await open(page, "media");
+    const back = page.getByRole("button", { name: "Back beside your list" });
+    // The pop-out button's mirror, as on a conversation's own window (#214).
+    await expect(back).toHaveAttribute("data-kit", "IconButton");
+    await back.click();
+    await expect.poll(() => did(page)).toContain("window:close");
+    expect(intents(await did(page))).toContainEqual({ kind: "tool", which: "media" });
+  });
+
+  test("with everything in windows of their own there's no beside to go back to", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("linger.next.conversations", "windows"));
+    await open(page, "search");
+    await expect(page.getByRole("button", { name: "Back beside your list" })).toHaveCount(0);
+  });
+});

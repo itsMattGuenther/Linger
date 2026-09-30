@@ -370,8 +370,8 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   show, Home and End jump, and Delete closes.
 - **`onMove`:** a tab can be dragged along the row. It follows the pointer and
   the tabs it passes slide aside (transforms only, so nothing reflows); a
-  press that travels under 4px is still a click. The chat window adds the
-  keyboard way, Ctrl+Shift+PageUp and PageDown (`core/keys.ts`).
+  press that travels under 4px is still a click. The tabs beside the list add
+  the keyboard way, Ctrl+Shift+PageUp and PageDown (`core/keys.ts`).
 - **Overflow:** more tabs than fit scroll sideways, the showing tab stays in
   view, and the edge with more beyond it fades.
 - **In a title bar:** the row's empty space, and the strip above the tabs,
@@ -381,8 +381,11 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
 
 The top of every Linger window, drawn by Linger (decided 2026-09-25), 40px.
 
-- **Parts:** `leading` (a mark), the title or a `TabStrip`, `actions`, and an
-  optional close button.
+- **Parts:** `leading` (a mark, or the conversations' fold button beside the
+  list, #337), the title or a `TabStrip`, `actions`, and an optional close
+  button. The list window unfolded has two bars side by side, the list's and
+  the conversations', the same height, split by the list's hairline; the
+  close button is only on the far right one.
 - **Drag region:** a press anywhere on the bar moves the window: the title,
   the mark, a `TabStrip`'s empty space, a conversation's header. Buttons,
   links, fields and tabs stay theirs. The bar is
@@ -479,8 +482,8 @@ readers.
 
 ### ChoiceCards
 
-A few big one-of choices as radio cards, like "As tabs in one window" or "Each
-in its own window".
+A few big one-of choices as radio cards, like "Beside your list, in one window"
+or "Each in its own window".
 
 - It is a real `fieldset`, so arrows move between choices and screen readers
   hear a group.
@@ -545,6 +548,18 @@ It's used for a person's volume, over their chip in the voice bar
 Voice, which plays one chime when let go of, and for a shared audio file's
 timeline and volume (`app/chat/AudioCard.tsx`).
 
+### Splitter
+
+The line between two panes, moved by dragging it: the buddy list's width
+beside the conversations (#337). It draws the 1px `--hairline` every pane
+edge is, brightening to `--edge-hover` under the pointer and while dragged,
+and takes presses its whole length and 4px either side of the line. That's
+the one exception to 24px hit targets: any wider, it would cover the list's
+scrollbar and the fold button beside it. It's a separator with a value
+(`role="separator"`), so the keyboard moves it too: the arrows a step at a
+time, Home and End to either end, and Enter, like a double press, back to
+where it started out.
+
 ### Card and Popover
 
 - **`Card`** is a raised block with a hairline edge. `tint` washes it faintly
@@ -583,11 +598,11 @@ said, but only while it's true (decision 1, `core/notes.ts`,
 
 With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
 ("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the
-Media window, beside how long the server keeps files.
+Media tab, beside how long the server keeps files.
 
 ## The conversation
 
-The chat window's conversation is a screen, not a kit component, but its
+A conversation is a screen, not a kit component, but its
 geometry is part of the system and its spec (`next-chat.spec.ts`) measures it.
 
 **Names on their own line (#295, replacing decision 9's inline names).** A
@@ -779,13 +794,13 @@ built on the rows' own grid so nothing new lines up by eye:
 | One-line rows are 32px and two-line rows 48px, in all twelve faces; every name line is 20px | `kit.spec.ts` › rows of a kind are one height |
 | In a list, text starts at one x whether the lead is a marker, a group, a `#` or empty, and section labels start there too | `kit.spec.ts` › names in a list start at one x |
 | Overflowing text ends in a drawn ellipsis (not on a flex or grid box, where it never draws) and never runs under an edge | `kit.spec.ts` › text that does not fit ends in an ellipsis |
-| Hit targets are at least 24×24 | `kit.spec.ts` › every hit target is at least 24px |
+| Hit targets are at least 24×24, but for a splitter's 8px across its whole length | `kit.spec.ts` › every hit target is at least 24px; a splitter moves with the pointer and the keys |
 | Every interactive element has an accessible name | `kit.spec.ts` › every interactive element has an accessible name |
 | Everything the keyboard reaches shows the focus ring | `kit.spec.ts` › the focus ring shows on everything the keyboard reaches |
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |
 | Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
 | A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
-| A press anywhere on a title bar but a control moves the window, in the kit and in every window; in the chat window that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
+| A press anywhere on a title bar but a control moves the window, in the kit and in every window; beside the list that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |

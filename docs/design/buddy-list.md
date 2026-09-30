@@ -15,13 +15,15 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
 - **Keep the prototype's look and feel exactly:** the colors, type and spacing,
   and how fast and snappy it feels.
 - **The buddy list is the app.** It is Linger's own window, not a page in a
-  browser. Conversations are real windows, or tabs in one.
+  browser. Conversations open beside it in the same window (#337, below), or
+  each in a real window of its own.
 - **Linger draws its own title bars in every window,** so the look is the same
   everywhere. The operating system still moves, snaps, resizes and tiles them.
-- **Tabs are the default everywhere, Hyprland included.** The first room you
-  open gets a chat window, which Hyprland tiles beside your list. The rooms you
-  open after that join it as tabs. Any tab can be popped out into its own
-  window. "Each in its own window" is a setting you turn on.
+- **Tabs are the default everywhere, Hyprland included.** ~~The first room you
+  open gets a chat window, which Hyprland tiles beside your list.~~ Since
+  2026-09-30 (#337) the rooms you open are tabs beside the list, in the list's
+  own window. Any tab can be popped out into its own window. "Each in its own
+  window" is a setting you turn on.
 - **Linux and Windows first.** No Mac version for now.
 - **No avatars.** Nobody has a picture, you included. Identity is the styled
   name and the colored dot.
@@ -42,7 +44,9 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
   and every other server stays connected.
 - **Media and Search open in windows of their own** (decision 15), from the
   foot of the list, as in the prototype. A search hit or a media tile opens
-  its conversation at that message.
+  its conversation at that message. **Since 2026-09-30 (#337)** they open as
+  tabs beside the list, like a conversation, and in windows of their own
+  only when everything does; either can pop out and come back.
 - **A server's color is its host's accent** (decision 18), the same for
   everybody. Each person's own color is their name's, chosen per server in
   Profile. A newcomer starts on the color the fewest people there wear, so a
@@ -204,25 +208,55 @@ Settings: the cards are on and the chime is off to start.
 |---|---|
 | ![](buddy-list/buddy-list-2-away.webp) | ![](buddy-list/buddy-list-4-edge.webp) |
 
-## Conversations: tabs or windows
+## Conversations beside the list
 
-A setting in Settings → Windows chooses how conversations open: **As tabs in
-one window** (the default) or **Each in its own window**. Switching moves
-whatever is open straight away.
+**Decided (Matt, 2026-09-30, #337):** the list is the one core window, and
+conversations unfold out of it. It began as a friend's ask (dock the chat
+window to the list so they move as one) and became the design: one real
+window moves, snaps, minimizes and tiles as one on every desktop, Wayland
+included, and it looks nothing like Discord's fixed columns. It replaced the
+separate chat window of tabs, which had been the default.
+
+A setting in Settings → Windows chooses how conversations open: **Beside your
+list, in one window** (the default) or **Each in its own window**. Switching
+moves whatever is open straight away.
+
+- **Opening a room or DM unfolds the window** to the right by the
+  conversation's width (leftwards where its screen ends) and adds a tab, or
+  shows it if it's already open. The list keeps its width. A maximized
+  window, or one a tiling desktop sizes, keeps its size, and the
+  conversations fit what they get.
+- **The line between the list and the conversations drags** (Matt,
+  2026-09-30): wider list, narrower conversations, the window the same size.
+  The arrow keys move it too, and Enter or a double press puts it back to
+  340. The width is kept, and it's the width folding goes back to. The list
+  goes 300–560 wide and the conversations keep at least 420; a narrower
+  window squeezes the list before it gives the conversation the window.
+- **The fold button (◧) is at the conversations' left edge**, in their title
+  bar. It folds the window back to just the list and keeps the tabs; folding
+  takes that button away, so a second click can't land on the list's close
+  button. Folded with tabs kept, the list's title bar has a button beside the
+  gear that brings them back: a neutral one, not the lamp (Matt, 2026-09-30:
+  amber read as a notification, since it's what a DM nobody has read is lit
+  in). Closing the last tab folds it too.
+- **Too narrow for both** (a narrow tile, a small screen), the conversation
+  takes the window, and ◧ goes back to the list.
+- **One title bar across the window:** the list's (mark, name, gear) over the
+  list, the tabs over the conversation, pop-out and close at the far right.
+  A press anywhere on either moves the window.
+- A tab goes bold when something new arrives in it, with no number.
+- Tabs can be dragged to reorder them. The pop-out button makes the showing
+  tab a window of its own, with **Back beside your list**.
+- Ctrl+Tab, Ctrl+W and the rest move between tabs and close them.
+- Each is kept on this computer: the tabs, whether it was folded, and how
+  wide the list and the conversations were, so each comes back as it was.
 
 ![Tabs, reading #listening-room while in voice in #general](buddy-list/buddy-list-8-tabs.webp)
 
-- The chat window's title bar is a row of tabs, like a browser. Opening a room
-  or DM adds a tab, or shows it if it's already open.
-- A tab goes bold when something new arrives in it, with no number.
-- Tabs can be dragged to reorder them. Drag one off the row, or use its pop-out
-  button, and it becomes its own window with **Back to tabs**.
-- The desktop app would use Ctrl+Tab and Ctrl+W. The prototype uses Alt+←/→
-  and Alt+W, because a browser keeps the Ctrl keys for itself.
-
 **Windows** suit a tiling desktop like Omarchy: each conversation is a real
 window, and Hyprland lays them out by itself. The prototype's **Tile** control
-(or the T key) previews that.
+(or the T key) previews that. With conversations beside the list, Hyprland
+tiles the one window, which fills its tile.
 
 ![Windows, tiled, with a knock landing on Dave](buddy-list/buddy-list-3-tiled.webp)
 
@@ -232,8 +266,8 @@ Khruangbin…`), which suits smaller windows.
 ## Voice belongs to the room, not the tab or window
 
 - **You stay in voice.** If you're in voice in #general, you can read
-  #listening-room, close #general's tab, or close the whole chat window, and
-  you stay in voice.
+  #listening-room, close #general's tab, fold the conversations away or close
+  a conversation's own window, and you stay in voice.
 - **Only Leave, or moving voice to another room, ends it.** You are in voice in
   one room at a time, across every server.
 - **Mute, Deafen and Leave live in one place:** a voice bar at the bottom of the

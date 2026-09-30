@@ -40,6 +40,11 @@ export type ListViewProps = ListShared &
 interface ListShared {
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
+  /**
+   * Folded with conversations kept (#337): bringing them back beside the
+   * list. Folding them away is the conversations' own button, at their edge.
+   */
+  onUnfold?: () => void;
   /** The gear: opens Settings (Ctrl+, does too). */
   onSettings?: () => void;
   /** The foot of the list: Media and Search, each in a window of its own (decision 15). */
@@ -86,10 +91,17 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, notes, voice, you, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock } = props;
+  const { onClose, onSettings, notices, notes, voice, you, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock, onUnfold } = props;
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
-  const gear = onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : undefined;
+  const gear =
+    onSettings || onUnfold ? (
+      <>
+        {onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : null}
+        {/* Neutral, not the lamp: amber is for something new (a lit DM), and this is only a way back. */}
+        {onUnfold ? <IconButton icon="unfold" tone="filled" label="Show your conversations" onClick={onUnfold} /> : null}
+      </>
+    ) : undefined;
   const bottom = (
     <>
       <div className="nx-list-notices">{notices}</div>

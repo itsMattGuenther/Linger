@@ -1,6 +1,6 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
@@ -11,6 +11,7 @@ import {
   loadNotifyRules,
   noteDm,
   saveStatus,
+  serverState,
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
@@ -35,8 +36,16 @@ import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
+import { loadScale } from "../../core/appearance";
+import { conversationIn } from "../../core/chat/conversation";
+import { loadMode } from "../../core/conversations";
+import { leaveDraft } from "../../core/handoff";
+import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
+import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
+  type Intent,
   leftOut,
   type ListControls,
   SERVER_PREFS,
@@ -47,6 +56,7 @@ import {
   type SignedInMessage,
   type SignedOutMessage,
   shareAsOwner,
+  type VoiceControlQuestion,
   type WindowOpener,
 } from "../../core/share";
 import { loadCloseList } from "../../core/closing";
@@ -55,10 +65,11 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
-import { Button, Spinner } from "../../kit";
+import { Button, Spinner, Splitter } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import { ListView } from "./ListView";
+import "./ListWindow.css";
 import type { ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
@@ -72,6 +83,8 @@ import type { User } from "../../../generated/User";
 
 /** How often the server's name is asked for again. It changes about once ever. */
 const INFO_REFRESH_MS = 120_000;
+/** The tabs beside the list and their order, on this computer (docs/design/architecture.md, "Remembering"). */
+const TABS_KEY = "linger.next.tabs";
 
 /**
  * The buddy list window: the owner (docs/design/architecture.md). It restores
@@ -201,7 +214,8 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
     void loadNotifyRules(api).catch(() => undefined);
   }, [api]);
 
-  // Around, in no room: rooms open in the chat window, which tells the owner.
+  // Around, in no room: a conversation shown beside the list, or in a
+  // window of its own, says where you are (core/showing.ts).
   useEffect(() => {
     setPresenceRoom(baseUrl, null);
   }, [baseUrl]);
@@ -283,6 +297,31 @@ function Servers({
     };
   }, [accounts]);
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
+  // Conversations beside the list (#337): the tabs, kept here so they
+  // outlast folding, and whether the window is unfolded to show them.
+  const [tabs, setTabs] = useState<Tabs<SideTab>>(() => loadTabs(stored(TABS_KEY)));
+  const tabsNow = useRef(tabs);
+  tabsNow.current = tabs;
+  const [side, setSide] = useState<Side>(() => loadSide(localStore()));
+  // The conversation the side unfolds on, for its first draw.
+  const [first, setFirst] = useState<SideOpen | null>(null);
+  // A brand new DM reaches the store as its own frame, after it was asked
+  // for: until it's been seen, its tab waits for it rather than going.
+  const unseen = useRef(new Set<string>());
+  // The side while it's out, to hand it a conversation or read a draft.
+  const handle = useRef<SideHandle | null>(null);
+  // Conversations opened in the moment between the side being drawn and it
+  // taking them (#355): handed over as soon as it does, message and all.
+  const waitingOpens = useRef<SideOpen[]>([]);
+  const bind = useCallback((held: SideHandle) => {
+    handle.current = held;
+    const queued = waitingOpens.current;
+    waitingOpens.current = [];
+    for (const opening of queued) held.open(opening);
+    return () => {
+      if (handle.current === held) handle.current = null;
+    };
+  }, []);
   listNow.current = {
     addServer: () => {
       setAdding(true);
@@ -295,6 +334,23 @@ function Servers({
       }
     },
     setPrefs: changePrefs,
+    // Conversations open each in a window of its own now: every tab goes to
+    // one, the showing one last so it lands on top, its draft with it.
+    conversations: (mode) => {
+      if (mode !== "windows") return;
+      const { open, active } = tabsNow.current;
+      const store = localStore();
+      for (const tab of [...open.filter((held) => !same(held, active)), ...open.filter((held) => same(held, active))]) {
+        if (isTool(tab)) {
+          openToolWindow(tab.tool);
+          continue;
+        }
+        const held = handle.current;
+        if (store && held) leaveDraft(store, keyOf(tab), held.draftOf(keyOf(tab)), Date.now());
+        sharing?.local({ kind: "popout", server: tab.server, roomId: tab.roomId });
+      }
+      setTabs(NO_TABS);
+    },
   };
 
   // The push-to-talk key the voice bar says to hold. Settings tells this
@@ -339,6 +395,7 @@ function Servers({
     const list: ListControls = {
       addServer: () => listNow.current.addServer(),
       setPrefs: (next) => listNow.current.setPrefs(next),
+      conversations: (mode) => listNow.current.conversations?.(mode),
       closeToTray: (on) => closeToTray(on),
       talkKey: (code) => setTalkKey(code),
     };
@@ -361,6 +418,121 @@ function Servers({
     sharing?.signInsChanged();
   }, [signedIn]);
 
+  // ------------------------------------------------------------------
+  // Beside the list (#337).
+
+  const unfolded = side.unfolded && tabs.open.length > 0;
+  const unfoldedNow = useRef(unfolded);
+  unfoldedNow.current = unfolded;
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const measure = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Side by side, the list at its width or squeezed to leave the
+  // conversations their room; too narrow for both, the conversation has it.
+  const shown = beside(width, side.list);
+  const layout = shown.layout;
+
+  // Folding keeps how wide the conversations were, and unfolding how wide
+  // the list was, so each comes back the size it was left.
+  const fold = useCallback(() => {
+    setFirst(null);
+    setSide((held) => {
+      if (!held.unfolded) return held;
+      const now = beside(window.innerWidth, held.list);
+      return { ...held, unfolded: false, pane: now.layout === "beside" ? paneWidth(window.innerWidth - now.list) : held.pane };
+    });
+  }, []);
+  const unfold = useCallback((opening: SideOpen | null) => {
+    setFirst(opening);
+    setSide((held) => (held.unfolded ? held : { ...held, unfolded: true, list: listWidth(window.innerWidth) }));
+  }, []);
+  // The last tab closed: back to the list.
+  useEffect(() => {
+    if (side.unfolded && tabs.open.length === 0) fold();
+  }, [side.unfolded, tabs.open.length, fold]);
+  useEffect(() => saveSide(localStore(), side), [side]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TABS_KEY, saveTabs(tabs));
+    } catch {
+      // Storage refused: the tabs just won't come back after a restart.
+    }
+  }, [tabs]);
+
+  // A conversation that's gone (a room archived, a DM you were taken out
+  // of, a server signed out of) loses its tab, once its server has said
+  // what exists. One still on its way keeps its tab until it has been seen.
+  useEffect(() => {
+    const servers = new Set(signedIn.map((session) => session.baseUrl));
+    setTabs((held) =>
+      keepOnly(held, (tab) => {
+        // Media and Search look through every server, as long as there's one.
+        if (isTool(tab)) return servers.size > 0;
+        if (!servers.has(tab.server)) return false;
+        const state = states[tab.server];
+        if (state === undefined || state.me === null) return true;
+        if (conversationIn(state, tab.roomId) === null) return unseen.current.has(keyOf(tab));
+        unseen.current.delete(keyOf(tab));
+        return true;
+      }),
+    );
+  }, [states, signedIn]);
+
+  // The window grows to show the conversations and shrinks back to the
+  // list, where the desktop lets an app size its windows. Not on the first
+  // draw: the window opens the size it was left.
+  const sized = useRef<boolean | null>(null);
+  useEffect(() => {
+    const was = sized.current;
+    sized.current = unfolded;
+    if (was === null || was === unfolded || !isTauri()) return;
+    void (unfolded ? growBeside(side) : shrinkToList(side));
+  }, [unfolded]);
+
+  // Show a conversation beside the list: its tab, the side unfolded, and
+  // the list window brought forward if it was behind or in the tray.
+  const openBeside = useRef<(server: string, roomId: RoomId, messageId?: MessageId) => void>(() => undefined);
+  openBeside.current = (server, roomId, messageId) => {
+    if (!apisRef.current.has(server)) return;
+    const tab = { server, roomId };
+    if (conversationIn(serverState(server), roomId) === null) unseen.current.add(keyOf(tab));
+    const opening = { tab, message: messageId ?? null };
+    if (handle.current) handle.current.open(opening);
+    else if (unfoldedNow.current) waitingOpens.current.push(opening);
+    else {
+      setTabs((held) => openTab(held, tab));
+      unfold(opening);
+    }
+    bringForward();
+  };
+  // Media or Search beside the list (#337): its tab, and Search's box ready
+  // for typing whenever it's asked for again (Ctrl+K).
+  const [searchAsk, setSearchAsk] = useState(1);
+  const openToolBeside = useRef<(which: "media" | "search") => void>(() => undefined);
+  openToolBeside.current = (which) => {
+    if (apisRef.current.size === 0) return;
+    const tab: SideTab = { tool: which };
+    setTabs((held) => openTab(held, tab));
+    if (which === "search") setSearchAsk((count) => count + 1);
+    if (!unfoldedNow.current) unfold(null);
+    bringForward();
+  };
+  useEffect(() => {
+    showBeside = (server, roomId, messageId) => openBeside.current(server, roomId, messageId);
+    showToolBeside = (which) => openToolBeside.current(which);
+    return () => {
+      showBeside = null;
+      showToolBeside = null;
+    };
+  }, []);
+  // What the side asks of the owner it's in: the same as any window, without the trip.
+  const intendHere = useCallback(async (intent: Intent) => {
+    sharing?.local(intent);
+  }, []);
+
   // Ctrl+, opens Settings from the list too, and Ctrl+K Search.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -381,6 +553,16 @@ function Servers({
   const voiceServer = ordered.find((session) => states[session.baseUrl]?.myVoice)?.baseUrl ?? null;
   const voiceState = voiceServer === null ? undefined : states[voiceServer];
   const pushToTalk = voiceState?.myVoice?.pushToTalk ?? false;
+  // A voice line's Mute, Deafen and Leave beside the list act here, as the voice bar's do.
+  const voiceServerNow = useRef(voiceServer);
+  voiceServerNow.current = voiceServer;
+  const voiceControl = useCallback((press: VoiceControlQuestion) => {
+    const server = voiceServerNow.current;
+    if (server === null) return;
+    if (press.control === "leave") void leaveVoice(server).catch(() => undefined);
+    else if (press.control === "mute") void setVoiceMuted(server, press.on).catch(() => undefined);
+    else void setVoiceDeafened(server, press.on).catch(() => undefined);
+  }, []);
 
   // Push-to-talk while the list has focus; a chat window reports its own
   // key presses (core/share.ts, "voice.talk").
@@ -671,38 +853,73 @@ function Servers({
     if (seen !== null && keys.some((key) => !seen.has(key))) setRock((count) => count + 1);
   }, [knocks]);
 
+  const closeList = isTauri() ? () => void getCurrentWindow().close() : undefined;
   return (
     <>
       {signedIn.map((session) => (
         <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
       ))}
-      {adding ? (
-        <SignInView
-          actions={addingActions}
-          keyringNotice={keyringNotice}
-          adding
-          below={voice ? <VoiceDock {...voice} /> : undefined}
-          onCancel={() => setAdding(false)}
-          onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
-        />
-      ) : (
-        <ListView
-        servers={listings}
-        voice={voice}
-        you={you}
-        onEditProfile={() => shell.settings("profile")}
-        everywhere={everywhere}
-        onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
-        onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
-        onSettings={() => shell.settings()}
-        onMedia={() => shell.tool("media")}
-        onSearch={() => shell.tool("search")}
-        notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
-        rock={rock}
-        notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
-        onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
-      />
-      )}
+      <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
+        <div className="nx-app-list">
+          {adding ? (
+            <SignInView
+              actions={addingActions}
+              keyringNotice={keyringNotice}
+              adding
+              below={voice ? <VoiceDock {...voice} /> : undefined}
+              onCancel={() => setAdding(false)}
+              onClose={unfolded ? undefined : closeList}
+            />
+          ) : (
+            <ListView
+              servers={listings}
+              voice={voice}
+              you={you}
+              onEditProfile={() => shell.settings("profile")}
+              everywhere={everywhere}
+              onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
+              onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
+              onSettings={() => shell.settings()}
+              onMedia={() => shell.tool("media")}
+              onSearch={() => shell.tool("search")}
+              notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
+              rock={rock}
+              notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
+              onUnfold={!unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
+              onClose={unfolded ? undefined : closeList}
+            />
+          )}
+        </div>
+        {unfolded && layout === "beside" ? (
+          // Dragged, or moved with the arrows: the list's width, kept on this
+          // computer, and the one folding goes back to. The window stays
+          // the size it is; the conversations take what's left.
+          <Splitter
+            label="Width of your list"
+            value={shown.list}
+            min={LIST_MIN}
+            max={widestList(width)}
+            reset={LIST_WIDTH}
+            onChange={(list) => setSide((held) => ({ ...held, list }))}
+          />
+        ) : null}
+        {unfolded ? (
+          <SidePane
+            apis={apisRef.current}
+            intend={intendHere}
+            tabs={tabs}
+            setTabs={setTabs}
+            first={first}
+            bind={bind}
+            show={(server, roomId, messageId) => openChat(server, roomId, messageId)}
+            searchAsk={searchAsk}
+            onPopOutTool={openToolWindow}
+            voiceControl={voiceControl}
+            onFold={fold}
+            onClose={closeList}
+          />
+        ) : null}
+      </div>
     </>
   );
 }
@@ -775,12 +992,7 @@ function closeToTray(on: boolean): void {
 
 /** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */
 const shell: WindowOpener = {
-  chat: (server, roomId, messageId) => {
-    if (!isTauri()) return;
-    void invoke("next_open_chat", { server, room: roomId, message: messageId ?? null }).catch((error: unknown) =>
-      console.error("could not open the chat window", error),
-    );
-  },
+  side: (server, roomId, messageId) => showBeside?.(server, roomId, messageId),
   conversation: (server, roomId, kind, messageId) => {
     if (!isTauri()) return;
     void invoke("next_open_conversation", { server, room: roomId, kind, message: messageId ?? null }).catch((error: unknown) =>
@@ -791,11 +1003,19 @@ const shell: WindowOpener = {
     if (!isTauri()) return;
     void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
+  // Media and Search open where conversations do: beside the list, or in
+  // a window of their own when everything opens in its own (#337).
   tool: (which) => {
-    if (!isTauri()) return;
-    void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
+    if (showToolBeside && loadMode(localStore()) !== "windows") showToolBeside(which);
+    else openToolWindow(which);
   },
 };
+
+/** Media or Search in a window of its own (decision 15): popped out, or every conversation in its own window. */
+function openToolWindow(which: "media" | "search"): void {
+  if (!isTauri()) return;
+  void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
+}
 
 /** This computer's storage, or none where it's refused. */
 function localStore(): Storage | null {
@@ -808,14 +1028,82 @@ function localStore(): Storage | null {
 
 /** This window's sharing, once it has started: it knows which conversations have their own windows. */
 let sharing: Sharing | null = null;
+/** Beside the list, once the list is drawn (`openBeside` in `Servers`). */
+let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId) => void) | null = null;
+/** Media or Search beside the list, once it's drawn. */
+let showToolBeside: ((which: "media" | "search") => void) | null = null;
 
 /**
  * Show a conversation: in its own window if it was popped out into one,
- * otherwise as a tab in the chat window (core/share.ts, `open`).
+ * otherwise where conversations open (core/share.ts, `open`): beside the
+ * list, or each in a window of its own.
  */
 function openChat(server: string, room: RoomId, messageId?: MessageId): void {
   if (sharing) sharing.open(server, room, messageId);
-  else shell.chat(server, room, messageId);
+  else showBeside?.(server, room, messageId);
+}
+
+/** Something this computer kept, or null where storage is refused. */
+function stored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bring the list window forward for a conversation opened from elsewhere (a
+ * banner, a window of its own): out of the tray, unminimized, focused. Not
+ * when it has the focus already: some desktops move the pointer to a window
+ * an app focuses (dont-fight-the-os, #226).
+ */
+function bringForward(): void {
+  if (!isTauri() || document.hasFocus()) return;
+  const current = getCurrentWindow();
+  void current
+    .show()
+    .then(() => current.unminimize())
+    .then(() => current.setFocus())
+    .catch(() => undefined);
+}
+
+/**
+ * Unfolding: the window grows to the right by the conversations' width,
+ * leftwards where its screen ends (core/side.ts). A maximized window, or one
+ * the desktop sizes itself (a tiling desktop), keeps its size, and the
+ * conversations fit what they get.
+ */
+async function growBeside(side: Side): Promise<void> {
+  try {
+    const current = getCurrentWindow();
+    if (await current.isMaximized()) return;
+    const factor = await current.scaleFactor();
+    const inner = (await current.innerSize()).toLogical(factor);
+    const at = (await current.outerPosition()).toLogical(factor);
+    const monitor = await currentMonitor();
+    const screen = monitor ? { x: monitor.position.x / monitor.scaleFactor, width: monitor.size.width / monitor.scaleFactor } : null;
+    const target = unfolding({ x: at.x, width: inner.width }, screen, side, loadScale() / 100);
+    if (!target) return;
+    if (target.x !== null) await current.setPosition(new LogicalPosition(target.x, at.y));
+    await current.setSize(new LogicalSize(target.width, inner.height));
+  } catch {
+    // A desktop that won't move or size the window: it stays as it is.
+  }
+}
+
+/** Folding: back to the list's width, where the desktop lets it. */
+async function shrinkToList(side: Side): Promise<void> {
+  try {
+    const current = getCurrentWindow();
+    if (await current.isMaximized()) return;
+    const factor = await current.scaleFactor();
+    const inner = (await current.innerSize()).toLogical(factor);
+    const width = folding(side, loadScale() / 100);
+    if (inner.width > width) await current.setSize(new LogicalSize(width, inner.height));
+  } catch {
+    // A desktop that won't size the window: the list fills it.
+  }
 }
 
 /** What a clicked banner says it leads to, if it says it properly (`src-tauri/src/notifications.rs`). */

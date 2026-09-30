@@ -23,7 +23,6 @@ const OWNER_ONLY: &[&str] = &[
     "voice_volume",
     "voice_choose_devices",
     "show_notification",
-    "next_open_chat",
     "next_open_conversation",
     "next_open_settings",
     "next_open_tool",
@@ -167,7 +166,7 @@ fn only_the_chat_windows_and_the_list_window_read_the_clipboard() {
         assert!(
             windows
                 .iter()
-                .all(|window| window == "main" || window == "chat" || window == "chat-*"),
+                .all(|window| window == "main" || window == "chat-*"),
             "{file} grants reading the clipboard to {windows:?}"
         );
     }
