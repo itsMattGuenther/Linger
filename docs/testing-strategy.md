@@ -193,10 +193,13 @@ rules that came out of them:
   `scripts/webkit.sh tests/browser/next-media.spec.ts --repeat-each=10`.
   The whole WebKit suite takes about 2 minutes this way, against about 8 on
   CI. The image is about 3.5 GB and downloads on first use.
-- **WebKit on CI gets 60 seconds a test, not 30.** A freshly started WebKit
-  there once took 25.5 seconds to open its first tab, before the test had
-  done anything (#335); every other tab opens in well under a second. The
-  15-second rule above still applies.
+- **WebKit gets 60 seconds a test, not 30, on CI and locally.** On CI a
+  freshly started WebKit once took 25.5 seconds to open its first tab, before
+  the test had done anything (#335); every other tab opens in well under a
+  second. Locally, `webkit.sh` runs every worker's WebKit in one container,
+  about 2.7 times slower than CI: a glow test that takes 9 seconds on CI took
+  25 there, and ran out of 30 when the machine was busy (#368). The
+  15-second rule above still applies, measured on CI.
 - The tests run on UTC, as CI does (`webkit.sh` sets it; the container is on
   UTC). A test that works out a date in the machine's own time zone will
   expect the wrong day somewhere.

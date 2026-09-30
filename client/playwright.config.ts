@@ -36,9 +36,12 @@ export default defineConfig({
       // On CI, a freshly started WebKit once took 25.5 seconds to open its
       // first tab, before the test had done anything, and two knock tests ran
       // out of their 30 (#335). Every other tab there opens in well under a
-      // second. Sixty is room for that, and costs nothing unless something
-      // hangs; slow tests are still held to 15 seconds by the testing strategy.
-      timeout: process.env.CI ? 60_000 : undefined,
+      // second. Locally, scripts/webkit.sh runs every worker's WebKit in one
+      // container, and a test that takes 9 seconds on CI took a median 25
+      // there; two ran out of their 30 (#368). Sixty is room for both, and
+      // costs nothing unless something hangs; slow tests are still held to
+      // 15 seconds on CI by the testing strategy.
+      timeout: 60_000,
       use: {
         browserName: "webkit",
         // scripts/webkit.sh runs WebKit in Playwright's Ubuntu image, for the
