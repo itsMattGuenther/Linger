@@ -19,7 +19,7 @@ export function classify(paths) {
     else if (path.startsWith("client/tests/browser/")) add("web");
     else if (path.startsWith("client/")) add("web", "packages");
     else if (path.startsWith("assets/logo/")) add("web", "packages");
-    else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4)$/.test(path)) add("packages");
+    else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*)$/.test(path)) add("packages");
     else if (path.startsWith("deploy/")) add("rust", "s3", "coturn");
     else add(...domains);
   }
