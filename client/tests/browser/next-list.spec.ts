@@ -25,6 +25,23 @@ function rows(page: Page, list: string): Locator {
 }
 
 /**
+ * Somebody's card, from the button their row shows on hover (#351): a click
+ * on the row itself opens them beside the list.
+ */
+async function openCard(page: Page, list: string, name: string) {
+  const row = rows(page, list).filter({ hasText: name });
+  await row.hover();
+  await row.getByRole("button", { name: `${name}'s card` }).click();
+}
+
+/** The same from the keyboard: their row, Tab to its card button, Enter. */
+async function openCardByKeyboard(page: Page, list: string, name: string) {
+  await rows(page, list).filter({ hasText: name }).getByRole("button").first().focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+}
+
+/**
  * Hover a control and check its tooltip is drawn whole: inside the window and
  * on top of everything at its middle and corners (#140).
  */
@@ -62,7 +79,8 @@ test("shows the server, you, and the rooms in their order", async ({ page }) => 
   await expect(you).toContainText("Matt");
   await expect(you).toContainText("in #general");
   await expect(you).toContainText("fixing the porch light (the real one)");
-  await expect(rows(page, "Rooms")).toHaveText([/general/, /listening-room/, /weekend-plans/]);
+  // Your group DMs come after the rooms: small private rooms (#351).
+  await expect(rows(page, "Rooms")).toHaveText([/general/, /listening-room/, /weekend-plans/, /Eli and Sam/]);
 });
 
 test("makes a room bold only when it holds something new, and never shows a number", async ({ page }) => {
@@ -92,8 +110,9 @@ test("draws every room's # the same, fresh or not", async ({ page }) => {
 });
 
 // A DM is addressed to you, so one you haven't read is lit in the lamp, not
-// only bold (#291). Rooms stay bold only.
-test("a DM you haven't read is lit, rooms are only bold, and reading puts it out (#291)", async ({ page }) => {
+// only bold (#291). Rooms stay bold only. A one-to-one DM lives on its
+// person's row, and a group DM's row sits with the rooms (#351).
+test("somebody who wrote to you is lit on their row, a group DM on its own, rooms are only bold, and reading puts it out (#291, #351)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?live");
   await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
   type Live = { said: (roomId: string, authorId: string) => void; read: (roomId: string) => void };
@@ -105,37 +124,42 @@ test("a DM you haven't read is lit, rooms are only bold, and reading puts it out
       const style = main ? getComputedStyle(main) : null;
       return { background: style?.backgroundColor ?? "", edge: style?.boxShadow ?? "", weight: title ? Number(getComputedStyle(title).fontWeight) : 0 };
     });
-  const jules = rows(page, "DMs").filter({ hasText: "Jules" });
-  const both = rows(page, "DMs").filter({ hasText: "Eli and Sam" });
+  const jules = rows(page, "People here").filter({ hasText: "Jules" });
+  const dave = rows(page, "People here").filter({ hasText: "Dave" });
+  const both = rows(page, "Rooms").filter({ hasText: "Eli and Sam" });
   await expect(jules).toHaveAttribute("data-lit", "yes");
+  await expect(dave).not.toHaveAttribute("data-lit", "yes");
   await expect(both).not.toHaveAttribute("data-lit", "yes");
-  const [lit, plain] = [await look(jules), await look(both)];
-  // Drawn, not only marked: a fill and an edge the unread one alone has, and bold.
+  // Said in words for a screen reader too, never a count.
+  await expect(jules.getByRole("button").first()).toHaveAccessibleName(/wrote to you/);
+  const [lit, plain] = [await look(jules), await look(dave)];
+  // Drawn, not only marked: a fill and an edge the unread one alone has.
+  // Their name keeps the face and weight they chose; the light says it.
   expect(lit.background).not.toBe(plain.background);
   expect(lit.edge).not.toBe("none");
   expect(plain.edge).toBe("none");
-  expect(lit.weight).toBeGreaterThanOrEqual(600);
   // Rooms with something new are bold, never lit.
   await expect(rows(page, "Rooms").and(page.locator("[data-lit='yes']"))).toHaveCount(0);
   await expect(rows(page, "Rooms").and(page.locator("[data-fresh='yes']"))).toHaveCount(2);
   // Hovered, it stays lit.
   await jules.hover();
   expect((await look(jules)).edge).not.toBe("none");
-  // Read, it goes out; somebody writing in the other lights that one.
+  // Read, it goes out; somebody writing in the group lights that row, and bold.
   await live((linger) => linger.read("d-jules"));
   await expect(jules).not.toHaveAttribute("data-lit", "yes");
   await live((linger) => linger.said("d-eli-sam", "u-eli"));
   await expect(both).toHaveAttribute("data-lit", "yes");
+  expect((await look(both)).weight).toBeGreaterThanOrEqual(600);
 });
 
-test("a folded DMs heading is lit while a DM inside hasn't been read (#291)", async ({ page }) => {
+test("a folded People heading is lit while somebody inside has written to you, and a folded Rooms heading while a group DM has (#291, #351)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?live");
   await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
-  const heading = page.locator(".k-section", { hasText: /^DMs/ });
+  const heading = page.locator(".k-section", { hasText: /^People/ });
   const rooms = page.locator(".k-section", { hasText: /^Rooms/ });
   // Open, the rows show it and the heading stays plain.
   await expect(heading).not.toHaveAttribute("data-lit", "yes");
-  await heading.getByRole("button", { name: /DMs/ }).click();
+  await heading.getByRole("button", { name: /People/ }).click();
   await expect(heading).toHaveAttribute("data-lit", "yes");
   const [lit, plain] = await Promise.all([heading, rooms].map((one) => one.evaluate((node) => getComputedStyle(node).backgroundColor)));
   expect(lit).not.toBe(plain);
@@ -146,34 +170,61 @@ test("a folded DMs heading is lit while a DM inside hasn't been read (#291)", as
   // Read while folded, it goes out.
   await page.evaluate(`window.linger.read("d-jules")`);
   await expect(heading).not.toHaveAttribute("data-lit", "yes");
+  // Rooms, folded, lights for a group DM written in, and not for a room.
+  await rooms.getByRole("button", { name: /Rooms/ }).click();
+  await expect(rooms).not.toHaveAttribute("data-lit", "yes");
+  await page.evaluate(`window.linger.said("d-eli-sam", "u-sam")`);
+  await expect(rooms).toHaveAttribute("data-lit", "yes");
 });
 
-test("lists DMs by who is in them, with the new one first", async ({ page }) => {
-  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
+test("has no DMs section: a one-to-one DM lives on its person's row, and a group DM with the rooms (#351)", async ({ page }) => {
+  await expect(page.getByRole("list", { name: "DMs" })).toHaveCount(0);
+  await expect(page.locator(".k-section", { hasText: /^DMs/ })).toHaveCount(0);
+  await expect(page.locator(".k-section-text")).toHaveText(["Rooms", "People", "Away", "Offline"]);
+  await expect(rows(page, "Rooms").last()).toHaveText(/Eli and Sam/);
+  await expect(rows(page, "People here").first()).toHaveText(/Jules/);
 });
 
-// The order used to be the order at connect for the whole session: the
-// store's newest message wasn't part of it (#248).
-test("a new message moves its DM to the top, theirs or yours, and reading it doesn't move it back", async ({ page }) => {
-  await page.goto("/tests/fixtures/next-list.html?live");
+// The people you're talking to come first in each group (#351): whoever
+// wrote to you, then whoever you talked with most recently, then everyone
+// else. Live, as DMs have been since #248: never the order at connect.
+test("the people you're talking to come first: whoever wrote, then the latest talked with, then everyone else (#351)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?live&talked");
   await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
   type Live = { said: (roomId: string, authorId: string) => void; read: (roomId: string) => void };
   const live = (act: (linger: Live) => void) => page.evaluate(`(${act.toString()})(window.linger)`);
-  // The Jules DM holds something new; the Eli and Sam one was spoken in later.
-  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
+  const here = rows(page, "People here");
+  // Jules wrote and it's unread; Dave was talked with; Eli and Callie weren't.
+  await expect(here).toHaveText([/Jules/, /Dave/, /Eli/, /Callie/]);
+  // Read, Jules stays up: he's the one talked with most recently.
   await live((linger) => linger.read("d-jules"));
-  await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
-
-  await live((linger) => linger.said("d-jules", "u-jules"));
-  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
-  await live((linger) => linger.read("d-jules"));
-  await expect(rows(page, "DMs")).toHaveText([/Jules/, /Eli and Sam/]);
-
+  await expect(here).toHaveText([/Jules/, /Dave/, /Eli/, /Callie/]);
+  // Dave writes: he's first, and stays first once read.
+  await live((linger) => linger.said("d-dave", "u-dave"));
+  await expect(here).toHaveText([/Dave/, /Jules/, /Eli/, /Callie/]);
+  await live((linger) => linger.read("d-dave"));
+  await expect(here).toHaveText([/Dave/, /Jules/, /Eli/, /Callie/]);
+  // You write to Jules: he's the latest talked with again.
   await live((linger) => {
-    linger.said("d-eli-sam", "u-matt");
-    linger.read("d-eli-sam");
+    linger.said("d-jules", "u-matt");
+    linger.read("d-jules");
   });
-  await expect(rows(page, "DMs")).toHaveText([/Eli and Sam/, /Jules/]);
+  await expect(here).toHaveText([/Jules/, /Dave/, /Eli/, /Callie/]);
+});
+
+test("somebody who writes shows even in a folded group, lit, and the rest of it stays folded (#351)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list.html?live&talked");
+  await expect(page.locator("body")).toHaveAttribute("data-live", "ready");
+  const offline = page.getByRole("button", { name: /Offline/ });
+  await expect(offline).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("list", { name: "Offline" })).toHaveCount(0);
+  await page.evaluate(`window.linger.said("d-jen", "u-jen")`);
+  await expect(rows(page, "Offline")).toHaveText([/Jen/]);
+  await expect(rows(page, "Offline").first()).toHaveAttribute("data-lit", "yes");
+  await expect(offline).toHaveAttribute("aria-expanded", "false");
+  // Read, it folds away with the rest.
+  await page.evaluate(`window.linger.read("d-jen")`);
+  await expect(page.getByRole("list", { name: "Offline" })).toHaveCount(0);
 });
 
 // The lights off (#301): idle is their dot at half strength and a grey name,
@@ -234,16 +285,16 @@ test("somebody away is a grey name and a half-strength moon, with their away mes
   await expect(page.getByRole("region", { name: "You" }).locator('[data-kit="Name"]').first()).not.toHaveAttribute("data-dim", "yes");
 });
 
-test("with no DMs yet, the heading and its New message button are still there", async ({ page }) => {
+test("with no DMs yet, the + for a group is on Rooms and People is everyone, as ever (#351)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?nodms");
-  await expect(page.locator("#nx-dms")).toHaveText("No DMs yet.");
-  await expect(page.getByRole("button", { name: "New message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start a group" })).toBeVisible();
+  await expect(rows(page, "Rooms")).toHaveText([/general/, /listening-room/, /weekend-plans/]);
+  await expect(rows(page, "People here").and(page.locator("[data-lit='yes']"))).toHaveCount(0);
 });
 
 test("a brand-new server says so in each empty place, and the host gets a way to fill it (decision 17)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?bare");
   await expect(page.locator("#nx-rooms .nx-list-empty")).toHaveText("No rooms yet.");
-  await expect(page.locator("#nx-dms .nx-list-empty")).toHaveText("No DMs yet.");
   await expect(page.locator("#nx-people .nx-list-empty")).toHaveText("Nobody else is here yet.");
   await page.getByRole("button", { name: "Make the first room" }).click();
   await page.getByRole("button", { name: "Invite people" }).click();
@@ -266,8 +317,10 @@ test("a brand-new server says so in each empty place, and the host gets a way to
 test("past eight rooms, the quiet ones fold under More rooms, with no number (decision 22)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list.html?many");
   const shown = rows(page, "Rooms");
-  await expect(shown).toHaveCount(8);
+  // Eight rooms, and the group DM after them (#351).
+  await expect(shown).toHaveCount(9);
   await expect(shown.first()).toContainText("general");
+  await expect(shown.last()).toContainText("Eli and Sam");
   const more = page.getByRole("button", { name: /More rooms/ });
   await expect(more).toHaveAttribute("aria-expanded", "false");
   await expect(more).not.toHaveText(/\d/);
@@ -277,7 +330,8 @@ test("past eight rooms, the quiet ones fold under More rooms, with no number (de
 });
 
 test("groups people into here, away and a folded offline", async ({ page }) => {
-  await expect(rows(page, "People here")).toHaveText([/Dave.*in #listening-room/, /Eli.*in #general/, /Jules.*in #general/, /Callie.*around/]);
+  // Jules first: he wrote to you, and it's unread (#351).
+  await expect(rows(page, "People here")).toHaveText([/Jules.*in #general/, /Dave.*in #listening-room/, /Eli.*in #general/, /Callie.*around/]);
   await expect(rows(page, "Away")).toHaveText([/Sam.*back after work/]);
   await expect(page.getByRole("list", { name: "Offline" })).toHaveCount(0);
   await page.getByRole("button", { name: /Offline/ }).click();
@@ -286,7 +340,7 @@ test("groups people into here, away and a folded offline", async ({ page }) => {
 
 test("keeps every row of a kind the same height, whatever the name's face", async ({ page }) => {
   await page.getByRole("button", { name: /Offline/ }).click();
-  const one = [...(await boxes(rows(page, "Rooms"))), ...(await boxes(rows(page, "DMs")))].map((box) => box.height);
+  const one = (await boxes(rows(page, "Rooms"))).map((box) => box.height);
   const two = [
     ...(await boxes(rows(page, "People here"))),
     ...(await boxes(rows(page, "Away"))),
@@ -304,19 +358,26 @@ test("starts every name at the same place, whatever leads the row", async ({ pag
   expect(new Set(starts).size).toBe(1);
 });
 
-test("opens a room or a DM by click and by keyboard", async ({ page }) => {
+test("opens a room, a group DM and a person by click and by keyboard (#351)", async ({ page }) => {
   await rows(page, "Rooms").first().getByRole("button").first().click();
   await expect(page.locator("body")).toHaveAttribute("data-opened", "room:r-general");
-  await rows(page, "DMs").first().getByRole("button").first().focus();
+  await rows(page, "Rooms").filter({ hasText: "Eli and Sam" }).getByRole("button").first().focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator("body")).toHaveAttribute("data-opened", "room:r-general,dm:d-jules");
+  await expect(page.locator("body")).toHaveAttribute("data-opened", "room:r-general,dm:d-eli-sam");
+  // A person opens them beside the list: your DM with them, or a new one.
+  await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+  await expect(page.locator("body")).toHaveAttribute("data-opened", /,person:u-jules:d-jules$/);
+  await rows(page, "People here").filter({ hasText: "Callie" }).getByRole("button").first().focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("body")).toHaveAttribute("data-opened", /,person:u-callie:new$/);
+  // No card opens on the way: a click is the person, not a look at them.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test.describe("a person's card", () => {
   test("opens from their row with their status, and focus goes in and comes back", async ({ page }) => {
     const row = rows(page, "Away").first().getByRole("button").first();
-    await row.focus();
-    await page.keyboard.press("Enter");
+    await openCardByKeyboard(page, "Away", "Sam");
     const card = page.getByRole("dialog", { name: "Sam" });
     await expect(card).toContainText("back after work");
     await expect(card.getByRole("button", { name: "Message" })).toBeFocused();
@@ -332,7 +393,7 @@ test.describe("a person's card", () => {
     const row = rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first();
     const card = page.getByRole("dialog", { name: "Jules" });
     const message = card.getByRole("button", { name: "Message" });
-    await row.click();
+    await openCard(page, "People here", "Jules");
     await expect(message).toBeFocused();
     await expect(message).toHaveCSS("outline-style", "none");
     await expect(page.locator("[data-kit='Tooltip']")).toHaveCount(0);
@@ -340,6 +401,7 @@ test.describe("a person's card", () => {
     await expect(card).toHaveCount(0);
 
     await row.focus();
+    await page.keyboard.press("Tab");
     await page.keyboard.press("Enter");
     await expect(message).toBeFocused();
     await expect(message).toHaveCSS("outline-style", "solid");
@@ -347,7 +409,7 @@ test.describe("a person's card", () => {
 
   test("a knock still waiting can't be pressed again; one that failed says so, and trying again clears it", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?holdknock");
-    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    await openCard(page, "People here", "Jules");
     const card = page.getByRole("dialog", { name: "Jules" });
     const knock = card.getByRole("button", { name: /^Knock/ });
     const knocks = async () => ((await page.locator("body").getAttribute("data-opened")) ?? "").split(",").filter((line) => line.startsWith("knock:"));
@@ -367,11 +429,11 @@ test.describe("a person's card", () => {
 
   test("a knock answered after its card closed lands on nobody else's card", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?holdknock");
-    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    await openCard(page, "People here", "Jules");
     await page.getByRole("dialog", { name: "Jules" }).getByRole("button", { name: /^Knock/ }).click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Jules" })).toHaveCount(0);
-    await rows(page, "Away").first().getByRole("button").first().click();
+    await openCard(page, "Away", "Sam");
     const sam = page.getByRole("dialog", { name: "Sam" });
     await expect(sam).toBeVisible();
     await page.evaluate(() => window.answerKnock?.(false));
@@ -381,7 +443,7 @@ test.describe("a person's card", () => {
   });
 
   test("shows what somebody is listening to, reading or working on", async ({ page }) => {
-    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    await openCard(page, "People here", "Jules");
     const card = page.getByRole("dialog", { name: "Jules" });
     await expect(card).toContainText("speakers: finally set up");
     await expect(card).toContainText("Listening to");
@@ -402,7 +464,7 @@ test.describe("a person's card", () => {
       };
     });
     await page.goto("/tests/fixtures/next-list.html?fields");
-    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().click();
+    await openCard(page, "People here", "Jules");
     const card = page.getByRole("dialog", { name: "Jules" });
     await expect(card.locator("dt")).toHaveText(["Listening to", "GitHub", "Playing"]);
     await expect(card.locator("dd")).toHaveText(["Khruangbin — Con Todo El Mundo", "github.com/bendthebracket", "Outer Wilds, not main.rs. https://www.mobiusdigitalgames.com"]);
@@ -436,10 +498,10 @@ test.describe("a person's card", () => {
         await page.goto("/tests/fixtures/next-list.html?fields&long");
         await page.evaluate(() => document.fonts.ready);
         for (const [name, opener] of [
-          ["Jules", rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first()],
-          ["Matt", page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" })],
+          ["Jules", () => openCard(page, "People here", "Jules")],
+          ["Matt", () => page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" }).click()],
         ] as const) {
-          await opener.click();
+          await opener();
           const card = page.getByRole("dialog", { name });
           await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
           await expect(card.locator("dt")).toHaveText(["Supercalifragilisticexpi", "Currently obsessing over", "GitHub"]);
@@ -470,7 +532,7 @@ test.describe("a person's card", () => {
   }
 
   test("Message starts the DM and closes the card", async ({ page }) => {
-    await rows(page, "Away").first().getByRole("button").first().click();
+    await openCard(page, "Away", "Sam");
     await page.getByRole("dialog", { name: "Sam" }).getByRole("button", { name: "Message" }).click();
     await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-sam");
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -482,7 +544,7 @@ test.describe("a person's card", () => {
     await page.reload();
     // Standing still, so "Knocked" is still up when it's looked at on a slow machine.
     await page.clock.pauseAt(new Date(opened.getTime() + 600_000));
-    await rows(page, "Away").first().getByRole("button").first().click();
+    await openCard(page, "Away", "Sam");
     const card = page.getByRole("dialog", { name: "Sam" });
     await card.getByRole("button", { name: "Knock" }).click();
     await expect(card.getByRole("button", { name: "Knocked" })).toBeDisabled();
@@ -493,7 +555,7 @@ test.describe("a person's card", () => {
 
   test("a knock refused for the hour says so in words", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?limit");
-    await rows(page, "Away").first().getByRole("button").first().click();
+    await openCard(page, "Away", "Sam");
     const card = page.getByRole("dialog", { name: "Sam" });
     await card.getByRole("button", { name: "Knock" }).click();
     await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
@@ -510,7 +572,7 @@ test.describe("a person's card", () => {
       test("a refused knock's sentences each sit on one line", async ({ page }) => {
         await page.goto("/tests/fixtures/next-list.html?limit");
         await page.evaluate(() => document.fonts.ready);
-        await rows(page, "Away").first().getByRole("button").first().click();
+        await openCard(page, "Away", "Sam");
         const card = page.getByRole("dialog", { name: "Sam" });
         await card.getByRole("button", { name: "Knock" }).click();
         const note = card.getByRole("status");
@@ -543,7 +605,7 @@ test.describe("a person's card", () => {
 
   test("nobody offline can be knocked, and the card says why (#288)", async ({ page }) => {
     await page.getByRole("button", { name: /Offline/ }).click();
-    await rows(page, "Offline").first().getByRole("button").first().click();
+    await openCard(page, "Offline", "Jen");
     const card = page.getByRole("dialog", { name: "Jen" });
     const knock = card.getByRole("button", { name: "Knock" });
     await expect(knock).toBeDisabled();
@@ -574,7 +636,7 @@ test.describe("a person's card", () => {
   test("always fits inside the list window, above the row when there is no room below", async ({ page }) => {
     await page.getByRole("button", { name: /Offline/ }).click();
     const row = rows(page, "Offline").first().getByRole("button").first();
-    await row.click();
+    await openCard(page, "Offline", "Jen");
     const card = await page.getByRole("dialog", { name: "Jen" }).boundingBox();
     const opened = await row.boundingBox();
     const size = page.viewportSize();
@@ -703,10 +765,10 @@ test.describe("your own card", () => {
 });
 
 test.describe("a person's row", () => {
-  test("shows Message and Knock on hover and focus; nobody offline can be knocked", async ({ page }) => {
+  test("shows their card and Knock on hover and focus; nobody offline can be knocked", async ({ page }) => {
     const sam = rows(page, "Away").first();
     await sam.hover();
-    await expect(sam.getByRole("button", { name: "Message Sam" })).toBeVisible();
+    await expect(sam.getByRole("button", { name: "Sam's card" })).toBeVisible();
     await expect(sam.getByRole("button", { name: "Knock on Sam's door" })).toBeEnabled();
     await page.getByRole("button", { name: /Offline/ }).click();
     const jen = rows(page, "Offline").first();
@@ -718,14 +780,15 @@ test.describe("a person's row", () => {
     await expect(page.locator("[data-kit='Tooltip']")).toHaveText("Can't knock while Jen is offline.");
     await knock.click({ force: true });
     await expect(page.locator("body")).not.toHaveAttribute("data-opened", "knock:u-jen");
-    // The keyboard reaches it: from the row, past Message.
+    // The keyboard reaches it: from the row, past their card.
     await page.mouse.move(0, 0);
     await jen.getByRole("button").first().focus();
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     await expect(knock).toBeFocused();
-    await jen.getByRole("button", { name: "Message Jen" }).click();
-    await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-jen");
+    // The row itself opens them, offline or not.
+    await jen.getByRole("button").first().click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "person:u-jen:new");
   });
 
   test("a knock from the row shakes it once and rests three seconds; from the card too", async ({ page }) => {
@@ -746,7 +809,7 @@ test.describe("a person's row", () => {
     await expect(sam).not.toHaveAttribute("data-knocked", "yes");
     await expect(sam.getByRole("button", { name: "Knock on Sam's door" })).toBeEnabled();
     // From the card, the row shakes the same way.
-    await sam.getByRole("button").first().click();
+    await openCard(page, "Away", "Sam");
     await page.getByRole("dialog", { name: "Sam" }).getByRole("button", { name: "Knock" }).click();
     await expect(sam).toHaveAttribute("data-knocked", "yes");
   });
@@ -762,10 +825,22 @@ test.describe("a person's row", () => {
     expect(await sam.getAttribute("data-knocked")).toBeNull();
   });
 
-  test("a double-click goes straight to the DM, the old AIM habit", async ({ page }) => {
-    await rows(page, "People here").filter({ hasText: "Jules" }).getByRole("button").first().dblclick();
-    await expect(page.locator("body")).toHaveAttribute("data-opened", "message:u-jules");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+  test("hovering shows their whole status when the row has had to cut it short (#351)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?longstatus");
+    await page.evaluate(() => document.fonts.ready);
+    const tip = page.locator("[data-kit='Tooltip']");
+    const dave = rows(page, "People here").filter({ hasText: "Dave" });
+    const detail = dave.locator(".k-row-detail");
+    const whole = (await detail.textContent()) ?? "";
+    expect(await detail.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+    await dave.getByRole("button").first().hover();
+    await expect(tip).toHaveText(whole);
+    await expect(tip).toHaveAttribute("data-placed", "yes");
+    await page.mouse.move(1, 1);
+    await expect(tip).toHaveCount(0);
+    // A status that fits isn't repeated.
+    await rows(page, "People here").filter({ hasText: "Eli" }).getByRole("button").first().hover();
+    await expect(tip).toHaveCount(0);
   });
 
   test("the shake doesn't move for somebody who asked for less motion", async ({ page }) => {
@@ -780,15 +855,15 @@ test.describe("a person's row", () => {
   });
 });
 
-test.describe("the new-message picker", () => {
-  const picker = (page: Page) => page.getByRole("dialog", { name: "New message" });
+test.describe("the picker for a group", () => {
+  const picker = (page: Page) => page.getByRole("dialog", { name: "Start a group" });
   const offered = (page: Page) => rows(page, "People to pick");
   const openPicker = async (page: Page) => {
-    await page.getByRole("button", { name: "New message" }).click();
+    await page.getByRole("button", { name: "Start a group" }).click();
     await expect(picker(page)).toBeVisible();
   };
 
-  test("opens from the DMs heading on everyone but you, typing already", async ({ page }) => {
+  test("opens from the + on Rooms on everyone but you, typing already (#351)", async ({ page }) => {
     await openPicker(page);
     await expect(offered(page)).toHaveText([/Callie/, /Dave/, /Eli/, /Jen/, /Jules/, /Sam/]);
     await expect(picker(page).getByRole("textbox", { name: "Add someone" })).toBeFocused();
@@ -861,7 +936,7 @@ test.describe("the new-message picker", () => {
     await openPicker(page);
     await page.keyboard.press("Escape");
     await expect(picker(page)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "New message" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Start a group" })).toBeFocused();
   });
 
   test("fits inside the list window, in the middle, and stays put as people are picked", async ({ page }) => {

@@ -30,7 +30,7 @@ import { awayChoices } from "../../src/next/core/you";
 import { ListView } from "../../src/next/app/list/ListView";
 import "../../src/next/styles/app.css";
 import type { User } from "../../src/generated/User";
-import { NOW, SERVER, SERVER_NAME, evening, ownFields, people, withFields } from "./next/evening";
+import { NOW, SERVER, SERVER_NAME, dms, evening, ownFields, people, withFields } from "./next/evening";
 import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk,
@@ -107,15 +107,30 @@ const hostMe = (me: typeof noDms.me) => (me ? { ...me, is_host: !query.has("memb
 const bare = query.has("bare")
   ? { ...noDms, rooms: [], dms: [], me: hostMe(noDms.me), users: noDms.users.filter((user) => user.id === noDms.me?.id).map((user) => ({ ...user, is_host: !query.has("member") })), presence: noDms.presence.filter((entry) => entry.user_id === noDms.me?.id) }
   : noDms;
-const many = query.has("many")
+// `?talked`: DMs with Dave and with Jen (offline) too, both read, Dave's
+// spoken in before Jules's (#351): the people you're talking to come first
+// in their group, and one who writes shows even in a folded group.
+const talked = query.has("talked")
   ? {
       ...bare,
-      rooms: [
-        ...bare.rooms,
-        ...Array.from({ length: 15 - bare.rooms.length }, (_, n) => ({ ...(bare.rooms[0] ?? ({} as never)), id: `r-extra-${n}`, slug: `extra-${n}`, name: `quiet-room-${n + 1}`, position: 10 + n, last_message_id: null })),
+      dms: [
+        ...bare.dms,
+        { ...dms.jules, id: "d-dave", slug: "d-dave", member_ids: [people.matt.id, people.dave.id], last_message_id: "m000026" },
+        { ...dms.jules, id: "d-jen", slug: "d-jen", member_ids: [people.matt.id, people.jen.id], last_message_id: "m000025" },
       ],
+      newest: { ...bare.newest, "d-dave": "m000026", "d-jen": "m000025" },
+      read: { ...bare.read, "d-dave": "m000026", "d-jen": "m000025" },
     }
   : bare;
+const many = query.has("many")
+  ? {
+      ...talked,
+      rooms: [
+        ...talked.rooms,
+        ...Array.from({ length: 15 - talked.rooms.length }, (_, n) => ({ ...(talked.rooms[0] ?? ({} as never)), id: `r-extra-${n}`, slug: `extra-${n}`, name: `quiet-room-${n + 1}`, position: 10 + n, last_message_id: null })),
+      ],
+    }
+  : talked;
 // `?idle`: Callie hasn't touched anything for ten minutes (#259).
 // `?idle=many`: Callie, Eli and Dave are all idle, as a busy evening's list
 // looks. Callie's and Eli's names glow, and they have no status line, so
@@ -140,6 +155,18 @@ const fielded = query.has("fields")
       return { ...shown, me: shown.me && wearing(shown.me), users: shown.users.map(wearing) };
     })()
   : shown;
+// `?longstatus`: Dave's status runs longer than his row (#351): hovering
+// his row shows it whole.
+const described = query.has("longstatus")
+  ? {
+      ...fielded,
+      users: fielded.users.map((user) =>
+        user.id === people.dave.id && user.status
+          ? { ...user, status: { ...user.status, line: "side two, then side one again, then probably side two, so nobody talk to me until eleven" } }
+          : user,
+      ),
+    }
+  : fielded;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
@@ -165,7 +192,7 @@ interface Live {
 
 /** One server, as the list has always been. */
 function OneServer() {
-  const [held, setHeld] = useState<GatewayState>(fielded);
+  const [held, setHeld] = useState<GatewayState>(described);
   useEffect(() => {
     if (!query.has("live")) return;
     let next = 100;
@@ -195,6 +222,7 @@ function OneServer() {
     speaking,
     onOpenRoom: (id) => note(`room:${id}`),
     onOpenDm: (id) => note(`dm:${id}`),
+    onOpenPerson: (user, dm) => note(`person:${user.id}:${dm ?? "new"}`),
     onMessage: (user) => note(`message:${user.id}`),
     onStartDm: async (people) => {
       note(`newdm:${people.map((person) => person.id).join(",")}`);
@@ -292,6 +320,7 @@ function Servers() {
         speaking: id === SERVER ? speaking : undefined,
         onOpenRoom: (room) => note(`room:${id}:${room}`),
         onOpenDm: (dm) => note(`dm:${id}:${dm}`),
+        onOpenPerson: (user, dm) => note(`person:${id}:${user.id}:${dm ?? "new"}`),
         onMessage: (user) => note(`message:${id}:${user.id}`),
         onKnock: async (user) => {
           note(`knock:${id}:${user.id}`);

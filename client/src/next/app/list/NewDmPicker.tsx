@@ -13,7 +13,7 @@ export interface NewDmPickerProps {
   meId: string | null;
   /** Your DMs, by who's in them. */
   dms: { id: string; member_ids: string[] | null }[];
-  /** The DMs heading, in window coordinates: the picker opens under it. */
+  /** The + on the Rooms heading, in window coordinates: the picker opens under it (#351). */
   anchor: { bottom: number };
   /** Open the DM; resolves to what went wrong, in words, or null once it's open. */
   onStart: (people: User[]) => Promise<string | null>;
@@ -81,9 +81,9 @@ export function NewDmPicker({ people, meId, dms, anchor, onStart, onCancel }: Ne
         : `A new DM with ${pickedLabel(picked)}.`;
 
   return (
-    <Popover label="New message" at={at} onClose={onCancel}>
+    <Popover label="Start a group" at={at} onClose={onCancel}>
       <div className="nx-newdm" ref={box}>
-        <h2 className="nx-newdm-title">New message</h2>
+        <h2 className="nx-newdm-title">Start a group</h2>
         <div className="nx-newdm-to">
           <span className="nx-newdm-to-label">To</span>
           {picked.length === 0 ? <span className="nx-newdm-nobody">nobody yet</span> : null}

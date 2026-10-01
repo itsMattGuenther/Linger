@@ -81,6 +81,32 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
   "around" to everybody**, its own people included. Nobody sees that you're
   DMing, let alone with whom.
 
+## Decided on 2026-09-30: places and people (#351)
+
+Matt found the DMs and People sections fragmented. Put into words: the list
+was sorted by what Linger stores (rooms, DM conversations, members), not by
+how you think of your friends (places and people). So every friend was in it
+twice, a DM row with a dot and a plain name and a People row with their
+styled name and status, looking different and doing different things when
+clicked. Mockups at real size compared three ways out; he chose the first:
+
+- **One row per friend.** A one-to-one DM has no row of its own; it lives on
+  its person. Their row is lit while they've written something you haven't
+  read.
+- **The people you're talking to come first** in each group: whoever wrote
+  to you, then whoever you've talked with most recently, then everyone else.
+  On a server of 50 or 60 (#197) the people you DM don't sink.
+- **Clicking a friend opens them beside the list:** their card on top, your
+  conversation underneath. Hovering shows their whole status. Opening another
+  person replaces a tab you haven't typed in, so looking around doesn't pile
+  up tabs.
+- **Group DMs sit with the rooms,** after the server's own, marked by their
+  people's dots: a group DM is a small private room. The + on Rooms starts one.
+- **Not taken:** keeping DMs but only while something's live (every friend
+  still twice exactly when it matters, and rows coming and going under you),
+  and DM rows that show the last line (still twice, and private words on the
+  screen pull at you like an inbox).
+
 ## The idea
 
 Friends don't need Discord's four columns; they need a buddy list. The
@@ -149,36 +175,61 @@ From top to bottom, for each server:
    - moving sound bars while voice is on.
 
    Click a room to open it.
-3. **DMs,** with a **new message** button on the heading (see below). A DM with
-   something new goes bold and goes first; after those, the one somebody wrote
-   in most recently, you or them, is on top (#248).
-4. **People:** everyone on the server in one list, not grouped by room, since
-   the rooms above already show who's where.
+
+   Your **group DMs** come after the server's rooms, above "More rooms"
+   (#351): a group DM is a small private room. Each is named by who's in it, with their dots in the
+   marker column; one with something new is lit and goes first, then the one
+   spoken in most recently (#248). The **+** on the Rooms heading starts one
+   (see below).
+3. **People:** everyone on the server in one list, not grouped by room, since
+   the rooms above already show who's where. Your one-to-one DMs live here,
+   on their people (#351): there is no DMs section.
    - People who are here come first, whether they're in a room or around.
    - Then **Away**, with their away messages. In this design they're the stars.
    - Then **Offline**. Away and Offline have the same small heading with a
      caret: Away starts open, and Offline starts folded with "show". There are
      no counts anywhere.
+   - **In each group, the people you're talking to come first:** whoever has
+     written to you and you haven't read yet, then whoever you've talked with
+     most recently (by the newest message in your DM, yours or theirs), then
+     everyone else as before. On a big server the people you DM stay at the
+     top instead of sinking in a sea of names.
 
    Each row has their dot, their styled name, one line of status or away
    message, and a faint note on the right: "in #general", "around" or "last
    here yesterday". An offline person's name is a dim grey rather than their
    colors, so the Offline group reads as nobody home.
-5. **Media and Search** at the bottom.
+
+   **Somebody who has written to you is lit:** their row gets the lamp's soft
+   fill and thin edge until you've read it (#291), even inside a folded Away
+   or Offline group, and a folded People heading is lit while one is. A DM
+   with somebody no longer on the server stays with the rooms, since there's
+   no row of theirs for it to live on.
+4. **Media and Search** at the bottom.
 
 ![A person's card, with Message and Knock](buddy-list/buddy-list-13-person-card.webp)
 
-**Click someone (or press Enter) and their card opens beside the list:**
+**Click someone (or press Enter) and they open beside the list** (#351): a
+tab with **their card on top and your conversation underneath**, one Jules,
+one click. The card part holds:
 
+- their styled name, and where they are;
 - the status in full, in their own face;
 - their fields: what they're listening to, reading, playing, or anything
   they labelled themselves, with web addresses as links (#270);
-- where they are.
+- **Knock**, and voice.
 
-The card has two clear buttons: **Message** and **Knock**. A knock makes their
-row wiggle, and the button says "knocked" for three seconds. Offline people
-can't be knocked. Hovering a row still shows the small Knock and Message
-buttons, and a double-click still goes straight to a DM, the old AIM habit.
+With "Each in its own window" on, they open in a window of their own instead.
+**Hovering a row shows their whole status**, for a look without opening
+anything, and the small Knock button. **A tab opened from the list is a
+preview:** its label is in italics, and the next person you open takes its
+place, so looking around doesn't pile up tabs. Typing in it, or opening that
+person another way, keeps it.
+
+A knock makes their row wiggle, and the button says "knocked" for three
+seconds. Offline people can't be knocked. The card on its own still opens
+from a name in a conversation or the voice bar (PPL-5), with **Message** and
+**Knock**, and a knock from a row that doesn't go says why on it.
 
 **Your own name opens your own card** (#271), at the top of the list and on
 your messages in a conversation. It is the same card friends see, not a
@@ -189,7 +240,8 @@ everyone's. A quiet line at the top says "This is how friends see you", and
 
 ![The new-message picker](buddy-list/buddy-list-12-new-dm.webp)
 
-**New message.** The button on the DMs heading opens a small picker:
+**Starting a group.** The **+** on the Rooms heading opens a small picker
+(#351; it was the new-message button on the DMs heading):
 
 - **Choosing:** pick one person, or up to seven for a group, since a DM holds
   two to eight people, you included. There's a search field, and each person

@@ -355,7 +355,10 @@ for (const scale of [1, 2]) {
 
         // And the light around the letters is the same, for the name's size,
         // as on the person card, where nothing cuts it (#272).
-        await rows(page, "People here").filter({ hasText: "Eli" }).getByRole("button").first().click();
+        // From the card button their row shows on hover: a click on the row opens them beside the list (#351).
+        const eliRow = rows(page, "People here").filter({ hasText: "Eli" });
+        await eliRow.hover();
+        await eliRow.getByRole("button", { name: "Eli's card" }).click();
         const card = page.getByRole("dialog", { name: "Eli" });
         await expect(card).toBeVisible();
         await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));

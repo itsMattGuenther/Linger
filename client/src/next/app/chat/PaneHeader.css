@@ -109,3 +109,64 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* A one-to-one DM beside the list is its person (#351): their card is the
+   header, with the conversation under it. Their name, where they are, their
+   whole status and their fields, over as many lines as they need. */
+.nx-pane-head[data-person="yes"] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  height: auto;
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3-5);
+  white-space: normal;
+}
+
+.nx-pane-person-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: var(--control-md);
+}
+
+.nx-pane-head[data-person="yes"] .nx-pane-title {
+  max-width: none;
+  overflow: visible;
+  line-height: var(--line-display);
+}
+
+.nx-pane-where {
+  display: flex;
+  align-items: center;
+  gap: var(--marker-gap);
+  min-width: 0;
+  height: var(--line-meta);
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+  color: var(--text-muted);
+}
+
+.nx-pane-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-pane-head[data-person="yes"] .nx-pane-sub {
+  flex: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+
+.nx-pane-head[data-person="yes"] .nx-pane-sub[data-away="yes"] {
+  color: var(--text-away);
+}
+
+.nx-pane-head[data-person="yes"] .nx-person-fields {
+  margin-top: var(--space-1);
+  max-width: 60ch;
+}

@@ -96,6 +96,8 @@ export interface PaneHost {
    * list, the list window acts itself, as its voice bar does.
    */
   voiceControl?: (press: VoiceControlQuestion) => void;
+  /** Something was typed in a conversation's box: a preview tab of it is kept (#351). */
+  onTyped?: (conversation: string) => void;
 }
 
 export interface ConversationPane {
@@ -128,7 +130,7 @@ export interface ConversationPane {
  * name opens. The place that holds it decides which conversation shows and
  * what surrounds it.
  */
-export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList }: PaneHost): ConversationPane {
+export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped }: PaneHost): ConversationPane {
   const servers = useServers();
   const now = useNow();
   // Its own clock, so the conversation isn't redrawn every two seconds.
@@ -140,7 +142,12 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const [knocks, setKnocks] = useState<ReadonlyMap<string, HeaderKnockNow>>(new Map());
   // What each conversation's box holds, so a draft can go with it to another window.
   const typed = useRef(new Map<string, string>());
-  const onDraft = useCallback((conversation: string, text: string) => void typed.current.set(conversation, text), []);
+  const typedNow = useRef(onTyped);
+  typedNow.current = onTyped;
+  const onDraft = useCallback((conversation: string, text: string) => {
+    typed.current.set(conversation, text);
+    if (text.trim() !== "") typedNow.current?.(conversation);
+  }, []);
   const draftOf = useCallback((conversation: string) => typed.current.get(conversation) ?? "", []);
   // Half-typed lines outlast their tab and a restart (decision 11).
   const keep = useMemo(() => {
@@ -387,6 +394,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
                 }
               : undefined,
           server: several ? serverTag(active.server) : undefined,
+          // Beside the list, a one-to-one DM's header is their card (#351).
+          person: others.length === 1 && only ? { note: personRow(state, only.user.id, now)?.note ?? "" } : undefined,
         }
       : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id), server: several ? serverTag(active.server) : undefined };
     return {

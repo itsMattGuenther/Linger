@@ -156,6 +156,8 @@ export function ServerSection({
             serverName={name}
             onOpenRoom={listing.onOpenRoom}
             onOpenDm={listing.onOpenDm}
+            onOpenPerson={listing.onOpenPerson}
+            showing={listing.showing}
             onMessage={listing.onMessage}
             onKnock={listing.onKnock}
             onStartDm={listing.onStartDm}

@@ -6,7 +6,7 @@ import { leaveDraft, takeDraft } from "../../core/handoff";
 import { tabCommand } from "../../core/keys";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
-import { closeTab, isTool, keyOf, moveTab, openTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
+import { closeTab, isPreview, isTool, keepTab, keyOf, moveTab, openTab, previewTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { IconButton, type TabItem } from "../../kit";
 import { MediaPanel, type OpenFound, SearchPanel } from "../tools/panels";
 import { ChatView } from "./ChatView";
@@ -16,6 +16,8 @@ import { draftStore, useConversationPane } from "./useConversationPane";
 export interface SideOpen {
   tab: TabKey;
   message?: MessageId | null;
+  /** A person opened from the list (#351): the next one takes this tab over until it's kept. */
+  preview?: boolean;
 }
 
 /** What the list window may ask of the side while it's out. */
@@ -84,15 +86,26 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
   const active = tabs.active;
   const conversation = active && !isTool(active) ? active : null;
   const tool = active && isTool(active) ? active.tool : null;
-  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl });
+  // Typing in a person's preview tab keeps it (#351).
+  const onTyped = useCallback(
+    (id: string) => {
+      if (!isPreview(tabsNow.current, id)) return;
+      setTabs((held) => {
+        const tab = held.open.find((open) => keyOf(open) === id);
+        return tab ? keepTab(held, tab) : held;
+      });
+    },
+    [setTabs],
+  );
+  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl, onTyped });
   const { goToMessage, askFocus, seedDraft, draftOf, tabItem } = view;
 
   // A conversation opened while the side is out: to the message first, so
   // the room opens once, around it (#266), then its tab, and the cursor.
   const opened = useCallback(
-    ({ tab, message }: SideOpen) => {
+    ({ tab, message, preview }: SideOpen) => {
       if (message) goToMessage(tab, message);
-      setTabs((held) => openTab(held, tab));
+      setTabs((held) => (preview ? previewTab(held, tab) : openTab(held, tab)));
       askFocus();
       // Back from a window of its own, perhaps with a draft.
       const store = draftStore();
@@ -172,7 +185,8 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
           return [{ id: keyOf(tab), title: name, label: name, lead: { kind: "icon", icon: tab.tool }, closable: true }];
         }
         const item = tabItem(tab, same(tab, tabs.active));
-        return item ? [item] : [];
+        if (!item) return [];
+        return [isPreview(tabs, keyOf(tab)) ? { ...item, preview: true, label: `${item.label}, preview` } : item];
       }),
     [tabs, tabItem],
   );

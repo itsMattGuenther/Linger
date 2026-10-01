@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTab, isTool, keepOnly, keyOf, loadTabs, moveTab, NO_TABS, openTab, same, type SideTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
+import { closeTab, isPreview, isTool, keepOnly, keepTab, keyOf, loadTabs, moveTab, NO_TABS, openTab, previewTab, same, type SideTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
 
 const HOME = "https://home.example";
 const WORK = "https://work.example";
@@ -95,5 +95,59 @@ describe("the tabs beside the list", () => {
     // Kept on this computer with the conversations, and read back defensively.
     expect(loadTabs(saveTabs(tabs))).toEqual(tabs);
     expect(loadTabs('{"v":1,"open":[{"tool":"media"},{"tool":"settings"},{"tool":1}],"active":{"tool":"media"}}')).toEqual({ open: [media], active: media });
+  });
+});
+
+describe("a person opened from the list is a preview until it's kept (#351)", () => {
+  const eli: TabKey = { server: HOME, roomId: "d-eli" };
+  const callie: TabKey = { server: HOME, roomId: "d-callie" };
+
+  it("the next person takes the preview's place, where it was, and becomes the preview", () => {
+    const looked = previewTab(previewTab(opened(general), jules), eli);
+    expect(names(looked)).toEqual(["r-general", "d-eli"]);
+    expect(looked.active).toEqual(eli);
+    expect(looked.preview).toEqual(eli);
+    // In place, not at the end: a kept tab to its right stays to its right.
+    const withRoom = openTab(previewTab(opened(general), jules), listening);
+    expect(names(previewTab(withRoom, eli))).toEqual(["r-general", "d-eli", "r-listening"]);
+  });
+
+  it("typing in it keeps it, so the next person gets a tab of their own", () => {
+    const kept = keepTab(previewTab(opened(general), jules), jules);
+    expect(kept.preview ?? null).toBeNull();
+    expect(names(previewTab(kept, eli))).toEqual(["r-general", "d-jules", "d-eli"]);
+  });
+
+  it("opening it another way (a banner, a search hit) keeps it too", () => {
+    const kept = openTab(previewTab(opened(general), jules), { ...jules });
+    expect(kept.preview ?? null).toBeNull();
+    expect(names(previewTab(kept, eli))).toEqual(["r-general", "d-jules", "d-eli"]);
+  });
+
+  it("a person whose tab is open already just shows it, kept or not", () => {
+    const tabs = previewTab(opened(general, jules), eli);
+    const again = previewTab(tabs, jules);
+    expect(names(again)).toEqual(["r-general", "d-jules", "d-eli"]);
+    expect(again.active).toEqual(jules);
+    expect(again.preview).toEqual(eli);
+  });
+
+  it("keeping or closing another tab leaves the preview alone; closing the preview ends it", () => {
+    const tabs = previewTab(opened(general, listening), jules);
+    expect(keepTab(tabs, general).preview).toEqual(jules);
+    expect(closeTab(tabs, general).preview).toEqual(jules);
+    expect(closeTab(tabs, jules).preview ?? null).toBeNull();
+    expect(moveTab(tabs, jules, 0).preview).toEqual(jules);
+    expect(stepTab(tabs, 1).preview).toEqual(jules);
+    expect(keepOnly(tabs, (tab) => !same(tab, jules)).preview ?? null).toBeNull();
+  });
+
+  it("knows the preview by its key, and isn't stored: after a restart every tab is kept", () => {
+    const tabs = previewTab(opened(general), callie);
+    expect(isPreview(tabs, keyOf(callie))).toBe(true);
+    expect(isPreview(tabs, keyOf(general))).toBe(false);
+    const back = loadTabs(saveTabs(tabs));
+    expect(names(back as Tabs)).toEqual(["r-general", "d-callie"]);
+    expect(back.preview ?? null).toBeNull();
   });
 });

@@ -60,7 +60,8 @@ async function grown(page: Page) {
 }
 
 const room = (page: Page, name: string) => page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: new RegExp(`^#${name}\\b`) });
-const dm = (page: Page, name: string) => page.getByRole("list", { name: "DMs" }).getByRole("button", { name: new RegExp(`^${name}`) });
+// A one-to-one DM lives on its person's row (#351): clicking them opens it, as a preview tab.
+const dm = (page: Page, name: string) => page.getByRole("list", { name: "People here" }).getByRole("button", { name: new RegExp(`^${name}`) }).first();
 const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const showing = (page: Page) => page.getByRole("tab", { selected: true });
 
@@ -90,7 +91,7 @@ test("folding shrinks the window to the list and keeps the tabs; unfolding bring
   await room(page, "general").click();
   await grown(page);
   await dm(page, "Jules").click();
-  await expect(showing(page)).toHaveAccessibleName("DM with Jules");
+  await expect(showing(page)).toHaveAccessibleName(/^DM with Jules(, preview)?$/);
 
   // The fold button is at the conversations' own edge: folding takes it away,
   // so a second click can't land on the list's close button.
@@ -108,7 +109,7 @@ test("folding shrinks the window to the list and keeps the tabs; unfolding bring
   await expect(unfold).toHaveAttribute("data-tone", "filled");
   await unfold.click();
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
-  await expect(showing(page)).toHaveAccessibleName("DM with Jules");
+  await expect(showing(page)).toHaveAccessibleName(/^DM with Jules(, preview)?$/);
   await expect.poll(() => sizes(page)).toEqual(["size 1120x820", "size 340x820", "size 1120x820"]);
 });
 
@@ -152,11 +153,90 @@ test("a person's card opened from the list sits over the list, not over the conv
   await open(page);
   await room(page, "general").click();
   await grown(page);
-  await page.getByRole("list", { name: "People here" }).getByRole("button", { name: /^Dave/ }).first().click();
+  const dave = page.getByRole("list", { name: "People here" }).locator(":scope > li").filter({ hasText: "Dave" });
+  await dave.hover();
+  await dave.getByRole("button", { name: "Dave's card" }).click();
   const card = await page.getByRole("dialog", { name: "Dave" }).boundingBox();
   const list = await page.locator("[data-screen='list']").boundingBox();
   expect(card).not.toBeNull();
   expect((card?.x ?? 0) + (card?.width ?? 0)).toBeLessThanOrEqual((list?.x ?? 0) + (list?.width ?? 0));
+});
+
+// A person clicked in the list opens in a preview tab (#351): looking around
+// doesn't pile up tabs, and typing in one keeps it.
+test("a person opened from the list is a preview: the next person takes its tab, and typing keeps it (#351)", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  const tabs = page.getByRole("tab");
+  await dm(page, "Jules").click();
+  await expect(tabs).toHaveText([/general/, /Jules/]);
+  await expect(showing(page)).toHaveAccessibleName("DM with Jules, preview");
+  await expect(page.locator(".k-tab[data-preview='yes'] .k-tab-title")).toHaveCSS("font-style", "italic");
+  // Somebody you've never talked with: the DM is made, and takes Jules's place.
+  await dm(page, "Callie").click();
+  await expect(tabs).toHaveText([/general/, /Callie/]);
+  await expect(showing(page)).toHaveAccessibleName("DM with Callie, preview");
+  // Typing keeps it, so the next person gets a tab of their own.
+  await box(page).pressSequentially("hey");
+  await expect(showing(page)).toHaveAccessibleName("DM with Callie");
+  await expect(page.locator(".k-tab[data-preview='yes']")).toHaveCount(0);
+  await dm(page, "Jules").click();
+  await expect(tabs).toHaveText([/general/, /Callie/, /Jules/]);
+  // A room is never a preview.
+  await room(page, "weekend-plans").click();
+  await expect(tabs).toHaveText([/general/, /Callie/, /Jules/, /weekend-plans/]);
+});
+
+test("the list marks what's showing beside it: a room's row, or the person whose DM it is (#351)", async ({ page }) => {
+  await open(page);
+  const person = (name: string) => page.getByRole("list", { name: "People here" }).locator(":scope > li").filter({ hasText: name });
+  const general = page.getByRole("list", { name: "Rooms" }).locator(":scope > li").filter({ hasText: "general" });
+  await dm(page, "Jules").click();
+  await grown(page);
+  await expect(person("Jules")).toHaveAttribute("data-selected", "yes");
+  await expect(general).not.toHaveAttribute("data-selected", "yes");
+  await room(page, "general").click();
+  await expect(general).toHaveAttribute("data-selected", "yes");
+  await expect(person("Jules")).not.toHaveAttribute("data-selected", "yes");
+  // Folded away, nothing is showing, so nothing is marked.
+  await page.getByRole("button", { name: "Fold back to your list" }).click();
+  await expect(page.locator("[data-screen='list'] li[data-selected='yes']")).toHaveCount(0);
+});
+
+// A one-to-one DM beside the list is its person (#351): their card on top,
+// the conversation under it.
+test("a one-to-one DM beside the list opens on their card: their name, where they are, their whole status, their fields and Knock (#351)", async ({ page }) => {
+  await open(page);
+  await dm(page, "Jules").click();
+  await grown(page);
+  const head = page.locator(".nx-pane-head[data-person='yes']");
+  await expect(head.locator(".nx-pane-title [data-kit='Name']")).toHaveText("Jules");
+  await expect(head.locator(".nx-pane-where")).toHaveText("in #general");
+  await expect(head.locator(".nx-pane-sub")).toHaveText("speakers: finally set up");
+  await expect(head.locator(".nx-person-fields dt")).toHaveText([/listening to/i]);
+  await expect(head.getByRole("button", { name: "Knock" })).toBeEnabled();
+  // Nothing in it is cut off: it takes the lines it needs.
+  const clipped = await head.evaluate((node) =>
+    [...node.querySelectorAll<HTMLElement>(".nx-pane-sub, .nx-person-fields dd, .nx-pane-title")].filter((one) => one.scrollWidth > one.clientWidth + 1).length,
+  );
+  expect(clipped).toBe(0);
+  // A room keeps its one line.
+  await room(page, "general").click();
+  await expect(page.locator(".nx-pane-head[data-kind='room']")).toHaveCSS("height", "40px");
+  await expect(page.locator(".nx-pane-head[data-person='yes']")).toHaveCount(0);
+});
+
+test("in their card, a refused knock says why in place of their status, whole, and never Knocked (#351, #288)", async ({ page }) => {
+  await open(page, "?one&limit");
+  await dm(page, "Jules").click();
+  await grown(page);
+  const head = page.locator(".nx-pane-head[data-person='yes']");
+  await head.getByRole("button", { name: "Knock" }).click();
+  const said = head.getByRole("status");
+  await expect(said).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
+  expect(await said.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  await expect(head.getByRole("button", { name: "Knock" })).not.toHaveText("Knocked");
 });
 
 test("moves between tabs and closes them from the keyboard, even while typing", async ({ page }) => {
@@ -172,7 +252,7 @@ test("moves between tabs and closes them from the keyboard, even while typing", 
   await page.keyboard.press("Control+Shift+Tab");
   await expect(showing(page)).toHaveAccessibleName("#weekend-plans");
   await page.keyboard.press("Control+PageUp");
-  await expect(showing(page)).toHaveAccessibleName("DM with Jules");
+  await expect(showing(page)).toHaveAccessibleName(/^DM with Jules(, preview)?$/);
   await page.keyboard.press("Alt+1");
   await expect(showing(page)).toHaveAccessibleName("#general");
   await page.keyboard.press("Alt+9");
@@ -183,7 +263,7 @@ test("moves between tabs and closes them from the keyboard, even while typing", 
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/, /weekend-plans/]);
   await page.keyboard.press("Control+w");
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
-  await expect(showing(page)).toHaveAccessibleName("DM with Jules");
+  await expect(showing(page)).toHaveAccessibleName(/^DM with Jules(, preview)?$/);
 });
 
 test("pops the showing tab out into its own window, and its draft goes with it", async ({ page }) => {
@@ -250,7 +330,7 @@ test("the tabs and the fold come back after a restart as they were left", async 
   await page.reload();
   await settled(page);
   await expect(page.getByRole("tab")).toHaveText([/general/, /Jules/]);
-  await expect(showing(page)).toHaveAccessibleName("DM with Jules");
+  await expect(showing(page)).toHaveAccessibleName(/^DM with Jules(, preview)?$/);
   // Folded, it comes back folded, with them kept.
   await page.getByRole("button", { name: "Fold back to your list" }).click();
   await page.reload();

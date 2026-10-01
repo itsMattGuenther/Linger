@@ -3,7 +3,8 @@ import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { sentencesOf } from "../../core/knock";
-import { Button, GroupMarker, HashMark, Marker, MarkerCluster, markerOf } from "../../kit";
+import { Button, GroupMarker, HashMark, Marker, MARKER_WORDS, MarkerCluster, markerOf, markerStateOf, Name } from "../../kit";
+import { PersonFields } from "../PersonFields";
 import "./PaneHeader.css";
 
 export type PaneHeaderProps =
@@ -23,6 +24,11 @@ export type PaneHeaderProps =
       server?: ServerTag;
       /** A one-to-one DM offers a knock. */
       knock?: HeaderKnock;
+      /**
+       * A one-to-one DM beside the list is its person (#351): their card is
+       * the header. Where they are, as their row in the list says it.
+       */
+      person?: { note: string };
     };
 
 /**
@@ -113,6 +119,52 @@ function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
         </Fragment>
       ))
     : null;
+  const knockButton = knock ? (
+    <Button
+      size="sm"
+      variant="secondary"
+      icon="knock"
+      busy={knock.phase === "knocking"}
+      disabled={knock.phase !== "idle"}
+      unavailable={knock.unavailable}
+      note={problem !== null && !inline ? sentences : undefined}
+      onClick={knock.onKnock}
+    >
+      {knock.phase === "knocked" ? "Knocked" : "Knock"}
+    </Button>
+  ) : null;
+  // Beside the list, a one-to-one DM is its person (#351): their card on
+  // top, the conversation under it. Their status is whole here, wrapping,
+  // and so is a refused knock's reason in its place.
+  if (single && props.person && place === "row") {
+    const away = single.state === "away";
+    return (
+      <Box className="nx-pane-head" data-kind="dm" data-place={place} data-person="yes">
+        <div className="nx-pane-person-top">
+          <h2 className="nx-pane-title">
+            <Name person={single.user} size="display" dim={single.state === "idle" || away || single.state === "offline"} />
+          </h2>
+          {tag}
+          <span className="nx-pane-fill" />
+          {knockButton}
+        </div>
+        <span className="nx-pane-where">
+          <Marker {...markerOf(single.user, single.state)} size="sm" label={MARKER_WORDS[markerStateOf(single.state)]} />
+          <span className="nx-pane-note">{props.person.note}</span>
+        </span>
+        {inline ? (
+          <p ref={said} className="nx-pane-sub" data-problem="yes" role="status">
+            {sentences}
+          </p>
+        ) : status ? (
+          <p className="nx-pane-sub" data-away={away ? "yes" : undefined}>
+            {status}
+          </p>
+        ) : null}
+        <PersonFields status={single.user.status} />
+      </Box>
+    );
+  }
   return (
     <Box className="nx-pane-head" data-kind="dm" data-place={place}>
       {single ? (
@@ -133,20 +185,7 @@ function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
       ) : (
         <span className="nx-pane-fill" />
       )}
-      {knock ? (
-        <Button
-          size="sm"
-          variant="secondary"
-          icon="knock"
-          busy={knock.phase === "knocking"}
-          disabled={knock.phase !== "idle"}
-          unavailable={knock.unavailable}
-          note={problem !== null && !inline ? sentences : undefined}
-          onClick={knock.onKnock}
-        >
-          {knock.phase === "knocked" ? "Knocked" : "Knock"}
-        </Button>
-      ) : null}
+      {knockButton}
     </Box>
   );
 }
