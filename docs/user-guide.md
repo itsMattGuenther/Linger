@@ -857,8 +857,10 @@ reports. Not anonymous ones either. There is nothing to opt out of.
 **On Linux, a shared video that plays without sound (or doesn't play at all)**
 is missing a decoder. Linux plays video through GStreamer, and the sound in
 most videos (AAC) and the picture (H.264) need its libav plugins. From 0.4.5,
-Linger's packages ask for them and the AppImage brings its own. On an older
-install, add them yourself: `sudo pacman -S gst-libav` on Arch and Omarchy,
+the Arch package requires them, a fresh install of the `.deb` or `.rpm` brings
+them, and the AppImage carries its own. Updating a `.deb` or `.rpm` from inside
+the app doesn't add them, and neither did anything before 0.4.5. Add them
+yourself: `sudo pacman -S gst-libav` on Arch and Omarchy,
 `sudo apt install gstreamer1.0-libav` on Debian and Ubuntu, `sudo dnf install
 gstreamer1-plugin-libav` on Fedora. Then restart Linger. An AppImage older than
 0.4.5 ignores what's installed on the computer, so update it instead (#358).
