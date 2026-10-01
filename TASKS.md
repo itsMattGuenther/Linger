@@ -24,11 +24,11 @@ default.
 
 ## How to run a task
 
-**0.4.4 release — ⏳ Matt, 2026-09-28.** A day of real use (#246–#306):
-@ mentions by name, pasted pictures, lit DMs, status fields, lights off for
-idle, away and offline, and voice through the server only; notes in
-`docs/releases/0.4.4.md`. The Buddy list client (M15, #198) has been the app
-since 0.4.0, and the previous client was deleted (#306).
+**0.4.5 release — ⏳ Matt, 2026-10-01.** One window and one row per friend:
+conversations, Media and Search beside the list (#337), a DM on its person
+(#351), messages to the time column (#334), Linux video sound (#358, #377),
+and hosts' `update.sh` and version note (#312, #314); notes in
+`docs/releases/0.4.5.md`. The server image is x86-64 only from 0.4.5 (#310).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
