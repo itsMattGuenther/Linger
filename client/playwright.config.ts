@@ -28,7 +28,14 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
-        launchOptions: { executablePath: process.env.LINGER_CHROMIUM_PATH },
+        // Text in grey smoothing only. With colored (LCD) smoothing, which
+        // CI's image turns on, Chromium paints red and blue fringes on grey
+        // letters wherever text sits on an opaque layer, and not where it's
+        // on a layer of its own, like a list long enough to scroll. The
+        // tests that measure a name's color pixel by pixel then depend on
+        // how long the list is: a list that stopped scrolling (#351) made an
+        // offline name read as colored (next-offline-names.spec.ts).
+        launchOptions: { executablePath: process.env.LINGER_CHROMIUM_PATH, args: ["--disable-lcd-text"] },
       },
     },
     {
