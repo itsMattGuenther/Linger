@@ -773,6 +773,7 @@ test.describe("files in the conversation", () => {
     await expect(video).toHaveAttribute("src", `${SERVER}/media/vid-1`);
     await expect(video).toHaveJSProperty("controls", true);
     await expect(video).toHaveAccessibleName("porch-timelapse.mp4");
+    await expect(video).toHaveAttribute("preload", "none");
 
     // Audio has no engine controls: Linger draws its own (#247, below), with
     // the length the server measured until the file says its own.
@@ -924,8 +925,9 @@ const PIECE = 8 * 1024;
  * While `down`, every request fails.
  */
 async function byteStore(page: Page, prefix: string, bytes: Buffer, contentType: string) {
-  const store = { down: false, ranges: [] as string[] };
+  const store = { down: false, ranges: [] as string[], requests: 0 };
   await page.route(`${SERVER}/media/${prefix}*`, async (route) => {
+    store.requests += 1;
     if (store.down) return route.fulfill({ status: 503 });
     const range = route.request().headers()["range"];
     const asked = /^bytes=(\d+)-(\d*)$/.exec(range ?? "");
@@ -943,6 +945,18 @@ async function byteStore(page: Page, prefix: string, bytes: Buffer, contentType:
     });
   });
   return store;
+}
+
+/**
+ * Whether a player already holds its whole file. Nothing loads before play
+ * (#381), and once played WebKit downloads the file in the background: these
+ * test files are seconds long, so by the time a test seeks it's all in and a
+ * seek asks the store for nothing. A real file of many megabytes still asks
+ * for the part a seek lands in, as Chromium always does, so the tests check
+ * the request only when the file wasn't whole.
+ */
+function wholeIn(media: HTMLMediaElement): boolean {
+  return media.buffered.length === 1 && media.buffered.start(0) === 0 && media.buffered.end(0) >= media.duration - 0.05;
 }
 
 /** The store for `/media/vid-*`, holding the clip. */
@@ -969,6 +983,15 @@ test.describe("a shared video (#222)", () => {
   const player = (page: Page, id: string) => row(page, id).locator("video");
   const time = (page: Page, id: string) => player(page, id).evaluate((video: HTMLVideoElement) => video.currentTime);
   const ready = (page: Page, id: string) => player(page, id).evaluate((video: HTMLVideoElement) => video.readyState);
+  // Resting with its source chosen (NETWORK_IDLE), which a player that loads nothing reaches at once.
+  const resting = (page: Page, id: string) => player(page, id).evaluate((video: HTMLVideoElement) => video.networkState === 1);
+
+  /** Played until it has its metadata, then paused: nothing loads before play (#381). */
+  async function loaded(page: Page, id: string) {
+    await player(page, id).evaluate((video: HTMLVideoElement) => void video.play().catch(() => undefined));
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await player(page, id).evaluate((video: HTMLVideoElement) => video.pause());
+  }
 
   /** The chat window with the video store in front of it, on an engine that can play the clip. */
   async function openWithVideo(page: Page) {
@@ -978,10 +1001,26 @@ test.describe("a shared video (#222)", () => {
     return videoStore(page);
   }
 
+  test("fetches nothing until it's played, then loads (#381)", async ({ page }) => {
+    const store = await openWithVideo(page);
+    const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
+    await expect(player(page, id)).toHaveAttribute("preload", "none");
+    // At rest with nothing loaded. One that asked for its metadata would be
+    // loading, then at rest with it loaded: a whole player built per video,
+    // about 190 MB each in WebKitGTK on NVIDIA.
+    await expect.poll(() => resting(page, id)).toBe(true);
+    expect(await ready(page, id)).toBe(0);
+    expect(store.requests).toBe(0);
+
+    await loaded(page, id);
+    expect(store.requests).toBeGreaterThan(0);
+  });
+
   test("seeks by asking for the part it needs, and plays on from there", async ({ page }) => {
     const store = await openWithVideo(page);
     const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
-    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await loaded(page, id);
+    const whole = await player(page, id).evaluate(wholeIn);
 
     await player(page, id).evaluate(
       (video: HTMLVideoElement) =>
@@ -994,8 +1033,8 @@ test.describe("a shared video (#222)", () => {
     await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(2);
     expect(await player(page, id).evaluate((video: HTMLVideoElement) => video.error)).toBeNull();
     await expect(row(page, id).getByRole("alert")).toHaveCount(0);
-    // It came back for a later part of the file, and got it.
-    expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
+    // It came back for a later part of the file, and got it, unless it had it all already (see `wholeIn`).
+    if (!whole) expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
   });
 
   test("one that can't load says so over its own frame, and loads again in place", async ({ page }) => {
@@ -1012,6 +1051,8 @@ test.describe("a shared video (#222)", () => {
       }, selector);
     const frame = await inRow("video");
     const rowHeight = await row(page, id).evaluate((node) => node.getBoundingClientRect().height);
+    // It loads only when played (#381), so that's when it finds the store down.
+    await player(page, id).evaluate((video: HTMLVideoElement) => void video.play().catch(() => undefined));
 
     const note = row(page, id).getByRole("alert");
     await expect(note).toHaveText("Couldn't load this video.");
@@ -1034,7 +1075,7 @@ test.describe("a shared video (#222)", () => {
   test("loading again picks up where it had got to", async ({ page }) => {
     await openWithVideo(page);
     const id = await post(page, "the porch light at dusk", "u-eli", { attachments: [clip] });
-    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await loaded(page, id);
     await player(page, id).evaluate(
       (video: HTMLVideoElement) =>
         new Promise<void>((settle) => {
@@ -1103,6 +1144,15 @@ test.describe("a shared audio file (#247)", () => {
   const ready = (page: Page, id: string) => sound(page, id).evaluate((audio: HTMLAudioElement) => audio.readyState);
   const read = <T,>(page: Page, id: string, what: (audio: HTMLAudioElement) => T) => sound(page, id).evaluate(what);
 
+  /** Played until it has its metadata, then paused: nothing loads before play (#381). */
+  async function loaded(page: Page, id: string) {
+    const play = card(page, id).getByRole("button", { name: "Play" });
+    await still(play);
+    await play.click();
+    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await card(page, id).getByRole("button", { name: "Pause" }).click();
+  }
+
   /** The chat window with the audio store in front of it, on an engine that can play a WAV. */
   async function openWithAudio(page: Page) {
     await open(page);
@@ -1124,7 +1174,8 @@ test.describe("a shared audio file (#247)", () => {
     await expect(shown(page, id)).toHaveText("0:00 / 0:04");
     await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
     await expect(player.getByRole("slider", { name: "Volume" })).toHaveAttribute("aria-valuetext", "100%");
-    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    // Settled: its source chosen and resting until it's played (#381).
+    await expect.poll(() => read(page, id, (audio) => audio.networkState)).toBe(1);
 
     const geometry = await player.evaluate((node) => {
       const box = (element: Element | null) => {
@@ -1254,10 +1305,25 @@ test.describe("a shared audio file (#247)", () => {
     expect(await read(page, a, (audio) => audio.volume)).toBeCloseTo(0.9, 5);
   });
 
+  test("fetches nothing until it's played, then loads (#381)", async ({ page }) => {
+    const store = await openWithAudio(page);
+    const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
+    await expect(sound(page, id)).toHaveAttribute("preload", "none");
+    await expect.poll(() => read(page, id, (audio) => audio.networkState)).toBe(1);
+    expect(await ready(page, id)).toBe(0);
+    expect(store.requests).toBe(0);
+    // The length is the server's until the file says its own.
+    await expect(shown(page, id)).toHaveText("0:00 / 0:04");
+
+    await loaded(page, id);
+    expect(store.requests).toBeGreaterThan(0);
+  });
+
   test("seeks with the timeline's keys by asking for the part it needs (#222)", async ({ page }) => {
     const store = await openWithAudio(page);
     const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
-    await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(1);
+    await loaded(page, id);
+    const whole = await sound(page, id).evaluate(wholeIn);
     const timeline = card(page, id).getByRole("slider", { name: "Timeline" });
 
     await timeline.focus();
@@ -1274,8 +1340,8 @@ test.describe("a shared audio file (#247)", () => {
     await expect.poll(() => ready(page, id)).toBeGreaterThanOrEqual(2);
     expect(await read(page, id, (audio) => audio.error)).toBeNull();
     await expect(row(page, id).getByRole("alert")).toHaveCount(0);
-    // It came back for a later part of the file, and got it.
-    expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
+    // It came back for a later part of the file, and got it, unless it had it all already (see `wholeIn`).
+    if (!whole) expect(store.ranges.some((range) => !range.startsWith("bytes=0-"))).toBe(true);
   });
 
   test("one that can't load says so on its controls' line, and loads again in place", async ({ page }) => {
@@ -1283,6 +1349,9 @@ test.describe("a shared audio file (#247)", () => {
     store.down = true;
     const id = await post(page, "rain on the porch roof", "u-eli", { attachments: [rain] });
     const player = card(page, id);
+    // It loads only when played (#381), so that's when it finds the store down.
+    await still(player.getByRole("button", { name: "Play" }));
+    await player.getByRole("button", { name: "Play" }).click();
     const note = player.getByRole("alert");
     await expect(note).toHaveText("Couldn't load this audio.");
     const again = player.getByRole("button", { name: "Load again" });
@@ -1337,7 +1406,10 @@ test.describe("a shared audio file (#247)", () => {
           attachments: [{ ...rain, id: "aud-long", url: "/media/aud-long", filename: "a very long recording of the rain on the porch roof, all night.wav" }],
         });
         const long = row(page, moved).getByRole("group");
+        // Played until it has its metadata, then paused: nothing loads before play (#381).
+        await long.getByRole("button", { name: "Play" }).click();
         await expect.poll(() => long.locator("audio").evaluate((audio: HTMLAudioElement) => audio.readyState)).toBeGreaterThanOrEqual(1);
+        await long.getByRole("button", { name: "Pause" }).click();
         await long.getByRole("slider", { name: "Timeline" }).focus();
         for (let step = 0; step < 15; step += 1) await page.keyboard.press("ArrowRight");
         await long.getByRole("slider", { name: "Volume" }).focus();
@@ -1345,9 +1417,10 @@ test.describe("a shared audio file (#247)", () => {
         const muted = await post(page, "quiet please", "u-dave", { attachments: [{ ...rain, id: "aud-muted", url: "/media/aud-muted" }] });
         await card(page, muted).getByRole("button", { name: "Mute" }).click();
         // A file of its own that the server refuses, so only this card fails,
-        // and fails at once in every engine.
+        // in every engine, once it's played (#381).
         await page.route(`${SERVER}/media/aud-gone`, (route) => route.fulfill({ status: 503 }));
         const failed = await post(page, "this one won't", "u-callie", { attachments: [{ ...rain, id: "aud-gone", url: "/media/aud-gone" }] });
+        await card(page, failed).getByRole("button", { name: "Play" }).click();
         await expect(card(page, failed).getByRole("alert")).toBeVisible();
         await page.locator("body").click({ position: { x: 1, y: 1 } });
         await page.mouse.move(0, 0);

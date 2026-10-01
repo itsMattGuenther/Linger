@@ -501,6 +501,9 @@ carry sender feedback to a different person.
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
   an embarrassing bug.
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
+- A shared video or audio file loads nothing until it's played: the poster and the
+  server's duration stand in until then. Building a player per file costs about
+  190 MB a video in WebKitGTK and about 45 MB in WebView2, watched or not (#381).
 - Download controls say that they open the system browser. A failed handoff
   shows a retryable error and a selectable download URL; a successful handoff
   does not claim the browser saved the file. Never navigate the app to an upload.
