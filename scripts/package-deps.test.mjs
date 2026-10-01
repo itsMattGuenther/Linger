@@ -26,9 +26,24 @@ test("the Arch package asks for the decoders shared videos need: AAC sound and H
   for (const name of ["gst-plugins-base", "gst-plugins-good", "gst-libav"]) assert.ok(depends.includes(name), `PKGBUILD depends lacks ${name}`);
 });
 
-test("the .deb asks for them too", () => {
-  for (const name of ["gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good", "gstreamer1.0-libav"]) {
+test("the .deb asks for them too, recommending the decoders rather than requiring them", () => {
+  for (const name of ["gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good"]) {
     assert.ok(linux.deb.depends.includes(name), `deb depends lacks ${name}`);
+  }
+  assert.ok(linux.deb.recommends.includes("gstreamer1.0-libav"), "deb recommends lacks gstreamer1.0-libav");
+});
+
+// What every .deb out there already required. An in-app update installs the
+// new .deb with `dpkg -i`, which never fetches anything: a requirement the
+// computer lacks leaves the package half-installed, the update failed, and apt
+// refusing everything until `apt --fix-broken install` (#377). So a package
+// the .deb wants from now on is a recommendation, which a fresh `apt install`
+// still brings.
+const DEB_ALREADY_REQUIRED = ["gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good", "gstreamer1.0-pulseaudio"];
+
+test("the .deb requires nothing installed copies didn't already, since an in-app update can't fetch it (#377)", () => {
+  for (const name of linux.deb.depends) {
+    assert.ok(DEB_ALREADY_REQUIRED.includes(name), `deb newly requires ${name}; an in-app update would fail where it's missing, so recommend it`);
   }
 });
 

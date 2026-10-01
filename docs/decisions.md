@@ -576,6 +576,14 @@ nothing to install.
   the other packages leave that to the system and Windows to Microsoft. H.264
   is still under patents in some countries; plenty of free apps' AppImages
   carry the same decoder.
+- **The `.deb` recommends the plugin rather than requiring it** (#377, before
+  0.4.5 shipped). Updating inside the app installs the new `.deb` with
+  `dpkg -i`, which fetches nothing: a requirement the computer lacks leaves the
+  package half-installed, the update failed, and apt refusing everything until
+  `apt --fix-broken install`. A fresh `apt install` brings recommendations
+  anyway, and an in-app update leaves it to the user guide's one command. The
+  same holds for anything the `.deb` wants in future, and
+  `scripts/package-deps.test.mjs` fails on a new requirement.
 
 ## Decided — the list is places and people: a DM lives on its person
 
