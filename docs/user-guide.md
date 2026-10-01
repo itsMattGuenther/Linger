@@ -258,10 +258,11 @@ Linger is one tall window: your **list**. From the top:
 - **Rooms**: each with the dots of who's in it, and a speaker when people are
   talking there. A room's name turns bold when something new is said. On a
   server with more than eight rooms, the quiet ones fold under **More rooms**.
-- **DMs**: your direct messages, named by who's in them. One with something
-  new in it is bold and at the top; the rest go by the latest message, yours
-  or theirs, so quiet ones sink. The pencil starts a new one.
+  Group DMs sit after the server's rooms, named by who's in them, and the
+  **+** on the **Rooms** heading starts one.
 - **People**: everyone on the server, with where they are and their status.
+  Your DM with somebody lives on their row, which lights up when they've
+  written something you haven't read. The people you're talking to come first.
   **Away** and **Offline** fold up under them.
 
 Click a room or a DM and it opens **beside the list**, in the same window: the
@@ -299,7 +300,7 @@ same menu has **Mute**, **Leave voice** and **Quit Linger**. To make closing the
 quit instead, open **Settings → Windows → When You Close Your List**. On a
 Linux desktop with no tray, closing the list always quits.
 
-Several servers? Each is a section of the list with its own rooms, DMs and
+Several servers? Each is a section of the list with its own rooms and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
 or arrival cards from it, though somebody naming you still gets a banner) and
 to move it up or down.
