@@ -41,7 +41,7 @@ import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
-import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -494,16 +494,16 @@ function Servers({
 
   // Show a conversation beside the list: its tab, the side unfolded, and
   // the list window brought forward if it was behind or in the tray.
-  const openBeside = useRef<(server: string, roomId: RoomId, messageId?: MessageId) => void>(() => undefined);
-  openBeside.current = (server, roomId, messageId) => {
+  const openBeside = useRef<(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void>(() => undefined);
+  openBeside.current = (server, roomId, messageId, preview = false) => {
     if (!apisRef.current.has(server)) return;
     const tab = { server, roomId };
     if (conversationIn(serverState(server), roomId) === null) unseen.current.add(keyOf(tab));
-    const opening = { tab, message: messageId ?? null };
+    const opening = { tab, message: messageId ?? null, preview };
     if (handle.current) handle.current.open(opening);
     else if (unfoldedNow.current) waitingOpens.current.push(opening);
     else {
-      setTabs((held) => openTab(held, tab));
+      setTabs((held) => (preview ? previewTab(held, tab) : openTab(held, tab)));
       unfold(opening);
     }
     bringForward();
@@ -521,7 +521,7 @@ function Servers({
     bringForward();
   };
   useEffect(() => {
-    showBeside = (server, roomId, messageId) => openBeside.current(server, roomId, messageId);
+    showBeside = (server, roomId, messageId, preview) => openBeside.current(server, roomId, messageId, preview);
     showToolBeside = (which) => openToolBeside.current(which);
     return () => {
       showBeside = null;
@@ -647,6 +647,8 @@ function Servers({
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
   }, [voiceState, voiceServer, several, infos, talkKey]);
 
+  // The conversation showing beside the list: its row in the list is marked (#351).
+  const besideTab = unfolded && tabs.active !== null && !isTool(tabs.active) ? tabs.active : null;
   const listings = useMemo(
     () =>
       ordered.flatMap((session): ServerListing[] => {
@@ -667,15 +669,17 @@ function Servers({
             speaking: talkingNow(state),
             onOpenRoom: (room) => openChat(baseUrl, room),
             onOpenDm: (room) => openChat(baseUrl, room),
+            onOpenPerson: (user, dm) => void openPerson(api, user, dm),
             onMessage: (user) => void messageWith(api, user),
             onKnock: (user) => knockOn(api, user.id),
             onStartDm: (people) => startDm(api, people),
             onHost: (section) => shell.settings(section),
+            showing: besideTab?.server === baseUrl ? besideTab.roomId : null,
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
           },
         ];
       }),
-    [ordered, states, now, quiet, infos],
+    [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId],
   );
 
   // One server: your status and away from the top card, as before.
@@ -970,6 +974,25 @@ async function messageWith(api: ServerSession["api"], user: User): Promise<void>
 }
 
 /**
+ * A person clicked in the list (#351): your DM with them, beside the list as
+ * a preview the next person takes over until it's kept, or in a window of
+ * its own when everything opens in one. Made first if you've never talked.
+ */
+async function openPerson(api: ServerSession["api"], user: User, dm: RoomId | null): Promise<void> {
+  if (dm !== null) {
+    openChat(api.baseUrl, dm, undefined, true);
+    return;
+  }
+  try {
+    const made = await api.openDm([user.id]);
+    noteDm(api.baseUrl, made);
+    openChat(api.baseUrl, made.id, undefined, true);
+  } catch (error: unknown) {
+    console.error("could not open a DM", error);
+  }
+}
+
+/**
  * Open the DM with exactly these people from the new-message picker: the
  * server hands back the one you already have, or makes it (SPEC §4.13).
  */
@@ -992,7 +1015,7 @@ function closeToTray(on: boolean): void {
 
 /** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */
 const shell: WindowOpener = {
-  side: (server, roomId, messageId) => showBeside?.(server, roomId, messageId),
+  side: (server, roomId, messageId, preview) => showBeside?.(server, roomId, messageId, preview),
   conversation: (server, roomId, kind, messageId) => {
     if (!isTauri()) return;
     void invoke("next_open_conversation", { server, room: roomId, kind, message: messageId ?? null }).catch((error: unknown) =>
@@ -1029,7 +1052,7 @@ function localStore(): Storage | null {
 /** This window's sharing, once it has started: it knows which conversations have their own windows. */
 let sharing: Sharing | null = null;
 /** Beside the list, once the list is drawn (`openBeside` in `Servers`). */
-let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId) => void) | null = null;
+let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void) | null = null;
 /** Media or Search beside the list, once it's drawn. */
 let showToolBeside: ((which: "media" | "search") => void) | null = null;
 
@@ -1038,9 +1061,9 @@ let showToolBeside: ((which: "media" | "search") => void) | null = null;
  * otherwise where conversations open (core/share.ts, `open`): beside the
  * list, or each in a window of its own.
  */
-function openChat(server: string, room: RoomId, messageId?: MessageId): void {
-  if (sharing) sharing.open(server, room, messageId);
-  else showBeside?.(server, room, messageId);
+function openChat(server: string, room: RoomId, messageId?: MessageId, preview = false): void {
+  if (sharing) sharing.open(server, room, messageId, { preview });
+  else showBeside?.(server, room, messageId, preview);
 }
 
 /** Something this computer kept, or null where storage is refused. */

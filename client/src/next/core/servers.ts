@@ -14,7 +14,7 @@
 import type { PresenceState } from "../../generated/PresenceState";
 import type { User } from "../../generated/User";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
-import type { ListModel, PersonRow, Present } from "./list";
+import { anyDmFresh, type ListModel, type PersonRow, type Present } from "./list";
 
 /** `linger-core::limits::MAX_VOICE_PEERS`: voice holds 25 a room, through the server (#197). */
 export const MAX_VOICE_PEERS = 25;
@@ -100,12 +100,12 @@ function foldedOf(state: GatewayState, model: ListModel): FoldedLine {
 
 /** What a server's header and the line under it say. */
 export function serverHeader(state: GatewayState, model: ListModel, quiet: boolean): ServerHeader {
-  const fresh = !quiet && (model.rooms.some((room) => room.fresh) || model.dms.some((dm) => dm.fresh));
+  const fresh = !quiet && (model.rooms.some((room) => room.fresh) || anyDmFresh(model));
   const me = model.me;
   const awayMessage = me?.user.status?.away_message ?? null;
   return {
     fresh,
-    lit: model.dms.some((dm) => dm.fresh),
+    lit: anyDmFresh(model),
     dots: dotsOf(model),
     folded: foldedOf(state, model),
     open: me

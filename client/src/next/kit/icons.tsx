@@ -13,6 +13,7 @@ export const ICON_NAMES = [
   "caret",
   "knock",
   "message",
+  "card",
   "speaker",
   "speakerOff",
   "note",
@@ -79,6 +80,12 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   knock: (
     <>
       <rect x="2.5" y="2" width="7" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" /><circle cx="7.5" cy="8.4" r=".9" fill="currentColor" /><path d="M11.6 5.6c.8.7 1.2 1.5 1.2 2.4s-.4 1.7-1.2 2.4M13.4 4.2c1.2 1.1 1.8 2.4 1.8 3.8s-.6 2.7-1.8 3.8" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  // Someone's card (#351): opened from a person's row, now a click opens them beside the list.
+  card: (
+    <>
+      <rect x="2" y="3.2" width="12" height="9.6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.35" /><circle cx="5.7" cy="6.9" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M3.9 10.6c.3-1 1-1.5 1.8-1.5s1.5.5 1.8 1.5M9.2 6.6h3M9.2 9h2.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </>
   ),
   message: (

@@ -114,20 +114,75 @@ describe("the buddy list for one server", () => {
     expect(listening?.voice).toBe(false);
   });
 
-  it("names DMs by the others in them and puts ones with something new first", () => {
-    const { dms } = listModel(evening(), NOW);
-    expect(dms.map((row) => row.label)).toEqual(["Jules", "Eli and Sam"]);
-    expect(dms[0]?.fresh).toBe(true);
-    expect(dms[1]?.people.map(({ user, state }) => [user.id, state])).toEqual([
+  it("puts a one-to-one DM on its person's row, lit while unread, and a group DM with the rooms (#351)", () => {
+    const model = listModel(evening(), NOW);
+    expect(model.groups.map((row) => row.label)).toEqual(["Eli and Sam"]);
+    expect(model.groups[0]?.people.map(({ user, state }) => [user.id, state])).toEqual([
       ["u-eli", "in_room"],
       ["u-sam", "away"],
     ]);
+    const julesRow = model.people.here.find((row) => row.user.id === "u-jules");
+    expect(julesRow?.dm).toBe("d-jules");
+    expect(julesRow?.fresh).toBe(true);
+    const eliRow = model.people.here.find((row) => row.user.id === "u-eli");
+    expect(eliRow?.dm).toBeNull();
+    expect(eliRow?.fresh).toBe(false);
+    // Every DM, for the picker's "the same people twice is the same DM".
+    expect(model.dmMembers.map((dm) => dm.id)).toEqual(["d-jules", "d-eli-sam"]);
+  });
+
+  it("puts the people you're talking to first in each group: wrote to you, then talked lately, then everyone else (#351)", () => {
+    const dave = person("u-dave", "Dave");
+    const callie = person("u-callie", "Callie");
+    const bo = person("u-bo", "Bo");
+    const held: GatewayState = {
+      ...evening(),
+      users: [matt, eli, jules, sam, jen, dave, callie, bo],
+      dms: [
+        room("d-jules", "d-jules", 0, { kind: "dm", member_ids: ["u-matt", "u-jules"] }),
+        room("d-dave", "d-dave", 0, { kind: "dm", member_ids: ["u-matt", "u-dave"] }),
+        room("d-callie", "d-callie", 0, { kind: "dm", member_ids: ["u-matt", "u-callie"] }),
+        room("d-jen", "d-jen", 0, { kind: "dm", member_ids: ["u-matt", "u-jen"], last_message_id: "m000003" }),
+      ],
+      presence: [...evening().presence, presence("u-dave", "in_room", "r-listening"), presence("u-callie", "around")],
+      // Jules wrote and it's unread; Dave was talked with after Callie.
+      newest: { "d-jules": "m000010", "d-dave": "m000020", "d-callie": "m000015" },
+      read: { "d-dave": "m000020", "d-callie": "m000015" },
+    };
+    const names = (rows: { user: User }[]) => rows.map((row) => row.user.display_name);
+    const { people } = listModel(held, NOW);
+    // Unread first, even though Dave was talked with since; then newest
+    // first; then everyone else in the roster's own order.
+    expect(names(people.here)).toEqual(["Jules", "Dave", "Callie", "Eli"]);
+    // Offline too: Jen is talked with, Bo isn't, though Bo comes first by name.
+    expect(names(people.offline)).toEqual(["Jen", "Bo"]);
+
+    // Callie writes: she's first. Reading it leaves her first, since she's
+    // now the one talked with most recently (#248, the same rule as DMs).
+    const said = apply(held, {
+      s: 0,
+      op: "message.create",
+      d: { id: "m000030", room_id: "d-callie", author_id: "u-callie", body: "hi", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: NOW },
+    });
+    expect(names(listModel(said, NOW).people.here)).toEqual(["Callie", "Jules", "Dave", "Eli"]);
+    const read: GatewayState = { ...said, read: { ...said.read, "d-callie": "m000030", "d-jules": "m000010" } };
+    expect(names(listModel(read, NOW).people.here)).toEqual(["Callie", "Dave", "Jules", "Eli"]);
+  });
+
+  it("keeps a DM with somebody the server no longer lists with the rooms, having no row to live on (#351)", () => {
+    const held: GatewayState = {
+      ...evening(),
+      dms: [...evening().dms, room("d-gone", "d-gone", 0, { kind: "dm", member_ids: ["u-matt", "u-gone"] })],
+    };
+    const { groups, people } = listModel(held, NOW);
+    expect(groups.map((row) => row.id).sort()).toEqual(["d-eli-sam", "d-gone"]);
+    expect([...people.here, ...people.away, ...people.offline].map((row) => row.dm).filter(Boolean)).toEqual(["d-jules"]);
   });
 
   // `ready` says where each DM's conversation had got to when the app
   // connected, and never again; the order has to follow what arrives after.
-  it("moves a DM to the top when somebody writes in it, and keeps it there once read (#248)", () => {
-    const labels = (held: GatewayState) => listModel(held, NOW).dms.map((row) => row.label);
+  it("moves a group DM to the top when somebody writes in it, and keeps it there once read (#248)", () => {
+    const labels = (held: GatewayState) => listModel(held, NOW).groups.map((row) => row.label);
     const said = (held: GatewayState, roomId: string, id: string, author: string) =>
       apply(held, {
         s: 0,
@@ -138,21 +193,21 @@ describe("the buddy list for one server", () => {
     const start: GatewayState = {
       ...evening(),
       dms: [
-        room("d-jules", "d-jules", 0, { kind: "dm", member_ids: ["u-matt", "u-jules"], last_message_id: "m000010" }),
+        room("d-jules-jen", "d-jules-jen", 0, { kind: "dm", member_ids: ["u-matt", "u-jules", "u-jen"], last_message_id: "m000010" }),
         room("d-eli-sam", "d-eli-sam", 0, { kind: "dm", member_ids: ["u-matt", "u-eli", "u-sam"], last_message_id: "m000004" }),
       ],
-      newest: { "d-jules": "m000010", "d-eli-sam": "m000004" },
-      read: { "d-jules": "m000010", "d-eli-sam": "m000004" },
+      newest: { "d-jules-jen": "m000010", "d-eli-sam": "m000004" },
+      read: { "d-jules-jen": "m000010", "d-eli-sam": "m000004" },
     };
-    expect(labels(start)).toEqual(["Jules", "Eli and Sam"]);
+    expect(labels(start)).toEqual(["Jules and Jen", "Eli and Sam"]);
 
     const theirs = said(start, "d-eli-sam", "m000011", "u-sam");
-    expect(labels(theirs)).toEqual(["Eli and Sam", "Jules"]);
+    expect(labels(theirs)).toEqual(["Eli and Sam", "Jules and Jen"]);
     // Reading it used to send it back to where it was at connect.
-    expect(labels(read(theirs, "d-eli-sam"))).toEqual(["Eli and Sam", "Jules"]);
+    expect(labels(read(theirs, "d-eli-sam"))).toEqual(["Eli and Sam", "Jules and Jen"]);
 
-    const mine = read(said(read(theirs, "d-eli-sam"), "d-jules", "m000012", "u-matt"), "d-jules");
-    expect(labels(mine)).toEqual(["Jules", "Eli and Sam"]);
+    const mine = read(said(read(theirs, "d-eli-sam"), "d-jules-jen", "m000012", "u-matt"), "d-jules-jen");
+    expect(labels(mine)).toEqual(["Jules and Jen", "Eli and Sam"]);
   });
 
   it("puts you in your own card, not among the people", () => {
@@ -185,9 +240,10 @@ describe("the buddy list for one server", () => {
 
   it("groups everyone else into here, away and offline, with where they are as a note", () => {
     const { people } = listModel(evening(), NOW);
+    // Jules first: he has written to you and it's unread (#351).
     expect(people.here.map((row) => [row.user.display_name, row.note])).toEqual([
-      ["Eli", "in #general"],
       ["Jules", "around"],
+      ["Eli", "in #general"],
     ]);
     expect(people.away.map((row) => [row.user.display_name, row.note, row.line])).toEqual([
       ["Sam", "away", "back after work"],
@@ -197,7 +253,8 @@ describe("the buddy list for one server", () => {
 
   it("uses the status line as the second line, and knows who is in voice", () => {
     const { people } = listModel(evening(), NOW);
-    const [eliRow, julesRow] = people.here;
+    const julesRow = people.here.find((row) => row.user.id === "u-jules");
+    const eliRow = people.here.find((row) => row.user.id === "u-eli");
     expect(julesRow?.line).toBe("speakers: finally set up");
     expect(eliRow?.line).toBeNull();
     expect(eliRow?.inVoice).toBe(true);
@@ -214,7 +271,7 @@ describe("the buddy list for one server", () => {
 
   it("is empty but well-formed before the server has said anything", () => {
     const model = listModel(serverState("https://nothing.example"), NOW);
-    expect(model).toEqual({ me: null, rooms: [], dms: [], people: { here: [], away: [], offline: [] } });
+    expect(model).toEqual({ me: null, rooms: [], groups: [], dmMembers: [], people: { here: [], away: [], offline: [] } });
   });
 });
 

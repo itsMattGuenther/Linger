@@ -32,6 +32,11 @@ export interface TabItem {
    * showing: the tab is lit in the lamp, as well as bold. Never a count.
    */
   lit?: boolean;
+  /**
+   * A person opened from the list, until it's kept (#351): the title is in
+   * italics, since the next person opened takes this tab's place.
+   */
+  preview?: boolean;
   /** Voice here: `mine` when you're in it, `others` when only others are. */
   voice?: "mine" | "others";
   speaking?: boolean;
@@ -189,6 +194,7 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
             data-active={active ? "yes" : undefined}
             data-fresh={tab.fresh && !active ? "yes" : undefined}
             data-lit={tab.lit && !active ? "yes" : undefined}
+            data-preview={tab.preview ? "yes" : undefined}
             data-stripe={tab.stripe ? "yes" : undefined}
             data-dragged={drag?.id === tab.id ? "yes" : undefined}
             style={{ ...stripeStyle(tab.stripe), ...(shift === 0 ? {} : { transform: `translateX(${shift}px)` }) }}

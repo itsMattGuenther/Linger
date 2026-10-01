@@ -107,23 +107,30 @@ and folds back to just the list (`docs/design/buddy-list.md` is the design, #337
 │ ● in #general           │ ◂)) Eli, Jules are talking              Join    │
 │ ✎ fixing the porch …    │                                                 │
 ├─────────────────────────┤ ─────────────── TONIGHT ───────────────         │
-│ ROOMS                   │ Eli: A bit of Khruangbin.              10:34 PM │
+│ ROOMS                 + │ Eli: A bit of Khruangbin.              10:34 PM │
 │ # general    ◂)) ●●●    │ Matt: This is exactly what I…          10:37 PM │
 │ # listening-room   ●    │ you left off here ──────────────────────        │
-│ DMS                   ✎ │ Jules: Saturday walk?                  10:43 PM │
-│ ● Jules                 │                                                 │
-│ PEOPLE                  │ ┌─────────────────────────────────────────────┐ │
-│ ● Dave  in #listening…  │ │ › Say something in #general            + → │ │
-│   side two. nobody…     │ └─────────────────────────────────────────────┘ │
+│ ●☾ Eli and Sam          │ Jules: Saturday walk?                  10:43 PM │
+│ PEOPLE                  │                                                 │
+│ ● Jules  in #general    │ ┌─────────────────────────────────────────────┐ │
+│   speakers: finally…    │ │ › Say something in #general            + → │ │
+│ ● Dave  in #listening…  │ └─────────────────────────────────────────────┘ │
 ├─────────────────────────┤                                                 │
 │ Media        Search     │                                                 │
 └─────────────────────────┴─────────────────────────────────────────────────┘
 ```
 
-**The list window** is the app. From the top: you (your name, where you are, your
-status, and Away); then **Rooms**, each with the dots of who is in it and bold when
-something new arrives; **DMs**, named by who is in them; and **People**, everyone on
-the server with their marker, where they are, and their status. Offline people show
+**The list window** is the app, and it holds two kinds of thing: places and people
+(#351). From the top: you (your name, where you are, your status, and Away); then
+**Rooms**, each with the dots of who is in it and bold when something new arrives,
+with your group DMs after them, since a group DM is a small private room; and
+**People**, everyone on the server with their marker, where they are, and their
+status. A one-to-one DM has no row of its own: it lives on its person. Their row is
+lit while they've written something you haven't read, and in each group the people
+you're talking to come first: whoever wrote to you, then whoever you've talked with
+most recently, then everyone else, so the people you DM never sink on a big server.
+Clicking somebody opens them beside the list: their card on top, your conversation
+underneath. Offline people show
 when they were last here and their away message, and their name is a dim grey in its
 own face rather than their colors until they are back. With several servers, each is a
 folding section of the list. When you are in voice, the voice bar sits at the bottom,
@@ -188,8 +195,11 @@ Replace with:
   bold. No number, no dot, no color. Read rooms must remain readable too.
 - **A DM is the exception** (#291, 2026-09-28). A DM is addressed to you, as a
   mention is, so one you haven't read is **lit** as well as bold: a soft fill and
-  a thin edge in the lamp, on its row, on the DMs heading while that's folded, on
-  a folded server's header, and on its tab. It goes out when you read the DM.
+  a thin edge in the lamp, on its row (a one-to-one DM's is its person's, in
+  People; a group's is with the rooms), on the heading above that row while it's
+  folded, on a folded server's header, and on its tab. A lit person shows even in a
+  folded group, and their name keeps the face and weight they chose: the light
+  is what says it (#351). It goes out when you read the DM.
   Still no number and no dot, and nothing blinks.
 - Opening a room or DM with new activity lands on **"you left off here"**.
   A caught-up conversation opens at the newest messages. There is no catch-up

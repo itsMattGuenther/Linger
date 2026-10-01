@@ -576,3 +576,38 @@ nothing to install.
   the other packages leave that to the system and Windows to Microsoft. H.264
   is still under patents in some countries; plenty of free apps' AppImages
   carry the same decoder.
+
+## Decided — the list is places and people: a DM lives on its person
+
+**Matt, 2026-09-30 (#351).** The DMs and People sections felt fragmented, and
+he couldn't put his finger on why. Put into words, it was that the list was
+sorted by what Linger stores (rooms, DM conversations, members) rather than
+how you think of your friends (places and people). So every friend was in it
+twice: a DM row with a dot and a plain name, and a People row with their
+styled name and status. The two looked different and did different things
+when clicked. Mockups at real size compared three ways out; he chose the first
+"as a great start to test this out", and settled its two details the same day.
+
+- **One row per friend.** A one-to-one DM has no row of its own; it lives on
+  its person, whose row is lit while they've written something you haven't
+  read (#291). A lit person shows even in a folded group, with their name as
+  they styled it: the light says it, not bold.
+- **The people you're talking to come first** in each group: whoever wrote to
+  you, then whoever you've talked with most recently, then everyone else.
+  Matt: so you don't lose the people you're DMing in a sea of people you
+  aren't, which matters more as servers grow (#197).
+- **Clicking a friend opens them beside the list,** their card as the DM's
+  header over your conversation. The tab is a preview until you type in it:
+  the next person you open takes its place, so looking around doesn't pile up
+  tabs. Hovering a row shows their whole status. The list marks what's
+  showing beside it.
+- **Group DMs sit with the rooms,** after the server's own: a group DM is a
+  small private room. The + on Rooms starts one.
+- **Their card on its own** still opens from a name in a conversation or the
+  voice bar, and from a small card button on their row next to Knock, for a
+  look at their fields without opening a tab. That button wasn't in the
+  mockups; it replaced the row's Message button, which a click now does.
+- **Not taken:** keeping DMs but only while something's live (every friend
+  still twice, exactly when it matters, and rows coming and going under you),
+  and DM rows showing the last line (still twice, and private words on the
+  screen pull at you like an inbox).

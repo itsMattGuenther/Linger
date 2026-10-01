@@ -148,6 +148,8 @@ export function ListView(props: ListViewProps) {
               speaking={only.speaking}
               onOpenRoom={only.onOpenRoom}
               onOpenDm={only.onOpenDm}
+              onOpenPerson={only.onOpenPerson}
+              showing={only.showing}
               onMessage={only.onMessage}
               onKnock={only.onKnock}
               onStartDm={only.onStartDm}

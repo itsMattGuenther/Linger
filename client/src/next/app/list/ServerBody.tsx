@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
-import { type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
+import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
 import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import "./ListView.css";
@@ -16,23 +16,32 @@ const KNOCKED_MS = 3_000;
 export interface ServerBodyActions {
   onOpenRoom?: (id: RoomId) => void;
   onOpenDm?: (id: RoomId) => void;
+  /**
+   * A person clicked in the list (#351): them beside the list, card on top and
+   * your conversation under it, as a preview the next person takes over.
+   * `dm` is your DM with them, when you have one.
+   */
+  onOpenPerson?: (user: User, dm: RoomId | null) => void;
   /** From a person's card: open a DM with them (finding the one you already have). */
   onMessage?: (user: User) => void;
   /** From a person's card: knock (SPEC §4.9). */
   onKnock?: (user: User) => Promise<KnockResult>;
-  /** From the new-message picker: open the DM with exactly these people; resolves to a problem in words, or null. */
+  /** From the picker the + on Rooms opens: open the DM with exactly these people; resolves to a problem in words, or null. */
   onStartDm?: (people: User[]) => Promise<string | null>;
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
   onHost?: (section: "rooms" | "invites") => void;
+  /** The conversation showing beside the list, on this server: its row, or its person's, is marked (#351). */
+  showing?: RoomId | null;
 }
 
-type Fold = "rooms" | "more" | "dms" | "people" | "away" | "offline";
+type Fold = "rooms" | "more" | "people" | "away" | "offline";
 
 /**
- * One server's rooms, DMs and people (docs/design/buddy-list.md): the whole
- * list with one server, a server's section with several. The person card and
- * the new-message picker it opens are its own, so each server's are about
- * that server's people.
+ * One server's places and people (docs/design/buddy-list.md, #351): its
+ * rooms with your group DMs after them, then everyone on it, each person
+ * once, their DM with you on their row. The whole list with one server, a
+ * server's section with several. The person card and the picker for a new
+ * group are its own, so each server's are about that server's people.
  *
  * `idPrefix` keeps the ids inside unique when several servers share a window
  * (empty with one server); `serverName`, with several, says which server a
@@ -45,10 +54,12 @@ export function ServerBody({
   serverName,
   onOpenRoom,
   onOpenDm,
+  onOpenPerson,
   onMessage,
   onKnock,
   onStartDm,
   onHost,
+  showing = null,
 }: ServerBodyActions & {
   model: ListModel;
   /** Who is talking right now, for the voice glyphs. */
@@ -122,15 +133,33 @@ export function ServerBody({
       // The lights are on only for somebody here (#301): idle, away and
       // offline names are the dim grey, and their mark says which.
       title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
-      label={`${row.user.display_name}, ${row.note}`}
+      // Written to you and not read: said in words too, never a count (SPEC §4.2).
+      label={`${row.user.display_name}, ${row.note}${row.fresh ? ", wrote to you" : ""}`}
       trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
       note={row.note}
       detail={row.line ?? undefined}
+      detailTip
       away={row.state === "away"}
-      selected={card?.row.user.id === row.user.id}
+      // Their DM with you lives on their row (#351): unread, it's lit (#291).
+      lit={row.fresh}
+      // Their card is open, or they're showing beside the list (#351).
+      selected={card?.row.user.id === row.user.id || (showing !== null && row.dm === showing)}
       knocked={knocked.has(row.user.id)}
       actions={[
-        <IconButton key="message" icon="message" size="sm" label={`Message ${row.user.display_name}`} onClick={() => onMessage?.(row.user)} />,
+        // Their card, for a look at their fields without opening them (#351).
+        <IconButton
+          key="card"
+          icon="card"
+          size="sm"
+          label={`${row.user.display_name}'s card`}
+          onClick={(event) => {
+            const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
+            if (!rowButton) return;
+            opener.current = rowButton;
+            const box = rowButton.getBoundingClientRect();
+            setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
+          }}
+        />,
         <IconButton
           key="knock"
           icon="knock"
@@ -152,19 +181,32 @@ export function ServerBody({
           }}
         />,
       ]}
-      onActivate={(event) => {
-        opener.current = event.currentTarget;
-        const box = event.currentTarget.getBoundingClientRect();
-        setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
-      }}
-      onDoubleActivate={() => {
-        // The old AIM habit: a double-click goes straight to the DM.
+      // Them beside the list, card and conversation (#351).
+      onActivate={() => {
         setCard(null);
-        onMessage?.(row.user);
+        onOpenPerson?.(row.user, row.dm);
       }}
     />
   );
 
+  // A group DM: a small private room, drawn with the rooms (#351).
+  const groupRow = (dm: DmRow) => (
+    <Row
+      key={dm.id}
+      lead={
+        dm.people.length === 1 && dm.people[0]
+          ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
+          : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
+      }
+      lines="one"
+      title={dm.label}
+      fresh={dm.fresh}
+      // Addressed to you: unread, it's lit, not only bold (#291).
+      lit={dm.fresh}
+      selected={dm.id === showing}
+      onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
+    />
+  );
   const rooms = splitRooms(model.rooms);
   const roomRow = (room: RoomRow) => (
     <Row
@@ -173,6 +215,7 @@ export function ServerBody({
       lines="one"
       title={room.name}
       fresh={room.fresh}
+      selected={room.id === showing}
       label={roomLabel(room.name, room.people.length, room.voice)}
       end={
         room.people.length > 0 || room.voice ? (
@@ -189,14 +232,38 @@ export function ServerBody({
 
   return (
     <>
-      <SectionLabel label="Rooms" open={open("rooms")} onToggle={() => toggle("rooms")} controls={id("rooms")} />
+      <SectionLabel
+        label="Rooms"
+        open={open("rooms")}
+        onToggle={() => toggle("rooms")}
+        controls={id("rooms")}
+        // Folded, it's lit while a group DM inside hasn't been read (#291).
+        lit={!open("rooms") && model.groups.some((group) => group.fresh)}
+        action={
+          onStartDm ? (
+            <IconButton
+              icon="plus"
+              label={on("Start a group")}
+              size="sm"
+              onClick={(event) => {
+                pickerOpener.current = event.currentTarget;
+                setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
+              }}
+            />
+          ) : undefined
+        }
+      />
       {open("rooms") ? (
         <div id={id("rooms")}>
           {model.rooms.length === 0 ? (
             <Empty words="No rooms yet." action={host && onHost ? { label: "Make the first room", run: () => onHost("rooms") } : undefined} />
-          ) : (
-            <RowList label={on("Rooms")}>{rooms.shown.map(roomRow)}</RowList>
-          )}
+          ) : null}
+          {rooms.shown.length + model.groups.length > 0 ? (
+            <RowList label={on("Rooms")}>
+              {rooms.shown.map(roomRow)}
+              {model.groups.map(groupRow)}
+            </RowList>
+          ) : null}
           {rooms.more.length > 0 ? (
             <>
               <SectionLabel label="More rooms" level="group" open={open("more")} onToggle={() => toggle("more")} controls={id("more")} />
@@ -211,54 +278,13 @@ export function ServerBody({
       ) : null}
 
       <SectionLabel
-        label="DMs"
-        open={open("dms")}
-        onToggle={() => toggle("dms")}
-        controls={id("dms")}
-        // Folded, it's lit while a DM inside hasn't been read (#291).
-        lit={!open("dms") && model.dms.some((dm) => dm.fresh)}
-        action={
-          onStartDm ? (
-            <IconButton
-              icon="compose"
-              label={on("New message")}
-              size="sm"
-              onClick={(event) => {
-                pickerOpener.current = event.currentTarget;
-                setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
-              }}
-            />
-          ) : undefined
-        }
+        label="People"
+        open={open("people")}
+        onToggle={() => toggle("people")}
+        controls={id("people")}
+        // Folded, it's lit while somebody inside has written to you (#291, #351).
+        lit={!open("people") && everyone.some((row) => row.fresh)}
       />
-      {open("dms") ? (
-        <div id={id("dms")}>
-          {model.dms.length === 0 ? (
-            <Empty words="No DMs yet." />
-          ) : (
-            <RowList label={on("DMs")}>
-              {model.dms.map((dm) => (
-                <Row
-                  key={dm.id}
-                  lead={
-                    dm.people.length === 1 && dm.people[0]
-                      ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
-                      : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
-                  }
-                  lines="one"
-                  title={dm.label}
-                  fresh={dm.fresh}
-                  // A DM is addressed to you: unread, it's lit, not only bold (#291).
-                  lit={dm.fresh}
-                  onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
-                />
-              ))}
-            </RowList>
-          )}
-        </div>
-      ) : null}
-
-      <SectionLabel label="People" open={open("people")} onToggle={() => toggle("people")} controls={id("people")} />
       {open("people") ? (
         <div id={id("people")}>
           {nobodyElse ? (
@@ -269,21 +295,13 @@ export function ServerBody({
           {model.people.away.length > 0 ? (
             <>
               <SectionLabel label="Away" level="group" open={open("away")} onToggle={() => toggle("away")} controls={id("away")} />
-              {open("away") ? (
-                <div id={id("away")}>
-                  <RowList label={on("Away")}>{model.people.away.map(person)}</RowList>
-                </div>
-              ) : null}
+              <Group fold="away" rows={model.people.away} open={open("away")} id={id("away")} label={on("Away")} person={person} />
             </>
           ) : null}
           {model.people.offline.length > 0 ? (
             <>
               <SectionLabel label="Offline" level="group" open={open("offline")} onToggle={() => toggle("offline")} controls={id("offline")} />
-              {open("offline") ? (
-                <div id={id("offline")}>
-                  <RowList label={on("Offline")}>{model.people.offline.map(person)}</RowList>
-                </div>
-              ) : null}
+              <Group fold="offline" rows={model.people.offline} open={open("offline")} id={id("offline")} label={on("Offline")} person={person} />
             </>
           ) : null}
         </div>
@@ -293,7 +311,7 @@ export function ServerBody({
         <NewDmPicker
           people={everyone}
           meId={model.me?.user.id ?? null}
-          dms={model.dms.map((dm) => ({ id: dm.id, member_ids: dm.memberIds }))}
+          dms={model.dmMembers}
           anchor={picking}
           onStart={async (people) => {
             const problem = await onStartDm(people);
@@ -338,6 +356,35 @@ function roomLabel(name: string, people: number, voice: boolean): string {
   else if (people > 1) parts.push(`${people} people in it`);
   if (voice) parts.push("voice on");
   return parts.join(", ");
+}
+
+/**
+ * Away or Offline under People. Folded, it still shows anybody in it who has
+ * written to you and you haven't read (#351): a DM is addressed to you, so
+ * folding a group never hides it.
+ */
+function Group({
+  fold,
+  rows,
+  open,
+  id,
+  label,
+  person,
+}: {
+  fold: Fold;
+  rows: PersonRow[];
+  open: boolean;
+  id: string;
+  label: string;
+  person: (row: PersonRow) => ReactNode;
+}) {
+  const shown = open ? rows : rows.filter((row) => row.fresh);
+  if (shown.length === 0) return null;
+  return (
+    <div id={open ? id : undefined} data-fold={fold}>
+      <RowList label={label}>{shown.map(person)}</RowList>
+    </div>
+  );
 }
 
 /**

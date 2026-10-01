@@ -1,5 +1,6 @@
-import type { MouseEvent, ReactNode } from "react";
+import { type FocusEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { GroupMarker, HashMark, Marker, MarkerSlot, type MarkerPerson } from "./Marker";
+import { TooltipBubble } from "./Tooltip";
 import "./Row.css";
 
 /** What sits in a row's lead column. */
@@ -19,6 +20,13 @@ export interface RowProps {
   detail?: ReactNode;
   /** Draw the second line in the warm away color. */
   away?: boolean;
+  /**
+   * Show the whole second line in a tooltip on hover or keyboard focus, when
+   * the row has had to cut it short (#351: a person's whole status, without
+   * opening anything). It's in the row's text already for assistive
+   * technology, so the tooltip is for eyes only.
+   */
+  detailTip?: boolean;
   /** A short faint note at the end of the first line: "in #general". */
   note?: string;
   /** Small marks right after the title, like a voice glyph beside a name. */
@@ -91,6 +99,7 @@ export function Row({
   title,
   detail,
   away = false,
+  detailTip = false,
   note,
   trailing,
   end,
@@ -106,6 +115,25 @@ export function Row({
   option,
 }: RowProps) {
   const count = Math.min(actions?.length ?? 0, 3);
+  const detailNode = useRef<HTMLSpanElement | null>(null);
+  const [tipAt, setTipAt] = useState<HTMLElement | null>(null);
+  const cut = () => {
+    const node = detailNode.current;
+    return node !== null && node.scrollWidth > node.clientWidth + 1;
+  };
+  const tip =
+    detailTip && lines === "two" && detail
+      ? {
+          onPointerEnter: (event: MouseEvent<HTMLButtonElement>) => {
+            if (cut()) setTipAt(event.currentTarget);
+          },
+          onPointerLeave: () => setTipAt(null),
+          onFocus: (event: FocusEvent<HTMLButtonElement>) => {
+            if (event.currentTarget.matches(":focus-visible") && cut()) setTipAt(event.currentTarget);
+          },
+          onBlur: () => setTipAt(null),
+        }
+      : {};
   const text = (
     <span className="k-row-text" data-kit-row-text="">
       <span className="k-row-top">
@@ -116,7 +144,7 @@ export function Row({
       </span>
       {/* No second line to show: the row keeps its height and the name sits level with the marker. */}
       {lines === "two" && detail ? (
-        <span className="k-row-detail" data-away={away ? "yes" : undefined}>
+        <span className="k-row-detail" data-away={away ? "yes" : undefined} ref={detailNode}>
           {detail}
         </span>
       ) : null}
@@ -161,11 +189,13 @@ export function Row({
         disabled={disabled}
         onClick={onActivate}
         onDoubleClick={onDoubleActivate}
+        {...tip}
       >
         <Lead lead={lead} />
         {text}
       </button>
       {count > 0 ? <span className="k-row-actions">{actions?.slice(0, 3)}</span> : null}
+      {tipAt ? <TooltipBubble anchor={tipAt}>{detail}</TooltipBubble> : null}
     </li>
   );
 }

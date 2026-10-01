@@ -117,7 +117,8 @@ test("with one server it's that server's list, as before", async ({ page }) => {
   await open(page, "?one");
   await expect(page.locator(".k-titlebar")).toContainText("The Good Company");
   await expect(page.locator(".nx-srv-toggle")).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Rooms" }).locator(":scope > li")).toHaveText([/general/, /listening-room/, /weekend-plans/]);
+  // And your group DM after the rooms (#351).
+  await expect(page.getByRole("list", { name: "Rooms" }).locator(":scope > li")).toHaveText([/general/, /listening-room/, /weekend-plans/, /Eli and Sam/]);
 });
 
 test("your order and Quiet are kept on this computer, across a restart", async ({ page }) => {
@@ -939,7 +940,8 @@ test("somebody's card and row give Knock back the moment they come online (#288)
   await open(page, "?one");
   await page.getByRole("button", { name: /Offline/ }).click();
   const jen = page.getByRole("listitem").filter({ hasText: "Jen" });
-  await jen.getByRole("button").first().click();
+  await jen.hover();
+  await jen.getByRole("button", { name: "Jen's card" }).click();
   const card = page.getByRole("dialog", { name: "Jen" });
   await expect(card.getByRole("status")).toHaveText("Can't knock while Jen is offline.");
   await expect(card.getByRole("button", { name: "Knock" })).toBeDisabled();

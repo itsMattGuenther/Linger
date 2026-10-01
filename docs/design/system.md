@@ -320,14 +320,18 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
     (`--lit-wash`, `--lit-wash-hover` on hover) and a thin lamp edge
     (`--lit-edge`), on top of `fresh`'s bold. High contrast draws a dashed
     edge instead. Never a count.
-  - `selected` means its card or window is open.
+  - `selected` means its card, tab or window is open.
+  - `detailTip` shows the whole second line in a tooltip on hover or
+    keyboard focus, when the row has had to cut it short: a person's status
+    (#351). It's in the row's text already for screen readers.
   - `knocked` means you just knocked on this person's door: the row gives one
     small shake (two slow durations long, so none under reduced motion).
 - **Actions:** up to three md `IconButton`s, shown on hover and keyboard focus.
   While they show, the text column gives up exactly their width, so they never
   cover text, and the note steps aside.
-- **The row is a button:** Enter or a click activates, and a double-click opens
-  (a DM).
+- **The row is a button:** Enter or a click activates it. A person's row
+  opens them beside the list (#351); `onDoubleActivate` is there for a row
+  that needs a second action.
 - **`option`** makes it one choice in an `OptionList` instead: an `option`
   that never takes focus, lit with the selected look while it's the
   highlighted one. A plain hover doesn't light it, so only one row is ever lit.
@@ -360,6 +364,8 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   - `lit`, a DM's tab with something new while it isn't showing (#291): lit
     in the lamp as a row is, as well as bold.
   - `voice` adds the voice glyph: `mine` in the lamp, `others` dim.
+  - `preview`, a person opened from the list until it's kept (#351): the
+    title is in italics, since the next person opened takes the tab's place.
   - A close button shows on hover, focus and the active tab.
 - **`lead`:** a room's tab leads with its `#`, in the same faint ink as
   everywhere and set against the name; a one-to-one DM's tab leads with the
@@ -827,7 +833,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Status fields (#270): a label from the list or typed, the list a caret away, focus following a switch; the fields saved whole; a label twice or a field with no label said in words; at 720 and 560 wide, 100% and 200%, a label beside what it says while they fit and over it when not, nothing clipped. On a person's card at 340px: labels and values in order, long labels wrapping in their column, what they say starting on one edge, web addresses as links that open in the browser and nothing else | `next-settings.spec.ts`, `next-list.spec.ts`, `core/status.test.ts`, `lib/statusLinks.test.ts` |
 | Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
 | What a server's header and line say, from its store | `core/servers.test.ts` |
-| A DM you haven't read is lit (its row, the DMs heading while folded, a folded server's header, its tab) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
+| A DM you haven't read is lit (its person's row in People, or a group's row with the rooms; the heading above while folded; a folded server's header; its tab; a lit person shows in a folded group, #351) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
 | DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |

@@ -443,7 +443,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       }),
     );
   }
-  if (path === "/knock") return new Response(null, { status: 204 });
+  // `?limit`: the fourth knock inside an hour, refused as the server does,
+  // with 19 minutes 10 seconds to go.
+  if (path === "/knock")
+    return query.has("limit")
+      ? json({ error: { code: "RATE_LIMITED", message: "Slow down a little.", retry_after_ms: 1_150_000 } }, 429)
+      : new Response(null, { status: 204 });
   if (path === "/dms" && method === "POST") {
     // The DM you already have with exactly these people, or a new one.
     const me = state.me?.id ?? "";

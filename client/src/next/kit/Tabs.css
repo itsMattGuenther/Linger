@@ -102,6 +102,11 @@
   font-weight: 700;
 }
 
+/* A person opened from the list, until it's kept (#351): the next one takes its place. */
+.k-tab[data-preview="yes"] .k-tab-title {
+  font-style: italic;
+}
+
 /* A DM you haven't read, while another tab shows (#291): lit in the lamp. */
 .k-tab[data-lit="yes"] {
   background: var(--lit-wash);

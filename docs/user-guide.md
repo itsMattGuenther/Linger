@@ -529,14 +529,19 @@ says the microphone stopped, and you join again.
 
 ## Talking to one person
 
-**Direct messages.** Click somebody in **People** and press **Message** on
-their card (or double-click them, the old AIM way). The pencil beside **DMs**
-starts one with several people. The conversation works exactly like a room,
+**Direct messages.** Click somebody in **People**: they open beside the list,
+their card on top and your conversation with them underneath. When somebody
+writes to you, their row lights up until you've read it, and the people you're
+talking to sit at the top of each group, so they're easy to find on a busy
+server. Clicking someone else replaces that tab until you type in it, so
+you can look around without collecting tabs. The **+** beside **Rooms** starts
+a conversation with several people, and those sit with the rooms. The
+conversation works exactly like a room,
 except only the people in it can see it, anywhere: not in media, not in search,
 not in anybody else's export. There's no way to add someone later; a different
 set of people is a different conversation.
 
-**Knocking.** On the same card, **Knock** is a tap on the shoulder: the other
+**Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
@@ -586,8 +591,10 @@ an outline for offline.
 Their colors come back the moment they're around or in a room again. An away
 message keeps its warm color, since it's there for you to read.
 
-Click someone to open their card, with their status and **Message** and
-**Knock**. Press Escape or click outside it to close it.
+Hover someone to see their whole status. Click them to open them beside the
+list: their card, with **Knock**, above your conversation with them. Clicking a
+name in a conversation opens just their card, with **Message** and **Knock**;
+press Escape or click outside it to close it.
 
 ## Your status
 
