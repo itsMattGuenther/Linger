@@ -153,6 +153,8 @@
 
   /* Keyboard focus: the lamp, 2px, offset 2px. Every focusable thing. */
   --focus: var(--lamp-1);
+  /* The ring itself, which only the keyboard lights (#375, below). */
+  --focus-ring: var(--focus);
   --focus-width: 2px;
   --focus-offset: 2px;
 
@@ -351,4 +353,12 @@
     --loop: 1;
     --motion: 0;
   }
+}
+
+/* After a click, the ring stays off until a key is used (#375,
+   core/inputMode.ts). Coming back to the window, WebKitGTK puts focus back
+   as if from the keyboard, and the ring lit up on whatever was last
+   clicked. Places you type into keep theirs (base.css). */
+:root[data-input="pointer"] {
+  --focus-ring: transparent;
 }

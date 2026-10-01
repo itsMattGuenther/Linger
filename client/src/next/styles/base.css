@@ -61,10 +61,16 @@ svg {
 }
 
 /* One focus ring for everything focusable: the lamp, drawn outside the box so
-   it never changes layout. Components do not restyle it. */
+   it never changes layout. Components do not restyle it. It's the keyboard's,
+   so after a click it stays off (`--focus-ring`, #375); a place you type into
+   keeps it however it was reached, since it says where the words go. */
 :focus-visible {
-  outline: var(--focus-width) solid var(--focus);
+  outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-offset);
+}
+
+:is(input, textarea, select, [contenteditable="true"]):focus-visible {
+  outline-color: var(--focus);
 }
 
 :focus:not(:focus-visible) {

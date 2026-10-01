@@ -96,6 +96,7 @@ required a change (marked ▲).
 | `--icon-faint` ▲ | `#69738a` (was `#667087`) | carets, a room's `#`, idle voice glyphs; **never text** |
 | `--hairline` / `--hairline-strong` / `--edge-hover` | `#222d44` / `#2e3b54` / `#43527a` | separators and control edges |
 | `--focus` | the lamp, 2px, offset 2px | every focus ring |
+| `--focus-ring` | `--focus`, or transparent after a click (#375) | the ring on anything but a place you type into: the keyboard's, so the window coming back doesn't light it on what you last clicked (`core/inputMode.ts`) |
 | `--window-focus-edge` | cyan at 38% | the focused window's edge |
 
 **The change.** The prototype drew its faintest metadata (notes like "in
@@ -803,6 +804,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Hit targets are at least 24×24, but for a splitter's 8px across its whole length | `kit.spec.ts` › every hit target is at least 24px; a splitter moves with the pointer and the keys |
 | Every interactive element has an accessible name | `kit.spec.ts` › every interactive element has an accessible name |
 | Everything the keyboard reaches shows the focus ring | `kit.spec.ts` › the focus ring shows on everything the keyboard reaches |
+| After a click the ring stays off until a key is used, even where the browser shows it (the window coming back, #375); a modifier alone isn't a key; a place you type into keeps its ring | `input-mode.spec.ts`; `core/inputMode.test.ts` |
 | Tabs: arrows, Home, End, Delete; one tab in the tab order | `kit.spec.ts` › tabs move with the arrow keys |
 | Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
 | A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
