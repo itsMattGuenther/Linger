@@ -96,7 +96,7 @@
 }
 
 .nx-msg-person:focus-visible {
-  outline: var(--focus-width) solid var(--focus);
+  outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-offset);
 }
 

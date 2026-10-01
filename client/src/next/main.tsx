@@ -10,6 +10,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
+import { followInputMode } from "./core/inputMode";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { unlockAudio } from "../lib/sound";
@@ -18,6 +19,10 @@ import { App } from "./app/App";
 // Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
+
+// The focus ring is for the keyboard: it follows how you last used the
+// window, not what WebKitGTK decides when the window comes back (#375).
+followInputMode(document.documentElement, window);
 
 // WebKitGTK leaves an AudioContext suspended until a gesture, and live chimes
 // arrive from the gateway rather than from a click. The first pointer or key
