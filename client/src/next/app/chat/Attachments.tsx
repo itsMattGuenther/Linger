@@ -109,7 +109,13 @@ function Video({
         width={box?.width}
         height={box?.height}
         controls
-        preload="metadata"
+        // Nothing until it's played (#381). Asking for even the metadata
+        // makes the engine build the whole player, a hardware decoder
+        // included: about 190 MB a video in WebKitGTK on NVIDIA, about 45 MB
+        // in WebView2, for every video in the loaded history, watched or not.
+        // The poster and the server's duration need none of it. "Load
+        // again" was asked for, so a second go loads straight away.
+        preload={attempt === 0 ? "none" : "metadata"}
         aria-label={name}
         onError={(event) => {
           resumeAt.current = event.currentTarget.currentTime;

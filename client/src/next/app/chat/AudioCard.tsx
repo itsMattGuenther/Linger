@@ -19,8 +19,9 @@ function levelStore(): Storage | null {
  * used: WebKitGTK's show a volume slider only on a player 136px tall or more,
  * so a one-line player there had mute and no volume.
  *
- * The file streams from the server as the engine asks for it, a byte range at
- * a time (#222), so a seek fetches only the part it lands in. How loud it
+ * Nothing of the file is fetched until it's played (#381). Then it streams
+ * from the server as the engine asks for it, a byte range at a time (#222),
+ * so a seek fetches only the part it lands in. How loud it
  * plays is kept on this computer for the next file (`core/audioPlayer.ts`).
  * If it stops loading, the row says so and loads it again in place, from
  * where it had got to, as a video does.
@@ -114,7 +115,9 @@ export function AudioCard({ name, src, durationMs }: { name: string; src: string
         key={attempt}
         ref={player}
         src={src}
-        preload="metadata"
+        // Nothing until it's played, like a video (#381): the length shown
+        // is the server's until then. "Load again" loads straight away.
+        preload={attempt === 0 ? "none" : "metadata"}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
