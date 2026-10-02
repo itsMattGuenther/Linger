@@ -120,7 +120,7 @@ loads. That is why there are no blanket retries ([L-31](design/lessons.md)):
 a retry that passes hides both.
 
 One check plays again, once, for one proven cause. When the packaged audio
-check's recording is the right sound with pieces missing, the runner stopped
+check's recording is the right sound with pieces missing or held up, the runner stopped
 for longer than the audio buffers hold, and the check plays its set again on a
 fresh app (#384). A click, a changed level or anything else fails at once, so
 does losing audio twice, and the first recording is kept

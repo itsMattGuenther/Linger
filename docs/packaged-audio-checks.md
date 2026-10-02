@@ -54,12 +54,15 @@ The unsigned Linux/Windows package workflow runs these checks:
   delay, received-event playback and Preview after a quiet gap. Knock runs
   first on the cold context. The recording must contain all ten complete cues,
   without abrupt sample jumps or clipped attacks. Each knock must retain both
-  taps, their 140 ms spacing and full decays.
+  taps, their 140 ms spacing and full decays. Each cue must also be the sound
+  the player made, a millisecond at a time: the probe renders the player's own
+  score at the WebView's rate, and the check converts it to the speaker's
+  48 kHz ([below](#each-chime-as-the-player-made-it-387-2026-10-02)).
   Each AppImage, extracted DEB executable and extracted RPM executable runs
   separately. This proves playback on the Ubuntu runner, not installation on
   every Linux distribution. When a recording fails only because pieces of the
-  sound never reached the speaker, the set plays once more and must pass; the
-  first recording is kept as `NEW_DIR-lost` ([below](#lost-audio-on-a-paused-runner-384-2026-10-02)).
+  sound never reached the speaker, or were held up, the set plays once more and
+  must pass; the first recording is kept as `NEW_DIR-lost` ([below](#lost-audio-on-a-paused-runner-384-2026-10-02)).
 - `scripts/linux-audio-check.py APPIMAGE --appimage --video` plays a shared
   video's kind of file in the packaged WebKitGTK instead: a 0.8 second 440 Hz
   tone in AAC over a 32 px H.264 picture (`scripts/fixtures/tone-h264-aac.mp4`,
@@ -193,31 +196,66 @@ reported underflows of WebKit's stream, whose sink buffers 60 ms. The app
 can't prevent this; a desktop stopped that long glitches every program's
 sound.
 
-So when the speaker check fails, `lost()` compares each failed cue with the
-passing cue of the same kind that has the most sound in it, from the same
-recording. Each audible millisecond must be that reference's, in order, at a
-shift that only grows, allowing 16 samples of drift as the sound server
-adjusts its resampling. A millisecond that matches nowhere must sit on a cut.
-Faint and silent stretches are read the way that loses least, and silence
-where the reference had sound is lost. If that explains every failed cue, the
-check raises `LostAudio`, and `run()` renames the output to `NEW_DIR-lost`,
-prints `LOST` (a warning annotation on GitHub Actions) and plays the set again
-on a fresh app and speaker. The second recording must pass. Anything else
-fails at once: a click, a crackle at an onset, a changed level, a missing cue,
-no intact reference, or audio lost again. A fault in the app or the package,
-such as #94's lost attacks, happens every time, so it still fails.
-`scripts/linux-audio-check.test.py` keeps the CI knock and a clean one as
+So when the speaker check fails, `lost()` compares each cue with the sound
+the player made ([#387](#each-chime-as-the-player-made-it-387-2026-10-02); at
+first, with the passing cue of the same kind that had the most sound in it).
+Each audible millisecond must be that reference's, in order, allowing 16
+samples of drift as the sound server adjusts its resampling. The shift
+between them grows where audio was skipped, and steps back, no further than
+the quiet before it, where the sound paused and carried on where it stopped.
+A millisecond that matches nowhere must sit on a cut. Faint and silent
+stretches are read the way that loses least, and silence where the reference
+had sound is lost. If that explains every failed cue, the check raises
+`LostAudio`, and `run()` renames the output to `NEW_DIR-lost`, prints `LOST`
+(a warning annotation on GitHub Actions) and plays the set again on a fresh
+app and speaker. The second recording must pass. Anything else fails at
+once: a click, a crackle at an onset, a changed level, a missing cue, or
+audio lost again. A fault in the app or the package, such as #94's lost
+attacks, happens every time, so it still fails.
+`scripts/linux-audio-check.test.py` keeps the CI knock and clean cues as
 fixtures and runs in CI's rules job.
 
 In the container, with pauses of 40–90 ms, 23 recordings failed and 17 of
 them were read as lost audio, among them all 12 failing first plays paused
 every one to two seconds. Of the other six, five had no intact cue of a kind
 left to compare with, and in one, paused throughout, part of a knock arrived
-out of order; those fail. A recording that passes is never compared. Two
-limits remain. A sound can lose a piece and still pass the checks above
-(#387): of 317 cues that passed in the frozen runs, 44 had lost audio, DM
-chimes up to 172 ms and knocks up to 18 ms, and four first plays passed that
-way. That was so before this change too. And `--video` has no replay.
+out of order; those fail. Two limits remained. A sound could lose a piece and
+still pass the measurements: of 317 cues that passed in the frozen runs, 44
+had lost audio, DM chimes up to 172 ms and knocks up to 18 ms, and four first
+plays passed that way. #387 closes that, below. And `--video` has no replay.
+
+## Each chime as the player made it (#387, 2026-10-02)
+
+The measurements can't see every loss. A DM chime peaks around 0.04 of full
+scale, so a cut in its quiet tail is no sudden jump, and silence in place of
+part of it leaves its length alone.
+
+So each recorded cue must also be the sound the player made. After its run,
+the probe renders the knock and the DM chime with `renderChime()` at the
+WebView's own rate and the player's volume, the call the player made, so the
+same samples. The GTK module adds them to the result as `score`; Windows
+doesn't read them. The check converts them to 48 kHz with a windowed sinc
+(16 taps each side, cut off at 95% of the lower rate's limit) and `missing()`
+must find each cue whole. Rendering at 48 kHz directly does not match: Web
+Audio applies scheduled changes on 128-sample blocks, so at another rate the
+second note lands differently, and recordings differed from it by 14–22% a
+millisecond.
+
+Converted, 21 clean recordings (210 cues: twelve under heavy CPU load, the CI
+AppImage run and eight more) matched, the worst millisecond 0.3% different
+against the 5% allowed. Rate conversion rings differently at the faint edges
+of a sound: the score ran on up to 19 samples past a recording's end and had
+up to 15 inside its silences. So a lost end must be more than a millisecond,
+and a silent millisecond is lost only where the score had sound in most of it.
+
+Pauses turned out to have a third shape: the sound stops and carries on where
+it stopped, held up rather than cut. `missing()` reads that too, and counts
+the pause as missing. Against the score, every damaged cue in the frozen runs
+reads as lost or held up: 45 that passed the measurements and 83 that failed
+them. With this check in the container, six clean runs passed; of eight first
+plays paused every one to two seconds, seven lost audio and passed when played
+again and one lost none; and two runs paused throughout lost audio twice and
+failed.
 
 ## Still requires listening
 

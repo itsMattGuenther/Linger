@@ -1,6 +1,7 @@
 // Test-only code bundled with the production player, then injected into an
 // unchanged package with an empty profile. No account or microphone is used.
-import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
+import { renderChime } from "../client/src/lib/chimes";
+import { loadSoundPrefs, playKnock, playPreview, playSound } from "../client/src/lib/sound";
 
 (() => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -106,6 +107,20 @@ import { playKnock, playPreview, playSound } from "../client/src/lib/sound";
           cues.push({ label, cue, peak, maxStep, taps, sampleRate: context.sampleRate });
         }
       }
+      // What each cue sounded like as the player made it: the same score,
+      // volume and rate, so the same samples. The Linux check compares its
+      // recording with them a millisecond at a time (#387). Rendering at the
+      // speaker's own rate instead schedules the second note differently.
+      // Rendered after the run, so the first cue still starts cold. Windows
+      // doesn't read it.
+      const score = {};
+      for (const cue of ["knock", "dm"]) {
+        const bytes = new Uint8Array((await renderChime(cue, context.sampleRate, loadSoundPrefs().volume)).getChannelData(0).slice().buffer);
+        let text = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        score[cue] = btoa(text);
+      }
+      window.__lingerAudioScore = { rate: context.sampleRate, cues: score };
       // Keep output open: samples may still be queued in the device backend.
       window.__lingerAudioResult = { status: "passed", cues };
     } catch (error) {
