@@ -210,13 +210,14 @@ such as #94's lost attacks, happens every time, so it still fails.
 fixtures and runs in CI's rules job.
 
 In the container, with pauses of 40–90 ms, 23 recordings failed and 17 of
-them were read as lost audio, among them all 12 first plays paused every one
-to two seconds. Of the other six, five had no intact cue of a kind left to
-compare with, and in one, paused throughout, part of a knock arrived out of
-order; those fail. A recording that passes is never compared. Two limits
-remain. A DM chime is quiet enough that a stretch lost from its middle passes
-the checks above: some container runs lost up to 113 ms that way, before and
-after this change. And `--video` has no replay.
+them were read as lost audio, among them all 12 failing first plays paused
+every one to two seconds. Of the other six, five had no intact cue of a kind
+left to compare with, and in one, paused throughout, part of a knock arrived
+out of order; those fail. A recording that passes is never compared. Two
+limits remain. A sound can lose a piece and still pass the checks above
+(#387): of 317 cues that passed in the frozen runs, 44 had lost audio, DM
+chimes up to 172 ms and knocks up to 18 ms, and four first plays passed that
+way. That was so before this change too. And `--video` has no replay.
 
 ## Still requires listening
 
