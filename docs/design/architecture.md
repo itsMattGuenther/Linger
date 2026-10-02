@@ -399,8 +399,10 @@ one.
   it directly (`ListControls.conversations`).
 - **Title bars.** Every new-client window is frameless and draws its own title
   bar from the kit, with a drag region and window controls where the desktop
-  has none. Windows 11 shadows and resizing on frameless windows need checking
-  early on Windows.
+  has none: close everywhere, and minimize on Windows (#386,
+  `core/windowControls.ts`), since a tiling Linux desktop has no minimizing.
+  Windows 11 shadows and resizing on frameless windows need checking early on
+  Windows.
 - **Remembering.** Open tabs and their order are remembered on this computer
   (`linger.next.tabs`), and whether the list was unfolded (`linger.next.side`).
   Closing the last tab folds the list window back, and the next conversation

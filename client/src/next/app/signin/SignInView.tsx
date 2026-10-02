@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
 import { displayNameProblem, loginReady, MIN_PASSWORD_CHARS, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
+import { minimizer } from "../../core/windowControls";
 import { Button, TextField, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./SignInView.css";
@@ -33,7 +34,7 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
 
   return (
     <div className="nx-signin" data-screen="signin">
-      <TitleBar leading={<LogoMark />} onClose={onClose}>
+      <TitleBar leading={<LogoMark />} onMinimize={onClose && minimizer()} onClose={onClose}>
         Linger
       </TitleBar>
       <div className="nx-signin-body">

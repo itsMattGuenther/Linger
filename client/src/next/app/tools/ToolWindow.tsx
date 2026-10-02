@@ -7,6 +7,7 @@ import { isSearchKey, isSettingsKey } from "../../core/keys";
 import type { Following } from "../../core/mirror";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage } from "../../core/share";
+import { minimizer } from "../../core/windowControls";
 import { Button, Icon, IconButton, type IconName, Spinner, TitleBar } from "../../kit";
 import { useFollowing } from "../useFollowing";
 import { WindowMessage } from "../WindowMessage";
@@ -173,7 +174,7 @@ function Frame({
 
   return (
     <div className="nx-tool" data-screen={screen}>
-      <TitleBar leading={<Icon name={icon} size="md" />} actions={beside} onClose={isTauri() ? close : undefined}>
+      <TitleBar leading={<Icon name={icon} size="md" />} actions={beside} onMinimize={minimizer()} onClose={isTauri() ? close : undefined}>
         {title}
       </TitleBar>
       <div className="nx-tool-body">{children(following, shown)}</div>

@@ -11,6 +11,11 @@ export interface TitleBarProps {
   actions?: ReactNode;
   /** The window has focus: full-strength title. */
   focused?: boolean;
+  /**
+   * Draws a minimize button before the close button, for a desktop whose
+   * windows all have one (Windows, #386). Leave it out everywhere else.
+   */
+  onMinimize?: () => void;
   /** Draws Linger's own close button. Leave it out where the desktop draws one. */
   onClose?: () => void;
   closeLabel?: string;
@@ -28,7 +33,7 @@ export interface TitleBarProps {
  * on anything inside it, so a bar marked that way is dead wherever its
  * content covers it: the tab row covered all of the chat window's (#225).
  */
-export function TitleBar({ leading, children, actions, focused = true, onClose, closeLabel = "Close window" }: TitleBarProps) {
+export function TitleBar({ leading, children, actions, focused = true, onMinimize, onClose, closeLabel = "Close window" }: TitleBarProps) {
   return (
     <header className="k-titlebar" data-kit="TitleBar" data-focused={focused ? "yes" : "no"} data-tauri-drag-region="deep">
       {leading ? <span className="k-titlebar-lead">{leading}</span> : null}
@@ -36,6 +41,7 @@ export function TitleBar({ leading, children, actions, focused = true, onClose, 
         {typeof children === "string" ? <span className="k-titlebar-text">{children}</span> : children}
       </div>
       {actions ? <span className="k-titlebar-actions">{actions}</span> : null}
+      {onMinimize ? <IconButton icon="minimize" label="Minimize" onClick={onMinimize} /> : null}
       {onClose ? <IconButton icon="close" label={closeLabel} tone="danger" onClick={onClose} /> : null}
     </header>
   );

@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import type { ListModel } from "../../core/list";
+import { minimizer } from "../../core/windowControls";
 import { Button, IconButton, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./ListView.css";
@@ -135,7 +136,7 @@ export function ListView(props: ListViewProps) {
     const name = only === undefined ? "Linger" : "serverName" in only ? only.serverName : only.name;
     return (
       <div className="nx-list" data-screen="list" data-rock={rocking}>
-        <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
+        <TitleBar leading={<LogoMark />} actions={gear} onMinimize={onClose && minimizer()} onClose={onClose}>
           {name}
         </TitleBar>
 
@@ -171,7 +172,7 @@ export function ListView(props: ListViewProps) {
 
   return (
     <div className="nx-list" data-screen="list" data-servers="several" data-rock={rocking}>
-      <TitleBar leading={<LogoMark />} actions={gear} onClose={onClose}>
+      <TitleBar leading={<LogoMark />} actions={gear} onMinimize={onClose && minimizer()} onClose={onClose}>
         Linger
       </TitleBar>
 

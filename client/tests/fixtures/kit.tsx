@@ -659,6 +659,12 @@ function Gallery() {
           </TitleBar>
           <div className="g-window-body">Unfocused: the title dims.</div>
         </div>
+        <div className="g-window">
+          <TitleBar leading={<Icon name="house" />} actions={<IconButton icon="gear" label="Settings" />} onMinimize={() => {}} onClose={() => {}}>
+            On Windows, with a title long enough to end in an ellipsis before minimize and close
+          </TitleBar>
+          <div className="g-window-body">Windows: minimize beside close (#386).</div>
+        </div>
         <SplitPanes />
       </Section>
 

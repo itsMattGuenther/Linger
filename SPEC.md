@@ -153,7 +153,8 @@ the computer (Windows and Linux); it is off until you turn it on. **Settings** i
 a window too.
 
 Every window draws its own title bar and is an ordinary window to the desktop: it
-snaps, tiles and resizes as the desktop does it. Window sizes and places are
+snaps, tiles and resizes as the desktop does it. On Windows each title bar has a
+minimize button beside its close button (#386). Window sizes and places are
 remembered on this computer.
 
 ---

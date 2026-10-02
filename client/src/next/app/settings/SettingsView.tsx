@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { type SettingsKey, type SettingsScope, sectionLead, SECTION_LABELS, settingsEntries, showable } from "../../core/settings";
+import { minimizer } from "../../core/windowControls";
 import { Icon, type IconName, type NavEntry, NavList, TitleBar } from "../../kit";
 import { type AccountProps, AccountSection } from "./AccountSection";
 import { type AppearanceProps, AppearanceSection } from "./AppearanceSection";
@@ -92,7 +93,7 @@ export function SettingsView(props: SettingsViewProps) {
 
   return (
     <div className="nx-set" data-screen="settings">
-      <TitleBar leading={<Icon name="gear" size="md" />} focused={props.focused ?? true} onClose={props.onClose}>
+      <TitleBar leading={<Icon name="gear" size="md" />} focused={props.focused ?? true} onMinimize={props.onClose && minimizer()} onClose={props.onClose}>
         Settings
       </TitleBar>
       <div className="nx-set-body">

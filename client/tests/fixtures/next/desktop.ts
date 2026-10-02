@@ -129,6 +129,9 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       case "plugin:window|close":
         note("window:close");
         return null;
+      case "plugin:window|minimize":
+        note("window:minimize");
+        return null;
       default: {
         const command = commands[cmd];
         return command ? command(a) : null;

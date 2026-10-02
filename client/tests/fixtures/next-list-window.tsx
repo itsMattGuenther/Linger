@@ -189,6 +189,9 @@ mockIPC((cmd, args) => {
     case "gateway_send":
       note(`send ${String(a.baseUrl)}:${JSON.stringify(a.frame)}`);
       return true;
+    case "plugin:window|minimize":
+      note("minimize");
+      return null;
     // The list window's own size and place (#337): unfolding grows it, folding shrinks it.
     case "plugin:window|is_maximized":
       return query.has("maximized");
