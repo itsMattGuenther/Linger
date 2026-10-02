@@ -6,4 +6,12 @@ export type Attachment = { id: AttachmentId, filename: string, mime: string, siz
 /**
  * Served from a separate origin (ARCHITECTURE §7) — uploads are hostile.
  */
-url: string, width: number | null, height: number | null, duration_ms: number | null, blurhash: string | null, poster_url: string | null, starred_at: number | null, uploader_id: UserId, created_at: number, };
+url: string, width: number | null, height: number | null, duration_ms: number | null, blurhash: string | null, poster_url: string | null, 
+/**
+ * An image as it is drawn small, in a conversation or on a media tile
+ * (#382, PROTOCOL §6): a copy 960 px on its longest side, or `url`
+ * itself for a smaller image or an animated GIF. Absent for anything
+ * that isn't an image, from an older server, and for an image from
+ * before copies until the server has made its: draw `url`.
+ */
+display_url?: string, starred_at: number | null, uploader_id: UserId, created_at: number, };

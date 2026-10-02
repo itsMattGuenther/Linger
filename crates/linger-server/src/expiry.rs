@@ -54,6 +54,10 @@ const SWEEP_BATCH: i64 = 500;
 /// rather than one batch every six hours for a week.
 const BATCH_PAUSE: Duration = Duration::from_secs(5);
 
+/// One file a pass takes: its id, its key, its poster's and its display
+/// copy's (#382), and its size.
+type Expired = (Vec<u8>, String, Option<String>, Option<String>, i64);
+
 /// What a pass took, for the log line and for the tests.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Swept {
@@ -119,8 +123,8 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     // `?` for the cutoff is bound twice and is NULL when expiry is off, which
     // makes both age comparisons false and leaves only the deleted-message
     // rule — that one is not about age and is not the host's to turn off.
-    let rows: Vec<(Vec<u8>, String, Option<String>, i64)> = sqlx::query_as(
-        "SELECT a.id, a.object_key, a.poster_key, a.size_bytes
+    let rows: Vec<Expired> = sqlx::query_as(
+        "SELECT a.id, a.object_key, a.poster_key, a.display_key, a.size_bytes
            FROM attachments a
            LEFT JOIN messages m ON m.id = a.message_id
           WHERE a.state = 'complete'
@@ -140,7 +144,7 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     .await?;
 
     let mut swept = Swept::default();
-    for (id, object_key, poster_key, size_bytes) in rows {
+    for (id, object_key, poster_key, display_key, size_bytes) in rows {
         let Ok(id) = AttachmentId::from_slice(&id) else {
             continue;
         };
@@ -152,6 +156,9 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
             continue;
         }
         if let Some(key) = &poster_key {
+            let _ = state.storage.delete_object(key).await;
+        }
+        if let Some(key) = display_key.as_ref().filter(|key| **key != object_key) {
             let _ = state.storage.delete_object(key).await;
         }
         sqlx::query("DELETE FROM attachments WHERE id = ?")

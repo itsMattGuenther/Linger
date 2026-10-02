@@ -502,6 +502,10 @@ carry sender feedback to a different person.
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
   an embarrassing bug.
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
+- A picture in a conversation or on a media tile is drawn from a copy the server
+  makes, 960 px on its longest side; the viewer and downloads open the original.
+  Drawn whole, a phone photo costs WebKit about 80 MB however small it is shown
+  (#382).
 - A shared video or audio file loads nothing until it's played: the poster and the
   server's duration stand in until then. Building a player per file costs about
   190 MB a video in WebKitGTK and about 45 MB in WebView2, watched or not (#381).

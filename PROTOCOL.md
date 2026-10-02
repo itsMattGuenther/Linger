@@ -519,7 +519,7 @@ make them acceptable.
 `DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
 `CONFLICT` once the attachment is on a message; delete the message instead.
 
-**Serving.** `Attachment.url` (and `poster_url`) point at the object store, on the media
+**Serving.** `Attachment.url` (and `poster_url` and `display_url`) point at the object store, on the media
 origin — a host of its own, `cdn.<LINGER_DOMAIN>` by default, which serves `/objects/...`
 and nothing else. On a server with `LINGER_DOMAIN` set these URLs are absolute; on one
 without, there is only one origin and they are root-relative, resolved against the server
@@ -552,6 +552,7 @@ type Attachment = {
   url: string;                       // separate CDN origin, see ARCHITECTURE §7
   width: number | null; height: number | null; duration_ms: number | null;
   blurhash: string | null; poster_url: string | null;
+  display_url?: string;              // an image's smaller copy, for lists; see below
   starred_at: number | null;
   uploader_id: string; created_at: number;
 }
@@ -560,6 +561,18 @@ type Attachment = {
 `mime`, `filename` and `size_bytes` on a finished attachment describe what the server
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
+
+**Display copies (#382).** An image's `display_url` is the picture to draw where it is
+shown small: in a conversation and on a media tile. An engine that decodes the full
+picture holds all of it in memory, about 50 MB for a phone photo, however small it is
+drawn. When the stored image is over 960 px on its longest side, `display_url` is a copy
+the server made, 960 px on its longest side, JPEG for a JPEG and PNG for anything else.
+Otherwise it is `url` itself, and so is an animated GIF's, which a still copy would stop.
+`url` is still the whole picture, for the image viewer and for downloads. Video, audio
+and other files have no `display_url`. An older server leaves it out, and so does this one
+for an image uploaded before it had copies, until its background pass has made that
+image's: either way, draw `url`. A copy is not counted in the pool, is not in an export
+(§7), where the original is, and goes when its file goes.
 
 **Media**
 

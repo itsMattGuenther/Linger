@@ -38,6 +38,7 @@ function picture(width: number, height: number, sky: string, ground: string): st
 export const PICTURES: Record<string, string> = {
   "/media/speakers.png": SPEAKERS_PHOTO,
   "/media/moon-over-the-porch.png": picture(300, 400, "#1d2340", "#2c2233"),
+  "/media/moon-over-the-porch.display.png": picture(300, 400, "#1d2340", "#2c2233"),
   "/media/porch-timelapse.jpg": picture(640, 360, "#31405e", "#3b2e2a"),
   "/media/raid-wipe.png": picture(800, 450, "#2a1f3a", "#1a1a24"),
   "/media/rio.jpg": picture(500, 500, "#3e5a78", "#26455a"),
@@ -178,7 +179,7 @@ function fileItem(kind: MediaKind, file: Attachment, room_id: string, message_id
 
 const at = (day: number, hour: number, minute: number) => new Date(2026, 8, 25 + day, hour, minute).getTime();
 const speakers = upload("a-speakers", "u-jules", at(0, 16, 7), "speakers.png", "image/png", 184_320, { width: 400, height: 250 });
-const moon = upload("a-moon", "u-callie", at(-1, 23, 14), "moon-over-the-porch.png", "image/png", 402_000, { width: 300, height: 400, starred_at: at(-1, 23, 20) });
+const moon = upload("a-moon", "u-callie", at(-1, 23, 14), "moon-over-the-porch.png", "image/png", 402_000, { width: 300, height: 400, starred_at: at(-1, 23, 20), display_url: "/media/moon-over-the-porch.display.png" });
 const timelapse = upload("a-timelapse", "u-matt", at(-2, 20, 30), "porch-timelapse.mp4", "video/mp4", 38_400_000, {
   width: 640,
   height: 360,

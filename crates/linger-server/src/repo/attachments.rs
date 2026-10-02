@@ -18,6 +18,10 @@ pub struct Record {
     pub uploader_id: UserId,
     pub object_key: String,
     pub poster_key: Option<String>,
+    /// What an image is drawn from where it is shown small (#382): its display
+    /// copy, or its own `object_key`. `None` for an image from before copies,
+    /// until `display.rs` has made its, and for anything that isn't an image.
+    pub display_key: Option<String>,
     pub filename: String,
     pub mime: String,
     pub size_bytes: u64,
@@ -37,6 +41,7 @@ fn row_to_record(row: &SqliteRow) -> Result<Record, ApiError> {
             .map_err(anyhow::Error::from)?,
         object_key: row.get("object_key"),
         poster_key: row.get("poster_key"),
+        display_key: row.get("display_key"),
         filename: row.get("filename"),
         mime: row.get("mime"),
         size_bytes: row.get::<i64, _>("size_bytes").max(0) as u64,
@@ -60,6 +65,7 @@ pub(crate) fn row_to_attachment(row: &SqliteRow, config: &Config) -> Result<Atta
             .map(|v| v.max(0) as u64),
         blurhash: row.get("blurhash"),
         poster_url: record.poster_key.map(|key| config.object_url(&key)),
+        display_url: record.display_key.map(|key| config.object_url(&key)),
         starred_at: row.get("starred_at"),
         uploader_id: record.uploader_id,
         created_at: row.get("created_at"),

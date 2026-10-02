@@ -203,6 +203,13 @@ pub fn poster_key(id: AttachmentId) -> String {
     format!("{}.poster.jpg", object_key(id))
 }
 
+/// The key of an image's display copy (#382): JPEG for a JPEG, PNG otherwise.
+#[must_use]
+pub fn display_key(id: AttachmentId, mime: &str) -> String {
+    let extension = if mime == "image/jpeg" { "jpg" } else { "png" };
+    format!("{}.display.{extension}", object_key(id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,5 +266,8 @@ mod tests {
         assert_eq!(key, format!("{}/{}/{}", &hex[0..2], &hex[2..4], hex));
         assert!(!key.contains(".."));
         assert!(poster_key(id).ends_with(".poster.jpg"));
+        assert!(display_key(id, "image/jpeg").ends_with(".display.jpg"));
+        assert!(display_key(id, "image/png").ends_with(".display.png"));
+        assert!(display_key(id, "image/png").starts_with(&object_key(id)));
     }
 }

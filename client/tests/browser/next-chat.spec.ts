@@ -560,6 +560,15 @@ test.describe("the row menu", () => {
     await expect(target).toBeInViewport();
   });
 
+  test("a picture is drawn from the server's smaller copy and opens whole (#382)", async ({ page }) => {
+    const copy = page.getByRole("button", { name: "Open speakers.png" }).locator("img");
+    expect(decodeURIComponent((await copy.getAttribute("src")) ?? "")).toContain("<title>display copy</title>");
+    await page.getByRole("button", { name: "Open speakers.png" }).click();
+    const whole = page.getByRole("dialog", { name: "speakers.png" }).locator("img");
+    await expect(whole).toBeVisible();
+    expect(decodeURIComponent((await whole.getAttribute("src")) ?? "")).not.toContain("display copy");
+  });
+
   test("a picture opens over the window and closes with Escape", async ({ page }) => {
     await page.getByRole("button", { name: "Open speakers.png" }).click();
     const viewer = page.getByRole("dialog", { name: "speakers.png" });

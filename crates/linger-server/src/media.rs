@@ -10,7 +10,8 @@
 //!    §4.10) — and destroys polyglots, files that are a valid image and a valid
 //!    something-else at the same time, in the same step. There is no toggle.
 //! 3. **Describe it.** Dimensions, a blurhash to show while the real thing
-//!    loads, a poster frame and duration for video. No transcoding in V1.
+//!    loads, a poster frame and duration for video, and a display copy of a
+//!    large image to draw where it is shown small (#382). No transcoding in V1.
 //!
 //! Video work shells out to `ffmpeg`/`ffprobe`. They are optional: a server
 //! without them stores videos perfectly well and simply has no poster frame.
@@ -28,12 +29,20 @@ use crate::error::ApiError;
 
 /// The biggest image this server will decode. Well past any camera, and short
 /// of the memory a deliberately enormous one would ask for.
-const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// Decoded-pixel guards against a small file that claims enormous dimensions.
 const MAX_IMAGE_DIMENSION: u32 = 16_384;
 const MAX_DECODE_ALLOC: u64 = 512 * 1024 * 1024;
 /// Blurhash is meant to be a smear of colour, so it is computed from a thumbnail.
 const BLURHASH_MAX_EDGE: u32 = 64;
+/// The longest side of an image's display copy (#382, PROTOCOL §6). A photo in
+/// a conversation is drawn at most 320 px wide, so 960 is sharp up to three
+/// times that: a 2× screen at 150% interface size. Ten phone photos then cost
+/// a WebKit page about 65 MB rather than 900 (measured on #382). Past that it
+/// softens a little in the conversation, and the viewer opens the original.
+pub const DISPLAY_EDGE: u32 = 960;
+/// A display copy is looked at small and briefly, then the original opens.
+const DISPLAY_QUALITY: u8 = 85;
 /// Where in a video to grab the poster frame. One second in, because frame zero
 /// of a lot of video is black.
 const POSTER_SECONDS: &str = "1";
@@ -63,6 +72,10 @@ pub struct Processed {
     pub blurhash: Option<String>,
     /// JPEG bytes of a generated video poster frame, if there is one.
     pub poster: Option<Vec<u8>>,
+    /// An image's display copy, in its own format, when it is over
+    /// [`DISPLAY_EDGE`] and not a GIF. `None` for an image that is drawn as it
+    /// is, and for anything that isn't an image.
+    pub display: Option<Vec<u8>>,
 }
 
 /// Inspect and clean up the staged file **in place**, so the caller can move it
@@ -83,6 +96,7 @@ pub async fn process(
         duration_ms: None,
         blurhash: None,
         poster: None,
+        display: None,
     };
 
     match media::kind_of(&mime) {
@@ -105,6 +119,7 @@ pub async fn process(
             out.width = Some(clean.width);
             out.height = Some(clean.height);
             out.blurhash = clean.blurhash;
+            out.display = clean.display;
         }
         "video" => {
             let probe = ffprobe(path).await;
@@ -202,6 +217,7 @@ struct CleanImage {
     width: u32,
     height: u32,
     blurhash: Option<String>,
+    display: Option<Vec<u8>>,
 }
 
 fn decode_limited(bytes: &[u8]) -> Result<image::DynamicImage, ApiError> {
@@ -254,6 +270,8 @@ fn reencode_image(bytes: &[u8], mime: &str) -> Result<CleanImage, ApiError> {
             width,
             height,
             blurhash,
+            // A still copy would stop the animation: a GIF is drawn as it is.
+            display: None,
         });
     }
 
@@ -283,13 +301,67 @@ fn reencode_image(bytes: &[u8], mime: &str) -> Result<CleanImage, ApiError> {
         "image/png"
     };
 
+    let display = display_copy(&decoded, mime)?;
     Ok(CleanImage {
         bytes: out,
         mime: mime.to_string(),
         width,
         height,
         blurhash,
+        display,
     })
+}
+
+/// An image's display copy (#382): the picture fitted inside [`DISPLAY_EDGE`]
+/// on its longest side, JPEG for a JPEG and PNG for anything else, or `None`
+/// when it is small enough to draw as it is.
+///
+/// Drawn small, a full-size picture still costs its full size: an engine that
+/// decodes it whole holds about 50 MB for a phone photo in a 320-pixel box.
+fn display_copy(image: &image::DynamicImage, mime: &str) -> Result<Option<Vec<u8>>, ApiError> {
+    use image::ImageEncoder;
+
+    if image.width().max(image.height()) <= DISPLAY_EDGE {
+        return Ok(None);
+    }
+    let small = image.resize(
+        DISPLAY_EDGE,
+        DISPLAY_EDGE,
+        image::imageops::FilterType::CatmullRom,
+    );
+    let mut out = Vec::new();
+    if mime == "image/jpeg" {
+        let rgb = small.to_rgb8();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, DISPLAY_QUALITY)
+            .write_image(
+                rgb.as_raw(),
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
+            )
+            .map_err(|_| ApiError::internal())?;
+    } else {
+        let rgba = small.to_rgba8();
+        image::codecs::png::PngEncoder::new(&mut out)
+            .write_image(
+                rgba.as_raw(),
+                rgba.width(),
+                rgba.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|_| ApiError::internal())?;
+    }
+    Ok(Some(out))
+}
+
+/// The display copy of an image already stored, for one uploaded before
+/// copies were made (`display.rs`). The stored file was re-encoded on upload,
+/// so it is read with the same limits and nothing else is done to it.
+pub fn display_copy_of(bytes: &[u8], mime: &str) -> Result<Option<Vec<u8>>, ApiError> {
+    if mime == "image/gif" {
+        return Ok(None);
+    }
+    display_copy(&decode_limited(bytes)?, mime)
 }
 
 fn blurhash_of(source: &image::RgbaImage) -> Option<String> {

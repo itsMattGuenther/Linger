@@ -148,10 +148,13 @@ async fn get_object(
     Path(key): Path<String>,
     request: HeaderMap,
 ) -> Result<Response, ApiError> {
+    // An image's display copy (#382) has its original's type, so it is served
+    // exactly as the original is.
     let row = sqlx::query(
         "SELECT filename, mime, poster_key FROM attachments
-         WHERE state = 'complete' AND (object_key = ? OR poster_key = ?)",
+         WHERE state = 'complete' AND (object_key = ? OR poster_key = ? OR display_key = ?)",
     )
+    .bind(&key)
     .bind(&key)
     .bind(&key)
     .fetch_optional(&state.db.read)

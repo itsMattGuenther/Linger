@@ -99,7 +99,8 @@ const WORD: Record<MediaKind, string> = {
 
 function faceOf(item: MediaItem): Face {
   const file = item.attachment;
-  if (item.kind === "image" && file) return { kind: "image", path: file.url, width: file.width, height: file.height };
+  // The smaller copy, where the server made one (#382): a tile is small.
+  if (item.kind === "image" && file) return { kind: "image", path: file.display_url ?? file.url, width: file.width, height: file.height };
   if (item.kind === "video" && file) return { kind: "video", poster: file.poster_url, length: file.duration_ms === null ? null : durationText(Number(file.duration_ms)) };
   if (item.kind === "link" && item.link) return { kind: "link", icon: item.link.icon, domain: item.link.domain };
   const word = WORD[item.kind];

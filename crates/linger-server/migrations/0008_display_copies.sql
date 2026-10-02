@@ -1,0 +1,14 @@
+-- Images get a smaller copy to be drawn from in conversations and on media
+-- tiles (PROTOCOL §6, #382). An engine that decodes the full picture holds all
+-- of it in memory, about 50 MB for a phone photo, however small it is drawn.
+--
+-- `display_key` is the object to draw an image from: a copy 960 px on its
+-- longest side, stored next to the original like a video's poster frame, or
+-- the original's own key when the image is already that small or is an
+-- animated GIF. It is set for every image finished from here on.
+--
+-- Images uploaded before this have none, and that is what NULL means for an
+-- image: not made yet. SQL can't make pictures, so the server does, in the
+-- background after it starts (`display.rs`), and the app draws the original
+-- until then. Anything that isn't an image keeps NULL for good.
+ALTER TABLE attachments ADD COLUMN display_key TEXT;
