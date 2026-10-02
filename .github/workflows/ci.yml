@@ -366,6 +366,10 @@ jobs:
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).
         run: node --test scripts/package-deps.test.mjs
+      - name: the Linux audio check tells sound lost on the way to the speaker from a click
+        # A runner its host pauses loses part of a chime before the virtual
+        # speaker records it. Only that plays the set again (#384).
+        run: python3 scripts/linux-audio-check.test.py -q
       - name: the browser jobs' Playwright image is the client's Playwright
         run: node --test scripts/playwright-image.test.mjs
       - name: workflow files
