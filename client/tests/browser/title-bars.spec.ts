@@ -81,11 +81,11 @@ test("the tabs window moves by any part of its title bar that isn't a tab or a b
 });
 
 test.describe("every title bar moves its window from anywhere but its controls", () => {
-  test("in the kit: plain titles, tabs, marks and actions", async ({ page }) => {
+  test("in the kit: plain titles, tabs, marks, actions and Windows' minimize", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/tests/fixtures/kit.html");
     const bars = page.locator("[data-section='tabs'] .k-titlebar");
-    await expect(bars).toHaveCount(4);
+    await expect(bars).toHaveCount(5);
     for (const bar of await bars.all()) expect(await wrongPresses(bar)).toEqual([]);
   });
 

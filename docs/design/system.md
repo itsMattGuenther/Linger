@@ -390,9 +390,12 @@ The top of every Linger window, drawn by Linger (decided 2026-09-25), 40px.
 
 - **Parts:** `leading` (a mark, or the conversations' fold button beside the
   list, #337), the title or a `TabStrip`, `actions`, and an optional close
-  button. The list window unfolded has two bars side by side, the list's and
-  the conversations', the same height, split by the list's hairline; the
-  close button is only on the far right one.
+  button. On Windows a minimize button comes just before close (#386), where
+  every window has one; not on Linux, where a tiling desktop has no
+  minimizing (`core/windowControls.ts`). The list window unfolded has two
+  bars side by side, the list's and the conversations', the same height,
+  split by the list's hairline; minimize and close are only on the far right
+  one.
 - **Drag region:** a press anywhere on the bar moves the window: the title,
   the mark, a `TabStrip`'s empty space, a conversation's header. Buttons,
   links, fields and tabs stay theirs. The bar is
@@ -809,6 +812,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Tabs lead with a `#` or a marker; server stripes are 2px in the server's palette color | `kit.spec.ts` › tabs lead with a room's # or a person's marker |
 | A dragged tab lands where it's dropped, the others slide aside, and a small wobble is a click | `kit.spec.ts` › a tab dragged along the row |
 | A press anywhere on a title bar but a control moves the window, in the kit and in every window; beside the list that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
+| On Windows every window's title bar has minimize just before close, and it minimizes that window; on Linux there's none (#386) | `window-buttons.spec.ts`, `core/windowControls.test.ts` |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |

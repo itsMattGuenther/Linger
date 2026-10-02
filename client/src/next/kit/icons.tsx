@@ -10,6 +10,7 @@ import type { ReactElement } from "react";
 
 export const ICON_NAMES = [
   "close",
+  "minimize",
   "caret",
   "knock",
   "message",
@@ -70,6 +71,13 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   close: (
     <>
       <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </>
+  ),
+  // A window's minimize (#386): one stroke as wide as close's cross, through
+  // the middle, as Windows draws its own.
+  minimize: (
+    <>
+      <path d="M4 8h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </>
   ),
   caret: (

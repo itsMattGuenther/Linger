@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
 import type { ReactNode } from "react";
+import { minimizer } from "../core/windowControls";
 import { TitleBar } from "../kit";
 import { LogoMark } from "./LogoMark";
 import "./WindowMessage.css";
@@ -13,7 +14,7 @@ export function WindowMessage({ children, onClose }: { children: ReactNode; onCl
   const close = onClose ?? (isTauri() ? () => void getCurrentWindow().close() : undefined);
   return (
     <div className="nx-window">
-      <TitleBar leading={<LogoMark />} onClose={close}>
+      <TitleBar leading={<LogoMark />} onMinimize={minimizer()} onClose={close}>
         Linger
       </TitleBar>
       <div className="nx-window-message" role="status">

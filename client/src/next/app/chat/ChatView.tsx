@@ -6,6 +6,7 @@ import type { User } from "../../../generated/User";
 import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
+import { minimizer } from "../../core/windowControls";
 import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
 import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
@@ -195,7 +196,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
 
   return (
     <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined}>
-      <TitleBar leading={leading} focused={focused} actions={single ? backBeside : popOut} onClose={onCloseWindow}>
+      <TitleBar leading={leading} focused={focused} actions={single ? backBeside : popOut} onMinimize={onCloseWindow && minimizer()} onClose={onCloseWindow}>
         {single ? (
           pane ? (
             <PaneHeader {...pane.header} place="title" />
