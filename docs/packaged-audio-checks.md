@@ -57,7 +57,9 @@ The unsigned Linux/Windows package workflow runs these checks:
   taps, their 140 ms spacing and full decays.
   Each AppImage, extracted DEB executable and extracted RPM executable runs
   separately. This proves playback on the Ubuntu runner, not installation on
-  every Linux distribution.
+  every Linux distribution. When a recording fails only because pieces of the
+  sound never reached the speaker, the set plays once more and must pass; the
+  first recording is kept as `NEW_DIR-lost` ([below](#lost-audio-on-a-paused-runner-384-2026-10-02)).
 - `scripts/linux-audio-check.py APPIMAGE --appimage --video` plays a shared
   video's kind of file in the packaged WebKitGTK instead: a 0.8 second 440 Hz
   tone in AAC over a 32 px H.264 picture (`scripts/fixtures/tone-h264-aac.mp4`,
@@ -166,6 +168,55 @@ player in this Linux package. Linger does not explicitly suspend this context.
 That diagnostic is not a passed sleep/wake check; OS sleep/wake and device
 changes still require real-client verification. The combined check uses an
 idle but open context, matching the player's normal lifetime.
+
+## Lost audio on a paused runner (#384, 2026-10-02)
+
+On 2026-10-01 the DEB run of the chime check failed once with "Abrupt chime
+onset" on `knock-first-preview` (maximum step 0.129) and passed on re-run
+(package check run 36915387652). In the recording kept from that run the
+first knock lasted 157 ms instead of 238 ms. Compared a millisecond at a time
+with a clean knock from the same recording, it was that knock sample for
+sample (relative squared difference about 0.0001) with two pieces cut out: it
+skipped about 40 ms at 5.5 ms in and about 41 ms more at 20 ms, 81 ms in all.
+Nothing was added or changed. The probe's analyser had measured the same cue
+whole in the WebView (two 98 ms taps, 140 ms apart), so the sound was lost
+between WebKit's audio output and the recorder. The other nine cues, and the
+AppImage and RPM runs, were clean.
+
+The CI DEB was then run in an Ubuntu 22.04 container limited to four CPUs.
+Twelve runs with eight busy processes competing for those CPUs lost nothing.
+Pausing the whole container (`docker pause`) for 40–150 ms at random moments,
+as a host pauses a virtual machine, lost audio in every run, on whichever cue
+was playing: the sound skipped ahead (one run lost 82 ms of a knock in the CI
+failure's pattern), or silence took the place of part of it. PulseAudio
+reported underflows of WebKit's stream, whose sink buffers 60 ms. The app
+can't prevent this; a desktop stopped that long glitches every program's
+sound.
+
+So when the speaker check fails, `lost()` compares each failed cue with the
+passing cue of the same kind that has the most sound in it, from the same
+recording. Each audible millisecond must be that reference's, in order, at a
+shift that only grows, allowing 16 samples of drift as the sound server
+adjusts its resampling. A millisecond that matches nowhere must sit on a cut.
+Faint and silent stretches are read the way that loses least, and silence
+where the reference had sound is lost. If that explains every failed cue, the
+check raises `LostAudio`, and `run()` renames the output to `NEW_DIR-lost`,
+prints `LOST` (a warning annotation on GitHub Actions) and plays the set again
+on a fresh app and speaker. The second recording must pass. Anything else
+fails at once: a click, a crackle at an onset, a changed level, a missing cue,
+no intact reference, or audio lost again. A fault in the app or the package,
+such as #94's lost attacks, happens every time, so it still fails.
+`scripts/linux-audio-check.test.py` keeps the CI knock and a clean one as
+fixtures and runs in CI's rules job.
+
+In the container, with pauses of 40–90 ms, 23 recordings failed and 17 of
+them were read as lost audio, among them all 12 first plays paused every one
+to two seconds. Of the other six, five had no intact cue of a kind left to
+compare with, and in one, paused throughout, part of a knock arrived out of
+order; those fail. A recording that passes is never compared. Two limits
+remain. A DM chime is quiet enough that a stretch lost from its middle passes
+the checks above: some container runs lost up to 113 ms that way, before and
+after this change. And `--video` has no replay.
 
 ## Still requires listening
 

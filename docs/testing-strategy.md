@@ -65,7 +65,8 @@ Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
-`scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`).
+`scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`, and
+`python3 scripts/linux-audio-check.test.py`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -117,6 +118,13 @@ fixed time, or measures a frame that a busy machine draws late. Sometimes the
 app is: #266 looked like a flaky test and was a real race in how history
 loads. That is why there are no blanket retries ([L-31](design/lessons.md)):
 a retry that passes hides both.
+
+One check plays again, once, for one proven cause. When the packaged audio
+check's recording is the right sound with pieces missing, the runner stopped
+for longer than the audio buffers hold, and the check plays its set again on a
+fresh app (#384). A click, a changed level or anything else fails at once, so
+does losing audio twice, and the first recording is kept
+([packaged audio checks](packaged-audio-checks.md#lost-audio-on-a-paused-runner-384-2026-10-02)).
 
 1. Re-run the failed job once, to be sure it is random and not your change.
 2. Open an issue the same day with the test's name, the run, and the error.

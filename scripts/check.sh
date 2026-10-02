@@ -43,6 +43,7 @@ echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
 node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs
+python3 scripts/linux-audio-check.test.py -q
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="
   docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
