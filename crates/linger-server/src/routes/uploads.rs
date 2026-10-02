@@ -30,7 +30,7 @@ use crate::auth::AuthedUser;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
-use crate::storage::{object_key, part_plan, poster_key, ServeAs};
+use crate::storage::{display_key, object_key, part_plan, poster_key, ServeAs};
 use crate::{repo, validate};
 
 /// Parts of an upload that never completed are swept once they are this old.
@@ -208,6 +208,28 @@ async fn finish(
         }
         None => None,
     };
+    // An image is drawn small from its display copy, or from itself when it
+    // is already small or a GIF (#382). Nothing else has one.
+    let display = if media::kind_of(&processed.mime) == "image" {
+        match &processed.display {
+            Some(bytes) => {
+                let key = display_key(record.id, &processed.mime);
+                state
+                    .storage
+                    .put_bytes(
+                        &key,
+                        bytes,
+                        &ServeAs::for_object(&processed.mime, &processed.filename),
+                    )
+                    .await
+                    .map_err(ApiError::from)?;
+                Some(key)
+            }
+            None => Some(record.object_key.clone()),
+        }
+    } else {
+        None
+    };
     // How this file is allowed to be served is decided once, here, from what
     // the server made of the bytes — never from what the uploader declared —
     // and stored with the object so it is the same answer wherever it is read
@@ -227,7 +249,8 @@ async fn finish(
     sqlx::query(
         "UPDATE attachments SET
            filename = ?, mime = ?, size_bytes = ?, width = ?, height = ?,
-           duration_ms = ?, blurhash = ?, poster_key = ?, state = 'complete'
+           duration_ms = ?, blurhash = ?, poster_key = ?, display_key = ?,
+           state = 'complete'
          WHERE id = ?",
     )
     .bind(&processed.filename)
@@ -238,6 +261,7 @@ async fn finish(
     .bind(processed.duration_ms.map(|d| d as i64))
     .bind(processed.blurhash.as_deref())
     .bind(poster.as_deref())
+    .bind(display.as_deref())
     .bind(record.id.to_vec())
     .execute(&state.db.write)
     .await?;
@@ -270,6 +294,13 @@ async fn cancel(
     let _ = state.storage.discard(upload_id).await;
     let _ = state.storage.delete_object(&record.object_key).await;
     if let Some(key) = &record.poster_key {
+        let _ = state.storage.delete_object(key).await;
+    }
+    if let Some(key) = record
+        .display_key
+        .as_ref()
+        .filter(|key| **key != record.object_key)
+    {
         let _ = state.storage.delete_object(key).await;
     }
     sqlx::query("DELETE FROM attachments WHERE id = ?")

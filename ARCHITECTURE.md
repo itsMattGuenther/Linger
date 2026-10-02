@@ -287,6 +287,7 @@ CREATE TABLE attachments (
   duration_ms     INTEGER,
   blurhash        TEXT,
   poster_key      TEXT,                        -- video poster frame
+  display_key     TEXT,                        -- an image as drawn small: its copy, or itself (#382)
   starred_at      INTEGER,                     -- starred => never expires
   state           TEXT NOT NULL,               -- pending | complete | failed
   created_at      INTEGER NOT NULL
@@ -579,7 +580,8 @@ Never proxy bytes through the app server.
 3. Client  → PUT direct to object store (multipart if > 8 MB, resumable)
 4. Client  → POST /uploads/{id}/complete
 5. Server  → verifies size, sniffs real MIME, re-encodes image (strips EXIF),
-             generates blurhash + poster frame, sets state=complete
+             generates blurhash + poster frame + an image's display copy,
+             sets state=complete
 6. Server  → attaches to message, fans out over gateway
 ```
 
@@ -640,7 +642,19 @@ decoder's limits: `ffprobe` gets 15 seconds, the poster gets 30 across both of i
 positions, and a run past its limit is killed and counts as no probe data or no poster —
 the same outcome as a server without ffmpeg.
 
-**The sweeper** (`expiry.rs`) is the server's one background task — spawned by `main`,
+**Display copies** (#382). An engine that decodes a whole picture holds all of it in
+memory however small it is drawn: about 80 MB a phone photo in WebKit, measured. So
+when the server re-encodes an image over 960 px on its longest side, it also stores a
+copy that size beside it, like a poster frame (`display_key`; JPEG for a JPEG, PNG
+otherwise). Conversations and media tiles draw the copy; the viewer, downloads and
+exports take the original. A smaller image, and an animated GIF, is drawn from itself.
+Images from before copies get theirs from `display.rs`, which `main` spawns once at
+startup, newest first, a few at a time. It reads each original back as an export does,
+so it works on S3, where the bucket answers requests for a copy and a copy could never
+be made on its first request. Ten phone photos in a conversation cost a WebKit page
+about 65 MB with copies, against 800 to 900 without.
+
+**The sweeper** (`expiry.rs`) is the server's one recurring background task — spawned by `main`,
 not by `AppState`, so building the state in a test never starts a loop nobody asked for.
 It runs at startup and every six hours, in batches, and takes three kinds of object:
 

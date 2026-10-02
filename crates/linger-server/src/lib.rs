@@ -7,6 +7,7 @@
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod display;
 pub mod error;
 pub mod expiry;
 pub mod export;

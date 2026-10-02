@@ -91,6 +91,12 @@ describe("the media filters", () => {
 });
 
 describe("a tile", () => {
+  it("draws a picture from the server's smaller copy, or from the original where there's none (#382)", () => {
+    const copied = item({ attachment: file({ display_url: "/media/speakers.display.png" }) });
+    expect(tileLine(copied, names, null).face).toEqual({ kind: "image", path: "/media/speakers.display.png", width: 400, height: 250 });
+    expect(tileLine(item(), names, null).face).toEqual({ kind: "image", path: "/media/speakers.png", width: 400, height: 250 });
+  });
+
   it("says what it is, who shared it, where and when, and its size", () => {
     const line = tileLine(item(), names, null);
     expect(line.face).toEqual({ kind: "image", path: "/media/speakers.png", width: 400, height: 250 });

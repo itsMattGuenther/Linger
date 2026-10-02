@@ -84,6 +84,17 @@ test.describe("the grid", () => {
     await expect(tile(page, "rain-sounds.mp3").getByRole("button", { name: "Star rain-sounds.mp3" })).toHaveCount(1);
   });
 
+  test("a picture's tile is drawn from the server's smaller copy, where it made one (#382)", async ({ page }) => {
+    await page.route("**/__media/**", () => undefined);
+    await open(page, "?lazy");
+    await loaded(page, 7);
+    const sources = await page.locator(".nx-tile-face[data-face='image'] img").evaluateAll((all) => all.map((img) => img.getAttribute("src")));
+    expect(sources).toContain("/__media/media/moon-over-the-porch.display.png");
+    expect(sources).not.toContain("/__media/media/moon-over-the-porch.png");
+    // A picture from a server without copies is drawn whole.
+    expect(sources).toContain("/__media/media/speakers.png");
+  });
+
   test("pictures load lazily into faces already the right size", async ({ page }) => {
     // Nothing ever answers for the pictures.
     await page.route("**/__media/**", () => undefined);

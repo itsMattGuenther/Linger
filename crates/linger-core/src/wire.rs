@@ -501,6 +501,14 @@ pub struct Attachment {
     pub duration_ms: Option<u64>,
     pub blurhash: Option<String>,
     pub poster_url: Option<String>,
+    /// An image as it is drawn small, in a conversation or on a media tile
+    /// (#382, PROTOCOL §6): a copy 960 px on its longest side, or `url`
+    /// itself for a smaller image or an animated GIF. Absent for anything
+    /// that isn't an image, from an older server, and for an image from
+    /// before copies until the server has made its: draw `url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub display_url: Option<String>,
     #[ts(type = "number | null")]
     pub starred_at: Option<i64>,
     pub uploader_id: UserId,

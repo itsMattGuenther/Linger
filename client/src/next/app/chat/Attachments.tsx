@@ -51,7 +51,8 @@ function One({
     case "image":
       return (
         <button type="button" className="nx-att-image" aria-label={`Open ${file.filename}`} onClick={() => onOpenImage(file)}>
-          <img src={mediaUrl(file.url)} alt={file.filename} width={box?.width} height={box?.height} loading="lazy" decoding="async" />
+          {/* The smaller copy, where the server made one (#382): the original opens in the viewer. */}
+          <img src={mediaUrl(file.display_url ?? file.url)} alt={file.filename} width={box?.width} height={box?.height} loading="lazy" decoding="async" />
         </button>
       );
     case "video":

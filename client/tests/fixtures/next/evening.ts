@@ -220,12 +220,21 @@ function said(room_id: string, author: User, created_at: number, body: string, e
   };
 }
 
+/**
+ * The server's smaller copy of the photo, for drawing it in the conversation
+ * (#382): the same scene, titled so a test can tell which one is drawn.
+ */
+export const SPEAKERS_COPY =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 50"><title>display copy</title><rect width="80" height="50" fill="#2a2133"/><rect width="80" height="30" fill="#3a2d3f"/></svg>`);
+
 const photo = (created_at: number): Attachment => ({
   id: "a-speakers",
   filename: "speakers.png",
   mime: "image/png",
   size_bytes: 184_320,
   url: SPEAKERS_PHOTO,
+  display_url: SPEAKERS_COPY,
   width: 400,
   height: 250,
   duration_ms: null,

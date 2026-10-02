@@ -3,7 +3,7 @@
 
 use std::io::BufRead;
 
-use linger_server::{db, expiry, reset};
+use linger_server::{db, display, expiry, reset};
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "\
@@ -192,6 +192,9 @@ async fn serve() -> anyhow::Result<()> {
     // (T-801) are the other background work, but one is spawned per request
     // rather than running on a clock.
     let _sweeper = expiry::spawn(state.clone());
+    // Display copies for images uploaded before the server made them (#382):
+    // once, at startup, newest first, until every image has one.
+    let _copies = display::spawn(state.clone());
 
     let app = linger_server::app(state);
     let listener = tokio::net::TcpListener::bind(bind).await?;

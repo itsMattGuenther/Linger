@@ -643,3 +643,90 @@ async fn an_export_pulls_the_files_back_out_of_the_bucket() {
     assert!(found, "the file never came back out of the bucket");
     assert_eq!(&image[1..4], b"PNG", "and the bytes are the real file");
 }
+
+/// A large image's display copy (#382) lives in the bucket next to it, is
+/// served from it as the image's own type, and goes when the upload goes.
+#[tokio::test]
+async fn a_large_images_display_copy_is_in_the_bucket_and_goes_with_it() {
+    let server = s3_server!("a_large_images_display_copy_is_in_the_bucket_and_goes_with_it");
+    let host = bootstrap_host(&server).await;
+
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "wide.png",
+        "image/png",
+        png(1500, 900),
+    )
+    .await;
+    let display = attachment
+        .display_url
+        .clone()
+        .expect("a large image has a display copy");
+    assert_ne!(display, attachment.url);
+    assert!(bucket_has(&key_of(&display)).await);
+
+    let resp = fetch_object(&server, &display).await;
+    assert_eq!(resp.status(), 200);
+    assert_eq!(header(&resp, reqwest::header::CONTENT_TYPE), "image/png");
+    assert!(header(&resp, reqwest::header::CONTENT_DISPOSITION).starts_with("inline;"));
+    let copy = image::load_from_memory(&resp.bytes().await.unwrap()).unwrap();
+    assert_eq!((copy.width(), copy.height()), (960, 576));
+
+    let resp = client()
+        .delete(server.url(&format!("/uploads/{}", attachment.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    assert!(
+        !bucket_has(&key_of(&display)).await,
+        "the copy went with the upload"
+    );
+}
+
+/// An image from before copies gets its copy when the server starts, read back
+/// out of the bucket (#382). Forgetting the copy is the one thing done to the
+/// store directly here: it is how an image from an older server looks.
+#[tokio::test]
+async fn an_earlier_image_gets_its_display_copy_from_the_bucket() {
+    let server = s3_server!("an_earlier_image_gets_its_display_copy_from_the_bucket");
+    let host = bootstrap_host(&server).await;
+
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "wide.png",
+        "image/png",
+        png(1500, 900),
+    )
+    .await;
+    let display = attachment.display_url.clone().unwrap();
+    server
+        .state
+        .storage
+        .delete_object(&key_of(&display))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE attachments SET display_key = NULL")
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    assert!(!bucket_has(&key_of(&display)).await);
+
+    assert_eq!(
+        linger_server::display::catch_up(&server.state)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        bucket_has(&key_of(&display)).await,
+        "the copy was made again from the bucket's original"
+    );
+    let copy =
+        image::load_from_memory(&fetch_object(&server, &display).await.bytes().await.unwrap())
+            .unwrap();
+    assert_eq!((copy.width(), copy.height()), (960, 576));
+}
