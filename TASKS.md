@@ -24,11 +24,12 @@ default.
 
 ## How to run a task
 
-**0.4.5 release — ⏳ Matt, 2026-10-01.** One window and one row per friend:
-conversations, Media and Search beside the list (#337), a DM on its person
-(#351), messages to the time column (#334), Linux video sound (#358, #377),
-and hosts' `update.sh` and version note (#312, #314); notes in
-`docs/releases/0.4.5.md`. The server image is x86-64 only from 0.4.5 (#310).
+**0.4.6 release — ⏳ Matt, 2026-10-02.** Lighter: photos shown from a 960 px
+copy the server makes (#382, a database change; existing photos get copies
+when the server starts), videos and audio that load nothing until played
+(#381), from the memory audit (#380, closed), and minimize on Windows (#386);
+notes in `docs/releases/0.4.6.md`. 0.4.5 (2026-10-01) was one window and one
+row per friend (#337, #351, #334, #358, #377, #312, #314), x86-64 only (#310).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every

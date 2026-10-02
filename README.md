@@ -18,7 +18,7 @@ people who already know each other, not a stadium of fifty thousand strangers.
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list with a conversation open beside it, in one window">
 </div>
 
-**Status: 0.4.5, testing with friends.** It works day to day; voice across
+**Status: 0.4.6, testing with friends.** It works day to day; voice across
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
