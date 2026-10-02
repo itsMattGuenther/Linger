@@ -12,7 +12,9 @@ cc, pkg-config, WebKitGTK/GStreamer headers, Xvfb, D-Bus and PulseAudio tools.
 import argparse
 import array
 import base64
+from fractions import Fraction
 import json
+import math
 import os
 from pathlib import Path
 import shlex
@@ -52,16 +54,66 @@ def segments(samples, gap=4800):
     return spans
 
 
+def resample(samples, rate, taps=16, cutoff=0.95):
+    """Samples at `rate` converted to the monitor's 48 kHz with a windowed
+    sinc, as the sound server converts what the WebView plays."""
+    assert rate <= 48000, f"The WebView ran at {rate} Hz; the check converts only up to 48 kHz"
+    step = Fraction(rate, 48000)  # input samples per output sample
+    kernels = {}
+    converted = array.array("f")
+    for n in range(int(len(samples) / step)):
+        position = n * step
+        base = math.floor(position)
+        phase = position - base
+        kernel = kernels.get(phase)
+        if kernel is None:
+            kernel = kernels[phase] = []
+            for k in range(1 - taps, taps + 1):
+                distance = cutoff * (float(phase) - k)
+                sinc = 1.0 if distance == 0 else math.sin(math.pi * distance) / (math.pi * distance)
+                kernel.append(cutoff * sinc * 0.5 * (1 + math.cos(math.pi * (float(phase) - k) / taps)))
+        total = 0.0
+        for k, weight in zip(range(base + 1 - taps, base + taps + 1), kernel):
+            if 0 <= k < len(samples):
+                total += samples[k] * weight
+        converted.append(total)
+    return converted
+
+
+def score(encoded, rate):
+    """A cue as the probe rendered it, from the player's own score, volume
+    and rate (#387), as the 48 kHz monitor should record it: converted, and
+    from its first sample loud enough to count to its last."""
+    samples = array.array("f")
+    samples.frombytes(base64.b64decode(encoded))
+    if sys.byteorder != "little":
+        samples.byteswap()
+    if rate != 48000:
+        samples = resample(samples, rate)
+    heard = [index for index, sample in enumerate(samples) if abs(sample) > 0.00001]
+    assert heard, "The probe's score is silent"
+    return samples[heard[0]:heard[-1] + 1]
+
+
 class LostAudio(AssertionError):
-    """The speaker got the right sound with pieces missing, lost on its way there (#384)."""
+    """The speaker got the right sound with pieces missing or held up on its way there (#384)."""
 
 
-def judge(samples, cues):
+def judge(samples, cues, scores):
     """Each recorded cue against the score: their measurements, or an
-    AssertionError for the first that fails."""
+    AssertionError for the first that fails. Each must also be the sound the
+    player made, a millisecond at a time: a DM chime is quiet enough to lose
+    a stretch without any measurement noticing (#387)."""
     spans = segments(samples)
     assert len(spans) == len(cues), f"Missing/extra chimes at speaker: {len(spans)}"
-    return [judge_cue(samples, cue, start, end) for cue, (start, end) in zip(cues, spans)]
+    onsets = []
+    for cue, (start, end) in zip(cues, spans):
+        onset = judge_cue(samples, cue, start, end)
+        gone = missing(samples[start:end + 1], scores[cue["cue"]])
+        assert gone == 0, (f"Not the sound the player made: {cue['label']} "
+                           + ("differs from it" if gone is None else f"is missing or held up {gone / 48:.0f} ms"))
+        onsets.append(onset)
+    return onsets
 
 
 def judge_cue(samples, cue, start, end):
@@ -96,19 +148,21 @@ MATCH = 0.05  # relative squared difference under which a millisecond is the ref
 FLOOR = BLOCK * 0.001 ** 2
 DRIFT = 16  # samples a recording wanders from its reference within a sound
 SKIP = BLOCK // 2  # samples a sound must jump by to have skipped
+EDGE = 4  # silent samples at the edge of a millisecond that show a cut inside it
 
 
 def missing(recorded, reference):
-    """How many samples of `reference` never reached `recorded`, when that is
-    all that is wrong with it; otherwise None.
+    """How many samples of `reference` never reached `recorded`: 0 when it
+    arrived whole, and None when something else is wrong with it.
 
     A machine that stops for longer than its audio buffers hold, such as a CI
     runner paused by its host, loses part of a sound on the way to the
-    speaker (#384). Either the sound skips ahead, or silence takes the place
-    of part of it and the sound carries on where it would have been. Both
-    times every millisecond that arrived is the reference's, in order, except
-    one or two where a cut falls. A click, a crackle or a changed level is
-    not, and neither is a sound that arrived whole.
+    speaker (#384). The sound skips ahead, or silence takes the place of part
+    of it and the sound carries on where it would have been, or it pauses and
+    carries on where it stopped. Every time, each millisecond that arrived is
+    the reference's, in order, except one or two where a cut falls. A pause
+    counts as missing for as long as it lasts. A click, a crackle or a
+    changed level is not, and neither is a sound that arrived whole.
     """
     padded = array.array("f", reference)
     padded.extend([0.0] * (len(recorded) + BLOCK))
@@ -138,24 +192,34 @@ def missing(recorded, reference):
     # [kind, shift, where]. A recorded sample at `at` is the reference's at
     # `at + shift`. Only audible milliseconds say what the shift is. It
     # drifts by a few samples as the sound server adjusts its resampling, so
-    # a millisecond that stops matching is looked for nearby first, and only
-    # then further on, where a skip would have put it. Audio never repeats.
+    # a millisecond that stops matching is looked for nearby first; then back
+    # by no more than the quiet just before it, where a pause would have put
+    # it; then further on, where a skip would have. Audio never repeats.
     starts = list(range(0, len(recorded) - BLOCK + 1, BLOCK))
     if len(recorded) % BLOCK and len(recorded) > BLOCK:
         starts.append(len(recorded) - BLOCK)
     marks = []
     shift = 0
+    held = 0  # samples since the last millisecond that matched
     for at in starts:
         block = recorded[at:at + BLOCK]
         energy = sum(v * v for v in block)
+        held = held + BLOCK if marks and marks[-1][0] != "match" else 0
         if energy < FLOOR:
             marks.append(["faint", None, at])
         elif error(block, energy, at + shift, MATCH) < MATCH:
             marks.append(["match", shift, at])
         else:
-            found = find(block, energy, at, shift - DRIFT, shift + DRIFT + 1)
-            if found is None:
-                found = find(block, energy, at, shift + DRIFT + 1, len(reference))
+            # Silence starting or ending inside it makes it a cut, not a
+            # place to look for: half a millisecond of a tone can match it a
+            # cycle further on.
+            edged = (max(abs(v) for v in block[:EDGE]) <= 0.00001
+                     or max(abs(v) for v in block[-EDGE:]) <= 0.00001)
+            found = None
+            for start, stop in ((shift - DRIFT, shift + DRIFT + 1), (shift - DRIFT - held, shift - DRIFT),
+                                (shift + DRIFT + 1, len(reference))):
+                if found is None and not edged and start < stop:
+                    found = find(block, energy, at, start, stop)
             if found is not None:
                 shift = found
                 marks.append(["match", shift, at])
@@ -181,8 +245,9 @@ def missing(recorded, reference):
         here = recorded[at:at + BLOCK]
         there = padded[max(0, at + shift):max(0, at + shift + BLOCK)]
         if max(abs(v) for v in here) <= 0.00001:
-            # More than drift could put across the edge of a sound.
-            return sum(abs(v) > 0.00001 for v in there) > DRIFT
+            # Most of it, so the edge of a sound, where converting rates
+            # rings a little differently, isn't counted.
+            return sum(abs(v) > 0.00001 for v in there) > BLOCK // 2
         had = sum(v * v for v in there)
         return had >= MATCH * FLOOR and had > 4 * sum(v * v for v in here)
 
@@ -206,10 +271,11 @@ def missing(recorded, reference):
         split = min(range(end - first + 1), key=lambda k: sum(early_lost[:k]) + sum(late_lost[k:]))
         for offset, m in enumerate(range(first, end)):
             gone = early_lost[offset] if offset < split else late_lost[offset]
-            marks[m][0] = "lost" if gone else "quiet"
+            marks[m][:2] = ["lost" if gone else "quiet", early if offset < split else late]
         first = end
-    # The reference carries on past the recording's end.
-    tail_lost = any(abs(v) > 0.00001 for v in reference[len(recorded) + shift + DRIFT:])
+    # The reference carries on past the recording's end, by more than a
+    # millisecond: rate conversion alone makes them differ by a few samples.
+    tail_lost = sum(abs(v) > 0.00001 for v in reference[len(recorded) + shift:]) > BLOCK
 
     def cut_inside(index, shift, leading):
         """Whether silence ends (`leading`) or starts inside this millisecond
@@ -248,7 +314,7 @@ def missing(recorded, reference):
         if end - first > 2:
             return None
         before, later = shift_before(first), shift_after(end)
-        cut = (later is not None and later - before > SKIP
+        cut = (later is not None and abs(later - before) > SKIP
                or first > 0 and marks[first - 1][0] == "lost"
                or end < len(marks) and marks[end][0] == "lost"
                or first > 0 and marks[first - 1][0] == "quiet" and later is not None
@@ -258,49 +324,43 @@ def missing(recorded, reference):
         if not cut:
             return None
         first = end
-    # Something has to be missing: the start, a skip, a stretch of silence
-    # in place of sound, a cut inside a millisecond, or the end.
+    # Something has to be missing: the start, a skip, a pause, a stretch of
+    # silence in place of sound, a cut inside a millisecond, or the end.
     shifts = [marks[m][1] for m in matched]
-    skipped = shifts[0] > SKIP or any(b - a > SKIP for a, b in zip(shifts, shifts[1:]))
+    skipped = shifts[0] > SKIP or any(abs(b - a) > SKIP for a, b in zip(shifts, shifts[1:]))
     if not (skipped or tail_lost or any(kind in ("lost", "seam") for kind, _, _ in marks)):
-        return None
-    arrived = BLOCK * sum(kind in ("match", "quiet") for kind, _, _ in marks)
-    return max(len(reference) - arrived, 1)
+        return 0
+    # A quiet millisecond pushed past the reference's end by a pause is no
+    # part of it that arrived.
+    arrived = BLOCK * sum(kind in ("match", "quiet") and at + shift < len(reference) for kind, shift, at in marks)
+    paused = sum(a - b for a, b in zip(shifts, shifts[1:]) if a - b > SKIP)
+    return max(len(reference) - arrived, 0) + paused or 1
 
 
-def lost(samples, cues):
+def lost(samples, cues, scores):
     """What the speaker lost, when losing it is all that failed: a list of
     (label, milliseconds), else None (#384).
 
-    Each failed cue is compared with one of the same kind that passed, from
-    the same recording: the one with the most sound in it, since a DM chime
-    can lose a stretch too quiet for the checks above to notice, and lost
-    audio only ever takes sound away. Silence in place of part of a sound
-    can split it in two, so cues are found here with a longer gap than the
-    check's own.
+    Each cue is compared with the sound the player made. Silence in place of
+    part of a sound can split it in two, so cues are found here with a
+    longer gap than the check's own. A cue that arrived whole but fails a
+    measurement is the score's fault, not the speaker's, so it fails too.
     """
     spans = segments(samples, gap=12000)
     if len(spans) != len(cues):
         return None
-    clean = {}
-    failed = []
+    damage = []
     for cue, (start, end) in zip(cues, spans):
-        recorded = samples[start:end + 1]
+        gone = missing(samples[start:end + 1], scores[cue["cue"]])
+        if gone is None:
+            return None
+        if gone:
+            damage.append((cue["label"], gone / 48))
+            continue
         try:
             judge_cue(samples, cue, start, end)
         except AssertionError:
-            failed.append((cue, recorded))
-        else:
-            energy = sum(v * v for v in recorded)
-            if energy > clean.get(cue["cue"], (0, None))[0]:
-                clean[cue["cue"]] = (energy, recorded)
-    damage = []
-    for cue, recorded in failed:
-        reference = clean.get(cue["cue"], (0, None))[1]
-        gone = None if reference is None else missing(recorded, reference)
-        if gone is None:
             return None
-        damage.append((cue["label"], gone / 48))
     return damage or None
 
 
@@ -414,6 +474,10 @@ def check(program, output, appimage, video=False):
         if video:
             heard(recorder, output, result, program)
             return
+        # Kept out of result.json: the cues' samples only matter here.
+        rendered = result.pop("score", None)
+        assert rendered, f"The probe sent no score to compare the recording with; see {output}"
+        scores = {cue: score(encoded, rendered["rate"]) for cue, encoded in rendered["cues"].items()}
         # PulseAudio's recording transport may deliver after the Web Audio
         # callback finishes. Wait for samples, not an arbitrary short sleep.
         peak = 0
@@ -435,16 +499,16 @@ def check(program, output, appimage, video=False):
         stop(recorder)
         assert peak > 0.005, f"Web Audio ran but no samples reached the virtual speaker: peak={peak}"
         try:
-            onsets = judge(samples, result["cues"])
+            onsets = judge(samples, result["cues"], scores)
         except AssertionError as failure:
-            damage = lost(samples, result["cues"])
+            damage = lost(samples, result["cues"], scores)
             if damage is None:
                 raise
             result["speaker_lost"] = [dict(label=label, lost_ms=ms) for label, ms in damage]
             (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-            raise LostAudio(f"{failure}. It is the right sound with pieces missing: "
-                            + ", ".join(f"{label} lost {ms:.0f} ms" for label, ms in damage)
-                            + "; everything that arrived matches a clean cue from the same recording") from failure
+            raise LostAudio(f"{failure}. It is the right sound with pieces missing or held up: "
+                            + ", ".join(f"{label} {ms:.0f} ms" for label, ms in damage)
+                            + "; everything that arrived is the sound the player made") from failure
         result["speaker_onsets"] = onsets
         result["speaker_peak"] = peak
         (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")

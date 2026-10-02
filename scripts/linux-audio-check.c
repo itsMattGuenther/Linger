@@ -42,8 +42,10 @@ static gboolean poll_result(gpointer unused) {
     (void)unused;
     if (!pending) {
         pending = TRUE;
+        /* The score rides along once the probe has rendered it (#387). */
         webkit_web_view_evaluate_javascript(view,
-            "JSON.stringify(window.__lingerAudioResult)", -1, NULL, NULL, NULL, result, NULL);
+            "JSON.stringify(Object.assign({}, window.__lingerAudioResult, {score: window.__lingerAudioScore}))",
+            -1, NULL, NULL, NULL, result, NULL);
     }
     return G_SOURCE_CONTINUE;
 }
