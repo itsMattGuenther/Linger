@@ -15,12 +15,19 @@
 //! absent, must degrade to a clear "sign in again" prompt instead of a crash.
 //! That is why nothing here returns `Err` — every outcome, including "this
 //! computer has no keyring", is a value the frontend can render.
+//!
+//! The phone app has no keyring crate behind it yet (T-1602): phones keep
+//! secrets in their own stores, Keychain on iPhone and the Android Keystore.
+//! Until it does, it takes the no-wallet path above, so a phone asks for a
+//! sign-in each time the app starts, and nothing is written anywhere.
 
+#[cfg(desktop)]
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 
 /// Keyring service name. Matches the bundle identifier so entries are
 /// recognisable in Seahorse / KWalletManager / Keychain Access.
+#[cfg(desktop)]
 const SERVICE: &str = "com.linger.desktop";
 
 /// Namespace every account name is built from. A parameter rather than a
@@ -82,6 +89,7 @@ pub enum SessionWrite {
 /// Turn a keyring failure into something a person can act on. The underlying
 /// messages are D-Bus and platform jargon, so they go in parentheses after a
 /// plain sentence rather than being shown raw.
+#[cfg(desktop)]
 fn explain(err: &keyring::Error) -> String {
     format!("No usable keyring on this computer ({err}).")
 }
@@ -89,12 +97,15 @@ fn explain(err: &keyring::Error) -> String {
 /// One account's contents. `Missing` and `Unavailable` are different answers:
 /// the first means the keyring works and has nothing, the second means we could
 /// not ask.
+// A phone only ever answers `Unavailable` until T-1602 gives it a store.
+#[cfg_attr(mobile, allow(dead_code))]
 enum Held {
     Found(String),
     Missing,
     Unavailable(String),
 }
 
+#[cfg(desktop)]
 fn read(account: &str) -> Held {
     let entry = match Entry::new(SERVICE, account) {
         Ok(entry) => entry,
@@ -107,6 +118,7 @@ fn read(account: &str) -> Held {
     }
 }
 
+#[cfg(desktop)]
 fn write(account: &str, value: &str) -> SessionWrite {
     let entry = match Entry::new(SERVICE, account) {
         Ok(entry) => entry,
@@ -124,6 +136,7 @@ fn write(account: &str, value: &str) -> SessionWrite {
     }
 }
 
+#[cfg(desktop)]
 fn delete(account: &str) -> SessionWrite {
     let entry = match Entry::new(SERVICE, account) {
         Ok(entry) => entry,
@@ -141,6 +154,28 @@ fn delete(account: &str) -> SessionWrite {
             reason: explain(&err),
         },
     }
+}
+
+/// Why a phone can't keep a sign-in yet, in the words the app shows.
+#[cfg(mobile)]
+const NOT_ON_PHONES: &str = "Linger can't remember sign-ins on a phone yet.";
+
+#[cfg(mobile)]
+fn read(_account: &str) -> Held {
+    Held::Unavailable(NOT_ON_PHONES.to_string())
+}
+
+#[cfg(mobile)]
+fn write(_account: &str, _value: &str) -> SessionWrite {
+    SessionWrite::Unavailable {
+        reason: NOT_ON_PHONES.to_string(),
+    }
+}
+
+#[cfg(mobile)]
+fn delete(_account: &str) -> SessionWrite {
+    // Nothing was stored, so there is nothing to forget.
+    SessionWrite::Done
 }
 
 /// The server list, or an empty one if it is missing or unreadable.

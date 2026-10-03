@@ -499,7 +499,17 @@ macOS runners, or a friend's Mac.
   ask. Phone backups leave Linger out unless you opt in, and report and block
   come before any store listing (T-1605). SPEC §4.15.
 
-- ⬜ **T-1602 · The mobile shell** — effort: **high**
+- 🟡 **T-1602 · The mobile shell** — effort: **high**
+  *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
+  builds for Android with the desktop-only code switched off (`phone_app` in
+  `src/lib.rs`, `capabilities/phone.json`, voice moved to
+  `src/voice_commands.rs`, `src/acl.rs` checking the phone's grants); the
+  Android project in `gen/android`, with cloud backup off; and in the Android
+  emulator the app opens, sets up a server, signs in, and its live connection
+  comes up. **Still to do:** keeping sign-ins (a phone answers "unavailable"
+  for now, so it asks again every launch), the backup opt-in setting,
+  reconnecting across a network switch, Linger's icons for the launcher (still
+  Tauri's), and iOS, which needs a Mac. Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and voice, which
@@ -525,6 +535,12 @@ macOS runners, or a friend's Mac.
   unfold it beside the list (#337), one-hand reach, and a message box above a
   software keyboard. Check that an iPhone camera photo uploads as something the
   server reads; iPhones save HEIC.
+  Seen on the first run in the emulator (2026-10-02): the list's title bar
+  draws under the phone's clock and icons, its ✕ means nothing on a phone, the
+  sign-in note says "this computer", and everything that opens another window
+  (Settings, "Make the first room", a conversation, Media, Search) does
+  nothing. A phone has one window and `phone.json` grants none of the window
+  commands, so all of those have to open inside the list's window instead.
   *Accept:* usable one-handed on a phone somebody actually owns.
 
 - ⬜ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**

@@ -47,7 +47,44 @@ const CAPABILITIES: &[(&str, &str)] = &[
         include_str!("../capabilities/next-tools.json"),
     ),
     ("owner.json", include_str!("../capabilities/owner.json")),
+    ("phone.json", include_str!("../capabilities/phone.json")),
 ];
+
+/// The platforms a desktop capability names, and a phone one. Each file names
+/// exactly one of the two sets, so a phone's grants never stand in for a
+/// desktop one in these tests, or the other way round.
+const DESKTOP: &[&str] = &["linux", "macOS", "windows"];
+const PHONE: &[&str] = &["android", "iOS"];
+
+/// Commands a phone never gets (SPEC §4.15): no voice or its sounds, no
+/// notifications, no in-app updates, no other windows, no tray, nothing
+/// started at sign-in, no Linux clipboard workaround.
+fn never_on_a_phone(command: &str) -> bool {
+    command.starts_with("voice_")
+        || command.starts_with("update_")
+        || command.starts_with("next_")
+        || command.starts_with("autostart_")
+        || matches!(
+            command,
+            "sound_play"
+                | "show_notification"
+                | "app_version"
+                | "newest_version"
+                | "clipboard_image"
+        )
+}
+
+fn platforms(text: &str) -> Vec<String> {
+    let capability: serde_json::Value = serde_json::from_str(text).expect("a capability is JSON");
+    capability["platforms"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .map(|platform| platform.as_str().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// The quoted names inside the first `[ … ]` after `start`.
 fn listed(source: &str, start: &str) -> BTreeSet<String> {
@@ -68,10 +105,16 @@ fn listed(source: &str, start: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// The app commands each window is granted, as command names.
+/// The app commands each desktop window is granted, as command names.
 fn granted() -> Vec<(String, Vec<String>, BTreeSet<String>)> {
+    granted_on(DESKTOP)
+}
+
+/// The same, from the files for one set of platforms.
+fn granted_on(set: &[&str]) -> Vec<(String, Vec<String>, BTreeSet<String>)> {
     CAPABILITIES
         .iter()
+        .filter(|(_, text)| platforms(text) == set)
         .map(|(file, text)| {
             let capability: serde_json::Value =
                 serde_json::from_str(text).expect("a capability is JSON");
@@ -211,4 +254,46 @@ fn every_capability_file_is_checked_here() {
         on_disk, checked,
         "add a new capability file to CAPABILITIES in src/acl.rs"
     );
+}
+
+#[test]
+fn every_capability_file_is_for_the_desktop_or_the_phone() {
+    // A file without "platforms" applies everywhere, and a desktop grant
+    // would reach the phone with it.
+    for (file, text) in CAPABILITIES {
+        let named = platforms(text);
+        assert!(
+            named == DESKTOP || named == PHONE,
+            "{file} must name exactly {DESKTOP:?} or {PHONE:?}, not {named:?}"
+        );
+    }
+}
+
+#[test]
+fn the_phone_may_call_exactly_what_phone_app_registers() {
+    let lib = include_str!("lib.rs");
+    let phone_app = &lib[lib.find("fn phone_app()").expect("phone_app in lib.rs")..];
+    let registered = listed(phone_app, "tauri::generate_handler![");
+    let phone: BTreeSet<String> = granted_on(PHONE)
+        .into_iter()
+        .flat_map(|(_, _, commands)| commands)
+        .collect();
+    assert_eq!(phone, registered);
+    let declared = listed(include_str!("../build.rs"), "const COMMANDS: &[&str] = &[");
+    assert!(
+        registered.is_subset(&declared),
+        "phone_app registers a command build.rs doesn't declare"
+    );
+}
+
+#[test]
+fn a_phone_gets_no_voice_notifications_updates_or_other_windows() {
+    for (file, _, commands) in granted_on(PHONE) {
+        for command in &commands {
+            assert!(
+                !never_on_a_phone(command),
+                "{file} grants {command}, which the phone app doesn't have (SPEC §4.15)"
+            );
+        }
+    }
 }

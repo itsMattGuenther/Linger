@@ -228,6 +228,57 @@ package checks install the published 0.3.0 MSI, upgrade to the newly built
 package, and check original, renamed, moved and deleted desktop shortcuts,
 including uninstall cleanup. See [the update check](windows-update-checks.md).
 
+## The phone app (Android)
+
+The phone app is built from the same `client/src-tauri` crate (SPEC §4.15,
+`TASKS.md` §Mobile). Desktop-only code is behind `#[cfg(desktop)]`, phone
+builds register only what `phone_app` in `src/lib.rs` lists, and
+`capabilities/phone.json` is the phone's one capability file. The Android
+project Tauri generated is `client/src-tauri/gen/android`; the phone
+identifier, `io.github.itsmattguenther.linger`, is in
+`tauri.android.conf.json` and `tauri.ios.conf.json`.
+
+Android builds on Linux. iPhone builds need a Mac and aren't set up yet.
+
+1. Install [Android Studio](https://developer.android.com/studio) (Arch: `yay
+   -S android-studio`) and run its setup once (Standard). Then, in **SDK
+   Manager → SDK Tools**, tick **NDK (Side by side)** and **Android SDK
+   Command-line Tools**.
+2. Install a **Java 21** JDK (Arch: `sudo pacman -S jdk21-openjdk`). Android
+   Studio brings Java 25, which the Gradle in `gen/android` can't run on:
+   the build stops at `Unsupported class file major version 69`.
+3. Add the Rust targets: `rustup target add aarch64-linux-android
+   armv7-linux-androideabi i686-linux-android x86_64-linux-android`.
+4. Point the tools at all of it, in your shell's startup file:
+
+   ```bash
+   export JAVA_HOME=/usr/lib/jvm/java-21-openjdk   # wherever your Java 21 is
+   export ANDROID_HOME="$HOME/Android/Sdk"
+   export NDK_HOME="$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)"
+   export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+   ```
+
+5. Start a virtual phone (Android Studio's **Device Manager**, or
+   `emulator -list-avds` then `emulator -avd <name>`), or plug in a phone with
+   USB debugging on. Then, in `client/`: `pnpm tauri android dev`. The first
+   build downloads Gradle and its plugins and takes a few minutes.
+
+A server on this computer is reachable from the virtual phone after
+`adb reverse tcp:8420 tcp:8420`, as `http://localhost:8420`. Dev builds may use
+`http://localhost`; release builds can't, as on desktop.
+
+**If `adb` starts crashing every few seconds** during `pnpm tauri android dev`
+(seen on one machine, 2026-10-02: one core dump of `adb -L tcp:5037
+fork-server server` every ~2.5 s, from the CLI checking whether the app is
+still running), stop the CLI. The installed dev build still works without it:
+run `pnpm dev --host 127.0.0.1`, then `adb reverse tcp:1420 tcp:1420`, and open
+Linger on the phone.
+
+On a virtual phone with an NVIDIA card, the emulator may switch itself to
+drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
+phone's graphics driver crashed the app once when it was reinstalled while
+running; opening it again was fine.
+
 ## Things that catch people out
 
 How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).

@@ -50,9 +50,51 @@ rand = "0.9"
 # talked into launching a local file or a program.
 tauri-plugin-opener = "2.5.4"
 
+# OS keyring for the refresh token (ARCHITECTURE §7.3). Features are picked per
+# platform on purpose:
+#
+#   Linux — `async-secret-service` + `crypto-rust` speaks the Secret Service
+#   D-Bus API through zbus, in pure Rust. The alternative, `sync-secret-service`,
+#   links libdbus and would add `libdbus-1-dev` to everyone's build. Note that
+#   `linux-native` (kernel keyutils) is deliberately NOT enabled: it would
+#   "succeed" on a headless box while losing the secret at logout, hiding the
+#   no-wallet case the client is required to handle honestly.
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+# The real forwarding server, in-process, for the end-to-end voice test (#197).
+linger-sfu = { path = "../../crates/linger-sfu" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust", "tokio"] }
+libc = "0.2"
+# Already in the tree through wry; named here so startup can ask which
+# WebKitGTK it is about to run before GTK exists (#187).
+webkit2gtk-sys = "2.0"
+# Already in the tree through Tauri and wry, which draw every window with
+# it; named here so the message box can read an image off the clipboard,
+# which WebKitGTK never shows the page (#276, `clipboard.rs`).
+gtk = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+# Starting Linger at sign-in (#228): one value under the user's Run key
+# (`autostart.rs`). Already in the tree for Windows builds (embed-resource
+# uses it at build time), over the same windows-sys the rest links.
+winreg = "0.55"
+
+# Everything the desktop app has and the phone app doesn't (SPEC §4.15):
+# notifications, remembered windows, one copy at a time, voice and its
+# sound devices, and in-app updates. A phone raises no notifications, has
+# one window, updates through its store, and is text only for now, so none
+# of these is built for Android or iOS. Code that uses them is behind
+# `#[cfg(desktop)]`.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # A desktop notification when somebody names you (SPEC §4.2, T-305). This is
 # the only push in the product — there is no badge and no unread count for one
-# to hang off. Same reasoning as the opener above: every platform raises a
+# to hang off. Same reasoning as the opener's: every platform raises a
 # notification differently and none of it is worth hand-rolling. On Linux it
 # talks to the freedesktop notification service over zbus, so it adds no system
 # package to anybody's build.
@@ -93,38 +135,3 @@ thiserror = "2"
 # named explicitly so a future default flip to native-tls can't quietly put
 # OpenSSL back into everyone's build.
 tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["rustls-tls", "zip"] }
-
-# OS keyring for the refresh token (ARCHITECTURE §7.3). Features are picked per
-# platform on purpose:
-#
-#   Linux — `async-secret-service` + `crypto-rust` speaks the Secret Service
-#   D-Bus API through zbus, in pure Rust. The alternative, `sync-secret-service`,
-#   links libdbus and would add `libdbus-1-dev` to everyone's build. Note that
-#   `linux-native` (kernel keyutils) is deliberately NOT enabled: it would
-#   "succeed" on a headless box while losing the secret at logout, hiding the
-#   no-wallet case the client is required to handle honestly.
-[dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
-# The real forwarding server, in-process, for the end-to-end voice test (#197).
-linger-sfu = { path = "../../crates/linger-sfu" }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "3", features = ["async-secret-service", "crypto-rust", "tokio"] }
-libc = "0.2"
-# Already in the tree through wry; named here so startup can ask which
-# WebKitGTK it is about to run before GTK exists (#187).
-webkit2gtk-sys = "2.0"
-# Already in the tree through Tauri and wry, which draw every window with
-# it; named here so the message box can read an image off the clipboard,
-# which WebKitGTK never shows the page (#276, `clipboard.rs`).
-gtk = "0.18"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "3", features = ["apple-native"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3", features = ["windows-native"] }
-# Starting Linger at sign-in (#228): one value under the user's Run key
-# (`autostart.rs`). Already in the tree for Windows builds (embed-resource
-# uses it at build time), over the same windows-sys the rest links.
-winreg = "0.55"

@@ -2,6 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Minimum permission surface for the main window (ARCHITECTURE §7). The updater plugin is registered in lib.rs but is deliberately absent from this list: the page never checks for or installs an update itself, it calls the app's own update_check / update_install commands in src/updates.rs. Granting updater:default here would hand a WebView the ability to download and run an installer.",
+  "platforms": ["linux", "macOS", "windows"],
   "windows": ["main"],
   "permissions": [
     "core:default",

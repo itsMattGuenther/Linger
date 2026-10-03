@@ -2,6 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "owner",
   "description": "The app's own commands for the list window, `main` in both clients (docs/design/architecture.md, the owner). Only it holds the sign-ins in the keyring, the server connections, voice, notifications and other windows' opening; build.rs declares every command, so no other window can call these unless its own capability file grants one. The old client is a single `main` window and uses all of them but autostart_state and autostart_set, the switch for starting Linger at sign-in, which only the Buddy list client's Settings shows (next-settings.json), and clipboard_image, which only the Buddy list client's message box asks (next-chat.json). next_request_attention (#291) is the Buddy list client's too: it flashes the taskbar for a DM, and the old client never calls it.",
+  "platforms": ["linux", "macOS", "windows"],
   "windows": [
     "main"
   ],
