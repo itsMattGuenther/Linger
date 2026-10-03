@@ -746,13 +746,14 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 /// Open a device in the format `pick` preferred and, when it won't open that
-/// one, in its own default. Some devices list a format they then refuse: a
-/// Logitech PRO X 2 headset on Windows answered "The parameter is incorrect"
-/// (os error -2147024809) for the mono 48 kHz one it had listed, so a friend
-/// couldn't join voice at all (2026-10-03). A device's default is the format
-/// Windows mixes in, which always opens; anything else about it (its rate,
-/// its channels) the path already converts. Nothing preferred: the default.
-/// Both refused: the first refusal, which is what was asked for.
+/// one, in its own default. A device can list a format it then refuses: a
+/// friend's Logitech PRO X 2 headset on Windows answered "The parameter is
+/// incorrect" (os error -2147024809) to what Linger chose, so he couldn't
+/// join voice at all (2026-10-03, #398; `plain_beyond_stereo` is the likely
+/// reason). A device's default is the format Windows mixes in, which always
+/// opens; its rate and channels the path already converts. Nothing
+/// preferred: the default. Both refused: the first refusal, which is what was
+/// asked for.
 fn opened<C, S, E>(
     preferred: Option<C>,
     default: impl FnOnce() -> Result<C, E>,
@@ -776,7 +777,7 @@ fn opened<C, S, E>(
 fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<SupportedStreamConfig> {
     let mut best: Option<SupportedStreamConfig> = None;
     for range in ranges {
-        if format_rank(range.sample_format()).is_none() {
+        if format_rank(range.sample_format()).is_none() || plain_beyond_stereo(&range) {
             continue;
         }
         let Some(config) = range.try_with_sample_rate(SAMPLE_RATE) else {
@@ -787,6 +788,17 @@ fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<Supp
         }
     }
     best
+}
+
+/// 16- and 8-bit samples on more than two channels, which Windows can't be
+/// asked for. cpal describes those formats to Windows the old, plain way
+/// (`WAVE_FORMAT_PCM`), which only ever meant mono or stereo, and a device
+/// that mixes in more, like a headset set to 7.1 surround, answers "The
+/// parameter is incorrect" (os error -2147024809, #398). Windows lists such a
+/// device's channels and nothing fewer, so its float formats are taken
+/// instead, which cpal describes the newer way.
+fn plain_beyond_stereo(range: &SupportedStreamConfigRange) -> bool {
+    range.channels() > 2 && matches!(range.sample_format(), SampleFormat::I16 | SampleFormat::U8)
 }
 
 /// Lower is better: fewest channels beyond one, then i16 over f32 because it
@@ -1152,6 +1164,41 @@ fn wait_or_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn range(channels: u16, format: SampleFormat) -> SupportedStreamConfigRange {
+        SupportedStreamConfigRange::new(
+            channels,
+            48_000,
+            48_000,
+            cpal::SupportedBufferSize::Unknown,
+            format,
+        )
+    }
+
+    #[test]
+    fn stereo_takes_sixteen_bit_samples_and_surround_never_does() {
+        // A stereo headset: 16-bit, as the rest of the path speaks.
+        let stereo = pick([range(2, SampleFormat::F32), range(2, SampleFormat::I16)].into_iter());
+        assert_eq!(
+            stereo.map(|c| (c.channels(), c.sample_format())),
+            Some((2, SampleFormat::I16))
+        );
+        // The same headset set to 7.1 (#398): Windows lists eight channels in
+        // every format, and only float can be asked for.
+        let surround = pick(
+            [
+                range(8, SampleFormat::I16),
+                range(8, SampleFormat::U8),
+                range(8, SampleFormat::F32),
+                range(8, SampleFormat::I32),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(
+            surround.map(|c| (c.channels(), c.sample_format())),
+            Some((8, SampleFormat::F32))
+        );
+    }
 
     #[test]
     fn a_device_that_opens_what_it_listed_is_opened_that_way() {
