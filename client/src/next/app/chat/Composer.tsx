@@ -13,6 +13,8 @@ import { MAX_MESSAGE_CHARS } from "./EditBox";
 import "./Composer.css";
 import type { DraftFile } from "../../core/chat/drafts";
 import { useMentions } from "./useMentions";
+import type { VoiceMessageControls } from "./useVoiceMessages";
+import { VoiceMessagePanel } from "./VoiceMessagePanel";
 
 /** `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE`, mirrored to refuse the eleventh file up front. */
 export const MAX_ATTACHMENTS = 10;
@@ -89,6 +91,11 @@ export interface ComposerProps {
    * the paste its files.
    */
   clipboardImage?: () => Promise<File | null>;
+  /**
+   * Voice messages (#401): the microphone button and the panel it opens,
+   * for this conversation. Left out where there's no recorder.
+   */
+  voiceMessage?: VoiceMessageControls;
 }
 
 /**
@@ -127,6 +134,7 @@ export const Composer = memo(function Composer({
   keep,
   mentionable = NOBODY,
   clipboardImage,
+  voiceMessage,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -438,6 +446,8 @@ export const Composer = memo(function Composer({
         </ul>
       )}
 
+      {voiceMessage ? <VoiceMessagePanel controls={voiceMessage} title={title} /> : null}
+
       <div className="nx-composer-box" ref={boxRow}>
         <span className="nx-composer-prompt" aria-hidden="true">
           ›
@@ -471,6 +481,7 @@ export const Composer = memo(function Composer({
             else if (clipboardImage) pasteThroughShell(clipboardImage, plan.words);
           }}
         />
+        {voiceMessage ? <IconButton icon="mic" label="Record a voice message" expanded={voiceMessage.state !== null} onClick={voiceMessage.open} /> : null}
         <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />
         <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
           <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />

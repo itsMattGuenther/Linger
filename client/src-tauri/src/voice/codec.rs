@@ -34,6 +34,24 @@ impl Encoder {
         Ok(Self(inner))
     }
 
+    /// Tuned for a voice message (#401): the same voice settings, at a
+    /// steady 32 kbit/s, clear speech at about a megabyte for the longest
+    /// clip, and none of the loss repair a live call needs, since a recording
+    /// never crosses a network packet by packet.
+    pub fn for_clip() -> Result<Self, opus::Error> {
+        let mut inner =
+            opus::Encoder::new(SAMPLE_RATE, opus::Channels::Mono, opus::Application::Voip)?;
+        inner.set_bitrate(opus::Bitrate::Bits(32_000))?;
+        Ok(Self(inner))
+    }
+
+    /// How many samples the encoder runs ahead: the decoder drops that many
+    /// from the start of a recording (Opus's "pre-skip", RFC 7845).
+    pub fn lookahead(&mut self) -> Result<u16, opus::Error> {
+        let samples = self.0.get_lookahead()?;
+        Ok(u16::try_from(samples).unwrap_or(0))
+    }
+
     /// One frame, one packet.
     pub fn encode(&mut self, frame: &[i16]) -> Result<Vec<u8>, opus::Error> {
         self.0.encode_vec(frame, MAX_PACKET)

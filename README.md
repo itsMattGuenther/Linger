@@ -71,6 +71,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
   goes through the host's server, which passes it on so up to 25 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.
+  Voice rooms are never recorded.
+- **Voice messages**: record a clip in the message box, hear it back, then
+  send it or throw it away. Up to five minutes.
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.

@@ -20,6 +20,12 @@
  * clipboard (`clipboard_image`, which the Linux app's box asks, #276); null
  * takes it off. Each time the box asks is written down as `clipboard`.
  *
+ * Voice messages (#401): the shell's recorder (`clip_start`, `clip_stop`,
+ * `clip_cancel`) hands back `next/voice-clip.bin`, one second of a tone that
+ * the real recorder made (src-tauri/src/clip.rs). `window.parity.clip` acts
+ * as the recorder: how loud you are, stopping by itself, and what it hands
+ * back. `?nomic` has no microphone to record from.
+ *
  * `window.parity.holdReads()` makes every history read from then on wait for
  * `window.parity.answerReads(…)`, so a test decides the order two reads come
  * back in.
@@ -51,6 +57,13 @@ const night = evening(serverState(SERVER));
 const finished = new Map<string, Attachment>();
 const slots = new Map<string, { filename: string; mime: string; size: number }>();
 let uploads = 0;
+/** What the recorder hands back when it's stopped: the real recording, until a test says otherwise. */
+let recorded: Uint8Array | null = null;
+const recordingLoaded = fetch("/tests/fixtures/next/voice-clip.bin")
+  .then((answer) => answer.arrayBuffer())
+  .then((bytes) => {
+    recorded ??= new Uint8Array(bytes);
+  });
 /** What the desktop shell would find on the clipboard: a picture's bytes, or nothing. */
 let shellClipboard: Uint8Array | null = null;
 let release: () => void = () => undefined;
@@ -89,6 +102,21 @@ const desktop = fakeDesktop({
   },
   commands: {
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
+    clip_start: (args) => {
+      desktop.note(`clip_start:${JSON.stringify(args)}`);
+      // As the shell says it when the system has no microphone.
+      if (query.has("nomic")) throw "no input device available";
+      return null;
+    },
+    clip_stop: async () => {
+      desktop.note("clip_stop");
+      await recordingLoaded;
+      return (recorded ?? new Uint8Array(2)).slice().buffer;
+    },
+    clip_cancel: () => {
+      desktop.note("clip_cancel");
+      return null;
+    },
     clipboard_image: () => {
       desktop.note("clipboard");
       // Raw bytes, as the shell answers (tauri::ipc::Response); none for no picture.
@@ -215,6 +243,17 @@ declare global {
       clipboard: (bytes: number[] | null) => void;
       /** The list window opens a conversation while this window is open. */
       open: (room: string) => void;
+      /** The voice message recorder (#401): as the desktop shell tells the window. */
+      clip: {
+        /** How loud you are, from 0 to 1. */
+        level: (level: number) => void;
+        /** It stopped by itself at five minutes. */
+        full: () => void;
+        /** The microphone went away. */
+        lost: () => void;
+        /** What it hands back when stopped, as `clip_stop` answers: the lookahead, then each packet by its length. */
+        hands: (bytes: number[]) => void;
+      };
       /** From now on, every history read waits to be answered. */
       holdReads: () => void;
       /** How many history reads are on their way, held or not. */
@@ -240,6 +279,14 @@ window.parity = {
     shellClipboard = bytes ? Uint8Array.from(bytes) : null;
   },
   open: (room) => desktop.deliver("next:open", { server: SERVER, room }),
+  clip: {
+    level: (level) => desktop.deliver("clip:level", level),
+    full: () => desktop.deliver("clip:full", null),
+    lost: () => desktop.deliver("clip:lost", null),
+    hands: (bytes) => {
+      recorded = Uint8Array.from(bytes);
+    },
+  },
   holdReads: () => {
     holdingReads = true;
   },

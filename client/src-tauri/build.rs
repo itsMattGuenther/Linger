@@ -36,6 +36,9 @@ const COMMANDS: &[&str] = &[
     "autostart_state",
     "autostart_set",
     "clipboard_image",
+    "clip_start",
+    "clip_stop",
+    "clip_cancel",
 ];
 
 fn main() {

@@ -290,6 +290,41 @@ async fn an_image_goes_up_gets_described_and_lands_on_a_message() {
     assert_eq!(page[0].attachments.len(), 1);
 }
 
+/// A voice message (#401): Opus in WebM, as the app records it. The sniffer
+/// calls any WebM a video, so this is the case that proves one declared as
+/// sound goes up as sound and is played in place.
+#[tokio::test]
+async fn a_voice_message_goes_up_as_sound_and_plays_in_place() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let mut bytes = vec![0x1a, 0x45, 0xdf, 0xa3, 0x8f, 0x42, 0x86, 0x81, 0x01];
+    bytes.extend_from_slice(&[0x42, 0x82, 0x84]);
+    bytes.extend_from_slice(b"webm");
+    bytes.extend_from_slice(&[0x42, 0x87, 0x81, 0x04]);
+    bytes.extend(filler(2_000));
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "Voice message.webm",
+        "audio/webm",
+        bytes,
+    )
+    .await;
+    assert_eq!(attachment.mime, "audio/webm");
+    assert_eq!(attachment.filename, "Voice message.webm");
+
+    let served = client()
+        .get(absolute(&server, &attachment.url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(served.headers()["content-type"], "audio/webm");
+    assert!(!served
+        .headers()
+        .get("content-disposition")
+        .is_some_and(|value| value.to_str().unwrap_or("").starts_with("attachment")));
+}
+
 #[tokio::test]
 async fn a_plain_file_is_handed_over_as_a_download() {
     let server = spawn_server().await;

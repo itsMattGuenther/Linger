@@ -21,14 +21,16 @@ pub const IMAGE_MIME: [&str; 4] = ["image/jpeg", "image/png", "image/gif", "imag
 /// a blurhash and stores the bytes as they arrived.
 pub const VIDEO_MIME: [&str; 3] = ["video/mp4", "video/webm", "video/quicktime"];
 
-/// Audio types.
-pub const AUDIO_MIME: [&str; 6] = [
+/// Audio types. `audio/webm` is a voice message (#401): Opus in WebM, which
+/// every engine Linger runs in plays.
+pub const AUDIO_MIME: [&str; 7] = [
     "audio/mpeg",
     "audio/ogg",
     "audio/wav",
     "audio/flac",
     "audio/aac",
     "audio/mp4",
+    "audio/webm",
 ];
 
 /// Everything else a person might reasonably hand a friend: documents and

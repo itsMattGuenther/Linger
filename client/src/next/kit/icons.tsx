@@ -54,6 +54,8 @@ export const ICON_NAMES = [
   "house",
   "play",
   "pause",
+  "record",
+  "stop",
   "compose",
   "head",
   "headOff",
@@ -307,6 +309,18 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   pause: (
     <>
       <rect x="4.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor" /><rect x="9.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor" />
+    </>
+  ),
+  /* A voice message (#401): record is a dot, stop the square every player
+     has, each as tall as play's triangle. */
+  record: (
+    <>
+      <circle cx="8" cy="8" r="4.4" fill="currentColor" />
+    </>
+  ),
+  stop: (
+    <>
+      <rect x="3.9" y="3.9" width="8.2" height="8.2" rx="1.4" fill="currentColor" />
     </>
   ),
   compose: (

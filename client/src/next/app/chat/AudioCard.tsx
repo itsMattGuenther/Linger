@@ -25,8 +25,11 @@ function levelStore(): Storage | null {
  * plays is kept on this computer for the next file (`core/audioPlayer.ts`).
  * If it stops loading, the row says so and loads it again in place, from
  * where it had got to, as a video does.
+ *
+ * A voice message (#401) is the same player, named as one, with the
+ * microphone for its icon.
  */
-export function AudioCard({ name, src, durationMs }: { name: string; src: string; durationMs: number | null }) {
+export function AudioCard({ name, src, durationMs, voice = false }: { name: string; src: string; durationMs: number | null; voice?: boolean }) {
   const nameId = useId();
   // Each go is a new element, as for a video: one that failed keeps its failure.
   const [attempt, setAttempt] = useState(0);
@@ -101,9 +104,9 @@ export function AudioCard({ name, src, durationMs }: { name: string; src: string
 
   return (
     <div className="nx-att-card" data-kind="audio" role="group" aria-labelledby={nameId}>
-      <Icon name="audio" size="md" />
+      <Icon name={voice ? "mic" : "audio"} size="md" />
       <span className="nx-att-name" id={nameId}>
-        {name}
+        {voice ? "Voice message" : name}
       </span>
       <span className="nx-att-meta nx-audio-time">
         <span>{timeText(position, length)}</span>

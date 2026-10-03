@@ -43,6 +43,7 @@ import { PersonCard } from "../list/PersonCard";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import type { ChatPane } from "./ChatView";
 import { useFileDrafts } from "./useFileDrafts";
+import { useVoiceMessages } from "./useVoiceMessages";
 import { useLanding, useReading } from "./visit";
 
 /** How long a knock's button says "Knocked" (SPEC §4.9), as on the person card. */
@@ -328,9 +329,10 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const onTyping = useCallback(() => {
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
+  const voiceMessage = useVoiceMessages(paneId, apis, find);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader() }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage],
   );
 
   const knock = useCallback(

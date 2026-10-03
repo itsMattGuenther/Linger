@@ -743,6 +743,12 @@ replaces an unread count.
   their way are listed above it, one line each; a picture shows a small
   square copy of itself (`--composer-thumb`) in place of the file icon, made
   on the device (#397). One this engine can't read keeps the icon.
+- **A voice message** (#401): the microphone button beside add-a-file opens
+  a panel over the box. Record, then Stop (a toggle, never a hold), with the
+  time in mono and lines in the lamp that move with your voice; then the
+  audio player to hear it back, Discard, and Send voice message (`primary`).
+  Stopping never sends. In a conversation it's the audio player named
+  "Voice message", with the microphone for its icon.
 - **Mentions** in a message read as the person's display name (`@Justin B`)
   in the mention's highlight, never their name's face or color, with the
   stored `@username` in the tooltip. A mention of you is in the lamp.
