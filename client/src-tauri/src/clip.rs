@@ -56,7 +56,7 @@ impl Clip {
     /// As the window reads it (`readClip` in `client/src/lib/webm.ts`): the
     /// lookahead in two bytes, then each packet as its length in two bytes and
     /// its bytes, little-endian. Raw bytes rather than JSON: five minutes is
-    /// about a megabyte. A packet is never longer than 1500 bytes
+    /// about 2.4 MB. A packet is never longer than 1500 bytes
     /// (`codec::MAX_PACKET`), so two bytes always hold its length.
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {

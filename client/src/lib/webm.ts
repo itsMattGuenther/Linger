@@ -8,8 +8,8 @@
  * (one, Opus, mono), its Cues (where each Cluster starts, so a player can
  * seek without reading the whole file) and the Clusters, each a few seconds
  * of packets as SimpleBlocks. Every size is known before it's written, so
- * the file is made in one go, in memory: five minutes of voice is about a
- * megabyte.
+ * the file is made in one go, in memory: five minutes of voice is about
+ * 2.4 MB.
  *
  * Matroska numbers everything as EBML: an element is its ID, its size as a
  * variable-length integer, then its body. Sizes are written as short as they
