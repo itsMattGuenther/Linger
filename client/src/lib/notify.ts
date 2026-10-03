@@ -81,12 +81,23 @@ export function setDmAlerts(on: (() => boolean) | null): void {
 }
 
 /**
+ * The phone app raises no notifications at all, open or closed (SPEC §4.15):
+ * no banner and nothing asking for attention. Its in-app sounds still play,
+ * as they would on a computer. Set once, at startup (`next/main.tsx`).
+ */
+let noNotifications = false;
+
+export function setNoNotifications(on: boolean): void {
+  noNotifications = on;
+}
+
+/**
  * Ask the desktop shell to point at the window a DM would show in. The shell
  * asks for nothing while any Linger window has the focus, and the OS stops
  * the flash once the window is used (`src-tauri/src/window.rs`).
  */
 function askForAttention(server: string, room: RoomId): void {
-  if (!isTauri()) return;
+  if (!isTauri() || noNotifications) return;
   void invoke("next_request_attention", { server, room }).catch(() => undefined);
 }
 
@@ -193,7 +204,7 @@ export interface BannerTarget {
 }
 
 async function show(title: string, body: string, open: BannerTarget): Promise<void> {
-  if (!isTauri()) return;
+  if (!isTauri() || noNotifications) return;
   try {
     if (allowed === null) {
       allowed = (await isPermissionGranted()) || (await requestPermission()) === "granted";

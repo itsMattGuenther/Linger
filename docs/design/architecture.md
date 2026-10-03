@@ -435,8 +435,10 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   folds away, and in Settings a section goes back to the list of them and
   then out. With nothing open, nobody listens, and Android does what it does
   with Back: leaves the app.
-- **No desktop furniture.** No close button on the list (the phone closes
-  apps), no pop-out, no voice line, and Settings has no Windows or
+- **No desktop furniture.** No notifications at all (`setNoNotifications`
+  in `lib/notify.ts`, set at startup: no banner, nothing asking for
+  attention; in-app sounds still play), no close button on the list (the
+  phone closes apps), no pop-out, no voice line, and Settings has no Windows or
   Notifications, no microphones and no updates.
 - **In the background, and without a network.** Thirty seconds after the
   app goes into the background its connections close, so it shows offline,

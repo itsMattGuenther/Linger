@@ -14,6 +14,7 @@ import { followInputMode } from "./core/inputMode";
 import { followKeyboard, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
+import { setNoNotifications } from "../lib/notify";
 import { unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
@@ -26,6 +27,8 @@ followAppearance();
 // (styles/phone.css).
 if (onPhone()) {
   document.documentElement.dataset.shell = "phone";
+  // No notifications on a phone, open or closed (SPEC §4.15).
+  setNoNotifications(true);
   if (window.visualViewport) followKeyboard(window.visualViewport, () => window.innerHeight, document.documentElement);
 }
 
