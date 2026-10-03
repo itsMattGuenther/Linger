@@ -325,7 +325,7 @@ function Fixture() {
       ...all,
       [roomId]: [
         ...(all[roomId] ?? []),
-        ...chosen.map((file, index) => ({ key: `f${Date.now()}-${index}`, name: file.name, progress: 1, ready: true, problem: null })),
+        ...chosen.map((file, index) => ({ key: `f${Date.now()}-${index}`, name: file.name, progress: 1, ready: true, problem: null, preview: null })),
       ],
     }));
   }, []);

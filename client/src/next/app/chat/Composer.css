@@ -119,6 +119,30 @@
   background: var(--surface-raised);
 }
 
+/* What a file leads with: its icon, or a picture's own small copy (#397).
+   With a picture in the list, every file's lead is as wide as a picture, so
+   the names line up. */
+.nx-composer-file-lead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.nx-composer-files[data-pictures="yes"] .nx-composer-file-lead {
+  width: var(--composer-thumb);
+}
+
+/* Square, the middle of the picture, so a few of them stack evenly. */
+.nx-composer-file-thumb {
+  flex: none;
+  width: var(--composer-thumb);
+  height: var(--composer-thumb);
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  background: var(--surface-sunken);
+}
+
 .nx-composer-reply-text,
 .nx-composer-unsent-text,
 .nx-composer-file-name {

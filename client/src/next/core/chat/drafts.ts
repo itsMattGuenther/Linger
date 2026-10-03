@@ -19,6 +19,12 @@ export interface DraftFile {
   ready: boolean;
   /** Why it didn't go up, in words. */
   problem: string | null;
+  /**
+   * A small copy of a picture, made on this device, to show in the box
+   * before it's sent (#397): a blob URL, let go of when the file is. Null for
+   * other files, a picture this engine can't read, or one not made yet.
+   */
+  preview: string | null;
 }
 
 export interface Drafts {
@@ -35,7 +41,7 @@ export const NO_FILES: readonly DraftFile[] = [];
 
 /** Files picked, dropped or pasted into a conversation's box. */
 export function added(drafts: Drafts, conversation: string, files: readonly { key: string; name: string }[]): Drafts {
-  const fresh = files.map((file): DraftFile => ({ key: file.key, name: file.name, progress: 0, ready: false, problem: null }));
+  const fresh = files.map((file): DraftFile => ({ key: file.key, name: file.name, progress: 0, ready: false, problem: null, preview: null }));
   return { ...drafts, draft: { ...drafts.draft, [conversation]: [...(drafts.draft[conversation] ?? []), ...fresh] } };
 }
 
@@ -54,6 +60,26 @@ export function progressed(drafts: Drafts, key: string, fraction: number): Draft
 export function uploaded(drafts: Drafts, key: string, attachment: Attachment): Drafts {
   const next = change(drafts, key, (file) => ({ ...file, progress: 1, ready: true, problem: null }));
   return { ...next, uploaded: { ...drafts.uploaded, [key]: attachment } };
+}
+
+/**
+ * A picture's preview is ready (#397). It goes on the file wherever the file
+ * is: in a draft, or held by a send. Null when the file is gone by now, and
+ * the caller lets the preview go.
+ */
+export function previewed(drafts: Drafts, key: string, preview: string): Drafts | null {
+  const held = drafts.held[key];
+  if (held) return { ...drafts, held: { ...drafts.held, [key]: { ...held, file: { ...held.file, preview } } } };
+  if (!Object.values(drafts.draft).some((files) => files.some((file) => file.key === key))) return null;
+  return change(drafts, key, (file) => ({ ...file, preview }));
+}
+
+/** Every preview the drafts hold, by file key: what's let go of when the window goes. */
+export function previews(drafts: Drafts): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const files of Object.values(drafts.draft)) for (const file of files) if (file.preview) out.set(file.key, file.preview);
+  for (const [key, { file }] of Object.entries(drafts.held)) if (file.preview) out.set(key, file.preview);
+  return out;
 }
 
 export function refused(drafts: Drafts, key: string, problem: string): Drafts {

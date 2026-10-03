@@ -636,6 +636,44 @@ test.describe("files", () => {
     await expect(file).not.toContainText(/didn't|refused|couldn't/i);
   });
 
+  // A picture shows a small copy of itself before it's sent (#397): a phone's
+  // photo is named like 9D836261-….jpg. 60 by 40, red on the left half and
+  // blue on the right, so the square middle is 40 by 40.
+  test("a picture shows a small copy of itself in the box, made on the device, and other files keep the icon (#397)", async ({ page }) => {
+    const picture = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAADwAAAAoCAIAAAAt2Q6oAAAAP0lEQVR42u3OMQ0AAAgDMIQhghvFyELFviYV0LrpkN4LKWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlp6WT6AWxeoxXlCpdWAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    await open(page);
+    await page.locator(".nx-composer input[type='file']").setInputFiles([
+      { name: "9D836261-01DD-4B5A-A86D-808DAF13E7F3.png", mimeType: "image/png", buffer: picture },
+      { name: "IMG_0042.heic", mimeType: "image/heic", buffer: Buffer.from("not a picture this engine reads") },
+      { name: "porch-plan.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF plan") },
+    ]);
+    const listed = page.getByRole("list", { name: "Files for this message" }).getByRole("listitem");
+    await expect(listed).toHaveCount(3);
+    const thumb = listed.nth(0).locator("img.nx-composer-file-thumb");
+    await expect(thumb).toBeVisible();
+    // The copy is the picture's square middle, nothing asked of the server.
+    await expect.poll(() => thumb.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([40, 40]);
+    const src = (await thumb.getAttribute("src")) ?? "";
+    expect(src).toMatch(/^blob:/);
+    expect((await did(page)).some((line) => line.includes(src))).toBe(false);
+    // Drawn at the token's size, square, beside the name.
+    const box = await thumb.boundingBox();
+    expect([box?.width, box?.height]).toEqual([40, 40]);
+    await expect(listed.nth(0).locator(".nx-composer-file-name")).toHaveText("9D836261-01DD-4B5A-A86D-808DAF13E7F3.png");
+    // Unreadable, and not a picture: the file icon, as before.
+    for (const at of [1, 2]) {
+      await expect(listed.nth(at).locator("img")).toHaveCount(0);
+      await expect(listed.nth(at).locator(".k-icon")).toHaveCount(2);
+    }
+    // Taken out, its copy is let go of.
+    await page.getByRole("button", { name: "Don't send 9D836261-01DD-4B5A-A86D-808DAF13E7F3.png" }).click();
+    await expect(listed).toHaveCount(2);
+    expect(await page.evaluate(async (url) => fetch(url).then(() => "kept", () => "gone"), src)).toBe("gone");
+  });
+
   test("a file the server won't take says so on that file, and the rest of the box is untouched (FILE-1)", async ({ page }) => {
     await open(page, "room=r-general&uploadrefuse");
     await box(page).fill("keep me");
