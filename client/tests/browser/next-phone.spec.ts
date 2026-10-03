@@ -322,3 +322,31 @@ test("the host's lit row opens People over the list, with the report in it", asy
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(list(page).getByRole("button", { name: /A report to look at/ })).toHaveCount(0);
 });
+
+// A hint that wraps shows its second line cut off, and Android's engine
+// doesn't cut a text box's hint with a "…": on a phone, a room with a long
+// name had "Say something in #screenshots and" and a sliver of a second line.
+test("the message box's hint fits on one line: who it's to when that fits, and just Say something when not", async ({ page }) => {
+  await phone(page);
+  await page.evaluate(() =>
+    window.core?.frame("https://good-company.example", {
+      op: "room.update",
+      d: { id: "r-general", slug: "general", name: "screenshots and clips", topic: "Good company. No hurry.", kind: "room", member_ids: null, position: 0, archived_at: null, last_message_id: "m000016" },
+    } as never),
+  );
+  await room(page, "screenshots and clips").click();
+  const box = page.getByRole("combobox", { name: /^Message/ });
+  await expect(box).toHaveAttribute("placeholder", "Say something");
+  const oneLine = await box.evaluate((node: HTMLTextAreaElement) => {
+    const style = getComputedStyle(node);
+    return node.scrollHeight <= Math.ceil(parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)) + 1;
+  });
+  expect(oneLine).toBe(true);
+
+  // A computer's window has room for the whole of it.
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await open(page, "?one");
+  await settled(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("combobox", { name: /^Message/ })).toHaveAttribute("placeholder", "Say something in #general");
+});
