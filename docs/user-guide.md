@@ -486,8 +486,9 @@ through the new device without leaving. If a device you picked isn't plugged
 in, or won't open, the system default is used and the picker says so.
 
 **If voice won't start**, the room's voice strip says why, where it would
-say who's talking: hover it for the whole reason. Joining needs a microphone
-and speakers that both open.
+say who's talking. Click it for the whole reason, including your computer's
+own words for what failed, with a **Copy** button for sending it to your
+host. Joining needs a microphone and speakers that both open.
 
 First, pick your microphone and speakers by name in **Settings → Sound &
 Voice**, instead of leaving them on the system default. That's the likely

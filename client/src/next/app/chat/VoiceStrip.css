@@ -47,9 +47,71 @@
   text-overflow: ellipsis;
 }
 
-/* Voice didn't start here last time (#261): the reason, in the words' place. */
+/* Voice didn't start here last time (#261): the reason, in the words' place.
+   It's a button that opens the whole of it (#399), drawn as the words. */
 .nx-strip-words[data-problem="yes"] {
   color: var(--text-danger);
+}
+
+.nx-strip-why-open {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline dotted;
+  text-underline-offset: var(--space-0-5);
+}
+
+.nx-strip-why-open:hover {
+  text-decoration-style: solid;
+}
+
+/* The whole reason, in a card that stays (#399). */
+.nx-strip-why {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Only the first line shares a row with the close button, so only it leaves room. */
+.nx-strip-why-lead {
+  margin: 0;
+  padding-right: var(--space-6);
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
+/* The shell's own words: what actually failed, for the host. Selectable. */
+.nx-strip-why-detail {
+  margin: 0;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.nx-strip-why-buttons {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.nx-strip-why-said {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
 }
 
 .nx-strip-here {
