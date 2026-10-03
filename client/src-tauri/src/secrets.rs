@@ -16,16 +16,15 @@
 //! That is why nothing here returns `Err` — every outcome, including "this
 //! computer has no keyring", is a value the frontend can render.
 //!
-//! On Android the same entries live in the platform's own store (T-1602):
-//! `keyring-core` with `android-native-keyring-store`, from the keyring
-//! crate's maintainers, which keeps each one in the app's private
+//! The phone app keeps the same entries in the phone's own store (T-1602).
+//! On the iPhone that's the Keychain, through the same keyring crate. On
+//! Android it's `keyring-core` with `android-native-keyring-store`, from the
+//! keyring crate's maintainers, which keeps each one in the app's private
 //! SharedPreferences encrypted with a key held in the Android Keystore. The
 //! key never leaves the Keystore and isn't in any backup, so a copy of the
-//! file is useless anywhere else. The iPhone has no store here yet: it takes
-//! the no-wallet path above, asking for a sign-in each time the app starts,
-//! until a Mac can build and check one.
+//! file is useless anywhere else.
 
-#[cfg(desktop)]
+#[cfg(not(target_os = "android"))]
 use keyring::{Entry, Error as StoreError};
 #[cfg(target_os = "android")]
 use keyring_core::{Entry, Error as StoreError};
@@ -33,7 +32,6 @@ use serde::{Deserialize, Serialize};
 
 /// Keyring service name. Matches the bundle identifier so entries are
 /// recognisable in Seahorse / KWalletManager / Keychain Access.
-#[cfg(any(desktop, target_os = "android"))]
 const SERVICE: &str = "com.linger.desktop";
 
 /// Namespace every account name is built from. A parameter rather than a
@@ -100,7 +98,7 @@ fn explain(err: &StoreError) -> String {
     format!("No usable keyring on this computer ({err}).")
 }
 
-#[cfg(target_os = "android")]
+#[cfg(mobile)]
 fn explain(err: &StoreError) -> String {
     format!("This phone's secure storage didn't answer ({err}).")
 }
@@ -121,7 +119,6 @@ fn android_store() -> Result<(), String> {
 }
 
 /// One account's entry, in this device's store.
-#[cfg(any(desktop, target_os = "android"))]
 fn entry(account: &str) -> Result<Entry, String> {
     #[cfg(target_os = "android")]
     android_store()?;
@@ -131,15 +128,12 @@ fn entry(account: &str) -> Result<Entry, String> {
 /// One account's contents. `Missing` and `Unavailable` are different answers:
 /// the first means the keyring works and has nothing, the second means we could
 /// not ask.
-// An iPhone only ever answers `Unavailable` until it has a store.
-#[cfg_attr(target_os = "ios", allow(dead_code))]
 enum Held {
     Found(String),
     Missing,
     Unavailable(String),
 }
 
-#[cfg(any(desktop, target_os = "android"))]
 fn read(account: &str) -> Held {
     let entry = match entry(account) {
         Ok(entry) => entry,
@@ -152,7 +146,6 @@ fn read(account: &str) -> Held {
     }
 }
 
-#[cfg(any(desktop, target_os = "android"))]
 fn write(account: &str, value: &str) -> SessionWrite {
     let entry = match entry(account) {
         Ok(entry) => entry,
@@ -166,7 +159,6 @@ fn write(account: &str, value: &str) -> SessionWrite {
     }
 }
 
-#[cfg(any(desktop, target_os = "android"))]
 fn delete(account: &str) -> SessionWrite {
     let entry = match entry(account) {
         Ok(entry) => entry,
@@ -180,28 +172,6 @@ fn delete(account: &str) -> SessionWrite {
             reason: explain(&err),
         },
     }
-}
-
-/// Why an iPhone can't keep a sign-in yet, in the words the app shows.
-#[cfg(target_os = "ios")]
-const NOT_ON_PHONES: &str = "Linger can't remember sign-ins on a phone yet.";
-
-#[cfg(target_os = "ios")]
-fn read(_account: &str) -> Held {
-    Held::Unavailable(NOT_ON_PHONES.to_string())
-}
-
-#[cfg(target_os = "ios")]
-fn write(_account: &str, _value: &str) -> SessionWrite {
-    SessionWrite::Unavailable {
-        reason: NOT_ON_PHONES.to_string(),
-    }
-}
-
-#[cfg(target_os = "ios")]
-fn delete(_account: &str) -> SessionWrite {
-    // Nothing was stored, so there is nothing to forget.
-    SessionWrite::Done
 }
 
 /// The server list, or an empty one if it is missing or unreadable.

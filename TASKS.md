@@ -511,9 +511,9 @@ macOS runners, or a friend's Mac.
   them and getting it back reopens them at once (checked with airplane mode in
   the emulator). Android keeps sign-ins in its Keystore-backed store
   (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
-  comes back signed in, with its tabs. **Still to do:** keeping sign-ins on
-  the iPhone (the Keychain, which needs a Mac to build), the backup opt-in
-  setting, a real wifi-to-mobile-data switch on a real phone (the emulator
+  comes back signed in, with its tabs. The iPhone uses the Keychain through
+  the keyring crate, built for iOS in CI but not yet run on an iPhone.
+  **Still to do:** the backup opt-in setting, a real wifi-to-mobile-data switch on a real phone (the emulator
   reaches a local server over adb, which no network change touches), and
   iOS, which needs a Mac. The launcher icon is the porch artwork
   (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.

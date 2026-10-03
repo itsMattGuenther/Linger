@@ -86,6 +86,10 @@ keyring = { version = "3", features = ["apple-native"] }
 keyring-core = "1"
 android-native-keyring-store = "1"
 
+# The iPhone's Keychain, for the phone app (T-1602, `secrets.rs`).
+[target.'cfg(target_os = "ios")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
 # Starting Linger at sign-in (#228): one value under the user's Run key
