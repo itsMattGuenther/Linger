@@ -3,11 +3,29 @@
  * its own status bar, cutout and gesture bar; the safe areas it reports keep
  * Linger clear of them, and the window's color shows through behind them.
  * A page sized to the window (`--window-height`) gets what's left between.
+ *
+ * The page is held to the part of the screen that's visible (`--phone-top`,
+ * `--phone-height`, followKeyboard): a keyboard covers a phone's page rather
+ * than shortening it. With the keyboard up, the gesture bar is under it, so
+ * there's nothing to keep clear of at the bottom.
  */
 :root[data-shell="phone"] {
-  --window-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  --window-height: calc(var(--phone-height, 100vh) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 
 :root[data-shell="phone"] body {
+  position: fixed;
+  top: var(--phone-top, 0);
+  right: 0;
+  left: 0;
+  height: var(--phone-height, 100vh);
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+:root[data-shell="phone"][data-keyboard="up"] {
+  --window-height: calc(var(--phone-height, 100vh) - env(safe-area-inset-top));
+}
+
+:root[data-shell="phone"][data-keyboard="up"] body {
+  padding-bottom: 0;
 }

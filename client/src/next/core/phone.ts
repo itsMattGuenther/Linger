@@ -98,3 +98,47 @@ export function watchNetwork(page: Online, onChange: (offline: boolean) => void)
     page.removeEventListener("online", back);
   };
 }
+
+/**
+ * Taller than this, what the page loses to something at the bottom of the
+ * screen is the keyboard, not a toolbar coming and going.
+ */
+export const KEYBOARD_MIN_PX = 150;
+
+/** The part of `VisualViewport` this needs, so tests can hand it a plain one. */
+export interface Visible {
+  height: number;
+  offsetTop: number;
+  addEventListener(type: "resize" | "scroll", listener: () => void): void;
+  removeEventListener(type: "resize" | "scroll", listener: () => void): void;
+}
+
+/** Where the phone's styles read the visible part of the page (styles/phone.css). */
+export interface Sized {
+  style: { setProperty(name: string, value: string): void };
+  dataset: Record<string, string | undefined>;
+}
+
+/**
+ * Keep the page to the part of the screen the keyboard leaves (T-1603). A
+ * phone's keyboard covers the page rather than shortening it, and the
+ * browser slides the page up under the status bar to show the box being
+ * typed in, so the message box ended half under the keyboard and the
+ * conversation's header off the top. This follows the visible part instead:
+ * where it starts and how tall it is, and whether the keyboard is up.
+ * `layoutHeight` is the page's own height. Answers how to stop.
+ */
+export function followKeyboard(visible: Visible, layoutHeight: () => number, root: Sized): () => void {
+  const fit = () => {
+    root.style.setProperty("--phone-top", `${Math.round(visible.offsetTop)}px`);
+    root.style.setProperty("--phone-height", `${Math.round(visible.height)}px`);
+    root.dataset.keyboard = layoutHeight() - visible.height > KEYBOARD_MIN_PX ? "up" : "down";
+  };
+  visible.addEventListener("resize", fit);
+  visible.addEventListener("scroll", fit);
+  fit();
+  return () => {
+    visible.removeEventListener("resize", fit);
+    visible.removeEventListener("scroll", fit);
+  };
+}

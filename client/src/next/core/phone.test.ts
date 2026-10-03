@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isPhone, type Online, type Showing, thisDevice, watchBackground, watchNetwork } from "./phone";
+import { followKeyboard, isPhone, type Online, type Showing, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -108,5 +108,51 @@ describe("the phone app's network (T-1602)", () => {
     const heard: boolean[] = [];
     watchNetwork(network(false), (offline) => heard.push(offline));
     expect(heard).toEqual([true]);
+  });
+});
+
+/** The visible part of a 914-tall page, which the test can cover with a keyboard. */
+function screen(): Visible & { keyboard(height: number, slid: number): void } {
+  const listeners = new Set<() => void>();
+  const held = {
+    height: 914,
+    offsetTop: 0,
+    addEventListener: (_: "resize" | "scroll", listener: () => void) => void listeners.add(listener),
+    removeEventListener: (_: "resize" | "scroll", listener: () => void) => void listeners.delete(listener),
+    keyboard(height: number, slid: number) {
+      held.height = 914 - height;
+      held.offsetTop = slid;
+      for (const listener of listeners) listener();
+    },
+  };
+  return held;
+}
+
+function root() {
+  const props = new Map<string, string>();
+  return { props, style: { setProperty: (name: string, value: string) => void props.set(name, value) }, dataset: {} as Record<string, string | undefined> };
+}
+
+describe("the phone's keyboard (T-1603)", () => {
+  it("keeps the page to what the keyboard leaves, where the browser slid it", () => {
+    const shown = screen();
+    const page = root();
+    followKeyboard(shown, () => 914, page);
+    expect(page.props.get("--phone-height")).toBe("914px");
+    expect(page.dataset.keyboard).toBe("down");
+    shown.keyboard(336, 316);
+    expect(page.props.get("--phone-height")).toBe("578px");
+    expect(page.props.get("--phone-top")).toBe("316px");
+    expect(page.dataset.keyboard).toBe("up");
+    shown.keyboard(0, 0);
+    expect(page.dataset.keyboard).toBe("down");
+  });
+
+  it("doesn't take a toolbar coming and going for the keyboard", () => {
+    const shown = screen();
+    const page = root();
+    followKeyboard(shown, () => 914, page);
+    shown.keyboard(56, 0);
+    expect(page.dataset.keyboard).toBe("down");
   });
 });

@@ -540,9 +540,10 @@ macOS runners, or a friend's Mac.
   gone, conversations open over the list, and Settings opens over it as its
   sections, then one section. In the emulator: set up a server, made a room
   from Settings, read and sent messages, and got Sam's reply live.
-  **Still to do:** the message box above a software keyboard (the emulator
-  showed only a floating bar, so it's unchecked), Media, Search, DMs, photos
-  and files from the phone, one-hand reach, and the launcher icon.
+  The message box sits on the keyboard, with the header still showing
+  (`followKeyboard`, checked with the emulator's on-screen keyboard).
+  **Still to do:** Media, Search, DMs, photos and files from the phone,
+  one-hand reach, and the launcher icon.
   The Buddy list window is already phone width (340 px), which is a head start.
   What is missing is where a conversation goes on a screen too narrow to
   unfold it beside the list (#337), one-hand reach, and a message box above a

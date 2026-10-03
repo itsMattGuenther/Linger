@@ -446,6 +446,13 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left
   between them.
+- **The keyboard.** A phone's keyboard covers the page instead of shortening
+  it, and the browser slides the page up to show the box being typed in,
+  which left the message box half under the keyboard and the conversation's
+  header gone. `followKeyboard` holds the page to the part of the screen
+  that's visible (`--phone-top`, `--phone-height`, `data-keyboard`), so the
+  message box sits on the keyboard. Android's web view ignores the viewport's
+  `interactive-widget`, which was tried first.
 
 ## The list window
 
