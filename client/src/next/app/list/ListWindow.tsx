@@ -25,7 +25,7 @@ import { isTalkKey, talkKeyName } from "../../core/talkKey";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
-import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { dropPresence, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { PROTOCOL, tauriBus } from "../../core/bus";
@@ -759,6 +759,17 @@ function Servers({
     };
   }, [several, signedIn, states]);
 
+  // Back at the computer while still away (#392): the top card says so once,
+  // with I'm back right there. Away is something you choose (SPEC §4.6), so
+  // nothing here ever sets you back.
+  const awayAnywhere = ordered.some((session) => (states[session.baseUrl]?.me?.status?.away_message ?? "") !== "");
+  const [backWhileAway, setBackWhileAway] = useState(false);
+  useEffect(() => onBack(() => setBackWhileAway(true)), []);
+  useEffect(() => {
+    if (!awayAnywhere) setBackWhileAway(false);
+  }, [awayAnywhere]);
+  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? { onDismiss: () => setBackWhileAway(false) } : undefined), [backWhileAway, awayAnywhere]);
+
   // The foot's standing lines (decision 1): a server that isn't connected
   // after a few seconds, a keyring that can't keep sign-ins, a new version.
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
@@ -906,6 +917,7 @@ function Servers({
               you={you}
               onEditProfile={() => shell.settings("profile")}
               everywhere={everywhere}
+              nudge={nudge}
               onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
               onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
               onSettings={() => shell.settings()}

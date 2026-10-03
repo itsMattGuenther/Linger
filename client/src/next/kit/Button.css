@@ -1,4 +1,4 @@
-/* Buttons with a label. Pill-shaped, three heights, four variants. */
+/* Buttons with a label. Pill-shaped, three heights, five variants. */
 .k-button {
   position: relative;
   display: inline-flex;
@@ -111,6 +111,19 @@
   background: var(--danger-wash);
   border-color: var(--danger-edge);
   color: var(--text-on-danger);
+}
+
+/* away: I'm back, while you're away (#392). Filled in an away message's
+   warm, so a glance at your own card says you're still away. Only there. */
+.k-button[data-variant="away"] {
+  background: var(--away-fill);
+  border-color: var(--away-fill);
+  color: var(--text-on-away);
+}
+
+.k-button[data-variant="away"]:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--away-fill-hover);
+  border-color: var(--away-fill-hover);
 }
 
 /* A toggle that is on. */

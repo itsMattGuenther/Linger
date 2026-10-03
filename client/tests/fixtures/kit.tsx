@@ -355,7 +355,7 @@ function Gallery() {
       </Section>
 
       <Section id="buttons" title="Buttons">
-        {(["primary", "secondary", "quiet", "danger"] as const).map((variant) => (
+        {(["primary", "secondary", "quiet", "danger", "away"] as const).map((variant) => (
           <div className="g-row" key={variant}>
             <Label>{variant}</Label>
             <Button variant={variant} size="sm" icon="message">

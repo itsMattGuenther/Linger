@@ -20,7 +20,7 @@ import type { PresenceState } from "../generated/PresenceState";
 import type { RoomId } from "../generated/RoomId";
 import { send } from "./gateway";
 import { readFocused, setLooking, stopLooking } from "./looking";
-import { decide, frameFor, nextCheckAt, type PresenceAction, type PresenceClock } from "./presence";
+import { decide, frameFor, IDLE_AFTER_MS, nextCheckAt, type PresenceAction, type PresenceClock } from "./presence";
 
 interface Sent {
   roomId: RoomId | null;
@@ -89,6 +89,30 @@ let lastInputAt = 0;
 let blurredAt = 0;
 let attached = false;
 let unlisten: (() => void) | null = null;
+/** Who hears that the person is back at Linger after a while away from it (`onBack`). */
+const backListeners = new Set<() => void>();
+
+/**
+ * The person is back at Linger after being away from it as long as going
+ * idle takes (`IDLE_AFTER_MS`): input in any of its windows, or one of them
+ * taking the focus, after that long with neither. The list asks then whether
+ * somebody who is still away is back (#392). It's only ever known that there
+ * was input, never what it was or where else it went (hard rule 2). Returns
+ * the way to stop listening.
+ */
+export function onBack(listener: () => void): () => void {
+  backListeners.add(listener);
+  return () => {
+    backListeners.delete(listener);
+  };
+}
+
+/** Input or focus, now: idling is measured from here, and a long quiet first means somebody's back. */
+function sawPerson(now: number): void {
+  const wasGone = now - lastInputAt >= IDLE_AFTER_MS;
+  lastInputAt = now;
+  if (wasGone) for (const listener of [...backListeners]) listener();
+}
 
 function clock(watch: Watch): PresenceClock {
   return {
@@ -192,14 +216,14 @@ function syncFocus(): void {
   const next = anyFocused();
   if (next === focused) return;
   const now = Date.now();
-  if (next) lastInputAt = now;
+  if (next) sawPerson(now);
   else blurredAt = now;
   focused = next;
   setLooking(next);
 }
 
 function onInput(): void {
-  lastInputAt = Date.now();
+  sawPerson(Date.now());
   syncFocus();
   tickAll();
 }
@@ -217,7 +241,7 @@ function onFocusChange(): void {
  */
 export function reportWindow(label: string, report: { focused: boolean; input?: boolean }): void {
   otherWindows.set(label, report.focused);
-  if (report.input === true) lastInputAt = Date.now();
+  if (report.input === true) sawPerson(Date.now());
   syncFocus();
   tickAll();
 }

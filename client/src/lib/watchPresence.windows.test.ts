@@ -23,8 +23,8 @@ vi.mock("./looking", () => ({
   stopLooking: () => undefined,
 }));
 
-const { forgetWindow, reportWindow, setPresenceLive, setPresenceRoom, startPresence } = await import("./watchPresence");
-const { LEAVE_AFTER_MS } = await import("./presence");
+const { forgetWindow, onBack, reportWindow, setPresenceLive, setPresenceRoom, startPresence } = await import("./watchPresence");
+const { IDLE_AFTER_MS, LEAVE_AFTER_MS } = await import("./presence");
 
 const HOME = "https://home.example";
 const ROOM = "room-general";
@@ -97,4 +97,38 @@ describe("presence with a chat window", () => {
     await settle();
     expect(outbox.some((frame) => frame.op === "presence.update" && frame.d.state === "idle")).toBe(false);
   });
+
+  // Back at Linger after as long away as going idle takes (#392): the list
+  // asks then whether somebody who's still away is back.
+  it("says somebody's back on the first input or focus after a long quiet, and not on any other", async () => {
+    let back = 0;
+    const stopListening = onBack(() => {
+      back += 1;
+    });
+    reportWindow("chat", { focused: true, input: true });
+    expect(back).toBe(0);
+    vi.setSystemTime(Date.now() + IDLE_AFTER_MS - 1_000);
+    reportWindow("chat", { focused: true, input: true });
+    expect(back).toBe(0);
+
+    // A long quiet, then input in a window.
+    vi.setSystemTime(Date.now() + IDLE_AFTER_MS);
+    reportWindow("chat", { focused: true, input: true });
+    expect(back).toBe(1);
+    reportWindow("chat", { focused: true, input: true });
+    expect(back).toBe(1);
+
+    // A long quiet with no window in focus, then one takes it.
+    reportWindow("chat", { focused: false });
+    vi.setSystemTime(Date.now() + IDLE_AFTER_MS + 1_000);
+    reportWindow("chat", { focused: true });
+    expect(back).toBe(2);
+
+    stopListening();
+    vi.setSystemTime(Date.now() + IDLE_AFTER_MS + 1_000);
+    reportWindow("chat", { focused: true, input: true });
+    expect(back).toBe(2);
+    await settle();
+  });
 });
+

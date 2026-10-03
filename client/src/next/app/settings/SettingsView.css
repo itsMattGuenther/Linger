@@ -326,14 +326,15 @@
 }
 
 /* Your status: being away, and the one picture. */
+/* You're away: in the away warm, as on your card in the list (#392). */
 .nx-set-away {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border: 1px solid var(--accent-edge-soft);
+  border: 1px solid var(--away-edge);
   border-radius: var(--radius-md);
-  background: var(--accent-wash);
+  background: var(--away-wash);
 }
 
 .nx-set-away-words {

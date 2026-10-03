@@ -89,6 +89,8 @@ required a change (marked ▲).
 | `--text-accent` / `--accent` | `#f3b55c` | the lamp: primary action, selected choice, your voice |
 | `--text-on-accent` | `#1c1206` | text on the lamp |
 | `--lit-wash` / `--lit-wash-hover` / `--lit-edge` | the lamp at 12%, 16% and 28% | a DM you haven't read, lit (#291) |
+| `--away-wash` / `--away-edge` | the away warm at 6% and 24% | your own card while you're away, and the box your away message sits in there (#392) |
+| `--away-fill` / `-hover` / `--text-on-away` | `#e9dcc4` / `#f5ecdd` / `#131a28` | I'm back while you're away (#392): the away warm, never the lamp |
 | `--text-danger` / `--danger` | `#f06e6e` | destructive actions, errors |
 | `--text-success` / `--success` | `#7cc98f` | confirmations |
 | `--icon-default` | `#c0c6d2` | icons on filled controls |
@@ -171,6 +173,8 @@ A pill with a visible label.
   - `secondary`: an outline, the default.
   - `quiet`: no edge until hovered.
   - `danger`: red text, a red wash on hover.
+  - `away`: filled in the away warm (`--away-fill`). Only I'm back, while
+    you're away (#392).
 - **States:**
   - `pressed`: a toggle, with `aria-pressed`.
   - `busy`: keeps its width, shows a spinner and refuses clicks.
@@ -796,6 +800,8 @@ built on the rows' own grid so nothing new lines up by eye:
   than being cut mid-letter.
 - **The top card** keeps only what's true everywhere: you, whether you're
   away (and where), and Away, whose editor ticks a `Checkbox` per server.
+  While you're away anywhere it's washed in `--away-wash` and I'm back is the
+  `away` button (#392), as with one server.
 - **One server** draws the list exactly as before, with no section header.
 
 ## What the tests enforce
@@ -844,6 +850,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
 | What a server's header and line say, from its store | `core/servers.test.ts` |
 | A DM you haven't read is lit (its person's row in People, or a group's row with the rooms; the heading above while folded; a folded server's header; its tab; a lit person shows in a folded group, #351) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
+| Your own card while you're away (#392): washed in the away warm, I'm back filled in it and the away message boxed with the moon, none of it the lamp, with one server or several and in Settings; every name color and grey readable on it; back at the computer after ten minutes still away, a line says so beside I'm back, and nothing sets you back by itself | `next-list.spec.ts`, `next-servers.spec.ts`, `next-settings.spec.ts`, `next-list-window.spec.ts`, `contrast.test.ts`, `lib/watchPresence.windows.test.ts` |
 | DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
