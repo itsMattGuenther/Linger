@@ -58,7 +58,9 @@ const {
   KNOCK_TTL_MS,
   leaveWindow,
   loadNewer,
+  loadNotifyRules,
   loadOlder,
+  loadReadMarkers,
   openAround,
   openRoom,
   releaseOtherRooms,
@@ -194,6 +196,40 @@ function arrive(server: string, frame: ServerFrame): void {
 function statusOf(server: string, status: unknown): void {
   handlers.get("gateway:status")?.({ payload: { server, status } });
 }
+
+describe("what's fetched alongside a connection that's opening", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+  });
+
+  // A server on the same machine (the phone app against a local server)
+  // answers before the connection has opened, and opening starts the
+  // server's state afresh. The answer was dropped, and a conversation then
+  // waited for read positions that never came.
+  it("keeps read positions that came back before the connection opened", async () => {
+    const api = fakeApi(HOME, () => ({ "r-garage": id(7) }));
+    const loading = loadReadMarkers(api);
+    await Promise.all([loading, connect(api)]);
+    expect(serverState(HOME).readLoaded).toBe(true);
+    expect(serverState(HOME).read["r-garage"]).toBe(id(7));
+  });
+
+  it("keeps notification rules that came back before the connection opened", async () => {
+    const rule = { target_user_id: "u-callie", room_id: null };
+    const api = fakeApi(HOME, () => [rule]);
+    const loading = loadNotifyRules(api);
+    await Promise.all([loading, connect(api)]);
+    expect(serverState(HOME).notifyRules).toEqual([rule]);
+  });
+
+  it("still drops them for a server signed out of meanwhile", async () => {
+    const api = fakeApi(HOME, () => ({ "r-garage": id(7) }));
+    await connect(api);
+    const loading = loadReadMarkers(api);
+    await Promise.all([loading, disconnect(HOME)]);
+    expect(serverState(HOME).readLoaded).toBe(false);
+  });
+});
 
 describe("the gateway store, with two servers", () => {
   beforeEach(async () => {

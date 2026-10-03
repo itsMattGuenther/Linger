@@ -966,6 +966,22 @@ function inTurn(server: string, work: () => Promise<void>): Promise<void> {
 }
 
 /**
+ * Wait until whatever is queued for this server, connecting or disconnecting,
+ * has run, a turn queued meanwhile included. Opening starts the server's
+ * state afresh, so an answer fetched alongside it waits for that before it is
+ * kept: a server on the same machine answers first, and its answer was wiped.
+ */
+async function settled(server: string): Promise<void> {
+  let held = queues.get(server);
+  while (held !== undefined) {
+    await held.catch(() => undefined);
+    const now = queues.get(server);
+    if (now === held) return;
+    held = now;
+  }
+}
+
+/**
  * The two event listeners, attached once for every server rather than once per
  * connection. The core tags each event with the server it came from, so one
  * pair routes for all of them — and attaching a second pair would deliver every
@@ -1664,6 +1680,7 @@ export async function loadReadMarkers(api: AuthedApi): Promise<void> {
   } catch {
     // An unavailable bookmark must not prevent opening the conversation.
   }
+  await settled(api.baseUrl);
   if (linkFor(api) === null) return;
   const current = stateOf(api.baseUrl);
   // Pin from the server's copy rather than the merged one. This answer and the
@@ -1737,6 +1754,7 @@ function sameRule(a: NotifyRule, b: NotifyRule): boolean {
 /** "Always notify me when this person posts" — the whole list (SPEC §4.2). */
 export async function loadNotifyRules(api: AuthedApi): Promise<void> {
   const rules = await api.get<NotifyRule[]>("/me/notify-rules");
+  await settled(api.baseUrl);
   if (linkFor(api) === null) return;
   publish(api.baseUrl, { ...stateOf(api.baseUrl), notifyRules: rules });
 }
