@@ -7,7 +7,7 @@ import { tabCommand } from "../../core/keys";
 import { onPhone } from "../../core/phone";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
-import { closeTab, isPreview, isTool, keepTab, keyOf, moveTab, openTab, previewTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
+import { closeTab, isPreview, isTool, keepTab, keyOf, moveTab, openTab, previewTab, pushTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
 import { IconButton, type TabItem } from "../../kit";
 import { MediaPanel, type OpenFound, SearchPanel } from "../tools/panels";
 import { ChatView } from "./ChatView";
@@ -59,6 +59,11 @@ export interface SidePaneProps {
   onFold: () => void;
   /** Linger's own close button for the list window, where the desktop draws none. */
   onClose?: () => void;
+  /**
+   * The phone (SPEC §4.15): one screen over another instead of tabs, and
+   * this takes the top one off, as the phone's own Back does.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -68,7 +73,7 @@ export interface SidePaneProps {
  * it counts towards where you are, and holds back the chime for what you're
  * looking at, only while it's there to be seen.
  */
-export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose }: SidePaneProps) {
+export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose, onBack }: SidePaneProps) {
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
   const findTab = useCallback((id: string): SideTab | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
@@ -106,7 +111,7 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
   const opened = useCallback(
     ({ tab, message, preview }: SideOpen) => {
       if (message) goToMessage(tab, message);
-      setTabs((held) => (preview ? previewTab(held, tab) : openTab(held, tab)));
+      setTabs((held) => (onPhone() ? pushTab(held, tab) : preview ? previewTab(held, tab) : openTab(held, tab)));
       askFocus();
       // Back from a window of its own, perhaps with a draft.
       const store = draftStore();
@@ -212,15 +217,14 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
         // A phone has one window: nothing pops out of it (SPEC §4.15).
         onPopOut={onPhone() ? undefined : popOut}
         leading={<IconButton icon="fold" label="Fold back to your list" onClick={onFold} />}
+        stack={onBack ? { onBack } : undefined}
         onCloseWindow={onClose}
         pane={view.pane}
-        other={
-          tool === "media"
-            ? { id: keyOf({ tool }), label: "Media", body: <MediaPanel apis={apis} onOpen={onFound} /> }
-            : tool === "search"
-              ? { id: keyOf({ tool }), label: "Search", body: <SearchPanel apis={apis} onOpen={onFound} focusRequest={searchAsk} /> }
-              : null
-        }
+        others={tabs.open.filter(isTool).map((open) =>
+          open.tool === "media"
+            ? { id: keyOf(open), label: "Media", body: <MediaPanel apis={apis} onOpen={onFound} /> }
+            : { id: keyOf(open), label: "Search", body: <SearchPanel apis={apis} onOpen={onFound} focusRequest={searchAsk} /> },
+        )}
       />
       {view.card}
     </div>

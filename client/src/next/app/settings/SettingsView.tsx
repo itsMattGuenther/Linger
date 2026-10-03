@@ -112,10 +112,20 @@ export function SettingsView(props: SettingsViewProps) {
   return (
     <div className="nx-set" data-screen="settings" data-stack={phone ? stack : undefined}>
       <TitleBar
-        leading={phone && stack === "section" ? <IconButton icon="fold" label="Back to Settings" onClick={() => setStack("index")} /> : <Icon name="gear" size="md" />}
+        leading={
+          // On the phone Settings is a screen over the list, left by Back
+          // like every other one (SPEC §4.15).
+          !phone ? (
+            <Icon name="gear" size="md" />
+          ) : stack === "section" ? (
+            <IconButton icon="back" label="Back to Settings" size="lg" onClick={() => setStack("index")} />
+          ) : props.onClose ? (
+            <IconButton icon="back" label="Back" size="lg" onClick={props.onClose} />
+          ) : undefined
+        }
         focused={props.focused ?? true}
-        onMinimize={props.onClose && minimizer()}
-        onClose={props.onClose}
+        onMinimize={!phone && props.onClose ? minimizer() : undefined}
+        onClose={phone ? undefined : props.onClose}
       >
         {phone && stack === "section" ? sectionLabel(section, scope) : "Settings"}
       </TitleBar>

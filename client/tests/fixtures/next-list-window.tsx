@@ -481,6 +481,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);
 };
 
+// The phone marks its page the way main.tsx does, so its styles apply here too.
+if (query.get("shell") === "phone") document.documentElement.dataset.shell = "phone";
+
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 createRoot(root).render(

@@ -41,7 +41,7 @@ import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
-import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -518,7 +518,9 @@ function Servers({
     if (handle.current) handle.current.open(opening);
     else if (unfoldedNow.current) waitingOpens.current.push(opening);
     else {
-      setTabs((held) => (preview ? previewTab(held, tab) : openTab(held, tab)));
+      // On the phone the list is home: anything left from before is gone,
+      // and this is the first screen over it.
+      setTabs((held) => (onPhone() ? pushTab(NO_TABS, tab) : preview ? previewTab(held, tab) : openTab(held, tab)));
       unfold(opening);
     }
     bringForward();
@@ -530,7 +532,8 @@ function Servers({
   openToolBeside.current = (which) => {
     if (apisRef.current.size === 0) return;
     const tab: SideTab = { tool: which };
-    setTabs((held) => openTab(held, tab));
+    const over = unfoldedNow.current;
+    setTabs((held) => (onPhone() ? pushTab(over ? held : NO_TABS, tab) : openTab(held, tab)));
     if (which === "search") setSearchAsk((count) => count + 1);
     if (!unfoldedNow.current) unfold(null);
     bringForward();
@@ -553,9 +556,11 @@ function Servers({
   const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey } | null>(null);
   const phoneSettingsOpen = useRef(false);
   phoneSettingsOpen.current = phoneSettings !== null;
-  // On the phone, Back from a conversation is the list again (SPEC §4.15).
-  // Settings, drawn over everything, handles its own.
-  useBackButton(unfolded && phoneSettings === null, fold);
+  // On the phone, Back takes the top screen off: a conversation, Media or
+  // Search, and the last one off is the list again (SPEC §4.15). Settings,
+  // drawn over everything, handles its own.
+  const goBack = useCallback(() => setTabs((held) => backTab(held)), []);
+  useBackButton(unfolded && phoneSettings === null, goBack);
   const sectionAsked = useRef(new Set<(key: string | null) => void>());
   useEffect(() => {
     if (!onPhone()) return;
@@ -970,7 +975,7 @@ function Servers({
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
               notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
-              onUnfold={!unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
+              onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
               onClose={unfolded ? undefined : closeList}
             />
           )}
@@ -1002,6 +1007,7 @@ function Servers({
             voiceControl={voiceControl}
             onFold={fold}
             onClose={closeList}
+            onBack={onPhone() ? goBack : undefined}
           />
         ) : null}
       </div>

@@ -459,6 +459,10 @@ test("Media and Search open as tabs beside the list, and a search hit opens its 
   await expect(page.getByRole("tab")).toHaveText([/Media/, /Search/, /general/]);
   await expect.poll(async () => (await did(page)).filter((line) => /^history r-general\?around=/.test(line)).length).toBe(1);
   await expect.poll(() => placedIn(page)).toBe("r-general");
+  // Back to Search: as it was left, the words and what they found.
+  await page.getByRole("tab", { name: "Search" }).click();
+  await expect(searchBox(page)).toHaveValue("khruangbin");
+  await expect(page.getByRole("tabpanel", { name: "Search" }).getByText("Khruangbin", { exact: false }).first()).toBeVisible();
 });
 
 test("Ctrl+K opens Search beside the list, and puts the cursor back in its box when asked again", async ({ page }) => {

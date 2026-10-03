@@ -36,7 +36,12 @@
 }
 
 /* Media or Search beside the list (#337): the view fills the pane, as it
-   fills its own window. */
+   fills its own window. Another tab showing, it's kept but hidden. */
+.nx-pane-other[hidden] {
+  display: none;
+}
+
+/* The view fills the pane, as it fills its own window. */
 .nx-pane-other > * {
   flex: 1;
   min-height: 0;

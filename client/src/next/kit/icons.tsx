@@ -26,6 +26,7 @@ export const ICON_NAMES = [
   "media",
   "search",
   "send",
+  "back",
   "mic",
   "micOff",
   "link",
@@ -155,6 +156,13 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   send: (
     <>
       <path d="M2.5 8h9M8 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Back, on a phone (SPEC §4.15): send's arrow, turned to point the way you
+  // came, and centered in its box.
+  back: (
+    <>
+      <path d="M12.5 8H3.5M7.5 4L3.5 8l4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
   mic: (

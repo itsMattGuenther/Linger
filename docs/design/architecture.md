@@ -421,20 +421,31 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
 `tauri.ios.conf.json`), and `core/phone.ts` reads that; the desktop never adds
 `shell`, so a browser test opens the phone's layout by adding it.
 
+- **One screen at a time, no tabs.** The list is home. A conversation, Media
+  or Search opens as a screen over it, filling the phone, with ← Back at the
+  start of its bar and its name beside it (`ChatView`'s `stack`), the way
+  phone chat apps do it (Discord's is the model Matt picked, 2026-10-03).
+  Underneath, they're still the side's tabs, kept as a stack: what opens
+  goes on top (`pushTab` in `core/tabs.ts`), Back takes the top off
+  (`backTab`), and the last one off folds back to the list. So a search hit
+  opens over Search, and Back from it is Search again. Rows and the title bar
+  are taller on the phone (`--row-1`, `--titlebar` in `tokens.css`), so a
+  thumb can hit them, and nothing may reach past the screen's right edge
+  (`next-phone.spec.ts` checks every screen).
 - **Nothing opens a window.** The phone's capability (`capabilities/phone.json`)
-  grants none of the window commands. Conversations, Media and Search are tabs
-  beside the list, as on a computer, and a screen that narrow shows them over
-  it (`beside` in `core/side.ts`). Settings, a window of its own on a
+  grants none of the window commands. Settings, a window of its own on a
   computer, is drawn over the list (`.nx-phone-over` in `ListWindow.tsx`):
   `Settings` takes a `SettingsHolder`, which is either its own window, reaching
   the owner over the shell's events, or the owner itself, answering Settings'
   questions directly (`Sharing.localNotify`, `Sharing.localPassword`). There,
-  Settings is its list of sections, then one section over it.
+  Settings is its list of sections, then one section over it, each with ←
+  Back where a computer has its close button.
 - **Android's Back.** The newest thing open answers it (`useBackButton`, a
-  stack behind one listener): a picture closes, a conversation over the list
-  folds away, and in Settings a section goes back to the list of them and
+  stack behind one listener): a picture closes, the top screen over the list
+  comes off, and in Settings a section goes back to the list of them and
   then out. With nothing open, nobody listens, and Android does what it does
-  with Back: leaves the app.
+  with Back: leaves the app. Its back gesture, a swipe in from the screen's
+  edge, is the same Back.
 - **Sounds follow the phone.** A chime asks the phone's ringer first
   (`followDeviceSound` in `lib/sound.ts`, `src-tauri/src/phone_sound.rs`):
   on vibrate it buzzes, on silent or Do Not Disturb nothing happens. Android

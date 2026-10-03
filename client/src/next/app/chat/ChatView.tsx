@@ -99,13 +99,22 @@ export interface ChatViewProps {
    * title bar, and a way back beside the list, as a tab.
    */
   single?: { onBackBeside: () => void };
+  /**
+   * The phone (SPEC §4.15): one screen at a time over the list, never tabs.
+   * The title bar holds the way back and what's showing, as a conversation's
+   * own window holds its header.
+   */
+  stack?: { onBack: () => void };
   /** The showing conversation, or null when no tab is open. */
   pane: ChatPane | null;
   /**
-   * The showing tab when it isn't a conversation (Media or Search beside the
-   * list, #337): its id, its name and what it shows.
+   * The open tabs that aren't conversations (Media or Search beside the
+   * list, #337): each one's id, its name and what it shows. The one whose
+   * id is `activeId` shows when no conversation does; the rest stay drawn
+   * but hidden, so going back to one finds it as it was left, its words and
+   * what they found included.
    */
-  other?: { id: string; label: string; body: ReactNode } | null;
+  others?: readonly { id: string; label: string; body: ReactNode }[];
 }
 
 /** "#general", or the people in a DM: what the box and the log are named by. */
@@ -124,7 +133,7 @@ function titleOf(header: PaneHeaderProps): string {
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, pane, other = null }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, stack, pane, others = [] }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -194,14 +203,20 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   // The pop-out button's opposite, drawn as its mirror (#214).
   const backBeside = single ? <IconButton icon="popin" label="Back beside your list" onClick={single.onBackBeside} /> : undefined;
 
+  // One thing at a time, its header in the title bar: a conversation's own
+  // window, or the phone.
+  const alone = single !== undefined || stack !== undefined;
+  const other = pane ? null : (others.find((one) => one.id === activeId) ?? null);
+  const back = stack ? <IconButton icon="back" label="Back" size="lg" onClick={stack.onBack} /> : undefined;
+
   return (
-    <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined}>
-      <TitleBar leading={leading} focused={focused} actions={single ? backBeside : popOut} onMinimize={onCloseWindow && minimizer()} onClose={onCloseWindow}>
-        {single ? (
+    <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined} data-stack={stack ? "yes" : undefined}>
+      <TitleBar leading={back ?? leading} focused={focused} actions={stack ? undefined : single ? backBeside : popOut} onMinimize={onCloseWindow && minimizer()} onClose={onCloseWindow}>
+        {alone ? (
           pane ? (
             <PaneHeader {...pane.header} place="title" />
           ) : (
-            "Linger"
+            (other?.label ?? "Linger")
           )
         ) : (
           <TabStrip label="Conversations" tabs={tabs} activeId={activeId ?? ""} onSelect={onSelectTab} onClose={onCloseTab} onMove={onMoveTab} panelIdPrefix="nx-pane-" />
@@ -209,8 +224,8 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       </TitleBar>
 
       {pane && actions ? (
-        <section className="nx-pane" id={`nx-pane-${pane.id}`} role={single ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
-          {single ? null : <PaneHeader {...pane.header} />}
+        <section className="nx-pane" id={`nx-pane-${pane.id}`} role={alone ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
+          {alone ? null : <PaneHeader {...pane.header} />}
           {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} /> : null}
           <Conversation
             key={pane.id}
@@ -240,13 +255,14 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             {...pane.composer}
           />
         </section>
-      ) : other ? (
-        <section className="nx-pane nx-pane-other" id={`nx-pane-${other.id}`} role="tabpanel" aria-label={other.label}>
-          {other.body}
-        </section>
-      ) : (
+      ) : other ? null : (
         <p className="nx-chat-none">Nothing open. Pick a room or a person in the list.</p>
       )}
+      {others.map((one) => (
+        <section key={one.id} className="nx-pane nx-pane-other" id={`nx-pane-${one.id}`} role={alone ? "region" : "tabpanel"} aria-label={one.label} hidden={one !== other}>
+          {one.body}
+        </section>
+      ))}
 
       {viewing && pane ? <ImageViewer file={viewing} url={pane.stream.mediaUrl(viewing.url)} onClose={() => setViewing(null)} /> : null}
     </div>

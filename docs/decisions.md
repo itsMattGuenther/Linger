@@ -668,7 +668,22 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
 - **Report and block, in both apps** (T-1605). Both stores require them in
   apps where people post things. Matt agreed to add them, and to the desktop
   app too if it made sense. It does: the server side is shared, and a report
-  goes to the host, who reads it in whichever app they use.
+  goes to the host, who reads it in whichever app they use. Matt sees them as
+  an edge case among friends who trust each other, wanted only because the
+  stores require them, so the rule is the least UI that does the job. He
+  approved the shape from mockups on 2026-10-03: Report is the last item on a
+  message's actions and behind a ··· on a person's card. The host sees who
+  sent a report, since everyone knows everyone anyway. A blocked person's
+  messages each become one grey line, "From Dex, who you blocked · Show",
+  rather than vanishing, because in a small room a reply to a message that
+  vanished reads as somebody talking to nobody. The host learns of a report
+  from one lit row in the list, never a count.
+- **On the phone, one screen at a time, like Discord** (Matt, 2026-10-03).
+  Tabs on a phone were awkward. Phone chat apps have settled on a pattern
+  people already know: the list is home, and a conversation, Media or Search
+  opens over it, full screen, with ← Back. Matt picked that, with Media and
+  Search staying at the foot of the list. Nothing on a phone may reach past
+  the screen's edge or scroll sideways.
 - **The phone identifier is `io.github.itsmattguenther.linger`.** Matt left
   the name to the session. A store never lets it change after the first upload,
   so it has to be one nobody else can already hold. Linger owns no domain, and

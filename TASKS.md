@@ -547,12 +547,17 @@ macOS runners, or a friend's Mac.
   Checked in the emulator: Media, Search (a hit opens its room at the
   message), a DM, a photo sent from Android's file picker (it arrived and
   shows), and a link, which opened in the browser with Linger left as it
-  was. **Still to do:** one-hand reach, judged on a phone somebody holds.
-  The Buddy list window is already phone width (340 px), which is a head start.
-  What is missing is where a conversation goes on a screen too narrow to
-  unfold it beside the list (#337), one-hand reach, and a message box above a
-  software keyboard. Check that an iPhone camera photo uploads as something the
-  server reads; iPhones save HEIC.
+  was. **One screen at a time** (Matt, 2026-10-03, docs/decisions.md): no
+  tabs on the phone. A conversation, Media or Search opens over the list,
+  full screen, with ← Back, and they stack: a search hit opens over Search,
+  and Back returns to Search as it was left. Settings goes back with ← too.
+  Rows and the title bar are 44 and 48 px tall, so a thumb hits them, and
+  `next-phone.spec.ts` checks that no screen reaches past the phone's edge.
+  Checked in the emulator with Android's own Back. **Still to do:** one-hand
+  reach, judged on a phone somebody holds, and an edge swipe for Back on the
+  iPhone, which has no Back of its own.
+  Also check that an iPhone camera photo uploads as something the server
+  reads; iPhones save HEIC.
   Seen on the first run in the emulator (2026-10-02): the list's title bar
   draws under the phone's clock and icons, its ✕ means nothing on a phone, the
   sign-in note says "this computer", and everything that opens another window
@@ -578,8 +583,16 @@ macOS runners, or a friend's Mac.
 - ⬜ **T-1605 · Report and block** — effort: **medium**
   SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
   1.2, Google Play's user-generated content policy), so they come before any
-  store listing, and they go in the desktop app too. The proposed shape, to
-  confirm with Matt before building:
+  store listing, and they go in the desktop app too. **The shape is
+  confirmed** (Matt, 2026-10-03, from mockups; docs/decisions.md): as below,
+  with the least UI that does it. On the phone, holding a message opens its
+  actions from the bottom (Reply, Copy text, Pin, then Report to host… under
+  a line); on a computer, Report is the last item in the ··· menu. A person's
+  card gets a ··· beside Knock with Report and Block. The host sees who sent
+  each report. A blocked person's messages each become one grey line, "From
+  Dex, who you blocked · Show", and Settings › Account lists who you've
+  blocked, to unblock. The host learns of a report from one lit row in the
+  list, "A report to look at", which opens Settings › People. The shape:
   **Report** is in a message's menu and on a person's card. It sends the
   message (or the person) to the host of that server with an optional note,
   because a self-hosted server has nobody else to send it to; the host already
