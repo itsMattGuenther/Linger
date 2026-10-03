@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
-import { followKeyboard, onPhone } from "./core/phone";
+import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
@@ -29,6 +29,8 @@ if (onPhone()) {
   document.documentElement.dataset.shell = "phone";
   // No notifications on a phone, open or closed (SPEC §4.15).
   setNoNotifications(true);
+  // Text, lines and rows grow with the phone's Font size (styles/tokens.css).
+  followTextSize(document, async () => (isTauri() ? Number(await invoke("phone_text_scale")) : 1));
   // Chimes follow the phone's ringer: silent is silent, vibrate buzzes, and
   // both go out as notification sounds (src-tauri/src/phone_sound.rs).
   if (isTauri()) {

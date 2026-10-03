@@ -311,7 +311,10 @@
 }
 
 .nx-set-preview-note {
-  flex: none;
+  /* Its own words wrap too, when even a line of its own is too narrow (a
+     phone with its text turned up). */
+  flex: 0 1 auto;
+  min-width: 0;
   margin-left: auto;
   color: var(--text-muted);
   font: 400 var(--text-label) / 1 var(--font-label);
@@ -545,10 +548,13 @@
   opacity: 0.6;
 }
 
+/* Too narrow for the name and the buttons together (a phone with its text
+   turned up), the buttons drop to a line of their own, still on the right. */
 .nx-set-item-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
   min-width: 0;
   min-height: var(--control-md);
 }

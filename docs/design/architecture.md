@@ -473,6 +473,14 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   the moment it's back (`watchNetwork`) rather than when missed heartbeats
   notice; the web view hears about the network only with Android's
   `ACCESS_NETWORK_STATE` permission (`AndroidManifest.xml`).
+- **The phone's text size.** Linger follows the phone's Font size, up to
+  twice the usual (`phone_text_scale` reads it, `followTextSize` sets
+  `--text-scale`, and the phone's tokens multiply text, line boxes, rows and
+  controls by it). The web view's own text zoom is off (`textZoom` 100 in
+  MainActivity.kt): it enlarged fonts and line spacing and no box around them,
+  and cut names in half. Icons and marks keep their size, as in Android's own
+  apps, and `next-phone.spec.ts` checks every screen at twice the size for
+  words cut off or reaching past the edge.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

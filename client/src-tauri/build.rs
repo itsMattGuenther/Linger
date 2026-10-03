@@ -41,6 +41,7 @@ const COMMANDS: &[&str] = &[
     "clipboard_image",
     "phone_sound_mode",
     "phone_buzz",
+    "phone_text_scale",
 ];
 
 fn main() {

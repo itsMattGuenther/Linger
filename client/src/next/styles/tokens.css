@@ -312,6 +312,9 @@
   --text-name: 15.5px; /* names in lists */
   --text-title: 20px;
   --text-display: 22px;
+  /* The # in a room's marker slot: a mark, like a presence dot, so on the
+     phone it keeps its size when the text grows. */
+  --text-mark: 14.5px;
   --leading-tight: 1.2;
   --leading-body: 1.42;
   --tracking-label: 0.08em;
@@ -348,10 +351,40 @@
 
 /* The phone (SPEC §4.15, styles/phone.css): rows and the title bar a thumb
    can hit. A finger needs about 44px where a pointer needs 32 (Apple's and
-   Google's guides both say so). */
+   Google's guides both say so).
+
+   And text grows with the phone's Font size, together with everything that
+   holds a line of it: line boxes, rows and controls. `--text-scale` is that
+   setting as a factor, 1 to 2 (`followTextSize` in core/phone.ts). The web
+   view's own text zoom is off (MainActivity.kt): it enlarged fonts and line
+   spacing and nothing around them, and cut the words in half. Icons,
+   markers and gaps stay as they are, as in Android's own apps. */
 :root[data-shell="phone"] {
-  --row-1: 44px;
-  --titlebar: 48px;
+  --text-scale: 1;
+  --text-label: calc(11px * var(--text-scale));
+  --text-meta: calc(12.5px * var(--text-scale));
+  --text-control: calc(13.5px * var(--text-scale));
+  --text-body: calc(14.5px * var(--text-scale));
+  --text-name: calc(15.5px * var(--text-scale));
+  --text-title: calc(20px * var(--text-scale));
+  --text-display: calc(22px * var(--text-scale));
+  /* Never below a thumb's size; above it only as much as the words need. */
+  --row-1: max(44px, calc(32px * var(--text-scale)));
+  --row-2: max(48px, calc(44px * var(--text-scale)));
+  --titlebar: max(48px, calc(40px * var(--text-scale)));
+  --tab: calc(32px * var(--text-scale));
+  --control-sm: calc(24px * var(--text-scale));
+  --control-md: calc(32px * var(--text-scale));
+  --control-lg: calc(40px * var(--text-scale));
+  --line-name: calc(20px * var(--text-scale));
+  --line-meta: calc(16px * var(--text-scale));
+  --line-display: calc(28px * var(--text-scale));
+  --line-body: calc(20px * var(--text-scale));
+  --pane-head: calc(40px * var(--text-scale));
+  --voice-strip: calc(40px * var(--text-scale));
+  --menu-w: calc(200px * var(--text-scale));
+  --picker-w: calc(280px * var(--text-scale));
+  --settings-label: calc(104px * var(--text-scale));
 }
 
 @media (prefers-reduced-motion: reduce) {

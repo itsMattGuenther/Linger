@@ -120,7 +120,7 @@ pub async fn sound_play(samples: Vec<i16>, output: Option<String>) -> bool {
 }
 
 #[cfg(target_os = "android")]
-mod android {
+pub(crate) mod android {
     use jni::objects::{JObject, JValue};
     use jni::{AttachGuard, JNIEnv, JavaVM};
 
@@ -149,8 +149,9 @@ mod android {
     }
 
     /// Run `work` on this thread, attached to the VM, clearing any Java
-    /// exception it leaves so the next call isn't refused.
-    fn with_env<T>(work: impl FnOnce(&mut AttachGuard<'_>, &JObject) -> Option<T>) -> Option<T> {
+    /// exception it leaves so the next call isn't refused. `phone_text.rs`
+    /// asks Android through it too.
+    pub(crate) fn with_env<T>(work: impl FnOnce(&mut AttachGuard<'_>, &JObject) -> Option<T>) -> Option<T> {
         let (vm, app) = app()?;
         let mut env = vm.attach_current_thread().ok()?;
         let answer = work(&mut env, &app);

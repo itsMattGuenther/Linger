@@ -23,6 +23,12 @@
   max-width: none;
 }
 
+/* Beside the room's name, the # is part of the words, so it grows with them
+   on a phone with its text turned up; in a row's marker slot it doesn't. */
+.nx-pane-name .k-hash {
+  font-size: var(--text-body);
+}
+
 .nx-pane-title {
   flex: none;
   min-width: 0;

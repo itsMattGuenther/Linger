@@ -25,6 +25,8 @@ pub mod packaging;
 // The phone's sounds: only the phone app registers them. Tests read them here too.
 #[cfg(any(mobile, test))]
 mod phone_sound;
+#[cfg(any(mobile, test))]
+mod phone_text;
 mod secrets;
 #[cfg(desktop)]
 pub mod sounds;
@@ -370,6 +372,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             graphics::graphics_started,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
-            phone_sound::sound_play
+            phone_sound::sound_play,
+            phone_text::phone_text_scale
         ])
 }

@@ -63,6 +63,7 @@
 .nx-divider::after {
   content: "";
   flex: 1;
+  min-width: var(--space-4);
   height: 1px;
   background: var(--hairline);
 }
@@ -81,9 +82,13 @@
   background: linear-gradient(90deg, var(--accent), transparent);
 }
 
+/* Too long for the width (a phone with its text turned up), the words wrap
+   onto a second line, centered, and the lines either side stay. */
 .nx-divider-label,
 .nx-left-off-label {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: center;
 }
 
 /* Out of a historical window: floats, so it moves nothing when it appears. */

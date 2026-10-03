@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { followKeyboard, isPhone, type Online, type Showing, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
+import { followKeyboard, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -177,5 +177,21 @@ describe("the phone's keyboard (T-1603)", () => {
     followKeyboard(shown, () => 914, page);
     shown.keyboard(56, 0);
     expect(page.dataset.keyboard).toBe("down");
+  });
+});
+
+describe("the phone's text size (its Font size setting)", () => {
+  it("is the phone's factor, to a hundredth, up to twice the usual", () => {
+    expect(textScale(1)).toBe(1);
+    expect(textScale(1.3)).toBe(1.3);
+    expect(textScale(2)).toBe(2);
+    expect(textScale(1.149_99)).toBe(1.15);
+    expect(textScale(3.5)).toBe(2);
+  });
+
+  it("never shrinks Linger, and takes an answer that isn't a number as the usual size", () => {
+    expect(textScale(0.85)).toBe(1);
+    expect(textScale(Number.NaN)).toBe(1);
+    expect(textScale(Number.POSITIVE_INFINITY)).toBe(1);
   });
 });

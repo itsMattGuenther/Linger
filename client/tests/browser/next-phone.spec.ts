@@ -122,6 +122,32 @@ test("opens Settings over the list, as its sections and then one section, withou
   await expect(page.locator("[data-screen='list']")).toBeVisible();
 });
 
+/**
+ * Words cut off top or bottom: a box that hides what doesn't fit, holding
+ * words of its own, with more of them than it shows. That was a name at
+ * twice the size in a row drawn for the usual one, showing 20px of 40
+ * (2026-10-03). Boxes that scroll are left out; scrolling is how they show
+ * the rest.
+ */
+async function cutOff(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    for (const element of document.body.querySelectorAll<HTMLElement>("*")) {
+      const style = getComputedStyle(element);
+      if (style.overflowY !== "hidden" && style.overflowY !== "clip") continue;
+      // Labels only a screen reader reads are 1px boxes on purpose.
+      if (style.visibility === "hidden" || element.clientHeight <= 1) continue;
+      const words = [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "");
+      // A font's padding above and below its letters can poke a few pixels
+      // past a line drawn as tall as the letters, which shows nothing; a fifth
+      // more than the box is words cut off.
+      if (!words || element.scrollHeight <= element.clientHeight * 1.2 + 1) continue;
+      out.push(`${[element.tagName.toLowerCase(), ...element.classList].join(".")} shows ${element.clientHeight}px of ${element.scrollHeight}: "${(element.textContent ?? "").trim().slice(0, 40)}"`);
+    }
+    return out;
+  });
+}
+
 test("a room opens as the whole screen, with Back to the list and no tabs", async ({ page }) => {
   await phone(page);
   await room(page, "general").click();
@@ -218,6 +244,31 @@ test("nothing reaches past the edge of the phone's screen, on any screen", async
   for (const name of names) {
     await sections.getByRole("tab", { name, exact: true }).click();
     await expect(settings.locator(".nx-set-title")).toHaveText(name);
+    expect(await sticksOut(page), `Settings, ${name}`).toEqual([]);
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+  }
+});
+
+test("at the phone's largest text size, words fit their lines and nothing reaches past the edge", async ({ page }) => {
+  await phone(page);
+  // What followTextSize sets from the phone's Font size at its largest
+  // (core/phone.ts): text, lines, rows and controls all grow together.
+  await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "2"));
+  expect(await cutOff(page), "the list").toEqual([]);
+  expect(await sticksOut(page), "the list").toEqual([]);
+
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  expect(await cutOff(page), "a room").toEqual([]);
+  expect(await sticksOut(page), "a room").toEqual([]);
+  await back(page).click();
+
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  const sections = settings.getByRole("navigation", { name: "Settings" });
+  for (const name of (await sections.getByRole("tab").allTextContents()).map((one) => one.trim())) {
+    await sections.getByRole("tab", { name, exact: true }).click();
+    expect(await cutOff(page), `Settings, ${name}`).toEqual([]);
     expect(await sticksOut(page), `Settings, ${name}`).toEqual([]);
     await settings.getByRole("button", { name: "Back to Settings" }).click();
   }
