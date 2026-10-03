@@ -13,6 +13,8 @@ mod acl;
 #[cfg(desktop)]
 mod autostart;
 #[cfg(desktop)]
+mod clip;
+#[cfg(desktop)]
 mod clipboard;
 pub mod cue;
 #[cfg(target_os = "linux")]
@@ -306,6 +308,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(tray::VoiceItems::default())
         .manage(voice_commands::VoiceEngines::default())
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
+        .manage(clip::Clips::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -346,7 +349,10 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             window::next_request_attention,
             autostart::autostart_state,
             autostart::autostart_set,
-            clipboard::clipboard_image
+            clipboard::clipboard_image,
+            clip::clip_start,
+            clip::clip_stop,
+            clip::clip_cancel
         ])
 }
 

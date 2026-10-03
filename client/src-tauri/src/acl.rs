@@ -234,6 +234,34 @@ fn only_the_chat_windows_and_the_list_window_read_the_clipboard() {
 }
 
 #[test]
+fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
+    // The microphone is recorded only from a message box (#401): Settings,
+    // Search and Media have none, and never get the recorder.
+    for (file, windows, commands) in granted() {
+        if !["clip_start", "clip_stop", "clip_cancel"]
+            .iter()
+            .any(|command| commands.contains(*command))
+        {
+            continue;
+        }
+        assert!(
+            windows
+                .iter()
+                .all(|window| window == "main" || window == "chat-*"),
+            "{file} grants recording to {windows:?}"
+        );
+    }
+    let chats: BTreeSet<String> = granted()
+        .into_iter()
+        .filter(|(_, windows, _)| windows.iter().any(|window| window == "chat-*"))
+        .flat_map(|(_, _, commands)| commands)
+        .collect();
+    for command in ["clip_start", "clip_stop", "clip_cancel"] {
+        assert!(chats.contains(command), "the chat windows can't {command}");
+    }
+}
+
+#[test]
 fn a_capability_for_main_names_no_other_window() {
     // Granting the owner's commands in a file that also names a viewer would
     // hand them to that viewer too.

@@ -1471,6 +1471,134 @@ test.describe("a shared audio file (#247)", () => {
   }
 });
 
+// Voice messages (#401): a clip you record of yourself, hear back, and choose
+// to send. The recorder is the desktop shell's (src-tauri/src/clip.rs); here
+// it hands back a second of a real recording it made.
+test.describe("voice messages (#401)", () => {
+  const panel = (page: Page) => page.getByRole("group", { name: "Voice message for #general" });
+  const asked = async (page: Page, what: string) => (await did(page)).filter((line) => line.startsWith(what));
+
+  /** Open the panel and start recording, as the person would. */
+  async function recording(page: Page) {
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await expect(panel(page)).toContainText("Press Record when you're ready.");
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  }
+
+  test("record when ready, lines that move with your voice, stop to hear it back, then send", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await expect(panel(page)).toContainText("Press Record when you're ready.");
+    // Nothing records until Record is pressed.
+    expect(await asked(page, "clip_start")).toEqual([]);
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+    expect(await asked(page, "clip_start")).toEqual([`clip_start:${JSON.stringify({ input: null })}`]);
+
+    // The lines move with your voice: the newest on the right.
+    const newest = panel(page).locator(".nx-voicemsg-lines i").last();
+    const quiet = await newest.evaluate((line) => line.getBoundingClientRect().height);
+    await page.evaluate(() => window.parity?.clip.level(0.9));
+    await expect.poll(() => newest.evaluate((line) => line.getBoundingClientRect().height)).toBeGreaterThan(quiet * 4);
+    await expect(panel(page).getByRole("timer")).toHaveText(/^0:0\d$/);
+
+    // Stopping never sends: you hear it back first.
+    await panel(page).getByRole("button", { name: "Stop" }).click();
+    await expect(panel(page).getByRole("button", { name: "Send voice message" })).toBeFocused();
+    expect(await asked(page, "POST /uploads")).toEqual([]);
+    await expect(panel(page).locator(".nx-att-name")).toHaveText("Voice message");
+    await panel(page).getByRole("button", { name: "Play" }).click();
+    // A real recording, in a file this engine opens: a second long.
+    await expect
+      .poll(() => panel(page).locator("audio").evaluate((audio: HTMLAudioElement) => (audio.error ? "failed" : Math.round(audio.duration * 10) / 10)))
+      .toBe(1);
+
+    await panel(page).getByRole("button", { name: "Send voice message" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    await expect.poll(async () => (await asked(page, "sent:")).at(-1)).toBe(`sent:${JSON.stringify({ body: "", reply_to: null, attachment_ids: ["f-1"] })}`);
+    // It went up as a voice message, and the conversation shows it as one.
+    const message = log(page).locator(".nx-att-card[data-kind='audio']").last();
+    await expect(message.locator(".nx-att-name")).toHaveText("Voice message");
+    expect(await asked(page, "clip_cancel")).toEqual([]);
+  });
+
+  test("discard throws it away, and the box is as it was", async ({ page }) => {
+    await open(page);
+    await box(page).fill("half a thought");
+    await recording(page);
+    await panel(page).getByRole("button", { name: "Stop" }).click();
+    await panel(page).getByRole("button", { name: "Discard" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    await expect(box(page)).toHaveValue("half a thought");
+    expect(await asked(page, "POST /uploads")).toEqual([]);
+    // Opened and closed without recording: nothing asked of the microphone.
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Close the voice message" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    expect(await asked(page, "clip_start")).toHaveLength(1);
+  });
+
+  test("it stops by itself at five minutes, or when the microphone goes, and keeps what it has", async ({ page }) => {
+    await open(page);
+    await recording(page);
+    await page.evaluate(() => window.parity?.clip.full());
+    await expect(panel(page).getByRole("status")).toHaveText("That's five minutes, the longest a voice message runs.");
+    await expect(panel(page).getByRole("button", { name: "Send voice message" })).toBeVisible();
+    await panel(page).getByRole("button", { name: "Discard" }).click();
+
+    await recording(page);
+    await page.evaluate(() => window.parity?.clip.lost());
+    await expect(panel(page).getByRole("status")).toHaveText("The microphone stopped. This is what was recorded.");
+    await expect(panel(page).getByRole("button", { name: "Send voice message" })).toBeVisible();
+  });
+
+  test("Record and Stop pressed by mistake isn't a message", async ({ page }) => {
+    await open(page);
+    // A tenth of a second: five packets.
+    await page.evaluate(() => window.parity?.clip.hands([0x38, 0x01, ...Array.from({ length: 5 }, () => [1, 0, 0xf8]).flat()]));
+    await recording(page);
+    await panel(page).getByRole("button", { name: "Stop" }).click();
+    await expect(panel(page).getByRole("alert")).toHaveText("That was too short to send. Press Record, then talk.");
+    await expect(panel(page).getByRole("button", { name: "Record" })).toBeVisible();
+  });
+
+  test("with no microphone it says so in words, and Record can be tried again", async ({ page }) => {
+    await open(page, "room=r-general&nomic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(panel(page).getByRole("alert")).toHaveText("No microphone found. Plug one in, or pick one in Settings.");
+    await expect(panel(page).getByRole("button", { name: "Record" })).toBeEnabled();
+  });
+
+  test("somebody's voice message shows as one, with its play button and its length", async ({ page }) => {
+    await open(page);
+    const id = await post(page, "", "u-eli", {
+      attachments: [
+        {
+          id: "vm-1",
+          filename: "Voice message.webm",
+          mime: "audio/webm",
+          size_bytes: 4_224,
+          url: "/media/vm-1",
+          width: null,
+          height: null,
+          duration_ms: 12_000,
+          blurhash: null,
+          poster_url: null,
+          starred_at: null,
+          uploader_id: "u-eli",
+          created_at: Date.parse("2026-09-25T22:50:00"),
+        },
+      ],
+    } as never);
+    const card = row(page, id).locator(".nx-att-card[data-kind='audio']");
+    await expect(card.locator(".nx-att-name")).toHaveText("Voice message");
+    await expect(card.getByRole("button", { name: "Play" })).toBeVisible();
+    await expect(card.locator(".nx-audio-time")).toContainText("0:12");
+  });
+});
+
 test.describe("voice and closing", () => {
   test("closing the window of the room you're in voice in never leaves voice (VOICE-3)", async ({ page }) => {
     await open(page, "room=r-general&ptt");

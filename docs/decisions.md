@@ -693,3 +693,39 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
 
 A phone app updates on its store's schedule, not ours, so phones will often be
 a version behind their server; how far back compatibility goes is #315.
+
+## Decided — voice messages: a clip you record, hear back, and choose to send
+
+**Matt, 2026-10-03 (#401).** Record a voice message in the message box and send
+it, on the desktop and, later, the phone. Discord offers it only on phones.
+
+- **A toggle, never press-and-hold, and Stop never sends.** A finger slips off
+  a hold and sends half a thought, and apps that send on stop send accidents.
+  You hear it back, then Send or Discard.
+- **SPEC §4.14 says "Voice rooms are never recorded".** It used to say
+  "Nothing is recorded, ever", meaning rooms. A voice message is a clip you
+  record of yourself and choose to send, like a file: nobody else is in it.
+  The promise about rooms is unchanged. Matt agreed to the wording
+  (2026-10-03): "It's no different than if I recorded an audio clip of
+  myself in Audacity and then uploaded it to the chat as an audio file."
+- **Opus in WebM, made on the computer, never converted by the server.**
+  Chromium and WebView2 play it, WebKitGTK does through the GStreamer plugins
+  the packages already depend on, and Safari's WebKit does from Safari 15.
+  The browser tests play a real recording in Chromium and WebKit. So there is
+  no ffmpeg step on a small host. AAC wouldn't play on Linux without a decoder
+  (#358).
+- **The desktop app records in Rust**, from the microphone voice already opens
+  in the device's own format (`src-tauri/src/clip.rs`, #398), and the page puts
+  the packets in a WebM file (`client/src/lib/webm.ts`). WebKitGTK's own
+  recording isn't something to lean on, and this way every desktop records
+  the same file. The phone will record with its WebView and use the same file
+  writer.
+- **Five minutes at most**, about 2.4 MB at 64 kbit/s, Discord's default for
+  a voice (Matt, 2026-10-03, up from 32: a message is heard again, so it gets
+  more bits than a live call; voice rooms stay at the encoder's own rate). It
+  stops by itself and says so, and the clip is kept to hear back and send.
+- **On the server it's an ordinary audio file.** `audio/webm` joins the audio
+  types; the sniffer calls every WebM a video, so one declared as sound is
+  taken as sound. The app shows one named `Voice message.webm` as a voice
+  message. Nothing on the wire changes.
+

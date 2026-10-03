@@ -42,6 +42,9 @@ const COMMANDS: &[&str] = &[
     "phone_sound_mode",
     "phone_buzz",
     "phone_text_scale",
+    "clip_start",
+    "clip_stop",
+    "clip_cancel",
 ];
 
 fn main() {

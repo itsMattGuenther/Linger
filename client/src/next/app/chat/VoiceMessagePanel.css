@@ -1,0 +1,69 @@
+/* A voice message above the message box (#401). Layout only; tokens only. */
+.nx-voicemsg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-raised);
+}
+
+.nx-voicemsg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: var(--control-md);
+}
+
+.nx-voicemsg-words {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* The lines that move with your voice, after the time: newest on the right,
+   in the lamp, as your own voice is everywhere else. */
+.nx-voicemsg-lines {
+  display: flex;
+  flex: 1;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--space-0-5);
+  min-width: 0;
+  height: var(--control-sm);
+  overflow: hidden;
+}
+
+.nx-voicemsg-lines i {
+  flex: none;
+  width: var(--space-0-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* How long it's been: a number, so mono, and wide enough that it doesn't
+   push the lines as it ticks. */
+.nx-voicemsg-time {
+  flex: none;
+  min-width: 4ch;
+  color: var(--text-secondary);
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+}
+
+.nx-voicemsg-problem {
+  margin: 0;
+  color: var(--text-danger);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* The player inside takes the panel's width. */
+.nx-voicemsg .nx-att-card[data-kind="audio"] {
+  width: 100%;
+  max-width: none;
+}

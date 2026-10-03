@@ -329,6 +329,10 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             }
         }
     }
+    // A voice message being recorded in a window that's gone goes with it (#401).
+    if matches!(event, tauri::WindowEvent::Destroyed) {
+        crate::clip::forget(window.app_handle(), window.label());
+    }
     if matches!(event, tauri::WindowEvent::Destroyed) && is_viewer(window.label()) {
         let app = window.app_handle();
         let _ = app.emit_to(OWNER, "next:closed", window.label());

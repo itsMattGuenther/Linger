@@ -670,9 +670,20 @@ could hear. Apps from before 0.4.1, which spoke only the mesh, can't join voice.
 DM (§4.13) — who is in voice is a fact about a room, so it reaches the room's members
 and nobody else. Nothing about voice is a way to find out a conversation exists.
 
-**Nothing is recorded, ever.** Not by the server, not by a client, not "for
+**Voice rooms are never recorded.** Not by the server, not by a client, not "for
 transcription", not opt-in. There is no feature here to add later; a room where the
 microphone might be being recorded is a different product.
+
+**A voice message is a clip you record of yourself and choose to send** (#401). It is
+the other thing, and never a room: the microphone button by the message box opens a
+panel, and **Record** and **Stop** are presses, never a hold, so a slipped finger can't
+send half a thought. Lines move with your voice while it records. Stopping never sends:
+you hear it back, then **Send** it or **Discard** it, and nothing of it leaves your
+computer until you press Send. It runs to five minutes at most, and stops there by
+itself. Sent, it is an ordinary audio file in the conversation (Opus in WebM, which
+every engine Linger runs in plays), shown as a voice message with a play button and its
+length. The desktop app records it today; the phone app will, once it asks for the
+microphone.
 
 **The host's server passes voice along, so the host could listen.** Voice is encrypted
 on the wire, but each hop ends at the server, which forwards the packets without decoding
@@ -926,6 +937,7 @@ says what replaced it: a status somebody typed.
 ### V2
 
 - Voice rooms (WebRTC through the host's server, #197; coturn for strict networks), push-to-talk, per-user gain (§4.14)
+- Voice messages: a clip you record, hear back and choose to send (§4.14, #401)
 - Ambient voice: a room you leave running, not a call you join
 - DMs and group DMs (§4.13)
 - Search (§4.12)

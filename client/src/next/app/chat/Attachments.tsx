@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import { fileSize, inlineBox, renderAs } from "../../../lib/media";
 import { Button, Icon, TextField } from "../../kit";
+import { isVoiceMessage } from "../../core/chat/voiceMessage";
 import { AudioCard } from "./AudioCard";
 import "./Attachments.css";
 
@@ -65,7 +66,14 @@ function One({
         />
       );
     case "audio":
-      return <AudioCard name={file.filename} src={mediaUrl(file.url)} durationMs={file.duration_ms === null ? null : Number(file.duration_ms)} />;
+      return (
+        <AudioCard
+          name={file.filename}
+          src={mediaUrl(file.url)}
+          durationMs={file.duration_ms === null ? null : Number(file.duration_ms)}
+          voice={isVoiceMessage(file.filename, file.mime)}
+        />
+      );
     case "file":
       return <FileCard file={file} url={mediaUrl(file.url)} onDownload={onDownload} />;
   }

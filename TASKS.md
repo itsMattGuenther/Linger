@@ -24,12 +24,14 @@ default.
 
 ## How to run a task
 
-**0.4.6 release — ⏳ Matt, 2026-10-02.** Lighter: photos shown from a 960 px
-copy the server makes (#382, a database change; existing photos get copies
-when the server starts), videos and audio that load nothing until played
-(#381), from the memory audit (#380, closed), and minimize on Windows (#386);
-notes in `docs/releases/0.4.6.md`. 0.4.5 (2026-10-01) was one window and one
-row per friend (#337, #351, #334, #358, #377, #312, #314), x86-64 only (#310).
+**0.4.7 release — ⏳ Matt, 2026-10-03.** Headsets and voice messages: gaming
+headsets on Windows open in their own format (#398), voice messages recorded
+in the message box (#401, the server takes `audio/webm`; no database change),
+away that's hard to miss (#392), picture previews (#397), the first close to
+the tray says where Linger went (#400), and the reason voice didn't start in
+full (#399); notes in `docs/releases/0.4.7.md`. 0.4.6 (2026-10-02) was
+lighter: 960 px photo copies (#382, a database change), media that loads
+nothing until played (#381), and minimize on Windows (#386).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
