@@ -444,6 +444,31 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
 });
 
+test("the first close to the tray says where Linger went, once ever, and that you're in voice (#400)", async ({ page }) => {
+  // The desktop lets Linger show banners. The engine's own permission is
+  // what the notification plugin asks first, so it's the one granted here.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "Notification", { configurable: true, value: { permission: "granted", requestPermission: async () => "granted" } });
+  });
+  const notices = async () =>
+    (await did(page)).filter((line) => line.startsWith("show_notification:")).map((line) => JSON.parse(line.slice("show_notification:".length)) as unknown);
+  await open(page, "?one");
+  await joinGeneral(page);
+  await page.evaluate(() => window.core?.hidden());
+  await expect.poll(notices).toEqual([
+    { title: "Linger is still running", body: expect.stringMatching(/ Quit Linger from there\. You're still in voice in #general\.$/), open: null },
+  ]);
+  // Back from the tray and closed again: nothing more.
+  await page.evaluate(() => window.core?.hidden());
+  await page.waitForTimeout(300);
+  expect(await notices()).toHaveLength(1);
+  // Nor after Linger starts again, on this computer.
+  await open(page, "?one");
+  await page.evaluate(() => window.core?.hidden());
+  await page.waitForTimeout(300);
+  expect(await notices()).toEqual([]);
+});
+
 /** Join voice in #general as a chat window would ask, once the connection is up. */
 async function joinGeneral(page: Page) {
   const bar = page.getByRole("region", { name: /In voice/ });

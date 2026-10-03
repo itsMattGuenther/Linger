@@ -148,7 +148,10 @@ takes the window, and ◧ goes back to the list. A tab can be popped out into a 
 of its own and put back, and Settings → Windows can open every conversation in a
 window of its own instead.
 Closing the list keeps Linger running in the tray, with its sounds and voice; a
-setting makes closing it quit instead. Another starts Linger when you sign in to
+setting makes closing it quit instead. The first time the list is closed on a
+computer, and never again, a notification says where Linger went and how to quit
+it, and that you're still in voice if you are (#400): Windows 11 hides a new
+tray icon under the ^ by the clock. Another starts Linger when you sign in to
 the computer (Windows and Linux); it is off until you turn it on. **Settings** is
 a window too.
 
@@ -217,7 +220,9 @@ are person-to-person only. `@everyone` and `@here` do not exist and will not be 
 who it's from, and the desktop is asked to point at Linger (Windows flashes the
 taskbar button until you look; Linux marks the window urgent), unless somebody is
 already using Linger or reading that DM. Both are on unless turned off, on that
-computer (Settings → Notifications). Nothing opens a window by itself. The phone
+computer (Settings → Notifications). Besides these, Linger says one thing about
+itself, once ever: where it went the first time the list is closed (§3, #400).
+Nothing opens a window by itself. The phone
 app raises none of these (§4.15): it marks mentions and DMs inside the app only.
 
 A mention is stored as `@username`. Usernames never change, so an old mention never

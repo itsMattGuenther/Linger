@@ -5,7 +5,8 @@
  * stream. The exception is a message that names you, one from somebody you
  * have explicitly asked to hear from, and, in the Buddy list client, a DM,
  * which is addressed to you just as a mention is (#291) — and that exception
- * is this file.
+ * is this file. Besides those, Linger says one thing about itself, once ever:
+ * where it went the first time its list is closed (`showNotice`, #400).
  *
  * Three rules shape it.
  *
@@ -192,7 +193,16 @@ export interface BannerTarget {
   message: MessageId;
 }
 
-async function show(title: string, body: string, open: BannerTarget): Promise<void> {
+/**
+ * A banner about Linger itself rather than a message (#400): no conversation
+ * behind it, so clicking it does what the desktop does by default. Same
+ * permission and the same silence as the rest.
+ */
+export function showNotice(title: string, body: string): Promise<void> {
+  return show(title, body, null);
+}
+
+async function show(title: string, body: string, open: BannerTarget | null): Promise<void> {
   if (!isTauri()) return;
   try {
     if (allowed === null) {

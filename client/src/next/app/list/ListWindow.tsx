@@ -22,7 +22,7 @@ import {
 } from "../../../lib/gateway";
 import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey, talkKeyName } from "../../core/talkKey";
-import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers } from "../../../lib/notify";
+import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
@@ -59,7 +59,7 @@ import {
   type VoiceControlQuestion,
   type WindowOpener,
 } from "../../core/share";
-import { loadCloseList } from "../../core/closing";
+import { desktopOf, firstTimeInTray, loadCloseList, trayNotice, type VoicePlace } from "../../core/closing";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
 import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
@@ -646,6 +646,31 @@ function Servers({
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
   }, [voiceState, voiceServer, several, infos, talkKey]);
+
+  // The list gone to the tray (#400): the first time ever on this computer,
+  // a notification says where Linger went, and that you're still in voice.
+  const voicePlace = useRef<VoicePlace | null>(null);
+  const myVoice = voiceState?.myVoice ?? null;
+  voicePlace.current = voice && myVoice ? { where: voice.where, room: !voiceState?.dms.some((dm) => dm.id === myVoice.roomId) } : null;
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<unknown>("next:hidden", () => {
+        if (!firstTimeInTray(localStore())) return;
+        const notice = trayNotice(desktopOf(navigator.userAgent), voicePlace.current);
+        void showNotice(notice.title, notice.body);
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   // The conversation showing beside the list: its row in the list is marked (#351).
   const besideTab = unfolded && tabs.active !== null && !isTool(tabs.active) ? tabs.active : null;
