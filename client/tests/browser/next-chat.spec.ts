@@ -675,6 +675,56 @@ test.describe("voice here", () => {
     expect(words.right).toBeLessThanOrEqual(button.x);
   });
 
+  // A friend couldn't read why voice didn't start: the strip cut it off and
+  // the whole of it was only a tooltip, gone when the mouse moved, which
+  // nothing could copy (#399). A click opens it whole, in a card that stays,
+  // and Copy takes both lines for the host.
+  test("the reason voice didn't start opens whole, stays, and copies for the host (#399)", async ({ page }) => {
+    const reason = "the speakers wouldn't open: Failed to initialize audio client: The parameter is incorrect. (os error -2147024809)";
+    await page.addInitScript(() => {
+      const copied: string[] = [];
+      Object.assign(window, { copied, refuse: false });
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            if ((window as unknown as { refuse: boolean }).refuse) throw new Error("refused");
+            copied.push(text);
+          },
+        },
+      });
+    });
+    await page.goto(`/tests/fixtures/next-chat.html?voice=off&windows&voicefail=${encodeURIComponent(reason)}`);
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await strip.getByRole("alert").getByRole("button").click();
+    const card = page.getByRole("dialog", { name: "Why voice didn't start" });
+    await expect(card).toBeVisible();
+    const lead = "Couldn't start voice. Windows' default speakers wouldn't open. Pick yours in Settings.";
+    await expect(card).toContainText(lead);
+    await expect(card).toContainText(reason);
+    // Copy has the focus, and takes Linger's sentence and the shell's words together.
+    const copy = card.getByRole("button", { name: "Copy" });
+    await expect(copy).toBeFocused();
+    await copy.click();
+    await expect(card.getByRole("button", { name: "Copied" })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual([`${lead}\n${reason}`]);
+    // Still there after the mouse has moved on.
+    await page.mouse.move(5, 5);
+    await expect(card).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+
+    // A clipboard that won't take it says so, rather than claiming "Copied".
+    await page.evaluate(() => Object.assign(window, { refuse: true }));
+    await strip.getByRole("alert").getByRole("button").click();
+    await card.getByRole("button", { name: "Copy" }).click();
+    await expect(card.getByRole("status")).toHaveText("The clipboard wouldn't take it. Select the words above and copy them instead.");
+    await expect(card.getByRole("button", { name: "Copied" })).toHaveCount(0);
+    // A press anywhere else closes it.
+    await page.mouse.click(5, 5);
+    await expect(card).toHaveCount(0);
+  });
+
   // The Windows 10 friend's default microphone wouldn't open; picking his by
   // name in Settings fixed it (#273). The strip says so on its one line, at
   // the chat window's narrowest and a conversation window's, with the fix as
