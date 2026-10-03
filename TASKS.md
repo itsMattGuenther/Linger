@@ -496,7 +496,8 @@ macOS runners, or a friend's Mac.
   2026-10-02. No push (so no relay, and nothing new leaves the server), no
   `mobile` presence state, uploads from phones, iPhone and Android both, and no
   voice in the first version: it comes back only if people using the phone app
-  ask. SPEC §4.15.
+  ask. Phone backups leave Linger out unless you opt in, and report and block
+  come before any store listing (T-1605). SPEC §4.15.
 
 - ⬜ **T-1602 · The mobile shell** — effort: **high**
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
@@ -505,12 +506,16 @@ macOS runners, or a friend's Mac.
   stays out of phone builds for now (SPEC §4.15). Expect the gateway to need
   reconnect behaviour for a network that changes every time somebody walks out
   of a building, and for a phone that stops the app as soon as it is in the
-  background. The identifier is `com.linger.desktop` (see the *Parking lot*);
-  a phone build can have its own in a phone-only Tauri config, and it has to be
-  picked before the first TestFlight or Play upload, because neither store lets
-  it change afterwards. To confirm with Matt (raised 2026-10-02): keep the
-  app's data out of the phone's cloud backup, so what the phone stores doesn't
-  reach Apple or Google either.
+  background. **The phone identifier is `io.github.itsmattguenther.linger`**
+  (Matt, 2026-10-02), set in `tauri.android.conf.json` and
+  `tauri.ios.conf.json` so desktop keeps `com.linger.desktop`. It is built
+  from the GitHub address, which nobody else can claim, and neither store lets
+  it change after the first upload. **Phone backups are off by default with a
+  setting to opt in** (SPEC §4.15, Matt 2026-10-02): on iPhone the app's files
+  are marked "don't back up" and the setting lifts the mark; on Android the
+  backup rules leave the app's files out unless it is on. Whether sign-ins
+  can come along depends on what each phone's secure storage lets move; work
+  that out here.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
@@ -528,12 +533,32 @@ macOS runners, or a friend's Mac.
   from 2027). iPhone: TestFlight, which needs the Apple Developer Program
   ($99/year); a TestFlight build stops working after 90 days. Then Google Play
   ($25 once; 12 testers for 14 days before a new account can publish) and the
-  App Store, review, and store listings. **Both stores require a way to report
-  content and block people** in apps where people post things (Apple's
-  guideline 1.2), and Linger has neither: a scope question for Matt before any
-  store listing, not something to build quietly. Follow current vendor docs,
-  not memory — this changes every year.
+  App Store, review, and store listings. **Needs T-1605 first:** both stores
+  require report and block. Apple's guideline 1.2 also asks for a way to
+  filter objectionable material and for published contact details, and both
+  stores want terms of use; what those mean for a self-hosted app among
+  friends is settled here, with Matt. Follow current vendor docs, not memory —
+  this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
+
+- ⬜ **T-1605 · Report and block** — effort: **medium**
+  SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
+  1.2, Google Play's user-generated content policy), so they come before any
+  store listing, and they go in the desktop app too. The proposed shape, to
+  confirm with Matt before building:
+  **Report** is in a message's menu and on a person's card. It sends the
+  message (or the person) to the host of that server with an optional note,
+  because a self-hosted server has nobody else to send it to; the host already
+  can delete a message or remove a member (T-413). The host sees reports in
+  their host controls, with **no count anywhere** (AGENTS rule 3).
+  **Block** is on a person's card and is private: they aren't told. It hides
+  their messages from you and stops their DMs and knocks reaching you. Which
+  surfaces filter it (stream, media, search, presence) is the bulk of the work,
+  the same kind of filtering M11 folded into every query for DMs
+  ([`m11.md`](docs/tasks/m11.md)).
+  *Accept:* a report reaches the host and only the host; a blocked person's
+  messages, DMs and knocks never reach the person who blocked them, on either
+  app.
 
 ---
 

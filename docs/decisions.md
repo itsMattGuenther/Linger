@@ -658,8 +658,20 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   builds. Nothing ships to a phone until a phone build is added to the release
   workflow.
 
-**What it leaves for later:** the stores (T-1604) require a way to report
-content and block people in apps where people post things, which Linger
-doesn't have; that is a scope question for Matt before any store listing. And
-a phone app updates on its store's schedule, not ours, so phones will often be
+- **Phone backups leave Linger out by default.** Matt: by default the app's
+  data should stay out of iCloud and Google backups, but people who want it
+  backed up should be able to opt in. It is the same reason as no push, applied
+  to what the phone stores. A setting turns it on.
+- **Report and block, in both apps** (T-1605). Both stores require them in
+  apps where people post things. Matt agreed to add them, and to the desktop
+  app too if it made sense. It does: the server side is shared, and a report
+  goes to the host, who reads it in whichever app they use.
+- **The phone identifier is `io.github.itsmattguenther.linger`.** Matt left
+  the name to the session. A store never lets it change after the first upload,
+  so it has to be one nobody else can already hold. Linger owns no domain, and
+  by convention `com.linger.*` is for whoever owns linger.com. A name built
+  from the GitHub address is the open-source convention for that case. Desktop keeps
+  `com.linger.desktop`.
+
+A phone app updates on its store's schedule, not ours, so phones will often be
 a version behind their server; how far back compatibility goes is #315.

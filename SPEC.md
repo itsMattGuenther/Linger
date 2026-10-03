@@ -738,6 +738,18 @@ in the first message they get on connecting.
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
 phone's camera has its location stripped like any other (§4.10).
 
+**Phone backups leave Linger out unless you put it in.** A phone backs its apps up to
+Apple's or Google's cloud by default. The phone app opts out, so what it keeps (your
+list of servers and your settings) doesn't reach either company. A setting, off until
+you turn it on, includes it for anybody who would rather a new phone came with them.
+Messages and pictures are never in a backup either way: they live on the server.
+
+**Report and block come before any store listing** (T-1605). Both stores require them
+in apps where people post things. A report goes to the host, because there is nobody
+else to send it to, and the host can already delete a message or remove a member.
+Blocking someone hides them from you. Both go in the desktop app too: the server side
+is shared, and a host reads reports in whichever app they use.
+
 **What it does not do, yet: voice.** Phone voice would not pass through Apple or
 Google, since it goes to the host's server as desktop voice does. It is left out
 because a phone on speaker needs echo cancelling, which the desktop app does not
