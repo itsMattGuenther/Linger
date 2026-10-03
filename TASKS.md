@@ -509,8 +509,10 @@ macOS runners, or a friend's Mac.
   comes up. Thirty seconds in the background closes the connections (offline,
   as SPEC §4.15 says) and coming back opens them; losing the network closes
   them and getting it back reopens them at once (checked with airplane mode in
-  the emulator). **Still to do:** keeping sign-ins (a phone answers
-  "unavailable" for now, so it asks again every launch), the backup opt-in
+  the emulator). Android keeps sign-ins in its Keystore-backed store
+  (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
+  comes back signed in, with its tabs. **Still to do:** keeping sign-ins on
+  the iPhone (the Keychain, which needs a Mac to build), the backup opt-in
   setting, a real wifi-to-mobile-data switch on a real phone (the emulator
   reaches a local server over adb, which no network change touches),
   Linger's icons for the launcher (still Tauri's), and iOS, which needs a Mac. Setup is in `docs/development.md`.

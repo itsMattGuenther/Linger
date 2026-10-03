@@ -16,18 +16,24 @@
 //! That is why nothing here returns `Err` — every outcome, including "this
 //! computer has no keyring", is a value the frontend can render.
 //!
-//! The phone app has no keyring crate behind it yet (T-1602): phones keep
-//! secrets in their own stores, Keychain on iPhone and the Android Keystore.
-//! Until it does, it takes the no-wallet path above, so a phone asks for a
-//! sign-in each time the app starts, and nothing is written anywhere.
+//! On Android the same entries live in the platform's own store (T-1602):
+//! `keyring-core` with `android-native-keyring-store`, from the keyring
+//! crate's maintainers, which keeps each one in the app's private
+//! SharedPreferences encrypted with a key held in the Android Keystore. The
+//! key never leaves the Keystore and isn't in any backup, so a copy of the
+//! file is useless anywhere else. The iPhone has no store here yet: it takes
+//! the no-wallet path above, asking for a sign-in each time the app starts,
+//! until a Mac can build and check one.
 
 #[cfg(desktop)]
-use keyring::Entry;
+use keyring::{Entry, Error as StoreError};
+#[cfg(target_os = "android")]
+use keyring_core::{Entry, Error as StoreError};
 use serde::{Deserialize, Serialize};
 
 /// Keyring service name. Matches the bundle identifier so entries are
 /// recognisable in Seahorse / KWalletManager / Keychain Access.
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 const SERVICE: &str = "com.linger.desktop";
 
 /// Namespace every account name is built from. A parameter rather than a
@@ -90,43 +96,67 @@ pub enum SessionWrite {
 /// messages are D-Bus and platform jargon, so they go in parentheses after a
 /// plain sentence rather than being shown raw.
 #[cfg(desktop)]
-fn explain(err: &keyring::Error) -> String {
+fn explain(err: &StoreError) -> String {
     format!("No usable keyring on this computer ({err}).")
+}
+
+#[cfg(target_os = "android")]
+fn explain(err: &StoreError) -> String {
+    format!("This phone's secure storage didn't answer ({err}).")
+}
+
+/// Open the Android store, once: Tauri has already handed the app's context
+/// to `ndk-context`, which is all it needs. A failure is kept, so every call
+/// after it says the same thing rather than trying again mid-sign-in.
+#[cfg(target_os = "android")]
+fn android_store() -> Result<(), String> {
+    static OPENED: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    OPENED
+        .get_or_init(|| {
+            android_native_keyring_store::Store::new()
+                .map(|store| keyring_core::set_default_store(store))
+                .map_err(|err| explain(&err))
+        })
+        .clone()
+}
+
+/// One account's entry, in this device's store.
+#[cfg(any(desktop, target_os = "android"))]
+fn entry(account: &str) -> Result<Entry, String> {
+    #[cfg(target_os = "android")]
+    android_store()?;
+    Entry::new(SERVICE, account).map_err(|err| explain(&err))
 }
 
 /// One account's contents. `Missing` and `Unavailable` are different answers:
 /// the first means the keyring works and has nothing, the second means we could
 /// not ask.
-// A phone only ever answers `Unavailable` until T-1602 gives it a store.
-#[cfg_attr(mobile, allow(dead_code))]
+// An iPhone only ever answers `Unavailable` until it has a store.
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 enum Held {
     Found(String),
     Missing,
     Unavailable(String),
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn read(account: &str) -> Held {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => return Held::Unavailable(explain(&err)),
+        Err(reason) => return Held::Unavailable(reason),
     };
     match entry.get_password() {
         Ok(value) => Held::Found(value),
-        Err(keyring::Error::NoEntry) => Held::Missing,
+        Err(StoreError::NoEntry) => Held::Missing,
         Err(err) => Held::Unavailable(explain(&err)),
     }
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn write(account: &str, value: &str) -> SessionWrite {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => {
-            return SessionWrite::Unavailable {
-                reason: explain(&err),
-            }
-        }
+        Err(reason) => return SessionWrite::Unavailable { reason },
     };
     match entry.set_password(value) {
         Ok(()) => SessionWrite::Done,
@@ -136,43 +166,39 @@ fn write(account: &str, value: &str) -> SessionWrite {
     }
 }
 
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 fn delete(account: &str) -> SessionWrite {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => {
-            return SessionWrite::Unavailable {
-                reason: explain(&err),
-            }
-        }
+        Err(reason) => return SessionWrite::Unavailable { reason },
     };
     match entry.delete_credential() {
         // Deleting nothing is a success: the caller wanted no stored session
         // and there is none.
-        Ok(()) | Err(keyring::Error::NoEntry) => SessionWrite::Done,
+        Ok(()) | Err(StoreError::NoEntry) => SessionWrite::Done,
         Err(err) => SessionWrite::Unavailable {
             reason: explain(&err),
         },
     }
 }
 
-/// Why a phone can't keep a sign-in yet, in the words the app shows.
-#[cfg(mobile)]
+/// Why an iPhone can't keep a sign-in yet, in the words the app shows.
+#[cfg(target_os = "ios")]
 const NOT_ON_PHONES: &str = "Linger can't remember sign-ins on a phone yet.";
 
-#[cfg(mobile)]
+#[cfg(target_os = "ios")]
 fn read(_account: &str) -> Held {
     Held::Unavailable(NOT_ON_PHONES.to_string())
 }
 
-#[cfg(mobile)]
+#[cfg(target_os = "ios")]
 fn write(_account: &str, _value: &str) -> SessionWrite {
     SessionWrite::Unavailable {
         reason: NOT_ON_PHONES.to_string(),
     }
 }
 
-#[cfg(mobile)]
+#[cfg(target_os = "ios")]
 fn delete(_account: &str) -> SessionWrite {
     // Nothing was stored, so there is nothing to forget.
     SessionWrite::Done

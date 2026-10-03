@@ -441,6 +441,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
+   On Android the phone app (SPEC §4.15) keeps the same entries in the platform's
+   store: `keyring-core` with `android-native-keyring-store`, which encrypts each one
+   into the app's private SharedPreferences with a key that never leaves the Android
+   Keystore (`src-tauri/src/secrets.rs`). The iPhone takes the no-wallet path until a
+   Mac can build and check its Keychain store.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, message send 10/10s/user, upload slot 20/hour/user,

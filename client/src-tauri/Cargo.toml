@@ -78,6 +78,14 @@ gtk = "0.18"
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
 
+# Android's version of the OS keyring (T-1602, `secrets.rs`): the same entries,
+# kept in the app's private SharedPreferences encrypted with a key that never
+# leaves the Android Keystore. From the keyring crate's maintainers;
+# `keyring-core` is the base the keyring crate is moving to.
+[target.'cfg(target_os = "android")'.dependencies]
+keyring-core = "1"
+android-native-keyring-store = "1"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
 # Starting Linger at sign-in (#228): one value under the user's Run key
