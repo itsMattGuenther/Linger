@@ -48,6 +48,15 @@ it("ignores own, deleted and edited messages, and a room already being read", ()
   expect(played).toEqual(["dm"]);
 });
 
+it("somebody you blocked never makes a sound or a banner, mention or not (PROTOCOL §5)", async () => {
+  const blocked = { ...snapshot, blocked: ["friend"] };
+  considerFrame(server, { op: "message.create", s: 1, d: message }, blocked);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, room_id: "room", body: "@me hello" } }, blocked);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(played).toEqual([]);
+  expect(banners).toEqual([]);
+});
+
 it("visual mentions still use the silent native banner path", async () => {
   considerFrame(server, { op: "message.create", s: 1, d: { ...message, body: "@me hello" } }, snapshot);
   await vi.advanceTimersByTimeAsync(1200);

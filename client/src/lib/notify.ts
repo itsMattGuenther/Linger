@@ -142,6 +142,8 @@ export function considerFrame(
 
   const message = frame.d;
   if (message.author_id === me.id || message.deleted_at !== null) return;
+  // Somebody you blocked never makes a sound or a banner (PROTOCOL §5).
+  if (snapshot.blocked.includes(message.author_id)) return;
   // You are looking right at it. `isLooking` is the same clock the
   // read-marker uses: the window has your attention, not merely a room
   // selected on a second monitor.

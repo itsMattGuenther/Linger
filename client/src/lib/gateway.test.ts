@@ -18,7 +18,7 @@ import type { ReadyData } from "../generated/ReadyData";
 import type { Room } from "../generated/Room";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { User } from "../generated/User";
-import type { AuthedApi } from "./api";
+import { ApiError, type AuthedApi } from "./api";
 
 /** Every command the store sent down to the core, in order. */
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -55,6 +55,8 @@ const {
   disconnect,
   dismissKnock,
   hasNewActivity,
+  loadBlocks,
+  loadReports,
   KNOCK_TTL_MS,
   leaveWindow,
   loadNewer,
@@ -67,6 +69,7 @@ const {
   send,
   sendMessage,
   serverState,
+  setBlocked,
   trimHistory,
 } = await import("./gateway");
 
@@ -1215,5 +1218,109 @@ describe("sending before the server answers", () => {
     await expect(sent).rejects.toThrow("refused");
 
     expect(shown()).toEqual([]);
+  });
+});
+
+describe("report and block (PROTOCOL §5, T-1605)", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+  });
+
+  const notFound = new ApiError(404, { code: "NOT_FOUND", message: "Not here.", retry_after_ms: null });
+
+  it("a block made on another device holds here at once, and an unblock lifts it", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    arrive(HOME, { s: 2, op: "block.update", d: { user_id: "u-dex", blocked: true } } as ServerFrame);
+    expect(serverState(HOME).blocked).toEqual(["u-dex"]);
+    arrive(HOME, { s: 3, op: "block.update", d: { user_id: "u-dex", blocked: true } } as ServerFrame);
+    expect(serverState(HOME).blocked).toEqual(["u-dex"]);
+    arrive(HOME, { s: 4, op: "block.update", d: { user_id: "u-dex", blocked: false } } as ServerFrame);
+    expect(serverState(HOME).blocked).toEqual([]);
+  });
+
+  it("what a blocked person says is nothing new, and a DM with only them never lights", async () => {
+    await connect(fakeApi(HOME));
+    // Dex's DM had something unread before the block.
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), rooms: [room("r-garage", "garage", null)], dms: [dm("d1", ["u-matt", "u-dex"], "m0005")] }));
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+    arrive(HOME, { s: 2, op: "block.update", d: { user_id: "u-dex", blocked: true } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(false);
+
+    // In a room, Dex saying something makes nothing new; Callie still does.
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(10), author_id: "u-dex" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(false);
+    arrive(HOME, { s: 4, op: "message.create", d: { ...message(11), author_id: "u-callie" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
+  });
+
+  it("loads who you've blocked, and a server from before blocks has nobody", async () => {
+    let answer: () => unknown = () => ["u-dex"];
+    const api = fakeApi(HOME, (path) => {
+      expect(path).toBe("/me/blocks");
+      return answer();
+    });
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await loadBlocks(api);
+    expect(serverState(HOME).blocked).toEqual(["u-dex"]);
+
+    answer = () => {
+      throw notFound;
+    };
+    await loadBlocks(api);
+    expect(serverState(HOME).blocked).toEqual([]);
+  });
+
+  it("a block shows at once, and one the server refuses is put back", async () => {
+    const calls: string[] = [];
+    let refuse = false;
+    const api = {
+      baseUrl: HOME,
+      accessToken: async () => ({ token: "t", expiresAt: 0 }),
+      put: async (path: string) => {
+        calls.push(`PUT ${path}`);
+        if (refuse) throw new Error("refused");
+      },
+      delete: async (path: string) => {
+        calls.push(`DELETE ${path}`);
+      },
+    } as unknown as AuthedApi;
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+
+    const blocking = setBlocked(api, "u-dex", true);
+    expect(serverState(HOME).blocked).toEqual(["u-dex"]);
+    await blocking;
+    await setBlocked(api, "u-dex", false);
+    expect(serverState(HOME).blocked).toEqual([]);
+    expect(calls).toEqual(["PUT /me/blocks/u-dex", "DELETE /me/blocks/u-dex"]);
+
+    refuse = true;
+    await expect(setBlocked(api, "u-dex", true)).rejects.toThrow("refused");
+    expect(serverState(HOME).blocked).toEqual([]);
+  });
+
+  it("the host's open reports load, and are asked for again when they change; nobody else's app asks", async () => {
+    const asked: string[] = [];
+    const host = { ...person("u-matt", "Matt"), is_host: true };
+    const api = fakeApi(HOME, (path) => {
+      asked.push(path);
+      return [{ id: "r1", reporter_id: "u-callie", user_id: "u-dex", message: null, note: null, created_at: 1 }];
+    });
+    await connect(api);
+    arrive(HOME, ready({ user: host }));
+    await loadReports(api);
+    expect(serverState(HOME).reports?.map((report) => report.id)).toEqual(["r1"]);
+    arrive(HOME, { s: 2, op: "reports.changed", d: {} } as ServerFrame);
+    await vi.waitFor(() => expect(asked.filter((path) => path === "/reports")).toHaveLength(2));
+
+    await disconnect(HOME);
+    const member = fakeApi(HOME);
+    await connect(member);
+    arrive(HOME, ready({ user: person("u-callie", "Callie") }));
+    // A member's app never asks: `fakeApi` without answers would throw.
+    await loadReports(member);
+    expect(serverState(HOME).reports).toBeNull();
   });
 });

@@ -35,6 +35,8 @@ import type { EditMessageRequest } from "../generated/EditMessageRequest";
 import type { Message } from "../generated/Message";
 import type { MessageId } from "../generated/MessageId";
 import type { NotifyRule } from "../generated/NotifyRule";
+import type { Report } from "../generated/Report";
+import type { ReportRequest } from "../generated/ReportRequest";
 import type { PresenceEntry } from "../generated/PresenceEntry";
 import type { PresenceState } from "../generated/PresenceState";
 import type { Room } from "../generated/Room";
@@ -60,7 +62,7 @@ import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound, type SoundCue } from "./sound";
 import { controlCue, voiceCue } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "./voice";
-import type { AuthedApi } from "./api";
+import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 
 /**
@@ -194,6 +196,19 @@ export interface GatewayState {
   /** "Always notify me when this person posts" (SPEC §4.2). */
   notifyRules: NotifyRule[];
   /**
+   * Who you've blocked on this server (PROTOCOL §5, "Report and block"):
+   * each of their messages is drawn as a grey line you can open, and none
+   * chimes or lights a DM. Kept up by `block.update`, so a block made on
+   * another of your devices holds here at once.
+   */
+  blocked: UserId[];
+  /**
+   * The open reports, for the host, newest first; null for anybody else, and
+   * until they've loaded. The list is the reports themselves: nothing here
+   * or anywhere counts them (AGENTS rule 3).
+   */
+  reports: Report[] | null;
+  /**
    * User id → when this client watched their connection go away.
    *
    * The roster says how long somebody has been gone, and the server is no help
@@ -322,6 +337,8 @@ const EMPTY: GatewayState = {
   newest: {},
   leftOff: {},
   notifyRules: [],
+  blocked: [],
+  reports: null,
   offlineAt: {},
   knocks: [],
   sessionId: null,
@@ -712,8 +729,9 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // Rooms nobody has opened have no stream to fold this into, and they are
       // exactly the rooms whose label has to change weight. So the newest id is
       // tracked separately from the history.
+      // Somebody you blocked saying something isn't something new for you.
       const held = next.newest[message.room_id];
-      if (frame.op === "message.create" && (held === undefined || held < message.id)) {
+      if (frame.op === "message.create" && !next.blocked.includes(message.author_id) && (held === undefined || held < message.id)) {
         next = { ...next, newest: { ...next.newest, [message.room_id]: message.id } };
       }
       // Something you said, from this device or another one, is something
@@ -775,6 +793,14 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         },
       };
     }
+    case "block.update": {
+      // A block or unblock made on another of your devices (PROTOCOL §5).
+      const { user_id, blocked } = frame.d;
+      const without = current.blocked.filter((id) => id !== user_id);
+      return { ...current, blocked: blocked ? [...without, user_id] : without };
+    }
+    // `reports.changed` only says to ask again, which isn't the fold's to do:
+    // the listener below asks.
     // `reaction.update` is still sent, and deliberately not applied: the app
     // shows no reactions during the trial (#168), and a frame that changes
     // nothing on screen should not re-render anything.
@@ -887,11 +913,11 @@ export function positionOf(server: string): Position {
  * The fields that change without a frame, which the owner keeps and shares
  * (docs/design/architecture.md, the table under "How windows share state").
  */
-export type SharedLocal = Pick<GatewayState, "myVoice" | "voiceFailed" | "read" | "readLoaded" | "notifyRules">;
+export type SharedLocal = Pick<GatewayState, "myVoice" | "voiceFailed" | "read" | "readLoaded" | "notifyRules" | "blocked" | "reports">;
 
 export function sharedLocalOf(server: string): SharedLocal {
-  const { myVoice, voiceFailed, read, readLoaded, notifyRules } = stateOf(server);
-  return { myVoice, voiceFailed, read, readLoaded, notifyRules };
+  const { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports } = stateOf(server);
+  return { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports };
 }
 
 /** A viewer takes the owner's copy of those fields. */
@@ -1030,6 +1056,8 @@ async function attachListeners(): Promise<void> {
       // The card is drawn by the fold above; the noise is a side effect and
       // belongs out here with the other one. `playKnock` applies the mute and
       // the quiet hours itself, so a knock at 3am is a card and nothing more.
+      // The host's open reports changed: ask for them again (PROTOCOL §5).
+      if (frame.op === "reports.changed") void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
       if (!replayed) {
         if (frame.op === "knock") void playKnock();
         const cue = voiceCue(frame, before, next);
@@ -1759,7 +1787,12 @@ export function hasNewActivity(current: GatewayState, roomId: RoomId): boolean {
   const newest = current.newest[roomId];
   if (newest === undefined) return false;
   const read = current.read[roomId];
-  return read === undefined || read < newest;
+  if (read !== undefined && read >= newest) return false;
+  // A DM with nobody in it but people you blocked has nothing new for you,
+  // whatever arrived before you blocked them (PROTOCOL §5).
+  const dm = current.dms.find((room) => room.id === roomId);
+  const others = dm?.member_ids?.filter((id) => id !== current.me?.id) ?? [];
+  return !(others.length > 0 && others.every((id) => current.blocked.includes(id)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1768,6 +1801,75 @@ export function hasNewActivity(current: GatewayState, roomId: RoomId): boolean {
 
 function sameRule(a: NotifyRule, b: NotifyRule): boolean {
   return a.target_user_id === b.target_user_id && a.room_id === b.room_id;
+}
+
+// ---------------------------------------------------------------------------
+// Report and block (SPEC §4.15, PROTOCOL §5, T-1605)
+// ---------------------------------------------------------------------------
+
+/** A server from before report and block answers 404 for them: nobody blocked, nothing to report. */
+function missing(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
+/** Who you've blocked on this server. */
+export async function loadBlocks(api: AuthedApi): Promise<void> {
+  const blocked = await api.get<UserId[]>("/me/blocks").catch((error: unknown) => {
+    if (missing(error)) return [];
+    throw error;
+  });
+  await settled(api.baseUrl);
+  if (linkFor(api) === null) return;
+  publish(api.baseUrl, { ...stateOf(api.baseUrl), blocked });
+}
+
+/**
+ * Block or unblock somebody. The local copy moves first, so their messages
+ * fold away at once; a refusal puts it back and is thrown for the card to say.
+ */
+export async function setBlocked(api: AuthedApi, userId: UserId, on: boolean): Promise<void> {
+  const server = api.baseUrl;
+  const before = stateOf(server).blocked;
+  const without = before.filter((id) => id !== userId);
+  publish(server, { ...stateOf(server), blocked: on ? [...without, userId] : without });
+  try {
+    if (on) await api.put(`/me/blocks/${userId}`);
+    else await api.delete(`/me/blocks/${userId}`);
+  } catch (error) {
+    if (linkFor(api) !== null) publish(server, { ...stateOf(server), blocked: before });
+    throw error;
+  }
+}
+
+/** The open reports, if you're this server's host; nothing to ask otherwise. */
+export async function loadReports(api: AuthedApi | null): Promise<void> {
+  if (api === null) return;
+  await settled(api.baseUrl);
+  if (stateOf(api.baseUrl).me?.is_host !== true) return;
+  const reports = await api.get<Report[]>("/reports").catch((error: unknown) => {
+    if (missing(error)) return [];
+    throw error;
+  });
+  if (linkFor(api) === null) return;
+  publish(api.baseUrl, { ...stateOf(api.baseUrl), reports });
+}
+
+/** Send the host a message, or a person, to look at (PROTOCOL §5). */
+export function sendReport(api: AuthedApi, request: ReportRequest): Promise<Report> {
+  return api.post<Report>("/reports", request);
+}
+
+/** The host dealt with a report: off the list, here at once and everywhere with `reports.changed`. */
+export async function closeReport(api: AuthedApi, id: Report["id"]): Promise<void> {
+  const server = api.baseUrl;
+  const before = stateOf(server).reports;
+  if (before !== null) publish(server, { ...stateOf(server), reports: before.filter((report) => report.id !== id) });
+  try {
+    await api.delete(`/reports/${id}`);
+  } catch (error) {
+    if (linkFor(api) !== null) publish(server, { ...stateOf(server), reports: before });
+    throw error;
+  }
 }
 
 /** "Always notify me when this person posts" — the whole list (SPEC §4.2). */

@@ -8,7 +8,9 @@ import {
   dismissKnock,
   type GatewayState,
   leaveVoice,
+  loadBlocks,
   loadNotifyRules,
+  loadReports,
   noteDm,
   retryAllNow,
   saveStatus,
@@ -222,6 +224,8 @@ function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInf
     if (paused) return;
     void loadReadMarkers(api);
     void loadNotifyRules(api).catch(() => undefined);
+    void loadBlocks(api).catch(() => undefined);
+    void loadReports(api).catch(() => undefined);
   }, [api, paused]);
 
   // Around, in no room: a conversation shown beside the list, or in a
