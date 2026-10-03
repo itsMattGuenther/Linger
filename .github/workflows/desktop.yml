@@ -6,7 +6,8 @@ name: desktop
 # noise. The Linux shell check in ci.yml already catches ordinary breakage,
 # WebKitGTK is the strictest of the three engines, and release.yml builds all
 # three on a tag anyway. Run this before a release, or after touching
-# client/src-tauri.
+# client/src-tauri. Since the phone app (2026-10-02) it builds Android and the
+# Rust half of iOS too.
 on:
   workflow_dispatch:
   # nightly.yml builds both every night, so a break shows up the next morning.
@@ -57,4 +58,64 @@ jobs:
           workspaces: client/src-tauri
       - name: build shell
         run: cargo build --manifest-path client/src-tauri/Cargo.toml
+
+  # The phone app (SPEC §4.15): the same crate, built for Android the way a
+  # developer builds it (docs/development.md, "The phone app"). A debug APK for
+  # real phones' processors; nothing is signed or published.
+  shell-android:
+    name: phone app builds for Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+        working-directory: client
+      # Java 21: the Gradle in gen/android can't run on 25.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+      # The runner has the Android SDK and an NDK already.
+      - name: point Tauri at the NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: build the Android app
+        working-directory: client
+        run: pnpm tauri android build --debug --target aarch64 --apk
+
+  # The iPhone needs a Mac and its Xcode project isn't made yet, so this only
+  # proves the Rust half builds for iOS: the phone-only code paths compile
+  # and nothing desktop-only leaks into them.
+  shell-ios:
+    name: phone app's Rust builds for iOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: build frontend
+        working-directory: client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vite build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+      - name: build shell
+        run: cargo build --manifest-path client/src-tauri/Cargo.toml --target aarch64-apple-ios
 

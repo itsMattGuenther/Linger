@@ -106,7 +106,7 @@ jobs:
           |---|---|
           | Every CI check | ${{ needs.tests.result }} |
           | Packages on Linux and Windows | ${{ needs.packages.result }} |
-          | Shell builds on Windows and macOS | ${{ needs.desktop.result }} |
+          | Shell builds on Windows and macOS, and the phone app's | ${{ needs.desktop.result }} |
           | Every browser test, three times | ${{ needs.repeat.result }} |
 
           Only the repeated browser tests failing usually means a test that fails at random. The failed job names it, and [the testing strategy](https://github.com/${{ github.repository }}/blob/main/docs/testing-strategy.md#a-test-that-fails-at-random) says what to do. Close this once the nightly run is green again.
