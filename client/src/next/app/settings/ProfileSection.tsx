@@ -107,7 +107,7 @@ function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["
           <p className="nx-set-away-words">
             You're away: <span className="nx-set-away-message">{saved?.away_message}</span>
           </p>
-          <Button size="sm" icon="sun" disabled={busy} onClick={() => void commit({ ...draft, awayMessage: "" })}>
+          <Button size="sm" variant="away" icon="sun" disabled={busy} onClick={() => void commit({ ...draft, awayMessage: "" })}>
             I'm back
           </Button>
         </div>

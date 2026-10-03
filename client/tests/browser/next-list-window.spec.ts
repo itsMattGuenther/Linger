@@ -469,6 +469,47 @@ test("the first close to the tray says where Linger went, once ever, and that yo
   expect(await notices()).toEqual([]);
 });
 
+// Coming back to the computer while still away is easy to miss (#392): the
+// top card says so, once you're back after a long quiet, and only says so.
+test("back at the computer while still away, the top card says so, and nothing sets you back by itself (#392)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one");
+  const you = page.getByRole("region", { name: "You" });
+  await you.getByRole("button", { name: "Away" }).click();
+  const editor = page.getByRole("dialog", { name: "Away message" });
+  await editor.getByRole("button", { name: "asleep 💤" }).click();
+  await editor.getByRole("button", { name: "I'm away" }).click();
+  await expect(you).toHaveAttribute("data-away", "yes");
+  const nudge = you.getByRole("status");
+  await expect(nudge).toHaveCount(0);
+
+  // Using Linger right after going away says nothing.
+  await page.mouse.move(100, 300);
+  await page.mouse.move(120, 320);
+  await expect(nudge).toHaveCount(0);
+
+  // Over ten minutes with nothing, then the mouse moves.
+  await page.clock.fastForward("11:00");
+  await page.mouse.move(140, 340);
+  await expect(nudge).toHaveText("Welcome back. You're still away.");
+  await expect(you.getByRole("button", { name: "I'm back" })).toBeVisible();
+  await expect(you).toHaveAttribute("data-away", "yes");
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("PATCH")).length).toBe(1);
+
+  // Waved off, it goes, and you stay away.
+  await nudge.getByRole("button", { name: "Stay away for now" }).click();
+  await expect(nudge).toHaveCount(0);
+  await expect(you).toHaveAttribute("data-away", "yes");
+
+  // Back again after another long quiet, it says so again; I'm back takes it away.
+  await page.clock.fastForward("11:00");
+  await page.mouse.move(160, 360);
+  await expect(nudge).toBeVisible();
+  await you.getByRole("button", { name: "I'm back" }).click();
+  await expect(nudge).toHaveCount(0);
+  await expect(you).not.toHaveAttribute("data-away", "yes");
+});
+
 /** Join voice in #general as a chat window would ask, once the connection is up. */
 async function joinGeneral(page: Page) {
   const bar = page.getByRole("region", { name: /In voice/ });

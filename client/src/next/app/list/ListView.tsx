@@ -6,6 +6,7 @@ import { LogoMark } from "../LogoMark";
 import "./ListView.css";
 import { ServerBody, type ServerBodyActions } from "./ServerBody";
 import { type ServerListing, ServerSection } from "./ServerSection";
+import type { AwayNudge } from "./AwayNudge";
 import { type YouActions, YouCard } from "./YouCard";
 import { type AwayEverywhere, YouEverywhere } from "./YouEverywhere";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
@@ -71,6 +72,11 @@ interface ListShared {
   /** One server: changing your status and going away, from the top card. */
   you?: YouActions;
   /**
+   * You're back at the computer and still away (#392): the top card says so,
+   * beside I'm back, until you come back or wave it off.
+   */
+  nudge?: AwayNudge;
+  /**
    * One server: your name on the top card opens your own card, as friends
    * see it (#271), and this is its Edit profile: Settings → Profile.
    */
@@ -92,7 +98,7 @@ interface ListShared {
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, notes, voice, you, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock, onUnfold } = props;
+  const { onClose, onSettings, notices, notes, voice, you, nudge, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock, onUnfold } = props;
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
   const gear =
@@ -140,7 +146,7 @@ export function ListView(props: ListViewProps) {
           {name}
         </TitleBar>
 
-        {only?.model.me ? <YouCard me={only.model.me} actions={you} onEditProfile={onEditProfile} /> : null}
+        {only?.model.me ? <YouCard me={only.model.me} actions={you} nudge={nudge} onEditProfile={onEditProfile} /> : null}
 
         <div className="nx-list-scroll">
           {only ? (
@@ -176,7 +182,7 @@ export function ListView(props: ListViewProps) {
         Linger
       </TitleBar>
 
-      {me ? <YouEverywhere me={me} servers={servers} actions={everywhere} /> : null}
+      {me ? <YouEverywhere me={me} servers={servers} actions={everywhere} nudge={nudge} /> : null}
 
       <div className="nx-list-scroll">
         {servers.map((listing, index) => (

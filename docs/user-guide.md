@@ -642,6 +642,13 @@ recent one or write your own; setting one is what makes you away, and it shows
 instead of your status. With several servers, tick where it shows. **I'm
 back** clears it.
 
+While you're away, the top of your list looks it: **I'm back** is filled in
+a warm cream, and your away message sits where your status was, with the
+moon. When you come back to your computer after ten minutes or more and
+you're still away, Linger says so there: "Welcome back. You're still away."
+It never brings you back by itself. Press **I'm back**, or **✕** to stay
+away.
+
 ## Your display name
 
 Your display name is what people see in their lists and on your messages.

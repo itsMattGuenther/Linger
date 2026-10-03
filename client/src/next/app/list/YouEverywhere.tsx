@@ -4,6 +4,7 @@ import { awayOn, serverNames } from "../../core/servers";
 import { Button, Marker, MARKER_WORDS, Name } from "../../kit";
 import { markerFor } from "../markers";
 import { AwayEditor } from "./AwayEditor";
+import { type AwayNudge, AwayNudgeLine } from "./AwayNudge";
 import { serverColor, type ServerListing } from "./ServerSection";
 import "./YouCard.css";
 
@@ -23,7 +24,7 @@ export interface AwayEverywhere {
  * you, and whether you're away. Your name and status on each server live in
  * that server's section. Away asks which servers to show it on.
  */
-export function YouEverywhere({ me, servers, actions }: { me: User; servers: ServerListing[]; actions?: AwayEverywhere }) {
+export function YouEverywhere({ me, servers, actions, nudge }: { me: User; servers: ServerListing[]; actions?: AwayEverywhere; nudge?: AwayNudge }) {
   const away = awayOn(servers);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export function YouEverywhere({ me, servers, actions }: { me: User; servers: Ser
   };
 
   return (
-    <section className="nx-you" aria-label="You">
+    <section className="nx-you" aria-label="You" data-away={away.length > 0 ? "yes" : undefined}>
       <div className="nx-you-top">
         <div className="nx-you-who">
           <Name person={me} size="display" />
@@ -70,7 +71,7 @@ export function YouEverywhere({ me, servers, actions }: { me: User; servers: Ser
         {actions ? (
           <div ref={awayButton}>
             {away.length > 0 ? (
-              <Button size="sm" variant="secondary" icon="sun" busy={busy} onClick={() => void comeBack()}>
+              <Button size="sm" variant="away" icon="sun" busy={busy} onClick={() => void comeBack()}>
                 I'm back
               </Button>
             ) : (
@@ -89,6 +90,8 @@ export function YouEverywhere({ me, servers, actions }: { me: User; servers: Ser
           </div>
         ) : null}
       </div>
+
+      {nudge && away.length > 0 ? <AwayNudgeLine nudge={nudge} /> : null}
 
       {problem ? (
         <p className="nx-you-problem" role="alert">

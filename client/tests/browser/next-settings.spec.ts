@@ -127,6 +127,7 @@ test.describe("profile", () => {
     await open(page, "?away");
     const block = page.getByRole("region", { name: "Your Status" });
     await expect(block).toContainText("You're away: walking the dog");
+    await expect(block.getByRole("button", { name: "I'm back" })).toHaveAttribute("data-variant", "away");
     await block.getByRole("button", { name: "I'm back" }).click();
     await expect(block).not.toContainText("You're away");
     const sent = (await did(page)).find((line) => line.startsWith("status:"));

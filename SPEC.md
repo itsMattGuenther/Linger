@@ -382,6 +382,14 @@ A user's **status** is a small card, not a bio field:
   link. No icons or emoji per label: three at most, a small card, not a bio.
 - Optional: an away message that supersedes the status when set
 
+Being away is easy to forget once you're back, and friends see you away the
+whole time (#392). So your own card looks different while you're away, in the
+away message's warm and never the lamp, which means something new for you.
+And when Linger sees you again after ten minutes with no input in any of its
+windows, it says you're still away, beside I'm back. It never sets you back by
+itself: away is something you choose (§4.3). It knows only that there was
+input, never what it was.
+
 A status is words. It has no picture: a photo goes in a room, where people see
 it without opening anybody's card and Media keeps it (#269, `docs/decisions.md`).
 
