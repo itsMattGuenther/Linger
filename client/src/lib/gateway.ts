@@ -716,6 +716,15 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       if (frame.op === "message.create" && (held === undefined || held < message.id)) {
         next = { ...next, newest: { ...next.newest, [message.room_id]: message.id } };
       }
+      // Something you said, from this device or another one, is something
+      // you've seen, and so is everything before it: saying it is catching
+      // up. Without this, a phone lit a DM for what its owner had just sent
+      // from their computer (Matt, 2026-10-03). Only this device's copy
+      // moves; the device that sent it tells the server.
+      const read = next.read[message.room_id];
+      if (frame.op === "message.create" && message.author_id === next.me?.id && (read === undefined || read < message.id)) {
+        next = { ...next, read: { ...next.read, [message.room_id]: message.id } };
+      }
       // Saying the thing is how you stop typing it. Without this the line
       // hangs around for a few seconds after the message it was announcing has
       // already arrived, which reads as a second message that never comes.

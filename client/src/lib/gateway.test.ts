@@ -1004,6 +1004,26 @@ describe("DMs", () => {
     expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
   });
 
+  it("doesn't mark a DM new for what you said yourself, from this device or another", async () => {
+    await connect(fakeApi(HOME));
+    const matt = person("u-matt", "Matt");
+    arrive(HOME, ready({ user: matt, dms: [dm("d1", ["u-matt", "u-callie"])] }));
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(false);
+
+    // Callie writes: something new.
+    arrive(HOME, { s: 2, op: "message.create", d: { ...message(1), room_id: "d1", author_id: "u-callie" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+
+    // Matt answers from his computer, and this is his phone: answering is
+    // catching up, so there's nothing new any more.
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(2), room_id: "d1", author_id: "u-matt" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(false);
+
+    // And Callie again: new again.
+    arrive(HOME, { s: 4, op: "message.create", d: { ...message(3), room_id: "d1", author_id: "u-callie" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+  });
+
   it("a person who is in no DMs has an empty list, not somebody else's", async () => {
     await connect(fakeApi(HOME));
     // `ready` carries the DMs *this person* is in, so a stranger's client has
