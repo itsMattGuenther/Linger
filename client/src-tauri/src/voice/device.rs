@@ -238,10 +238,20 @@ fn input_stream(
     tx: &mpsc::Sender<Vec<i16>>,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let config = match pick(device.supported_input_configs()?) {
-        Some(config) => config,
-        None => device.default_input_config()?,
-    };
+    opened(
+        pick(device.supported_input_configs()?),
+        || Ok(device.default_input_config()?),
+        |config| open_input(device, config, tx, alarm),
+    )
+}
+
+/// A stream from a microphone, in one format it offered.
+fn open_input(
+    device: &cpal::Device,
+    config: SupportedStreamConfig,
+    tx: &mpsc::Sender<Vec<i16>>,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
     let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
     let config_format = config.sample_format();
     let alarm = alarm.clone();
@@ -509,10 +519,23 @@ fn output_stream(
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let config = match pick(device.supported_output_configs()?) {
-        Some(config) => config,
-        None => device.default_output_config()?,
-    };
+    opened(
+        pick(device.supported_output_configs()?),
+        || Ok(device.default_output_config()?),
+        |config| open_output(device, config, lanes, cues, deafened, rate, alarm),
+    )
+}
+
+/// A stream to an output device in one format it offered.
+fn open_output(
+    device: &cpal::Device,
+    config: SupportedStreamConfig,
+    lanes: &Arc<Mutex<HashMap<String, Lane>>>,
+    cues: &Cues,
+    deafened: &Arc<AtomicBool>,
+    rate: &AtomicU32,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
     let channels = usize::from(config.channels());
     let device_rate = config.sample_rate();
     // Whatever was queued was for the device that just went; the new one may
@@ -720,6 +743,31 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Open a device in the format `pick` preferred and, when it won't open that
+/// one, in its own default. Some devices list a format they then refuse: a
+/// Logitech PRO X 2 headset on Windows answered "The parameter is incorrect"
+/// (os error -2147024809) for the mono 48 kHz one it had listed, so a friend
+/// couldn't join voice at all (2026-10-03). A device's default is the format
+/// Windows mixes in, which always opens; anything else about it (its rate,
+/// its channels) the path already converts. Nothing preferred: the default.
+/// Both refused: the first refusal, which is what was asked for.
+fn opened<C, S, E>(
+    preferred: Option<C>,
+    default: impl FnOnce() -> Result<C, E>,
+    mut open: impl FnMut(C) -> Result<S, E>,
+) -> Result<S, E> {
+    let Some(config) = preferred else {
+        return open(default()?);
+    };
+    match open(config) {
+        Ok(stream) => Ok(stream),
+        Err(refused) => match default() {
+            Ok(fallback) => open(fallback).map_err(|_| refused),
+            Err(_) => Err(refused),
+        },
+    }
 }
 
 /// Prefer 48 kHz, prefer mono, and take any sample format the callbacks can
@@ -1104,6 +1152,65 @@ fn wait_or_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_that_opens_what_it_listed_is_opened_that_way() {
+        let mut tried = Vec::new();
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || panic!("the default isn't asked for"),
+            |config| {
+                tried.push(config);
+                Ok(config)
+            },
+        );
+        assert_eq!(got, Ok("mono"));
+        assert_eq!(tried, ["mono"]);
+    }
+
+    #[test]
+    fn a_device_that_refuses_what_it_listed_opens_in_its_own_default() {
+        let mut tried = Vec::new();
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || Ok("its mix format"),
+            |config| {
+                tried.push(config);
+                if config == "mono" {
+                    Err("The parameter is incorrect.")
+                } else {
+                    Ok(config)
+                }
+            },
+        );
+        assert_eq!(got, Ok("its mix format"));
+        assert_eq!(tried, ["mono", "its mix format"]);
+    }
+
+    #[test]
+    fn refused_both_ways_it_says_why_the_first_one_failed() {
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || Ok("default"),
+            |config| {
+                Err(if config == "mono" {
+                    "refused mono"
+                } else {
+                    "refused default"
+                })
+            },
+        );
+        assert_eq!(got, Err("refused mono"));
+        let got: Result<&str, &str> =
+            opened(Some("mono"), || Err("no default"), |_| Err("refused mono"));
+        assert_eq!(got, Err("refused mono"));
+    }
+
+    #[test]
+    fn a_device_with_nothing_preferred_opens_in_its_default() {
+        let got: Result<&str, &str> = opened(None, || Ok("default"), Ok);
+        assert_eq!(got, Ok("default"));
+    }
 
     #[test]
     fn a_stereo_frame_becomes_one_sample() {
