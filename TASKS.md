@@ -5,7 +5,9 @@ structure and this file) and implementation sessions — run by any contributor,
 with any coding agent. It is a live document: claim tasks, check them off, add
 discoveries, and keep it truthful.
 
-Tasks are marked **⬜ not started**, **⏳ claimed** (name + date), or **✅ done**
+Tasks are marked **⬜ not started**, **⏳ claimed** (name + date), **🟡 started**
+(part done, with what's left), **⏸ waiting** (on purpose, for a decision or
+another task), or **✅ done**
 — emoji, not markdown `- [ ]` checkboxes, so the state of the queue is visible
 at a glance while scrolling. Use the same characters when you add or move a task.
 
@@ -502,6 +504,9 @@ macOS runners, or a friend's Mac.
   report and block come before any store listing (T-1605). SPEC §4.15.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
+  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone half waits
+  until Android is out (Matt has no iPhone; docs/decisions.md, "Android
+  first, Apple after").*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
   builds for Android with the desktop-only code switched off (`phone_app` in
   `src/lib.rs`, `capabilities/phone.json`, voice moved to
@@ -564,11 +569,14 @@ macOS runners, or a friend's Mac.
   and Back returns to Search as it was left. Settings goes back with ← too.
   Rows and the title bar are 44 and 48 px tall, so a thumb hits them, and
   `next-phone.spec.ts` checks that no screen reaches past the phone's edge.
-  Checked in the emulator with Android's own Back. **Still to do:** one-hand
-  reach, judged on a phone somebody holds, and an edge swipe for Back on the
-  iPhone, which has no Back of its own.
-  Also check that an iPhone camera photo uploads as something the server
-  reads; iPhones save HEIC.
+  Checked in the emulator with Android's own Back. **Still to do, on Matt's
+  Pixel:** one-hand reach (open a room, scroll back, send, Back, Media,
+  Search, a friend's card, Away and back, all with one thumb), the same at
+  Android's largest Font size, and a photo from the gallery and one taken
+  with the camera. **Waiting for the iPhone** (Android first): an edge swipe
+  for Back, since the iPhone has no Back of its own, and checking that an
+  iPhone camera photo uploads as something the server reads (iPhones save
+  HEIC).
   Seen on the first run in the emulator (2026-10-02): the list's title bar
   draws under the phone's clock and icons, its ✕ means nothing on a phone, the
   sign-in note says "this computer", and everything that opens another window
@@ -577,7 +585,10 @@ macOS runners, or a friend's Mac.
   commands, so all of those have to open inside the list's window instead.
   *Accept:* usable one-handed on a phone somebody actually owns.
 
-- ⬜ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+- ⏸ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+  *Waiting (Matt, 2026-10-03):* starts once T-1605 is done and Matt says go.
+  Android first, on Google Play, with Matt paying the $25; Apple only after it
+  has worked well there.
   Friends first, then the stores. Android: a signed APK on the GitHub release
   (Google requires registered developers even outside its store, worldwide
   from 2027). iPhone: TestFlight, which needs the Apple Developer Program

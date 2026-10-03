@@ -690,6 +690,13 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   by convention `com.linger.*` is for whoever owns linger.com. A name built
   from the GitHub address is the open-source convention for that case. Desktop keeps
   `com.linger.desktop`.
+- **Android first, Apple after** (Matt, 2026-10-03). Matt has no iPhone, and
+  Apple costs $99 a year to Google's $25 once. So the phone app goes out on
+  Google Play first, with Matt paying the $25, and only once it has worked
+  well there does it go to Apple. Until then the iPhone build only keeps
+  compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
+  wait with it. Getting the app to other people (T-1604) waits until report
+  and block are done and Matt says go.
 
 A phone app updates on its store's schedule, not ours, so phones will often be
 a version behind their server; how far back compatibility goes is #315.
