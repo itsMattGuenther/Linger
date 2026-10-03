@@ -239,7 +239,7 @@ fn input_stream(
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
     opened(
-        pick(device.supported_input_configs()?),
+        preferred(device.supported_input_configs()?),
         || Ok(device.default_input_config()?),
         |config| open_input(device, config, tx, alarm),
     )
@@ -520,7 +520,7 @@ fn output_stream(
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
     opened(
-        pick(device.supported_output_configs()?),
+        preferred(device.supported_output_configs()?),
         || Ok(device.default_output_config()?),
         |config| open_output(device, config, lanes, cues, deafened, rate, alarm),
     )
@@ -768,6 +768,27 @@ fn opened<C, S, E>(
             Ok(fallback) => open(fallback).map_err(|_| refused),
             Err(_) => Err(refused),
         },
+    }
+}
+
+/// The format to try first, before the device's own default (`opened`).
+///
+/// On Windows that's the device's own: none of ours. Windows mixes every
+/// device in one format, opens that one for anybody, and is asked for any
+/// other only through a conversion a driver may get wrong. Two friends'
+/// headsets did (2026-10-03, #398): a Logitech PRO X 2 refused the 16-bit
+/// format outright, and a SteelSeries Arctis Nova 5's microphone opened in it
+/// and stayed silent, where Discord, which takes the device's own, heard it.
+/// The path converts whatever rate, channels and samples the device has.
+/// Elsewhere, 48 kHz, mono and 16-bit where offered, as `pick` chooses.
+fn preferred(
+    ranges: impl Iterator<Item = SupportedStreamConfigRange>,
+) -> Option<SupportedStreamConfig> {
+    if cfg!(windows) {
+        drop(ranges);
+        None
+    } else {
+        pick(ranges)
     }
 }
 
@@ -1198,6 +1219,18 @@ mod tests {
             surround.map(|c| (c.channels(), c.sample_format())),
             Some((8, SampleFormat::F32))
         );
+    }
+
+    #[test]
+    fn windows_opens_a_device_in_its_own_format_and_elsewhere_we_choose() {
+        let listed = [range(2, SampleFormat::F32), range(2, SampleFormat::I16)];
+        let chosen = preferred(listed.into_iter()).map(|config| config.sample_format());
+        if cfg!(windows) {
+            // Nothing of ours: `opened` goes straight to the device's own (#398).
+            assert_eq!(chosen, None);
+        } else {
+            assert_eq!(chosen, Some(SampleFormat::I16));
+        }
     }
 
     #[test]
