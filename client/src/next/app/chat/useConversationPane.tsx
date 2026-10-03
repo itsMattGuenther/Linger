@@ -330,7 +330,9 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     if (api && roomId !== null) startedTyping(api, roomId);
   }, [api, roomId]);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader() }),
+    // On the phone the cursor goes in the box when it's tapped: putting it there
+    // on opening raises the keyboard over half the conversation (SPEC §4.15).
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader() }),
     [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep],
   );
 
