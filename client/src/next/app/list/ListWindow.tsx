@@ -63,6 +63,7 @@ import { loadCloseList } from "../../core/closing";
 import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
+import { useBackButton } from "../useBackButton";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
 import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
@@ -552,6 +553,9 @@ function Servers({
   const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey } | null>(null);
   const phoneSettingsOpen = useRef(false);
   phoneSettingsOpen.current = phoneSettings !== null;
+  // On the phone, Back from a conversation is the list again (SPEC §4.15).
+  // Settings, drawn over everything, handles its own.
+  useBackButton(unfolded && phoneSettings === null, fold);
   const sectionAsked = useRef(new Set<(key: string | null) => void>());
   useEffect(() => {
     if (!onPhone()) return;

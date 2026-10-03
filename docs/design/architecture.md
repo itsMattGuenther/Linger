@@ -430,6 +430,10 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   the owner over the shell's events, or the owner itself, answering Settings'
   questions directly (`Sharing.localNotify`, `Sharing.localPassword`). There,
   Settings is its list of sections, then one section over it.
+- **Android's Back.** While a conversation is over the list, Back folds it
+  away, and in Settings it goes from a section to the list of them and then
+  out (`useBackButton`). With nothing open, nobody listens, and Android does
+  what it does with Back: leaves the app.
 - **No desktop furniture.** No close button on the list (the phone closes
   apps), no pop-out, no voice line, and Settings has no Windows or
   Notifications, no microphones and no updates.

@@ -19,6 +19,7 @@ import { type ProfileProps, ProfileSection } from "./ProfileSection";
 import { type ServersProps, ServersSection } from "./ServersSection";
 import { type SoundProps, SoundSection } from "./SoundSection";
 import { hasWindowsChoices, type WindowsProps, WindowsSection } from "./WindowsSection";
+import { useBackButton } from "../useBackButton";
 import "./SettingsView.css";
 
 /** Everything the host can change, for the server you host. */
@@ -92,6 +93,11 @@ export function SettingsView(props: SettingsViewProps) {
     setWanted(key);
     setStack("section");
   };
+  // Android's Back: from a section to the list of them, and from there out.
+  useBackButton(phone, () => {
+    if (stack === "section") setStack("index");
+    else props.onClose?.();
+  });
   const main = useRef<HTMLDivElement | null>(null);
 
   // A section starts at its top, not where the last one was scrolled to.
