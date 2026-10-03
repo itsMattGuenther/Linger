@@ -506,10 +506,14 @@ macOS runners, or a friend's Mac.
   `src/voice_commands.rs`, `src/acl.rs` checking the phone's grants); the
   Android project in `gen/android`, with cloud backup off; and in the Android
   emulator the app opens, sets up a server, signs in, and its live connection
-  comes up. **Still to do:** keeping sign-ins (a phone answers "unavailable"
-  for now, so it asks again every launch), the backup opt-in setting,
-  reconnecting across a network switch, Linger's icons for the launcher (still
-  Tauri's), and iOS, which needs a Mac. Setup is in `docs/development.md`.
+  comes up. Thirty seconds in the background closes the connections (offline,
+  as SPEC §4.15 says) and coming back opens them; losing the network closes
+  them and getting it back reopens them at once (checked with airplane mode in
+  the emulator). **Still to do:** keeping sign-ins (a phone answers
+  "unavailable" for now, so it asks again every launch), the backup opt-in
+  setting, a real wifi-to-mobile-data switch on a real phone (the emulator
+  reaches a local server over adb, which no network change touches),
+  Linger's icons for the launcher (still Tauri's), and iOS, which needs a Mac. Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and voice, which

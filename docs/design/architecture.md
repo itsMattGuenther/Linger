@@ -433,6 +433,15 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
 - **No desktop furniture.** No close button on the list (the phone closes
   apps), no pop-out, no voice line, and Settings has no Windows or
   Notifications, no microphones and no updates.
+- **In the background, and without a network.** Thirty seconds after the
+  app goes into the background its connections close, so it shows offline,
+  and they open again when it's back (`watchBackground`,
+  `BACKGROUND_GRACE_MS`). Android freezes an app it has stopped showing after
+  about a minute, after which no timer runs, so the grace has to come first.
+  When the phone loses its network the connections close too, and they open
+  the moment it's back (`watchNetwork`) rather than when missed heartbeats
+  notice; the web view hears about the network only with Android's
+  `ACCESS_NETWORK_STATE` permission (`AndroidManifest.xml`).
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

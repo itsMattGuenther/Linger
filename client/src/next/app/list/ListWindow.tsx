@@ -60,7 +60,7 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { loadCloseList } from "../../core/closing";
-import { onPhone, thisDevice } from "../../core/phone";
+import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
@@ -198,11 +198,14 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
  * UI of its own. Owning it here is what keeps a StrictMode remount from
  * leaving a socket nobody follows.
  */
-function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void }) {
+function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void; paused: boolean }) {
   const { api, baseUrl } = session;
   const status = useGateway(baseUrl).status.kind;
 
+  // Paused: the phone app a while in the background, so it shows offline,
+  // or with no network. Opened again when it's back (SPEC §4.15, core/phone.ts).
   useEffect(() => {
+    if (paused) return;
     void connect(api);
     return () => {
       forgetNotifications(baseUrl);
@@ -210,12 +213,14 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
       dropPresence(baseUrl);
       void disconnect(baseUrl);
     };
-  }, [api, baseUrl]);
+  }, [api, baseUrl, paused]);
 
+  // Opening starts the server's state afresh, so these come again with it.
   useEffect(() => {
+    if (paused) return;
     void loadReadMarkers(api);
     void loadNotifyRules(api).catch(() => undefined);
-  }, [api]);
+  }, [api, paused]);
 
   // Around, in no room: a conversation shown beside the list, or in a
   // window of its own, says where you are (core/showing.ts).
@@ -256,6 +261,12 @@ function Servers({
   const states = useServers();
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
+  // The phone app, a while in the background (SPEC §4.15): its connections close.
+  const [backgrounded, setBackgrounded] = useState(false);
+  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded) : undefined), []);
+  // And with no network: closed, and opened again the moment there is one.
+  const [offline, setOffline] = useState(false);
+  useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);
   const ordered = useMemo(() => inOrder(signedIn, prefs.order), [signedIn, prefs.order]);
   const quiet = useMemo(() => new Set(prefs.quiet), [prefs.quiet]);
   const [infos, setInfos] = useState<Readonly<Record<string, ServerInfo>>>({});
@@ -927,7 +938,7 @@ function Servers({
   return (
     <>
       {signedIn.map((session) => (
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
+        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} paused={backgrounded || offline} />
       ))}
       <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
         <div className="nx-app-list">
