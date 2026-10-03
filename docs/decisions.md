@@ -687,8 +687,9 @@ it, on the desktop and, later, the phone. Discord offers it only on phones.
 - **SPEC §4.14 says "Voice rooms are never recorded".** It used to say
   "Nothing is recorded, ever", meaning rooms. A voice message is a clip you
   record of yourself and choose to send, like a file: nobody else is in it.
-  The promise about rooms is unchanged. **Matt's OK on this wording is still
-  owed**; the PR that brings voice messages waits for it.
+  The promise about rooms is unchanged. Matt agreed to the wording
+  (2026-10-03): "It's no different than if I recorded an audio clip of
+  myself in Audacity and then uploaded it to the chat as an audio file."
 - **Opus in WebM, made on the computer, never converted by the server.**
   Chromium and WebView2 play it, WebKitGTK does through the GStreamer plugins
   the packages already depend on, and Safari's WebKit does from Safari 15.
