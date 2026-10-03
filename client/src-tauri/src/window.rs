@@ -321,6 +321,9 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             if app.state::<crate::tray::Closing>().hides() {
                 api.prevent_close();
                 let _ = window.hide();
+                // The list says where Linger went, the first time ever
+                // (#400): Windows 11 hides a new tray icon under the ^.
+                let _ = app.emit_to(OWNER, "next:hidden", ());
             } else {
                 app.exit(0);
             }

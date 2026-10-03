@@ -444,6 +444,72 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
 });
 
+test("the first close to the tray says where Linger went, once ever, and that you're in voice (#400)", async ({ page }) => {
+  // The desktop lets Linger show banners. The engine's own permission is
+  // what the notification plugin asks first, so it's the one granted here.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "Notification", { configurable: true, value: { permission: "granted", requestPermission: async () => "granted" } });
+  });
+  const notices = async () =>
+    (await did(page)).filter((line) => line.startsWith("show_notification:")).map((line) => JSON.parse(line.slice("show_notification:".length)) as unknown);
+  await open(page, "?one");
+  await joinGeneral(page);
+  await page.evaluate(() => window.core?.hidden());
+  await expect.poll(notices).toEqual([
+    { title: "Linger is still running", body: expect.stringMatching(/ Quit Linger from there\. You're still in voice in #general\.$/), open: null },
+  ]);
+  // Back from the tray and closed again: nothing more.
+  await page.evaluate(() => window.core?.hidden());
+  await page.waitForTimeout(300);
+  expect(await notices()).toHaveLength(1);
+  // Nor after Linger starts again, on this computer.
+  await open(page, "?one");
+  await page.evaluate(() => window.core?.hidden());
+  await page.waitForTimeout(300);
+  expect(await notices()).toEqual([]);
+});
+
+// Coming back to the computer while still away is easy to miss (#392): the
+// top card says so, once you're back after a long quiet, and only says so.
+test("back at the computer while still away, the top card says so, and nothing sets you back by itself (#392)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one");
+  const you = page.getByRole("region", { name: "You" });
+  await you.getByRole("button", { name: "Away" }).click();
+  const editor = page.getByRole("dialog", { name: "Away message" });
+  await editor.getByRole("button", { name: "asleep 💤" }).click();
+  await editor.getByRole("button", { name: "I'm away" }).click();
+  await expect(you).toHaveAttribute("data-away", "yes");
+  const nudge = you.getByRole("status");
+  await expect(nudge).toHaveCount(0);
+
+  // Using Linger right after going away says nothing.
+  await page.mouse.move(100, 300);
+  await page.mouse.move(120, 320);
+  await expect(nudge).toHaveCount(0);
+
+  // Over ten minutes with nothing, then the mouse moves.
+  await page.clock.fastForward("11:00");
+  await page.mouse.move(140, 340);
+  await expect(nudge).toHaveText("Welcome back. You're still away.");
+  await expect(you.getByRole("button", { name: "I'm back" })).toBeVisible();
+  await expect(you).toHaveAttribute("data-away", "yes");
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("PATCH")).length).toBe(1);
+
+  // Waved off, it goes, and you stay away.
+  await nudge.getByRole("button", { name: "Stay away for now" }).click();
+  await expect(nudge).toHaveCount(0);
+  await expect(you).toHaveAttribute("data-away", "yes");
+
+  // Back again after another long quiet, it says so again; I'm back takes it away.
+  await page.clock.fastForward("11:00");
+  await page.mouse.move(160, 360);
+  await expect(nudge).toBeVisible();
+  await you.getByRole("button", { name: "I'm back" }).click();
+  await expect(nudge).toHaveCount(0);
+  await expect(you).not.toHaveAttribute("data-away", "yes");
+});
+
 /** Join voice in #general as a chat window would ask, once the connection is up. */
 async function joinGeneral(page: Page) {
   const bar = page.getByRole("region", { name: /In voice/ });

@@ -418,10 +418,12 @@ export const Composer = memo(function Composer({
       ) : null}
 
       {files.length === 0 ? null : (
-        <ul className="nx-composer-files" aria-label="Files for this message">
+        <ul className="nx-composer-files" aria-label="Files for this message" data-pictures={files.some((file) => file.preview) ? "yes" : undefined}>
           {files.map((file) => (
             <li key={file.key} className="nx-composer-file" data-problem={file.problem ? "yes" : undefined}>
-              <Icon name="file" size="sm" />
+              <span className="nx-composer-file-lead">
+                {file.preview ? <img className="nx-composer-file-thumb" src={file.preview} alt="" draggable={false} /> : <Icon name="file" size="sm" />}
+              </span>
               <span className="nx-composer-file-name">{file.name}</span>
               {file.problem ? (
                 <span className="nx-composer-file-problem">{file.problem}</span>

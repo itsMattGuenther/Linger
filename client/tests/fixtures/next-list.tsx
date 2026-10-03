@@ -12,6 +12,9 @@
  * open, `&quiet` makes Ashen Lanterns quiet, `&awayfail` has Casa da
  * Ribeira refuse to save an away message.
  *
+ * `?away`: you're away; `&back` has you back at the computer, still away
+ * (#392).
+ *
  * `?fields`: Jules and you have fields with labels of your own and web
  * addresses in them (#270); `&long` makes them as long as the server takes.
  */
@@ -259,6 +262,7 @@ function OneServer() {
           : undefined
       }
       onEditProfile={() => note("settings:profile")}
+      nudge={query.has("back") ? { onDismiss: () => note("stay away") } : undefined}
       you={{
         awayChoices: awayChoices([]),
         saveLine: async (line) => {

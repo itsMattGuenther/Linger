@@ -300,6 +300,15 @@ same menu has **Mute**, **Leave voice** and **Quit Linger**. To make closing the
 quit instead, open **Settings → Windows → When You Close Your List**. On a
 Linux desktop with no tray, closing the list always quits.
 
+The first time you close the list, Linger says where it went in a
+notification, and whether you're still in voice. It says it once on each
+computer, and never again.
+
+**On Windows 11 the icon starts out hidden** under the **^** by the clock.
+Windows doesn't let an app put its own icon in sight, but you can: open
+**Settings → Personalization → Taskbar → Other system tray icons** and turn
+**Linger** on. Or drag the icon out from under the **^** onto the taskbar.
+
 Several servers? Each is a section of the list with its own rooms and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
 or arrival cards from it, though somebody naming you still gets a banner) and
@@ -392,6 +401,11 @@ something, reply to it, emoji and all.
 
 Three ways, all the same thing: the **+** in the message box, drag a file onto
 the box, or paste one from your clipboard.
+
+Files wait above the box until you send, one line each, with a **✕** to take
+one out. A picture shows a small copy of itself there, so you can see it's the
+right one before it goes. Other files, and pictures Linger can't show, get
+the file icon.
 
 Pasting works for pictures too. Copy one (take a screenshot to the clipboard,
 use **Copy** in an image viewer, or **Copy Image** in a browser), click the
@@ -486,8 +500,9 @@ through the new device without leaving. If a device you picked isn't plugged
 in, or won't open, the system default is used and the picker says so.
 
 **If voice won't start**, the room's voice strip says why, where it would
-say who's talking: hover it for the whole reason. Joining needs a microphone
-and speakers that both open.
+say who's talking. Click it for the whole reason, including your computer's
+own words for what failed, with a **Copy** button for sending it to your
+host. Joining needs a microphone and speakers that both open.
 
 First, pick your microphone and speakers by name in **Settings → Sound &
 Voice**, instead of leaving them on the system default. That's the likely
@@ -631,6 +646,13 @@ There's also an **away message**: **Away** at the top of the list. Pick a
 recent one or write your own; setting one is what makes you away, and it shows
 instead of your status. With several servers, tick where it shows. **I'm
 back** clears it.
+
+While you're away, the top of your list looks it: **I'm back** is filled in
+a warm cream, and your away message sits where your status was, with the
+moon. When you come back to your computer after ten minutes or more and
+you're still away, Linger says so there: "Welcome back. You're still away."
+It never brings you back by itself. Press **I'm back**, or **✕** to stay
+away.
 
 ## Your display name
 

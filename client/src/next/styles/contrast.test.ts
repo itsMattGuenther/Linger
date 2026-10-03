@@ -224,6 +224,27 @@ describe("contrast of the new client's tokens", () => {
     expect(bad, bad.join("\n")).toEqual([]);
   });
 
+  // While you're away your own card takes on the away warm, and I'm back is
+  // filled with it (#392). Your name, in any of the 16 colors, every grey on
+  // the card and the away message stay readable on the card, and the words on
+  // the button on it, hovered or not.
+  it("keeps your card readable while you're away, and I'm back's words on its fill (#392)", () => {
+    const list = color(tokenIn(LIST, ".nx-list", "background", "app/list/ListView.css"));
+    const card = over(color("--away-wash"), list);
+    const bad: string[] = [];
+    for (const fg of [...PALETTE_KEYS, "--text-primary", "--text-secondary", "--text-muted", "--text-away"]) {
+      const value = ratio(color(fg), card);
+      if (value < 4.5) bad.push(`${fg} on --away-wash over the list: ${value.toFixed(2)}:1, needs 4.5:1`);
+    }
+    for (const fill of ["--away-fill", "--away-fill-hover"]) {
+      const value = ratio(color("--text-on-away"), color(fill));
+      if (value < 4.5) bad.push(`--text-on-away on ${fill}: ${value.toFixed(2)}:1, needs 4.5:1`);
+      const edge = ratio(color(fill), card);
+      if (edge < 3) bad.push(`${fill} against the card: ${edge.toFixed(2)}:1, needs 3:1`);
+    }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
   // Somebody offline has their name drawn in a dim grey in the list, with
   // none of their own color (#274). Dim, but still text: it must read at
   // 4.5:1 on the list and on a row that's hovered or has its card open. The

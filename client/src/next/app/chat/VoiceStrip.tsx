@@ -1,9 +1,11 @@
-import { memo } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
 import { startProblemWords, type StartProblem } from "../../../lib/voice";
 import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
-import { Button, Chip, IconButton, markerOf, Name, VoiceGlyph } from "../../kit";
+import { copyText } from "../../core/copy";
+import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from "../../kit";
 import "./VoiceStrip.css";
 
 /** Chips that fit on the strip's one line; past this it says "and others". */
@@ -59,23 +61,30 @@ export const VoiceStrip = memo(function VoiceStrip({
   controls?: StripControls;
   /**
    * The last try at starting voice here failed (#261). It takes the words'
-   * place, on the same one line, so the strip keeps its height (VOICE-17);
-   * the whole of it, and the shell's reason, are the tooltip. The button
-   * stays, to try again. When picking a device fixes it, that's a button
-   * too, which opens Settings there and is never cut off: on a narrow window
-   * the words give way first (#273).
+   * place, on the same one line, so the strip keeps its height (VOICE-17).
+   * The whole of it, and the shell's reason, are the tooltip, and a click
+   * opens them in a card that stays, with Copy for sending them to the host
+   * (#399). The button stays, to try again. When picking a device fixes it,
+   * that's a button too, which opens Settings there and is never cut off: on
+   * a narrow window the words give way first (#273).
    */
   failed?: StripProblem;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
+  const [why, setWhy] = useState<DOMRect | null>(null);
+  const lead = showFailed ? `Couldn't start voice. ${startProblemWords(showFailed)}` : "";
   const problem = showFailed ? (
-    <p
-      className="nx-strip-words"
-      data-problem="yes"
-      role="alert"
-      title={`Couldn't start voice. ${startProblemWords(showFailed)}\n${showFailed.detail}`}
-    >
-      Couldn't start voice. {showFailed.line}
+    <p className="nx-strip-words" data-problem="yes" role="alert" title={`${lead}\n${showFailed.detail}`}>
+      <button
+        type="button"
+        className="nx-strip-why-open"
+        aria-haspopup="dialog"
+        aria-expanded={why !== null}
+        onClick={(event) => setWhy(event.currentTarget.getBoundingClientRect())}
+      >
+        Couldn't start voice. {showFailed.line}
+      </button>
+      {why ? <WhyCard anchor={why} lead={lead} detail={showFailed.detail} onClose={() => setWhy(null)} /> : null}
     </p>
   ) : null;
   const fix =
@@ -166,4 +175,63 @@ function micState(off: "muted" | "deafened" | undefined): { icon: "micOff" | "he
   if (off === "deafened") return { icon: "headOff", word: "Deafened" };
   if (off === "muted") return { icon: "micOff", word: "Muted" };
   return undefined;
+}
+
+/** Space kept between the card, the strip and the window's edges. */
+const GAP = 4;
+const EDGE = 8;
+
+/**
+ * Why voice didn't start, whole (#399): Linger's sentence and the shell's
+ * own words, which say what actually failed, in a card that stays until it's
+ * closed. Its words can be selected, and Copy takes both, ready to send the
+ * host. It sits under the strip's words, or over them if there's no room
+ * below, and never off the window.
+ */
+function WhyCard({ anchor, lead, detail, onClose }: { anchor: DOMRect; lead: string; detail: string; onClose: () => void }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
+  const [copied, setCopied] = useState<boolean | null>(null);
+  useLayoutEffect(() => {
+    const card = box.current?.parentElement;
+    if (!card) return;
+    const { offsetWidth: width, offsetHeight: height } = card;
+    const below = anchor.bottom + GAP;
+    const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
+    const x = Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
+    setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
+  }, [anchor.top, anchor.bottom, anchor.left]);
+  // Copy has the focus to start with; a press anywhere else closes it.
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    box.current?.querySelector<HTMLButtonElement>("[data-copy] button")?.focus();
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && box.current?.parentElement?.contains(event.target)) return;
+      close.current();
+    };
+    document.addEventListener("pointerdown", onPointer, true);
+    return () => document.removeEventListener("pointerdown", onPointer, true);
+  }, []);
+  return createPortal(
+    <Popover label="Why voice didn't start" at={at} onClose={onClose}>
+      <div ref={box} className="nx-strip-why">
+        <p className="nx-strip-why-lead">{lead}</p>
+        <p className="nx-strip-why-detail">{detail}</p>
+        <div className="nx-strip-why-buttons">
+          <span data-copy="">
+            <Button size="sm" variant="secondary" onClick={() => void copyText(`${lead}\n${detail}`).then(setCopied)}>
+              {copied === true ? "Copied" : "Copy"}
+            </Button>
+          </span>
+        </div>
+        {copied === false ? (
+          <p className="nx-strip-why-said" role="status">
+            The clipboard wouldn't take it. Select the words above and copy them instead.
+          </p>
+        ) : null}
+      </div>
+    </Popover>,
+    document.body,
+  );
 }

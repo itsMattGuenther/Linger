@@ -4,7 +4,7 @@ import { Spinner } from "./Spinner";
 import { TooltipBubble, useTooltip } from "./Tooltip";
 import "./Button.css";
 
-export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger" | "away";
 export type ControlSize = "sm" | "md" | "lg";
 
 export interface ButtonProps {
@@ -43,7 +43,7 @@ export interface ButtonProps {
 export const ICON_FOR: Record<ControlSize, "sm" | "md" | "lg"> = { sm: "sm", md: "md", lg: "lg" };
 
 /**
- * A button with a visible label. Pills, in three heights, four variants.
+ * A button with a visible label. Pills, in three heights, five variants.
  *
  * The size is intrinsic: there is no `className` or `style`, so nothing can
  * make a 31px button. Layout (where it sits, whether it fills) belongs to the

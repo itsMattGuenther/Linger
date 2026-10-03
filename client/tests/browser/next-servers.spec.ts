@@ -232,11 +232,15 @@ test.describe("away, with a choice of servers", () => {
     expect(await opened(page)).toBe(`away:${GOOD}+${GUILD}:back after work`);
     const you = page.getByRole("region", { name: "You" });
     await expect(you.locator(".nx-you-text")).toHaveAttribute("title", "away on The Good Company and Ashen Lanterns");
+    // Away anywhere, the card looks it, and I'm back is in the away warm (#392).
+    await expect(you).toHaveAttribute("data-away", "yes");
+    await expect(you.getByRole("button", { name: "I'm back" })).toHaveAttribute("data-variant", "away");
     // Each server's section shows your away message there, when it's open.
     await toggle(page, "Ashen Lanterns").click();
     expect(await words(lineOf(page, "Ashen Lanterns"))).toBe("you're Lamplighter here · “back after work”");
     await you.getByRole("button", { name: "I'm back" }).click();
     await expect(you.getByRole("button", { name: "Away" })).toBeVisible();
+    await expect(you).not.toHaveAttribute("data-away", "yes");
     expect(await opened(page)).toBe(`away:${GOOD}+${GUILD}:back after work,back:${GOOD}+${GUILD}`);
   });
 

@@ -1,10 +1,26 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type AuthedApi, UnconfirmedError } from "../../../lib/api";
 import { sendMessage } from "../../../lib/gateway";
 import { uploadFile } from "../../../lib/upload";
-import { added, type Drafts, filesIn, NO_DRAFTS, NO_FILES, progressed, refused, removed, restored, sent, taken, uploaded } from "../../core/chat/drafts";
+import {
+  added,
+  type Drafts,
+  filesIn,
+  NO_DRAFTS,
+  NO_FILES,
+  previewed,
+  previews,
+  progressed,
+  refused,
+  removed,
+  restored,
+  sent,
+  taken,
+  uploaded,
+} from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
 import type { TabKey } from "../../core/tabs";
+import { pictureCopy } from "./pictureCopy";
 
 /**
  * Files on their way into a message, per conversation, and sending: each
@@ -24,6 +40,17 @@ export function useFileDrafts(
   const draftsNow = useRef(drafts);
   draftsNow.current = drafts;
 
+  // A picture's preview is a blob URL (#397): let go of with its file, and
+  // every one still held when the window goes.
+  useEffect(() => () => previews(draftsNow.current).forEach((url) => URL.revokeObjectURL(url)), []);
+  const letGo = useCallback((held: Drafts, keys: readonly string[]) => {
+    const urls = previews(held);
+    for (const key of keys) {
+      const url = urls.get(key);
+      if (url) URL.revokeObjectURL(url);
+    }
+  }, []);
+
   // Files, per conversation, uploading on their own (core/chat/drafts.ts).
   const onAttach = useCallback(
     (chosen: File[]) => {
@@ -31,6 +58,17 @@ export function useFileDrafts(
       const files = chosen.map((file) => ({ file, key: `${paneId} ${file.name} ${Date.now()} ${Math.random()}` }));
       setDrafts((held) => added(held, paneId, files.map(({ key, file }) => ({ key, name: file.name }))));
       for (const { file, key } of files) {
+        // A picture shows a small copy of itself in the box (#397).
+        void pictureCopy(file).then((url) => {
+          if (url === null) return;
+          setDrafts((held) => {
+            const next = previewed(held, key, url);
+            if (next !== null) return next;
+            // Taken out before its preview was ready.
+            URL.revokeObjectURL(url);
+            return held;
+          });
+        });
         uploadFile(api, file, { onProgress: (fraction) => setDrafts((held) => progressed(held, key, fraction)) }).then(
           (attachment) => setDrafts((held) => uploaded(held, key, attachment)),
           (error: unknown) => setDrafts((held) => refused(held, key, error instanceof ApiError ? error.message : "That file didn't go up.")),
@@ -42,11 +80,12 @@ export function useFileDrafts(
   const onRemoveFile = useCallback(
     (key: string) => {
       const { drafts: next, abandoned } = removed(draftsNow.current, key);
+      letGo(draftsNow.current, [key]);
       setDrafts(next);
       // A finished upload nothing will point at: give the server its space back.
       if (abandoned && api) void api.cancelUpload(String(abandoned.id)).catch(() => undefined);
     },
-    [api],
+    [api, letGo],
   );
   const onRestoreFiles = useCallback((keys: string[]) => setDrafts((held) => restored(held, keys)), []);
 
@@ -69,9 +108,10 @@ export function useFileDrafts(
           error instanceof ApiError || error instanceof UnconfirmedError ? error.message : "Couldn't reach the server. Your message is kept here.",
         );
       }
+      letGo(draftsNow.current, submission.fileKeys);
       setDrafts((held) => sent(held, submission.fileKeys));
     },
-    [apis, find],
+    [apis, find, letGo],
   );
 
   return { files: paneId === null ? NO_FILES : filesIn(drafts, paneId), onAttach, onRemoveFile, onRestoreFiles, onSend };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Attachment } from "../../../generated/Attachment";
-import { added, filesIn, NO_DRAFTS, progressed, refused, removed, restored, sent, taken, uploaded } from "./drafts";
+import { added, filesIn, NO_DRAFTS, previewed, previews, progressed, refused, removed, restored, sent, taken, uploaded } from "./drafts";
 
 function attachment(id: string): Attachment {
   return { id, filename: `${id}.png`, mime: "image/png", size_bytes: 10, width: 1, height: 1, duration_ms: null, url: `/media/${id}`, poster_url: null } as Attachment;
@@ -72,4 +72,22 @@ describe("files on their way into a message", () => {
     const drafts = added(NO_DRAFTS, GENERAL, [{ key: "a", name: "a.png" }]);
     expect(taken(drafts, GENERAL, ["a"])).toBeNull();
   });
+
+  it("a picture's preview goes on its file, in the box or held by a send, and nowhere once it's gone (#397)", () => {
+    let drafts = added(NO_DRAFTS, GENERAL, [{ key: "a", name: "a.png" }, { key: "b", name: "b.png" }]);
+    expect(filesIn(drafts, GENERAL).map((file) => file.preview)).toEqual([null, null]);
+    drafts = previewed(drafts, "a", "blob:a") ?? drafts;
+    expect(filesIn(drafts, GENERAL).map((file) => file.preview)).toEqual(["blob:a", null]);
+    // Held by a send that's on its way: the preview still lands, and comes back with the file.
+    drafts = uploaded(drafts, "b", attachment("att-b"));
+    drafts = taken(drafts, GENERAL, ["b"])?.drafts ?? drafts;
+    drafts = previewed(drafts, "b", "blob:b") ?? drafts;
+    expect(previews(drafts)).toEqual(new Map([["a", "blob:a"], ["b", "blob:b"]]));
+    expect(filesIn(restored(drafts, ["b"]), GENERAL).map((file) => file.preview)).toEqual(["blob:a", "blob:b"]);
+    // Gone before its preview was ready: nothing to put it on.
+    const without = removed(drafts, "a").drafts;
+    expect(previewed(without, "a", "blob:a2")).toBeNull();
+    expect(previews(sent(without, ["b"]))).toEqual(new Map());
+  });
 });
+

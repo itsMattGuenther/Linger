@@ -89,6 +89,8 @@ required a change (marked ▲).
 | `--text-accent` / `--accent` | `#f3b55c` | the lamp: primary action, selected choice, your voice |
 | `--text-on-accent` | `#1c1206` | text on the lamp |
 | `--lit-wash` / `--lit-wash-hover` / `--lit-edge` | the lamp at 12%, 16% and 28% | a DM you haven't read, lit (#291) |
+| `--away-wash` / `--away-edge` | the away warm at 6% and 24% | your own card while you're away, and the box your away message sits in there (#392) |
+| `--away-fill` / `-hover` / `--text-on-away` | `#e9dcc4` / `#f5ecdd` / `#131a28` | I'm back while you're away (#392): the away warm, never the lamp |
 | `--text-danger` / `--danger` | `#f06e6e` | destructive actions, errors |
 | `--text-success` / `--success` | `#7cc98f` | confirmations |
 | `--icon-default` | `#c0c6d2` | icons on filled controls |
@@ -120,7 +122,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -171,6 +173,8 @@ A pill with a visible label.
   - `secondary`: an outline, the default.
   - `quiet`: no edge until hovered.
   - `danger`: red text, a red wash on hover.
+  - `away`: filled in the away warm (`--away-fill`). Only I'm back, while
+    you're away (#392).
 - **States:**
   - `pressed`: a toggle, with `aria-pressed`.
   - `busy`: keeps its width, shows a spinner and refuses clicks.
@@ -735,7 +739,10 @@ replaces an unread count.
   then add-a-file, emoji and send (32px each). It grows with its text to
   `--composer-max`, measuring a hidden copy so typing never lays out the
   conversation (L-12). An `@` at the start of a word opens an `OptionList` of
-  people to mention above it (#267, `app/chat/useMentions.tsx`).
+  people to mention above it (#267, `app/chat/useMentions.tsx`). Files on
+  their way are listed above it, one line each; a picture shows a small
+  square copy of itself (`--composer-thumb`) in place of the file icon, made
+  on the device (#397). One this engine can't read keeps the icon.
 - **Mentions** in a message read as the person's display name (`@Justin B`)
   in the mention's highlight, never their name's face or color, with the
   stored `@username` in the tooltip. A mention of you is in the lamp.
@@ -793,6 +800,8 @@ built on the rows' own grid so nothing new lines up by eye:
   than being cut mid-letter.
 - **The top card** keeps only what's true everywhere: you, whether you're
   away (and where), and Away, whose editor ticks a `Checkbox` per server.
+  While you're away anywhere it's washed in `--away-wash` and I'm back is the
+  `away` button (#392), as with one server.
 - **One server** draws the list exactly as before, with no section header.
 
 ## What the tests enforce
@@ -841,6 +850,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Several servers: headers and lines on the rows' grid (names on one edge, the mark where markers sit, 32px headers, 16px lines), pinned while scrolled through, no digit in any header or line, bold only when new and never while Quiet, the menu and folding by keyboard, nothing clipped at 340px | `next-servers.spec.ts` |
 | What a server's header and line say, from its store | `core/servers.test.ts` |
 | A DM you haven't read is lit (its person's row in People, or a group's row with the rooms; the heading above while folded; a folded server's header; its tab; a lit person shows in a folded group, #351) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
+| Your own card while you're away (#392): washed in the away warm, I'm back filled in it and the away message boxed with the moon, none of it the lamp, with one server or several and in Settings; every name color and grey readable on it; back at the computer after ten minutes still away, a line says so beside I'm back, and nothing sets you back by itself | `next-list.spec.ts`, `next-servers.spec.ts`, `next-settings.spec.ts`, `next-list-window.spec.ts`, `contrast.test.ts`, `lib/watchPresence.windows.test.ts` |
 | DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |

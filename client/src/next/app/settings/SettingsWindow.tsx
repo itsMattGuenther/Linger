@@ -1,4 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
+import { copyText } from "../../core/copy";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Invite } from "../../../generated/Invite";
@@ -684,13 +685,4 @@ function localStore(): Storage | null {
   }
 }
 
-/** Onto the clipboard, or honestly not. */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 

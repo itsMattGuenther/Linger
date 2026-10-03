@@ -47,6 +47,7 @@
   --ink-3: #8d96a9;
   --ink-4: #69738a;
   --ink-warm: #e9dcc4; /* away messages */
+  --ink-warm-2: #f5ecdd; /* a hovered I'm back (#392) */
 
   /* Hairlines. */
   --hair-1: #222d44;
@@ -69,6 +70,8 @@
   --lamp-a16: rgb(243 181 92 / 0.16);
   --lamp-a28: rgb(243 181 92 / 0.28);
   --lamp-a45: rgb(243 181 92 / 0.45);
+  --warm-a06: rgb(233 220 196 / 0.06);
+  --warm-a24: rgb(233 220 196 / 0.24);
   --red-a16: rgb(240 110 110 / 0.16);
   --red-a42: rgb(240 110 110 / 0.42);
   --sign-a10: rgb(46 197 242 / 0.1);
@@ -145,6 +148,15 @@
   --lit-wash-hover: var(--accent-wash-stronger);
   --lit-edge: var(--lamp-a28);
   --accent-edge-soft: var(--lamp-a28);
+
+  /* Away (#392): your own card while you're away, and I'm back. The warm of
+     an away message, never the lamp: amber means something new for you, and
+     being away isn't that. */
+  --away-wash: var(--warm-a06);
+  --away-edge: var(--warm-a24);
+  --away-fill: var(--ink-warm);
+  --away-fill-hover: var(--ink-warm-2);
+  --text-on-away: var(--night-2);
 
   --danger: var(--red-1);
   --danger-wash: var(--red-a16);
@@ -233,6 +245,7 @@
   --linkcard-w: 360px;
   --audio-volume-w: 64px; /* a shared audio file's volume slider, beside its mute (#247) */
   --composer-max: 200px; /* the message box grows to this, then scrolls */
+  --composer-thumb: 40px; /* a picture's preview above the message box, before it's sent (#397) */
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
   --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */

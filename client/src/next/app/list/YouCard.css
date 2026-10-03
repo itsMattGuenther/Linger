@@ -7,6 +7,12 @@
   border-bottom: 1px solid var(--hairline);
 }
 
+/* While you're away (#392), the card takes on the away warm, so a glance at
+   it says you still are: not the lamp, which is for something new. */
+.nx-you[data-away="yes"] {
+  background: var(--away-wash);
+}
+
 .nx-you-top {
   display: flex;
   align-items: flex-start;
@@ -86,16 +92,50 @@
   color: var(--text-muted);
 }
 
+/* Your away message, in the status line's place and its shape, edged in
+   the away warm with the moon, so it reads as away and not as a status. */
 .nx-you-away {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-md);
   margin: 0;
+  padding: 0 var(--space-2-5);
+  border: 1px solid var(--away-edge);
+  border-radius: var(--radius-md);
+  color: var(--text-away);
+  font-size: var(--text-meta);
+  font-style: italic;
+}
+
+.nx-you-away .k-icon {
+  color: var(--text-away);
+}
+
+.nx-you-away-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Back at the computer and still away (#392): one line, with a way to wave
+   it off. */
+.nx-you-nudge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
   font-size: var(--text-meta);
-  line-height: var(--control-md);
-  font-style: italic;
-  color: var(--text-away);
+  line-height: var(--line-meta);
+}
+
+.nx-you-nudge-text {
+  min-width: 0;
 }
 
 /* With several servers: a short bar in each server's color, in your order. */

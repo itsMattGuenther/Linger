@@ -4,6 +4,7 @@ import { lineProblem } from "../../core/you";
 import { Button, Icon, Marker, MARKER_WORDS, markerStateOf, Name, TextField } from "../../kit";
 import { markerFor } from "../markers";
 import { AwayEditor } from "./AwayEditor";
+import { type AwayNudge, AwayNudgeLine } from "./AwayNudge";
 import { PersonCard } from "./PersonCard";
 import "./YouCard.css";
 
@@ -24,7 +25,7 @@ export interface YouActions {
  * Your name opens your own card, the one friends see (#271), with Edit
  * profile (`onEditProfile`, Settings → Profile) in place of Message and Knock.
  */
-export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: YouActions; onEditProfile?: () => void }) {
+export function YouCard({ me, actions, nudge, onEditProfile }: { me: MeCard; actions?: YouActions; nudge?: AwayNudge; onEditProfile?: () => void }) {
   const status = me.user.status;
   const awayMessage = status?.away_message ?? null;
   const away = awayMessage !== null && awayMessage !== "";
@@ -70,7 +71,7 @@ export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: 
   };
 
   return (
-    <section className="nx-you" aria-label="You">
+    <section className="nx-you" aria-label="You" data-away={away ? "yes" : undefined}>
       <div className="nx-you-top">
         <div className="nx-you-who">
           {onEditProfile ? (
@@ -98,7 +99,7 @@ export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: 
         {actions ? (
           <div ref={awayButton}>
             {away ? (
-              <Button size="sm" variant="secondary" icon="sun" busy={busy} onClick={() => void comeBack()}>
+              <Button size="sm" variant="away" icon="sun" busy={busy} onClick={() => void comeBack()}>
                 I'm back
               </Button>
             ) : (
@@ -119,7 +120,10 @@ export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: 
       </div>
 
       {away ? (
-        <p className="nx-you-away">“{awayMessage}”</p>
+        <p className="nx-you-away">
+          <Icon name="moon" size="sm" />
+          <span className="nx-you-away-text">“{awayMessage}”</span>
+        </p>
       ) : editing ? (
         <div
           className="nx-you-edit"
@@ -158,6 +162,8 @@ export function YouCard({ me, actions, onEditProfile }: { me: MeCard; actions?: 
           </span>
         </button>
       )}
+
+      {nudge && away ? <AwayNudgeLine nudge={nudge} /> : null}
 
       {awayOpen && actions ? (
         <AwayEditor

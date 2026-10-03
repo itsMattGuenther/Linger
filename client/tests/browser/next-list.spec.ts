@@ -1139,6 +1139,57 @@ test.describe("you, at the top", () => {
     await expect(page.locator("body")).toHaveAttribute("data-opened", "back");
   });
 
+  // Still away is easy to miss (#392): the card takes on the away warm, with
+  // the away message boxed where your status was and I'm back filled. None of
+  // it is the lamp, which a DM you haven't read is lit in.
+  test("when you're away the card looks it, in the away warm and never the lamp (#392)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?away");
+    const you = page.getByRole("region", { name: "You" });
+    await expect(you).toHaveAttribute("data-away", "yes");
+    const back = you.getByRole("button", { name: "I'm back" });
+    await expect(back).toHaveAttribute("data-variant", "away");
+    const looks = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      document.body.append(probe);
+      const of = (token: string) => {
+        probe.style.color = `var(${token})`;
+        return getComputedStyle(probe).color;
+      };
+      const card = document.querySelector<HTMLElement>(".nx-you");
+      const button = document.querySelector<HTMLElement>(".nx-you .k-button");
+      const message = document.querySelector<HTMLElement>(".nx-you-away");
+      const lit = document.querySelector<HTMLElement>("[data-lit='yes']");
+      const out = {
+        card: card ? getComputedStyle(card).backgroundColor : "",
+        button: button ? getComputedStyle(button).backgroundColor : "",
+        edge: message ? getComputedStyle(message).borderTopColor : "",
+        lit: lit ? getComputedStyle(lit).backgroundColor : "",
+        wash: of("--away-wash"),
+        fill: of("--away-fill"),
+        awayEdge: of("--away-edge"),
+        lamp: of("--accent"),
+      };
+      probe.remove();
+      return out;
+    });
+    expect(looks.card).toBe(looks.wash);
+    expect(looks.button).toBe(looks.fill);
+    expect(looks.edge).toBe(looks.awayEdge);
+    expect([looks.card, looks.button, looks.edge]).not.toContain(looks.lit);
+    expect([looks.card, looks.button, looks.edge]).not.toContain(looks.lamp);
+  });
+
+  test("back at the computer and still away, the card says so beside I'm back, and can be waved off (#392)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?away&back");
+    const you = page.getByRole("region", { name: "You" });
+    await expect(you.getByRole("status")).toHaveText("Welcome back. You're still away.");
+    await you.getByRole("button", { name: "Stay away for now" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "stay away");
+    // Not away, nothing to say.
+    await page.goto("/tests/fixtures/next-list.html?back");
+    await expect(page.getByRole("region", { name: "You" }).getByRole("status")).toHaveCount(0);
+  });
+
   test("the away editor fits inside the list window", async ({ page }) => {
     await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Away" }).click();
     const box = await page.getByRole("dialog", { name: "Away message" }).boundingBox();

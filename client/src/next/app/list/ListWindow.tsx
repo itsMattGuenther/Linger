@@ -25,10 +25,10 @@ import {
 } from "../../../lib/gateway";
 import { loadVoicePrefs } from "../../../lib/voice";
 import { isTalkKey, talkKeyName } from "../../core/talkKey";
-import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers } from "../../../lib/notify";
+import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
-import { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { dropPresence, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { PROTOCOL, tauriBus } from "../../core/bus";
@@ -62,7 +62,7 @@ import {
   type VoiceControlQuestion,
   type WindowOpener,
 } from "../../core/share";
-import { loadCloseList } from "../../core/closing";
+import { desktopOf, firstTimeInTray, loadCloseList, trayNotice, type VoicePlace } from "../../core/closing";
 import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
@@ -736,6 +736,31 @@ function Servers({
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
   }, [voiceState, voiceServer, several, infos, talkKey]);
 
+  // The list gone to the tray (#400): the first time ever on this computer,
+  // a notification says where Linger went, and that you're still in voice.
+  const voicePlace = useRef<VoicePlace | null>(null);
+  const myVoice = voiceState?.myVoice ?? null;
+  voicePlace.current = voice && myVoice ? { where: voice.where, room: !voiceState?.dms.some((dm) => dm.id === myVoice.roomId) } : null;
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<unknown>("next:hidden", () => {
+        if (!firstTimeInTray(localStore())) return;
+        const notice = trayNotice(desktopOf(navigator.userAgent), voicePlace.current);
+        void showNotice(notice.title, notice.body);
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
+
   // The conversation showing beside the list: its row in the list is marked (#351).
   const besideTab = unfolded && tabs.active !== null && !isTool(tabs.active) ? tabs.active : null;
   const listings = useMemo(
@@ -822,6 +847,17 @@ function Servers({
       comeBack: (servers) => each(servers, null),
     };
   }, [several, signedIn, states]);
+
+  // Back at the computer while still away (#392): the top card says so once,
+  // with I'm back right there. Away is something you choose (SPEC §4.6), so
+  // nothing here ever sets you back.
+  const awayAnywhere = ordered.some((session) => (states[session.baseUrl]?.me?.status?.away_message ?? "") !== "");
+  const [backWhileAway, setBackWhileAway] = useState(false);
+  useEffect(() => onBack(() => setBackWhileAway(true)), []);
+  useEffect(() => {
+    if (!awayAnywhere) setBackWhileAway(false);
+  }, [awayAnywhere]);
+  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? { onDismiss: () => setBackWhileAway(false) } : undefined), [backWhileAway, awayAnywhere]);
 
   // The foot's standing lines (decision 1): a server that isn't connected
   // after a few seconds, a keyring that can't keep sign-ins, a new version.
@@ -972,6 +1008,7 @@ function Servers({
               you={you}
               onEditProfile={() => shell.settings("profile")}
               everywhere={everywhere}
+              nudge={nudge}
               onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
               onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
               onSettings={() => shell.settings()}
