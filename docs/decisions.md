@@ -619,3 +619,59 @@ when clicked. Mockups at real size compared three ways out; he chose the first
   still twice, exactly when it matters, and rows coming and going under you),
   and DM rows showing the last line (still twice, and private words on the
   screen pull at you like an inbox).
+
+---
+
+## Decided — the phone app: text first, and nothing wakes it
+
+**Matt, 2026-10-02 (T-1601, #253).** Mobile comes off the backburner, and the
+question that blocked it since 2026-08-28 is answered: **no push.** He took
+eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
+`mobile` presence state and generic notifications ("something new on
+<server>"). SPEC §4.15 is the rule; this is why.
+
+- **A real app on iPhone and Android,** from the same Tauri 2 code as desktop,
+  so the gateway client in Rust carries over. Not a phone-friendly website.
+- **No push, no relay, no notifications.** Waking a closed phone app takes
+  Apple's or Google's push service. Linger has no single company behind it, so
+  every server would need the push keys, and they can't be handed out. The
+  usual fix is one central relay holding the keys, and that is a company in the
+  middle of every message's existence. Matt: no relay keeps "no company in the
+  middle" true for messages and voice. The README's privacy section stays as it
+  is. The cost is that a phone never buzzes; the app catches up when opened.
+- **No `mobile` presence.** A closed phone app is offline, which is the truth.
+  Presence is where somebody is, not what they are holding (SPEC §4.3). It also
+  avoids a protocol change: `PresenceState` has no catch-all, so an older
+  desktop app can't read a value it doesn't know.
+- **Uploads from phones: yes.** The server already strips location data from
+  every image (SPEC §4.10).
+- **Text first; voice only if asked for.** Matt had assumed phone voice would
+  route through Apple or Google. It doesn't: it goes to the host's server like
+  desktop voice, and only ringing a closed app would need push. It waits anyway.
+  A phone on speaker needs echo cancelling the desktop app doesn't have, the
+  work is weeks of real-phone testing (AGENTS "Where you will be wrong": audio
+  devices), and of the rare times friends talk from a phone on Discord, Matt
+  says "it sounds awful and it's not pleasant for anybody". It comes back if
+  people using the phone app ask.
+- **No mobile branch.** Phone work lands on `main` in ordinary short branches,
+  with desktop-only code (tray, updater, keyring, voice) switched off for phone
+  builds. Nothing ships to a phone until a phone build is added to the release
+  workflow.
+
+- **Phone backups leave Linger out by default.** Matt: by default the app's
+  data should stay out of iCloud and Google backups, but people who want it
+  backed up should be able to opt in. It is the same reason as no push, applied
+  to what the phone stores. A setting turns it on.
+- **Report and block, in both apps** (T-1605). Both stores require them in
+  apps where people post things. Matt agreed to add them, and to the desktop
+  app too if it made sense. It does: the server side is shared, and a report
+  goes to the host, who reads it in whichever app they use.
+- **The phone identifier is `io.github.itsmattguenther.linger`.** Matt left
+  the name to the session. A store never lets it change after the first upload,
+  so it has to be one nobody else can already hold. Linger owns no domain, and
+  by convention `com.linger.*` is for whoever owns linger.com. A name built
+  from the GitHub address is the open-source convention for that case. Desktop keeps
+  `com.linger.desktop`.
+
+A phone app updates on its store's schedule, not ours, so phones will often be
+a version behind their server; how far back compatibility goes is #315.

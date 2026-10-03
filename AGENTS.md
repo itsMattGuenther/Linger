@@ -307,7 +307,8 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                                ← V2, planned
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
-  → backburner: entrance sounds (T-901…T-903), mobile (T-16xx)
+  → mobile (T-16xx), text first, no push                 ← started 2026-10-02
+  → backburner: entrance sounds (T-901…T-903)
 ```
 
 V1 is built, and so are **M9 (knock), M10 (search), M11 (DMs), M12 (voice)
@@ -317,7 +318,10 @@ touching message loading. **All nine release checks closed on 2026-09-25**
 from real use of the published app; the steps are kept in
 `docs/tasks/release-checks.md` for re-running when their area changes. M13 is
 planned and not started, and larger groups and the voice rework (a forwarding
-server) are #197. Close a milestone's checks before starting the next.
+server) are #197. **Mobile is started** (Matt, 2026-10-02): a phone app for
+iPhone and Android from the same Tauri 2 crate, text first, with no push and no
+notifications. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
+§Mobile. Close a milestone's checks before starting the next.
 
 **The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read
 `docs/design/architecture.md` before touching it; what's left of M15 is in

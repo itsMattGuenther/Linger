@@ -806,9 +806,11 @@ is gone (#306).
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
 **A mobile client is not in this sequence** (Matt, 2026-08-28). It was going to
-be M14; it is on `TASKS.md`'s *Backburner* instead, because the desktop app has
-to be finished and used by real people before a second platform doubles the
-surface of every bug still in it. **M14 is now custom themes** (Matt,
+be M14 and went to `TASKS.md`'s *Backburner*, because the desktop app had to be
+finished and used by real people before a second platform doubled the surface
+of every bug still in it. It came back on 2026-10-02 as its own section of
+`TASKS.md` (T-16xx), not a milestone: a phone app for iPhone and Android from
+the same Tauri 2 crate, text first, with no push (SPEC §4.15). **M14 is now custom themes** (Matt,
 2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line and
 `TASKS.md` M14 carries the three things that have to be decided before any of it
 starts. The short version is that a theme is a list of token values rather than
@@ -824,9 +826,9 @@ months back is thousands of pages behind the newest, so the messages endpoint
 grew `around=<id>` and a room can now be *behind its own newest message*. While
 it is, live message frames for that room are dropped rather than folded into
 history they do not join onto — an invisible gap is the one thing the message
-store must never produce. One decision is still open and blocks the work it
-belongs to: whether mobile push through Apple and Google is acceptable at all
-(whenever mobile comes back). It is in `TASKS.md`'s parking lot.
+store must never produce. The decision that blocked mobile, whether push
+through Apple and Google was acceptable at all, was answered on 2026-10-02: it
+isn't, so the phone app has no push (SPEC §4.15).
 
 **The activity-detection spike came before M0** and did its job. One evening,
 Kubuntu/Plasma 6 Wayland and Windows, a throwaway binary that printed the

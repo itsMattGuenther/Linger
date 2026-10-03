@@ -107,7 +107,8 @@ a task fails its acceptance criteria twice.
 **M12 (voice) is built, and every release check closed on 2026-09-25.**
 **M15, the Buddy list client (#198), is the app from 0.4.0**; what's left of it
 is under [M15](#m15--the-buddy-list-client-198). M13 (ambient voice) is planned
-and not started, and larger groups and the voice rework are #197.
+and not started, and larger groups and the voice rework are #197. **Mobile is
+started** (2026-10-02, text first): [its own section](#mobile--started-2026-10-02-text-first).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue
@@ -473,11 +474,100 @@ Rules for this milestone:
 
 ---
 
+## Mobile — started 2026-10-02, text first
+
+*Off the backburner on 2026-10-02 (Matt, #253).* It was parked on 2026-08-28
+until the desktop app was finished and lived with; the release checks closed on
+2026-09-25 and friends have used it since. **T-1601 is decided and written into
+SPEC §4.15:** a phone app for iPhone and Android from the same Tauri 2 code, no
+push and no notifications, no `mobile` presence, uploads yes, and text only for
+now. The reasons are in [`docs/decisions.md`](docs/decisions.md).
+
+*Check: sign in, read a room, send a message and a photo, from a phone.*
+
+**No mobile branch.** Phone work lands on `main` in ordinary short branches
+(`feat/t-1602-…`). Desktop-only code is switched off for phone builds
+(`#[cfg(desktop)]`), and nothing ships to a phone until a phone build is added
+to the release workflow. Android builds and runs on Linux, in Android Studio's
+emulator or on a phone over USB or wifi. iPhone builds need macOS: GitHub's
+macOS runners, or a friend's Mac.
+
+- ✅ **T-1601 · Decide what mobile means** — *a decision, not a task.* Matt,
+  2026-10-02. No push (so no relay, and nothing new leaves the server), no
+  `mobile` presence state, uploads from phones, iPhone and Android both, and no
+  voice in the first version: it comes back only if people using the phone app
+  ask. Phone backups leave Linger out unless you opt in, and report and block
+  come before any store listing (T-1605). SPEC §4.15.
+
+- ⬜ **T-1602 · The mobile shell** — effort: **high**
+  Tauri 2 builds for iOS and Android from the same crate. What does not carry
+  over: the OS keyring (phones have their own secure storage), the tray, the
+  in-app updater (a phone app updates through its store), and voice, which
+  stays out of phone builds for now (SPEC §4.15). Expect the gateway to need
+  reconnect behaviour for a network that changes every time somebody walks out
+  of a building, and for a phone that stops the app as soon as it is in the
+  background. **The phone identifier is `io.github.itsmattguenther.linger`**
+  (Matt, 2026-10-02), set in `tauri.android.conf.json` and
+  `tauri.ios.conf.json` so desktop keeps `com.linger.desktop`. It is built
+  from the GitHub address, which nobody else can claim, and neither store lets
+  it change after the first upload. **Phone backups are off by default with a
+  setting to opt in** (SPEC §4.15, Matt 2026-10-02): on iPhone the app's files
+  are marked "don't back up" and the setting lifts the mark; on Android the
+  backup rules leave the app's files out unless it is on. Whether sign-ins
+  can come along depends on what each phone's secure storage lets move; work
+  that out here.
+  *Accept:* the app opens on a real phone, signs in, and stays connected across
+  a wifi-to-mobile-data switch.
+
+- ⬜ **T-1603 · The layout at phone width** — effort: **medium**
+  The Buddy list window is already phone width (340 px), which is a head start.
+  What is missing is where a conversation goes on a screen too narrow to
+  unfold it beside the list (#337), one-hand reach, and a message box above a
+  software keyboard. Check that an iPhone camera photo uploads as something the
+  server reads; iPhones save HEIC.
+  *Accept:* usable one-handed on a phone somebody actually owns.
+
+- ⬜ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+  Friends first, then the stores. Android: a signed APK on the GitHub release
+  (Google requires registered developers even outside its store, worldwide
+  from 2027). iPhone: TestFlight, which needs the Apple Developer Program
+  ($99/year); a TestFlight build stops working after 90 days. Then Google Play
+  ($25 once; 12 testers for 14 days before a new account can publish) and the
+  App Store, review, and store listings. **Needs T-1605 first:** both stores
+  require report and block. Apple's guideline 1.2 also asks for a way to
+  filter objectionable material and for published contact details, and both
+  stores want terms of use; what those mean for a self-hosted app among
+  friends is settled here, with Matt. Follow current vendor docs, not memory —
+  this changes every year.
+  *Accept:* somebody who has never met you installs it from a store.
+
+- ⬜ **T-1605 · Report and block** — effort: **medium**
+  SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
+  1.2, Google Play's user-generated content policy), so they come before any
+  store listing, and they go in the desktop app too. The proposed shape, to
+  confirm with Matt before building:
+  **Report** is in a message's menu and on a person's card. It sends the
+  message (or the person) to the host of that server with an optional note,
+  because a self-hosted server has nobody else to send it to; the host already
+  can delete a message or remove a member (T-413). The host sees reports in
+  their host controls, with **no count anywhere** (AGENTS rule 3).
+  **Block** is on a person's card and is private: they aren't told. It hides
+  their messages from you and stops their DMs and knocks reaching you. Which
+  surfaces filter it (stream, media, search, presence) is the bulk of the work,
+  the same kind of filtering M11 folded into every query for DMs
+  ([`m11.md`](docs/tasks/m11.md)).
+  *Accept:* a report reaches the host and only the host; a blocked person's
+  messages, DMs and knocks never reach the person who blocked them, on either
+  app.
+
+---
+
 ## Backburner — later, not the next thing
 
-Three things live here: one V1 feature that is still in the spec, one release
-errand blocked on money, and the mobile client. None of them is on the path to a
-usable desktop product. Do not pull any of them "while you're in there".
+Two things live here: one V1 feature that is still in the spec, and one release
+errand blocked on money. Neither is on the path to a usable desktop product. Do
+not pull either "while you're in there". The mobile client lived here until
+2026-10-02 and is now [its own section](#mobile--started-2026-10-02-text-first).
 
 **Activity detection used to be here and is gone** (Matt, 2026-08-28 —
 [`docs/decisions.md`](docs/decisions.md)). T-911…T-917 are deleted, along with
@@ -530,60 +620,6 @@ middle of it. Anything that lands before them must not break the frames they rel
   12–16 sounds per `assets/sounds/README.md` rules; `ffmpeg -af loudnorm=I=-16`
   for normalization; fill the source/license table.
 
-
-
-### Mobile
-
-*Moved here 2026-08-28 by Matt, out of V2.* **Desktop first.** The app has to be
-finished, installed by real people, and lived with for a while before a second
-platform is worth starting. A mobile client doubles the surface of every bug
-still in the desktop one, and V1 has not been through a single human check yet.
-This is not a "next quarter" item, it is a "when the desktop app is boring"
-item.
-
-*Check, when it comes back: sign in, read a room, send a message and a photo,
-from a phone.*
-
-**Start with the decision, not the code.** Mobile has one question in it that is
-Matt's and is not a technical one:
-
-> **Push notifications go through Apple and Google.** There is no other way to
-> wake a phone app. That means a message's *existence* — and whatever the
-> notification says — passes through a third party, which is a different promise
-> from the one the README makes today.
-
-Three honest answers, and one has to be picked before T-1602: ship without push
-and let the app only notify while open; ship with push and **change the README
-to say exactly what leaves the server**; or run a self-hosted push relay, which
-is a second piece of infrastructure for every host and probably kills it.
-Recorded in the *Parking lot* too.
-
-- ⬜ **T-1601 · Decide what mobile means** — *not a task; a decision.* Matt.
-  The push question above, plus: does mobile get uploads, does it get voice, and
-  is it iOS-and-Android or one of them. Write the answers into SPEC before
-  anything else starts.
-
-- ⬜ **T-1602 · The mobile shell** — effort: **high**
-  Tauri 2 builds for iOS and Android from the same crate. What does not carry
-  over: the OS keyring (mobile has its own secure storage) and the tray. Expect
-  the gateway to
-  need reconnect behaviour for a network that changes every time somebody walks
-  out of a building.
-  *Accept:* the app opens on a real phone, signs in, and stays connected across
-  a wifi-to-mobile-data switch.
-
-- ⬜ **T-1603 · The layout at phone width** — effort: **medium**
-  The roster already collapses under 880px (`client/src/lib/layout.ts`), which
-  is a head start. What is missing is one-hand reach, a composer above a
-  software keyboard, and the rail as something other than a fixed column.
-  *Accept:* usable one-handed on a phone somebody actually owns.
-
-- ⬜ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
-  Apple Developer Program, Google Play, review, and store listings. This is the
-  same money-and-paperwork wall as T-705, doubled. **Do not start without both
-  accounts.** Follow current vendor docs, not memory — this changes every year.
-  *Accept:* somebody who has never met you installs it from a store.
-
 ---
 
 ## V2 — M9, M10 and M11 built; voice is started
@@ -611,8 +647,8 @@ coordinate with Matt before starting** — that is where audio, real networks an
 the V1 work that came off the critical path — and for small V1 changes that land
 after the milestones closed (`T-904`). V2 starts a new band at **`T-1xxx`, where
 the hundreds digit is the area** — `T-11xx` knock, `T-12xx` search, `T-13xx`
-DMs, `T-14xx` voice, `T-15xx` ambient voice — and `T-16xx` mobile, which is on
-the backburner rather than in V2, and `T-17xx` themes, which is V3. It does not
+DMs, `T-14xx` voice, `T-15xx` ambient voice — and `T-16xx` mobile, which has
+its own section rather than a milestone, and `T-17xx` themes, which is V3. It does not
 continue the milestone-matches-number rule, because `T-9xx` is already spoken
 for.
 
@@ -627,9 +663,10 @@ M9 knock (built) → M10 search (built) → M11 DMs (built)
   → M12 voice (built; its four-network check is HC-9) → M13 ambient voice
 ```
 
-**Mobile is not in this sequence** (Matt, 2026-08-28). It was going to be M14;
-it is on the *Backburner* instead. Desktop has to be finished and used by real
-people first.
+**Mobile is not in this sequence** (Matt, 2026-08-28). It was going to be M14
+and went to the *Backburner* until the desktop app had been used by real
+people. It came back on 2026-10-02 as
+[its own section](#mobile--started-2026-10-02-text-first), not a milestone.
 
 ---
 
@@ -804,14 +841,16 @@ run again when its area changes.
   store without prices and a moderation surface, and rule 13 plus SPEC §6's
   "must never be load-bearing" both point at it.
 - Bundle identifier is `com.linger.desktop` — fine? Changing after M7 is painful.
-- **Mobile push goes through Apple and Google, or it does not exist.** There is
+- ~~**Mobile push goes through Apple and Google, or it does not exist.**~~
+  **Answered by Matt, 2026-10-02**, and written into SPEC §4.15: no push, so no
+  relay and no notifications, and the README stays as it is. There is
   no third way to wake a phone app. Whatever a notification says, and the fact
   that it happened, passes through a company that is not you. The README's
   privacy section does not currently allow for that. Three answers: no push
   (the app only notifies while it is open), push with the README changed to say
   exactly what leaves the server, or a self-hosted relay — which is a second
-  piece of infrastructure for every host and probably ends the idea. **This
-  blocks mobile** and nothing else. Raised 2026-08-28 while planning V2.
+  piece of infrastructure for every host and probably ends the idea. Raised
+  2026-08-28 while planning V2.
 - ~~**Where does search live, and what does it cover?**~~ **Answered by Matt,
   2026-08-30**, and written into SPEC §4.12: a destination in the rail next to
   `media`, opening in place of the stream, with `Ctrl`/`Cmd`+`K` as a shortcut

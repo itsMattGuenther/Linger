@@ -217,7 +217,8 @@ are person-to-person only. `@everyone` and `@here` do not exist and will not be 
 who it's from, and the desktop is asked to point at Linger (Windows flashes the
 taskbar button until you look; Linux marks the window urgent), unless somebody is
 already using Linger or reading that DM. Both are on unless turned off, on that
-computer (Settings → Notifications). Nothing opens a window by itself.
+computer (Settings → Notifications). Nothing opens a window by itself. The phone
+app raises none of these (§4.15): it marks mentions and DMs inside the app only.
 
 A mention is stored as `@username`. Usernames never change, so an old mention never
 breaks. People mention each other by the names they know (#267): `@` at the start of
@@ -281,6 +282,7 @@ Presence states: `in_room`, `around` (app focused, no room), `idle` (no
 input >10 min), `away` (explicit, with message), `offline`.
 
 That is the whole of it. Where somebody is, and nothing about what they are doing.
+Nor which device they are on: a phone shows the same states (§4.15).
 
 **Activity detection was cut on 2026-08-28** (Matt — `docs/decisions.md`). This
 section used to specify a feature that watched which application you had in front
@@ -707,6 +709,54 @@ Two sessions of the same person share that level. Unadjusted people remain at
 else all end it, and the people you were talking to see you go. You are in voice in at
 most one room at a time, for the same reason you are in one room at a time.
 
+### 4.15 The phone app
+
+**Decided by Matt on 2026-10-02 (T-1601, #253).** Linger gets a phone app for iPhone
+and Android, built from the same Tauri 2 code as the desktop app: the same gateway
+client in Rust, the same screens laid out for a phone. It is not a phone-friendly
+website. It is for seeing who is around and answering them, not a full port, and it
+starts **text only**.
+
+**Nothing wakes it, and it raises no notifications.** The only way to wake a closed
+phone app is a push through Apple's or Google's push service. Sending one needs keys
+that cannot be handed to every host, and the usual answer, one central relay that
+holds them, is a company in the middle. So there is no push and no relay, and the
+README's privacy promise stands as written: nothing new leaves the server. The phone
+app raises no notification, open or closed: no banners, nothing on the lock screen,
+and no badge on its icon, which would be an unread count (§4.2). Mentions and DMs are
+marked inside the app as on desktop and are there when you open it. Opening it
+catches up the way a desktop app does after a reconnect.
+
+**Presence is the same five states** (§4.3). Open on screen, a phone is `around` or
+`in_room`. Sent to the background, the phone soon stops the app and its connection
+closes, so it shows `offline`. That is the truth: it hears nothing until it is opened
+again. Presence never says which device somebody is on, because it is where they are,
+not what they are holding. There is no `mobile` state. One would also break older
+desktop apps: they can't read a presence value they don't know, and it would arrive
+in the first message they get on connecting.
+
+**What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
+phone's camera has its location stripped like any other (§4.10).
+
+**Phone backups leave Linger out unless you put it in.** A phone backs its apps up to
+Apple's or Google's cloud by default. The phone app opts out, so what it keeps (your
+list of servers and your settings) doesn't reach either company. A setting, off until
+you turn it on, includes it for anybody who would rather a new phone came with them.
+Messages and pictures are never in a backup either way: they live on the server.
+
+**Report and block come before any store listing** (T-1605). Both stores require them
+in apps where people post things. A report goes to the host, because there is nobody
+else to send it to, and the host can already delete a message or remove a member.
+Blocking someone hides them from you. Both go in the desktop app too: the server side
+is shared, and a host reads reports in whichever app they use.
+
+**What it does not do, yet: voice.** Phone voice would not pass through Apple or
+Google, since it goes to the host's server as desktop voice does. It is left out
+because a phone on speaker needs echo cancelling, which the desktop app does not
+have, and phone voice elsewhere is rarely pleasant for anyone. It comes back only if
+the people using the phone app ask for it. Ringing a closed phone into a voice room
+would need push, so that stays out either way (§4.14).
+
 ---
 
 ## 5. Design system
@@ -850,7 +900,7 @@ says what replaced it: a status somebody typed.
 - DMs and group DMs (§4.13)
 - Search (§4.12)
 - Knock (§4.9)
-- Mobile client
+- A phone app for iPhone and Android, text first, with no push (§4.15)
 
 ### V3 or never
 
