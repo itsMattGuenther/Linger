@@ -29,3 +29,9 @@
 :root[data-shell="phone"][data-keyboard="up"] body {
   padding-bottom: 0;
 }
+
+/* A picture opened over everything keeps its close button clear of the
+   phone's status bar. */
+:root[data-shell="phone"] .nx-viewer-close {
+  top: calc(env(safe-area-inset-top) + var(--space-3));
+}
