@@ -1132,6 +1132,16 @@ async function open(api: AuthedApi): Promise<void> {
   });
 }
 
+/**
+ * Ask every connection waiting between tries to try again now: the phone app
+ * back on the screen (`gateway_retry`, which only the phone has). A live one
+ * ignores it.
+ */
+export async function retryAllNow(): Promise<void> {
+  if (!isTauri()) return;
+  await Promise.all([...links.keys()].map((server) => invoke("gateway_retry", { baseUrl: server }).catch(() => undefined)));
+}
+
 /** Close one server's connection and forget everything it told us. */
 export function disconnect(server: string): Promise<void> {
   return inTurn(server, () => close(server));

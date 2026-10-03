@@ -27,7 +27,9 @@ export function thisDevice(phone: boolean): string {
  * away and back; short enough to come before Android freezes an app it has
  * stopped showing (about a minute, measured on Android 17), after which no
  * timer of ours runs and the server notices only when its heartbeats stop
- * (PROTOCOL, "Heartbeat").
+ * (PROTOCOL, "Heartbeat"). Android 17 on a Pixel also blocks the network of
+ * an app that's left the screen, after about five seconds, so there the
+ * connections drop sooner and retry into the block until this closes them.
  */
 export const BACKGROUND_GRACE_MS = 30_000;
 
@@ -40,10 +42,13 @@ export interface Showing {
 
 /**
  * Tell `onChange` when the app has been in the background for `graceMs`
- * (true), and when it's back (false). Coming back within the grace says
- * nothing. Answers how to stop.
+ * (true), and when it's back (false). Coming back within the grace tells
+ * `onReturn` instead: the connections weren't closed, but Android blocks a
+ * background app's network after about five seconds (Android 17 on a Pixel,
+ * 2026-10-03), so they may be waiting out a retry that has backed off, and
+ * should try again now. Answers how to stop.
  */
-export function watchBackground(page: Showing, graceMs: number, onChange: (away: boolean) => void): () => void {
+export function watchBackground(page: Showing, graceMs: number, onChange: (away: boolean) => void, onReturn?: () => void): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let away = false;
   const settle = () => {
@@ -60,6 +65,7 @@ export function watchBackground(page: Showing, graceMs: number, onChange: (away:
     if (timer !== null) {
       clearTimeout(timer);
       timer = null;
+      onReturn?.();
     }
     if (away) {
       away = false;

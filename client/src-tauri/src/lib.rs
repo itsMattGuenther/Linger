@@ -222,6 +222,20 @@ fn gateway_disconnect(connections: State<'_, Connections>, base_url: String) {
     });
 }
 
+/// Try one server's connection again now, if it's waiting between tries: the
+/// phone app back on the screen (`Handle::retry`). Android blocks an app's
+/// network soon after it leaves the screen, and the tries made into that
+/// block wait longer each time, up to half a minute.
+#[cfg(mobile)]
+#[tauri::command]
+fn gateway_retry(connections: State<'_, Connections>, base_url: String) {
+    connections.with(|held| {
+        if let Some(handle) = held.get(&base_url) {
+            handle.retry();
+        }
+    });
+}
+
 /// Hand one connection a fresh access token. The frontend is the only owner of
 /// refresh tokens, so this is the only way a new one arrives.
 #[tauri::command]
@@ -352,6 +366,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             gateway_disconnect,
             gateway_token,
             gateway_send,
+            gateway_retry,
             graphics::graphics_started,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,

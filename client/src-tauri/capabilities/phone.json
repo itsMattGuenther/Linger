@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "phone",
-  "description": "The phone app's one window (SPEC §4.15). It opens links in the person's browser, like the desktop list window, and calls only the app's own commands a text-only phone uses: the sign-ins, the gateway connections, the start-up check (graphics_started, which does nothing off Linux), and its sounds (src/phone_sound.rs): the phone's ringer, which chimes follow, a chime played as a notification sound (sound_play, the desktop's call, limited the same way), and the buzz in place of one on vibrate. No notifications, no voice, no updates, no other windows: lib.rs's phone_app registers nothing else, and src/acl.rs checks the two agree. The desktop files say \"platforms\" so none of them applies here.",
+  "description": "The phone app's one window (SPEC §4.15). It opens links in the person's browser, like the desktop list window, and calls only the app's own commands a text-only phone uses: the sign-ins, the gateway connections (gateway_retry tries one again at once when the app comes back to the screen), the start-up check (graphics_started, which does nothing off Linux), and its sounds (src/phone_sound.rs): the phone's ringer, which chimes follow, a chime played as a notification sound (sound_play, the desktop's call, limited the same way), and the buzz in place of one on vibrate. No notifications, no voice, no updates, no other windows: lib.rs's phone_app registers nothing else, and src/acl.rs checks the two agree. The desktop files say \"platforms\" so none of them applies here.",
   "platforms": ["android", "iOS"],
   "windows": ["main"],
   "permissions": [
@@ -17,6 +17,7 @@
     "allow-gateway-disconnect",
     "allow-gateway-token",
     "allow-gateway-send",
+    "allow-gateway-retry",
     "allow-graphics-started",
     "allow-phone-sound-mode",
     "allow-phone-buzz",

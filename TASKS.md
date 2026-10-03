@@ -513,9 +513,18 @@ macOS runners, or a friend's Mac.
   (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
   comes back signed in, with its tabs. The iPhone uses the Keychain through
   the keyring crate, built for iOS in CI but not yet run on an iPhone.
-  **Still to do:** a real wifi-to-mobile-data switch on a real phone (the emulator
-  reaches a local server over adb, which no network change touches), and
-  iOS, which needs a Mac. The launcher icon is the porch artwork
+  **On a real phone** (Matt's Pixel 11 Pro, Android 17, against his own
+  server, 2026-10-03): signed in, sent and got messages, and switched networks
+  both ways. Wi-Fi off: the connection closed and was back on mobile data
+  within a second. Wi-Fi back on: the connection riding mobile data dropped,
+  and the app resumed on Wi-Fi within a second, with nothing missed. Android
+  17 blocks an app's network about five seconds after it leaves the screen
+  (`dumpsys netpolicy` shows `APP_BACKGROUND`), so the connection drops then,
+  not at the thirty seconds the app allows, and it retries into the block
+  until then. Coming back after a short time it was live in two seconds, but
+  the retries back off up to thirty, so now the app tries again at once when
+  it comes back to the screen (`gateway_retry`). **Still to do:** iOS, which
+  needs a Mac. The launcher icon is the porch artwork
   (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the

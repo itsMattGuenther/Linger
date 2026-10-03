@@ -10,6 +10,7 @@ import {
   leaveVoice,
   loadNotifyRules,
   noteDm,
+  retryAllNow,
   saveStatus,
   serverState,
   loadReadMarkers,
@@ -264,7 +265,7 @@ function Servers({
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   // The phone app, a while in the background (SPEC §4.15): its connections close.
   const [backgrounded, setBackgrounded] = useState(false);
-  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded) : undefined), []);
+  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow()) : undefined), []);
   // And with no network: closed, and opened again the moment there is one.
   const [offline, setOffline] = useState(false);
   useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);

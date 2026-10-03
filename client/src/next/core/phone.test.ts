@@ -65,6 +65,29 @@ describe("the phone app in the background (SPEC §4.15)", () => {
     expect(heard).toEqual([]);
   });
 
+  it("says when the app comes back within the grace, so connections Android cut off try again at once", () => {
+    vi.useFakeTimers();
+    const shown = page();
+    const heard: string[] = [];
+    watchBackground(
+      shown,
+      60_000,
+      (away) => heard.push(away ? "away" : "here"),
+      () => heard.push("back"),
+    );
+    shown.show("visible");
+    expect(heard).toEqual([]);
+    shown.show("hidden");
+    vi.advanceTimersByTime(20_000);
+    shown.show("visible");
+    expect(heard).toEqual(["back"]);
+    // Past the grace the connections were closed, and opening them is a fresh start.
+    shown.show("hidden");
+    vi.advanceTimersByTime(60_000);
+    shown.show("visible");
+    expect(heard).toEqual(["back", "away", "here"]);
+  });
+
   it("stops listening when asked", () => {
     vi.useFakeTimers();
     const shown = page();

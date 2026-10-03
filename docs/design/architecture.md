@@ -462,6 +462,11 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   and they open again when it's back (`watchBackground`,
   `BACKGROUND_GRACE_MS`). Android freezes an app it has stopped showing after
   about a minute, after which no timer runs, so the grace has to come first.
+  Android 17 on a Pixel also blocks a background app's network after about
+  five seconds, so there the connections drop sooner and their tries back
+  off into the block. Back on the screen within the grace, the app asks them
+  to try again at once (`retryAllNow`, `gateway_retry`, `Handle::retry`)
+  rather than wait out a backoff that can reach half a minute.
   When the phone loses its network the connections close too, and they open
   the moment it's back (`watchNetwork`) rather than when missed heartbeats
   notice; the web view hears about the network only with Android's

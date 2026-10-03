@@ -14,6 +14,7 @@ const COMMANDS: &[&str] = &[
     "gateway_disconnect",
     "gateway_token",
     "gateway_send",
+    "gateway_retry",
     "voice_join",
     "voice_leave",
     "voice_frame",
