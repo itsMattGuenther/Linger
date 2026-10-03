@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod acl;
 mod autostart;
+mod clip;
 mod clipboard;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
@@ -550,6 +551,7 @@ pub fn run() {
         .manage(tray::VoiceItems::default())
         .manage(VoiceEngines::default())
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
+        .manage(clip::Clips::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -590,7 +592,10 @@ pub fn run() {
             window::next_request_attention,
             autostart::autostart_state,
             autostart::autostart_set,
-            clipboard::clipboard_image
+            clipboard::clipboard_image,
+            clip::clip_start,
+            clip::clip_stop,
+            clip::clip_cancel
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Linger");

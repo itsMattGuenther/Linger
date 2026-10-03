@@ -445,6 +445,31 @@ private, especially for DM files.
 - Files may be deleted after a while — a year, unless whoever runs the server
   chose differently. **Starring a file keeps it forever.**
 
+### Voice messages
+
+Rather say it than type it? Press the **microphone** beside the **+** in the
+message box. A panel opens over the box:
+
+1. Press **Record** when you're ready. Lines move with your voice, and the
+   time counts up.
+2. Press **Stop** when you're done. Stopping never sends anything.
+3. Press **Play** to hear it back.
+4. **Send voice message** sends it to the conversation. **Discard** throws it
+   away.
+
+It's a press, not a hold, so you can let go of the mouse while you talk. A
+voice message runs up to five minutes; at five minutes Linger stops recording
+by itself and keeps what you have, to hear back and send. Nothing leaves your
+computer until you press Send.
+
+Linger records from the microphone you picked in **Settings → Sound &
+Voice**, or your computer's default. If you move to another conversation
+while recording, it stops, and the clip waits in the one you recorded it in.
+
+A voice message shows in the conversation with a microphone, a play button
+and its length, and everyone can play it, whatever they're on. The desktop
+app records them today; the phone app will later.
+
 ## Talking
 
 Voice happens in a room, not in a call. There is nothing to ring and nobody to
@@ -532,10 +557,12 @@ each person, a way that is gone now, so people on those versions need to
 update to talk. A server that hasn't been updated either may still send a
 call that old way, and then the voice line says the server needs an update.
 
-**Nothing is recorded.** Not by the server, not by anybody's app, not "for
-transcription". The server passes voice along without keeping it; the person
-who runs it could listen, the same way they could read messages, and Linger
-says so rather than pretending otherwise.
+**Voice rooms are never recorded.** Not by the server, not by anybody's app,
+not "for transcription". The server passes voice along without keeping it; the
+person who runs it could listen, the same way they could read messages, and
+Linger says so rather than pretending otherwise. (A voice message is something
+else: a clip you record yourself and choose to send. See
+[Voice messages](#voice-messages).)
 
 Two things to know: on a network that blocks voice (some offices and public
 wifi), you need the host to run the relay (the host guide says how), and if

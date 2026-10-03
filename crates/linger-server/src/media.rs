@@ -163,7 +163,9 @@ fn io(err: std::io::Error) -> ApiError {
 async fn resolve_mime(path: &Path, declared: &str) -> Result<String, ApiError> {
     let head = read_head(path).await?;
     let declared_kind = media::kind_of(declared);
-    let sniffed = infer::get(&head).map(|t| media::canonical_mime(t.mime_type()).to_string());
+    let sniffed = infer::get(&head)
+        .map(|t| media::canonical_mime(t.mime_type()).to_string())
+        .map(|sniffed| sound_only(sniffed, declared));
 
     match sniffed {
         Some(sniffed) => {
@@ -183,6 +185,18 @@ async fn resolve_mime(path: &Path, declared: &str) -> Result<String, ApiError> {
         None => Err(ApiError::unsupported_media(
             "That file isn't what it says it is.",
         )),
+    }
+}
+
+/// A WebM file is a WebM file to the sniffer, sound or picture, and it calls
+/// every one `video/webm`. One declared as `audio/webm` is a voice message
+/// (#401), so it's taken as sound, as it says: it's served as `audio/webm`
+/// and filed under audio. Were it a video, it would only play as sound.
+fn sound_only(sniffed: String, declared: &str) -> String {
+    if sniffed == "video/webm" && media::canonical_mime(declared) == "audio/webm" {
+        "audio/webm".to_string()
+    } else {
+        sniffed
     }
 }
 
@@ -549,6 +563,37 @@ mod tests {
             "text/plain"
         );
         assert!(resolve_mime(&path, "image/jpeg").await.is_err());
+    }
+
+    /// The start of a WebM file as the sniffer knows one: the EBML header with
+    /// its doc type, then enough of anything to pass its length check.
+    fn webm_bytes() -> Vec<u8> {
+        let mut bytes = vec![0x1a, 0x45, 0xdf, 0xa3, 0x8f, 0x42, 0x86, 0x81, 0x01];
+        bytes.extend_from_slice(&[0x42, 0x82, 0x84]);
+        bytes.extend_from_slice(b"webm");
+        bytes.extend_from_slice(&[0x42, 0x87, 0x81, 0x04]);
+        bytes.resize(400, 0xec);
+        bytes
+    }
+
+    #[tokio::test]
+    async fn a_webm_declared_as_sound_is_sound_and_otherwise_a_video() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("staged");
+        tokio::fs::write(&path, webm_bytes()).await.unwrap();
+        assert_eq!(
+            resolve_mime(&path, "audio/webm").await.unwrap(),
+            "audio/webm"
+        );
+        assert_eq!(
+            resolve_mime(&path, "video/webm").await.unwrap(),
+            "video/webm"
+        );
+        // Sound in some other container is still checked as it was.
+        assert!(resolve_mime(&path, "audio/ogg").await.is_err());
+        // And a PNG declared as sound is still a lie.
+        tokio::fs::write(&path, png_bytes(4, 4)).await.unwrap();
+        assert!(resolve_mime(&path, "audio/webm").await.is_err());
     }
 
     /// The case the limit exists for: a tool that never finishes. It has to
