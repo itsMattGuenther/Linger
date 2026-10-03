@@ -514,8 +514,9 @@ macOS runners, or a friend's Mac.
   comes back signed in, with its tabs. **Still to do:** keeping sign-ins on
   the iPhone (the Keychain, which needs a Mac to build), the backup opt-in
   setting, a real wifi-to-mobile-data switch on a real phone (the emulator
-  reaches a local server over adb, which no network change touches),
-  Linger's icons for the launcher (still Tauri's), and iOS, which needs a Mac. Setup is in `docs/development.md`.
+  reaches a local server over adb, which no network change touches), and
+  iOS, which needs a Mac. The launcher icon is the porch artwork
+  (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and voice, which
@@ -548,7 +549,7 @@ macOS runners, or a friend's Mac.
   Checked in the emulator: Media, Search (a hit opens its room at the
   message), a DM, a photo sent from Android's file picker (it arrived and
   shows), and a link, which opened in the browser with Linger left as it
-  was. **Still to do:** one-hand reach, and the launcher icon.
+  was. **Still to do:** one-hand reach, judged on a phone somebody holds.
   The Buddy list window is already phone width (340 px), which is a head start.
   What is missing is where a conversation goes on a screen too narrow to
   unfold it beside the list (#337), one-hand reach, and a message box above a

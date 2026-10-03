@@ -209,6 +209,9 @@ To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
 source, run `python3 scripts/app-icons.py` from the repository root after
 `pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
 padding to make the source square, without cropping or stretching the artwork.
+The same script writes the phone app's Android launcher icons into
+`client/src-tauri/gen/android/app/src/main/res`: the artwork over the window's
+color (`--night-2`), which Android cuts to the phone's own icon shape.
 Use `python3 scripts/app-icons.py --check` to verify the committed files without
 changing them. The [desktop icon audit](app-icon-checks.md) explains the
 package checks and remaining visual checks. Packaging changes run an unsigned
