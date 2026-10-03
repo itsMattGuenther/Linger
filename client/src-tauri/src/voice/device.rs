@@ -238,10 +238,20 @@ fn input_stream(
     tx: &mpsc::Sender<Vec<i16>>,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let config = match pick(device.supported_input_configs()?) {
-        Some(config) => config,
-        None => device.default_input_config()?,
-    };
+    opened(
+        preferred(device.supported_input_configs()?),
+        || Ok(device.default_input_config()?),
+        |config| open_input(device, config, tx, alarm),
+    )
+}
+
+/// A stream from a microphone, in one format it offered.
+fn open_input(
+    device: &cpal::Device,
+    config: SupportedStreamConfig,
+    tx: &mpsc::Sender<Vec<i16>>,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
     let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
     let config_format = config.sample_format();
     let alarm = alarm.clone();
@@ -509,10 +519,23 @@ fn output_stream(
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let config = match pick(device.supported_output_configs()?) {
-        Some(config) => config,
-        None => device.default_output_config()?,
-    };
+    opened(
+        preferred(device.supported_output_configs()?),
+        || Ok(device.default_output_config()?),
+        |config| open_output(device, config, lanes, cues, deafened, rate, alarm),
+    )
+}
+
+/// A stream to an output device in one format it offered.
+fn open_output(
+    device: &cpal::Device,
+    config: SupportedStreamConfig,
+    lanes: &Arc<Mutex<HashMap<String, Lane>>>,
+    cues: &Cues,
+    deafened: &Arc<AtomicBool>,
+    rate: &AtomicU32,
+    alarm: &Alarm,
+) -> Result<cpal::Stream, DeviceError> {
     let channels = usize::from(config.channels());
     let device_rate = config.sample_rate();
     // Whatever was queued was for the device that just went; the new one may
@@ -722,13 +745,60 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// Open a device in the format `pick` preferred and, when it won't open that
+/// one, in its own default. A device can list a format it then refuses: a
+/// friend's Logitech PRO X 2 headset on Windows answered "The parameter is
+/// incorrect" (os error -2147024809) to what Linger chose, so he couldn't
+/// join voice at all (2026-10-03, #398; `plain_beyond_stereo` is the likely
+/// reason). A device's default is the format Windows mixes in, which always
+/// opens; its rate and channels the path already converts. Nothing
+/// preferred: the default. Both refused: the first refusal, which is what was
+/// asked for.
+fn opened<C, S, E>(
+    preferred: Option<C>,
+    default: impl FnOnce() -> Result<C, E>,
+    mut open: impl FnMut(C) -> Result<S, E>,
+) -> Result<S, E> {
+    let Some(config) = preferred else {
+        return open(default()?);
+    };
+    match open(config) {
+        Ok(stream) => Ok(stream),
+        Err(refused) => match default() {
+            Ok(fallback) => open(fallback).map_err(|_| refused),
+            Err(_) => Err(refused),
+        },
+    }
+}
+
+/// The format to try first, before the device's own default (`opened`).
+///
+/// On Windows that's the device's own: none of ours. Windows mixes every
+/// device in one format, opens that one for anybody, and is asked for any
+/// other only through a conversion a driver may get wrong. Two friends'
+/// headsets did (2026-10-03, #398): a Logitech PRO X 2 refused the 16-bit
+/// format outright, and a SteelSeries Arctis Nova 5's microphone opened in it
+/// and stayed silent, where Discord, which takes the device's own, heard it.
+/// The path converts whatever rate, channels and samples the device has.
+/// Elsewhere, 48 kHz, mono and 16-bit where offered, as `pick` chooses.
+fn preferred(
+    ranges: impl Iterator<Item = SupportedStreamConfigRange>,
+) -> Option<SupportedStreamConfig> {
+    if cfg!(windows) {
+        drop(ranges);
+        None
+    } else {
+        pick(ranges)
+    }
+}
+
 /// Prefer 48 kHz, prefer mono, and take any sample format the callbacks can
 /// read or convert. `None` means the device offers no 48 kHz at all and the
 /// caller should take the default and resample.
 fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<SupportedStreamConfig> {
     let mut best: Option<SupportedStreamConfig> = None;
     for range in ranges {
-        if format_rank(range.sample_format()).is_none() {
+        if format_rank(range.sample_format()).is_none() || plain_beyond_stereo(&range) {
             continue;
         }
         let Some(config) = range.try_with_sample_rate(SAMPLE_RATE) else {
@@ -739,6 +809,17 @@ fn pick(ranges: impl Iterator<Item = SupportedStreamConfigRange>) -> Option<Supp
         }
     }
     best
+}
+
+/// 16- and 8-bit samples on more than two channels, which Windows can't be
+/// asked for. cpal describes those formats to Windows the old, plain way
+/// (`WAVE_FORMAT_PCM`), which only ever meant mono or stereo, and a device
+/// that mixes in more, like a headset set to 7.1 surround, answers "The
+/// parameter is incorrect" (os error -2147024809, #398). Windows lists such a
+/// device's channels and nothing fewer, so its float formats are taken
+/// instead, which cpal describes the newer way.
+fn plain_beyond_stereo(range: &SupportedStreamConfigRange) -> bool {
+    range.channels() > 2 && matches!(range.sample_format(), SampleFormat::I16 | SampleFormat::U8)
 }
 
 /// Lower is better: fewest channels beyond one, then i16 over f32 because it
@@ -1104,6 +1185,112 @@ fn wait_or_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn range(channels: u16, format: SampleFormat) -> SupportedStreamConfigRange {
+        SupportedStreamConfigRange::new(
+            channels,
+            48_000,
+            48_000,
+            cpal::SupportedBufferSize::Unknown,
+            format,
+        )
+    }
+
+    #[test]
+    fn stereo_takes_sixteen_bit_samples_and_surround_never_does() {
+        // A stereo headset: 16-bit, as the rest of the path speaks.
+        let stereo = pick([range(2, SampleFormat::F32), range(2, SampleFormat::I16)].into_iter());
+        assert_eq!(
+            stereo.map(|c| (c.channels(), c.sample_format())),
+            Some((2, SampleFormat::I16))
+        );
+        // The same headset set to 7.1 (#398): Windows lists eight channels in
+        // every format, and only float can be asked for.
+        let surround = pick(
+            [
+                range(8, SampleFormat::I16),
+                range(8, SampleFormat::U8),
+                range(8, SampleFormat::F32),
+                range(8, SampleFormat::I32),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(
+            surround.map(|c| (c.channels(), c.sample_format())),
+            Some((8, SampleFormat::F32))
+        );
+    }
+
+    #[test]
+    fn windows_opens_a_device_in_its_own_format_and_elsewhere_we_choose() {
+        let listed = [range(2, SampleFormat::F32), range(2, SampleFormat::I16)];
+        let chosen = preferred(listed.into_iter()).map(|config| config.sample_format());
+        if cfg!(windows) {
+            // Nothing of ours: `opened` goes straight to the device's own (#398).
+            assert_eq!(chosen, None);
+        } else {
+            assert_eq!(chosen, Some(SampleFormat::I16));
+        }
+    }
+
+    #[test]
+    fn a_device_that_opens_what_it_listed_is_opened_that_way() {
+        let mut tried = Vec::new();
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || panic!("the default isn't asked for"),
+            |config| {
+                tried.push(config);
+                Ok(config)
+            },
+        );
+        assert_eq!(got, Ok("mono"));
+        assert_eq!(tried, ["mono"]);
+    }
+
+    #[test]
+    fn a_device_that_refuses_what_it_listed_opens_in_its_own_default() {
+        let mut tried = Vec::new();
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || Ok("its mix format"),
+            |config| {
+                tried.push(config);
+                if config == "mono" {
+                    Err("The parameter is incorrect.")
+                } else {
+                    Ok(config)
+                }
+            },
+        );
+        assert_eq!(got, Ok("its mix format"));
+        assert_eq!(tried, ["mono", "its mix format"]);
+    }
+
+    #[test]
+    fn refused_both_ways_it_says_why_the_first_one_failed() {
+        let got: Result<&str, &str> = opened(
+            Some("mono"),
+            || Ok("default"),
+            |config| {
+                Err(if config == "mono" {
+                    "refused mono"
+                } else {
+                    "refused default"
+                })
+            },
+        );
+        assert_eq!(got, Err("refused mono"));
+        let got: Result<&str, &str> =
+            opened(Some("mono"), || Err("no default"), |_| Err("refused mono"));
+        assert_eq!(got, Err("refused mono"));
+    }
+
+    #[test]
+    fn a_device_with_nothing_preferred_opens_in_its_default() {
+        let got: Result<&str, &str> = opened(None, || Ok("default"), Ok);
+        assert_eq!(got, Ok("default"));
+    }
 
     #[test]
     fn a_stereo_frame_becomes_one_sample() {
