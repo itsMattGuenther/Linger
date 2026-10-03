@@ -3,7 +3,7 @@
 .nx-set {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: var(--window-height);
   background: var(--surface-window);
   color: var(--text-secondary);
 }
@@ -311,7 +311,10 @@
 }
 
 .nx-set-preview-note {
-  flex: none;
+  /* Its own words wrap too, when even a line of its own is too narrow (a
+     phone with its text turned up). */
+  flex: 0 1 auto;
+  min-width: 0;
   margin-left: auto;
   color: var(--text-muted);
   font: 400 var(--text-label) / 1 var(--font-label);
@@ -546,10 +549,13 @@
   opacity: 0.6;
 }
 
+/* Too narrow for the name and the buttons together (a phone with its text
+   turned up), the buttons drop to a line of their own, still on the right. */
 .nx-set-item-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
   min-width: 0;
   min-height: var(--control-md);
 }
@@ -728,4 +734,82 @@
   font: 400 var(--text-label) / 1 var(--font-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* On the phone (SPEC §4.15): the list of sections, or one section, each the
+   whole width. */
+.nx-set[data-stack="index"] .nx-set-main,
+.nx-set[data-stack="section"] .nx-set-nav {
+  display: none;
+}
+
+/* Back sits at the very start of the bar, where it does on every phone screen. */
+.nx-set[data-stack] .k-titlebar {
+  padding-left: 0;
+}
+
+.nx-set[data-stack="index"] .nx-set-nav {
+  flex: 1;
+  width: auto;
+  border-right: 0;
+}
+
+/* The host's reports (T-1605): each one a small block of its own. */
+.nx-set-report {
+  gap: var(--space-2);
+  padding-top: var(--space-2-5);
+  padding-bottom: var(--space-2-5);
+}
+
+.nx-set-report-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* The flag, centred on the first line of words. */
+.nx-set-report-flag {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--line-meta);
+  color: var(--icon-muted);
+}
+
+/* Who sent it and what it's about, then when, beside the flag. The words
+   keep their own width, so where the date doesn't fit beside them it goes
+   under them, starting where they do, rather than squeezing them. */
+.nx-set-report-what {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  min-width: 0;
+}
+
+.nx-set-report-who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nx-set-report-meta time {
+  color: var(--text-muted);
+}
+
+.nx-set-report-note {
+  margin: 0;
+  color: var(--text-away);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  overflow-wrap: anywhere;
+}
+
+.nx-set-report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }

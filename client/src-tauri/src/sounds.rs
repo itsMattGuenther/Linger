@@ -20,7 +20,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::voice::audio::SAMPLE_RATE;
 use crate::voice::device::{DeviceError, Speaker};
 
 /// How long a sound's own speaker stays open after the last sound. Long
@@ -28,39 +27,8 @@ use crate::voice::device::{DeviceError, Speaker};
 /// short enough that Linger isn't holding a sound device for nothing.
 pub const KEEP_OPEN: Duration = Duration::from_secs(10);
 
-/// The longest sound the shell plays: two seconds. Every cue is under one;
-/// anything longer isn't one of Linger's sounds.
-pub const MAX_SAMPLES: usize = 2 * SAMPLE_RATE as usize;
-
-/// The loudest a sound may peak: 0.8 of full scale, the same ceiling the
-/// sound volume is designed to (`chime-onset.spec.ts`). The chat and Settings
-/// windows can play sounds too, and they render other people's messages; a
-/// page that went wrong must not be able to blast noise through this.
-pub const MAX_PEAK: i16 = 26_214;
-
-/// A sound as the page sent it, made safe to play: `None` when it is empty
-/// or too long, and scaled down whole (never clipped) when it peaks above
-/// [`MAX_PEAK`].
-#[must_use]
-pub fn checked(mut samples: Vec<i16>) -> Option<Vec<i16>> {
-    if samples.is_empty() || samples.len() > MAX_SAMPLES {
-        return None;
-    }
-    let peak = samples
-        .iter()
-        .map(|sample| i32::from(*sample).abs())
-        .max()
-        .unwrap_or(0);
-    if peak > i32::from(MAX_PEAK) {
-        let scale = f64::from(MAX_PEAK) / f64::from(peak);
-        for sample in &mut samples {
-            #[allow(clippy::cast_possible_truncation)]
-            let scaled = (f64::from(*sample) * scale).round() as i16;
-            *sample = scaled;
-        }
-    }
-    Some(samples)
-}
+// The safety check every sound passes, shared with the phone app's player.
+pub use crate::cue::{checked, MAX_PEAK, MAX_SAMPLES};
 
 /// Somewhere a sound can be played: a real speaker, or a stand-in in the
 /// tests.

@@ -21,6 +21,8 @@ export interface SoundProps {
   devices: VoiceDeviceList | null | "looking";
   /** Now, for saying whether quiet hours are on right now. */
   now: number;
+  /** The phone app, which is text only for now (SPEC §4.15): no Voice block. */
+  phone?: boolean;
 }
 
 /** A minute of the day as this computer writes clock times. */
@@ -29,7 +31,7 @@ function minuteText(minutes: number): string {
 }
 
 /** Sound & Voice (SND, VOICE-8, VOICE-9). */
-export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, now }: SoundProps) {
+export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, now, phone = false }: SoundProps) {
   // Choosing the push-to-talk key (decision 6): the next key pressed, if it's
   // one that types nothing. Escape leaves it as it was.
   const [picking, setPicking] = useState(false);
@@ -147,49 +149,51 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
         </div>
         <Note>Play always sounds a preview. Live chimes follow the switches and quiet hours.</Note>
       </Block>
-      <Block heading={HEADINGS.voice} lead="Talking happens in a room: Join, in a room's voice strip, turns your microphone on there.">
-        {devices === null || devices === "looking" ? (
-          <Note tone="status">{devices === null ? "Microphones and speakers are picked in the desktop app." : "Looking for microphones and speakers…"}</Note>
-        ) : (
-          <>
-            <Fields>
-              <Select
-                label="Microphone"
-                value={voice.devices.input ?? SYSTEM_DEFAULT}
-                onChange={(input) => onVoice({ ...voice, devices: { ...voice.devices, input: input === SYSTEM_DEFAULT ? null : input } })}
-                options={deviceOptions(devices.inputs, devices.default_input, voice.devices.input)}
-              />
-              <Select
-                label="Speakers"
-                value={voice.devices.output ?? SYSTEM_DEFAULT}
-                onChange={(output) => onVoice({ ...voice, devices: { ...voice.devices, output: output === SYSTEM_DEFAULT ? null : output } })}
-                options={deviceOptions(devices.outputs, devices.default_output, voice.devices.output)}
-              />
-            </Fields>
-            <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
-          </>
-        )}
-        <SettingRow
-          title="Push to talk"
-          description="Opens the microphone only while you hold the key. Not holding it isn't muting: nobody sees you as muted. Off by default: a room you leave running shouldn't need a key held down."
-          control={<Switch label="Push to talk" checked={voice.pushToTalk} onChange={(pushToTalk) => onVoice({ ...voice, pushToTalk })} />}
-        />
-        <SettingRow
-          title="Talk key"
-          description="The key you hold. Right Ctrl unless you pick another: the shortcuts use the left one, so they never open the microphone."
-          control={
+      {phone ? null : (
+        <Block heading={HEADINGS.voice} lead="Talking happens in a room: Join, in a room's voice strip, turns your microphone on there.">
+          {devices === null || devices === "looking" ? (
+            <Note tone="status">{devices === null ? "Microphones and speakers are picked in the desktop app." : "Looking for microphones and speakers…"}</Note>
+          ) : (
             <>
-              <kbd className="nx-set-key" title="The push-to-talk key">
-                {talkKeyName(voice.pushToTalkKey)}
-              </kbd>
-              <Button size="sm" variant="secondary" onClick={() => setPicking((on) => !on)}>
-                {picking ? "Press a key…" : "Change"}
-              </Button>
+              <Fields>
+                <Select
+                  label="Microphone"
+                  value={voice.devices.input ?? SYSTEM_DEFAULT}
+                  onChange={(input) => onVoice({ ...voice, devices: { ...voice.devices, input: input === SYSTEM_DEFAULT ? null : input } })}
+                  options={deviceOptions(devices.inputs, devices.default_input, voice.devices.input)}
+                />
+                <Select
+                  label="Speakers"
+                  value={voice.devices.output ?? SYSTEM_DEFAULT}
+                  onChange={(output) => onVoice({ ...voice, devices: { ...voice.devices, output: output === SYSTEM_DEFAULT ? null : output } })}
+                  options={deviceOptions(devices.outputs, devices.default_output, voice.devices.output)}
+                />
+              </Fields>
+              <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
             </>
-          }
-        />
-        {refused ? <Note tone="problem">{refused}</Note> : null}
-      </Block>
+          )}
+          <SettingRow
+            title="Push to talk"
+            description="Opens the microphone only while you hold the key. Not holding it isn't muting: nobody sees you as muted. Off by default: a room you leave running shouldn't need a key held down."
+            control={<Switch label="Push to talk" checked={voice.pushToTalk} onChange={(pushToTalk) => onVoice({ ...voice, pushToTalk })} />}
+          />
+          <SettingRow
+            title="Talk key"
+            description="The key you hold. Right Ctrl unless you pick another: the shortcuts use the left one, so they never open the microphone."
+            control={
+              <>
+                <kbd className="nx-set-key" title="The push-to-talk key">
+                  {talkKeyName(voice.pushToTalkKey)}
+                </kbd>
+                <Button size="sm" variant="secondary" onClick={() => setPicking((on) => !on)}>
+                  {picking ? "Press a key…" : "Change"}
+                </Button>
+              </>
+            }
+          />
+          {refused ? <Note tone="problem">{refused}</Note> : null}
+        </Block>
+      )}
     </>
   );
 }

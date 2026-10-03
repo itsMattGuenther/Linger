@@ -29,6 +29,12 @@ export interface ViewServer extends ScopeServer {
   users: readonly User[];
   /** Its rooms and the DMs you're in. */
   rooms: readonly Room[];
+  /**
+   * Who you've blocked there (PROTOCOL §5): what they shared and said isn't
+   * shown. Hidden as it's drawn, not as it's fetched, so a page that held
+   * some of theirs still counts as a full one. Left out: nobody.
+   */
+  blocked?: ReadonlySet<string>;
 }
 
 /**

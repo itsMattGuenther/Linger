@@ -154,11 +154,21 @@ impl Handle {
     pub fn shutdown(&self) {
         let _ = self.cmd.try_send(Cmd::Shutdown);
     }
+
+    /// Try again now if the connection is waiting between tries. The phone
+    /// sends this when the app comes back to the screen: Android blocks an
+    /// app's network soon after it leaves, the tries into that block back
+    /// off towards half a minute, and somebody looking at the app shouldn't
+    /// wait that out. A live connection, or one waiting for a token, ignores it.
+    pub fn retry(&self) {
+        let _ = self.cmd.try_send(Cmd::Retry);
+    }
 }
 
 enum Cmd {
     Token(Token),
     Send(ClientFrame),
+    Retry,
     Shutdown,
 }
 
@@ -432,6 +442,8 @@ impl<E: Events> Runner<E> {
                             return Outcome::Dropped("write failed".into());
                         }
                     }
+                    // Already connected: nothing to try again.
+                    Some(Cmd::Retry) => {}
                 },
             }
         }
@@ -468,6 +480,15 @@ impl<E: Events> Runner<E> {
                     }
                     // Nothing to send it over. See `Handle::send`.
                     Some(Cmd::Send(_)) => {}
+                    // Between tries: go now, and start the backoff over, so a
+                    // try that fails too waits half a second, not half a
+                    // minute. Waiting for a token, there's nothing to try with.
+                    Some(Cmd::Retry) => {
+                        if !stop_on_token {
+                            self.attempt = 0;
+                            return Wait::Elapsed;
+                        }
+                    }
                 },
             }
         }

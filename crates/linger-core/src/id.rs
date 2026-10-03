@@ -121,6 +121,10 @@ define_id!(
     /// One member's request for an archive of the whole server (SPEC §4.11).
     ExportId
 );
+define_id!(
+    /// A report a member sent the host (SPEC §4.15, PROTOCOL §5, T-1605).
+    ReportId
+);
 
 #[cfg(test)]
 mod tests {

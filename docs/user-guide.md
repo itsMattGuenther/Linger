@@ -788,6 +788,39 @@ earlier messages you are reading. If you scroll a long way back, the header
 offers **back to the newest** too — Linger has put down the newest messages
 to save memory, and scrolling down picks them up again.
 
+## Reporting and blocking
+
+Among friends these should hardly ever come up, so they stay out of the way.
+
+**Report** sends a message, or a person, to whoever hosts the server, and to
+nobody else. The person isn't told.
+
+- **A message:** on a computer, its **···** and then **Report to host…**, the
+  last item. On the phone, hold the message, and choose **Report to host…**.
+- **A person:** open their card (click their name), then **···** beside
+  **Knock**, and **Report**.
+
+You can add a note for the host before you send it. A host has nobody to
+report to, so they don't see Report at all: they can already delete a message
+or remove somebody.
+
+**Block** is on the same **···** on a person's card. It's private: they
+aren't told, and they still see what you say in rooms. For you:
+
+- Each of their messages folds into one grey line, "From Jules, who you
+  blocked". Click **Show** to read one anyway.
+- Their DMs never light up or chime, and their knocks stop reaching you.
+- Nothing of theirs shows in Media or Search.
+
+To undo it, choose **Unblock** on their card, or open **Settings → Account &
+App → Blocked**, which lists everyone you've blocked on that server.
+
+**If you host:** when somebody reports something, a row saying **A report to
+look at** lights up in your list. It never shows how many. It opens
+**Settings → People**, which shows who sent each report, what it's about and
+their note. From there you can delete the message, remove the person, or
+**Let it go**. Each of those closes the report.
+
 ## Taking everything with you
 
 Any member can ask the server for a copy of **everything on it** — every

@@ -1,10 +1,12 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Invite } from "../../../generated/Invite";
 import type { PresenceState } from "../../../generated/PresenceState";
+import type { Report } from "../../../generated/Report";
 import type { Room } from "../../../generated/Room";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
+import { fullTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import {
   draftSlug,
@@ -19,8 +21,9 @@ import {
   slugNeeded,
   slugTyped,
 } from "../../core/settings";
-import { Button, HashMark, IconButton, Marker, markerOf, Name, Swatch, TextField } from "../../kit";
+import { Button, HashMark, Icon, IconButton, Marker, markerOf, Name, Swatch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useFollowSaved, useSave } from "./parts";
+import "../chat/ReportBlock.css";
 
 /**
  * Hosting: running the server from Settings (HOST-1 to HOST-9). A member
@@ -384,9 +387,27 @@ export interface HostPeopleProps {
   removed: readonly User[] | null;
   remove: (userId: string) => Promise<string | null>;
   restore: (userId: string) => Promise<string | null>;
+  /**
+   * The open reports, newest first (T-1605), and what the host can do about
+   * one. Left out, or none open: nothing shows.
+   */
+  reports?: HostReports;
 }
 
-export function PeopleSection({ members, meId, presenceOf, removed, remove, restore }: HostPeopleProps) {
+/** The host's reports, and their three answers to one (PROTOCOL §5). */
+export interface HostReports {
+  open: readonly Report[];
+  /** Somebody a report names, if the server still knows them. */
+  personOf: (userId: string) => User | undefined;
+  /** Where a reported message was said: "#general", or "a DM". */
+  placeOf: (roomId: RoomId) => string;
+  /** Delete the reported message, then close the report. */
+  deleteMessage: (report: Report) => Promise<string | null>;
+  /** Let it go: close the report and do nothing else. */
+  close: (reportId: string) => Promise<string | null>;
+}
+
+export function PeopleSection({ members, meId, presenceOf, removed, remove, restore, reports }: HostPeopleProps) {
   const [asking, setAsking] = useState<string | null>(null);
   const save = useSave();
   const busy = save.phase.kind === "saving";
@@ -395,6 +416,7 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
 
   return (
     <>
+      {reports && reports.open.length > 0 ? <ReportsBlock reports={reports} remove={remove} meId={meId} /> : null}
       <Block heading={HEADINGS.members}>
         <ul className="nx-set-list" ref={list} aria-label="Members">
           {ordered.map((person) => (
@@ -467,6 +489,80 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
         </Note>
       </Block>
     </>
+  );
+}
+
+/**
+ * The host's open reports (T-1605): who sent each, about whom, the message's
+ * words as they were, the note, and the three answers: delete the message,
+ * remove the person (asking first, as the members list does), or let it go.
+ * There's no count of them anywhere (AGENTS rule 3).
+ */
+function ReportsBlock({ reports, remove, meId }: { reports: HostReports; remove: HostPeopleProps["remove"]; meId: string }) {
+  const [asking, setAsking] = useState<string | null>(null);
+  const save = useSave();
+  const busy = save.phase.kind === "saving";
+  const nameOf = (userId: string) => reports.personOf(userId)?.display_name ?? "somebody";
+  return (
+    <Block heading={HEADINGS.reports} lead="Sent to you and nobody else. Whoever they're about isn't told.">
+      <ul className="nx-set-list" aria-label="Reports">
+        {reports.open.map((report) => {
+          const about = reports.personOf(report.user_id);
+          const who = nameOf(report.user_id);
+          const removable = about !== undefined && about.id !== meId && !about.is_host;
+          return (
+            <li key={report.id} className="nx-set-item nx-set-report">
+              <p className="nx-set-report-meta">
+                <span className="nx-set-report-flag">
+                  <Icon name="flag" size="sm" />
+                </span>
+                <span className="nx-set-report-what">
+                  <span className="nx-set-report-who">
+                    From {nameOf(report.reporter_id)}, about {report.message ? `a message by ${who} in ${reports.placeOf(report.message.room_id)}` : who}
+                  </span>
+                  <time className="nx-set-mono" dateTime={new Date(report.created_at).toISOString()}>
+                    {fullTime(report.created_at)}
+                  </time>
+                </span>
+              </p>
+              {report.message ? <p className="nx-report-quote">{report.message.excerpt.trim() === "" ? "A file" : report.message.excerpt}</p> : null}
+              {report.note ? <p className="nx-set-report-note">"{report.note}"</p> : null}
+              {asking === report.id ? (
+                <Question
+                  words={`Remove ${who} from this server? They lose their sign-in and any invite links they made. What they wrote stays, and you can let them back in below.`}
+                  yes="Yes, remove"
+                  no="Keep them"
+                  busy={busy}
+                  onYes={() =>
+                    void save
+                      .run(remove(report.user_id).then((problem) => (problem === null ? reports.close(report.id) : problem)))
+                      .then((ok) => ok && setAsking(null))
+                  }
+                  onNo={() => setAsking(null)}
+                />
+              ) : (
+                <span className="nx-set-report-buttons">
+                  {report.message ? (
+                    <Button size="sm" variant="danger" disabled={busy} onClick={() => void save.run(reports.deleteMessage(report))}>
+                      Delete message
+                    </Button>
+                  ) : null}
+                  {removable ? (
+                    <Button size="sm" disabled={busy} onClick={() => setAsking(report.id)}>
+                      Remove {who}…
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="quiet" disabled={busy} onClick={() => void save.run(reports.close(report.id))}>
+                    Let it go
+                  </Button>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+    </Block>
   );
 }
 

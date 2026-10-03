@@ -1,4 +1,5 @@
 import { type FocusEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { Icon, type IconName } from "./Icon";
 import { GroupMarker, HashMark, Marker, MarkerSlot, type MarkerPerson } from "./Marker";
 import { TooltipBubble } from "./Tooltip";
 import "./Row.css";
@@ -8,6 +9,8 @@ export type RowLead =
   | { kind: "person"; person: MarkerPerson; typing?: boolean }
   | { kind: "group"; people: MarkerPerson[] }
   | { kind: "room" }
+  /** A mark of its own, like the flag on the host's "A report to look at" (T-1605). */
+  | { kind: "icon"; icon: IconName }
   | { kind: "none" };
 
 export interface RowProps {
@@ -81,6 +84,12 @@ function Lead({ lead }: { lead: RowLead }) {
       return (
         <MarkerSlot>
           <HashMark />
+        </MarkerSlot>
+      );
+    case "icon":
+      return (
+        <MarkerSlot>
+          <Icon name={lead.icon} size="sm" />
         </MarkerSlot>
       );
     case "none":

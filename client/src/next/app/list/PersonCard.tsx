@@ -2,8 +2,10 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { paletteKey } from "../../../lib/names";
-import { Button, Marker, MARKER_WORDS, markerStateOf, Name, Popover } from "../../kit";
+import { Button, IconButton, Marker, MARKER_WORDS, markerStateOf, Menu, type MenuAnchor, type MenuItem, Name, Popover } from "../../kit";
 import { knockOfflineLine, sentencesOf, type KnockResult } from "../../core/knock";
+import type { CardSafety } from "../../core/safety";
+import { BlockForm, ReportForm } from "../chat/ReportBlock";
 import { markerFor } from "../markers";
 import { PersonFields } from "../PersonFields";
 import "./PersonCard.css";
@@ -30,6 +32,8 @@ interface TheirCard {
   onKnock: () => Promise<KnockResult>;
   /** Why a knock from their row didn't go, when that's what opened the card. */
   problem?: string | null;
+  /** Report and block, behind the card's ··· (T-1605). Left out: neither. */
+  safety?: CardSafety;
   onEditProfile?: undefined;
 }
 
@@ -42,6 +46,7 @@ interface YourCard {
   onMessage?: undefined;
   onKnock?: undefined;
   problem?: undefined;
+  safety?: undefined;
 }
 
 export type PersonCardProps = CardBase & (TheirCard | YourCard);
@@ -63,7 +68,7 @@ export type PersonCardProps = CardBase & (TheirCard | YourCard);
 const GAP = 4;
 const EDGE = 8;
 
-export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEditProfile, onClose, problem: refused = null }: PersonCardProps) {
+export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEditProfile, onClose, safety, problem: refused = null }: PersonCardProps) {
   const first = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
 
@@ -84,6 +89,11 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
   }, [anchor.top, anchor.bottom, anchor.left]);
   const [phase, setPhase] = useState<"idle" | "knocking" | "knocked">("idle");
   const [problem, setProblem] = useState<string | null>(refused);
+  // The card itself becomes the form for a report or a block (T-1605), so
+  // neither opens anything of its own.
+  const [view, setView] = useState<"card" | "report" | "block">("card");
+  const [menu, setMenu] = useState<MenuAnchor | null>(null);
+  const more = useRef<HTMLSpanElement | null>(null);
 
   // Focus goes into the card when it opens (the row gets it back on close).
   useEffect(() => {
@@ -120,6 +130,63 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
   const status = user.status;
   const away = state === "away";
   const words = away ? (status?.away_message ?? null) : (status?.line ?? null);
+
+  const back = () => setView("card");
+  if (safety && view === "report" && safety.host !== null) {
+    return (
+      <Popover label={`Report ${user.display_name}`} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
+        <div className="nx-person" ref={first}>
+          <ReportForm who={user.display_name} host={safety.host} onSend={safety.report} onDone={back} />
+        </div>
+      </Popover>
+    );
+  }
+  if (safety && view === "block") {
+    return (
+      <Popover label={`Block ${user.display_name}`} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
+        <div className="nx-person" ref={first}>
+          <BlockForm who={user.display_name} onBlock={() => safety.block(true)} onDone={back} />
+        </div>
+      </Popover>
+    );
+  }
+  const items: MenuItem[] = safety
+    ? [
+        ...(safety.host === null
+          ? []
+          : [
+              {
+                id: "report",
+                label: `Report ${user.display_name}…`,
+                icon: "flag" as const,
+                onSelect: () => {
+                  setMenu(null);
+                  setView("report");
+                },
+              },
+            ]),
+        safety.blocked
+          ? {
+              id: "unblock",
+              label: `Unblock ${user.display_name}`,
+              icon: "block" as const,
+              onSelect: () => {
+                setMenu(null);
+                void safety.block(false).then(setProblem);
+              },
+            }
+          : {
+              id: "block",
+              label: `Block ${user.display_name}`,
+              icon: "block" as const,
+              tone: "danger" as const,
+              onSelect: () => {
+                setMenu(null);
+                setView("block");
+              },
+            },
+      ]
+    : [];
 
   return (
     <Popover label={user.display_name} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
@@ -159,9 +226,23 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
               >
                 {phase === "knocked" ? "Knocked" : "Knock"}
               </Button>
+              {safety ? (
+                <span ref={more}>
+                  <IconButton
+                    icon="more"
+                    label={`More for ${user.display_name}`}
+                    expanded={menu !== null}
+                    onClick={(event) => {
+                      const box = event.currentTarget.getBoundingClientRect();
+                      setMenu((open) => (open ? null : { top: box.top, left: box.left, right: box.right, bottom: box.bottom }));
+                    }}
+                  />
+                </span>
+              ) : null}
             </>
           )}
         </div>
+        {safety?.blocked ? <p className="nx-person-problem" data-tone="quiet">You've blocked {user.display_name}. Their messages fold away for you.</p> : null}
         {shown ? (
           <p className="nx-person-problem" data-tone={offline ? "quiet" : undefined} role="status">
             {sentencesOf(shown).map((sentence, at) => (
@@ -173,6 +254,17 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
           </p>
         ) : null}
       </div>
+      {menu ? (
+        <Menu
+          label={`More for ${user.display_name}`}
+          items={items}
+          anchor={menu}
+          onClose={(reason) => {
+            setMenu(null);
+            if (reason === "escape" || reason === "tab") more.current?.querySelector("button")?.focus();
+          }}
+        />
+      ) : null}
     </Popover>
   );
 }

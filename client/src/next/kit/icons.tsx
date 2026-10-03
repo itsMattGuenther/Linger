@@ -26,6 +26,10 @@ export const ICON_NAMES = [
   "media",
   "search",
   "send",
+  "back",
+  "block",
+  "flag",
+  "copy",
   "mic",
   "micOff",
   "link",
@@ -157,6 +161,34 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   send: (
     <>
       <path d="M2.5 8h9M8 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Back, on a phone (SPEC §4.15): send's arrow, turned to point the way you
+  // came, and centered in its box.
+  back: (
+    <>
+      <path d="M12.5 8H3.5M7.5 4L3.5 8l4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Somebody you blocked (T-1605): a ring with a stroke across it.
+  block: (
+    <>
+      <circle cx="8" cy="8" r="5.4" stroke="currentColor" strokeWidth="1.4" fill="none" />
+      <path d="M4.2 11.8L11.8 4.2" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  // Report to the host (T-1605): a flag on its pole.
+  flag: (
+    <>
+      <path d="M4 14V2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <path d="M4 3h8l-1.8 2.9L12 8.8H4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" />
+    </>
+  ),
+  // Copy a message's words (the phone, where holding a message can't select them).
+  copy: (
+    <>
+      <rect x="5.5" y="5.5" width="8" height="8.5" rx="1.4" stroke="currentColor" strokeWidth="1.4" fill="none" />
+      <path d="M10.5 3.4V3a1.2 1.2 0 0 0-1.2-1.2H3.4A1.2 1.2 0 0 0 2.2 3v6.2a1.2 1.2 0 0 0 1.2 1.2h.4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
     </>
   ),
   mic: (

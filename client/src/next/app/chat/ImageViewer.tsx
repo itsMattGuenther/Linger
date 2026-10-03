@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Attachment } from "../../../generated/Attachment";
 import { IconButton } from "../../kit";
 import "./ImageViewer.css";
+import { useBackButton } from "../useBackButton";
 
 /**
  * A picture from the conversation, over the whole window. It lives outside
@@ -11,6 +12,8 @@ import "./ImageViewer.css";
  */
 export function ImageViewer({ file, url, onClose }: { file: Attachment; url: string; onClose: () => void }) {
   const close = useRef<HTMLDivElement | null>(null);
+  // Android's Back closes the picture first (SPEC §4.15).
+  useBackButton(true, onClose);
   useEffect(() => {
     const opener = document.activeElement;
     close.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });

@@ -34,6 +34,13 @@
  * (`?maximized` has it maximized), and every resize and move is written down
  * as `size <w>x<h>` and `position <x>,<y>`.
  *
+ * Report and block (T-1605), on The Good Company: `?guest` has Eli host it
+ * instead of you, so there's somebody to report to; `?blocked` has you
+ * blocking Jules already; `?reports` has one report open for you, the host,
+ * from Eli about a message of Jules's in #general. Blocks, reports and
+ * closing one are written down (`block u-…`, `report {…}`, `close r-…`) and
+ * answered with the frames the server sends.
+ *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
@@ -49,6 +56,8 @@ import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
 import type { Message } from "../../src/generated/Message";
+import type { Report } from "../../src/generated/Report";
+import type { User } from "../../src/generated/User";
 import { json, PHOTO_PATH } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
@@ -69,6 +78,14 @@ const states: Record<string, GatewayState> = {
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };
+// `?guest`: Eli hosts The Good Company, and you don't (T-1605).
+if (query.has("guest")) {
+  const good = states[SERVER];
+  const host = (user: User): User => ({ ...user, is_host: user.id === people.eli.id });
+  if (good?.me) states[SERVER] = { ...good, me: host(good.me), users: good.users.map(host) };
+}
+/** Who you've blocked on The Good Company, as its server keeps them. */
+const blocks = new Set<string>(query.has("blocked") ? [people.jules.id] : []);
 /** The sign-ins saved on this computer: all three, or with `?one` The Good Company alone. */
 const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
 const NO_KEYRING = "No usable keyring on this computer (no secret service).";
@@ -340,6 +357,22 @@ if (many > 0) {
     ...held,
   ];
 }
+/** The Good Company's open reports, for its host: `?reports` has one of Jules's messages reported by Eli. */
+let reports: Report[] = (() => {
+  if (!query.has("reports")) return [];
+  const said = (history["r-general"] ?? []).find((message) => message.author_id === people.jules.id);
+  if (!said) return [];
+  return [
+    {
+      id: "r-1",
+      reporter_id: people.eli.id,
+      user_id: people.jules.id,
+      message: { id: said.id, room_id: "r-general", excerpt: said.body, created_at: said.created_at },
+      note: "This felt a bit much tonight.",
+      created_at: Date.now() - 20 * 60_000,
+    },
+  ];
+})();
 let serial = 900_000;
 function page(room: string, params: URLSearchParams): Message[] {
   const all = history[room] ?? [];
@@ -468,6 +501,42 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     );
   }
   if (path === "/me/notify-rules") return json([]);
+  // Report and block (PROTOCOL §5): The Good Company's; the others predate them.
+  if (server === SERVER && path === "/me/blocks" && method === "GET") return json([...blocks]);
+  const blockOf = server === SERVER ? /^\/me\/blocks\/([^/]+)$/.exec(path) : null;
+  if (blockOf && (method === "PUT" || method === "DELETE")) {
+    const id = decodeURIComponent(blockOf[1] ?? "");
+    const on = method === "PUT";
+    note(`${on ? "block" : "unblock"} ${id}`);
+    if (on) blocks.add(id);
+    else blocks.delete(id);
+    window.setTimeout(() => window.core?.frame(SERVER, { op: "block.update", d: { user_id: id, blocked: on } } as Omit<ServerFrame, "s">), 10);
+    return new Response(null, { status: 204 });
+  }
+  if (server === SERVER && path === "/reports" && method === "POST") {
+    note(`report ${JSON.stringify(body)}`);
+    const reported = typeof body.message_id === "string" ? (history["r-general"] ?? []).find((message) => message.id === body.message_id) : undefined;
+    const report: Report = {
+      id: `r-${reports.length + 2}`,
+      reporter_id: state.me?.id ?? "",
+      user_id: reported?.author_id ?? String(body.user_id ?? ""),
+      message: reported ? { id: reported.id, room_id: reported.room_id, excerpt: reported.body, created_at: reported.created_at } : null,
+      note: typeof body.note === "string" ? body.note : null,
+      created_at: Date.now(),
+    };
+    return json(report, 201);
+  }
+  if (server === SERVER && path === "/reports" && method === "GET") {
+    return state.me?.is_host ? json(reports) : json({ error: { code: "FORBIDDEN", message: "Only the host sees reports.", retry_after_ms: null } }, 403);
+  }
+  const reportOf = server === SERVER ? /^\/reports\/([^/]+)$/.exec(path) : null;
+  if (reportOf && method === "DELETE") {
+    const id = decodeURIComponent(reportOf[1] ?? "");
+    note(`close ${id}`);
+    reports = reports.filter((report) => report.id !== id);
+    window.setTimeout(() => window.core?.frame(SERVER, { op: "reports.changed", d: {} } as Omit<ServerFrame, "s">), 10);
+    return new Response(null, { status: 204 });
+  }
   if (path === "/server" && query.has("noinfo") && server === LISBON) return json({ error: { code: "UNAVAILABLE", message: "Busy.", retry_after_ms: null } }, 503);
   if (path === "/server") {
     return json({
@@ -485,6 +554,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === "/me" && method === "PATCH") return json({ ...state.me, status: body.status ?? state.me?.status ?? null });
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);
 };
+
+// The phone marks its page the way main.tsx does, so its styles apply here too.
+if (query.get("shell") === "phone") document.documentElement.dataset.shell = "phone";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

@@ -6,6 +6,7 @@ import { uploadFile } from "../../../lib/upload";
 import { loadVoicePrefs, onWindows, startProblemWords, voiceStartProblem } from "../../../lib/voice";
 import { opusWebm, PACKET_MS, readClip } from "../../../lib/webm";
 import { tauriBus } from "../../core/bus";
+import { onPhone } from "../../core/phone";
 import { FULL_NOTE, LOST_NOTE, SHORTEST_MS, TOO_SHORT, VOICE_MESSAGE_NAME, type VoiceMessage, withLevel } from "../../core/chat/voiceMessage";
 import type { TabKey } from "../../core/tabs";
 
@@ -29,7 +30,8 @@ export interface VoiceMessageControls {
  * stops it, and the clip waits where it was recorded, to hear back and send
  * or discard. Closing the window throws it away.
  *
- * Undefined outside the desktop app, where there's no recorder.
+ * Undefined outside the desktop app, where there's no recorder: the phone
+ * app has none yet (SPEC §4.15, #401), so it offers no microphone button.
  */
 export function useVoiceMessages(
   paneId: string | null,
@@ -41,7 +43,7 @@ export function useVoiceMessages(
   clipsNow.current = clips;
   /** The conversation being recorded in, if any. */
   const recordingIn = useRef<string | null>(null);
-  const desktop = isTauri();
+  const desktop = isTauri() && !onPhone();
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {

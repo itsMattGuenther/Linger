@@ -8,8 +8,10 @@ import {
   dismissKnock,
   type GatewayState,
   leaveVoice,
+  loadBlocks,
   loadNotifyRules,
   noteDm,
+  retryAllNow,
   saveStatus,
   serverState,
   loadReadMarkers,
@@ -41,7 +43,7 @@ import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
-import { isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -60,6 +62,11 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { desktopOf, firstTimeInTray, loadCloseList, trayNotice, type VoicePlace } from "../../core/closing";
+import { cardSafety } from "../../core/safety";
+import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
+import { type SettingsKey, settingsKeys } from "../../core/settings";
+import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
+import { useBackButton } from "../useBackButton";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
 import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
@@ -144,7 +151,7 @@ export function ListWindow() {
         actions={signIn}
         notice={sessions.notice}
         keyringNotice={sessions.keyringNotice}
-        onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
+        onClose={isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined}
       />
     );
   }
@@ -195,11 +202,14 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
  * UI of its own. Owning it here is what keeps a StrictMode remount from
  * leaving a socket nobody follows.
  */
-function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void }) {
+function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void; paused: boolean }) {
   const { api, baseUrl } = session;
   const status = useGateway(baseUrl).status.kind;
 
+  // Paused: the phone app a while in the background, so it shows offline,
+  // or with no network. Opened again when it's back (SPEC §4.15, core/phone.ts).
   useEffect(() => {
+    if (paused) return;
     void connect(api);
     return () => {
       forgetNotifications(baseUrl);
@@ -207,12 +217,16 @@ function ServerLink({ session, onInfo }: { session: ServerSession; onInfo: (serv
       dropPresence(baseUrl);
       void disconnect(baseUrl);
     };
-  }, [api, baseUrl]);
+  }, [api, baseUrl, paused]);
 
+  // Opening starts the server's state afresh, so these come again with it.
   useEffect(() => {
+    if (paused) return;
     void loadReadMarkers(api);
     void loadNotifyRules(api).catch(() => undefined);
-  }, [api]);
+    void loadBlocks(api).catch(() => undefined);
+    // The host's reports come with the server's `ready` (lib/gateway.ts).
+  }, [api, paused]);
 
   // Around, in no room: a conversation shown beside the list, or in a
   // window of its own, says where you are (core/showing.ts).
@@ -253,6 +267,12 @@ function Servers({
   const states = useServers();
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
+  // The phone app, a while in the background (SPEC §4.15): its connections close.
+  const [backgrounded, setBackgrounded] = useState(false);
+  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow()) : undefined), []);
+  // And with no network: closed, and opened again the moment there is one.
+  const [offline, setOffline] = useState(false);
+  useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);
   const ordered = useMemo(() => inOrder(signedIn, prefs.order), [signedIn, prefs.order]);
   const quiet = useMemo(() => new Set(prefs.quiet), [prefs.quiet]);
   const [infos, setInfos] = useState<Readonly<Record<string, ServerInfo>>>({});
@@ -503,7 +523,9 @@ function Servers({
     if (handle.current) handle.current.open(opening);
     else if (unfoldedNow.current) waitingOpens.current.push(opening);
     else {
-      setTabs((held) => (preview ? previewTab(held, tab) : openTab(held, tab)));
+      // On the phone the list is home: anything left from before is gone,
+      // and this is the first screen over it.
+      setTabs((held) => (onPhone() ? pushTab(NO_TABS, tab) : preview ? previewTab(held, tab) : openTab(held, tab)));
       unfold(opening);
     }
     bringForward();
@@ -515,7 +537,8 @@ function Servers({
   openToolBeside.current = (which) => {
     if (apisRef.current.size === 0) return;
     const tab: SideTab = { tool: which };
-    setTabs((held) => openTab(held, tab));
+    const over = unfoldedNow.current;
+    setTabs((held) => (onPhone() ? pushTab(over ? held : NO_TABS, tab) : openTab(held, tab)));
     if (which === "search") setSearchAsk((count) => count + 1);
     if (!unfoldedNow.current) unfold(null);
     bringForward();
@@ -532,6 +555,72 @@ function Servers({
   const intendHere = useCallback(async (intent: Intent) => {
     sharing?.local(intent);
   }, []);
+
+  // Settings on the phone: drawn over the list, in the phone's one window
+  // (SPEC §4.15). On a computer it's a window of its own (`shell.settings`).
+  const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey } | null>(null);
+  const phoneSettingsOpen = useRef(false);
+  phoneSettingsOpen.current = phoneSettings !== null;
+  // On the phone, Back takes the top screen off: a conversation, Media or
+  // Search, and the last one off is the list again (SPEC §4.15). Settings,
+  // drawn over everything, handles its own.
+  const goBack = useCallback(() => setTabs((held) => backTab(held)), []);
+  useBackButton(unfolded && phoneSettings === null, goBack);
+  const sectionAsked = useRef(new Set<(key: string | null) => void>());
+  useEffect(() => {
+    if (!onPhone()) return;
+    showSettingsHere = (section) => {
+      if (phoneSettingsOpen.current) for (const heard of sectionAsked.current) heard(section ?? null);
+      else setPhoneSettings({ section: settingsKeys(EVERY_SECTION).find((key) => key === section) });
+    };
+    return () => {
+      showSettingsHere = null;
+    };
+  }, []);
+  // Signing in or out while it's open: it shows what's left.
+  const signedInNow = useRef(new Set<(server: string) => void>());
+  const signedOutNow = useRef(new Set<(server: string) => void>());
+  const wereSignedIn = useRef<readonly string[]>([]);
+  useEffect(() => {
+    const now = signedIn.map((session) => session.baseUrl);
+    const was = wereSignedIn.current;
+    wereSignedIn.current = now;
+    for (const server of was) if (!now.includes(server)) for (const heard of signedOutNow.current) heard(server);
+    for (const server of now) if (!was.includes(server)) for (const heard of signedInNow.current) heard(server);
+  }, [signedIn]);
+  const phoneHolder = useMemo(
+    (): SettingsHolder => ({
+      following: {
+        // Read when asked: the sign-ins this window holds now.
+        get apis() {
+          return apisRef.current;
+        },
+        intend: intendHere,
+        onSignedOut: (heard) => {
+          signedOutNow.current.add(heard);
+          return () => void signedOutNow.current.delete(heard);
+        },
+        onSignedIn: (heard) => {
+          signedInNow.current.add(heard);
+          return () => void signedInNow.current.delete(heard);
+        },
+        stop: () => undefined,
+      },
+      notify: (question) => sharing?.localNotify(question) ?? Promise.resolve({ problem: "Linger is still starting. Try again in a moment." }),
+      password: (question) => sharing?.localPassword(question) ?? Promise.resolve({ problem: "Linger is still starting. Try again in a moment." }),
+      onSection: (heard) => {
+        sectionAsked.current.add(heard);
+        return () => void sectionAsked.current.delete(heard);
+      },
+      // Your servers' order and Quiet change only in Settings while it covers the list.
+      onServerPrefs: () => () => undefined,
+      close: () => setPhoneSettings(null),
+      closable: true,
+      section: phoneSettings?.section,
+      phone: true,
+    }),
+    [intendHere, phoneSettings?.section],
+  );
 
   // Ctrl+, opens Settings from the list too, and Ctrl+K Search.
   useEffect(() => {
@@ -697,6 +786,9 @@ function Servers({
             onOpenPerson: (user, dm) => void openPerson(api, user, dm),
             onMessage: (user) => void messageWith(api, user),
             onKnock: (user) => knockOn(api, user.id),
+            safetyFor: (user) => cardSafety(api, state, user),
+            // The host, with a report open (T-1605): Settings, People, where they are.
+            onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
             onStartDm: (people) => startDm(api, people),
             onHost: (section) => shell.settings(section),
             showing: besideTab?.server === baseUrl ? besideTab.roomId : null,
@@ -805,6 +897,7 @@ function Servers({
     update,
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
+    thisDevice(onPhone()),
   );
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
@@ -893,11 +986,12 @@ function Servers({
     if (seen !== null && keys.some((key) => !seen.has(key))) setRock((count) => count + 1);
   }, [knocks]);
 
-  const closeList = isTauri() ? () => void getCurrentWindow().close() : undefined;
+  // A phone's app is closed the phone's way, never with a button of ours (SPEC §4.15).
+  const closeList = isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined;
   return (
     <>
       {signedIn.map((session) => (
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} />
+        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} paused={backgrounded || offline} />
       ))}
       <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
         <div className="nx-app-list">
@@ -926,7 +1020,7 @@ function Servers({
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
               notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
-              onUnfold={!unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
+              onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
               onClose={unfolded ? undefined : closeList}
             />
           )}
@@ -958,9 +1052,15 @@ function Servers({
             voiceControl={voiceControl}
             onFold={fold}
             onClose={closeList}
+            onBack={onPhone() ? goBack : undefined}
           />
         ) : null}
       </div>
+      {phoneSettings ? (
+        <div className="nx-phone-over">
+          <Settings holder={phoneHolder} />
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1060,6 +1160,11 @@ const shell: WindowOpener = {
     );
   },
   settings: (section) => {
+    // The phone's one window draws Settings over the list (SPEC §4.15).
+    if (showSettingsHere) {
+      showSettingsHere(section);
+      return;
+    }
     if (!isTauri()) return;
     void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
@@ -1092,6 +1197,10 @@ let sharing: Sharing | null = null;
 let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void) | null = null;
 /** Media or Search beside the list, once it's drawn. */
 let showToolBeside: ((which: "media" | "search") => void) | null = null;
+/** Settings over the list, on the phone only, once the list is drawn. */
+let showSettingsHere: ((section?: string) => void) | null = null;
+/** A scope with every section in it, to check a section asked for against. */
+const EVERY_SECTION = { hosting: "any", severalServers: true, windows: true };
 
 /**
  * Show a conversation: in its own window if it was popped out into one,

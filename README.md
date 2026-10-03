@@ -162,7 +162,9 @@ crates/linger-core/    shared types, IDs and the palette: the wire contract
 crates/linger-server/  the server: REST and WebSocket gateway, SQLite, file storage
 client/                the desktop app: Tauri 2 shell (src-tauri) and React
                        (src/next is the app; src/lib is the logic its windows
-                       share, and src/generated the wire types)
+                       share, and src/generated the wire types); the phone
+                       app, started, builds from the same shell
+                       (src-tauri/gen/android)
 deploy/                Dockerfile, compose and Caddyfile
 packaging/arch/        the Arch/Omarchy package and its repository
 docs/                  guides, decisions, design, release notes
@@ -173,12 +175,15 @@ scripts/               check.sh (the local gate) and what it calls
 cargo test --workspace                        # server and core, no GUI needed
 cd client && pnpm install && pnpm check && pnpm test
 cd client && pnpm tauri dev                   # the desktop app
+cd client && pnpm tauri android dev           # the phone app, on Android
 ```
 
 The desktop app needs a webview, ALSA headers, cmake, the GStreamer plugins
 for sound, and the appindicator library for the tray; the packages for each
 distribution are in [docs/development.md](docs/development.md), with
-everything else about building and testing. **Run `scripts/check.sh` before
+everything else about building and testing. The phone app needs Android
+Studio, Java 21 and the Rust Android targets; the steps are in its section
+there. **Run `scripts/check.sh` before
 pushing**; it runs what CI runs for your change, and
 [docs/testing-strategy.md](docs/testing-strategy.md) says what runs where.
 

@@ -22,10 +22,12 @@ import {
   startedTyping,
   trimHistory,
   useServers,
+  sendReport,
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { onWindows, voiceStartProblem } from "../../../lib/voice";
+import { onPhone } from "../../core/phone";
 import { tauriBus } from "../../core/bus";
 import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere } from "../../core/chat/conversation";
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
@@ -33,6 +35,7 @@ import { type MentionPerson, mentionable as mentionableIn } from "../../core/cha
 import { clipboardImageReader } from "../../core/chat/paste";
 import { voiceStrip } from "../../core/chat/voice";
 import { knockOfflineLine, knockOn } from "../../core/knock";
+import { cardSafety, hostName, said } from "../../core/safety";
 import { personRow } from "../../core/list";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { keyOf, type TabKey } from "../../core/tabs";
@@ -320,9 +323,22 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     setCard(null);
     if (cardOpener.current?.isConnected) cardOpener.current.focus();
   }, []);
+  // Report to the host (T-1605): nobody to send one to when you're the host.
+  const host = state ? hostName(state) : null;
+  const report = useMemo(
+    () =>
+      api && host !== null
+        ? {
+            host,
+            send: (message: Message, note: string | null) =>
+              said(sendReport(api, note === null ? { message_id: message.id } : { message_id: message.id, note }), "Couldn't send the report."),
+          }
+        : undefined,
+    [api, host],
+  );
   const actions = useMemo(
-    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson }),
-    [save, remove, pin, download, wantCards, openPerson],
+    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report }),
+    [save, remove, pin, download, wantCards, openPerson, report],
   );
 
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
@@ -331,7 +347,9 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   }, [api, roomId]);
   const voiceMessage = useVoiceMessages(paneId, apis, find);
   const composer = useMemo(
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage }),
+    // On the phone the cursor goes in the box when it's tapped: putting it there
+    // on opening raises the keyboard over half the conversation (SPEC §4.15).
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage }),
     [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage],
   );
 
@@ -403,7 +421,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     return {
       id: paneId,
       header,
-      voice: {
+      // The phone is text only for now (SPEC §4.15): no voice line to join from.
+      voice: onPhone() ? null : {
         strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false),
         onJoin,
         onPickDevice,
@@ -423,6 +442,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
       },
       people,
       me: state.me,
+      blocked: new Set(state.blocked),
       speaking: talking,
       typing: typingIn(state, room.id, typingNow),
       mentionable,
@@ -488,6 +508,10 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
                 const cardApi = apis.get(card.server);
                 return cardApi ? knockOn(cardApi, cardRow.user.id) : Promise.resolve({ ok: false, problem: "You're not signed in to that server any more." });
               },
+              safety: (() => {
+                const cardApi = apis.get(card.server);
+                return cardApi && cardState ? cardSafety(cardApi, cardState, cardRow.user) : undefined;
+              })(),
             })}
       />
     ) : null;

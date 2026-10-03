@@ -5,7 +5,9 @@ structure and this file) and implementation sessions — run by any contributor,
 with any coding agent. It is a live document: claim tasks, check them off, add
 discoveries, and keep it truthful.
 
-Tasks are marked **⬜ not started**, **⏳ claimed** (name + date), or **✅ done**
+Tasks are marked **⬜ not started**, **⏳ claimed** (name + date), **🟡 started**
+(part done, with what's left), **⏸ waiting** (on purpose, for a decision or
+another task), or **✅ done**
 — emoji, not markdown `- [ ]` checkboxes, so the state of the queue is visible
 at a glance while scrolling. Use the same characters when you add or move a task.
 
@@ -498,10 +500,39 @@ macOS runners, or a friend's Mac.
   2026-10-02. No push (so no relay, and nothing new leaves the server), no
   `mobile` presence state, uploads from phones, iPhone and Android both, and no
   voice in the first version: it comes back only if people using the phone app
-  ask. Phone backups leave Linger out unless you opt in, and report and block
-  come before any store listing (T-1605). SPEC §4.15.
+  ask. Phone backups leave Linger out (the opt-in was dropped 2026-10-03), and
+  report and block come before any store listing (T-1605). SPEC §4.15.
 
-- ⬜ **T-1602 · The mobile shell** — effort: **high**
+- 🟡 **T-1602 · The mobile shell** — effort: **high**
+  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone half waits
+  until Android is out (Matt has no iPhone; docs/decisions.md, "Android
+  first, Apple after").*
+  *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
+  builds for Android with the desktop-only code switched off (`phone_app` in
+  `src/lib.rs`, `capabilities/phone.json`, voice moved to
+  `src/voice_commands.rs`, `src/acl.rs` checking the phone's grants); the
+  Android project in `gen/android`, with cloud backup off; and in the Android
+  emulator the app opens, sets up a server, signs in, and its live connection
+  comes up. Thirty seconds in the background closes the connections (offline,
+  as SPEC §4.15 says) and coming back opens them; losing the network closes
+  them and getting it back reopens them at once (checked with airplane mode in
+  the emulator). Android keeps sign-ins in its Keystore-backed store
+  (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
+  comes back signed in, with its tabs. The iPhone uses the Keychain through
+  the keyring crate, built for iOS in CI but not yet run on an iPhone.
+  **On a real phone** (Matt's Pixel 11 Pro, Android 17, against his own
+  server, 2026-10-03): signed in, sent and got messages, and switched networks
+  both ways. Wi-Fi off: the connection closed and was back on mobile data
+  within a second. Wi-Fi back on: the connection riding mobile data dropped,
+  and the app resumed on Wi-Fi within a second, with nothing missed. Android
+  17 blocks an app's network about five seconds after it leaves the screen
+  (`dumpsys netpolicy` shows `APP_BACKGROUND`), so the connection drops then,
+  not at the thirty seconds the app allows, and it retries into the block
+  until then. Coming back after a short time it was live in two seconds, but
+  the retries back off up to thirty, so now the app tries again at once when
+  it comes back to the screen (`gateway_retry`). **Still to do:** iOS, which
+  needs a Mac. The launcher icon is the porch artwork
+  (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and voice, which
@@ -512,24 +543,52 @@ macOS runners, or a friend's Mac.
   (Matt, 2026-10-02), set in `tauri.android.conf.json` and
   `tauri.ios.conf.json` so desktop keeps `com.linger.desktop`. It is built
   from the GitHub address, which nobody else can claim, and neither store lets
-  it change after the first upload. **Phone backups are off by default with a
-  setting to opt in** (SPEC §4.15, Matt 2026-10-02): on iPhone the app's files
-  are marked "don't back up" and the setting lifts the mark; on Android the
-  backup rules leave the app's files out unless it is on. Whether sign-ins
-  can come along depends on what each phone's secure storage lets move; work
-  that out here.
+  it change after the first upload. **Phone backups leave Linger out**
+  (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
+  `allowBackup="false"` does it there, and the iPhone's files still need
+  marking "don't back up" once its Xcode project exists.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
-- ⬜ **T-1603 · The layout at phone width** — effort: **medium**
-  The Buddy list window is already phone width (340 px), which is a head start.
-  What is missing is where a conversation goes on a screen too narrow to
-  unfold it beside the list (#337), one-hand reach, and a message box above a
-  software keyboard. Check that an iPhone camera photo uploads as something the
-  server reads; iPhones save HEIC.
+- 🟡 **T-1603 · The layout at phone width** — effort: **medium**
+  *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
+  one window (`docs/design/architecture.md`, "The phone's one window"): the
+  page keeps clear of the phone's bars, the ✕, pop-out and voice line are
+  gone, conversations open over the list, and Settings opens over it as its
+  sections, then one section. In the emulator: set up a server, made a room
+  from Settings, read and sent messages, and got Sam's reply live.
+  The message box sits on the keyboard, with the header still showing
+  (`followKeyboard`, checked with the emulator's on-screen keyboard).
+  Opening a conversation leaves the keyboard down until the box is tapped.
+  Checked in the emulator: Media, Search (a hit opens its room at the
+  message), a DM, a photo sent from Android's file picker (it arrived and
+  shows), and a link, which opened in the browser with Linger left as it
+  was. **One screen at a time** (Matt, 2026-10-03, docs/decisions.md): no
+  tabs on the phone. A conversation, Media or Search opens over the list,
+  full screen, with ← Back, and they stack: a search hit opens over Search,
+  and Back returns to Search as it was left. Settings goes back with ← too.
+  Rows and the title bar are 44 and 48 px tall, so a thumb hits them, and
+  `next-phone.spec.ts` checks that no screen reaches past the phone's edge.
+  Checked in the emulator with Android's own Back. **Still to do, on Matt's
+  Pixel:** one-hand reach (open a room, scroll back, send, Back, Media,
+  Search, a friend's card, Away and back, all with one thumb), the same at
+  Android's largest Font size, and a photo from the gallery and one taken
+  with the camera. **Waiting for the iPhone** (Android first): an edge swipe
+  for Back, since the iPhone has no Back of its own, and checking that an
+  iPhone camera photo uploads as something the server reads (iPhones save
+  HEIC).
+  Seen on the first run in the emulator (2026-10-02): the list's title bar
+  draws under the phone's clock and icons, its ✕ means nothing on a phone, the
+  sign-in note says "this computer", and everything that opens another window
+  (Settings, "Make the first room", a conversation, Media, Search) does
+  nothing. A phone has one window and `phone.json` grants none of the window
+  commands, so all of those have to open inside the list's window instead.
   *Accept:* usable one-handed on a phone somebody actually owns.
 
-- ⬜ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+- ⏸ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+  *Waiting (Matt, 2026-10-03):* starts once T-1605 is done and Matt says go.
+  Android first, on Google Play, with Matt paying the $25; Apple only after it
+  has worked well there.
   Friends first, then the stores. Android: a signed APK on the GitHub release
   (Google requires registered developers even outside its store, worldwide
   from 2027). iPhone: TestFlight, which needs the Apple Developer Program
@@ -543,11 +602,35 @@ macOS runners, or a friend's Mac.
   this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
 
-- ⬜ **T-1605 · Report and block** — effort: **medium**
+- ✅ **T-1605 · Report and block** — effort: **medium**
+  *Built 2026-10-03 on `feat/t-1602-mobile-shell`; it reaches `main` with
+  that branch.* The server (PROTOCOL §5, "Report and block"): `/me/blocks`,
+  `/reports`, the `block.update` and `reports.changed` frames, a blocked
+  person's knock dropped, and `tests/report_block.rs` for who hears what.
+  The apps, as the mockups Matt approved: Report and Block behind a ··· on a
+  person's card, Report to host… last in a message's actions (held for, on
+  the phone, in a sheet from the bottom), each blocked message one grey line
+  you can open, nothing of theirs lit, chimed, in Media or in Search,
+  Settings › Account listing who you've blocked, and the host's one lit row,
+  "A report to look at", opening Settings › People with each report and
+  Delete message, Remove… and Let it go. `next-report-block.spec.ts` and
+  `next-phone.spec.ts` prove it in Chromium and WebKit. Found on the way: a
+  host's open reports were asked for before the server said who you are, so
+  the lit row waited for the next report; they now load on every `ready`.
+  **Still to try:** reporting and blocking on Matt's Pixel against his
+  server.
   SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
   1.2, Google Play's user-generated content policy), so they come before any
-  store listing, and they go in the desktop app too. The proposed shape, to
-  confirm with Matt before building:
+  store listing, and they go in the desktop app too. **The shape is
+  confirmed** (Matt, 2026-10-03, from mockups; docs/decisions.md): as below,
+  with the least UI that does it. On the phone, holding a message opens its
+  actions from the bottom (Reply, Copy text, Pin, then Report to host… under
+  a line); on a computer, Report is the last item in the ··· menu. A person's
+  card gets a ··· beside Knock with Report and Block. The host sees who sent
+  each report. A blocked person's messages each become one grey line, "From
+  Dex, who you blocked · Show", and Settings › Account lists who you've
+  blocked, to unblock. The host learns of a report from one lit row in the
+  list, "A report to look at", which opens Settings › People. The shape:
   **Report** is in a message's menu and on a person's card. It sends the
   message (or the person) to the host of that server with an optional note,
   because a self-hosted server has nobody else to send it to; the host already

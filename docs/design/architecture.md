@@ -418,6 +418,85 @@ one.
   window also remembers which interface size it was sized for, so a
   remembered window isn't grown again on the next run (`core/appearance.ts`).
 
+## The phone's one window
+
+The phone app (SPEC §4.15) is this client in one window, the list, which is
+the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
+`tauri.ios.conf.json`), and `core/phone.ts` reads that; the desktop never adds
+`shell`, so a browser test opens the phone's layout by adding it.
+
+- **One screen at a time, no tabs.** The list is home. A conversation, Media
+  or Search opens as a screen over it, filling the phone, with ← Back at the
+  start of its bar and its name beside it (`ChatView`'s `stack`), the way
+  phone chat apps do it (Discord's is the model Matt picked, 2026-10-03).
+  Underneath, they're still the side's tabs, kept as a stack: what opens
+  goes on top (`pushTab` in `core/tabs.ts`), Back takes the top off
+  (`backTab`), and the last one off folds back to the list. So a search hit
+  opens over Search, and Back from it is Search again. Rows and the title bar
+  are taller on the phone (`--row-1`, `--titlebar` in `tokens.css`), so a
+  thumb can hit them, and nothing may reach past the screen's right edge
+  (`next-phone.spec.ts` checks every screen).
+- **Nothing opens a window.** The phone's capability (`capabilities/phone.json`)
+  grants none of the window commands. Settings, a window of its own on a
+  computer, is drawn over the list (`.nx-phone-over` in `ListWindow.tsx`):
+  `Settings` takes a `SettingsHolder`, which is either its own window, reaching
+  the owner over the shell's events, or the owner itself, answering Settings'
+  questions directly (`Sharing.localNotify`, `Sharing.localPassword`). There,
+  Settings is its list of sections, then one section over it, each with ←
+  Back where a computer has its close button.
+- **Android's Back.** The newest thing open answers it (`useBackButton`, a
+  stack behind one listener): a picture closes, the top screen over the list
+  comes off, and in Settings a section goes back to the list of them and
+  then out. With nothing open, nobody listens, and Android does what it does
+  with Back: leaves the app. Its back gesture, a swipe in from the screen's
+  edge, is the same Back.
+- **Sounds follow the phone.** A chime asks the phone's ringer first
+  (`followDeviceSound` in `lib/sound.ts`, `src-tauri/src/phone_sound.rs`):
+  on vibrate it buzzes, on silent or Do Not Disturb nothing happens. Android
+  plays chimes and buzzes itself, as notification sounds, through
+  `sound_play` (the desktop's call) and `phone_buzz`, so they follow the
+  notification volume and need no tap on the page first.
+- **No desktop furniture.** No notifications at all (`setNoNotifications`
+  in `lib/notify.ts`, set at startup: no banner, nothing asking for
+  attention; in-app sounds still play), no close button on the list (the
+  phone closes apps), no pop-out, no voice line, and Settings has no Windows or
+  Notifications, no microphones, no updates and no Interface size: it zooms
+  the window, which the phone can't, and the phone's own display and text
+  size do that job.
+- **In the background, and without a network.** Thirty seconds after the
+  app goes into the background its connections close, so it shows offline,
+  and they open again when it's back (`watchBackground`,
+  `BACKGROUND_GRACE_MS`). Android freezes an app it has stopped showing after
+  about a minute, after which no timer runs, so the grace has to come first.
+  Android 17 on a Pixel also blocks a background app's network after about
+  five seconds, so there the connections drop sooner and their tries back
+  off into the block. Back on the screen within the grace, the app asks them
+  to try again at once (`retryAllNow`, `gateway_retry`, `Handle::retry`)
+  rather than wait out a backoff that can reach half a minute.
+  When the phone loses its network the connections close too, and they open
+  the moment it's back (`watchNetwork`) rather than when missed heartbeats
+  notice; the web view hears about the network only with Android's
+  `ACCESS_NETWORK_STATE` permission (`AndroidManifest.xml`).
+- **The phone's text size.** Linger follows the phone's Font size, up to
+  twice the usual (`phone_text_scale` reads it, `followTextSize` sets
+  `--text-scale`, and the phone's tokens multiply text, line boxes, rows and
+  controls by it). The web view's own text zoom is off (`textZoom` 100 in
+  MainActivity.kt): it enlarged fonts and line spacing and no box around them,
+  and cut names in half. Icons and marks keep their size, as in Android's own
+  apps, and `next-phone.spec.ts` checks every screen at twice the size for
+  words cut off or reaching past the edge.
+- **The phone's bars.** The page is drawn under the phone's status bar and
+  gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
+  and `--window-height`, the whole window on a computer, is what's left
+  between them.
+- **The keyboard.** A phone's keyboard covers the page instead of shortening
+  it, and the browser slides the page up to show the box being typed in,
+  which left the message box half under the keyboard and the conversation's
+  header gone. `followKeyboard` holds the page to the part of the screen
+  that's visible (`--phone-top`, `--phone-height`, `data-keyboard`), so the
+  message box sits on the keyboard. Android's web view ignores the viewport's
+  `interactive-widget`, which was tried first.
+
 ## The list window
 
 - **The Buddy list is the app** from 0.4.0: the shell opens `next.html` as the

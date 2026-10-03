@@ -11,7 +11,7 @@ import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../li
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
-import { type GatewayState, saveDisplayName, saveStatus, saveStyle, useServers } from "../../../lib/gateway";
+import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
 import { inviteUrl, moveRoom } from "../../../lib/host";
 import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
@@ -60,6 +60,66 @@ function sectionOf(search: string): SettingsKey | undefined {
 }
 
 /**
+ * What holds Settings, and how it reaches the list window (the owner): a
+ * window of its own, over the shell's events, or the phone's one window,
+ * which is the owner itself (SPEC §4.15, `ListWindow`).
+ */
+export interface SettingsHolder {
+  following: Following;
+  /** Turn a notification rule on or off: only the owner may (NOTIFY). */
+  notify(question: NotifyQuestion): Promise<Outcome>;
+  /** Change your password: only the owner may, since it signs straight back in (PASSWORD). */
+  password(question: PasswordQuestion): Promise<Outcome>;
+  /** Hear a section asked for again while Settings is open. Answers how to stop. */
+  onSection(heard: (key: string | null) => void): () => void;
+  /** Hear your servers' order and Quiet change (SERVER_PREFS). Answers how to stop. */
+  onServerPrefs(heard: (message: ServerPrefsMessage) => void): () => void;
+  /** Close Settings: its window, or back to the list. */
+  close(): void;
+  /** Whether Settings draws a close button of its own. */
+  closable: boolean;
+  /** The section it opens on. */
+  section?: SettingsKey;
+  /** The phone app: no Windows, no Notifications, no microphones and no updates (SPEC §4.15). */
+  phone: boolean;
+}
+
+/** Listen on the shell's events, and answer how to stop even before the listening has started. */
+function listening<T>(event: string, heard: (payload: T) => void): () => void {
+  if (!isTauri()) return () => undefined;
+  let stop: (() => void) | null = null;
+  let gone = false;
+  void tauriBus()
+    .listen<T>(event, heard)
+    .then((unlisten) => {
+      if (gone) unlisten();
+      else stop = unlisten;
+    });
+  return () => {
+    gone = true;
+    stop?.();
+  };
+}
+
+/** Settings in a window of its own: it reaches the list window over the shell's events. */
+function windowHolder(following: Following): SettingsHolder {
+  return {
+    following,
+    notify: (question) => ask<Outcome>(tauriBus(), OWNER, NOTIFY, question, 30_000),
+    password: (question) => ask<Outcome>(tauriBus(), OWNER, PASSWORD, question, 30_000),
+    // Asked for again while open: window.rs emits `next:section`.
+    onSection: (heard) => listening<string | null>("next:section", heard),
+    onServerPrefs: (heard) => listening<ServerPrefsMessage>(SERVER_PREFS, heard),
+    close: () => {
+      if (isTauri()) void getCurrentWindow().close();
+    },
+    closable: isTauri(),
+    section: sectionOf(window.location.search),
+    phone: false,
+  };
+}
+
+/**
  * The Settings window: a viewer (docs/design/architecture.md). It follows the
  * list window's connection and saves through its borrowed sign-in; what only
  * the owner may do (notification rules, a password change, signing out,
@@ -67,6 +127,8 @@ function sectionOf(search: string): SettingsKey | undefined {
  */
 export function SettingsWindow() {
   const held = useFollowing();
+  const following = held.kind === "ready" ? held.following : null;
+  const holder = useMemo(() => (following ? windowHolder(following) : null), [following]);
   if (held.kind === "waiting") {
     return (
       <WindowMessage>
@@ -86,7 +148,7 @@ export function SettingsWindow() {
       </WindowMessage>
     );
   }
-  return <Settings following={held.following} />;
+  return holder ? <Settings holder={holder} /> : null;
 }
 
 /** A request's failure as a sentence for the person. */
@@ -104,7 +166,9 @@ async function said(work: Promise<unknown>, fallback: string): Promise<string | 
   }
 }
 
-function Settings({ following }: { following: Following }) {
+/** Settings, wherever it's held (`SettingsHolder`). */
+export function Settings({ holder }: { holder: SettingsHolder }) {
+  const { following, phone } = holder;
   const { apis, intend } = following;
   const servers = useServers();
   const now = useNow();
@@ -117,7 +181,7 @@ function Settings({ following }: { following: Following }) {
     return first ?? [null, null];
   }, [apis, signedOuts]);
   const state: GatewayState | undefined = server === null ? undefined : servers[server];
-  const [section, setSection] = useState<{ key: SettingsKey | undefined; asked: number }>({ key: sectionOf(window.location.search), asked: 0 });
+  const [section, setSection] = useState<{ key: SettingsKey | undefined; asked: number }>({ key: holder.section, asked: 0 });
 
   // Presence: typing or moving in Settings is you being here (core/report.ts).
   const reporter = useRef<Reporter | null>(null);
@@ -132,8 +196,8 @@ function Settings({ following }: { following: Following }) {
 
   const closeWindow = useCallback(() => {
     reporter.current?.stop();
-    if (isTauri()) void getCurrentWindow().close();
-  }, []);
+    holder.close();
+  }, [holder]);
 
   // Signed out of a server: Settings shows what's left, or closes with nothing
   // left. Signed in to one: it shows that one too.
@@ -149,25 +213,15 @@ function Settings({ following }: { following: Following }) {
     };
   }, [following, closeWindow]);
 
-  // Asked for again while open: show that section (window.rs emits `next:section`).
-  useEffect(() => {
-    if (!isTauri()) return;
-    let stop: (() => void) | null = null;
-    let gone = false;
-    void tauriBus()
-      .listen<string | null>("next:section", (key) => {
+  // Asked for again while open: show that section.
+  useEffect(
+    () =>
+      holder.onSection((key) => {
         const wanted = settingsKeys(EVERY_SECTION).find((one) => one === key);
         setSection((held) => ({ key: wanted ?? held.key, asked: held.asked + 1 }));
-      })
-      .then((unlisten) => {
-        if (gone) unlisten();
-        else stop = unlisten;
-      });
-    return () => {
-      gone = true;
-      stop?.();
-    };
-  }, []);
+      }),
+    [holder],
+  );
 
   // Escape closes Settings when nothing inside it wanted Escape first, and
   // never from inside a text box, where it means "never mind this edit" and
@@ -192,23 +246,13 @@ function Settings({ following }: { following: Following }) {
   // Your servers' order and Quiet are the list window's: Settings asks it to
   // change them, and it says whenever they have changed (SERVER_PREFS).
   const [serverPrefs, setServerPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
-  useEffect(() => {
-    if (!isTauri()) return;
-    let stop: (() => void) | null = null;
-    let gone = false;
-    void tauriBus()
-      .listen<ServerPrefsMessage>(SERVER_PREFS, (message) => {
+  useEffect(
+    () =>
+      holder.onServerPrefs((message) => {
         if (message.v === PROTOCOL) setServerPrefs(prefsFrom(message.prefs));
-      })
-      .then((unlisten) => {
-        if (gone) unlisten();
-        else stop = unlisten;
-      });
-    return () => {
-      gone = true;
-      stop?.();
-    };
-  }, []);
+      }),
+    [holder],
+  );
   const askServerPrefs = (next: ServerPrefs) => {
     setServerPrefs(next);
     void intend({ kind: "serverprefs", order: next.order, quiet: next.quiet }).catch(() => undefined);
@@ -374,9 +418,10 @@ function Settings({ following }: { following: Following }) {
 
   return (
     <SettingsView
+      phone={phone}
       key={section.asked}
       initialSection={section.key}
-      onClose={isTauri() ? closeWindow : undefined}
+      onClose={holder.closable ? closeWindow : undefined}
       profile={{
         me,
         plainNames: plain,
@@ -392,13 +437,16 @@ function Settings({ following }: { following: Following }) {
         },
       }}
       appearance={{
-        scale: {
-          value: scale,
-          onChange: (value) => {
-            setScale(saveScale(value));
-            announceAppearance();
-          },
-        },
+        // A phone sizes things with its own display and text size (SPEC §4.15).
+        scale: phone
+          ? undefined
+          : {
+              value: scale,
+              onChange: (value) => {
+                setScale(saveScale(value));
+                announceAppearance();
+              },
+            },
         plainNames: {
           value: plain,
           onChange: (value) => {
@@ -457,8 +505,7 @@ function Settings({ following }: { following: Following }) {
         rooms,
         rules: state.notifyRules,
         setRule: async (rule, on) => {
-          const question: NotifyQuestion = { server, rule, on };
-          return askOwner(question, NOTIFY, "Couldn't reach the list window.");
+          return askOwner(holder.notify({ server, rule, on }), "Couldn't reach the list window.");
         },
         arrivals: {
           on: arrivalCards,
@@ -477,9 +524,15 @@ function Settings({ following }: { following: Following }) {
       }}
       account={{
         serverName,
+        // Who you've blocked here (T-1605), by the names the server has for them.
+        blocked: state
+          ? {
+              people: state.blocked.flatMap((id) => state.users.filter((user) => user.id === id)),
+              unblock: (id) => said(setBlocked(api, id, false), "Couldn't unblock them."),
+            }
+          : undefined,
         changePassword: (current, next) => {
-          const question: PasswordQuestion = { server, current, next };
-          return askOwner(question, PASSWORD, "Couldn't reach the list window.");
+          return askOwner(holder.password({ server, current, next }), "Couldn't reach the list window.");
         },
         archive: {
           phase: archive,
@@ -489,25 +542,28 @@ function Settings({ following }: { following: Following }) {
           },
           download: (url) => openExternal(url),
         },
-        updates: {
-          version,
-          check,
-          looking,
-          installing,
-          problem: updateProblem,
-          checkAgain,
-          install: () => {
-            setInstalling(true);
-            setUpdateProblem(null);
-            void installUpdate()
-              .then((outcome) => {
-                if (outcome.kind === "failed") setUpdateProblem(outcome.reason);
-              })
-              .finally(() => setInstalling(false));
-          },
-          openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
-        },
-        startAtSignIn: startup ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
+        // A phone app is updated by its store (SPEC §4.15).
+        updates: phone
+          ? undefined
+          : {
+              version,
+              check,
+              looking,
+              installing,
+              problem: updateProblem,
+              checkAgain,
+              install: () => {
+                setInstalling(true);
+                setUpdateProblem(null);
+                void installUpdate()
+                  .then((outcome) => {
+                    if (outcome.kind === "failed") setUpdateProblem(outcome.reason);
+                  })
+                  .finally(() => setInstalling(false));
+              },
+              openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
+            },
+        startAtSignIn: startup && !phone ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
         signOut: () => {
           for (const one of apis.keys()) void intend({ kind: "signout", server: one }).catch(() => undefined);
           closeWindow();
@@ -591,6 +647,25 @@ function Settings({ following }: { following: Following }) {
                   if (problem === null) readHostLists();
                   return problem;
                 },
+                // What was reported to the host (T-1605).
+                reports: state.reports
+                  ? {
+                      open: state.reports,
+                      personOf: (userId) => state.users.find((user) => user.id === userId) ?? removed?.find((user) => user.id === userId),
+                      placeOf: (roomId) => {
+                        const room = state.rooms.find((one) => one.id === roomId);
+                        return room ? `#${room.name}` : "a DM";
+                      },
+                      deleteMessage: (report) =>
+                        report.message
+                          ? said(
+                              api.delete(`/messages/${encodeURIComponent(report.message.id)}`).then(() => closeReport(api, report.id)),
+                              "Couldn't delete the message.",
+                            )
+                          : Promise.resolve(null),
+                      close: (reportId) => said(closeReport(api, reportId), "Couldn't take the report off the list."),
+                    }
+                  : undefined,
               },
               server: {
                 version: {
@@ -616,10 +691,10 @@ function Settings({ following }: { following: Following }) {
     />
   );
 
-  /** Ask the list window something only it may do, and say how it went. */
-  async function askOwner(question: object, event: string, fallback: string): Promise<string | null> {
+  /** What the list window said to something only it may do, in words. */
+  async function askOwner(asking: Promise<Outcome>, fallback: string): Promise<string | null> {
     try {
-      const outcome = await ask<Outcome>(tauriBus(), OWNER, event, question, 30_000);
+      const outcome = await asking;
       return outcome.problem;
     } catch {
       return fallback;

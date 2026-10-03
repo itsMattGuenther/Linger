@@ -337,6 +337,26 @@ async function playInShell(samples: number[]): Promise<boolean> {
   }
 }
 
+/**
+ * What the phone's own sound setting allows (SPEC §4.15): its ringer at
+ * sound, vibrate or silent, with Do Not Disturb counting as silent. Linger's
+ * own switches (mute, quiet hours, each kind) are asked first; this comes
+ * after. A computer has no such setting, so nothing is followed there.
+ */
+export type DeviceSound = "sound" | "vibrate" | "silent";
+
+let deviceSound: { ask: () => Promise<DeviceSound>; buzz: (pattern: number[]) => void } | null = null;
+
+/** The phone app follows its ringer: set once, at startup (`next/main.tsx`). */
+export function followDeviceSound(ask: () => Promise<DeviceSound>, buzz: (pattern: number[]) => void): void {
+  deviceSound = { ask, buzz };
+}
+
+/** In place of a cue, with the phone on vibrate: a knock taps twice, everything else once. */
+export function vibrationFor(cue: SoundCue): number[] {
+  return categoryOf(cue) === "knocks" ? [60, 90, 60] : [40];
+}
+
 /** Never queues an old cue for later or throws when the audio device refuses. */
 export async function playSound(cue: SoundCue, now: Date = new Date()): Promise<boolean> {
   return play(cue, now, false);
@@ -373,6 +393,18 @@ async function play(cue: SoundCue, now: Date, preview: boolean): Promise<boolean
       Date.now() - (lastPlayed.get(category) ?? -Infinity) >= cooldown
     );
   };
+  // The phone's ringer, a preview included: silent is silent, and vibrate
+  // buzzes instead. One that can't be asked plays as before.
+  if (deviceSound !== null) {
+    const mode = await deviceSound.ask().catch((): DeviceSound => "sound");
+    if (mode === "silent") return false;
+    if (mode === "vibrate") {
+      if (!stillWanted()) return false;
+      deviceSound.buzz(vibrationFor(cue));
+      if (!preview) lastPlayed.set(category, Date.now());
+      return true;
+    }
+  }
   if (isTauri()) {
     try {
       const samples = await samplesFor(cue, prefs.volume);

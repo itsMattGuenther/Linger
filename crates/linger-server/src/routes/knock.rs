@@ -54,6 +54,12 @@ async fn knock(
         return Err(ApiError::rate_limited(retry_after_ms));
     }
 
+    // Somebody who blocked you never hears your knock, and you're never told:
+    // the answer is the same 204 (PROTOCOL §5, "Report and block").
+    if super::blocks::has_blocked(&state, req.target_user_id, auth.id).await? {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
     // Addressed, so it reaches that person's sessions and nobody else's — not
     // the room, not the server, not the sender's own other windows.
     state.gateway.publish_to(

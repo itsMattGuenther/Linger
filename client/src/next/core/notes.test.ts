@@ -71,6 +71,10 @@ describe("a saved server not reached yet (T-907)", () => {
     });
   });
 
+  it("says which device doesn't remember sign-ins", () => {
+    expect(listNotes([], "no keyring", null, 0, [], "this phone")[0]?.words).toBe("Sign-ins aren't remembered on this phone.");
+  });
+
   it("sits with the connections, before the keyring", () => {
     const notes = listNotes([], "no keyring", null, 0, [{ server: "https://a.example", name: "a.example", why: "down" }]);
     expect(notes.map((note) => note.kind)).toEqual(["waiting", "keyring"]);

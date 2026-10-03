@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   },
 }));
 vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted: async () => true, requestPermission: async () => "granted" }));
-const { considerFrame, resetNotifications, setDmAlerts, setQuietServers, setViewing } = await import("./notify");
+const { considerFrame, resetNotifications, setDmAlerts, setNoNotifications, setQuietServers, setViewing } = await import("./notify");
 const { serverState } = await import("./gateway");
 const server = "https://sound.example";
 const room: Room = { id: "room", name: "room", slug: "room", kind: "room", topic: null, member_ids: null, position: 0, archived_at: null, last_message_id: null };
@@ -27,7 +27,7 @@ const snapshot: GatewayState = { ...serverState(server), rooms: [room], dms: [{ 
 } };
 const message: Message = { id: "message", room_id: "dm", author_id: "friend", body: "hello", attachments: [], reply_to: null, reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: 0 };
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal("window", { setTimeout, clearTimeout }); played.length = 0; banners.length = 0; asked.length = 0; looking = false; });
-afterEach(() => { resetNotifications(); setQuietServers(new Set()); setDmAlerts(null); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { resetNotifications(); setQuietServers(new Set()); setDmAlerts(null); setNoNotifications(false); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 it("routes DMs and room messages to distinct sound categories, not banner permission", () => {
   considerFrame(server, { op: "message.create", s: 1, d: message }, snapshot);
@@ -46,6 +46,15 @@ it("ignores own, deleted and edited messages, and a room already being read", ()
   looking = false;
   considerFrame(server, { op: "message.create", s: 5, d: message }, snapshot);
   expect(played).toEqual(["dm"]);
+});
+
+it("somebody you blocked never makes a sound or a banner, mention or not (PROTOCOL §5)", async () => {
+  const blocked = { ...snapshot, blocked: ["friend"] };
+  considerFrame(server, { op: "message.create", s: 1, d: message }, blocked);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, room_id: "room", body: "@me hello" } }, blocked);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(played).toEqual([]);
+  expect(banners).toEqual([]);
 });
 
 it("visual mentions still use the silent native banner path", async () => {
@@ -155,4 +164,12 @@ it("a burst of DMs is one banner", async () => {
   considerFrame(server, { op: "message.create", s: 2, d: { ...message, id: "again", body: "you there?" } }, withFriend);
   await vi.advanceTimersByTimeAsync(1200);
   expect(banners).toEqual([expect.objectContaining({ title: "Jules", body: "you there?" })]);
+});
+it("the phone app raises no banner and asks for no attention, mention or DM (SPEC §4.15)", async () => {
+  setNoNotifications(true);
+  considerFrame(server, { op: "message.create", s: 1, d: { ...message, body: "@me hello" } }, snapshot);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, id: "dm-again" } }, snapshot);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(banners).toEqual([]);
+  expect(asked.filter((call) => call.cmd === "next_request_attention")).toEqual([]);
 });

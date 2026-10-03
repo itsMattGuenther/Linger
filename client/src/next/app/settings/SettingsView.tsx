@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { type SettingsKey, type SettingsScope, sectionLead, SECTION_LABELS, settingsEntries, showable } from "../../core/settings";
+import { type SettingsKey, type SettingsScope, sectionLabel, sectionLead, settingsEntries, showable } from "../../core/settings";
 import { minimizer } from "../../core/windowControls";
-import { Icon, type IconName, type NavEntry, NavList, TitleBar } from "../../kit";
+import { Icon, IconButton, type IconName, type NavEntry, NavList, TitleBar } from "../../kit";
 import { type AccountProps, AccountSection } from "./AccountSection";
 import { type AppearanceProps, AppearanceSection } from "./AppearanceSection";
 import {
@@ -19,6 +19,7 @@ import { type ProfileProps, ProfileSection } from "./ProfileSection";
 import { type ServersProps, ServersSection } from "./ServersSection";
 import { type SoundProps, SoundSection } from "./SoundSection";
 import { hasWindowsChoices, type WindowsProps, WindowsSection } from "./WindowsSection";
+import { useBackButton } from "../useBackButton";
 import "./SettingsView.css";
 
 /** Everything the host can change, for the server you host. */
@@ -49,6 +50,8 @@ export interface SettingsViewProps {
   servers?: ServersProps;
   /** Only for the host; leave out for a member (SRV-8). */
   hosting?: HostingProps;
+  /** The phone app (SPEC §4.15): no Notifications, and Sound and Account say less. */
+  phone?: boolean;
 }
 
 const ICONS: Record<SettingsKey, IconName> = {
@@ -77,9 +80,24 @@ export function SettingsView(props: SettingsViewProps) {
     hosting: props.hosting?.serverName ?? null,
     severalServers: (props.servers?.servers.length ?? 0) > 1,
     windows: hasWindowsChoices(props.windows),
+    phone: props.phone === true,
   };
   const [wanted, setWanted] = useState<SettingsKey>(props.initialSection ?? "profile");
   const section = showable(scope, wanted);
+  // On the phone the sections are a list of their own, and one opens over it
+  // with a way back (SPEC §4.15): side by side, neither fits. Asked for a
+  // section, it opens on that one.
+  const [stack, setStack] = useState<"index" | "section">(props.initialSection ? "section" : "index");
+  const phone = props.phone === true;
+  const choose = (key: SettingsKey) => {
+    setWanted(key);
+    setStack("section");
+  };
+  // Android's Back: from a section to the list of them, and from there out.
+  useBackButton(phone, () => {
+    if (stack === "section") setStack("index");
+    else props.onClose?.();
+  });
   const main = useRef<HTMLDivElement | null>(null);
 
   // A section starts at its top, not where the last one was scrolled to.
@@ -92,19 +110,34 @@ export function SettingsView(props: SettingsViewProps) {
   );
 
   return (
-    <div className="nx-set" data-screen="settings">
-      <TitleBar leading={<Icon name="gear" size="md" />} focused={props.focused ?? true} onMinimize={props.onClose && minimizer()} onClose={props.onClose}>
-        Settings
+    <div className="nx-set" data-screen="settings" data-stack={phone ? stack : undefined}>
+      <TitleBar
+        leading={
+          // On the phone Settings is a screen over the list, left by Back
+          // like every other one (SPEC §4.15).
+          !phone ? (
+            <Icon name="gear" size="md" />
+          ) : stack === "section" ? (
+            <IconButton icon="back" label="Back to Settings" size="lg" onClick={() => setStack("index")} />
+          ) : props.onClose ? (
+            <IconButton icon="back" label="Back" size="lg" onClick={props.onClose} />
+          ) : undefined
+        }
+        focused={props.focused ?? true}
+        onMinimize={!phone && props.onClose ? minimizer() : undefined}
+        onClose={phone ? undefined : props.onClose}
+      >
+        {phone && stack === "section" ? sectionLabel(section, scope) : "Settings"}
       </TitleBar>
       <div className="nx-set-body">
         <nav className="nx-set-nav" aria-label="Settings">
-          <NavList label="Settings sections" entries={entries} current={section} onSelect={setWanted} panelId="nx-set-panel" />
+          <NavList label="Settings sections" entries={entries} current={section} onSelect={phone ? choose : setWanted} panelId="nx-set-panel" />
         </nav>
         <div className="nx-set-main" ref={main}>
           <section id="nx-set-panel" className="nx-set-panel" role="tabpanel" aria-labelledby="nx-set-title">
             <header className="nx-set-head">
               <h2 id="nx-set-title" className="nx-set-title">
-                {SECTION_LABELS[section]}
+                {sectionLabel(section, scope)}
               </h2>
               <p className="nx-set-intro">{sectionLead(section, scope)}</p>
             </header>
@@ -128,11 +161,11 @@ function Section({ section, ...props }: SettingsViewProps & { section: SettingsK
     case "windows":
       return props.windows ? <WindowsSection {...props.windows} /> : null;
     case "sound":
-      return <SoundSection {...props.sound} />;
+      return <SoundSection {...props.sound} phone={props.phone} />;
     case "notifications":
       return <NotificationsSection {...props.notifications} />;
     case "account":
-      return <AccountSection {...props.account} />;
+      return <AccountSection {...props.account} phone={props.phone} />;
     case "servers":
       return props.servers ? <ServersSection {...props.servers} /> : null;
     case "rooms":

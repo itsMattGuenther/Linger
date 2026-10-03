@@ -70,6 +70,8 @@ pub const MAX_MEDIA_PAGE: u32 = 100;
 /// yourself in it, which is a text file wearing a conversation's clothes.
 pub const MIN_DM_MEMBERS: usize = 2;
 pub const MAX_DM_MEMBERS: usize = 8;
+/// A report's note to the host, in characters (PROTOCOL §5).
+pub const MAX_REPORT_NOTE_CHARS: usize = 1_000;
 
 /// Search (SPEC §4.12, PROTOCOL §6).
 ///
@@ -131,6 +133,9 @@ pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);
 pub const RATE_KNOCK_PER_TARGET: (u32, u64) = (3, 3_600);
+/// Reports one person may send in an hour (PROTOCOL §5, "Report and block"):
+/// plenty for a real problem, and not a way to bury the host.
+pub const RATE_REPORT_PER_HOUR: (u32, u64) = (10, 3_600);
 pub const RATE_EXPORT: (u32, u64) = (1, 3_600);
 /// Full-text search is cheap per query and not free, and it is the one endpoint
 /// a client can fire on every keystroke. Thirty a minute leaves room for

@@ -22,10 +22,24 @@ DESKTOP_ICONS = (
     "32x32.png", "128x128.png", "128x128@2x.png",
     "icon.png", "icon.ico", "icon.icns",
 )
+# The phone app's launcher icons (SPEC §4.15), into the Android project. An
+# Android icon is the artwork over a background the phone cuts to its own
+# shape; the background is the window's color (--night-2, styles/tokens.css),
+# not Tauri's white, so the dark porch doesn't sit in a white disc.
+ANDROID_RES = ROOT / "client/src-tauri/gen/android/app/src/main/res"
+ANDROID_BACKGROUND = "#131a28"
+ANDROID_ICONS = tuple(
+    f"mipmap-{density}/{name}"
+    for density in ("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
+    for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png")
+) + ("mipmap-anydpi-v26/ic_launcher.xml", "values/ic_launcher_background.xml")
 
 
 def comparable(path):
     data = path.read_bytes()
+    if path.suffix == ".xml":
+        # A Windows checkout may turn the Android XML's line endings into CRLF.
+        return data.replace(b"\r\n", b"\n")
     if path.suffix != ".icns":
         return data
     # The ICNS writer iterates a map; chunk order is not stable or meaningful.
@@ -60,10 +74,12 @@ def main():
             f'<image x="{x}" y="{y}" width="{width}" height="{height}" '
             f'xlink:href="data:image/png;base64,{encoded}"/></svg>\n'
         )
+        manifest = work / "icon.json"
+        manifest.write_text(f'{{"default": "porch.svg", "bg_color": "{ANDROID_BACKGROUND}"}}\n')
         output = work / "icons"
         subprocess.run(
             ["node", str(ROOT / "client/node_modules/@tauri-apps/cli/tauri.js"),
-             "icon", str(square), "--output", str(output)],
+             "icon", str(manifest), "--output", str(output)],
             cwd=ROOT / "client", check=True,
         )
         # Mobile and store-specific assets are not part of the desktop bundle.
@@ -73,7 +89,15 @@ def main():
                     raise SystemExit(f"Icon differs from the approved artwork: {name}")
             else:
                 shutil.copyfile(output / name, ICONS / name)
-    print(f"{'Verified' if args.check else 'Updated'} {len(DESKTOP_ICONS)} desktop icons from {SOURCE.name}.")
+        for name in ANDROID_ICONS:
+            if args.check:
+                if comparable(output / "android" / name) != comparable(ANDROID_RES / name):
+                    raise SystemExit(f"Android icon differs from the approved artwork: {name}")
+            else:
+                (ANDROID_RES / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(output / "android" / name, ANDROID_RES / name)
+    print(f"{'Verified' if args.check else 'Updated'} {len(DESKTOP_ICONS)} desktop and "
+          f"{len(ANDROID_ICONS)} Android icons from {SOURCE.name}.")
 
 
 if __name__ == "__main__":

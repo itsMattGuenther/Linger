@@ -160,6 +160,8 @@ export function ServerSection({
             showing={listing.showing}
             onMessage={listing.onMessage}
             onKnock={listing.onKnock}
+            safetyFor={listing.safetyFor}
+            onReports={listing.onReports}
             onStartDm={listing.onStartDm}
             onHost={listing.onHost}
           />

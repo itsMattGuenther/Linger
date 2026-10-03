@@ -107,6 +107,22 @@ export function closeTab<T extends SideTab>(tabs: Tabs<T>, tab: T): Tabs<T> {
   return tabsOf(open, next, preview);
 }
 
+/**
+ * The phone's way (SPEC §4.15, docs/design/architecture.md, "The phone's one
+ * window"): one screen over another, with no tabs to see. What opens goes on
+ * top and shows, moved up if it was open lower down, so Back never shows the
+ * same thing twice. Nothing is a preview: there's no row for one to save.
+ */
+export function pushTab<T extends SideTab>(tabs: Tabs<T>, tab: T): Tabs<T> {
+  const open = tabs.open.filter((held) => !same(held, tab));
+  return tabsOf([...open, tab], tab, null);
+}
+
+/** Back on the phone: the showing screen comes off, and the one under it shows. */
+export function backTab<T extends SideTab>(tabs: Tabs<T>): Tabs<T> {
+  return tabs.active === null ? tabs : closeTab(tabs, tabs.active);
+}
+
 /** Move a tab to a new position (dragging along the row), keeping it showing if it was. */
 export function moveTab<T extends SideTab>(tabs: Tabs<T>, tab: T, to: number): Tabs<T> {
   const from = tabs.open.findIndex((held) => same(held, tab));

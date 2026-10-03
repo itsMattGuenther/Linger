@@ -18,6 +18,7 @@ import {
   roomSlugOf,
   ruleSummary,
   SECTION_LABELS,
+  sectionLabel,
   sectionLead,
   type SettingsScope,
   settingsEntries,
@@ -51,6 +52,20 @@ describe("the Settings sidebar", () => {
     expect(settingsKeys({ ...MEMBER, severalServers: true })).toContain("servers");
     expect(settingsKeys(MEMBER)).not.toContain("servers");
     expect(settingsKeys({ ...MEMBER, windows: false })).not.toContain("windows");
+  });
+
+  it("leaves the phone without Windows and Notifications, and keeps the host's sections (SPEC §4.15)", () => {
+    const phone = { ...HOST, phone: true };
+    expect(settingsKeys(phone)).toEqual(["profile", "appearance", "sound", "account", "rooms", "invites", "people", "server"]);
+    expect(showable(phone, "notifications")).toBe("profile");
+  });
+
+  it("calls Sound just that on the phone, which is text only for now", () => {
+    expect(sectionLabel("sound", { ...MEMBER, phone: true })).toBe("Sound");
+    expect(sectionLabel("sound", MEMBER)).toBe(SECTION_LABELS.sound);
+    expect(sectionLead("sound", { ...MEMBER, phone: true })).not.toMatch(/voice|notification/i);
+    expect(sectionLead("appearance", { ...MEMBER, phone: true })).toContain("this phone");
+    expect(sectionLead("account", { ...MEMBER, phone: true })).not.toContain("updates");
   });
 
   it("opens on the section asked for when it exists here, and on Profile when not", () => {

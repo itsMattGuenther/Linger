@@ -2,7 +2,7 @@
 .nx-signin {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: var(--window-height);
   background: var(--surface-window);
   color: var(--text-secondary);
 }
@@ -67,6 +67,16 @@
   justify-content: space-between;
   gap: var(--space-2);
   min-width: 0;
+}
+
+/* Under Join: somebody who already has an account here signs in instead. */
+.nx-signin-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
 }
 
 .nx-signin-server {

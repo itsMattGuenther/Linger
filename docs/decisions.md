@@ -658,20 +658,45 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   builds. Nothing ships to a phone until a phone build is added to the release
   workflow.
 
-- **Phone backups leave Linger out by default.** Matt: by default the app's
-  data should stay out of iCloud and Google backups, but people who want it
-  backed up should be able to opt in. It is the same reason as no push, applied
-  to what the phone stores. A setting turns it on.
+- **Phone backups leave Linger out.** Matt: the app's data stays out of
+  iCloud and Google backups, the same reason as no push, applied to what the
+  phone stores. He first wanted a setting to opt in, and dropped it on
+  2026-10-03: building the Android side showed a backup would carry almost
+  nothing. Sign-ins are encrypted to a key that never leaves the phone, so
+  they can't move to a new one, and messages and pictures live on the server;
+  what's left is a few preferences. A new phone signs in again.
 - **Report and block, in both apps** (T-1605). Both stores require them in
   apps where people post things. Matt agreed to add them, and to the desktop
   app too if it made sense. It does: the server side is shared, and a report
-  goes to the host, who reads it in whichever app they use.
+  goes to the host, who reads it in whichever app they use. Matt sees them as
+  an edge case among friends who trust each other, wanted only because the
+  stores require them, so the rule is the least UI that does the job. He
+  approved the shape from mockups on 2026-10-03: Report is the last item on a
+  message's actions and behind a ··· on a person's card. The host sees who
+  sent a report, since everyone knows everyone anyway. A blocked person's
+  messages each become one grey line, "From Dex, who you blocked · Show",
+  rather than vanishing, because in a small room a reply to a message that
+  vanished reads as somebody talking to nobody. The host learns of a report
+  from one lit row in the list, never a count.
+- **On the phone, one screen at a time, like Discord** (Matt, 2026-10-03).
+  Tabs on a phone were awkward. Phone chat apps have settled on a pattern
+  people already know: the list is home, and a conversation, Media or Search
+  opens over it, full screen, with ← Back. Matt picked that, with Media and
+  Search staying at the foot of the list. Nothing on a phone may reach past
+  the screen's edge or scroll sideways.
 - **The phone identifier is `io.github.itsmattguenther.linger`.** Matt left
   the name to the session. A store never lets it change after the first upload,
   so it has to be one nobody else can already hold. Linger owns no domain, and
   by convention `com.linger.*` is for whoever owns linger.com. A name built
   from the GitHub address is the open-source convention for that case. Desktop keeps
   `com.linger.desktop`.
+- **Android first, Apple after** (Matt, 2026-10-03). Matt has no iPhone, and
+  Apple costs $99 a year to Google's $25 once. So the phone app goes out on
+  Google Play first, with Matt paying the $25, and only once it has worked
+  well there does it go to Apple. Until then the iPhone build only keeps
+  compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
+  wait with it. Getting the app to other people (T-1604) waits until report
+  and block are done and Matt says go.
 
 A phone app updates on its store's schedule, not ours, so phones will often be
 a version behind their server; how far back compatibility goes is #315.

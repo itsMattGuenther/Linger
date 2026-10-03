@@ -732,6 +732,71 @@ async fn an_unreachable_server_waits_and_retries() {
         .await;
 }
 
+/// The phone back on the screen (`Handle::retry`): a connection waiting out a
+/// long backoff tries again at once, and starts the backoff over, so a try
+/// that fails too waits half a second rather than doubling on.
+#[tokio::test]
+async fn a_retry_ends_the_wait_between_tries_and_starts_the_backoff_over() {
+    let addr = {
+        let server = FakeServer::bind().await;
+        server.addr
+    };
+    let (tx, rx) = mpsc::unbounded_channel();
+    let (handle, task) = gateway::client(
+        &format!("http://{addr}"),
+        Token {
+            value: "access-token".into(),
+            expires_at_ms: now_ms() + 15 * 60 * 1000,
+        },
+        Recorder { tx },
+    )
+    .expect("a dialable address");
+    tokio::spawn(task);
+    let mut watch = Watcher {
+        rx,
+        seen: Vec::new(),
+    };
+
+    // The fourth try waits two to four seconds.
+    let long = watch
+        .until_status(
+            "a long wait",
+            |status| matches!(status, Status::Waiting { retry_in_ms, .. } if *retry_in_ms >= 2000),
+        )
+        .await;
+    let Status::Waiting { retry_in_ms, .. } = long else {
+        unreachable!("matched on waiting");
+    };
+    let asked = std::time::Instant::now();
+    handle.retry();
+    watch
+        .until_status("connecting", |status| *status == Status::Connecting)
+        .await;
+    let took = asked.elapsed();
+    assert!(
+        took < Duration::from_millis(retry_in_ms / 2),
+        "tried again {took:?} after being asked, with {retry_in_ms} ms of the wait to go"
+    );
+
+    let next = watch
+        .until_status("the next wait", |status| {
+            matches!(status, Status::Waiting { .. })
+        })
+        .await;
+    let Status::Waiting { retry_in_ms, .. } = next else {
+        unreachable!("matched on waiting");
+    };
+    assert!(
+        retry_in_ms <= 500,
+        "the backoff started over, so this wait is short, not {retry_in_ms} ms"
+    );
+
+    handle.shutdown();
+    watch
+        .until_status("offline", |status| *status == Status::Offline)
+        .await;
+}
+
 /// Dropping the handle is the same instruction as a shutdown: no orphan
 /// connection outlives the frontend that asked for it.
 #[tokio::test]

@@ -11,14 +11,39 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
+import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
-import { unlockAudio } from "../lib/sound";
+import { setNoNotifications } from "../lib/notify";
+import { type DeviceSound, followDeviceSound, unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
 // Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
+
+// The phone app's one window (SPEC §4.15, core/phone.ts): its styles keep
+// clear of the phone's own bars and cutouts, and of the keyboard
+// (styles/phone.css).
+if (onPhone()) {
+  document.documentElement.dataset.shell = "phone";
+  // No notifications on a phone, open or closed (SPEC §4.15).
+  setNoNotifications(true);
+  // Text, lines and rows grow with the phone's Font size (styles/tokens.css).
+  followTextSize(document, async () => (isTauri() ? Number(await invoke("phone_text_scale")) : 1));
+  // Chimes follow the phone's ringer: silent is silent, vibrate buzzes, and
+  // both go out as notification sounds (src-tauri/src/phone_sound.rs).
+  if (isTauri()) {
+    followDeviceSound(
+      async (): Promise<DeviceSound> => {
+        const mode: unknown = await invoke("phone_sound_mode");
+        return mode === "vibrate" || mode === "silent" ? mode : "sound";
+      },
+      (pattern) => void invoke("phone_buzz", { pattern }).catch(() => undefined),
+    );
+  }
+  if (window.visualViewport) followKeyboard(window.visualViewport, () => window.innerHeight, document.documentElement);
+}
 
 // The focus ring is for the keyboard: it follows how you last used the
 // window, not what WebKitGTK decides when the window comes back (#375).

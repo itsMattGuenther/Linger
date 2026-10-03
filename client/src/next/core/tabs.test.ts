@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTab, isPreview, isTool, keepOnly, keepTab, keyOf, loadTabs, moveTab, NO_TABS, openTab, previewTab, same, type SideTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
+import { backTab, closeTab, isPreview, isTool, keepOnly, keepTab, keyOf, loadTabs, moveTab, NO_TABS, openTab, previewTab, pushTab, same, type SideTab, saveTabs, selectTab, stepTab, type TabKey, type Tabs } from "./tabs";
 
 const HOME = "https://home.example";
 const WORK = "https://work.example";
@@ -149,5 +149,42 @@ describe("a person opened from the list is a preview until it's kept (#351)", ()
     const back = loadTabs(saveTabs(tabs));
     expect(names(back as Tabs)).toEqual(["r-general", "d-callie"]);
     expect(back.preview ?? null).toBeNull();
+  });
+});
+
+describe("on a phone, one screen over another (SPEC §4.15)", () => {
+  const search: SideTab = { tool: "search" };
+
+  function stack(...tabs: SideTab[]): Tabs<SideTab> {
+    return tabs.reduce<Tabs<SideTab>>((held, tab) => pushTab(held, tab), NO_TABS);
+  }
+
+  it("puts what opens on top and shows it", () => {
+    const tabs = stack(search, general);
+    expect(tabs.open.map(keyOf)).toEqual(["tool:search", `${HOME}#r-general`]);
+    expect(tabs.active).toEqual(general);
+  });
+
+  it("moves something open lower down to the top, so Back never shows it twice", () => {
+    const tabs = stack(general, jules, general);
+    expect(tabs.open.map(keyOf)).toEqual([`${HOME}#d-jules`, `${HOME}#r-general`]);
+    expect(tabs.active).toEqual(general);
+  });
+
+  it("Back takes the top off and shows the one under it, down to nothing", () => {
+    let tabs = stack(search, general, jules);
+    tabs = backTab(tabs);
+    expect(tabs.active).toEqual(general);
+    tabs = backTab(tabs);
+    expect(tabs.active).toEqual(search);
+    tabs = backTab(tabs);
+    expect(tabs).toEqual(NO_TABS);
+    expect(backTab(tabs)).toEqual(NO_TABS);
+  });
+
+  it("makes nothing a preview, and takes over one left from before", () => {
+    const tabs = pushTab(previewTab(opened(general), jules) as Tabs<SideTab>, listening);
+    expect(tabs.preview ?? null).toBeNull();
+    expect(tabs.active).toEqual(listening);
   });
 });

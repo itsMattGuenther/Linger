@@ -7,7 +7,7 @@ import type { User } from "../../../generated/User";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
-import { Button } from "../../kit";
+import { Button, Icon } from "../../kit";
 import { type MessageActions, MessageRow } from "./MessageRow";
 import type { MentionLookup } from "./MessageText";
 import "./Conversation.css";
@@ -54,6 +54,12 @@ export interface ConversationProps {
   land: { ready: boolean; at: "left-off" | "end" };
   people: ReadonlyMap<string, User>;
   me: User | null;
+  /**
+   * Who you've blocked (PROTOCOL §5): each of their messages is drawn as one
+   * grey line, and opens where it is when asked. Folding them away entirely
+   * would leave replies to them answering nothing (SPEC §4.15).
+   */
+  blocked?: ReadonlySet<string>;
   now: number;
   previews: Readonly<Record<string, LinkPreview>>;
   mediaUrl: (path: string) => string;
@@ -274,6 +280,9 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   useEffect(checkEdges, [landed, rows.length, checkEdges]);
 
   const [flash, setFlash] = useState<MessageId | null>(null);
+  // Blocked people's messages opened anyway, this time round (PROTOCOL §5).
+  const [shown, setShown] = useState<ReadonlySet<MessageId>>(() => new Set());
+  const show = useCallback((id: MessageId) => setShown((held) => new Set(held).add(id)), []);
   useEffect(() => setFlash(null), [id]);
   const jumpTo = useCallback(
     (target: MessageId): boolean => {
@@ -365,6 +374,9 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                     people={people}
                     byId={byId}
                     me={me}
+                    blocked={props.blocked}
+                    shown={shown}
+                    onShow={show}
                     now={now}
                     editing={props.editing}
                     flash={flash}
@@ -395,6 +407,9 @@ function RowView({
   people,
   byId,
   me,
+  blocked,
+  shown,
+  onShow,
   now,
   editing,
   flash,
@@ -407,6 +422,10 @@ function RowView({
   people: ReadonlyMap<string, User>;
   byId: ReadonlyMap<MessageId, Message>;
   me: User | null;
+  blocked: ReadonlySet<string> | undefined;
+  /** Messages from somebody blocked that were opened anyway. */
+  shown: ReadonlySet<MessageId>;
+  onShow: (id: MessageId) => void;
   now: number;
   editing: MessageId | null;
   flash: MessageId | null;
@@ -431,6 +450,9 @@ function RowView({
       );
     case "message": {
       const { message } = row;
+      if (blocked?.has(message.author_id) && message.deleted_at === null && !shown.has(message.id)) {
+        return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
+      }
       const quoted = message.reply_to === null ? undefined : byId.get(message.reply_to);
       return (
         <MessageRow
@@ -453,4 +475,19 @@ function RowView({
       );
     }
   }
+}
+
+/**
+ * A message from somebody you blocked (PROTOCOL §5, SPEC §4.15): one grey
+ * line in its place, which opens it where it is. Their name is said, so a
+ * reply to them still makes sense.
+ */
+function BlockedLine({ who, onShow }: { who: string; onShow: () => void }) {
+  return (
+    <button type="button" className="nx-msg-blocked" onClick={onShow} aria-label={`A message from ${who}, who you blocked. Show it.`}>
+      <Icon name="block" size="sm" />
+      <span className="nx-msg-blocked-who">From {who}, who you blocked</span>
+      <span className="nx-msg-blocked-show">Show</span>
+    </button>
+  );
 }

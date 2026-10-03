@@ -57,6 +57,11 @@
 
 .nx-composer-input::placeholder {
   color: var(--text-muted);
+  /* One line, cut with a "…" when it doesn't fit, as on a phone with its
+     text turned up: a hint that wraps puts its second line out of sight. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nx-composer-emoji-anchor {

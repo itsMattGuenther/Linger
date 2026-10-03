@@ -3,11 +3,15 @@ import { MIN_PASSWORD_CHARS, passwordReady } from "../../../lib/account";
 import { exportLine, type ExportPhase } from "../../../lib/export";
 import { type UpdateCheck, updateLine } from "../../../lib/updates";
 import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
+import { thisDevice } from "../../core/phone";
 import { HEADINGS } from "../../core/settings";
-import { Button, SettingRow, Switch, TextField } from "../../kit";
-import { Actions, Block, Fields, Note, useSave } from "./parts";
+import type { User } from "../../../generated/User";
+import { Button, Name, SettingRow, Switch, TextField } from "../../kit";
+import { Actions, Block, Fields, Note, SaveLine, useSave } from "./parts";
 
 export interface AccountProps {
+  /** The phone app: "this phone", and no updates or start at sign-in (SPEC §4.15). */
+  phone?: boolean;
   /** The server you sign in to, for the password's sentence. */
   serverName: string;
   /**
@@ -18,7 +22,8 @@ export interface AccountProps {
   /** Taking everything with you (EXP-1, EXP-2): how it stands, and the two things to do. */
   archive: { phase: ExportPhase; start: () => void; download: (url: string) => void };
   /** Updates (UPD-1 to UPD-4, UPD-6). */
-  updates: {
+  /** Leave out on the phone, which its store updates (SPEC §4.15). */
+  updates?: {
     /** This copy's version, or null outside the desktop app. */
     version: string | null;
     check: UpdateCheck | null;
@@ -41,6 +46,12 @@ export interface AccountProps {
     /** Open the user guide's lines for a desktop that won't start Linger by itself. */
     openGuide: () => void;
   };
+  /**
+   * Who you've blocked on this server (T-1605), and unblocking one: null when
+   * the server took it, or what went wrong in words. Shown only while there's
+   * somebody on it.
+   */
+  blocked?: { people: readonly User[]; unblock: (id: User["id"]) => Promise<string | null> };
   /** Sign out on this computer (SIGN-13). With several servers this is all of them. */
   signOut: () => void;
   severalServers: boolean;
@@ -49,10 +60,12 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, signOut, severalServers, addServer }: AccountProps) {
+export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, blocked, signOut, severalServers, addServer, phone = false }: AccountProps) {
+  const device = thisDevice(phone);
   return (
     <>
       <Password serverName={serverName} changePassword={changePassword} />
+      {blocked && blocked.people.length > 0 ? <Blocked serverName={serverName} {...blocked} /> : null}
       <Block
         heading={HEADINGS.archive}
         lead="Download public rooms and your own DMs, including shared files, as a zip. Messages open in any text editor. Available once an hour."
@@ -75,35 +88,37 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
           ) : null}
         </Actions>
       </Block>
-      <Block
-        heading={HEADINGS.updates}
-        lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
-      >
-        <Note tone="status">{updates.version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${updates.version}.`}</Note>
-        <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
-        <Actions start>
-          <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
-            Check again
-          </Button>
-          {updates.check?.kind === "ready" ? (
-            <>
-              <Button
-                variant="quiet"
-                icon="go"
-                onClick={() => {
-                  if (updates.check?.kind === "ready") updates.openNotes(updates.check.version);
-                }}
-              >
-                What's new
-              </Button>
-              <Button variant="primary" busy={updates.installing} onClick={updates.install}>
-                Install and restart
-              </Button>
-            </>
-          ) : null}
-        </Actions>
-      </Block>
-      <Block heading={HEADINGS.computer}>
+      {updates === undefined ? null : (
+        <Block
+          heading={HEADINGS.updates}
+          lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
+        >
+          <Note tone="status">{updates.version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${updates.version}.`}</Note>
+          <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
+          <Actions start>
+            <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
+              Check again
+            </Button>
+            {updates.check?.kind === "ready" ? (
+              <>
+                <Button
+                  variant="quiet"
+                  icon="go"
+                  onClick={() => {
+                    if (updates.check?.kind === "ready") updates.openNotes(updates.check.version);
+                  }}
+                >
+                  What's new
+                </Button>
+                <Button variant="primary" busy={updates.installing} onClick={updates.install}>
+                  Install and restart
+                </Button>
+              </>
+            ) : null}
+          </Actions>
+        </Block>
+      )}
+      <Block heading={phone ? HEADINGS.phone : HEADINGS.computer}>
         {startAtSignIn ? (
           <>
             <SettingRow
@@ -126,8 +141,8 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
         ) : null}
         <p className="nx-set-lead">
           {severalServers
-            ? "Signing out forgets every server on this computer. It doesn't delete your accounts. Each server signs out on its own, in Servers."
-            : "Signing out forgets this server on this computer. It doesn't delete your account."}
+            ? `Signing out forgets every server on ${device}. It doesn't delete your accounts. Each server signs out on its own, in Servers.`
+            : `Signing out forgets this server on ${device}. It doesn't delete your account.`}
         </p>
         <Actions start>
           {addServer && !severalServers ? (
@@ -189,6 +204,36 @@ function Password({ serverName, changePassword }: { serverName: string; changePa
           Change password
         </Button>
       </Actions>
+    </Block>
+  );
+}
+
+/**
+ * Who you've blocked (T-1605): where a block is undone, besides the person's
+ * own card. Only there while somebody's on it.
+ */
+function Blocked({ serverName, people, unblock }: { serverName: string } & NonNullable<AccountProps["blocked"]>) {
+  const save = useSave();
+  const busy = save.phase.kind === "saving";
+  return (
+    <Block heading={HEADINGS.blocked} lead={`Their messages fold into a grey line for you on ${serverName}, and their DMs and knocks don't reach you. They aren't told.`}>
+      <ul className="nx-set-list" aria-label="Blocked">
+        {people.map((person) => (
+          <li key={person.id} className="nx-set-item">
+            <div className="nx-set-item-line">
+              <span className="nx-set-item-mark" />
+              <Name person={person} />
+              <span className="nx-set-item-sub nx-set-mono">@{person.username}</span>
+              <span className="nx-set-item-buttons">
+                <Button size="sm" disabled={busy} onClick={() => void save.run(unblock(person.id))}>
+                  Unblock
+                </Button>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
     </Block>
   );
 }

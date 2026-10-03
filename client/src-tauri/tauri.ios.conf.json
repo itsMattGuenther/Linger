@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "io.github.itsmattguenther.linger",
+  "app": {
+    "windows": [
+      {
+        "title": "Linger",
+        "url": "next.html?shell=phone"
+      }
+    ]
+  }
+}

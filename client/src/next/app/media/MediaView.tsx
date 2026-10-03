@@ -174,7 +174,8 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
   );
   const shown = useMemo(
     () =>
-      (merged?.shown ?? []).map(({ server, item }) => {
+      // What somebody you blocked shared isn't shown (PROTOCOL §5).
+      (merged?.shown ?? []).filter(({ server, item }) => !(placeOf(server)?.blocked?.has(item.author_id) ?? false)).map(({ server, item }) => {
         const key = keyOf(server, item);
         const starredNow = stars.get(key);
         const current = starredNow === undefined ? item : { ...item, starred_at: starredNow ? (item.starred_at ?? Date.now()) : null };

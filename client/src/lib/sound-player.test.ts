@@ -261,3 +261,42 @@ describe("notification sound policy", () => {
     expect(starts.length).toBeGreaterThan(0);
   });
 });
+
+describe("the phone's ringer (SPEC §4.15)", () => {
+  it.each([
+    ["sound", 1, []],
+    ["vibrate", 0, [[40]]],
+    ["silent", 0, []],
+  ] as const)("on %s, a DM chime plays %i times and buzzes %j", async (mode, plays, buzzes) => {
+    const { sources } = player();
+    const sound = await import("./sound");
+    const buzzed: number[][] = [];
+    sound.followDeviceSound(async () => mode, (pattern) => buzzed.push(pattern));
+    sound.unlockAudio();
+    await sound.playSound("dm");
+    expect(sources).toHaveLength(plays);
+    expect(buzzed).toEqual(buzzes);
+  });
+
+  it("asks the ringer only after Linger's own switches: muted, nothing buzzes", async () => {
+    player();
+    const sound = await import("./sound");
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, muted: true });
+    const asked = vi.fn(async () => "vibrate" as const);
+    const buzzed: number[][] = [];
+    sound.followDeviceSound(asked, (pattern) => buzzed.push(pattern));
+    await sound.playSound("dm");
+    expect(asked).not.toHaveBeenCalled();
+    expect(buzzed).toEqual([]);
+  });
+
+  it("knocks twice on vibrate, and plays as before when the ringer can't be asked", async () => {
+    const { sources } = player();
+    const sound = await import("./sound");
+    expect(sound.vibrationFor("knock")).toEqual([60, 90, 60]);
+    sound.followDeviceSound(async () => { throw new Error("no answer"); }, () => undefined);
+    sound.unlockAudio();
+    await sound.playSound("dm");
+    expect(sources).toHaveLength(1);
+  });
+});

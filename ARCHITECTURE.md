@@ -357,6 +357,29 @@ CREATE TABLE notify_rules (
   PRIMARY KEY (user_id, target_user_id, room_id)
 );
 
+-- Report and block (SPEC §4.15, PROTOCOL §5, T-1605). A block is one
+-- person's private list; the server only stops their knocks.
+CREATE TABLE blocks (
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- who blocked
+  blocked_id      BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (user_id, blocked_id)
+);
+
+-- A report goes to the host only, keeping the message's words as they were.
+CREATE TABLE reports (
+  id              BLOB PRIMARY KEY,
+  reporter_id     BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- who it's about
+  message_id      BLOB,                       -- no reference: the message may be deleted
+  room_id         BLOB,
+  excerpt         TEXT,
+  message_at      INTEGER,
+  note            TEXT,                       -- 1000 chars
+  created_at      INTEGER NOT NULL,
+  closed_at       INTEGER                     -- the host dealt with it
+);
+
 CREATE TABLE invites (
   code            TEXT PRIMARY KEY,            -- 12 chars, base32, CSPRNG
   created_by      BLOB NOT NULL REFERENCES users(id),
@@ -441,6 +464,12 @@ E2EE launders a false promise, which is worse than an honest limitation.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
+   On Android the phone app (SPEC §4.15) keeps the same entries in the platform's
+   store: `keyring-core` with `android-native-keyring-store`, which encrypts each one
+   into the app's private SharedPreferences with a key that never leaves the Android
+   Keystore (`src-tauri/src/secrets.rs`). The iPhone uses the Keychain through the
+   same `keyring` crate as the desktop; CI builds it for iOS, but it hasn't run on an
+   iPhone yet.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, message send 10/10s/user, upload slot 20/hour/user,

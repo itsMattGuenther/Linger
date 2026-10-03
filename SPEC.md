@@ -751,6 +751,12 @@ and no badge on its icon, which would be an unread count (§4.2). Mentions and D
 marked inside the app as on desktop and are there when you open it. Opening it
 catches up the way a desktop app does after a reconnect.
 
+**Its sounds follow the phone** (Matt, 2026-10-03). While the app is open, its chimes
+play as they do on desktop, under the same switches, and then the phone has its say:
+on vibrate a chime is a short buzz instead, and on silent or Do Not Disturb there is
+nothing. They go out as notification sounds, so they follow the phone's notification
+volume and vibration settings, as a message app's do.
+
 **Presence is the same five states** (§4.3). Open on screen, a phone is `around` or
 `in_room`. Sent to the background, the phone soon stops the app and its connection
 closes, so it shows `offline`. That is the truth: it hears nothing until it is opened
@@ -760,19 +766,30 @@ desktop apps: they can't read a presence value they don't know, and it would arr
 in the first message they get on connecting.
 
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
-phone's camera has its location stripped like any other (§4.10).
+phone's camera has its location stripped like any other (§4.10). One screen shows at a
+time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
+Media or Search opens over it with a way back. It has no Interface size of its own:
+the phone's display size and text size settings do that job.
 
-**Phone backups leave Linger out unless you put it in.** A phone backs its apps up to
-Apple's or Google's cloud by default. The phone app opts out, so what it keeps (your
-list of servers and your settings) doesn't reach either company. A setting, off until
-you turn it on, includes it for anybody who would rather a new phone came with them.
-Messages and pictures are never in a backup either way: they live on the server.
+**Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
+cloud by default. The phone app opts out, so what it keeps (your list of servers and
+your settings) doesn't reach either company. There's no setting to put it back in
+(Matt, 2026-10-03): a backup couldn't bring your sign-ins to a new phone anyway, since
+they're encrypted to a key that never leaves the old one, and messages and pictures
+live on the server. A new phone signs in again.
 
 **Report and block come before any store listing** (T-1605). Both stores require them
 in apps where people post things. A report goes to the host, because there is nobody
 else to send it to, and the host can already delete a message or remove a member.
 Blocking someone hides them from you. Both go in the desktop app too: the server side
-is shared, and a host reads reports in whichever app they use.
+is shared, and a host reads reports in whichever app they use. Among friends who trust
+each other they should be rare, so they take the least room that does the job (Matt,
+2026-10-03): Report is the last of a message's actions and behind a ··· on a person's
+card, and the host sees who sent it. Blocking is private and isn't told to the person
+blocked; each of their messages becomes one grey line you can open, their DMs never
+light up or chime, their knocks never arrive, and nothing of theirs shows in Media or
+Search. The host learns of a report from one quiet row in the list, never a count.
+PROTOCOL §5 has the details.
 
 **What it does not do, yet: voice.** Phone voice would not pass through Apple or
 Google, since it goes to the host's server as desktop voice does. It is left out

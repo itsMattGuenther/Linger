@@ -73,13 +73,18 @@ export function waitingNote({ server, name, why }: Waiting): ListNote {
     : { kind: "waiting", server, words: `Can't reach ${name}. Still trying.`, detail: why, trying: false };
 }
 
-/** Everything the foot says, most pressing first: connections and servers not reached yet, then the keyring, then an update. */
+/**
+ * Everything the foot says, most pressing first: connections and servers not
+ * reached yet, then the keyring, then an update. `device` is what the
+ * keyring's note calls this device (`core/phone.ts`, `thisDevice`).
+ */
 export function listNotes(
   connections: readonly Connection[],
   keyring: string | null,
   update: UpdateCheck | null,
   now: number,
   waiting: readonly Waiting[] = [],
+  device = "this computer",
 ): ListNote[] {
   const notes: ListNote[] = [];
   for (const connection of connections) {
@@ -87,7 +92,7 @@ export function listNotes(
     if (note) notes.push(note);
   }
   for (const one of waiting) notes.push(waitingNote(one));
-  if (keyring !== null) notes.push({ kind: "keyring", words: "Sign-ins aren't remembered on this computer.", detail: keyring });
+  if (keyring !== null) notes.push({ kind: "keyring", words: `Sign-ins aren't remembered on ${device}.`, detail: keyring });
   if (update?.kind === "ready") notes.push({ kind: "update", version: update.version, words: `Linger ${update.version} is ready.` });
   return notes;
 }

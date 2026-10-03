@@ -278,6 +278,19 @@ pub enum ServerEvent {
     Knock {
         from_user_id: UserId,
     },
+    /// Somebody this person blocked or unblocked (PROTOCOL §5, T-1605). Sent
+    /// to every session of the person who did it and nobody else's, so a
+    /// block made on a phone holds on the computer at once.
+    #[serde(rename = "block.update")]
+    BlockUpdate {
+        user_id: UserId,
+        blocked: bool,
+    },
+    /// The open reports changed: ask `GET /reports` again. Sent to the host's
+    /// sessions and nobody else's, and with nothing in it: never a count
+    /// (AGENTS rule 3).
+    #[serde(rename = "reports.changed")]
+    ReportsChanged {},
 }
 
 /// A server frame: an event plus its sequence number. `hello`, `heartbeat_ack`,

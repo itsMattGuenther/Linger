@@ -15,8 +15,19 @@
 //! absent, must degrade to a clear "sign in again" prompt instead of a crash.
 //! That is why nothing here returns `Err` — every outcome, including "this
 //! computer has no keyring", is a value the frontend can render.
+//!
+//! The phone app keeps the same entries in the phone's own store (T-1602).
+//! On the iPhone that's the Keychain, through the same keyring crate. On
+//! Android it's `keyring-core` with `android-native-keyring-store`, from the
+//! keyring crate's maintainers, which keeps each one in the app's private
+//! SharedPreferences encrypted with a key held in the Android Keystore. The
+//! key never leaves the Keystore and isn't in any backup, so a copy of the
+//! file is useless anywhere else.
 
-use keyring::Entry;
+#[cfg(not(target_os = "android"))]
+use keyring::{Entry, Error as StoreError};
+#[cfg(target_os = "android")]
+use keyring_core::{Entry, Error as StoreError};
 use serde::{Deserialize, Serialize};
 
 /// Keyring service name. Matches the bundle identifier so entries are
@@ -82,8 +93,36 @@ pub enum SessionWrite {
 /// Turn a keyring failure into something a person can act on. The underlying
 /// messages are D-Bus and platform jargon, so they go in parentheses after a
 /// plain sentence rather than being shown raw.
-fn explain(err: &keyring::Error) -> String {
+#[cfg(desktop)]
+fn explain(err: &StoreError) -> String {
     format!("No usable keyring on this computer ({err}).")
+}
+
+#[cfg(mobile)]
+fn explain(err: &StoreError) -> String {
+    format!("This phone's secure storage didn't answer ({err}).")
+}
+
+/// Open the Android store, once: Tauri has already handed the app's context
+/// to `ndk-context`, which is all it needs. A failure is kept, so every call
+/// after it says the same thing rather than trying again mid-sign-in.
+#[cfg(target_os = "android")]
+fn android_store() -> Result<(), String> {
+    static OPENED: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    OPENED
+        .get_or_init(|| {
+            android_native_keyring_store::Store::new()
+                .map(|store| keyring_core::set_default_store(store))
+                .map_err(|err| explain(&err))
+        })
+        .clone()
+}
+
+/// One account's entry, in this device's store.
+fn entry(account: &str) -> Result<Entry, String> {
+    #[cfg(target_os = "android")]
+    android_store()?;
+    Entry::new(SERVICE, account).map_err(|err| explain(&err))
 }
 
 /// One account's contents. `Missing` and `Unavailable` are different answers:
@@ -96,25 +135,21 @@ enum Held {
 }
 
 fn read(account: &str) -> Held {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => return Held::Unavailable(explain(&err)),
+        Err(reason) => return Held::Unavailable(reason),
     };
     match entry.get_password() {
         Ok(value) => Held::Found(value),
-        Err(keyring::Error::NoEntry) => Held::Missing,
+        Err(StoreError::NoEntry) => Held::Missing,
         Err(err) => Held::Unavailable(explain(&err)),
     }
 }
 
 fn write(account: &str, value: &str) -> SessionWrite {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => {
-            return SessionWrite::Unavailable {
-                reason: explain(&err),
-            }
-        }
+        Err(reason) => return SessionWrite::Unavailable { reason },
     };
     match entry.set_password(value) {
         Ok(()) => SessionWrite::Done,
@@ -125,18 +160,14 @@ fn write(account: &str, value: &str) -> SessionWrite {
 }
 
 fn delete(account: &str) -> SessionWrite {
-    let entry = match Entry::new(SERVICE, account) {
+    let entry = match entry(account) {
         Ok(entry) => entry,
-        Err(err) => {
-            return SessionWrite::Unavailable {
-                reason: explain(&err),
-            }
-        }
+        Err(reason) => return SessionWrite::Unavailable { reason },
     };
     match entry.delete_credential() {
         // Deleting nothing is a success: the caller wanted no stored session
         // and there is none.
-        Ok(()) | Err(keyring::Error::NoEntry) => SessionWrite::Done,
+        Ok(()) | Err(StoreError::NoEntry) => SessionWrite::Done,
         Err(err) => SessionWrite::Unavailable {
             reason: explain(&err),
         },
