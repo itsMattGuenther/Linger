@@ -496,8 +496,8 @@ macOS runners, or a friend's Mac.
   2026-10-02. No push (so no relay, and nothing new leaves the server), no
   `mobile` presence state, uploads from phones, iPhone and Android both, and no
   voice in the first version: it comes back only if people using the phone app
-  ask. Phone backups leave Linger out unless you opt in, and report and block
-  come before any store listing (T-1605). SPEC §4.15.
+  ask. Phone backups leave Linger out (the opt-in was dropped 2026-10-03), and
+  report and block come before any store listing (T-1605). SPEC §4.15.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
@@ -513,7 +513,7 @@ macOS runners, or a friend's Mac.
   (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
   comes back signed in, with its tabs. The iPhone uses the Keychain through
   the keyring crate, built for iOS in CI but not yet run on an iPhone.
-  **Still to do:** the backup opt-in setting, a real wifi-to-mobile-data switch on a real phone (the emulator
+  **Still to do:** a real wifi-to-mobile-data switch on a real phone (the emulator
   reaches a local server over adb, which no network change touches), and
   iOS, which needs a Mac. The launcher icon is the porch artwork
   (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
@@ -527,12 +527,10 @@ macOS runners, or a friend's Mac.
   (Matt, 2026-10-02), set in `tauri.android.conf.json` and
   `tauri.ios.conf.json` so desktop keeps `com.linger.desktop`. It is built
   from the GitHub address, which nobody else can claim, and neither store lets
-  it change after the first upload. **Phone backups are off by default with a
-  setting to opt in** (SPEC §4.15, Matt 2026-10-02): on iPhone the app's files
-  are marked "don't back up" and the setting lifts the mark; on Android the
-  backup rules leave the app's files out unless it is on. Whether sign-ins
-  can come along depends on what each phone's secure storage lets move; work
-  that out here.
+  it change after the first upload. **Phone backups leave Linger out**
+  (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
+  `allowBackup="false"` does it there, and the iPhone's files still need
+  marking "don't back up" once its Xcode project exists.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 

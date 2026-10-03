@@ -658,10 +658,13 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   builds. Nothing ships to a phone until a phone build is added to the release
   workflow.
 
-- **Phone backups leave Linger out by default.** Matt: by default the app's
-  data should stay out of iCloud and Google backups, but people who want it
-  backed up should be able to opt in. It is the same reason as no push, applied
-  to what the phone stores. A setting turns it on.
+- **Phone backups leave Linger out.** Matt: the app's data stays out of
+  iCloud and Google backups, the same reason as no push, applied to what the
+  phone stores. He first wanted a setting to opt in, and dropped it on
+  2026-10-03: building the Android side showed a backup would carry almost
+  nothing. Sign-ins are encrypted to a key that never leaves the phone, so
+  they can't move to a new one, and messages and pictures live on the server;
+  what's left is a few preferences. A new phone signs in again.
 - **Report and block, in both apps** (T-1605). Both stores require them in
   apps where people post things. Matt agreed to add them, and to the desktop
   app too if it made sense. It does: the server side is shared, and a report

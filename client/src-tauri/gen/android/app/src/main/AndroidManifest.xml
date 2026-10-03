@@ -9,8 +9,8 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
-    <!-- No cloud backup (SPEC §4.15): what the app keeps doesn't go to Google.
-         The setting that lets somebody opt in is still to build (T-1602). -->
+    <!-- No cloud backup (SPEC §4.15): what the app keeps doesn't go to Google,
+         and there's no setting to put it back in (dropped 2026-10-03). -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

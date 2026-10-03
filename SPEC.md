@@ -738,11 +738,12 @@ in the first message they get on connecting.
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
 phone's camera has its location stripped like any other (§4.10).
 
-**Phone backups leave Linger out unless you put it in.** A phone backs its apps up to
-Apple's or Google's cloud by default. The phone app opts out, so what it keeps (your
-list of servers and your settings) doesn't reach either company. A setting, off until
-you turn it on, includes it for anybody who would rather a new phone came with them.
-Messages and pictures are never in a backup either way: they live on the server.
+**Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
+cloud by default. The phone app opts out, so what it keeps (your list of servers and
+your settings) doesn't reach either company. There's no setting to put it back in
+(Matt, 2026-10-03): a backup couldn't bring your sign-ins to a new phone anyway, since
+they're encrypted to a key that never leaves the old one, and messages and pictures
+live on the server. A new phone signs in again.
 
 **Report and block come before any store listing** (T-1605). Both stores require them
 in apps where people post things. A report goes to the host, because there is nobody
