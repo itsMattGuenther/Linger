@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::id::{AttachmentId, ExportId, MessageId, RoomId, UploadId, UserId};
+use crate::id::{AttachmentId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};
 
 // NOTE on 64-bit integers: ts-rs maps i64/u64 to `bigint`, but JSON.parse hands
 // the frontend plain numbers. Every 64-bit value on this wire (Unix ms, byte
@@ -768,6 +768,55 @@ where
 pub struct NotifyRule {
     pub target_user_id: UserId,
     pub room_id: Option<RoomId>,
+}
+
+// ---------------------------------------------------------------------------
+// Report and block (SPEC §4.15, PROTOCOL §5, T-1605)
+// ---------------------------------------------------------------------------
+
+/// `POST /reports`: a message, or a person, for the host to look at. Exactly
+/// one of `message_id` and `user_id`; a message names its author itself.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReportRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message_id: Option<MessageId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub user_id: Option<UserId>,
+    /// For the host, up to `MAX_REPORT_NOTE_CHARS`. Blank is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
+}
+
+/// The message a report is about, as it was when it was reported: an edit or
+/// a delete afterwards doesn't take away what the host was asked to see.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReportedMessage {
+    pub id: MessageId,
+    pub room_id: RoomId,
+    /// Its words when it was reported.
+    pub excerpt: String,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+/// One open report, as the host sees it (`GET /reports`). There is no count
+/// of them anywhere (AGENTS rule 3).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Report {
+    pub id: ReportId,
+    pub reporter_id: UserId,
+    /// Who it's about: the message's author, or the person named.
+    pub user_id: UserId,
+    pub message: Option<ReportedMessage>,
+    pub note: Option<String>,
+    #[ts(type = "number")]
+    pub created_at: i64,
 }
 
 // ---------------------------------------------------------------------------

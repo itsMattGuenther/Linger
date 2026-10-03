@@ -589,7 +589,12 @@ macOS runners, or a friend's Mac.
   this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
 
-- ⬜ **T-1605 · Report and block** — effort: **medium**
+- 🟡 **T-1605 · Report and block** — effort: **medium**
+  *Started 2026-10-03 on `feat/t-1602-mobile-shell`.* **Done:** the server
+  (PROTOCOL §5, "Report and block"): `/me/blocks`, `/reports`, the
+  `block.update` and `reports.changed` frames, a blocked person's knock
+  dropped, and `tests/report_block.rs` for who hears what. **Still to do:**
+  the apps.
   SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
   1.2, Google Play's user-generated content policy), so they come before any
   store listing, and they go in the desktop app too. **The shape is

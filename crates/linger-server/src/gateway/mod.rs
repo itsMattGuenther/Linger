@@ -135,6 +135,10 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
         | ServerEvent::UserRemove { .. }
         | ServerEvent::Knock { .. } => None,
 
+        // Addressed to one person's sessions (PROTOCOL §5, "Report and
+        // block"): the blocker's own, or the host's. Neither names a room.
+        ServerEvent::BlockUpdate { .. } | ServerEvent::ReportsChanged {} => None,
+
         // Session control. These never reach the bus — they are written
         // straight to one socket — but they are variants of the same enum, so
         // the match has to name them.

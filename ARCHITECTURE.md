@@ -357,6 +357,29 @@ CREATE TABLE notify_rules (
   PRIMARY KEY (user_id, target_user_id, room_id)
 );
 
+-- Report and block (SPEC §4.15, PROTOCOL §5, T-1605). A block is one
+-- person's private list; the server only stops their knocks.
+CREATE TABLE blocks (
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- who blocked
+  blocked_id      BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (user_id, blocked_id)
+);
+
+-- A report goes to the host only, keeping the message's words as they were.
+CREATE TABLE reports (
+  id              BLOB PRIMARY KEY,
+  reporter_id     BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- who it's about
+  message_id      BLOB,                       -- no reference: the message may be deleted
+  room_id         BLOB,
+  excerpt         TEXT,
+  message_at      INTEGER,
+  note            TEXT,                       -- 1000 chars
+  created_at      INTEGER NOT NULL,
+  closed_at       INTEGER                     -- the host dealt with it
+);
+
 CREATE TABLE invites (
   code            TEXT PRIMARY KEY,            -- 12 chars, base32, CSPRNG
   created_by      BLOB NOT NULL REFERENCES users(id),

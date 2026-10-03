@@ -758,7 +758,14 @@ live on the server. A new phone signs in again.
 in apps where people post things. A report goes to the host, because there is nobody
 else to send it to, and the host can already delete a message or remove a member.
 Blocking someone hides them from you. Both go in the desktop app too: the server side
-is shared, and a host reads reports in whichever app they use.
+is shared, and a host reads reports in whichever app they use. Among friends who trust
+each other they should be rare, so they take the least room that does the job (Matt,
+2026-10-03): Report is the last of a message's actions and behind a ··· on a person's
+card, and the host sees who sent it. Blocking is private and isn't told to the person
+blocked; each of their messages becomes one grey line you can open, their DMs never
+light up or chime, their knocks never arrive, and nothing of theirs shows in Media or
+Search. The host learns of a report from one quiet row in the list, never a count.
+PROTOCOL §5 has the details.
 
 **What it does not do, yet: voice.** Phone voice would not pass through Apple or
 Google, since it goes to the host's server as desktop voice does. It is left out

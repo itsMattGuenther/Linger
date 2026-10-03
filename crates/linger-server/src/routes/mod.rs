@@ -13,6 +13,7 @@
 //! the client can always switch on `error.code`.
 
 mod auth;
+mod blocks;
 mod dms;
 mod export;
 mod health;
@@ -22,6 +23,7 @@ mod links;
 mod media;
 mod messages;
 mod objects;
+mod reports;
 mod rooms;
 mod search;
 mod server;
@@ -101,6 +103,8 @@ pub fn router(state: AppState) -> Router {
         .merge(search::router())
         .merge(export::router())
         .merge(knock::router())
+        .merge(blocks::router())
+        .merge(reports::router())
         .merge(voice::router())
         .merge(links::router())
         .route("/gateway", any(crate::gateway::ws_route))

@@ -315,6 +315,14 @@ DELETE /me/notify-rules   { target_user_id, room_id | null }   → 204
 GET  /users/removed       → User[]                  # host-only
 POST /users/:id/remove    → 204                     # host-only
 POST /users/:id/restore   → 204                     # host-only
+
+GET    /me/blocks           → UserId[]                         # who you've blocked
+PUT    /me/blocks/:user_id  → 204
+DELETE /me/blocks/:user_id  → 204
+
+POST   /reports             { message_id } | { user_id }, note? → 201 Report   # 10/hour
+GET    /reports             → Report[]                          # host-only, open ones
+DELETE /reports/:id         → 204                               # host-only: dealt with
 ```
 
 ### Removing a member
@@ -458,6 +466,61 @@ Older apps keep working, both ways:
 A server that updates to #270 turns each status's three old values into
 fields with those labels, in the order Listening to, Reading, Working on
 (migration `0007_status_fields.sql`), so every status reads back unchanged.
+
+### Report and block (SPEC §4.15, T-1605)
+
+Both stores require them in an app where people post things. Among friends who
+trust each other they should be rare, so they are the least that does the job.
+
+**Block** is one person's private list. `PUT` adds somebody and `DELETE` takes
+them off; both answer 204 whether or not that changed anything. Blocking yourself
+is `VALIDATION_FAILED`, and an id that isn't a member of this server is
+`NOT_FOUND`. Nobody else can read the list, and the person blocked is never told:
+nothing they can call answers any differently.
+
+The server enforces one thing itself: a `knock` from somebody you've blocked is
+answered 204, as any knock is, and goes nowhere. Everything else is the client's.
+A blocked person's messages still arrive, live and in history, and the client
+draws each one as a single grey line you can open (SPEC §4.15). They don't chime,
+light a DM, or show in Media or Search. That is deliberate: in a room of friends,
+a reply to a message that vanished reads as somebody talking to nobody.
+
+A change reaches every session of the person who made it as
+`block.update { user_id, blocked }`, so a block made on a phone holds on the
+computer at once. Nobody else's session hears of it.
+
+**Report** goes to the host and nobody else; a self-hosted server has nobody
+else to send it to. A report names a message (`message_id`: one the reporter can
+read, and not their own) or a person (`user_id`: anybody but yourself). The
+`note` is optional, up to 1000 characters. The server keeps the message's words as
+they were when it was reported (`excerpt`), so the host still sees what was
+reported after it has been edited or deleted. A report about a DM shows the host
+that one message, which is what the reporter is asking for. Anything else in a DM
+stays out of the host's sight. Ten reports an hour per reporter
+(`RATE_REPORT_PER_HOUR`).
+
+`GET /reports` answers the open reports, newest first, to the host; anybody else
+gets `FORBIDDEN`.
+
+```ts
+type Report = {
+  id: string;
+  reporter_id: string;
+  user_id: string;          // who it's about
+  message: { id: string; room_id: string; excerpt: string; created_at: number } | null;
+  note: string | null;
+  created_at: number;
+}
+```
+
+`DELETE /reports/:id` closes one: the host dealt with it, by deleting the
+message, removing the person, or letting it go. A closed report isn't listed
+again, and nothing reopens it.
+
+Whenever the open reports change (one sent, one closed), every session the host
+has open gets `reports.changed`, with nothing in it, and the client asks
+`GET /reports` again. There is **no count** anywhere (AGENTS rule 3): the host's
+list shows one quiet row while any report is open, never how many.
 
 ### Palette validation (server-side, mandatory)
 
@@ -875,6 +938,8 @@ Beyond that, the client must re-identify and refetch.
 | `room.create` / `room.update` | `Room` — a DM's `room.create` reaches its members and nobody else, which is how the other members find out it exists |
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
+| `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
+| `reports.changed` | `{}` — **sent to the host's sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
 
@@ -1004,10 +1069,13 @@ told the thing.
   anything (SPEC §4.1).
 - `user.update` and `user.remove` go to every connected client. They are about a person,
   not a place.
-- `knock` is the one **addressed** frame: it goes to every session the target
+- `knock` is an **addressed** frame: it goes to every session the target
   has open and to no other member, the sender included. The address is not on
   the wire — the receiver is the only one who gets the frame, so a field naming
   them would carry nothing (SPEC §4.9, T-1101).
+- `block.update` and `reports.changed` are addressed too: the first to the
+  sessions of the person who blocked or unblocked, the second to the host's.
+  Neither names a room.
 
 ---
 
