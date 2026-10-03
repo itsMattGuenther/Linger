@@ -176,6 +176,8 @@ for (const scale of [1, 2]) {
     test("your card beside your name fits the window, with nothing cut off", async ({ page }) => {
       await open(page);
       const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Matt" }).last();
+      // A picture above can still be loading, moving the name (#396).
+      await still(name);
       await name.click();
       const card = page.getByRole("dialog", { name: "Matt" });
       await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((running) => running.finished)));
