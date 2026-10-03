@@ -753,3 +753,63 @@
   width: auto;
   border-right: 0;
 }
+
+/* The host's reports (T-1605): each one a small block of its own. */
+.nx-set-report {
+  gap: var(--space-2);
+  padding-top: var(--space-2-5);
+  padding-bottom: var(--space-2-5);
+}
+
+.nx-set-report-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* The flag, centred on the first line of words. */
+.nx-set-report-flag {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--line-meta);
+  color: var(--icon-muted);
+}
+
+/* Who sent it and what it's about, then when, beside the flag. The words
+   keep their own width, so where the date doesn't fit beside them it goes
+   under them, starting where they do, rather than squeezing them. */
+.nx-set-report-what {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  min-width: 0;
+}
+
+.nx-set-report-who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nx-set-report-meta time {
+  color: var(--text-muted);
+}
+
+.nx-set-report-note {
+  margin: 0;
+  color: var(--text-away);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  overflow-wrap: anywhere;
+}
+
+.nx-set-report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

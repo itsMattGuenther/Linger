@@ -276,3 +276,49 @@ test("at the phone's largest text size, words fit their lines and nothing reache
     await settings.getByRole("button", { name: "Back to Settings" }).click();
   }
 });
+
+// Report and block on the phone (T-1605): there's no hovering for a
+// message's ···, so a message is held for its actions, which rise from the
+// bottom; a report's form rises the same way. The computer's are in
+// next-report-block.spec.ts.
+test("holding a message opens its actions from the bottom, Report to host… last, and its form rises there too", async ({ page }) => {
+  await open(page, "?one&guest&shell=phone");
+  await settled(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  await page.locator(".nx-msg", { hasText: "No plans, no agenda" }).last().dispatchEvent("contextmenu");
+  const sheet = page.getByRole("menu");
+  await expect(sheet.getByRole("menuitem")).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
+  expect(await sticksOut(page), "the actions").toEqual([]);
+
+  await sheet.getByRole("menuitem", { name: "Report to host…" }).click();
+  const form = page.getByRole("dialog", { name: "Report Eli's message" });
+  await expect(form).toContainText("It goes to Eli, who hosts this server, and to nobody else.");
+  expect(await sticksOut(page), "the report").toEqual([]);
+  await form.getByRole("button", { name: "Send to Eli" }).click();
+  await expect(form.getByRole("status")).toContainText("Sent to Eli. Only Eli sees it.");
+  await form.getByRole("button", { name: "Done" }).click();
+  await expect(form).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("report "))).toHaveLength(1);
+});
+
+test("the host's lit row opens People over the list, with the report in it", async ({ page }) => {
+  await open(page, "?one&reports&shell=phone");
+  await settled(page);
+  const row = list(page).getByRole("button", { name: /A report to look at/ });
+  await expect(row).toBeVisible();
+  expect(await sticksOut(page), "the list").toEqual([]);
+  await row.click();
+  // Settings' list of them; the list underneath has its row in one named the same.
+  const reports = page.locator("[data-screen='settings']").getByRole("list", { name: "Reports" });
+  const report = reports.getByRole("listitem");
+  await expect(report).toContainText("From Eli, about a message by Jules in #general");
+  expect(await sticksOut(page), "People").toEqual([]);
+  await report.getByRole("button", { name: "Let it go" }).click();
+  await expect.poll(async () => did(page)).toContain("close r-1");
+  await expect(reports).toHaveCount(0);
+  // Back on the list (through Settings' own sections), the row has gone with the last report.
+  await page.getByRole("button", { name: "Back to Settings" }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(list(page).getByRole("button", { name: /A report to look at/ })).toHaveCount(0);
+});

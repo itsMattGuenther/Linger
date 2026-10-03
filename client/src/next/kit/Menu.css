@@ -71,3 +71,44 @@
   margin-left: auto;
   color: var(--text-accent);
 }
+
+/* On a phone (SPEC §4.15): a sheet across the bottom, over the page dimmed,
+   with rows a thumb can hit. */
+.k-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+  background: var(--scrim);
+}
+
+.k-menu[data-sheet="yes"] {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-height: calc(var(--window-height) * 0.7);
+  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-bottom: 0;
+}
+
+.k-menu[data-sheet="yes"] .k-menu-item {
+  height: var(--row-1);
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
+  font-size: var(--text-body);
+}
+
+/* What the sheet acts on: the message, quoted on one quiet line. */
+.k-menu-head {
+  margin: 0 var(--space-3) var(--space-1);
+  padding: var(--space-1) 0 var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

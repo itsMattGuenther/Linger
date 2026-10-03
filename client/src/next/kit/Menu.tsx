@@ -42,11 +42,19 @@ export function Menu({
   items,
   anchor,
   onClose,
+  sheet,
 }: {
   label: string;
   items: MenuItem[];
   anchor: MenuAnchor;
   onClose: (reason: MenuCloseReason) => void;
+  /**
+   * On a phone (SPEC §4.15): the whole width, risen from the bottom over the
+   * page dimmed, with rows a thumb can hit, instead of floating by a button
+   * a finger can't hover. `head` is a quiet line on top saying what it's for:
+   * the message it acts on.
+   */
+  sheet?: { head?: string };
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState<{ top: number; left: number; maxHeight?: number } | null>(null);
@@ -55,6 +63,11 @@ export function Menu({
   useLayoutEffect(() => {
     const node = box.current;
     if (!node) return;
+    // A sheet sits at the bottom, by its style; there's nothing to measure.
+    if (sheet) {
+      setPlace({ top: 0, left: 0 });
+      return;
+    }
     const size = node.getBoundingClientRect();
     // Below the trigger, its right edge on the trigger's; above when there is
     // no room below. Always inside the window.
@@ -101,17 +114,23 @@ export function Menu({
     all[next]?.focus();
   };
 
-  return createPortal(
+  const menu = (
     <div
       ref={box}
       className="k-menu"
       data-kit="Menu"
+      data-sheet={sheet ? "yes" : undefined}
       role="menu"
       aria-label={label}
       data-placed={place ? "yes" : "no"}
-      style={place ? { top: place.top, left: place.left, maxHeight: place.maxHeight } : undefined}
+      style={place && !sheet ? { top: place.top, left: place.left, maxHeight: place.maxHeight } : undefined}
       onKeyDown={onKeyDown}
     >
+      {sheet?.head ? (
+        <p className="k-menu-head" aria-hidden="true">
+          {sheet.head}
+        </p>
+      ) : null}
       {items.map((item) => (
         <button
           key={item.id}
@@ -138,7 +157,17 @@ export function Menu({
           ) : null}
         </button>
       ))}
-    </div>,
+    </div>
+  );
+  return createPortal(
+    sheet ? (
+      <>
+        <div className="k-menu-scrim" aria-hidden="true" />
+        {menu}
+      </>
+    ) : (
+      menu
+    ),
     document.body,
   );
 }

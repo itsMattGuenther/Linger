@@ -12,6 +12,8 @@ import { Button, Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } 
 import { Attachments } from "./Attachments";
 import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
+import { onPhone } from "../../core/phone";
+import { FloatingForm, ReportForm } from "./ReportBlock";
 import { type MentionLookup, MessageText } from "./MessageText";
 import "./MessageRow.css";
 
@@ -35,6 +37,12 @@ export interface MessageActions {
   openPerson?: (user: User, anchor: { top: number; bottom: number; left: number }) => void;
   /** Pin a message or take its pin off (T-908). A refusal rejects with a sentence. */
   pin?: (message: Message, pinned: boolean) => Promise<void>;
+  /**
+   * Report somebody else's message to the host (T-1605): the host's name,
+   * and sending it, which says null or what went wrong. Left out where
+   * there's nobody to report to, as for the host.
+   */
+  report?: { host: string; send: (message: Message, note: string | null) => Promise<string | null> };
 }
 
 /**
@@ -81,6 +89,8 @@ export const MessageRow = memo(function MessageRow({
   actions: MessageActions;
 }) {
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; confirming: boolean } | null>(null);
+  // Reporting it to the host (T-1605): the form floats where the menu was.
+  const [reporting, setReporting] = useState<MenuAnchor | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
 
@@ -109,6 +119,11 @@ export const MessageRow = memo(function MessageRow({
     if (refocus) trigger.current?.focus();
   };
 
+  // On the phone a message is held for its actions (SPEC §4.15): there's no
+  // hovering for the ··· button, and holding can't select its words, so
+  // Copy text is one of them.
+  const phone = onPhone();
+  const words = message.body.trim();
   const items: MenuItem[] = menu?.confirming
     ? [
         {
@@ -133,6 +148,19 @@ export const MessageRow = memo(function MessageRow({
             actions.reply(message);
           },
         },
+        ...(phone && words !== ""
+          ? [
+              {
+                id: "copy",
+                label: "Copy text",
+                icon: "copy" as const,
+                onSelect: () => {
+                  closeMenu(false);
+                  void navigator.clipboard?.writeText(message.body).catch(() => undefined);
+                },
+              },
+            ]
+          : []),
         ...(actions.pin && !pending
           ? [
               {
@@ -162,6 +190,21 @@ export const MessageRow = memo(function MessageRow({
         ...(canDelete
           ? [{ id: "delete", label: "Delete", icon: "close" as const, tone: "danger" as const, onSelect: () => setMenu((open) => (open ? { ...open, confirming: true } : open)) }]
           : []),
+        // Last, and plain: there, not loud (T-1605).
+        ...(actions.report && !mine
+          ? [
+              {
+                id: "report",
+                label: "Report to host…",
+                icon: "flag" as const,
+                onSelect: () => {
+                  const anchor = menu?.anchor ?? null;
+                  closeMenu(false);
+                  setReporting(anchor);
+                },
+              },
+            ]
+          : []),
       ];
 
   const reply = !deleted && message.reply_to !== null;
@@ -169,6 +212,15 @@ export const MessageRow = memo(function MessageRow({
   return (
     <div
       className="nx-msg"
+      onContextMenu={
+        phone && !deleted && !editing && !pending
+          ? (event) => {
+              event.preventDefault();
+              const box = event.currentTarget.getBoundingClientRect();
+              setMenu({ anchor: { top: box.top, left: box.left, right: box.right, bottom: box.bottom }, confirming: false });
+            }
+          : undefined
+      }
       data-head={head ? "yes" : undefined}
       data-reply={reply ? "yes" : undefined}
       data-pending={pending ? "yes" : undefined}
@@ -276,7 +328,29 @@ export const MessageRow = memo(function MessageRow({
           items={items}
           anchor={menu.anchor}
           onClose={(reason) => closeMenu(reason === "escape" || reason === "tab")}
+          sheet={phone ? { head: `${who}: ${excerpt(message.body) || "a file"}` } : undefined}
         />
+      ) : null}
+      {reporting && actions.report ? (
+        <FloatingForm
+          anchor={reporting}
+          label={`Report ${who}'s message`}
+          onClose={() => {
+            setReporting(null);
+            trigger.current?.focus();
+          }}
+        >
+          <ReportForm
+            who={who}
+            excerpt={message.body}
+            host={actions.report.host}
+            onSend={(note) => actions.report?.send(message, note) ?? Promise.resolve("Reporting isn't available here.")}
+            onDone={() => {
+              setReporting(null);
+              trigger.current?.focus();
+            }}
+          />
+        </FloatingForm>
       ) : null}
     </div>
   );

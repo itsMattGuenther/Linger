@@ -10,7 +10,6 @@ import {
   leaveVoice,
   loadBlocks,
   loadNotifyRules,
-  loadReports,
   noteDm,
   retryAllNow,
   saveStatus,
@@ -63,6 +62,7 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { desktopOf, firstTimeInTray, loadCloseList, trayNotice, type VoicePlace } from "../../core/closing";
+import { cardSafety } from "../../core/safety";
 import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
@@ -225,7 +225,7 @@ function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInf
     void loadReadMarkers(api);
     void loadNotifyRules(api).catch(() => undefined);
     void loadBlocks(api).catch(() => undefined);
-    void loadReports(api).catch(() => undefined);
+    // The host's reports come with the server's `ready` (lib/gateway.ts).
   }, [api, paused]);
 
   // Around, in no room: a conversation shown beside the list, or in a
@@ -786,6 +786,9 @@ function Servers({
             onOpenPerson: (user, dm) => void openPerson(api, user, dm),
             onMessage: (user) => void messageWith(api, user),
             onKnock: (user) => knockOn(api, user.id),
+            safetyFor: (user) => cardSafety(api, state, user),
+            // The host, with a report open (T-1605): Settings, People, where they are.
+            onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
             onStartDm: (people) => startDm(api, people),
             onHost: (section) => shell.settings(section),
             showing: besideTab?.server === baseUrl ? besideTab.roomId : null,

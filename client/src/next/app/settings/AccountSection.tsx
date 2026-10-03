@@ -5,8 +5,9 @@ import { type UpdateCheck, updateLine } from "../../../lib/updates";
 import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
 import { thisDevice } from "../../core/phone";
 import { HEADINGS } from "../../core/settings";
-import { Button, SettingRow, Switch, TextField } from "../../kit";
-import { Actions, Block, Fields, Note, useSave } from "./parts";
+import type { User } from "../../../generated/User";
+import { Button, Name, SettingRow, Switch, TextField } from "../../kit";
+import { Actions, Block, Fields, Note, SaveLine, useSave } from "./parts";
 
 export interface AccountProps {
   /** The phone app: "this phone", and no updates or start at sign-in (SPEC §4.15). */
@@ -45,6 +46,12 @@ export interface AccountProps {
     /** Open the user guide's lines for a desktop that won't start Linger by itself. */
     openGuide: () => void;
   };
+  /**
+   * Who you've blocked on this server (T-1605), and unblocking one: null when
+   * the server took it, or what went wrong in words. Shown only while there's
+   * somebody on it.
+   */
+  blocked?: { people: readonly User[]; unblock: (id: User["id"]) => Promise<string | null> };
   /** Sign out on this computer (SIGN-13). With several servers this is all of them. */
   signOut: () => void;
   severalServers: boolean;
@@ -53,11 +60,12 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, signOut, severalServers, addServer, phone = false }: AccountProps) {
+export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, blocked, signOut, severalServers, addServer, phone = false }: AccountProps) {
   const device = thisDevice(phone);
   return (
     <>
       <Password serverName={serverName} changePassword={changePassword} />
+      {blocked && blocked.people.length > 0 ? <Blocked serverName={serverName} {...blocked} /> : null}
       <Block
         heading={HEADINGS.archive}
         lead="Download public rooms and your own DMs, including shared files, as a zip. Messages open in any text editor. Available once an hour."
@@ -196,6 +204,36 @@ function Password({ serverName, changePassword }: { serverName: string; changePa
           Change password
         </Button>
       </Actions>
+    </Block>
+  );
+}
+
+/**
+ * Who you've blocked (T-1605): where a block is undone, besides the person's
+ * own card. Only there while somebody's on it.
+ */
+function Blocked({ serverName, people, unblock }: { serverName: string } & NonNullable<AccountProps["blocked"]>) {
+  const save = useSave();
+  const busy = save.phase.kind === "saving";
+  return (
+    <Block heading={HEADINGS.blocked} lead={`Their messages fold into a grey line for you on ${serverName}, and their DMs and knocks don't reach you. They aren't told.`}>
+      <ul className="nx-set-list" aria-label="Blocked">
+        {people.map((person) => (
+          <li key={person.id} className="nx-set-item">
+            <div className="nx-set-item-line">
+              <span className="nx-set-item-mark" />
+              <Name person={person} />
+              <span className="nx-set-item-sub nx-set-mono">@{person.username}</span>
+              <span className="nx-set-item-buttons">
+                <Button size="sm" disabled={busy} onClick={() => void save.run(unblock(person.id))}>
+                  Unblock
+                </Button>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
     </Block>
   );
 }

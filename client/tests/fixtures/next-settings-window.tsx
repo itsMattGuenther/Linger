@@ -18,18 +18,24 @@
  * has the server answer an older one (#314).
  * `window.shell.prefs(prefs)` is the list window saying your servers'
  * order or Quiet changed.
+ * Report and block (T-1605): `?blocked` has you blocking Jules, for Account's
+ * list; `?reports` has one report open for you, the host, from Eli about a
+ * message of Jules's in #general, for People. Unblocking, deleting the message
+ * and closing the report are written down, and the list window passes on
+ * what changed, as the real one does.
  * What the window asked for is written to `body[data-did]`, `|`-separated.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Invite } from "../../src/generated/Invite";
 import type { NotifyRule } from "../../src/generated/NotifyRule";
+import type { Report } from "../../src/generated/Report";
 import type { ServerInfo } from "../../src/generated/ServerInfo";
 import { serverState } from "../../src/lib/gateway";
 import { SettingsWindow } from "../../src/next/app/settings/SettingsWindow";
 import "../../src/next/styles/app.css";
 import { fakeDesktop, json } from "./next/desktop";
-import { NOW, SERVER, SERVER_NAME, evening, people } from "./next/evening";
+import { NOW, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
@@ -37,6 +43,24 @@ const night = evening(serverState(SERVER));
 const me = { ...people.matt, is_host: !query.has("member") };
 let info: ServerInfo = { name: SERVER_NAME, accent_key: "amber", icon_key: null, member_count: 7, created_at: NOW - 90 * 86_400_000 } as ServerInfo;
 const invites: Invite[] = [];
+let blocked: string[] = query.has("blocked") ? [people.jules.id] : [];
+const reported = (messages["r-general"] ?? []).find((message) => message.author_id === people.jules.id);
+let reports: Report[] | null = !me.is_host
+  ? null
+  : query.has("reports") && reported
+    ? [
+        {
+          id: "r-1",
+          reporter_id: people.eli.id,
+          user_id: people.jules.id,
+          message: { id: reported.id, room_id: "r-general", excerpt: reported.body, created_at: reported.created_at },
+          note: "This felt a bit much tonight.",
+          created_at: NOW - 20 * 60_000,
+        },
+      ]
+    : [];
+/** The list window passes on what it holds that changed, as it does when a frame changes it. */
+const shareSafety = () => window.setTimeout(() => desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: null, read: night.read, readLoaded: true, notifyRules: rules, blocked, reports } }), 10);
 let rules: NotifyRule[] = [];
 // What the computer has for starting at sign-in: the only record there is.
 const startup = query.get("autostart");
@@ -47,7 +71,7 @@ const desktop = fakeDesktop({
   query,
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)), [LISBON]: lisbon(serverState(LISBON)) } : {},
   infos: query.has("servers") ? serverInfo : {},
-  ownerState: { ...night, me, users: night.users.map((user) => (user.id === me.id ? me : user)) },
+  ownerState: { ...night, me, users: night.users.map((user) => (user.id === me.id ? me : user)), blocked, reports },
   asks: {
     "next:notify": (asked) => {
       if (query.has("refuse")) return { problem: "The server is busy." };
@@ -92,6 +116,25 @@ const desktop = fakeDesktop({
     }
     if (path === "/invites" && method === "GET") return json(invites);
     if (path === "/users/removed") return json([]);
+    const unblock = /^\/me\/blocks\/([^/]+)$/.exec(path);
+    if (unblock && method === "DELETE") {
+      desktop.note(`unblock ${decodeURIComponent(unblock[1] ?? "")}`);
+      blocked = blocked.filter((id) => id !== decodeURIComponent(unblock[1] ?? ""));
+      shareSafety();
+      return new Response(null, { status: 204 });
+    }
+    const message = /^\/messages\/([^/]+)$/.exec(path);
+    if (message && method === "DELETE") {
+      desktop.note(`delete ${decodeURIComponent(message[1] ?? "")}`);
+      return new Response(null, { status: 204 });
+    }
+    const report = /^\/reports\/([^/]+)$/.exec(path);
+    if (report && method === "DELETE") {
+      desktop.note(`close ${decodeURIComponent(report[1] ?? "")}`);
+      reports = (reports ?? []).filter((held) => held.id !== decodeURIComponent(report[1] ?? ""));
+      shareSafety();
+      return new Response(null, { status: 204 });
+    }
     return null;
   },
 });

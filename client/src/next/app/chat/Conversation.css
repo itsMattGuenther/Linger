@@ -99,3 +99,48 @@
   transform: translateX(-50%);
   z-index: var(--z-raised);
 }
+
+/* A message from somebody you blocked (PROTOCOL §5): one quiet line in its
+   place, the width of a message, that opens it where it is. Grey, dashed and
+   small, so it reads as something set aside rather than something said. */
+.nx-msg-blocked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: calc(100% - var(--space-2) - var(--space-1));
+  min-height: var(--control-md);
+  margin: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  padding: 0 var(--space-2-5);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  text-align: left;
+}
+
+.nx-msg-blocked .k-icon {
+  flex: none;
+  color: var(--icon-faint);
+}
+
+.nx-msg-blocked-who {
+  flex: 1;
+  min-width: 0;
+}
+
+.nx-msg-blocked-show {
+  flex: none;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: var(--space-0-5);
+}
+
+.nx-msg-blocked:hover {
+  border-color: var(--edge-hover);
+}
+
+.nx-msg-blocked:hover .nx-msg-blocked-show {
+  color: var(--text-primary);
+}

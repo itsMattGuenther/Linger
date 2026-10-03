@@ -39,7 +39,7 @@ export type ChatStream = Pick<
 >;
 
 /** What the window does for a message. Reply, edit and pictures the view handles itself. */
-export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards" | "openPerson">;
+export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards" | "openPerson" | "report">;
 
 /** What the window does for the box: uploads and sending. */
 export type ChatComposer = Pick<
@@ -66,6 +66,8 @@ export interface ChatPane {
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
   me: User | null;
+  /** Who you've blocked: each of their messages is a grey line you can open (PROTOCOL §5). */
+  blocked?: ReadonlySet<string>;
   /** Who is talking right now. */
   speaking: ReadonlySet<string>;
   /** Who is writing here right now, not counting you. */
@@ -169,6 +171,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
     parentActions?.download,
     parentActions?.wantCards,
     parentActions?.openPerson,
+    parentActions?.report,
     setReply,
   ]);
 
@@ -234,6 +237,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             {...pane.stream}
             people={pane.people}
             me={pane.me}
+            blocked={pane.blocked}
             editing={editing?.tab === pane.id ? editing.id : null}
             empty={
               pane.header.kind === "room"

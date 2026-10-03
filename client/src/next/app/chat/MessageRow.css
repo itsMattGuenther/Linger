@@ -242,3 +242,11 @@ button.nx-quote:hover {
   margin-top: var(--space-1);
   margin-left: calc(-1 * var(--space-2-5) - 1px);
 }
+
+/* On the phone a message is held for its actions (its sheet has Copy text),
+   so holding it doesn't start selecting its words. */
+:root[data-shell="phone"] .nx-msg {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

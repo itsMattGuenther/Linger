@@ -1056,8 +1056,10 @@ async function attachListeners(): Promise<void> {
       // The card is drawn by the fold above; the noise is a side effect and
       // belongs out here with the other one. `playKnock` applies the mute and
       // the quiet hours itself, so a knock at 3am is a card and nothing more.
-      // The host's open reports changed: ask for them again (PROTOCOL §5).
-      if (frame.op === "reports.changed") void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
+      // The host's open reports (PROTOCOL §5): asked for once the server has
+      // said who you are, since only a host may ask, and again whenever they
+      // change. Asking any earlier finds nobody yet and gives up.
+      if (frame.op === "ready" || frame.op === "reports.changed") void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
       if (!replayed) {
         if (frame.op === "knock") void playKnock();
         const cue = voiceCue(frame, before, next);

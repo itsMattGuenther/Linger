@@ -319,6 +319,9 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
   - `note`, a faint end-of-line note ("in #general");
   - `end` marks at the end ("who's in a room");
   - `detail`, the second line, set `away` for the warm away color.
+  - `lead` is the column before the title: a person's marker, a room's `#`,
+    nothing, or `kind: "icon"`, a mark of its own, like the flag on the
+    host's "A report to look at" (T-1605).
 - **States:**
   - `fresh` draws the title bold. Weight only, never a count.
   - `lit` is something new addressed to you, a DM (#291): a soft lamp fill
@@ -430,6 +433,12 @@ message's Reply, Edit and Delete.
 - **Width** is `--menu-w`; a long label ends in "…".
 - **`checked`** makes an item an on/off choice (`menuitemcheckbox`), like a
   server's Quiet: a tick in the lamp at its end when it's on.
+- **`sheet`** (the phone, SPEC §4.15): the same items rise from the bottom of
+  the screen, full width over a dimmed scrim (`--scrim`), with an optional
+  `head` line saying what they're for ("Eli: No plans, no agenda…"). A
+  message is held for them, since a phone has no hover for its ···, and Copy
+  text is one of them, since holding can't select its words. A tap on the
+  scrim, or Back, closes it.
 
 ### OptionList
 
@@ -752,6 +761,19 @@ replaces an unread count.
 - **Mentions** in a message read as the person's display name (`@Justin B`)
   in the mention's highlight, never their name's face or color, with the
   stored `@username` in the tooltip. A mention of you is in the lamp.
+- **Somebody you blocked** (T-1605, PROTOCOL §5): each of their messages is
+  one grey line in the message's place, "From Jules, who you blocked", with
+  Show at its end; Show opens that one message. A dashed hairline edge, the
+  muted grey and the block mark, so it reads as folded away and never as
+  missing. A reply quoting them still quotes them: it's somebody else's
+  message.
+- **Reporting** (T-1605): Report to host… is the last of a message's actions
+  (never on your own, and not for a host, who has nobody to report to). Its
+  form opens where the menu was, on a computer, and rises from the bottom on
+  the phone: who it goes to, that the person isn't told, the message's words,
+  an optional note, and Send. Sent, the same place says so, with Done. A
+  person's card offers Report and Block behind a ··· beside Knock, and the
+  card itself becomes each form.
 
 **It never moves a reader.** A short conversation hangs from the bottom,
 above the box. At the end, new messages follow, and anything that grows

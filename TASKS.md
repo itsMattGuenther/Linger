@@ -602,12 +602,23 @@ macOS runners, or a friend's Mac.
   this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
 
-- 🟡 **T-1605 · Report and block** — effort: **medium**
-  *Started 2026-10-03 on `feat/t-1602-mobile-shell`.* **Done:** the server
-  (PROTOCOL §5, "Report and block"): `/me/blocks`, `/reports`, the
-  `block.update` and `reports.changed` frames, a blocked person's knock
-  dropped, and `tests/report_block.rs` for who hears what. **Still to do:**
-  the apps.
+- ✅ **T-1605 · Report and block** — effort: **medium**
+  *Built 2026-10-03 on `feat/t-1602-mobile-shell`; it reaches `main` with
+  that branch.* The server (PROTOCOL §5, "Report and block"): `/me/blocks`,
+  `/reports`, the `block.update` and `reports.changed` frames, a blocked
+  person's knock dropped, and `tests/report_block.rs` for who hears what.
+  The apps, as the mockups Matt approved: Report and Block behind a ··· on a
+  person's card, Report to host… last in a message's actions (held for, on
+  the phone, in a sheet from the bottom), each blocked message one grey line
+  you can open, nothing of theirs lit, chimed, in Media or in Search,
+  Settings › Account listing who you've blocked, and the host's one lit row,
+  "A report to look at", opening Settings › People with each report and
+  Delete message, Remove… and Let it go. `next-report-block.spec.ts` and
+  `next-phone.spec.ts` prove it in Chromium and WebKit. Found on the way: a
+  host's open reports were asked for before the server said who you are, so
+  the lit row waited for the next report; they now load on every `ready`.
+  **Still to try:** reporting and blocking on Matt's Pixel against his
+  server.
   SPEC §4.15. Matt, 2026-10-02: both stores require them (Apple guideline
   1.2, Google Play's user-generated content policy), so they come before any
   store listing, and they go in the desktop app too. **The shape is

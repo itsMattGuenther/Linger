@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { CardSafety } from "../../core/safety";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
@@ -26,6 +27,13 @@ export interface ServerBodyActions {
   onMessage?: (user: User) => void;
   /** From a person's card: knock (SPEC §4.9). */
   onKnock?: (user: User) => Promise<KnockResult>;
+  /** From a person's card: report and block them (T-1605); nothing for you. */
+  safetyFor?: (user: User) => CardSafety | undefined;
+  /**
+   * For the host, while a report is open (T-1605): one lit row at the top,
+   * "A report to look at", that opens them. Never how many.
+   */
+  onReports?: () => void;
   /** From the picker the + on Rooms opens: open the DM with exactly these people; resolves to a problem in words, or null. */
   onStartDm?: (people: User[]) => Promise<string | null>;
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
@@ -57,6 +65,8 @@ export function ServerBody({
   onOpenPerson,
   onMessage,
   onKnock,
+  safetyFor,
+  onReports,
   onStartDm,
   onHost,
   showing = null,
@@ -232,6 +242,11 @@ export function ServerBody({
 
   return (
     <>
+      {onReports ? (
+        <RowList label={on("Reports")}>
+          <Row lead={{ kind: "icon", icon: "flag" }} lines="one" title="A report to look at" lit label="A report to look at, in Settings, People" onActivate={onReports} />
+        </RowList>
+      ) : null}
       <SectionLabel
         label="Rooms"
         open={open("rooms")}
@@ -337,6 +352,7 @@ export function ServerBody({
             setCard(null);
           }}
           onKnock={() => knock(card.row.user)}
+          safety={safetyFor?.(card.row.user)}
           onClose={closeCard}
           problem={card.problem ?? null}
         />

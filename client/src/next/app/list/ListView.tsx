@@ -159,6 +159,8 @@ export function ListView(props: ListViewProps) {
               showing={only.showing}
               onMessage={only.onMessage}
               onKnock={only.onKnock}
+              safetyFor={only.safetyFor}
+              onReports={only.onReports}
               onStartDm={only.onStartDm}
               onHost={only.onHost}
             />

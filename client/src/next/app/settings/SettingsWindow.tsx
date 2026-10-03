@@ -11,7 +11,7 @@ import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../li
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
-import { type GatewayState, saveDisplayName, saveStatus, saveStyle, useServers } from "../../../lib/gateway";
+import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
 import { inviteUrl, moveRoom } from "../../../lib/host";
 import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
@@ -524,6 +524,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       }}
       account={{
         serverName,
+        // Who you've blocked here (T-1605), by the names the server has for them.
+        blocked: state
+          ? {
+              people: state.blocked.flatMap((id) => state.users.filter((user) => user.id === id)),
+              unblock: (id) => said(setBlocked(api, id, false), "Couldn't unblock them."),
+            }
+          : undefined,
         changePassword: (current, next) => {
           return askOwner(holder.password({ server, current, next }), "Couldn't reach the list window.");
         },
@@ -640,6 +647,25 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   if (problem === null) readHostLists();
                   return problem;
                 },
+                // What was reported to the host (T-1605).
+                reports: state.reports
+                  ? {
+                      open: state.reports,
+                      personOf: (userId) => state.users.find((user) => user.id === userId) ?? removed?.find((user) => user.id === userId),
+                      placeOf: (roomId) => {
+                        const room = state.rooms.find((one) => one.id === roomId);
+                        return room ? `#${room.name}` : "a DM";
+                      },
+                      deleteMessage: (report) =>
+                        report.message
+                          ? said(
+                              api.delete(`/messages/${encodeURIComponent(report.message.id)}`).then(() => closeReport(api, report.id)),
+                              "Couldn't delete the message.",
+                            )
+                          : Promise.resolve(null),
+                      close: (reportId) => said(closeReport(api, reportId), "Couldn't take the report off the list."),
+                    }
+                  : undefined,
               },
               server: {
                 version: {

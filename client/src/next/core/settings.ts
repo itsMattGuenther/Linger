@@ -145,6 +145,8 @@ export const HEADINGS = {
   links: "Links You Have Made",
   members: "Members",
   removed: "Removed",
+  blocked: "Blocked",
+  reports: "Reports",
   serverVersion: "Version",
   serverName: "Name",
   accent: "Accent",

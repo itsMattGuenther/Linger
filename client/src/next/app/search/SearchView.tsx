@@ -166,7 +166,11 @@ export function SearchView({ servers, startOn, search, onOpenHit, focusRequest }
     () => (streams === null ? null : merge(covered.map((place) => [place.server, streams.get(place.server) ?? { items: [], more: false }] as const), hitOrder)),
     [streams, covered],
   );
-  const shown = merged?.shown ?? [];
+  // Somebody you blocked says nothing here (PROTOCOL §5).
+  const shown = useMemo(
+    () => (merged?.shown ?? []).filter(({ server, item }) => !(servers.find((place) => place.server === server)?.blocked?.has(item.author_id) ?? false)),
+    [merged, servers],
+  );
   const mixed = several && scope === EVERY_SERVER;
   const lines = useMemo(() => {
     const now = Date.now();

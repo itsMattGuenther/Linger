@@ -36,6 +36,7 @@ export function useViewServers(apis: ReadonlyMap<string, AuthedApi>): MediaServe
           me: state.me?.id ?? null,
           users: state.users,
           rooms: [...state.rooms, ...state.dms],
+          blocked: new Set(state.blocked),
           expiryDays: info?.fileExpiryDays,
           storage: info?.storage,
         },

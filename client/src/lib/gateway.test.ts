@@ -1309,11 +1309,24 @@ describe("report and block (PROTOCOL §5, T-1605)", () => {
       return [{ id: "r1", reporter_id: "u-callie", user_id: "u-dex", message: null, note: null, created_at: 1 }];
     });
     await connect(api);
-    arrive(HOME, ready({ user: host }));
+    // The server's `ready` says you're the host, and that's what asks: the
+    // app opening a server asks before the server has said who you are, and
+    // that ask finds nobody and gives up.
     await loadReports(api);
-    expect(serverState(HOME).reports?.map((report) => report.id)).toEqual(["r1"]);
+    expect(asked).toEqual([]);
+    arrive(HOME, ready({ user: host }));
+    await vi.waitFor(() => expect(serverState(HOME).reports?.map((report) => report.id)).toEqual(["r1"]));
+    expect(asked.filter((path) => path === "/reports")).toHaveLength(1);
     arrive(HOME, { s: 2, op: "reports.changed", d: {} } as ServerFrame);
     await vi.waitFor(() => expect(asked.filter((path) => path === "/reports")).toHaveLength(2));
+
+    // Every connection's `ready` asks again: they may have changed meanwhile.
+    await disconnect(HOME);
+    asked.length = 0;
+    await connect(api);
+    arrive(HOME, ready({ user: host }));
+    await vi.waitFor(() => expect(asked.filter((path) => path === "/reports")).toHaveLength(1));
+    expect(serverState(HOME).reports?.map((report) => report.id)).toEqual(["r1"]);
 
     await disconnect(HOME);
     const member = fakeApi(HOME);
