@@ -639,6 +639,8 @@ for (const width of [420, 360]) {
     test.use({ viewport: { width, height: 820 }, deviceScaleFactor: 2 });
 
     test("nothing moves, long lines still end in an ellipsis, and the voice strip still hides what doesn't fit", async ({ page }) => {
+      // Long by design: four kinds of line measured, each against a shot (#394).
+      test.slow();
       await openChat(page);
       await restyleInChat(page, styled(people.eli, AMBER_GLOW));
       await restyleInChat(page, styled(people.jules, GRADIENT_GLOW, { display_name: "Jules, whose name goes on and on" }));
@@ -701,6 +703,9 @@ for (const width of [420, 360]) {
         expect(cut, selector).toEqual({ over: true, ellipsis: "ellipsis", across: "clip", nowrap: "nowrap" });
         await line.scrollIntoViewIfNeeded();
         await still(line);
+        // Typing lasts six seconds, and on a busy machine the shot can come
+        // later than that: said again just before it (#394).
+        if (selector === ".nx-typing-words") await threeTyping();
         const box = await line.boundingBox();
         if (!box) throw new Error("nothing to measure");
         await line.evaluate((node: HTMLElement) => (node.dataset.probe = "letters"));
@@ -709,7 +714,9 @@ for (const width of [420, 360]) {
         const room = Math.min(12, width - (box.x + box.width + 1));
         const beyond = room >= 1 ? await shoot(page, { x: box.x + box.width + 1, y: box.y, width: room, height: box.height }) : { w: 0, h: 0, data: new Uint8Array() };
         await letters.evaluate((node: Element) => node.remove());
-        await line.evaluate((node: HTMLElement) => delete node.dataset.probe);
+        // Not through `line`: a typing line that has gone by now would be
+        // waited for until the test ran out of time (#394).
+        await page.evaluate(() => document.querySelector("[data-probe]")?.removeAttribute("data-probe"));
         let white = 0;
         for (let i = 0; i < beyond.w * beyond.h; i += 1) if ([0, 1, 2].every((c) => (beyond.data[i * 4 + c] ?? 0) > 230)) white += 1;
         expect(white, `${selector}: letters painted past its end`).toBe(0);
