@@ -151,7 +151,9 @@ pub(crate) mod android {
     /// Run `work` on this thread, attached to the VM, clearing any Java
     /// exception it leaves so the next call isn't refused. `phone_text.rs`
     /// asks Android through it too.
-    pub(crate) fn with_env<T>(work: impl FnOnce(&mut AttachGuard<'_>, &JObject) -> Option<T>) -> Option<T> {
+    pub(crate) fn with_env<T>(
+        work: impl FnOnce(&mut AttachGuard<'_>, &JObject) -> Option<T>,
+    ) -> Option<T> {
         let (vm, app) = app()?;
         let mut env = vm.attach_current_thread().ok()?;
         let answer = work(&mut env, &app);
@@ -357,7 +359,11 @@ pub(crate) mod android {
         );
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(lasts).await;
-            let _ = with_env(|env, _| env.call_method(track.as_obj(), "release", "()V", &[]).ok().map(|_| ()));
+            let _ = with_env(|env, _| {
+                env.call_method(track.as_obj(), "release", "()V", &[])
+                    .ok()
+                    .map(|_| ())
+            });
         });
         Some(())
     }

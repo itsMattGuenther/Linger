@@ -44,7 +44,12 @@ mod android {
     pub fn font_scale() -> Option<f32> {
         with_env(|env, app| {
             let resources = env
-                .call_method(app, "getResources", "()Landroid/content/res/Resources;", &[])
+                .call_method(
+                    app,
+                    "getResources",
+                    "()Landroid/content/res/Resources;",
+                    &[],
+                )
                 .ok()?
                 .l()
                 .ok()?;

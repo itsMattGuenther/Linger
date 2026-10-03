@@ -759,9 +759,10 @@ async fn a_retry_ends_the_wait_between_tries_and_starts_the_backoff_over() {
 
     // The fourth try waits two to four seconds.
     let long = watch
-        .until_status("a long wait", |status| {
-            matches!(status, Status::Waiting { retry_in_ms, .. } if *retry_in_ms >= 2000)
-        })
+        .until_status(
+            "a long wait",
+            |status| matches!(status, Status::Waiting { retry_in_ms, .. } if *retry_in_ms >= 2000),
+        )
         .await;
     let Status::Waiting { retry_in_ms, .. } = long else {
         unreachable!("matched on waiting");
@@ -778,12 +779,17 @@ async fn a_retry_ends_the_wait_between_tries_and_starts_the_backoff_over() {
     );
 
     let next = watch
-        .until_status("the next wait", |status| matches!(status, Status::Waiting { .. }))
+        .until_status("the next wait", |status| {
+            matches!(status, Status::Waiting { .. })
+        })
         .await;
     let Status::Waiting { retry_in_ms, .. } = next else {
         unreachable!("matched on waiting");
     };
-    assert!(retry_in_ms <= 500, "the backoff started over, so this wait is short, not {retry_in_ms} ms");
+    assert!(
+        retry_in_ms <= 500,
+        "the backoff started over, so this wait is short, not {retry_in_ms} ms"
+    );
 
     handle.shutdown();
     watch
