@@ -233,6 +233,7 @@
   --linkcard-w: 360px;
   --audio-volume-w: 64px; /* a shared audio file's volume slider, beside its mute (#247) */
   --composer-max: 200px; /* the message box grows to this, then scrolls */
+  --composer-thumb: 40px; /* a picture's preview above the message box, before it's sent (#397) */
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
   --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */

@@ -393,6 +393,11 @@ something, reply to it, emoji and all.
 Three ways, all the same thing: the **+** in the message box, drag a file onto
 the box, or paste one from your clipboard.
 
+Files wait above the box until you send, one line each, with a **✕** to take
+one out. A picture shows a small copy of itself there, so you can see it's the
+right one before it goes. Other files, and pictures Linger can't show, get
+the file icon.
+
 Pasting works for pictures too. Copy one (take a screenshot to the clipboard,
 use **Copy** in an image viewer, or **Copy Image** in a browser), click the
 message box and press **Ctrl+V**. The picture joins the message as a file,
