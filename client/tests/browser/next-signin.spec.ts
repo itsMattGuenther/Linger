@@ -110,6 +110,25 @@ test("an invite leads to joining, named for its server, and Join waits for eight
   expect(sent).toEqual([`signin ${JSON.stringify({ invite_code: "ABCD-1234", username: "jules", display_name: "Jules R.", password: "12345678" })}`]);
 });
 
+test("an invite opened by somebody who already has an account here leads to signing in instead, and makes nobody new", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/invite/ABCD-1234`);
+  const join = page.getByRole("form", { name: "Join" });
+  await expect(join).toBeVisible();
+  await join.getByRole("button", { name: "Sign in" }).click();
+
+  const form = page.getByRole("form", { name: "Sign in" });
+  await expect(form).toBeVisible();
+  await expect(form.getByText("The Good Company")).toBeVisible();
+  await form.getByRole("textbox", { name: "Username" }).fill("matt");
+  await form.getByLabel("Password").fill("porch light");
+  await form.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  const sent = (await did(page)).filter((line) => line.startsWith("signin "));
+  // A sign-in, with no invite in it: the invite is left for whoever it was for.
+  expect(sent).toEqual([`signin ${JSON.stringify({ username: "matt", password: "porch light" })}`]);
+});
+
 test("a spent invite or setup link says so, and the box keeps what was pasted", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/DEAD`);

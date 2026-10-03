@@ -45,7 +45,9 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
         ) : null}
         {step.kind === "paste" ? <Paste check={actions.check} onStep={setStep} onCancel={onCancel} adding={adding} /> : null}
         {step.kind === "login" ? <Login step={step} login={actions.login} onBack={back} /> : null}
-        {step.kind === "register" ? <Register step={step} register={actions.register} onBack={back} /> : null}
+        {step.kind === "register" ? (
+          <Register step={step} register={actions.register} onBack={back} onSignIn={() => setStep({ kind: "login", baseUrl: step.baseUrl, serverName: step.serverName })} />
+        ) : null}
         {step.kind === "setup" ? <Setup step={step} setup={actions.setup} onBack={back} /> : null}
         {keyringNotice ? (
           <p className="nx-signin-keyring" role="status">
@@ -165,10 +167,17 @@ function Register({
   step,
   register,
   onBack,
+  onSignIn,
 }: {
   step: Extract<SignInStep, { kind: "register" }>;
   register: SignInActions["register"];
   onBack: () => void;
+  /**
+   * An invite opened by somebody who already has an account here: on a new
+   * phone, say, where the link was the easiest way in (Matt, 2026-10-03).
+   * Signing in leaves the invite unused.
+   */
+  onSignIn: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -198,6 +207,12 @@ function Register({
       <Button variant="primary" type="submit" busy={busy} disabled={!ready} fill>
         Join
       </Button>
+      <div className="nx-signin-switch">
+        <span>Already have an account here?</span>
+        <Button variant="quiet" size="sm" onClick={onSignIn}>
+          Sign in
+        </Button>
+      </div>
     </form>
   );
 }
