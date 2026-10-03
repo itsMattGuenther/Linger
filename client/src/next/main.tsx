@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
+import { onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { unlockAudio } from "../lib/sound";
@@ -19,6 +20,10 @@ import { App } from "./app/App";
 // Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
+
+// The phone app's one window (SPEC §4.15, core/phone.ts): its styles keep
+// clear of the phone's own bars and cutouts (styles/phone.css).
+if (onPhone()) document.documentElement.dataset.shell = "phone";
 
 // The focus ring is for the keyboard: it follows how you last used the
 // window, not what WebKitGTK decides when the window comes back (#375).

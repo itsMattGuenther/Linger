@@ -4,6 +4,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { AuthedApi } from "../../../lib/api";
 import { leaveDraft, takeDraft } from "../../core/handoff";
 import { tabCommand } from "../../core/keys";
+import { onPhone } from "../../core/phone";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { closeTab, isPreview, isTool, keepTab, keyOf, moveTab, openTab, previewTab, same, selectTab, type SideTab, stepTab, type TabKey, type Tabs } from "../../core/tabs";
@@ -208,7 +209,8 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
           const tab = findTab(id);
           if (tab) setTabs((held) => moveTab(held, tab, to));
         }}
-        onPopOut={popOut}
+        // A phone has one window: nothing pops out of it (SPEC §4.15).
+        onPopOut={onPhone() ? undefined : popOut}
         leading={<IconButton icon="fold" label="Fold back to your list" onClick={onFold} />}
         onCloseWindow={onClose}
         pane={view.pane}

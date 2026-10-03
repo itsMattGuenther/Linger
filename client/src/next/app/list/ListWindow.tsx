@@ -60,6 +60,9 @@ import {
   type WindowOpener,
 } from "../../core/share";
 import { loadCloseList } from "../../core/closing";
+import { onPhone, thisDevice } from "../../core/phone";
+import { type SettingsKey, settingsKeys } from "../../core/settings";
+import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
 import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
@@ -144,7 +147,7 @@ export function ListWindow() {
         actions={signIn}
         notice={sessions.notice}
         keyringNotice={sessions.keyringNotice}
-        onClose={isTauri() ? () => void getCurrentWindow().close() : undefined}
+        onClose={isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined}
       />
     );
   }
@@ -533,6 +536,67 @@ function Servers({
     sharing?.local(intent);
   }, []);
 
+  // Settings on the phone: drawn over the list, in the phone's one window
+  // (SPEC §4.15). On a computer it's a window of its own (`shell.settings`).
+  const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey } | null>(null);
+  const phoneSettingsOpen = useRef(false);
+  phoneSettingsOpen.current = phoneSettings !== null;
+  const sectionAsked = useRef(new Set<(key: string | null) => void>());
+  useEffect(() => {
+    if (!onPhone()) return;
+    showSettingsHere = (section) => {
+      if (phoneSettingsOpen.current) for (const heard of sectionAsked.current) heard(section ?? null);
+      else setPhoneSettings({ section: settingsKeys(EVERY_SECTION).find((key) => key === section) });
+    };
+    return () => {
+      showSettingsHere = null;
+    };
+  }, []);
+  // Signing in or out while it's open: it shows what's left.
+  const signedInNow = useRef(new Set<(server: string) => void>());
+  const signedOutNow = useRef(new Set<(server: string) => void>());
+  const wereSignedIn = useRef<readonly string[]>([]);
+  useEffect(() => {
+    const now = signedIn.map((session) => session.baseUrl);
+    const was = wereSignedIn.current;
+    wereSignedIn.current = now;
+    for (const server of was) if (!now.includes(server)) for (const heard of signedOutNow.current) heard(server);
+    for (const server of now) if (!was.includes(server)) for (const heard of signedInNow.current) heard(server);
+  }, [signedIn]);
+  const phoneHolder = useMemo(
+    (): SettingsHolder => ({
+      following: {
+        // Read when asked: the sign-ins this window holds now.
+        get apis() {
+          return apisRef.current;
+        },
+        intend: intendHere,
+        onSignedOut: (heard) => {
+          signedOutNow.current.add(heard);
+          return () => void signedOutNow.current.delete(heard);
+        },
+        onSignedIn: (heard) => {
+          signedInNow.current.add(heard);
+          return () => void signedInNow.current.delete(heard);
+        },
+        stop: () => undefined,
+      },
+      notify: (question) => sharing?.localNotify(question) ?? Promise.resolve({ problem: "Linger is still starting. Try again in a moment." }),
+      password: (question) => sharing?.localPassword(question) ?? Promise.resolve({ problem: "Linger is still starting. Try again in a moment." }),
+      onSection: (heard) => {
+        sectionAsked.current.add(heard);
+        return () => void sectionAsked.current.delete(heard);
+      },
+      // Your servers' order and Quiet change only in Settings while it covers the list.
+      onServerPrefs: () => () => undefined,
+      close: () => setPhoneSettings(null),
+      closable: true,
+      section: phoneSettings?.section,
+      phone: true,
+    }),
+    [intendHere, phoneSettings?.section],
+  );
+
   // Ctrl+, opens Settings from the list too, and Ctrl+K Search.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -769,6 +833,7 @@ function Servers({
     update,
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
+    thisDevice(onPhone()),
   );
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
@@ -857,7 +922,8 @@ function Servers({
     if (seen !== null && keys.some((key) => !seen.has(key))) setRock((count) => count + 1);
   }, [knocks]);
 
-  const closeList = isTauri() ? () => void getCurrentWindow().close() : undefined;
+  // A phone's app is closed the phone's way, never with a button of ours (SPEC §4.15).
+  const closeList = isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined;
   return (
     <>
       {signedIn.map((session) => (
@@ -924,6 +990,11 @@ function Servers({
           />
         ) : null}
       </div>
+      {phoneSettings ? (
+        <div className="nx-phone-over">
+          <Settings holder={phoneHolder} />
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1023,6 +1094,11 @@ const shell: WindowOpener = {
     );
   },
   settings: (section) => {
+    // The phone's one window draws Settings over the list (SPEC §4.15).
+    if (showSettingsHere) {
+      showSettingsHere(section);
+      return;
+    }
     if (!isTauri()) return;
     void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
@@ -1055,6 +1131,10 @@ let sharing: Sharing | null = null;
 let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void) | null = null;
 /** Media or Search beside the list, once it's drawn. */
 let showToolBeside: ((which: "media" | "search") => void) | null = null;
+/** Settings over the list, on the phone only, once the list is drawn. */
+let showSettingsHere: ((section?: string) => void) | null = null;
+/** A scope with every section in it, to check a section asked for against. */
+const EVERY_SECTION = { hosting: "any", severalServers: true, windows: true };
 
 /**
  * Show a conversation: in its own window if it was popped out into one,

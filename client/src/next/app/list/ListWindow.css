@@ -5,7 +5,7 @@
 
 .nx-app {
   display: flex;
-  height: 100vh;
+  height: var(--window-height);
   background: var(--surface-window);
 }
 
@@ -53,4 +53,13 @@
   flex: 1;
   height: auto;
   min-height: 0;
+}
+
+/* Settings over the list, on the phone (SPEC §4.15): the whole space between
+   the phone's own bars, where a computer would open a window. */
+.nx-phone-over {
+  position: fixed;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  z-index: var(--z-popover);
+  background: var(--surface-window);
 }

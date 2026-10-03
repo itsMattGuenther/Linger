@@ -274,6 +274,12 @@ still running), stop the CLI. The installed dev build still works without it:
 run `pnpm dev --host 127.0.0.1`, then `adb reverse tcp:1420 tcp:1420`, and open
 Linger on the phone.
 
+**The phone's layout in a browser:** add `?shell=phone` to the page's address
+(`core/phone.ts`) and make the window phone-sized;
+`tests/browser/next-phone.spec.ts` does that. To look inside the page on a
+phone or emulator, a debug build can be inspected from Chrome's
+`chrome://inspect`.
+
 On a virtual phone with an NVIDIA card, the emulator may switch itself to
 drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
 phone's graphics driver crashed the app once when it was reinstalled while

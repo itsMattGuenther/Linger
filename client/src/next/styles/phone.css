@@ -1,0 +1,13 @@
+/*
+ * The phone app (SPEC §4.15, core/phone.ts). The phone draws the page under
+ * its own status bar, cutout and gesture bar; the safe areas it reports keep
+ * Linger clear of them, and the window's color shows through behind them.
+ * A page sized to the window (`--window-height`) gets what's left between.
+ */
+:root[data-shell="phone"] {
+  --window-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+:root[data-shell="phone"] body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}

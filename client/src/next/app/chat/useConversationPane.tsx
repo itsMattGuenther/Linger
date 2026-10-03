@@ -26,6 +26,7 @@ import {
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { onWindows, voiceStartProblem } from "../../../lib/voice";
+import { onPhone } from "../../core/phone";
 import { tauriBus } from "../../core/bus";
 import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere } from "../../core/chat/conversation";
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
@@ -401,7 +402,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     return {
       id: paneId,
       header,
-      voice: {
+      // The phone is text only for now (SPEC §4.15): no voice line to join from.
+      voice: onPhone() ? null : {
         strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false),
         onJoin,
         onPickDevice,

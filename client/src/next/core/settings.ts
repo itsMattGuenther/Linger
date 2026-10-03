@@ -33,6 +33,8 @@ export interface SettingsScope {
   severalServers: boolean;
   /** Something to choose in Windows (it appears only when there is). */
   windows: boolean;
+  /** The phone app: no Notifications, since a phone raises none (SPEC §4.15). */
+  phone?: boolean;
 }
 
 export type SettingsEntry =
@@ -53,17 +55,22 @@ export const SECTION_LABELS: Record<SettingsKey, string> = {
   server: "Server",
 };
 
+/** A section's name here: on the phone, which is text only for now, Sound has no Voice (SPEC §4.15). */
+export function sectionLabel(key: SettingsKey, scope: SettingsScope): string {
+  return key === "sound" && scope.phone === true ? "Sound" : SECTION_LABELS[key];
+}
+
 /** The sidebar, in order. Host sections sit under the server's name; a member never sees them. */
 export function settingsEntries(scope: SettingsScope): SettingsEntry[] {
-  const item = (key: SettingsKey): SettingsEntry => ({ kind: "item", key, label: SECTION_LABELS[key] });
+  const item = (key: SettingsKey): SettingsEntry => ({ kind: "item", key, label: sectionLabel(key, scope) });
   return [
     { kind: "group", label: "You" },
     item("profile"),
     { kind: "group", label: "This App" },
     item("appearance"),
-    ...(scope.windows ? [item("windows")] : []),
+    ...(scope.windows && scope.phone !== true ? [item("windows")] : []),
     item("sound"),
-    item("notifications"),
+    ...(scope.phone === true ? [] : [item("notifications")]),
     item("account"),
     ...(scope.severalServers ? [item("servers")] : []),
     ...(scope.hosting === null
@@ -91,15 +98,15 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
         ? "Who you are on this server. Each server has its own name and look: see Servers."
         : "Who you are here, what you're up to, and how your name looks.";
     case "appearance":
-      return "Make yourself comfortable. These choices stay on this computer.";
+      return `Make yourself comfortable. These choices stay on ${scope.phone === true ? "this phone" : "this computer"}.`;
     case "windows":
       return "How Linger sits on your desktop.";
     case "sound":
-      return "Choose your notification chimes. To silence people in voice, use deafen.";
+      return scope.phone === true ? "Choose your chimes." : "Choose your notification chimes. To silence people in voice, use deafen.";
     case "notifications":
       return "Desktop banners for DMs, mentions and the people you choose, and cards when somebody arrives.";
     case "account":
-      return "Your password, your archive, updates and this computer.";
+      return scope.phone === true ? "Your password, your archive and this phone." : "Your password, your archive, updates and this computer.";
     case "servers":
       return "Each server is its own account: its own you, its own look. The order is yours; nothing reshuffles by activity.";
     case "rooms":
@@ -131,6 +138,7 @@ export const HEADINGS = {
   archive: "Take Everything with You",
   updates: "Updates",
   computer: "This Computer",
+  phone: "This Phone",
   newRoom: "New Room",
   rooms: "Your Rooms, in Order",
   newInvite: "New Invite",

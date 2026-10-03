@@ -340,6 +340,10 @@
   --z-popover: 100;
   --z-notice: 200;
   --z-tooltip: 300;
+
+  /* How tall a window's page is: the whole window on a computer. The phone
+     takes its own bars off it (styles/phone.css). */
+  --window-height: 100vh;
 }
 
 @media (prefers-reduced-motion: reduce) {

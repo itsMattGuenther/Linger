@@ -5,7 +5,7 @@
     "windows": [
       {
         "title": "Linger",
-        "url": "next.html"
+        "url": "next.html?shell=phone"
       }
     ]
   }

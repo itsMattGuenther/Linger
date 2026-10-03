@@ -3,7 +3,7 @@
 .nx-set {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: var(--window-height);
   background: var(--surface-window);
   color: var(--text-secondary);
 }
@@ -727,4 +727,17 @@
   font: 400 var(--text-label) / 1 var(--font-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* On the phone (SPEC §4.15): the list of sections, or one section, each the
+   whole width. */
+.nx-set[data-stack="index"] .nx-set-main,
+.nx-set[data-stack="section"] .nx-set-nav {
+  display: none;
+}
+
+.nx-set[data-stack="index"] .nx-set-nav {
+  flex: 1;
+  width: auto;
+  border-right: 0;
 }

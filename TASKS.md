@@ -529,7 +529,16 @@ macOS runners, or a friend's Mac.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
-- ⬜ **T-1603 · The layout at phone width** — effort: **medium**
+- 🟡 **T-1603 · The layout at phone width** — effort: **medium**
+  *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
+  one window (`docs/design/architecture.md`, "The phone's one window"): the
+  page keeps clear of the phone's bars, the ✕, pop-out and voice line are
+  gone, conversations open over the list, and Settings opens over it as its
+  sections, then one section. In the emulator: set up a server, made a room
+  from Settings, read and sent messages, and got Sam's reply live.
+  **Still to do:** the message box above a software keyboard (the emulator
+  showed only a floating bar, so it's unchecked), Media, Search, DMs, photos
+  and files from the phone, one-hand reach, and the launcher icon.
   The Buddy list window is already phone width (340 px), which is a head start.
   What is missing is where a conversation goes on a screen too narrow to
   unfold it beside the list (#337), one-hand reach, and a message box above a

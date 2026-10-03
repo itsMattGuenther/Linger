@@ -264,6 +264,13 @@ export interface Sharing {
    */
   local(intent: Intent): void;
   /**
+   * Settings' two questions, from Settings drawn in the list window itself
+   * (the phone's one window, SPEC §4.15), without a trip through the shell:
+   * the same answers a window of its own gets (NOTIFY, PASSWORD).
+   */
+  localNotify(question: NotifyQuestion): Promise<Outcome>;
+  localPassword(question: PasswordQuestion): Promise<Outcome>;
+  /**
    * The sign-ins changed (a server added, or signed back into after a
    * password change, which starts its presence afresh): put you back in the
    * room you're in.
@@ -500,6 +507,38 @@ export async function shareAsOwner(
     }
   };
 
+  const notify = async ({ server, rule, on }: NotifyQuestion): Promise<Outcome> => {
+    const api = sessions().get(server);
+    if (!api) return { problem: "You're not signed in to that server any more." };
+    try {
+      await setNotifyRule(api, rule, on);
+      return { problem: null };
+    } catch (error) {
+      return { problem: inWords(error, "Couldn't reach the server.") };
+    }
+  };
+  // A password change ends every other sign-in for the account (the server
+  // can't tell who else had the old one), so the owner signs straight back
+  // in with the new password rather than leave every window to be signed
+  // out when its token runs out. The passwords are never kept or logged.
+  const password = async ({ server, current, next }: PasswordQuestion): Promise<Outcome> => {
+    const api = sessions().get(server);
+    const username = serverState(server).me?.username;
+    if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
+    try {
+      await api.changePassword(passwordRequest(current, next));
+    } catch (error) {
+      return { problem: inWords(error, "Couldn't change your password.") };
+    }
+    try {
+      const auth = await new PublicApi(server).login({ username, password: next });
+      await accounts?.reauthenticate(server, auth);
+      return { problem: null };
+    } catch {
+      return { problem: "Password changed. Sign out and back in with the new one." };
+    }
+  };
+
   const stops = await Promise.all([
     answer<SnapshotQuestion, SnapshotAnswer>(bus, SNAPSHOT, async ({ only }) => {
       const wanted = [...sessions()].filter(([server]) => only === undefined || server === only);
@@ -514,37 +553,8 @@ export async function shareAsOwner(
         ),
       };
     }),
-    answer<NotifyQuestion, Outcome>(bus, NOTIFY, async ({ server, rule, on }) => {
-      const api = sessions().get(server);
-      if (!api) return { problem: "You're not signed in to that server any more." };
-      try {
-        await setNotifyRule(api, rule, on);
-        return { problem: null };
-      } catch (error) {
-        return { problem: inWords(error, "Couldn't reach the server.") };
-      }
-    }),
-    // A password change ends every other sign-in for the account (the server
-    // can't tell who else had the old one), so the owner signs straight back
-    // in with the new password rather than leave every window to be signed
-    // out when its token runs out. The passwords are never kept or logged.
-    answer<PasswordQuestion, Outcome>(bus, PASSWORD, async ({ server, current, next }) => {
-      const api = sessions().get(server);
-      const username = serverState(server).me?.username;
-      if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
-      try {
-        await api.changePassword(passwordRequest(current, next));
-      } catch (error) {
-        return { problem: inWords(error, "Couldn't change your password.") };
-      }
-      try {
-        const auth = await new PublicApi(server).login({ username, password: next });
-        await accounts?.reauthenticate(server, auth);
-        return { problem: null };
-      } catch {
-        return { problem: "Password changed. Sign out and back in with the new one." };
-      }
-    }),
+    answer<NotifyQuestion, Outcome>(bus, NOTIFY, notify),
+    answer<PasswordQuestion, Outcome>(bus, PASSWORD, password),
     answer<TokenQuestion, Lent>(bus, TOKEN, async ({ server, stale }) => {
       const api = sessions().get(server);
       if (!api) throw new Error(`not signed in to ${server}`);
@@ -596,6 +606,8 @@ export async function shareAsOwner(
     },
     open: (server, roomId, messageId, how) => open(server, roomId, messageId, undefined, how?.preview === true),
     local: (intent) => carryOut({ ...intent, v: PROTOCOL, id: "", from: SIDE }),
+    localNotify: notify,
+    localPassword: password,
     signInsChanged: place,
   };
 }

@@ -414,6 +414,30 @@ one.
   window also remembers which interface size it was sized for, so a
   remembered window isn't grown again on the next run (`core/appearance.ts`).
 
+## The phone's one window
+
+The phone app (SPEC §4.15) is this client in one window, the list, which is
+the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
+`tauri.ios.conf.json`), and `core/phone.ts` reads that; the desktop never adds
+`shell`, so a browser test opens the phone's layout by adding it.
+
+- **Nothing opens a window.** The phone's capability (`capabilities/phone.json`)
+  grants none of the window commands. Conversations, Media and Search are tabs
+  beside the list, as on a computer, and a screen that narrow shows them over
+  it (`beside` in `core/side.ts`). Settings, a window of its own on a
+  computer, is drawn over the list (`.nx-phone-over` in `ListWindow.tsx`):
+  `Settings` takes a `SettingsHolder`, which is either its own window, reaching
+  the owner over the shell's events, or the owner itself, answering Settings'
+  questions directly (`Sharing.localNotify`, `Sharing.localPassword`). There,
+  Settings is its list of sections, then one section over it.
+- **No desktop furniture.** No close button on the list (the phone closes
+  apps), no pop-out, no voice line, and Settings has no Windows or
+  Notifications, no microphones and no updates.
+- **The phone's bars.** The page is drawn under the phone's status bar and
+  gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
+  and `--window-height`, the whole window on a computer, is what's left
+  between them.
+
 ## The list window
 
 - **The Buddy list is the app** from 0.4.0: the shell opens `next.html` as the

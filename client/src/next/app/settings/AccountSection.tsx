@@ -3,11 +3,14 @@ import { MIN_PASSWORD_CHARS, passwordReady } from "../../../lib/account";
 import { exportLine, type ExportPhase } from "../../../lib/export";
 import { type UpdateCheck, updateLine } from "../../../lib/updates";
 import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
+import { thisDevice } from "../../core/phone";
 import { HEADINGS } from "../../core/settings";
 import { Button, SettingRow, Switch, TextField } from "../../kit";
 import { Actions, Block, Fields, Note, useSave } from "./parts";
 
 export interface AccountProps {
+  /** The phone app: "this phone", and no updates or start at sign-in (SPEC §4.15). */
+  phone?: boolean;
   /** The server you sign in to, for the password's sentence. */
   serverName: string;
   /**
@@ -18,7 +21,8 @@ export interface AccountProps {
   /** Taking everything with you (EXP-1, EXP-2): how it stands, and the two things to do. */
   archive: { phase: ExportPhase; start: () => void; download: (url: string) => void };
   /** Updates (UPD-1 to UPD-4, UPD-6). */
-  updates: {
+  /** Leave out on the phone, which its store updates (SPEC §4.15). */
+  updates?: {
     /** This copy's version, or null outside the desktop app. */
     version: string | null;
     check: UpdateCheck | null;
@@ -49,7 +53,8 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, signOut, severalServers, addServer }: AccountProps) {
+export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, signOut, severalServers, addServer, phone = false }: AccountProps) {
+  const device = thisDevice(phone);
   return (
     <>
       <Password serverName={serverName} changePassword={changePassword} />
@@ -75,35 +80,37 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
           ) : null}
         </Actions>
       </Block>
-      <Block
-        heading={HEADINGS.updates}
-        lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
-      >
-        <Note tone="status">{updates.version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${updates.version}.`}</Note>
-        <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
-        <Actions start>
-          <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
-            Check again
-          </Button>
-          {updates.check?.kind === "ready" ? (
-            <>
-              <Button
-                variant="quiet"
-                icon="go"
-                onClick={() => {
-                  if (updates.check?.kind === "ready") updates.openNotes(updates.check.version);
-                }}
-              >
-                What's new
-              </Button>
-              <Button variant="primary" busy={updates.installing} onClick={updates.install}>
-                Install and restart
-              </Button>
-            </>
-          ) : null}
-        </Actions>
-      </Block>
-      <Block heading={HEADINGS.computer}>
+      {updates === undefined ? null : (
+        <Block
+          heading={HEADINGS.updates}
+          lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
+        >
+          <Note tone="status">{updates.version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${updates.version}.`}</Note>
+          <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
+          <Actions start>
+            <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
+              Check again
+            </Button>
+            {updates.check?.kind === "ready" ? (
+              <>
+                <Button
+                  variant="quiet"
+                  icon="go"
+                  onClick={() => {
+                    if (updates.check?.kind === "ready") updates.openNotes(updates.check.version);
+                  }}
+                >
+                  What's new
+                </Button>
+                <Button variant="primary" busy={updates.installing} onClick={updates.install}>
+                  Install and restart
+                </Button>
+              </>
+            ) : null}
+          </Actions>
+        </Block>
+      )}
+      <Block heading={phone ? HEADINGS.phone : HEADINGS.computer}>
         {startAtSignIn ? (
           <>
             <SettingRow
@@ -126,8 +133,8 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
         ) : null}
         <p className="nx-set-lead">
           {severalServers
-            ? "Signing out forgets every server on this computer. It doesn't delete your accounts. Each server signs out on its own, in Servers."
-            : "Signing out forgets this server on this computer. It doesn't delete your account."}
+            ? `Signing out forgets every server on ${device}. It doesn't delete your accounts. Each server signs out on its own, in Servers.`
+            : `Signing out forgets this server on ${device}. It doesn't delete your account.`}
         </p>
         <Actions start>
           {addServer && !severalServers ? (
