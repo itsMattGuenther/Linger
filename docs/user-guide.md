@@ -300,6 +300,15 @@ same menu has **Mute**, **Leave voice** and **Quit Linger**. To make closing the
 quit instead, open **Settings → Windows → When You Close Your List**. On a
 Linux desktop with no tray, closing the list always quits.
 
+The first time you close the list, Linger says where it went in a
+notification, and whether you're still in voice. It says it once on each
+computer, and never again.
+
+**On Windows 11 the icon starts out hidden** under the **^** by the clock.
+Windows doesn't let an app put its own icon in sight, but you can: open
+**Settings → Personalization → Taskbar → Other system tray icons** and turn
+**Linger** on. Or drag the icon out from under the **^** onto the taskbar.
+
 Several servers? Each is a section of the list with its own rooms and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
 or arrival cards from it, though somebody naming you still gets a banner) and

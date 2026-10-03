@@ -226,6 +226,8 @@ mockIPC((cmd, args) => {
     case "next_open_tool":
     case "next_close_to_tray":
     case "next_tray_voice":
+    // A desktop banner (lib/notify.ts), with where it leads.
+    case "show_notification":
     case "voice_volume":
     // What the voice engine is told: controls are what the room hears about,
     // push-to-talk's gate isn't (#232).
@@ -251,6 +253,8 @@ declare global {
       tray: (action: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
       banner: (target: unknown) => void;
+      /** The desktop shell hid the list into the tray, its close button pressed (#400). */
+      hidden: () => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
       /** With `?down`, the server that was down answers from now on. */
@@ -279,6 +283,7 @@ window.core = {
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
   banner: (target) => deliver("next:banner", target),
+  hidden: () => deliver("next:hidden", null),
   release: () => release(),
   up: () => {
     down = null;

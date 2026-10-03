@@ -424,7 +424,9 @@ one.
   running; the tray icon (`src-tauri/src/tray.rs`) brings it back, mutes,
   leaves voice or quits. Settings → Windows turns that off
   (`core/closing.ts`), and so does a desktop with no tray. A second launch
-  shows the running copy's list (`tauri-plugin-single-instance`).
+  shows the running copy's list (`tauri-plugin-single-instance`). Hiding it
+  tells the list (`next:hidden`), which the first time ever on that computer
+  shows a notification saying where Linger went (#400).
 
 ## Testing strategy
 
