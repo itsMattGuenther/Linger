@@ -456,7 +456,9 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   in `lib/notify.ts`, set at startup: no banner, nothing asking for
   attention; in-app sounds still play), no close button on the list (the
   phone closes apps), no pop-out, no voice line, and Settings has no Windows or
-  Notifications, no microphones and no updates.
+  Notifications, no microphones, no updates and no Interface size: it zooms
+  the window, which the phone can't, and the phone's own display and text
+  size do that job.
 - **In the background, and without a network.** Thirty seconds after the
   app goes into the background its connections close, so it shows offline,
   and they open again when it's back (`watchBackground`,

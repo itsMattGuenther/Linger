@@ -436,13 +436,16 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         },
       }}
       appearance={{
-        scale: {
-          value: scale,
-          onChange: (value) => {
-            setScale(saveScale(value));
-            announceAppearance();
-          },
-        },
+        // A phone sizes things with its own display and text size (SPEC §4.15).
+        scale: phone
+          ? undefined
+          : {
+              value: scale,
+              onChange: (value) => {
+                setScale(saveScale(value));
+                announceAppearance();
+              },
+            },
         plainNames: {
           value: plain,
           onChange: (value) => {

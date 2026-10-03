@@ -742,7 +742,10 @@ desktop apps: they can't read a presence value they don't know, and it would arr
 in the first message they get on connecting.
 
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
-phone's camera has its location stripped like any other (§4.10).
+phone's camera has its location stripped like any other (§4.10). One screen shows at a
+time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
+Media or Search opens over it with a way back. It has no Interface size of its own:
+the phone's display size and text size settings do that job.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and

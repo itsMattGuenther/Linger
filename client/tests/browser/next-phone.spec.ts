@@ -108,6 +108,10 @@ test("opens Settings over the list, as its sections and then one section, withou
   await sections.getByText("Appearance").click();
   await expect(sections).toBeHidden();
   await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
+  // A phone sizes things with its own display and text size: no Interface
+  // size, which couldn't zoom the phone's window anyway.
+  await expect(settings.getByText("Use plain names and message fonts", { exact: true })).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Interface size" })).toHaveCount(0);
   await settings.getByRole("button", { name: "Back to Settings" }).click();
   await expect(sections).toBeVisible();
 
