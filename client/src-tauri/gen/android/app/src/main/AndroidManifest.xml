@@ -5,6 +5,9 @@
          its events), so the app reconnects the moment there's a network
          again (core/phone.ts, watchNetwork). No prompt: a normal permission. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- A chime with the phone on vibrate buzzes instead (lib/sound.ts,
+         src-tauri/src/ringer.rs). No prompt: a normal permission. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

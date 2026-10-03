@@ -85,6 +85,10 @@ keyring = { version = "3", features = ["apple-native"] }
 [target.'cfg(target_os = "android")'.dependencies]
 keyring-core = "1"
 android-native-keyring-store = "1"
+# Reading the phone's ringer for chimes (`ringer.rs`), through the app
+# context MainActivity hands over. Both already in the tree for the above.
+jni = "0.21"
+ndk-context = "0.1"
 
 # The iPhone's Keychain, for the phone app (T-1602, `secrets.rs`).
 [target.'cfg(target_os = "ios")'.dependencies]

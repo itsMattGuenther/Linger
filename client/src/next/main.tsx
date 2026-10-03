@@ -15,7 +15,7 @@ import { followKeyboard, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
-import { unlockAudio } from "../lib/sound";
+import { type DeviceSound, followDeviceSound, unlockAudio } from "../lib/sound";
 import { App } from "./app/App";
 
 // Plain names and interface size, the same in every window
@@ -29,6 +29,17 @@ if (onPhone()) {
   document.documentElement.dataset.shell = "phone";
   // No notifications on a phone, open or closed (SPEC §4.15).
   setNoNotifications(true);
+  // Chimes follow the phone's ringer: silent is silent, vibrate buzzes, and
+  // both go out as notification sounds (src-tauri/src/phone_sound.rs).
+  if (isTauri()) {
+    followDeviceSound(
+      async (): Promise<DeviceSound> => {
+        const mode: unknown = await invoke("phone_sound_mode");
+        return mode === "vibrate" || mode === "silent" ? mode : "sound";
+      },
+      (pattern) => void invoke("phone_buzz", { pattern }).catch(() => undefined),
+    );
+  }
   if (window.visualViewport) followKeyboard(window.visualViewport, () => window.innerHeight, document.documentElement);
 }
 

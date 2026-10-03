@@ -56,9 +56,9 @@ const CAPABILITIES: &[(&str, &str)] = &[
 const DESKTOP: &[&str] = &["linux", "macOS", "windows"];
 const PHONE: &[&str] = &["android", "iOS"];
 
-/// Commands a phone never gets (SPEC §4.15): no voice or its sounds, no
-/// notifications, no in-app updates, no other windows, no tray, nothing
-/// started at sign-in, no Linux clipboard workaround.
+/// Commands a phone never gets (SPEC §4.15): no voice, no notifications, no
+/// in-app updates, no other windows, no tray, nothing started at sign-in, no
+/// Linux clipboard workaround. Its chimes it does play (`phone_sound.rs`).
 fn never_on_a_phone(command: &str) -> bool {
     command.starts_with("voice_")
         || command.starts_with("update_")
@@ -66,11 +66,7 @@ fn never_on_a_phone(command: &str) -> bool {
         || command.starts_with("autostart_")
         || matches!(
             command,
-            "sound_play"
-                | "show_notification"
-                | "app_version"
-                | "newest_version"
-                | "clipboard_image"
+            "show_notification" | "app_version" | "newest_version" | "clipboard_image"
         )
 }
 
@@ -137,25 +133,41 @@ fn granted_on(set: &[&str]) -> Vec<(String, Vec<String>, BTreeSet<String>)> {
         .collect()
 }
 
+/// What the desktop registers (`desktop_app`, the first `generate_handler!`).
+fn desktop_registered() -> BTreeSet<String> {
+    listed(include_str!("lib.rs"), "tauri::generate_handler![")
+}
+
+/// What the phone registers (`phone_app`).
+fn phone_registered() -> BTreeSet<String> {
+    let lib = include_str!("lib.rs");
+    listed(
+        &lib[lib.find("fn phone_app()").expect("phone_app in lib.rs")..],
+        "tauri::generate_handler![",
+    )
+}
+
 #[test]
 fn every_registered_command_is_declared_and_nothing_else() {
     let declared = listed(include_str!("../build.rs"), "const COMMANDS: &[&str] = &[");
-    let registered = listed(include_str!("lib.rs"), "tauri::generate_handler![");
+    let registered: BTreeSet<String> = desktop_registered()
+        .union(&phone_registered())
+        .cloned()
+        .collect();
     assert_eq!(
         declared, registered,
-        "build.rs COMMANDS and generate_handler! in lib.rs must name the same commands"
+        "build.rs COMMANDS must name every command either generate_handler! in lib.rs registers, and nothing else"
     );
 }
 
 #[test]
 fn the_list_window_may_call_every_command() {
-    let declared = listed(include_str!("../build.rs"), "const COMMANDS: &[&str] = &[");
     let mains: BTreeSet<String> = granted()
         .into_iter()
         .filter(|(_, windows, _)| windows.iter().any(|window| window == "main"))
         .flat_map(|(_, _, commands)| commands)
         .collect();
-    assert_eq!(mains, declared);
+    assert_eq!(mains, desktop_registered());
 }
 
 #[test]
@@ -271,9 +283,7 @@ fn every_capability_file_is_for_the_desktop_or_the_phone() {
 
 #[test]
 fn the_phone_may_call_exactly_what_phone_app_registers() {
-    let lib = include_str!("lib.rs");
-    let phone_app = &lib[lib.find("fn phone_app()").expect("phone_app in lib.rs")..];
-    let registered = listed(phone_app, "tauri::generate_handler![");
+    let registered = phone_registered();
     let phone: BTreeSet<String> = granted_on(PHONE)
         .into_iter()
         .flat_map(|(_, _, commands)| commands)

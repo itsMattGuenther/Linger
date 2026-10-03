@@ -727,6 +727,12 @@ and no badge on its icon, which would be an unread count (§4.2). Mentions and D
 marked inside the app as on desktop and are there when you open it. Opening it
 catches up the way a desktop app does after a reconnect.
 
+**Its sounds follow the phone** (Matt, 2026-10-03). While the app is open, its chimes
+play as they do on desktop, under the same switches, and then the phone has its say:
+on vibrate a chime is a short buzz instead, and on silent or Do Not Disturb there is
+nothing. They go out as notification sounds, so they follow the phone's notification
+volume and vibration settings, as a message app's do.
+
 **Presence is the same five states** (§4.3). Open on screen, a phone is `around` or
 `in_room`. Sent to the background, the phone soon stops the app and its connection
 closes, so it shows `offline`. That is the truth: it hears nothing until it is opened

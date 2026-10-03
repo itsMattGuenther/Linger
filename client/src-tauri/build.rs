@@ -2,8 +2,10 @@
 /// them: a window can call only what its capability file grants
 /// (`capabilities/`), so the chat and Settings windows can't reach the
 /// keyring, the connections or voice, which are the list window's alone
-/// (docs/design/architecture.md). Every command in `generate_handler!` in
-/// `src/lib.rs` must be listed here; `src/acl.rs` tests that.
+/// (docs/design/architecture.md). Every command in either `generate_handler!`
+/// in `src/lib.rs`, the desktop's or the phone's, must be listed here;
+/// `src/acl.rs` tests that. `phone_sound_mode` and `phone_buzz` are the
+/// phone's alone (`capabilities/phone.json`).
 const COMMANDS: &[&str] = &[
     "sessions_load",
     "session_save",
@@ -36,6 +38,8 @@ const COMMANDS: &[&str] = &[
     "autostart_state",
     "autostart_set",
     "clipboard_image",
+    "phone_sound_mode",
+    "phone_buzz",
 ];
 
 fn main() {

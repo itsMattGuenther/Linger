@@ -435,6 +435,12 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   folds away, and in Settings a section goes back to the list of them and
   then out. With nothing open, nobody listens, and Android does what it does
   with Back: leaves the app.
+- **Sounds follow the phone.** A chime asks the phone's ringer first
+  (`followDeviceSound` in `lib/sound.ts`, `src-tauri/src/phone_sound.rs`):
+  on vibrate it buzzes, on silent or Do Not Disturb nothing happens. Android
+  plays chimes and buzzes itself, as notification sounds, through
+  `sound_play` (the desktop's call) and `phone_buzz`, so they follow the
+  notification volume and need no tap on the page first.
 - **No desktop furniture.** No notifications at all (`setNoNotifications`
   in `lib/notify.ts`, set at startup: no banner, nothing asking for
   attention; in-app sounds still play), no close button on the list (the

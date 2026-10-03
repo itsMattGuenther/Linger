@@ -14,6 +14,7 @@ mod acl;
 mod autostart;
 #[cfg(desktop)]
 mod clipboard;
+pub mod cue;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
 pub mod gateway;
@@ -21,6 +22,9 @@ pub mod graphics;
 #[cfg(desktop)]
 mod notifications;
 pub mod packaging;
+// The phone's sounds: only the phone app registers them. Tests read them here too.
+#[cfg(any(mobile, test))]
+mod phone_sound;
 mod secrets;
 #[cfg(desktop)]
 pub mod sounds;
@@ -330,9 +334,9 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         ])
 }
 
-/// What the phone app registers (SPEC §4.15): links to the browser, and the
+/// What the phone app registers (SPEC §4.15): links to the browser, the
 /// sign-ins and the gateway connections, which are all a text-only app needs
-/// from Rust. The window comes from `tauri.android.conf.json` and
+/// from Rust, and its sounds, which follow the phone's ringer. The window comes from `tauri.android.conf.json` and
 /// `tauri.ios.conf.json`. Every command here is granted by
 /// `capabilities/phone.json` and nothing else is; `src/acl.rs` checks that.
 #[cfg(mobile)]
@@ -348,6 +352,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             gateway_disconnect,
             gateway_token,
             gateway_send,
-            graphics::graphics_started
+            graphics::graphics_started,
+            phone_sound::phone_sound_mode,
+            phone_sound::phone_buzz,
+            phone_sound::sound_play
         ])
 }
