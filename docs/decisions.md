@@ -702,8 +702,10 @@ it, on the desktop and, later, the phone. Discord offers it only on phones.
   recording isn't something to lean on, and this way every desktop records
   the same file. The phone will record with its WebView and use the same file
   writer.
-- **Five minutes at most**, about a megabyte. It stops by itself and says so,
-  and the clip is kept to hear back and send.
+- **Five minutes at most**, about 2.4 MB at 64 kbit/s, Discord's default for
+  a voice (Matt, 2026-10-03, up from 32: a message is heard again, so it gets
+  more bits than a live call; voice rooms stay at the encoder's own rate). It
+  stops by itself and says so, and the clip is kept to hear back and send.
 - **On the server it's an ordinary audio file.** `audio/webm` joins the audio
   types; the sniffer calls every WebM a video, so one declared as sound is
   taken as sound. The app shows one named `Voice message.webm` as a voice

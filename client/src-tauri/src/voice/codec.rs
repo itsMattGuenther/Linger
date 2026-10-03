@@ -17,6 +17,9 @@ use crate::voice::audio::{FRAME_SAMPLES, SAMPLE_RATE};
 /// frame at 1275; the rest is headroom that costs nothing.
 const MAX_PACKET: usize = 1500;
 
+/// How many bits a second a voice message is encoded at (#401).
+pub const CLIP_BITS_PER_SECOND: i32 = 64_000;
+
 /// Turns frames of samples into Opus packets.
 pub struct Encoder(opus::Encoder);
 
@@ -34,14 +37,16 @@ impl Encoder {
         Ok(Self(inner))
     }
 
-    /// Tuned for a voice message (#401): the same voice settings, at a
-    /// steady 32 kbit/s, clear speech at about a megabyte for the longest
-    /// clip, and none of the loss repair a live call needs, since a recording
-    /// never crosses a network packet by packet.
+    /// Tuned for a voice message (#401): the same voice settings, at 64
+    /// kbit/s, what Discord gives a voice by default, and about 2.4 MB for the
+    /// longest clip. A message is heard again and kept, so it's worth more
+    /// bits than a live call, and nothing of the loss repair a live call
+    /// needs, since a recording never crosses a network packet by packet.
+    /// Voice rooms keep the encoder's own rate (`new`).
     pub fn for_clip() -> Result<Self, opus::Error> {
         let mut inner =
             opus::Encoder::new(SAMPLE_RATE, opus::Channels::Mono, opus::Application::Voip)?;
-        inner.set_bitrate(opus::Bitrate::Bits(32_000))?;
+        inner.set_bitrate(opus::Bitrate::Bits(CLIP_BITS_PER_SECOND))?;
         Ok(Self(inner))
     }
 
@@ -117,6 +122,25 @@ mod tests {
             .windows(2)
             .filter(|w| (w[0] < 0) != (w[1] < 0))
             .count()
+    }
+
+    /// A voice message is encoded at 64 kbit/s (#401), and stays sound all
+    /// the way: a clip encoder's tone comes back a tone too.
+    #[test]
+    fn a_voice_message_is_encoded_at_64_kbit_per_second() {
+        let mut encoder = Encoder::for_clip().expect("encoder");
+        assert_eq!(
+            encoder.0.get_bitrate().expect("bitrate"),
+            opus::Bitrate::Bits(64_000)
+        );
+        let mut decoder = Decoder::new().expect("decoder");
+        let mut last = Vec::new();
+        for n in 0..3 {
+            last = decoder
+                .decode(&encoder.encode(&tone(n)).expect("encode"))
+                .expect("decode");
+        }
+        assert!(rms(&last) > 1000.0, "the tone was lost");
     }
 
     /// The proof that both halves agree: a tone goes in one side and a tone
