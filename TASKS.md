@@ -26,7 +26,7 @@ default.
 
 ## How to run a task
 
-**0.4.7 release — ⏳ Matt, 2026-10-03.** Headsets and voice messages: gaming
+**0.4.7 release — ✅ published 2026-10-03.** Headsets and voice messages: gaming
 headsets on Windows open in their own format (#398), voice messages recorded
 in the message box (#401, the server takes `audio/webm`; no database change),
 away that's hard to miss (#392), picture previews (#397), the first close to
@@ -551,6 +551,8 @@ macOS runners, or a friend's Mac.
   a wifi-to-mobile-data switch.
 
 - 🟡 **T-1603 · The layout at phone width** — effort: **medium**
+  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone checks wait
+  with T-1602's iPhone half.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
   one window (`docs/design/architecture.md`, "The phone's one window"): the
   page keeps clear of the phone's bars, the ✕, pop-out and voice line are
@@ -577,8 +579,10 @@ macOS runners, or a friend's Mac.
   "…"; the box now says just "Say something" when the long hint won't fit.
   **Voice messages record on the phone too** (#401, 2026-10-03), in the page
   (`app/chat/recorders.ts`), into the same file as the desktop's; Android asks
-  for the microphone the first time Record is pressed. Still to try on the
-  Pixel.
+  for the microphone the first time Record is pressed. **On the Pixel
+  (2026-10-03):** Android asked for the microphone the first time; recorded,
+  sent and played back on the phone and on the desktop, cancelled one, and
+  recorded with the ringer on silent. All worked.
   **Waiting for the iPhone** (Android first): an edge swipe
   for Back, since the iPhone has no Back of its own, and checking that an
   iPhone camera photo uploads as something the server reads (iPhones save
