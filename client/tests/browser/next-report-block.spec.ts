@@ -97,11 +97,15 @@ test.describe("on a person's card", () => {
     await expect(greyLines(page)).toHaveCount(0);
   });
 
-  test("the host has nobody to report to: the card offers Block only", async ({ page }) => {
+  test("the host has nobody to report to: no Report, and Take out of voice while they're in a room's voice (#423)", async ({ page }) => {
+    // Jules is in #general's voice this evening.
     await inGeneral(page, "?one");
     await openCard(page, "Jules");
     await more(page, "Jules").click();
-    await expect(page.getByRole("menu", { name: "More for Jules" }).getByRole("menuitem")).toHaveText(["Block Jules"]);
+    await expect(page.getByRole("menu", { name: "More for Jules" }).getByRole("menuitem")).toHaveText(["Take out of voice in #general", "Block Jules"]);
+    await page.getByRole("menuitem", { name: "Take out of voice in #general" }).click();
+    await expect.poll(async () => did(page)).toContain("takeout r-general u-jules");
+    await expect(card(page, "Jules")).toContainText("Jules is out of voice. They can join again.");
   });
 });
 
