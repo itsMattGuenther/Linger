@@ -31,8 +31,9 @@ Android `.apk` on a release (#253, T-1604), with report and block in both apps
 (T-1605, a database change) and voice messages on the phone (#401). Wireless
 headsets heard at last (#398: a glitch no longer restarts the microphone), the
 voice bar says when a picked microphone won't open, being in a room's voice is
-being in the room (#420), the host can take somebody out of voice (#423), and
-pins show beside pictures and links; notes in `docs/releases/0.4.8.md`. 0.4.7
+being in the room (#420), the host can take somebody out of voice (#423) and
+name co-hosts (#424, a database change), and pins show beside pictures and
+links; notes in `docs/releases/0.4.8.md`. 0.4.7
 (2026-10-03) was headsets in their own format and voice messages (#398, #401).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
