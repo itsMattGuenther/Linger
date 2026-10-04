@@ -70,9 +70,9 @@ export function tabModel(tab: TabKey, state: GatewayState, showing: boolean, tal
   };
 }
 
-/** Who a room's header shows as in it: people, never a count of them. */
+/** Who a room's header shows as in it, its voice included (#420): people, never a count of them. */
 export function peopleInRoom(state: GatewayState, roomId: RoomId): User[] {
-  return occupantsOf(roomId, state.occupancy, state.presence, state.users);
+  return occupantsOf(roomId, state.occupancy, state.presence, state.users, voicePeersIn(state, roomId));
 }
 
 /** Who is writing here right now, not you (`typistsIn` leaves you out). */

@@ -18,17 +18,24 @@ import type { UserId } from "../generated/UserId";
  * Takes both the occupancy map and the presence list because they are two
  * views of the same fact, arriving a frame apart. Either one is enough;
  * together they cannot drop somebody the other one still holds.
+ *
+ * `voice` is who is in the room's voice, and they are in the room too
+ * (SPEC §4.1, #420), whatever has their attention: somebody talking in
+ * #general with a game in front of them is in #general. Somebody reading
+ * another room while they talk here is in both.
  */
 export function occupantsOf(
   roomId: RoomId,
   occupancy: Readonly<Record<string, UserId[]>>,
   presence: readonly PresenceEntry[],
   users: readonly User[],
+  voice: readonly { user_id: UserId }[] = [],
 ): User[] {
   const ids = new Set<string>(occupancy[roomId] ?? []);
   for (const entry of presence) {
     if (entry.room_id === roomId) ids.add(entry.user_id);
   }
+  for (const peer of voice) ids.add(peer.user_id);
   if (ids.size === 0) return [];
   return users
     .filter((person) => ids.has(person.id))
