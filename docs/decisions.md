@@ -697,6 +697,16 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
   wait with it. Getting the app to other people (T-1604) waits until report
   and block are done and Matt says go.
+- **Friends first, from the release page** (Matt, 2026-10-03). Report and
+  block were done and every Pixel check had passed, so Matt said go, for the
+  quick path first: a signed `.apk` on each GitHub release, which an Android
+  friend downloads and installs (Matt's wife is the first). No Google account,
+  no review, no wait. It doesn't update itself; each release installs over the
+  last because all of them are signed with the same key
+  (`scripts/android-key.sh`, checked against a committed fingerprint before
+  and after every build). Google Play stays the next step, and can take that
+  same key, so a phone that installed from GitHub keeps updating from the
+  store. Its slow part is a new account's 12 testers for 14 days.
 
 A phone app updates on its store's schedule, not ours, so phones will often be
 a version behind their server; how far back compatibility goes is #315.

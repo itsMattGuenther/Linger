@@ -778,6 +778,12 @@ your settings) doesn't reach either company. There's no setting to put it back i
 they're encrypted to a key that never leaves the old one, and messages and pictures
 live on the server. A new phone signs in again.
 
+**Getting it, before the stores** (Matt, 2026-10-03). Android friends install the
+signed `.apk` from each GitHub release; Android asks them once to allow installs
+from their browser. It doesn't update itself: a newer release installs over the old
+one and keeps them signed in, because every release is signed with the same key.
+The iPhone has nothing yet (Android first, Apple after).
+
 **Report and block come before any store listing** (T-1605). Both stores require them
 in apps where people post things. A report goes to the host, because there is nobody
 else to send it to, and the host can already delete a message or remove a member.

@@ -307,6 +307,28 @@ drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
 phone's graphics driver crashed the app once when it was reinstalled while
 running; opening it again was fine.
 
+**The release key (T-1604).** A release's `.apk` is signed with one key, kept
+off the repo, so each release installs over the last on people's phones. A
+debug build is signed with Android's debug key instead, so it won't install
+over a release (or the other way round): uninstall first, which signs you out.
+
+- `scripts/android-key.sh` makes the key once, in
+  `~/.local/share/linger/android-release.jks` with its password beside it,
+  writes the key's public fingerprint to
+  `client/src-tauri/android-release-cert.sha256` (committed), and prints the
+  backups to make and the two GitHub secrets to set
+  (`ANDROID_RELEASE_KEYSTORE`, `ANDROID_RELEASE_KEYSTORE_PASSWORD`). It never
+  replaces a key, or a committed fingerprint for a different one.
+- The release workflow's `android` job runs `scripts/android-signing.sh`:
+  `check` (also in preflight), then `setup`, which writes
+  `gen/android/keystore.properties` for `build.gradle.kts` (git ignores it),
+  then `verify` on the built `.apk` before adding it to the draft as
+  `Linger_<version>_android-arm64.apk`.
+- To sign a release build on your own machine, with the key: export the two
+  secrets' values and run `scripts/android-signing.sh setup`, then
+  `pnpm tauri android build --target aarch64 --apk`. Without a
+  `keystore.properties` the release build comes out unsigned.
+
 ## Things that catch people out
 
 How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).

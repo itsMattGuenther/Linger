@@ -66,6 +66,17 @@ jobs:
         # isn't the mate of the committed public key builds a green release that
         # no installed copy will accept.
         run: scripts/signing-preflight.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: the Android key opens and is the one every release is signed with
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        # The same reasoning for the phone (T-1604): signed with any other key,
+        # an APK won't install over the Linger a phone already has.
+        run: scripts/android-signing.sh check
 
   bundle:
     name: ${{ matrix.label }}
@@ -188,6 +199,8 @@ jobs:
             | Fedora, RHEL or openSUSE | `.rpm` |
             | Any other Linux | `.AppImage` — make it executable and run it |
             | macOS | Not built yet — see [decisions.md](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md) |
+            | Android phone | `_android-arm64.apk` — download it on the phone |
+            | iPhone | Not yet |
 
             The `.msi` is for companies rolling it out to many machines at once.
             If you are not sure, you want the `.exe`.
@@ -201,6 +214,13 @@ jobs:
             has not — that is a
             [known decision](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md),
             not a broken download.
+
+            **Android will ask before installing.** The phone says it won't
+            install apps from your browser until you allow it: tap *Settings*,
+            turn on *Allow from this source*, and go back. That is Android's
+            rule for any app that isn't from the Play Store. The phone app
+            doesn't update itself: install each new one from its release page,
+            right over the old one, and you stay signed in.
 
             New here? The
             [user guide](https://github.com/${{ github.repository }}/blob/main/docs/user-guide.md)
@@ -259,3 +279,59 @@ jobs:
             package-check/next-*/result.json
             package-check/updates/*.log
           retention-days: 7
+
+  # The Android phone app (SPEC §4.15, T-1604): one signed APK for 64-bit
+  # phones, added to the draft the desktop bundles opened. Until there is a
+  # store listing, Android friends install this file. Every release is signed
+  # with the same key, or it won't install over the last one, so the key is
+  # checked against the committed fingerprint before the build and the APK
+  # after it (scripts/android-signing.sh).
+  android:
+    name: Android
+    needs: [preflight, tests, bundle]
+    # Only a tag builds, and only once the draft exists to add to.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: install frontend deps
+        working-directory: client
+        run: pnpm install --frozen-lockfile
+      # Java 21: the Gradle in gen/android can't run on 25.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+      # The runner has the Android SDK and an NDK already.
+      - name: point Tauri at the NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: the release key, for Gradle
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: scripts/android-signing.sh setup
+      - name: build the Android app
+        working-directory: client
+        run: pnpm tauri android build --target aarch64 --apk
+      - name: signed with the release key, then onto the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          apk=client/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          scripts/android-signing.sh verify "$apk"
+          version="$(node -p "require('./client/src-tauri/tauri.conf.json').version")"
+          named="$RUNNER_TEMP/Linger_${version}_android-arm64.apk"
+          cp "$apk" "$named"
+          gh release upload "$GITHUB_REF_NAME" "$named" --clobber
