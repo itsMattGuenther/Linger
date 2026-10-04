@@ -49,7 +49,7 @@ use cpal::{
 };
 use tokio::sync::mpsc;
 
-use crate::voice::audio::{Devices, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -84,7 +84,9 @@ pub fn open_default() -> Result<Devices, DeviceError> {
 /// plugged in today — falls back to the default rather than failing, because
 /// the person asked to talk, not to talk through one particular thing. So does
 /// one that is listed but won't open (`or_default`). The picker shows what is
-/// actually present, so the mismatch is visible there.
+/// actually present, so a missing device is visible there; a microphone that
+/// is present and won't open is said in the voice bar, with why
+/// (`Source::refused`, #398).
 pub fn open(input: Option<&str>, output: Option<&str>) -> Result<Devices, DeviceError> {
     let source = Microphone::open(input)
         .map_err(|error| DeviceError::Opening("microphone", Box::new(error)))?;
@@ -159,6 +161,9 @@ pub struct Microphone {
     /// The device asked for by name, or `None` for the default. Read on every
     /// build, so changing it and waking the worker is a switch (#249).
     wanted: Arc<Mutex<Option<String>>>,
+    /// The device asked for when it wouldn't open and the default is in its
+    /// place (#398). Set on every build, so a later build clears it.
+    refused: Arc<Mutex<Option<Refused>>>,
     worker: Worker,
 }
 
@@ -170,6 +175,8 @@ impl Microphone {
     pub fn open(name: Option<&str>) -> Result<Self, DeviceError> {
         let wanted = Arc::new(Mutex::new(name.map(str::to_owned)));
         let chosen = Arc::clone(&wanted);
+        let refused = Arc::new(Mutex::new(None));
+        let noted = Arc::clone(&refused);
         // Sixteen frames is a third of a second. The callback drops frames if
         // the engine falls further behind than that, because a queue that
         // grows is latency nobody asked for.
@@ -185,13 +192,14 @@ impl Microphone {
                     host.default_input_device(),
                     "input",
                 )?;
-                let stream = or_default(
+                let (stream, why) = or_default(
                     name.as_deref(),
                     &device,
                     || host.default_input_device(),
                     "microphone",
                     |device| input_stream(device, &tx, alarm),
                 )?;
+                *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
                 Ok((stream, ()))
             },
             // Given up: an empty frame is the sentinel `frame()` reads as "the
@@ -204,6 +212,7 @@ impl Microphone {
         Ok(Self {
             frames: tokio::sync::Mutex::new(rx),
             wanted,
+            refused,
             worker,
         })
     }
@@ -229,6 +238,10 @@ impl Source for Microphone {
         if choose(&self.wanted, name) {
             self.worker.switch();
         }
+    }
+
+    fn refused(&self) -> Option<Refused> {
+        lock(&self.refused).clone()
     }
 }
 
@@ -329,29 +342,32 @@ where
 }
 
 /// Build on the device found for `name`; if that was a device picked by name
-/// and it won't open, build on the default instead.
+/// and it won't open, build on the default instead, and hand back why it
+/// wouldn't, to be said where the person can see it (#398).
 ///
 /// A device can be listed and still refuse: busy, held by another program, or
 /// a sound card output nothing is plugged into (seen on a real machine: ALSA
 /// "unable to open slave"). Retrying it would go on for twenty seconds and
 /// then leave the call silent; the default is what Linger promises for a
-/// device that isn't there (#249).
-fn or_default<T>(
+/// device that isn't there (#249). Quietly, though, the default looks like the
+/// picked microphone not hearing you: a Windows headset whose system default
+/// was a silent virtual microphone did exactly that (#398).
+fn or_default<D, T>(
     name: Option<&str>,
-    device: &cpal::Device,
-    default: impl FnOnce() -> Option<cpal::Device>,
+    device: &D,
+    default: impl FnOnce() -> Option<D>,
     what: &str,
-    build: impl Fn(&cpal::Device) -> Result<T, DeviceError>,
-) -> Result<T, DeviceError> {
+    build: impl Fn(&D) -> Result<T, DeviceError>,
+) -> Result<(T, Option<String>), DeviceError> {
     match build(device) {
         Err(error) if name.is_some() => {
             eprintln!("voice: {what}: {name:?} would not open ({error}); using the default");
             match default() {
-                Some(fallback) => build(&fallback),
+                Some(fallback) => build(&fallback).map(|built| (built, Some(error.to_string()))),
                 None => Err(error),
             }
         }
-        built => built,
+        built => built.map(|built| (built, None)),
     }
 }
 
@@ -447,7 +463,7 @@ impl Speaker {
                     host.default_output_device(),
                     "output",
                 )?;
-                let stream = or_default(
+                let (stream, _) = or_default(
                     name.as_deref(),
                     &device,
                     || host.default_output_device(),
@@ -1354,6 +1370,71 @@ mod tests {
             error.to_string(),
             "the microphone wouldn't open: no input device"
         );
+    }
+
+    /// `or_default`'s build, for devices that are only names: "busy" refuses,
+    /// anything else opens as itself.
+    fn open_unless_busy(device: &&'static str) -> Result<&'static str, DeviceError> {
+        if *device == "busy" {
+            Err(DeviceError::NoDevice("input"))
+        } else {
+            Ok(*device)
+        }
+    }
+
+    #[test]
+    fn a_picked_device_that_opens_is_used_and_nothing_is_said() {
+        let built = or_default(
+            Some("headset"),
+            &"headset",
+            || Some("default"),
+            "microphone",
+            open_unless_busy,
+        );
+        assert_eq!(built.ok(), Some(("headset", None)));
+    }
+
+    #[test]
+    fn a_picked_device_that_wont_open_falls_back_and_says_why() {
+        // The Windows headset held by another program, with a silent
+        // virtual microphone as the default (#398): the call still opens,
+        // and why the headset didn't comes back to be said.
+        let built = or_default(
+            Some("busy"),
+            &"busy",
+            || Some("default"),
+            "microphone",
+            open_unless_busy,
+        );
+        assert_eq!(
+            built.ok(),
+            Some(("default", Some("no input device".to_owned())))
+        );
+    }
+
+    #[test]
+    fn the_default_that_wont_open_has_nothing_to_fall_back_to() {
+        let built = or_default(
+            None,
+            &"busy",
+            || Some("default"),
+            "microphone",
+            open_unless_busy,
+        );
+        assert_eq!(
+            built.err().map(|error| error.to_string()),
+            Some("no input device".to_owned())
+        );
+        // And a picked device that refuses, with a default that refuses too,
+        // says why the picked one failed.
+        let built = or_default(
+            Some("busy"),
+            &"busy",
+            || Some("busy"),
+            "microphone",
+            open_unless_busy,
+        );
+        assert!(built.is_err());
     }
 
     #[test]

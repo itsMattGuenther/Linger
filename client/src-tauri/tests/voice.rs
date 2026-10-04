@@ -352,6 +352,78 @@ async fn a_source_that_ends_stops_sending_and_says_so() {
     );
 }
 
+#[tokio::test]
+async fn a_picked_microphone_that_wouldnt_open_is_said_once_and_unsaid_once() {
+    // Six frames. The picked microphone is refused from the third to the
+    // fifth (the default standing in for it, #398), then picked again.
+    struct Refusing(std::sync::atomic::AtomicU8);
+
+    #[async_trait]
+    impl audio::Source for Refusing {
+        async fn frame(&self) -> Option<Vec<i16>> {
+            let n = self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            (n < 6).then(|| vec![0i16; audio::FRAME_SAMPLES])
+        }
+
+        fn refused(&self) -> Option<audio::Refused> {
+            let delivered = self.0.load(std::sync::atomic::Ordering::Relaxed);
+            (3..=5).contains(&delivered).then(|| audio::Refused {
+                name: "Headset Microphone".to_string(),
+                why: "the device is in use".to_string(),
+            })
+        }
+    }
+
+    #[derive(Default)]
+    struct Said(Mutex<Vec<String>>);
+    impl Watcher for Said {
+        fn peer_state(&self, _peer: &str, _state: &str) {}
+        fn audio_state(&self, state: &str) {
+            self.0.lock().unwrap().push(state.to_string());
+        }
+        fn microphone_refused(&self, refused: Option<&audio::Refused>) {
+            self.0.lock().unwrap().push(match refused {
+                Some(refused) => format!("refused {}: {}", refused.name, refused.why),
+                None => "refused nothing".to_string(),
+            });
+        }
+    }
+
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let said = Arc::new(Said::default());
+    let engine = Engine::new(Arc::new(Wire(tx)), Arc::clone(&said), Vec::new());
+    engine.set_session(A.to_string()).await;
+    engine
+        .join(
+            RoomId::new(),
+            Devices {
+                source: Arc::new(Refusing(std::sync::atomic::AtomicU8::new(0))),
+                sink: Arc::new(Discard),
+            },
+            Vec::new(),
+        )
+        .await;
+
+    let mut lines = Vec::new();
+    for _ in 0..40 {
+        lines = said.0.lock().unwrap().clone();
+        if lines.iter().any(|line| line == "stopped") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(
+        lines,
+        vec![
+            "sending".to_string(),
+            "refused Headset Microphone: the device is in use".to_string(),
+            "refused nothing".to_string(),
+            "stopped".to_string(),
+        ],
+        "a refused microphone was not said once and unsaid once"
+    );
+}
+
 #[test]
 fn the_audio_seam_is_one_twenty_millisecond_frame() {
     // The seam `cpal` and Opus arrive at. Asserted here as well as in the unit

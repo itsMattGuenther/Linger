@@ -368,9 +368,18 @@ describe("voice in the store", () => {
     expect(serverState(HOME).myVoice).toMatchObject({
       peers: { "s-1": "connected" },
       audio: "sending",
+      refused: null,
       speaking: { "s-1": true },
       talking: true,
     });
+
+    // The microphone picked in Settings wouldn't open, so the default is in
+    // its place (#398), and then it's picked again and does.
+    const refused = { name: "Headset Microphone (SteelSeries Arctis Nova 5)", why: "the device is in use" };
+    coreEvent("voice:microphone", { server: HOME, refused });
+    expect(serverState(HOME).myVoice?.refused).toEqual(refused);
+    coreEvent("voice:microphone", { server: HOME, refused: null });
+    expect(serverState(HOME).myVoice?.refused).toBeNull();
 
     await leaveVoice(HOME);
     expect(serverState(HOME).myVoice).toBeNull();

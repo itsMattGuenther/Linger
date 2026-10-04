@@ -61,7 +61,7 @@ import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound, type SoundCue } from "./sound";
 import { controlCue, voiceCue } from "./sound-events";
-import { clampVolume, loadVoiceVolumes, saveVoiceVolume } from "./voice";
+import { clampVolume, loadVoiceVolumes, type RefusedMicrophone, saveVoiceVolume } from "./voice";
 import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 
@@ -287,6 +287,11 @@ export interface MyVoice {
    * went away mid-call (T-1405 will make that recover).
    */
   audio: string;
+  /**
+   * The microphone picked in Settings, when it wouldn't open and the system
+   * default is standing in for it (#398); null otherwise.
+   */
+  refused: RefusedMicrophone | null;
   /** Peer session id → its connection state, as the core reports it. */
   peers: Record<string, string>;
   /** Peer session id → whether they are talking right now. */
@@ -1107,6 +1112,12 @@ async function attachListeners(): Promise<void> {
       const current = stateOf(server);
       if (current.myVoice === null) return;
       publish(server, { ...current, myVoice: { ...current.myVoice, audio: state } });
+    }),
+    listen<{ server: string; refused: RefusedMicrophone | null }>("voice:microphone", (event) => {
+      const { server, refused } = event.payload;
+      const current = stateOf(server);
+      if (current.myVoice === null) return;
+      publish(server, { ...current, myVoice: { ...current.myVoice, refused } });
     }),
     listen<{ server: string; peer: string | null; speaking: boolean }>(
       "voice:speaking",
@@ -1991,6 +2002,7 @@ export async function joinVoice(
       talkHeld: false,
       moved: previous !== undefined && previous !== null,
       audio: "opening",
+      refused: null,
       peers: {},
       speaking: {},
       talking: false,

@@ -93,6 +93,7 @@ const desktop = fakeDesktop({
           talkHeld: false,
           moved: false,
           audio: "sending" as const,
+          refused: null,
           peers: {},
           speaking: {},
           talking: false,

@@ -55,6 +55,7 @@ const seat =
         talkHeld: false,
         moved: false,
         audio: "sending" as const,
+        refused: null,
         peers: {},
         speaking: {},
         talking: query.has("talking"),
