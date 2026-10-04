@@ -1,0 +1,72 @@
+name: mic check
+
+# The Linger mic check (#398, client/src-tauri/examples/mic_check.rs): a
+# small Windows program that tests every microphone with Linger's own voice
+# code and writes a report somebody can send back. For a friend whose headset
+# Linger can't hear, on a Windows PC nobody working on Linger can sit at.
+#
+# Not part of a release and never signed: run it from the Actions tab and
+# hand over the `linger-mic-check` artifact (a zip with the program and how to
+# use it). Windows warns about an unsigned program; the instructions say so.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feat/398-mic-check"]
+
+jobs:
+  windows:
+    name: mic check for Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      # The app's library embeds the built page, so it has to exist even for a
+      # program that never shows it.
+      - name: build frontend
+        working-directory: client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vite build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+      - name: build the mic check
+        run: cargo build --release --example mic_check --manifest-path client/src-tauri/Cargo.toml
+      - name: the program and how to use it
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item client/src-tauri/target/release/examples/mic_check.exe out/linger-mic-check.exe
+          $text = @'
+          Linger mic check
+          ================
+
+          This tests every microphone on your computer the way Linger does, and
+          writes down what it heard: how loud, and in what format. It records
+          nothing and sends nothing.
+
+          1. Unzip this first (right-click the zip, Extract All). Don't run it
+             from inside the zip.
+          2. Close Linger. Put your headset on, switched on as you normally use it.
+          3. Double-click linger-mic-check.exe.
+             If Windows says "Windows protected your PC", click "More info",
+             then "Run anyway". It says that because the program isn't signed.
+          4. Press Enter. Each time it says "Talk now", count out loud or read
+             something until it says "Stop". It goes through every microphone,
+             5 seconds each.
+          5. At the end, a folder opens with linger-mic-check.txt selected.
+             Send that file to Matt.
+
+          The file only has your microphones' names and how loud each one was.
+          '@
+          $text | Set-Content -Encoding utf8 out/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linger-mic-check
+          path: out/
+          retention-days: 30

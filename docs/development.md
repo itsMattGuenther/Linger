@@ -107,6 +107,25 @@ a window built from a synchronous command deadlocks WebView2 (#205), so every
 window-building command in `src-tauri/src/window.rs` is `async`. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
+## Somebody else's microphone (#398)
+
+When Linger can't hear somebody's microphone and nobody here can sit at their
+computer, the mic check gets the facts: `client/src-tauri/examples/mic_check.rs`
+listens to each microphone for five seconds while they talk, through Linger's
+own `voice::device::Microphone` and also raw, channel by channel, and writes
+`linger-mic-check.txt` beside itself: each device's own format, whether sound
+arrived, whether it was exact silence, how loud it got against the "talking"
+line (`voice::level::THRESHOLD`), and whether a picked device refused to open.
+It records and sends nothing; they send the file back.
+
+For Windows, run the **mic check** workflow from the Actions tab and hand over
+its `linger-mic-check` artifact, a zip with the program and a README.txt in
+plain words. It's unsigned, so Windows warns first (More info, Run anyway).
+Here: `cargo run --release --example mic_check` in `client/src-tauri`, with
+`LINGER_MIC_CHECK_ONLY=<part of a name>` to skip Linux's many virtual devices
+(one of ALSA's plugins crashes when opened for recording, which is why the
+report is saved after every microphone) and `LINGER_MIC_CHECK_SECONDS`.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so
