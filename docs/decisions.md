@@ -771,3 +771,20 @@ the most present anybody is.
   only the one looking needs the update.
 - **A DM's voice isn't a room.** Being in a DM is being around (§4.13), so a DM call
   doesn't put anybody "in" anything.
+
+## Decided — the host can take somebody out of voice
+
+**Matt, 2026-10-04 (#423).** A friend walked away from his desk with his headset on
+and unmuted; in a bigger room a blaring microphone like that takes the call over, and
+all anybody could do was turn him down for themselves.
+
+- **The host takes somebody out; nobody mutes anybody.** Matt chose taking out over a
+  Discord-style server mute: it ends the problem, can't leave anybody stuck muted, and
+  keeps "nobody can turn your microphone on". Their app leaves the call as if they'd
+  pressed Leave and says the host took them out. Not a ban: they can join again.
+- **From the voice bar or their card.** Their chip's volume card has **Take out of
+  voice** for the host, and so does their card's **···**, which works when the host
+  isn't in the call.
+- **Older apps can't bounce back.** The server ends the person's seats and announces
+  the room's `voice.state` without them; every app since 0.4.1 leaves on that, and a
+  restart without a seat is ignored. The new `voice.removed` only says why.

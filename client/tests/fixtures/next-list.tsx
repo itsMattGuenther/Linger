@@ -260,6 +260,17 @@ function OneServer() {
               onMute: (muted) => note(`mute:${muted}`),
               onDeafen: (deafened) => note(`deafen:${deafened}`),
               onLeave: () => note("leave"),
+              // `?takeout`: you're the host, so a chip's card can take them
+              // out of voice (#423); `&takeoutfail` has the server refuse.
+              ...(query.has("takeout")
+                ? {
+                    onVolume: (person: { user: { id: string } }, volume: number) => note(`volume:${person.user.id}:${volume}`),
+                    onTakeOut: async (person: { user: { id: string } }) => {
+                      note(`takeout:${voice.roomId}:${person.user.id}`);
+                      return query.has("takeoutfail") ? "They aren't in voice there." : null;
+                    },
+                  }
+                : {}),
             }
           : undefined
       }

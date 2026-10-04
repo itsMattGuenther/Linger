@@ -150,8 +150,24 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
       </Popover>
     );
   }
+  const takeOut = safety?.takeOut;
   const items: MenuItem[] = safety
     ? [
+        // The host taking somebody out of voice (#423): for everybody, and
+        // they can join again.
+        ...(takeOut === undefined
+          ? []
+          : [
+              {
+                id: "take-out",
+                label: `Take out of voice in #${takeOut.room}`,
+                icon: "leave" as const,
+                onSelect: () => {
+                  setMenu(null);
+                  void takeOut.act().then((said) => setProblem(said ?? `${user.display_name} is out of voice. They can join again.`));
+                },
+              },
+            ]),
         ...(safety.host === null
           ? []
           : [

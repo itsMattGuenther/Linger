@@ -62,6 +62,8 @@ export interface ChatPane {
     controls?: StripControls;
     /** Starting voice here failed last time: why, short, what fixes it, and the whole reason (#261, #273). */
     failed?: StripProblem;
+    /** The host took you out of voice here (#423). */
+    takenOut?: boolean;
   } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
@@ -229,7 +231,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={alone ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
           {alone ? null : <PaneHeader {...pane.header} />}
-          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} /> : null}
+          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} /> : null}
           <Conversation
             key={pane.id}
             id={pane.id}

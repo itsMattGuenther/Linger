@@ -38,3 +38,10 @@
   line-height: var(--line-meta);
   color: var(--text-muted);
 }
+
+.nx-volume-problem {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-danger);
+}

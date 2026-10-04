@@ -337,6 +337,27 @@ describe("voice in the store", () => {
     expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
   });
 
+  it("is taken out by the host: the seat ends at once, the core lets go, and the strip has why until the next join (#423)", async () => {
+    await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"]]));
+    invoked.length = 0;
+
+    arrive(HOME, { s: 3, op: "voice.removed", d: { room_id: "r-garage" } });
+    expect(serverState(HOME).myVoice).toBeNull();
+    expect(serverState(HOME).voiceTakenOut).toBe("r-garage");
+    expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
+
+    // The room's list without us follows, and lets go of nothing twice.
+    arrive(HOME, voiceState("r-garage", [["s-1", "u-amy"]]));
+    expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
+    expect(serverState(HOME).voiceTakenOut).toBe("r-garage");
+
+    // Not a ban: joining again is allowed, and clears it.
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    expect(serverState(HOME).voiceTakenOut).toBeNull();
+    expect(serverState(HOME).myVoice?.roomId).toBe("r-garage");
+  });
+
   // A server from before the mesh was taken out sends a room the old way when
   // it doesn't forward, or an older app is in it. This app has no old way:
   // it leaves, and the strip says why (#306).

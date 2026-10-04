@@ -516,6 +516,11 @@ window, so you don't need the list in front to mute:
 - **Mute** (the microphone) stops sending, instantly, and nobody else can
   change it. Nobody can mute you either, and nobody can turn your microphone
   on. While you're muted, the microphone is crossed out and lit.
+- **The host can take somebody out of voice**: somebody who walked away with
+  their microphone on, say. Click their name in the voice bar (or open their
+  card and its **···**) and choose **Take out of voice**. They leave the call
+  as if they'd pressed Leave, their app says the host took them out, and they
+  can join again whenever they're back.
 - **Deafen** (the headphones) silences incoming voice and mutes your
   microphone together. Pressing it again restores your previous mic choice.
   Deafen doesn't change notification sounds.

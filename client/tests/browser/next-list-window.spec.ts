@@ -896,6 +896,34 @@ test("a voice chip opens that person's volume: it's heard at once, kept on this 
   await expect(bar.getByRole("button", { name: "Eli's volume, 100%" })).toBeFocused();
 });
 
+test("the host, and only the host, can take somebody out of voice from their chip's card (#423)", async ({ page }) => {
+  for (const [query, host] of [["?one", true], ["?one&guest", false]] as const) {
+    await open(page, query);
+    const bar = page.getByRole("region", { name: /In voice/ });
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+          await page.waitForTimeout(250);
+          return bar.count();
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(1);
+    await bar.getByRole("button", { name: "Eli's volume, 100%" }).click();
+    const card = page.getByRole("dialog", { name: "Eli's volume" });
+    await expect(card.getByRole("slider")).toBeVisible();
+    const takeOut = card.getByRole("button", { name: "Take out of voice" });
+    if (!host) {
+      await expect(takeOut).toHaveCount(0);
+      continue;
+    }
+    await takeOut.click();
+    await expect.poll(async () => did(page)).toContain("takeout r-general u-eli");
+    await expect(card).toHaveCount(0);
+  }
+});
+
 test("the volume card sits over its chip, inside the window, with nothing clipped", async ({ page }) => {
   await open(page, "?one");
   const bar = page.getByRole("region", { name: /In voice/ });

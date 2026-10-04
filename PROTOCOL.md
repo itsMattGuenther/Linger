@@ -794,6 +794,7 @@ POST /export             → { job_id }                        # any member, 1/h
 GET  /export/:job_id     → { job_id, state, progress, url? } # the asker's own only
 POST /knock              { target_user_id }                 → 204   # 3/hour per target
 GET  /voice/ice          → { servers: IceServer[], ttl_secs } # the voice relay, for you
+DELETE /rooms/:id/voice/:user_id → 204   # host only: take them out of that room's voice (#423)
 ```
 
 ```ts
@@ -942,6 +943,7 @@ Beyond that, the client must re-identify and refetch.
 | `reports.changed` | `{}` — **sent to the host's sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
+| `voice.removed` | `{ room_id }` — **addressed to one session**: the host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
 
 ```ts
 type PresenceEntry = {
@@ -977,6 +979,15 @@ controls on a join mean unknown, not an open microphone; repeating a join
 without them does not erase known state. Reports are held in memory, survive
 resume with the seat, and disappear on leaving. They use the ordinary
 membership-filtered `voice.state`, including inside DMs.
+
+**The host can take somebody out of a room's voice** (#423): `DELETE /rooms/:id/voice/:user_id`,
+for somebody who walked away with their microphone on. Every seat that person has in that
+room ends (a laptop and a desktop are two); each of those sessions gets `voice.removed`, and
+then the room gets its `voice.state` without them. It isn't a ban: they can join again. It is
+the one thing anybody can do to somebody else's voice, and it isn't a remote mute: their
+microphone is closed by their own app leaving, and nothing turns anybody's microphone on.
+Only in a room the host can see, so a DM's call is as private as the DM; never the host
+themselves (422, they have Leave); 404 when the person isn't in that room's voice.
 
 Old servers ignore the extra join field and old clients ignore the extra peer field. New
 clients still enforce local controls on an old server, but cannot show others' state. Mic

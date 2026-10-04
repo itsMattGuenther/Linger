@@ -257,6 +257,11 @@ export interface GatewayState {
    * being the system default, which says what fixes it (#273).
    */
   voiceFailed: { roomId: RoomId; problem: string; devices: VoiceDeviceChoice } | null;
+  /**
+   * The host took us out of this room's voice (#423), so its strip can say
+   * so instead of just showing Join. Cleared by the next try at joining.
+   */
+  voiceTakenOut: RoomId | null;
 }
 
 /** Everything about being in voice that is this client's alone. */
@@ -350,6 +355,7 @@ const EMPTY: GatewayState = {
   voice: {},
   myVoice: null,
   voiceFailed: null,
+  voiceTakenOut: null,
 };
 
 /**
@@ -636,6 +642,14 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         mine.roomId !== room_id ||
         peers.some((peer) => peer.session_id === current.sessionId);
       return { ...current, voice, myVoice: seated ? mine : null };
+    }
+    case "voice.removed": {
+      // The host took this session out of the room's voice (#423). The
+      // room's `voice.state` without us follows, and would end the seat on
+      // its own; this says why, and ends it now.
+      const { room_id } = frame.d;
+      const mine = current.myVoice;
+      return { ...current, myVoice: mine !== null && mine.roomId === room_id ? null : mine, voiceTakenOut: room_id };
     }
     case "presence.update": {
       const entry = frame.d;
@@ -1074,6 +1088,11 @@ async function attachListeners(): Promise<void> {
       // page's (ARCHITECTURE §2, #197): it is handed straight over, and the
       // core answers it.
       if (frame.op === "voice.offer") void voiceFrame(server, frame);
+      if (frame.op === "voice.removed" && seated && next.myVoice === null) {
+        // Taken out by the host (#423): let go of the devices, as when the
+        // room's list stops having us.
+        void voiceLeave(server);
+      }
       if (frame.op === "voice.state") {
         applySavedVoiceVolumes(server);
         if (seated && next.myVoice === null) {
@@ -1993,6 +2012,7 @@ export async function joinVoice(
   publish(server, {
     ...stateOf(server),
     voiceFailed: null,
+    voiceTakenOut: null,
     myVoice: {
       roomId,
       muted: previous?.deafened || previous?.muted || false,
@@ -2036,6 +2056,27 @@ export async function joinVoice(
  * What a join says when the server put the room the old way (#306). The
  * strip's words for it are `voiceStartProblem`'s.
  */
+/**
+ * Take somebody out of a room's voice (#423), as the host: somebody who
+ * walked away with their microphone on, say. Null when it's done, or why
+ * not in words. Not a ban: they can join again.
+ */
+export async function takeOutOfVoice(server: string, roomId: RoomId, userId: UserId): Promise<string | null> {
+  const api = links.get(server)?.api;
+  if (!api) return "Not connected to this server.";
+  try {
+    await api.takeOutOfVoice(roomId, userId);
+    return null;
+  } catch (error: unknown) {
+    return error instanceof Error && error.message !== "" ? error.message : "Couldn't take them out of voice.";
+  }
+}
+
+/** Whether you can take people out of voice here: the host (#423). */
+export function canTakeOut(state: GatewayState): boolean {
+  return state.me?.is_host === true;
+}
+
 export const OLD_WAY = "the server sent this call the old way";
 
 /**

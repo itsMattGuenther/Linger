@@ -564,3 +564,165 @@ async fn fresh_connections_see_existing_voice_without_joining_and_cannot_see_pri
     let (_empty_observer, snapshot) = connect_ready(&server, &member.access_token).await;
     assert_eq!(snapshot["d"]["voice"], json!([]));
 }
+
+// ---------------------------------------------------------------------------
+// The host taking somebody out of voice (#423)
+// ---------------------------------------------------------------------------
+
+async fn take_out(
+    server: &common::TestServer,
+    token: &str,
+    room: &str,
+    user: &str,
+) -> reqwest::StatusCode {
+    reqwest::Client::new()
+        .delete(server.url(&format!("/rooms/{room}/voice/{user}")))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn the_host_takes_somebody_out_of_voice_and_they_stay_out() {
+    let (server, host, room) = common::voice_server_with_room("garage").await;
+    let callie = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    let (mut a, a_id) = connect(&server, &host.access_token).await;
+    let (mut b, _b_id) = connect(&server, &callie.access_token).await;
+    join_voice(&mut a, &room_id).await;
+    join_voice(&mut b, &room_id).await;
+    tokio::time::sleep(SETTLE).await;
+    drain(&mut a, SETTLE).await;
+    drain(&mut b, SETTLE).await;
+
+    let status = take_out(
+        &server,
+        &host.access_token,
+        &room_id,
+        &callie.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(status, reqwest::StatusCode::NO_CONTENT);
+    tokio::time::sleep(SETTLE).await;
+
+    // She's told why, then that she's out: the reason before the list, so
+    // her app can say it as it leaves.
+    let hers = drain(&mut b, SETTLE).await;
+    let removed = hers
+        .iter()
+        .position(|f| f["op"] == "voice.removed")
+        .expect("she is told the host took her out");
+    assert_eq!(hers[removed]["d"]["room_id"], json!(room_id));
+    let state = hers
+        .iter()
+        .position(|f| f["op"] == "voice.state")
+        .expect("she is told the room's new list");
+    assert!(removed < state, "the reason came after the list: {hers:?}");
+    assert_eq!(peer_sessions(&hers[state]), vec![a_id.clone()]);
+
+    // The room sees her leave, and only she is told why.
+    let room_sees = drain(&mut a, SETTLE).await;
+    assert_eq!(
+        peer_sessions(voice_state(&room_sees, &room_id).expect("the room is told")),
+        vec![a_id.clone()]
+    );
+    assert!(
+        room_sees.iter().all(|f| f["op"] != "voice.removed"),
+        "somebody else was told: {room_sees:?}"
+    );
+
+    // An app that keeps trying to restart its call gets nowhere: with no
+    // seat, a restart is ignored, so nothing brings her back but joining.
+    send_json(&mut b, json!({ "op": "voice.restart" })).await;
+    tokio::time::sleep(SETTLE).await;
+    let after = drain(&mut a, SETTLE).await;
+    assert!(
+        voice_state(&after, &room_id).is_none(),
+        "a restart changed the room: {after:?}"
+    );
+
+    // Not a ban: she can join again.
+    join_voice(&mut b, &room_id).await;
+    tokio::time::sleep(SETTLE).await;
+    let back = drain(&mut a, SETTLE).await;
+    assert_eq!(
+        peer_sessions(voice_state(&back, &room_id).expect("she can rejoin")).len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn only_the_host_takes_people_out_and_only_where_they_can_see() {
+    let (server, host, room) = common::voice_server_with_room("garage").await;
+    let callie = common::join_member(&server, &host.access_token, "callie").await;
+    let dave = common::join_member(&server, &host.access_token, "dave").await;
+    let room_id = room.id.to_string();
+
+    let (mut a, _a_id) = connect(&server, &host.access_token).await;
+    let (mut c, _c_id) = connect(&server, &callie.access_token).await;
+    let (mut d, _d_id) = connect(&server, &dave.access_token).await;
+    join_voice(&mut a, &room_id).await;
+    join_voice(&mut c, &room_id).await;
+    tokio::time::sleep(SETTLE).await;
+
+    // A member can't take anybody out, the host included.
+    let refused = take_out(
+        &server,
+        &callie.access_token,
+        &room_id,
+        &host.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(refused, reqwest::StatusCode::FORBIDDEN);
+    // The host has Leave for themselves.
+    let own = take_out(
+        &server,
+        &host.access_token,
+        &room_id,
+        &host.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(own, reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    // Somebody who isn't in that room's voice isn't there to take out.
+    let absent = take_out(
+        &server,
+        &host.access_token,
+        &room_id,
+        &dave.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(absent, reqwest::StatusCode::NOT_FOUND);
+
+    // A call in a DM the host isn't in is as private as the DM: the host
+    // can't reach into it, and isn't told it exists.
+    let dm: linger_core::wire::Room = reqwest::Client::new()
+        .post(server.url("/dms"))
+        .bearer_auth(&callie.access_token)
+        .json(&json!({ "user_ids": [dave.user.id.to_string()] }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let dm_id = dm.id.to_string();
+    join_voice(&mut d, &dm_id).await;
+    tokio::time::sleep(SETTLE).await;
+    let private = take_out(
+        &server,
+        &host.access_token,
+        &dm_id,
+        &dave.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(private, reqwest::StatusCode::NOT_FOUND);
+    let dave_hears = drain(&mut d, SETTLE).await;
+    assert!(
+        dave_hears.iter().all(|f| f["op"] != "voice.removed"),
+        "a DM call was reached into: {dave_hears:?}"
+    );
+    drain(&mut c, SETTLE).await;
+}

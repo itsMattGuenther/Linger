@@ -43,6 +43,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   onPickDevice,
   controls,
   failed,
+  takenOut,
 }: {
   strip: Strip;
   /** Everyone the strip names, by id. */
@@ -69,8 +70,19 @@ export const VoiceStrip = memo(function VoiceStrip({
    * a narrow window the words give way first (#273).
    */
   failed?: StripProblem;
+  /**
+   * The host took you out of voice here (#423): said where the strip's words
+   * go, until you join again. Join stays, since it isn't a ban.
+   */
+  takenOut?: boolean;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
+  const takenOutWords =
+    takenOut && strip.kind !== "mine" && !showFailed ? (
+      <p className="nx-strip-words" role="status">
+        The host took you out of voice.
+      </p>
+    ) : null;
   const [why, setWhy] = useState<DOMRect | null>(null);
   const lead = showFailed ? `Couldn't start voice. ${startProblemWords(showFailed)}` : "";
   const problem = showFailed ? (
@@ -105,7 +117,7 @@ export const VoiceStrip = memo(function VoiceStrip({
     return (
       <div className="nx-strip" data-kind="quiet" role="group" aria-label="Voice in this conversation">
         <VoiceGlyph speaking={false} />
-        {problem ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
+        {problem ?? takenOutWords ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
         {fix}
         <Button size="sm" variant="secondary" icon="mic" onClick={onJoin}>
           {strip.action === "move" ? QUIET_MOVE_WORDS : VOICE_ACTION_WORDS[strip.action]}
@@ -134,7 +146,7 @@ export const VoiceStrip = memo(function VoiceStrip({
           </li>
         ))}
       </ul>
-      {problem ?? (
+      {problem ?? takenOutWords ?? (
         <p className="nx-strip-words">
           {here.length > shown.length ? "and others " : ""}
           {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}

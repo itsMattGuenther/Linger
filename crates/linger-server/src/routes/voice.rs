@@ -12,18 +12,45 @@
 //! it says at the introduction, which is where to meet when neither can reach
 //! the other's door.
 
-use axum::extract::State;
-use axum::routing::get;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::routing::{delete, get};
 use axum::{Json, Router};
 use linger_core::wire::IceServers;
+use linger_core::{RoomId, UserId};
 
-use crate::auth::AuthedUser;
+use crate::auth::{AuthedUser, HostUser};
 use crate::error::ApiError;
+use crate::repo;
 use crate::state::AppState;
 use crate::turn;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/voice/ice", get(ice))
+    Router::new()
+        .route("/voice/ice", get(ice))
+        .route("/rooms/{id}/voice/{user_id}", delete(take_out))
+}
+
+/// `DELETE /rooms/{id}/voice/{user_id}` — the host takes somebody out of
+/// a room's voice (#423): somebody who walked away with their microphone on,
+/// say. Not a ban; they can join again. Only in a room the host can see, so a
+/// DM's call stays as private as the DM, and never the host themselves, who
+/// has Leave.
+async fn take_out(
+    State(state): State<AppState>,
+    host: HostUser,
+    Path((room_id, user_id)): Path<(RoomId, UserId)>,
+) -> Result<StatusCode, ApiError> {
+    if user_id == host.id {
+        return Err(ApiError::validation(
+            "To leave voice yourself, press Leave.",
+        ));
+    }
+    repo::rooms::visible_to(&state.db.read, room_id, host.id).await?;
+    if !state.gateway.voice_take_out(room_id, user_id) {
+        return Err(ApiError::not_found("They aren't in voice there."));
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `GET /voice/ice` — the relay, for the member asking, for the next while.
