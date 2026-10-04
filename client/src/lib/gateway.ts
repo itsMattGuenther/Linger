@@ -64,6 +64,7 @@ import { controlCue, voiceCue } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, type RefusedMicrophone, saveVoiceVolume } from "./voice";
 import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
+import { hostsHere } from "./host";
 
 /**
  * Mirrors `Status` in `src-tauri/src/gateway.rs`. Allowed to be hand-written:
@@ -674,10 +675,14 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // do double duty: it is "their name changed" and "here is somebody you
       // did not have" — a person who just registered, or a member the host let
       // back in (PROTOCOL §8).
+      const mine = current.me?.id === user.id;
       return {
         ...current,
-        me: current.me?.id === user.id ? user : current.me,
+        me: mine ? user : current.me,
         users: upsert(current.users, user, (u) => u.id === user.id),
+        // No longer a co-host (#424): the reports aren't yours to hold. The
+        // listener asks for them when you become one.
+        reports: mine && !hostsHere(user) ? null : current.reports,
       };
     }
     case "user.remove": {
@@ -1076,9 +1081,11 @@ async function attachListeners(): Promise<void> {
       // belongs out here with the other one. `playKnock` applies the mute and
       // the quiet hours itself, so a knock at 3am is a card and nothing more.
       // The host's open reports (PROTOCOL §5): asked for once the server has
-      // said who you are, since only a host may ask, and again whenever they
-      // change. Asking any earlier finds nobody yet and gives up.
-      if (frame.op === "ready" || frame.op === "reports.changed") void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
+      // said who you are, since only the host or a co-host may ask, again
+      // whenever they change, and when the host makes you a co-host (#424).
+      // Asking any earlier finds nobody yet and gives up.
+      const madeCohost = frame.op === "user.update" && frame.d.id === next.me?.id && hostsHere(next.me) && !hostsHere(before.me);
+      if (frame.op === "ready" || frame.op === "reports.changed" || madeCohost) void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
       if (!replayed) {
         if (frame.op === "knock") void playKnock();
         const cue = voiceCue(frame, before, next);
@@ -1873,17 +1880,29 @@ export async function setBlocked(api: AuthedApi, userId: UserId, on: boolean): P
   }
 }
 
-/** The open reports, if you're this server's host; nothing to ask otherwise. */
+/** The open reports, if you're this server's host or a co-host; nothing to ask otherwise. */
 export async function loadReports(api: AuthedApi | null): Promise<void> {
   if (api === null) return;
   await settled(api.baseUrl);
-  if (stateOf(api.baseUrl).me?.is_host !== true) return;
+  if (!hostsHere(stateOf(api.baseUrl).me)) return;
   const reports = await api.get<Report[]>("/reports").catch((error: unknown) => {
     if (missing(error)) return [];
     throw error;
   });
   if (linkFor(api) === null) return;
   publish(api.baseUrl, { ...stateOf(api.baseUrl), reports });
+}
+
+/**
+ * The host makes somebody a co-host, or they stop being one (#424). The
+ * person as the server answers goes in at once, so their card says so under
+ * the finger; `user.update` brings the same to every other window.
+ */
+export async function setCohost(api: AuthedApi, userId: UserId, on: boolean): Promise<void> {
+  const user = await api.setCohost(userId, on);
+  if (linkFor(api) === null) return;
+  const held = stateOf(api.baseUrl);
+  publish(api.baseUrl, { ...held, users: upsert(held.users, user, (u) => u.id === user.id) });
 }
 
 /** Send the host a message, or a person, to look at (PROTOCOL §5). */
@@ -2072,9 +2091,13 @@ export async function takeOutOfVoice(server: string, roomId: RoomId, userId: Use
   }
 }
 
-/** Whether you can take people out of voice here: the host (#423). */
+/**
+ * Whether you can take people out of voice here: the host or a co-host
+ * (#423, #424). A co-host still can't take the host out: ask `mayActOn`
+ * for the person.
+ */
 export function canTakeOut(state: GatewayState): boolean {
-  return state.me?.is_host === true;
+  return hostsHere(state.me);
 }
 
 export const OLD_WAY = "the server sent this call the old way";

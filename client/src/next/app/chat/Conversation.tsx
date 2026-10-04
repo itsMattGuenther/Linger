@@ -4,6 +4,7 @@ import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
+import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
@@ -463,7 +464,7 @@ function RowView({
           quoted={quoted}
           quotedAuthor={quoted ? people.get(quoted.author_id) : undefined}
           me={me}
-          canDelete={me !== null && (message.author_id === me.id || me.is_host)}
+          canDelete={me !== null && (message.author_id === me.id || mayActOn(me, people.get(message.author_id)))}
           now={now}
           editing={editing === message.id}
           flashing={flash === message.id}

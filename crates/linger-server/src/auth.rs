@@ -297,7 +297,7 @@ pub async fn revoke_all_for_user(db: &SqlitePool, user_id: UserId) -> anyhow::Re
 ///
 /// **Removed members are refused here, not just at the next refresh** (T-413).
 /// That costs one primary-key read on the read pool per authenticated request,
-/// which is the same read `HostUser` already pays for `is_host`. The other
+/// which is the same read the host extractors already pay for [`standing`]. The other
 /// answer — let the access token lapse on its own — buys that read back at the
 /// price of up to fifteen minutes in which somebody the host just removed can
 /// still post, and those fifteen minutes are the exact thing the host was
@@ -331,7 +331,50 @@ impl FromRequestParts<AppState> for AuthedUser {
     }
 }
 
-/// The host. It is "the host", never "admin" (SPEC §1 vocabulary).
+/// What somebody is to the server: the host, a co-host the host named, or
+/// neither (#424). It is "the host" and "a co-host", never "admin" or
+/// "moderator" (SPEC §1 vocabulary).
+///
+/// Two values that do anything and nothing in between, on purpose: a co-host
+/// is one switch with a fixed meaning, not the first rung of a role ladder
+/// (SPEC §2 anti-goals, `docs/decisions.md`). Do not add a variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    Host,
+    Cohost,
+    Member,
+}
+
+impl Standing {
+    /// The host's powers in the app: the host, or a co-host.
+    #[must_use]
+    pub const fn hosts(self) -> bool {
+        matches!(self, Self::Host | Self::Cohost)
+    }
+}
+
+/// Where somebody stands, or `None` for an account that is removed or was
+/// never here. One primary-key read, like the bearer extractor's.
+///
+/// The host is never also a co-host (`routes/users.rs` refuses it), but if a
+/// row said both, the host wins: nothing a co-host can't do is lost that way.
+pub async fn standing(db: &SqlitePool, id: UserId) -> Result<Option<Standing>, ApiError> {
+    let row: Option<(bool, bool)> = sqlx::query_as(
+        "SELECT is_host, is_cohost FROM users WHERE id = ? AND deactivated_at IS NULL",
+    )
+    .bind(id.to_vec())
+    .fetch_optional(db)
+    .await?;
+    Ok(row.map(|(is_host, is_cohost)| match (is_host, is_cohost) {
+        (true, _) => Standing::Host,
+        (false, true) => Standing::Cohost,
+        (false, false) => Standing::Member,
+    }))
+}
+
+/// The host and nobody else. Only one thing needs it: making and clearing
+/// co-hosts (#424). Everything else the host does, a co-host does too, and
+/// takes [`HostOrCohost`].
 #[derive(Debug, Clone, Copy)]
 pub struct HostUser {
     pub id: UserId,
@@ -342,16 +385,72 @@ impl FromRequestParts<AppState> for HostUser {
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, ApiError> {
         let user = AuthedUser::from_request_parts(parts, state).await?;
-        let (is_host,): (bool,) =
-            sqlx::query_as("SELECT is_host FROM users WHERE id = ? AND deactivated_at IS NULL")
-                .bind(user.id.to_vec())
-                .fetch_optional(&state.db.read)
-                .await?
-                .ok_or_else(ApiError::unauthenticated)?;
-        if !is_host {
-            return Err(ApiError::forbidden("Only the host can do that."));
+        match standing(&state.db.read, user.id).await? {
+            Some(Standing::Host) => Ok(Self { id: user.id }),
+            Some(_) => Err(ApiError::forbidden("Only the host can do that.")),
+            None => Err(ApiError::unauthenticated()),
         }
-        Ok(Self { id: user.id })
+    }
+}
+
+/// The host, or a co-host the host named (#424): whoever has the host's
+/// powers in the app. Every host endpoint takes this, except the one that
+/// makes co-hosts.
+///
+/// A co-host can do all of it but one more thing besides: act on the host.
+/// An endpoint that acts on a person asks [`HostOrCohost::not_on_the_host`]
+/// before it does, so a co-host can't remove the host, take them out of
+/// voice, delete their messages or revoke their invites. Those two
+/// exceptions are the whole difference, and there will be no third.
+#[derive(Debug, Clone, Copy)]
+pub struct HostOrCohost {
+    pub id: UserId,
+    pub standing: Standing,
+}
+
+impl HostOrCohost {
+    /// Refuse a co-host acting on the host, in the words given. The host
+    /// themselves, and anybody acting on somebody else, pass.
+    pub async fn not_on_the_host(
+        &self,
+        db: &SqlitePool,
+        target: UserId,
+        refusal: &str,
+    ) -> Result<(), ApiError> {
+        refuse_on_the_host(db, self.standing, target, refusal).await
+    }
+}
+
+/// [`HostOrCohost::not_on_the_host`] for an endpoint where the person acting
+/// may be neither, like deleting a message: an author deletes their own, and
+/// only the host's powers reach anybody else's.
+pub async fn refuse_on_the_host(
+    db: &SqlitePool,
+    acting: Standing,
+    target: UserId,
+    refusal: &str,
+) -> Result<(), ApiError> {
+    if acting == Standing::Cohost && standing(db, target).await? == Some(Standing::Host) {
+        return Err(ApiError::forbidden(refusal));
+    }
+    Ok(())
+}
+
+impl FromRequestParts<AppState> for HostOrCohost {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, ApiError> {
+        let user = AuthedUser::from_request_parts(parts, state).await?;
+        match standing(&state.db.read, user.id).await? {
+            Some(standing) if standing.hosts() => Ok(Self {
+                id: user.id,
+                standing,
+            }),
+            Some(_) => Err(ApiError::forbidden(
+                "Only the host or a co-host can do that.",
+            )),
+            None => Err(ApiError::unauthenticated()),
+        }
     }
 }
 

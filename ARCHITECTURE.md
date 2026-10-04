@@ -190,6 +190,7 @@ CREATE TABLE users (
   display_name    TEXT NOT NULL,
   password_hash   TEXT NOT NULL,               -- argon2id
   is_host         INTEGER NOT NULL DEFAULT 0,
+  is_cohost       INTEGER NOT NULL DEFAULT 0,  -- set by the host only (#424, 0010)
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
   deactivated_at  INTEGER
@@ -366,7 +367,8 @@ CREATE TABLE blocks (
   PRIMARY KEY (user_id, blocked_id)
 );
 
--- A report goes to the host only, keeping the message's words as they were.
+-- A report goes to the host and the co-hosts only, keeping the message's
+-- words as they were.
 CREATE TABLE reports (
   id              BLOB PRIMARY KEY,
   reporter_id     BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -377,7 +379,7 @@ CREATE TABLE reports (
   message_at      INTEGER,
   note            TEXT,                       -- 1000 chars
   created_at      INTEGER NOT NULL,
-  closed_at       INTEGER                     -- the host dealt with it
+  closed_at       INTEGER                     -- the host or a co-host dealt with it
 );
 
 CREATE TABLE invites (

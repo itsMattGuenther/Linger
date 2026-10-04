@@ -42,6 +42,7 @@ async function fresh() {
       username: "me",
       display_name: "Me",
       is_host: false,
+      is_cohost: false,
       status: null,
       entrance_sound: null,
       last_seen_at: null,

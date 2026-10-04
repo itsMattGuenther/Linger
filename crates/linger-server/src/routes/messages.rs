@@ -20,7 +20,7 @@ use linger_core::wire::{
 use linger_core::{MessageId, RoomId, UserId};
 use serde::Deserialize;
 
-use crate::auth::AuthedUser;
+use crate::auth::{self, AuthedUser, Standing};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -256,14 +256,8 @@ async fn edit(
     Ok(Json(message))
 }
 
-async fn is_host(state: &AppState, user_id: UserId) -> Result<bool, ApiError> {
-    Ok(sqlx::query_scalar("SELECT is_host FROM users WHERE id = ?")
-        .bind(user_id.to_vec())
-        .fetch_optional(&state.db.read)
-        .await?
-        .unwrap_or(false))
-}
-
+/// The author deletes their own message; the host or a co-host deletes
+/// anybody's, except that a co-host can't delete the host's (#424).
 async fn delete(
     State(state): State<AppState>,
     auth: AuthedUser,
@@ -273,10 +267,22 @@ async fn delete(
     if message.deleted_at.is_some() {
         return Ok(StatusCode::NO_CONTENT); // idempotent
     }
-    if message.author_id != auth.id && !is_host(&state, auth.id).await? {
-        return Err(ApiError::forbidden(
-            "Only the author or the host can delete a message.",
-        ));
+    if message.author_id != auth.id {
+        let standing = auth::standing(&state.db.read, auth.id)
+            .await?
+            .unwrap_or(Standing::Member);
+        if !standing.hosts() {
+            return Err(ApiError::forbidden(
+                "Only the author, the host or a co-host can delete a message.",
+            ));
+        }
+        auth::refuse_on_the_host(
+            &state.db.read,
+            standing,
+            message.author_id,
+            "A co-host can't delete the host's messages.",
+        )
+        .await?;
     }
 
     // Tombstone, not removal: body empties, the row (and reply chains) survive.

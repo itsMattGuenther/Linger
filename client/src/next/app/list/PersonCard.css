@@ -45,6 +45,12 @@
   white-space: nowrap;
 }
 
+/* "· co-host" (#424) keeps its place at the end; the note gives way first. */
+.nx-person-cohost {
+  flex: none;
+  white-space: nowrap;
+}
+
 .nx-person-status {
   margin: 0;
   font-size: var(--text-body);

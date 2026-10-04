@@ -8,7 +8,7 @@ use linger_core::gateway::ServerEvent;
 use linger_core::wire::{CreateRoomRequest, Room, RoomKind, UpdateRoomRequest};
 use linger_core::RoomId;
 
-use crate::auth::{AuthedUser, HostUser};
+use crate::auth::{AuthedUser, HostOrCohost};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -30,7 +30,7 @@ async fn list(
 
 async fn create(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Json(req): Json<CreateRoomRequest>,
 ) -> Result<Json<Room>, ApiError> {
     validate::room_slug(&req.slug)?;
@@ -89,7 +89,7 @@ fn only_a_room(room: &Room) -> Result<(), ApiError> {
 
 async fn update(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Path(id): Path<RoomId>,
     Json(req): Json<UpdateRoomRequest>,
 ) -> Result<Json<Room>, ApiError> {
@@ -132,7 +132,7 @@ async fn update(
 
 async fn archive(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Path(id): Path<RoomId>,
 ) -> Result<Json<Room>, ApiError> {
     only_a_room(&repo::rooms::expect(&state.db.read, id).await?)?;

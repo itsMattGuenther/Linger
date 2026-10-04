@@ -137,7 +137,9 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           volume={open.volume ?? 1}
           anchor={opener}
           onVolume={(volume) => onVolume(open, volume)}
-          {...(onTakeOut ? { onTakeOut: () => onTakeOut(open) } : {})}
+          // Never on the host's chip (#424): your own chip opens no card, so
+          // whoever opened the host's is a co-host, who can't take the host out.
+          {...(onTakeOut && !open.user.is_host ? { onTakeOut: () => onTakeOut(open) } : {})}
           onClose={closeVolume}
         />
       ) : null}

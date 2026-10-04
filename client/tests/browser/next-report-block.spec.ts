@@ -97,15 +97,75 @@ test.describe("on a person's card", () => {
     await expect(greyLines(page)).toHaveCount(0);
   });
 
-  test("the host has nobody to report to: no Report, and Take out of voice while they're in a room's voice (#423)", async ({ page }) => {
+  test("the host has nobody to report to: no Report, the co-host switch (#424), and Take out of voice while they're in a room's voice (#423)", async ({ page }) => {
     // Jules is in #general's voice this evening.
     await inGeneral(page, "?one");
     await openCard(page, "Jules");
     await more(page, "Jules").click();
-    await expect(page.getByRole("menu", { name: "More for Jules" }).getByRole("menuitem")).toHaveText(["Take out of voice in #general", "Block Jules"]);
+    await expect(page.getByRole("menu", { name: "More for Jules" }).getByRole("menuitem")).toHaveText(["Take out of voice in #general", "Make Jules a co-host", "Block Jules"]);
     await page.getByRole("menuitem", { name: "Take out of voice in #general" }).click();
     await expect.poll(async () => did(page)).toContain("takeout r-general u-jules");
     await expect(card(page, "Jules")).toContainText("Jules is out of voice. They can join again.");
+  });
+});
+
+test.describe("co-host (#424)", () => {
+  test("the host makes somebody a co-host from their card, the card says so, and it turns back", async ({ page }) => {
+    await inGeneral(page, "?one");
+    await openCard(page, "Jules");
+    await expect(card(page, "Jules")).not.toContainText("co-host");
+    await more(page, "Jules").click();
+    await page.getByRole("menuitem", { name: "Make Jules a co-host" }).click();
+    await expect.poll(async () => did(page)).toContain("cohost u-jules on");
+    // One quiet word on the card, nothing more.
+    await expect(card(page, "Jules").locator(".nx-person-cohost")).toHaveText("· co-host");
+
+    await more(page, "Jules").click();
+    await page.getByRole("menuitem", { name: "Jules stops being a co-host" }).click();
+    await expect.poll(async () => did(page)).toContain("cohost u-jules off");
+    await expect(card(page, "Jules")).not.toContainText("co-host");
+  });
+
+  test("a co-host can't name co-hosts, and can take somebody out of voice", async ({ page }) => {
+    // Jules is in #general's voice this evening.
+    await inGeneral(page, "?one&cohost");
+    await openCard(page, "Jules");
+    await more(page, "Jules").click();
+    await expect(page.getByRole("menu", { name: "More for Jules" }).getByRole("menuitem")).toHaveText(["Take out of voice in #general", "Report Jules…", "Block Jules"]);
+    await page.getByRole("menuitem", { name: "Take out of voice in #general" }).click();
+    await expect.poll(async () => did(page)).toContain("takeout r-general u-jules");
+    expect((await did(page)).some((line) => line.startsWith("cohost "))).toBe(false);
+  });
+
+  test("a co-host is told of reports by the same lit row as the host", async ({ page }) => {
+    await page.setViewportSize({ width: 340, height: 820 });
+    await page.goto("/tests/fixtures/next-list-window.html?one&cohost&reports");
+    await expect(page.getByRole("button", { name: /A report to look at/ })).toBeVisible();
+  });
+
+  test("with co-hosts, a report says it goes to them too", async ({ page }) => {
+    await inGeneral(page, "?one&guest&cohosts");
+    await openCard(page, "Jules");
+    await more(page, "Jules").click();
+    await page.getByRole("menuitem", { name: "Report Jules…" }).click();
+    const form = page.getByRole("form", { name: "Report Jules" });
+    await expect(form).toContainText("It goes to Eli and the co-hosts, and to nobody else. Jules isn't told.");
+    await form.getByRole("button", { name: "Send the report" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Sent to Eli" })).toHaveText("Sent to Eli and the co-hosts. Only they see it.Done");
+  });
+
+  test("a co-host's Settings has Hosting and the reports, and not the server's version", async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.goto("/tests/fixtures/next-settings-window.html?section=people&reports&cohost");
+    const reports = page.getByRole("list", { name: "Reports" });
+    await expect(reports.getByRole("listitem")).toContainText("From Eli, about a message by Jules in #general");
+    await expect(page.getByRole("tablist", { name: "Settings sections" }).getByRole("tab", { name: "Rooms" })).toBeVisible();
+    await expect(page.getByRole("tabpanel")).toContainText("You, a co-host");
+
+    await page.getByRole("tablist", { name: "Settings sections" }).getByRole("tab", { name: "Server" }).click();
+    await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Server");
+    await expect(page.getByRole("region", { name: "Version" })).toHaveCount(0);
+    expect((await did(page)).filter((line) => line.startsWith("GET /health"))).toEqual([]);
   });
 });
 

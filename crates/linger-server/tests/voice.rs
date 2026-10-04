@@ -726,3 +726,65 @@ async fn only_the_host_takes_people_out_and_only_where_they_can_see() {
     );
     drain(&mut c, SETTLE).await;
 }
+
+#[tokio::test]
+async fn a_cohost_takes_people_out_but_never_the_host() {
+    let (server, host, room) = common::voice_server_with_room("garage").await;
+    let callie = common::join_member(&server, &host.access_token, "callie").await;
+    let dave = common::join_member(&server, &host.access_token, "dave").await;
+    let room_id = room.id.to_string();
+    // Callie is made a co-host (#424).
+    let made = reqwest::Client::new()
+        .put(server.url(&format!("/users/{}/cohost", callie.user.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(made.status(), reqwest::StatusCode::OK);
+
+    let (mut a, a_id) = connect(&server, &host.access_token).await;
+    let (mut c, _c_id) = connect(&server, &callie.access_token).await;
+    let (mut d, _d_id) = connect(&server, &dave.access_token).await;
+    join_voice(&mut a, &room_id).await;
+    join_voice(&mut c, &room_id).await;
+    join_voice(&mut d, &room_id).await;
+    tokio::time::sleep(SETTLE).await;
+    drain(&mut a, SETTLE).await;
+    drain(&mut d, SETTLE).await;
+
+    // Not the host: the host stays in.
+    let refused = take_out(
+        &server,
+        &callie.access_token,
+        &room_id,
+        &host.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(refused, reqwest::StatusCode::FORBIDDEN);
+    let hosts = drain(&mut a, SETTLE).await;
+    assert!(
+        hosts.iter().all(|f| f["op"] != "voice.removed"),
+        "the host was taken out: {hosts:?}"
+    );
+
+    // Anybody else, yes.
+    let status = take_out(
+        &server,
+        &callie.access_token,
+        &room_id,
+        &dave.user.id.to_string(),
+    )
+    .await;
+    assert_eq!(status, reqwest::StatusCode::NO_CONTENT);
+    tokio::time::sleep(SETTLE).await;
+    let his = drain(&mut d, SETTLE).await;
+    assert!(
+        his.iter().any(|f| f["op"] == "voice.removed"),
+        "he is told he was taken out: {his:?}"
+    );
+    let room_sees = drain(&mut a, SETTLE).await;
+    let left = peer_sessions(voice_state(&room_sees, &room_id).expect("the room is told"));
+    assert!(left.contains(&a_id), "the host is still in: {left:?}");
+    assert_eq!(left.len(), 2, "only Dave left: {left:?}");
+    drain(&mut c, SETTLE).await;
+}

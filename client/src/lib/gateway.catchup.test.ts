@@ -41,6 +41,7 @@ function person(id: string, name: string, displayName = name): User {
     username: name,
     display_name: displayName,
     is_host: false,
+    is_cohost: false,
     style: {
       font_key: "inter",
       weight: 400,

@@ -23,6 +23,7 @@ function person(id: string, name: string, extra: Partial<User> = {}): User {
     username: name.toLowerCase(),
     display_name: name,
     is_host: false,
+    is_cohost: false,
     style: {
       font_key: "inter",
       weight: 400,

@@ -21,6 +21,8 @@ export interface ReportFormProps {
   excerpt?: string;
   /** Who the report goes to: the host's name. */
   host: string;
+  /** It goes to co-hosts as well as the host (#424), so it says so. */
+  cohosts?: boolean;
   /** Send it with the note, or none. */
   onSend: Ask<string | null>;
   /** Back to what opened it, unsent or sent. */
@@ -29,10 +31,13 @@ export interface ReportFormProps {
 
 /**
  * Report a message or a person to the host, with a note if you like. It says
- * where it goes before it goes: to the host and nobody else, and the person
- * isn't told. Once sent, it says so in the same place.
+ * where it goes before it goes: to the host, and the co-hosts if there are
+ * any (#424), and nobody else, and the person isn't told. Once sent, it says
+ * so in the same place.
  */
-export function ReportForm({ who, excerpt, host, onSend, onDone }: ReportFormProps) {
+export function ReportForm({ who, excerpt, host, cohosts = false, onSend, onDone }: ReportFormProps) {
+  // Who it goes to, said the same way in each place it's said.
+  const to = cohosts ? `${host} and the co-hosts` : host;
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -48,9 +53,7 @@ export function ReportForm({ who, excerpt, host, onSend, onDone }: ReportFormPro
       <div ref={box} className="nx-report" role="status">
         <p className="nx-report-sent">
           <Icon name="check" size="sm" />
-          <span>
-            Sent to {host}. Only {host} sees it.
-          </span>
+          <span>{cohosts ? `Sent to ${to}. Only they see it.` : `Sent to ${host}. Only ${host} sees it.`}</span>
         </p>
         <div className="nx-report-buttons">
           <Button variant="secondary" size="md" onClick={onDone}>
@@ -76,10 +79,11 @@ export function ReportForm({ who, excerpt, host, onSend, onDone }: ReportFormPro
     <form className="nx-report" aria-label={excerpt === undefined ? `Report ${who}` : `Report ${who}'s message`} onSubmit={(event) => void submit(event)}>
       <h3 className="nx-report-title">{excerpt === undefined ? `Report ${who}` : `Report ${who}'s message`}</h3>
       <p className="nx-report-lead">
-        It goes to {host}, who hosts this server, and to nobody else. {who} isn't told.
+        {cohosts ? `It goes to ${to}, and to nobody else.` : `It goes to ${host}, who hosts this server, and to nobody else.`}{" "}
+        {who} isn't told.
       </p>
       {excerpt === undefined ? null : <p className="nx-report-quote">{excerpt.trim() === "" ? "A file" : excerpt}</p>}
-      <TextField label={`A note for ${host}, if you like`} value={note} onChange={setNote} placeholder="What's going on?" autoFocus />
+      <TextField label={cohosts ? "A note for them, if you like" : `A note for ${host}, if you like`} value={note} onChange={setNote} placeholder="What's going on?" autoFocus />
       {problem ? (
         <p className="nx-report-problem" role="alert">
           {problem}
@@ -90,7 +94,7 @@ export function ReportForm({ who, excerpt, host, onSend, onDone }: ReportFormPro
           Cancel
         </Button>
         <Button variant="primary" size="md" type="submit" busy={busy}>
-          Send to {host}
+          {cohosts ? "Send the report" : `Send to ${host}`}
         </Button>
       </div>
     </form>

@@ -42,7 +42,7 @@ export interface MessageActions {
    * and sending it, which says null or what went wrong. Left out where
    * there's nobody to report to, as for the host.
    */
-  report?: { host: string; send: (message: Message, note: string | null) => Promise<string | null> };
+  report?: { host: string; cohosts?: boolean; send: (message: Message, note: string | null) => Promise<string | null> };
 }
 
 /**
@@ -78,7 +78,7 @@ export const MessageRow = memo(function MessageRow({
   quoted: Message | undefined;
   quotedAuthor: User | undefined;
   me: User | null;
-  /** You may delete it: it's yours, or you are the host. */
+  /** You may delete it: it's yours, or you are the host or a co-host and it isn't the host's (#424). */
   canDelete: boolean;
   now: number;
   editing: boolean;
@@ -352,6 +352,7 @@ export const MessageRow = memo(function MessageRow({
             who={who}
             excerpt={message.body}
             host={actions.report.host}
+            cohosts={actions.report.cohosts}
             onSend={(note) => actions.report?.send(message, note) ?? Promise.resolve("Reporting isn't available here.")}
             onDone={() => {
               setReporting(null);

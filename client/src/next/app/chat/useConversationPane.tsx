@@ -35,7 +35,7 @@ import { type MentionPerson, mentionable as mentionableIn } from "../../core/cha
 import { clipboardImageReader } from "../../core/chat/paste";
 import { voiceStrip } from "../../core/chat/voice";
 import { knockOfflineLine, knockOn } from "../../core/knock";
-import { cardSafety, hostName, said } from "../../core/safety";
+import { cardSafety, hostName, reportsReachCohosts, said } from "../../core/safety";
 import { personRow } from "../../core/list";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { keyOf, type TabKey } from "../../core/tabs";
@@ -325,16 +325,19 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   }, []);
   // Report to the host (T-1605): nobody to send one to when you're the host.
   const host = state ? hostName(state) : null;
+  // It reaches co-hosts too, when there are any (#424).
+  const cohosts = state ? reportsReachCohosts(state) : false;
   const report = useMemo(
     () =>
       api && host !== null
         ? {
             host,
+            cohosts,
             send: (message: Message, note: string | null) =>
               said(sendReport(api, note === null ? { message_id: message.id } : { message_id: message.id, note }), "Couldn't send the report."),
           }
         : undefined,
-    [api, host],
+    [api, host, cohosts],
   );
   const actions = useMemo(
     () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report }),

@@ -81,6 +81,7 @@ function person(id: string, name: string, personStyle: Style, extra: Partial<Use
     username: name.toLowerCase(),
     display_name: name,
     is_host: false,
+    is_cohost: false,
     style: personStyle,
     status: null,
     entrance_sound: null,
@@ -92,6 +93,7 @@ function person(id: string, name: string, personStyle: Style, extra: Partial<Use
 export const people = {
   matt: person("u-matt", "Matt", style("geist-sans", 700, { kind: "solid", color: "azure" }), {
     is_host: true,
+    is_cohost: false,
     status: status("fixing the porch light (the real one)", { working_on: "a design for this app" }),
   }),
   eli: person("u-eli", "Eli", style("space-grotesk", 700, { kind: "solid", color: "amber" }), {

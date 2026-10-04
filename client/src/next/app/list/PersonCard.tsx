@@ -136,7 +136,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
     return (
       <Popover label={`Report ${user.display_name}`} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
         <div className="nx-person" ref={first}>
-          <ReportForm who={user.display_name} host={safety.host} onSend={safety.report} onDone={back} />
+          <ReportForm who={user.display_name} host={safety.host} cohosts={safety.cohosts} onSend={safety.report} onDone={back} />
         </div>
       </Popover>
     );
@@ -151,10 +151,11 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
     );
   }
   const takeOut = safety?.takeOut;
+  const cohost = safety?.cohost;
   const items: MenuItem[] = safety
     ? [
-        // The host taking somebody out of voice (#423): for everybody, and
-        // they can join again.
+        // The host or a co-host taking somebody out of voice (#423, #424):
+        // for everybody, and they can join again.
         ...(takeOut === undefined
           ? []
           : [
@@ -168,6 +169,22 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
                 },
               },
             ]),
+        // The host names co-hosts here, and only here (#424). Turning it on
+        // or off happens at once; the card's "co-host" says where it stands.
+        ...(cohost
+          ? [
+              {
+                id: "cohost",
+                label: cohost.on ? `${user.display_name} stops being a co-host` : `Make ${user.display_name} a co-host`,
+                icon: "key" as const,
+                onSelect: () => {
+                  setMenu(null);
+                  setProblem(null);
+                  void cohost.set(!cohost.on).then(setProblem);
+                },
+              },
+            ]
+          : []),
         ...(safety.host === null
           ? []
           : [
@@ -213,6 +230,8 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
           <span className="nx-person-where">
             <Marker {...markerFor(user, state)} size="sm" label={MARKER_WORDS[markerStateOf(state)]} />
             <span className="nx-person-note">{note}</span>
+            {/* A co-host, said quietly in the same faint line (#424): a word, never a badge. */}
+            {user.is_cohost === true ? <span className="nx-person-cohost">· co-host</span> : null}
           </span>
         </div>
         {words ? (

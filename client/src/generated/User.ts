@@ -3,7 +3,14 @@ import type { Style } from "./Style";
 import type { UserId } from "./UserId";
 import type { UserStatus } from "./UserStatus";
 
-export type User = { id: UserId, username: string, display_name: string, is_host: boolean, style: Style, status: UserStatus | null, 
+export type User = { id: UserId, username: string, display_name: string, is_host: boolean, 
+/**
+ * A co-host the host named (#424, PROTOCOL §5): everything the host can
+ * do in the app except make or clear co-hosts and act on the host.
+ * Never true for the host. A server from before co-hosts leaves it out,
+ * which reads as false.
+ */
+is_cohost: boolean, style: Style, status: UserStatus | null, 
 /**
  * Bundled sound key, or object key for a custom upload.
  */

@@ -40,6 +40,7 @@ room, and a status are.
 | A text channel | **a room** | channel |
 | Being present in a room | **in the room** | sitting in, joined, connected |
 | The person running it | **the host** | admin, owner |
+| Somebody the host gave their powers in the app | **a co-host** | admin, moderator, mod |
 | Media/link archive | **media** | the shelf, gallery |
 | A user's status card | **their status** | their sign, bio, about me |
 
@@ -708,10 +709,10 @@ short-lived password for it at the moment they join. A host who runs no relay ha
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's
-microphone on. The one exception is the host, who can **take somebody out of voice**
-(Matt, 2026-10-04, #423): somebody who walked away with their microphone on leaves the
-call as if they'd pressed Leave, their app says the host took them out, and they can
-join again. It's not a mute, and not a ban. Mute stops your outgoing voice. Deafen stops all incoming voice
+microphone on. The one exception is the host, or a co-host (§4.16), who can **take
+somebody out of voice** (Matt, 2026-10-04, #423): somebody who walked away with their
+microphone on leaves the call as if they'd pressed Leave, their app says they were taken
+out, and they can join again. It's not a mute, and not a ban. Mute stops your outgoing voice. Deafen stops all incoming voice
 and mutes your microphone together. Undeafening restores your previous mic
 choice; with push-to-talk it stays closed until you press the key again.
 Deafen does not change per-person volume or notification preferences. Its
@@ -795,8 +796,9 @@ one and keeps them signed in, because every release is signed with the same key.
 The iPhone has nothing yet (Android first, Apple after).
 
 **Report and block come before any store listing** (T-1605). Both stores require them
-in apps where people post things. A report goes to the host, because there is nobody
-else to send it to, and the host can already delete a message or remove a member.
+in apps where people post things. A report goes to the host and any co-hosts (§4.16),
+because there is nobody else to send it to, and they can already delete a message or
+remove a member.
 Blocking someone hides them from you. Both go in the desktop app too: the server side
 is shared, and a host reads reports in whichever app they use. Among friends who trust
 each other they should be rare, so they take the least room that does the job (Matt,
@@ -804,7 +806,8 @@ each other they should be rare, so they take the least room that does the job (M
 card, and the host sees who sent it. Blocking is private and isn't told to the person
 blocked; each of their messages becomes one grey line you can open, their DMs never
 light up or chime, their knocks never arrive, and nothing of theirs shows in Media or
-Search. The host learns of a report from one quiet row in the list, never a count.
+Search. The host and any co-hosts learn of a report from one quiet row in the list,
+never a count.
 PROTOCOL §5 has the details.
 
 **Voice messages, yes** (#401): a clip recorded on the phone is the same kind of file
@@ -817,6 +820,28 @@ because a phone on speaker needs echo cancelling, which the desktop app does not
 have, and phone voice elsewhere is rarely pleasant for anyone. It comes back only if
 the people using the phone app ask for it. Ringing a closed phone into a voice room
 would need push, so that stays out either way (§4.14).
+
+### 4.16 A co-host
+
+**One switch the host can give somebody, for when they're away** (Matt, 2026-10-04,
+#424). Without it, a host on holiday leaves nobody who can handle a report, take
+somebody out of voice or remove somebody who shouldn't be there.
+
+- **Only the host turns it on or off**, from the person's card: "Make Dex a co-host",
+  and "Dex stops being a co-host". Never on the host, never on yourself.
+- **A co-host can do everything the host does in the app:** rooms, the server's name
+  and color, invites, reports, removing and restoring members, deleting messages and
+  taking somebody out of voice. They see the same Hosting sections in Settings.
+- **Except two things:** a co-host can't make or clear co-hosts, and can't act on the
+  host (remove them, take them out of voice, delete their messages or revoke their
+  invites).
+- **Reports go to the host and every co-host.**
+- **The server machine stays with whoever runs it.** Updating it, and the version it
+  runs, are not the app's, so a co-host doesn't see the version line.
+- **It shows quietly**: one word, "co-host", on their card. No badge, no color.
+
+This is not roles. The anti-goal "a role/permission matrix" (§2) still stands: no
+other levels, no per-power switches. `docs/decisions.md` has why.
 
 ---
 
@@ -931,7 +956,7 @@ first two are the system defaults.
 | # | Feature | Spec |
 |---|---|---|
 | 1 | Self-hosted server: single binary + Docker image | ARCHITECTURE |
-| 2 | Invite-link registration; host/member roles only | §2 |
+| 2 | Invite-link registration; the host and members only, and since #424 a co-host the host names | §2, §4.16 |
 | 3 | Rooms with occupancy and in-room presence | §4.1 |
 | 4 | Entrance sounds | §4.1 |
 | 5 | Text: markdown, edit, delete, reply | §4.7 |

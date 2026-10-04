@@ -199,6 +199,12 @@ pub struct User {
     pub username: String,
     pub display_name: String,
     pub is_host: bool,
+    /// A co-host the host named (#424, PROTOCOL §5): everything the host can
+    /// do in the app except make or clear co-hosts and act on the host.
+    /// Never true for the host. A server from before co-hosts leaves it out,
+    /// which reads as false.
+    #[serde(default)]
+    pub is_cohost: bool,
     pub style: Style,
     pub status: Option<UserStatus>,
     /// Bundled sound key, or object key for a custom upload.

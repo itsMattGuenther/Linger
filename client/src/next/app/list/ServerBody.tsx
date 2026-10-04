@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { CardSafety } from "../../core/safety";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
+import { hostsHere } from "../../../lib/host";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
 import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
@@ -80,7 +81,8 @@ export function ServerBody({
   // Offline and the quiet rooms past eight start folded (the design,
   // decision 22); everything else starts open.
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline", "more"]));
-  const host = model.me?.user.is_host === true;
+  // The host or a co-host (#424): the ways from an empty place to Hosting.
+  const host = hostsHere(model.me?.user);
   const toggle = (fold: Fold) =>
     setFolded((current) => {
       const next = new Set(current);

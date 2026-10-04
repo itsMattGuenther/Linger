@@ -71,7 +71,7 @@ export const VoiceStrip = memo(function VoiceStrip({
    */
   failed?: StripProblem;
   /**
-   * The host took you out of voice here (#423): said where the strip's words
+   * The host or a co-host took you out of voice here (#423, #424): said where the strip's words
    * go, until you join again. Join stays, since it isn't a ban.
    */
   takenOut?: boolean;
@@ -80,7 +80,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   const takenOutWords =
     takenOut && strip.kind !== "mine" && !showFailed ? (
       <p className="nx-strip-words" role="status">
-        The host took you out of voice.
+        You were taken out of voice.
       </p>
     ) : null;
   const [why, setWhy] = useState<DOMRect | null>(null);

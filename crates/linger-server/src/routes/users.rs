@@ -2,13 +2,13 @@
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, patch, post};
+use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
 use linger_core::wire::{ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User};
 use linger_core::UserId;
 
-use crate::auth::{self, AuthedUser, HostUser};
+use crate::auth::{self, AuthedUser, HostOrCohost, HostUser, Standing};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/{id}", get(get_user))
         .route("/users/{id}/remove", post(remove_user))
         .route("/users/{id}/restore", post(restore_user))
+        .route("/users/{id}/cohost", put(make_cohost).delete(clear_cohost))
         .route("/me", get(me).patch(patch_me))
         .route("/me/password", patch(change_password))
         .route(
@@ -49,11 +50,12 @@ async fn get_user(
     repo::users::expect(&state.db.read, id).await.map(Json)
 }
 
-/// The host's list of everybody they have removed. Restore is useless if the
-/// people you could restore are not written down anywhere (T-413).
+/// The list of everybody who has been removed, for the host and the
+/// co-hosts. Restore is useless if the people you could restore are not
+/// written down anywhere (T-413).
 async fn list_removed(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
 ) -> Result<Json<Vec<User>>, ApiError> {
     repo::users::removed(&state.db.read).await.map(Json)
 }
@@ -68,28 +70,40 @@ async fn list_removed(
 ///
 /// Their messages are untouched. Removing a person is not deleting what they
 /// wrote (SPEC principle 3).
+///
+/// The host or a co-host may remove anybody but themselves, and a co-host
+/// may not remove the host (#424). Removing a co-host ends their being one:
+/// a restore brings them back as a member, and only the host can make them a
+/// co-host again. That gives a co-host no new power over another, since
+/// removing somebody already does more than that.
 async fn remove_user(
     State(state): State<AppState>,
-    host: HostUser,
+    host: HostOrCohost,
     Path(id): Path<UserId>,
 ) -> Result<StatusCode, ApiError> {
-    // `is_host` is a boolean nobody can hand on (TASKS, *Decided — the host's
-    // side*), so a host who removed themselves would leave a server no one
-    // could ever add a room to again.
+    // `is_host` is a boolean nobody can hand on (`docs/decisions.md`, *the
+    // host's side*), so a host who removed themselves would leave a server no
+    // one could ever add a room to again.
     if id == host.id {
-        return Err(ApiError::forbidden(
-            "You can't remove yourself from your own server.",
-        ));
+        return Err(ApiError::forbidden(if host.standing == Standing::Host {
+            "You can't remove yourself from your own server."
+        } else {
+            "You can't remove yourself."
+        }));
     }
+    host.not_on_the_host(&state.db.read, id, "A co-host can't remove the host.")
+        .await?;
     expect_account(&state, id).await?;
 
     let now = now_ms();
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
-    sqlx::query("UPDATE users SET deactivated_at = ? WHERE id = ? AND deactivated_at IS NULL")
-        .bind(now)
-        .bind(id.to_vec())
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET deactivated_at = ?, is_cohost = 0 WHERE id = ? AND deactivated_at IS NULL",
+    )
+    .bind(now)
+    .bind(id.to_vec())
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
     )
@@ -124,7 +138,7 @@ async fn remove_user(
 /// stay dead, so they come back through the front door with their password.
 async fn restore_user(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Path(id): Path<UserId>,
 ) -> Result<StatusCode, ApiError> {
     expect_account(&state, id).await?;
@@ -142,6 +156,58 @@ async fn restore_user(
     let user = repo::users::expect(&state.db.read, id).await?;
     state.gateway.publish(ServerEvent::UserUpdate(user));
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `PUT /users/:id/cohost` — the host makes somebody a co-host (#424).
+async fn make_cohost(
+    State(state): State<AppState>,
+    host: HostUser,
+    Path(id): Path<UserId>,
+) -> Result<Json<User>, ApiError> {
+    set_cohost(&state, host, id, true).await.map(Json)
+}
+
+/// `DELETE /users/:id/cohost` — they stop being a co-host.
+async fn clear_cohost(
+    State(state): State<AppState>,
+    host: HostUser,
+    Path(id): Path<UserId>,
+) -> Result<Json<User>, ApiError> {
+    set_cohost(&state, host, id, false).await.map(Json)
+}
+
+/// The one switch (#424): only the host turns it on or off, never on
+/// themselves, and only for somebody on the server now. Setting it to what it
+/// already is changes nothing and answers the same.
+///
+/// Everybody hears the person as they are now, in `user.update`: that is how
+/// their own app learns to show them the host's controls, or stop, and how
+/// everybody else's card says "co-host". The reports reach them from the
+/// next `reports.changed`, which asks the database who to tell
+/// (`routes/reports.rs`).
+async fn set_cohost(
+    state: &AppState,
+    host: HostUser,
+    id: UserId,
+    on: bool,
+) -> Result<User, ApiError> {
+    if id == host.id {
+        return Err(ApiError::validation(
+            "You're the host. A co-host is somebody else.",
+        ));
+    }
+    // Members only: somebody removed is not found, as everywhere else.
+    repo::users::expect(&state.db.read, id).await?;
+    sqlx::query(
+        "UPDATE users SET is_cohost = ? WHERE id = ? AND is_host = 0 AND deactivated_at IS NULL",
+    )
+    .bind(i64::from(on))
+    .bind(id.to_vec())
+    .execute(&state.db.write)
+    .await?;
+    let user = repo::users::expect(&state.db.read, id).await?;
+    state.gateway.publish(ServerEvent::UserUpdate(user.clone()));
+    Ok(user)
 }
 
 /// An account row, removed or not. `repo::users` only ever sees active members,
