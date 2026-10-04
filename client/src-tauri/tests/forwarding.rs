@@ -503,12 +503,53 @@ fn last(recorder: &Recorder) -> f64 {
     rms(heard(recorder, A).last().expect("something from A"))
 }
 
-/// Mute sends silence, not nothing, through the server: the frames keep
-/// coming, quiet, and unmuting brings the tone back on the same connection.
-/// Deafen sends silence too. B's engine marks A talking, then quiet when A
+/// Route until nothing new from A has come for 600 ms, and say what did come
+/// meanwhile. Silence isn't sent (#197): a mute, a deafen or a key let go
+/// ends in a few quiet frames as Opus eases out, then nothing at all.
+async fn goes_quiet(
+    gateway: &mut Gateway,
+    rigs: &mut [Routed<'_>],
+    recorder: &Recorder,
+) -> Vec<Vec<i16>> {
+    let from = heard(recorder, A).len();
+    let mut count = from;
+    let mut still = std::time::Instant::now();
+    for _ in 0..800 {
+        gateway.route(rigs).await;
+        let now = heard(recorder, A).len();
+        if now != count {
+            count = now;
+            still = std::time::Instant::now();
+        } else if still.elapsed() >= Duration::from_millis(600) {
+            return heard(recorder, A).split_off(from);
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!("A never stopped sending");
+}
+
+/// Few frames, the last of them quiet: Opus easing out, and then nothing.
+fn eased_out(tail: &[Vec<i16>], what: &str) {
+    assert!(
+        tail.len() <= 30,
+        "{what} kept sending: {} frames",
+        tail.len()
+    );
+    if let Some(final_frame) = tail.last() {
+        assert!(
+            rms(final_frame) < 200.0,
+            "{what} ended loud: rms {}",
+            rms(final_frame)
+        );
+    }
+}
+
+/// Mute sends nothing through the server, once Opus has eased out (#197:
+/// silence isn't sent), and unmuting brings the tone back on the same
+/// connection. Deafen too. B's engine marks A talking, then quiet when A
 /// mutes, then talking again; and B, which sent only silence, never talks.
 #[tokio::test(flavor = "multi_thread")]
-async fn muting_sends_silence_through_the_server_and_the_mark_follows() {
+async fn muting_stops_sending_through_the_server_and_the_mark_follows() {
     let room = RoomId::new();
     let mut gateway = Gateway::start(room);
     let (a, mut a_rx, _) = engine(A).await;
@@ -539,21 +580,16 @@ async fn muting_sends_silence_through_the_server_and_the_mark_follows() {
     );
     assert!(last(&recorder) > 2000.0, "not the tone");
 
-    // Mute: the frames keep arriving and they are quiet.
+    // Mute: a few quiet frames as Opus eases out, then nothing.
     a.set_controls(VoiceControls {
         muted: true,
         deafened: false,
     })
     .await;
     assert!(a.is_muted());
-    assert!(
-        hear(&mut gateway, &mut rigs, &recorder, 25).await,
-        "muting stopped the frames"
-    );
-    assert!(
-        last(&recorder) < 200.0,
-        "mute is not silence: rms {}",
-        last(&recorder)
+    eased_out(
+        &goes_quiet(&mut gateway, &mut rigs, &recorder).await,
+        "mute",
     );
 
     // Unmute: the tone is back on the same connection.
@@ -568,14 +604,16 @@ async fn muting_sends_silence_through_the_server_and_the_mark_follows() {
         last(&recorder)
     );
 
-    // Deafen also sends silence, even with the microphone asked to be on.
+    // Deafen also stops sending, even with the microphone asked to be on.
     a.set_controls(VoiceControls {
         muted: false,
         deafened: true,
     })
     .await;
-    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
-    assert!(last(&recorder) < 200.0);
+    eased_out(
+        &goes_quiet(&mut gateway, &mut rigs, &recorder).await,
+        "deafen",
+    );
     a.set_controls(VoiceControls::default()).await;
     assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
     assert!(last(&recorder) > 2000.0);
@@ -593,13 +631,14 @@ async fn muting_sends_silence_through_the_server_and_the_mark_follows() {
     b.leave().await;
 }
 
-/// Push-to-talk (#232), through the server: with the key up, what goes out
-/// is silence from the very first frame, and A is never marked talking; held,
-/// the tone goes out and A lights up, for A and for B; let go, silence again.
-/// None of it is a mute: A's only report to the room is the join, saying the
+/// Push-to-talk (#232), through the server: with the key up, nothing loud
+/// goes out from the very first frame, then nothing at all (#197: silence
+/// isn't sent), and A is never marked talking; held, the tone goes out and A
+/// lights up, for A and for B; let go, quiet and then nothing again. None of
+/// it is a mute: A's only report to the room is the join, saying the
 /// microphone is on.
 #[tokio::test(flavor = "multi_thread")]
-async fn push_to_talk_sends_silence_through_the_server_until_the_key_is_held() {
+async fn push_to_talk_sends_nothing_through_the_server_until_the_key_is_held() {
     let room = RoomId::new();
     let mut gateway = Gateway::start(room);
     let (a, mut a_rx, a_log) = engine(A).await;
@@ -627,15 +666,10 @@ async fn push_to_talk_sends_silence_through_the_server_until_the_key_is_held() {
     .await;
     let mut rigs = [(A, &a, &mut a_rx), (B, &b, &mut b_rx)];
 
-    // Key up: B hears A's frames, and every one of them is quiet.
-    assert!(
-        hear(&mut gateway, &mut rigs, &recorder, 25).await,
-        "B never heard A"
-    );
-    let loudest = heard(&recorder, A)
-        .iter()
-        .map(|frame| rms(frame))
-        .fold(0.0, f64::max);
+    // Key up: at most a few quiet frames reach B, then nothing.
+    let key_up = goes_quiet(&mut gateway, &mut rigs, &recorder).await;
+    eased_out(&key_up, "the key up");
+    let loudest = key_up.iter().map(|frame| rms(frame)).fold(0.0, f64::max);
     assert!(
         loudest < 200.0,
         "the tone went out before the key was held: rms {loudest}"
@@ -653,12 +687,11 @@ async fn push_to_talk_sends_silence_through_the_server_until_the_key_is_held() {
         "holding the key didn't open the microphone"
     );
 
-    // Let go: quiet again.
+    // Let go: quiet, then nothing again.
     a.set_push_to_talk_closed(true);
-    assert!(hear(&mut gateway, &mut rigs, &recorder, 25).await);
-    assert!(
-        last(&recorder) < 200.0,
-        "letting go didn't close the microphone"
+    eased_out(
+        &goes_quiet(&mut gateway, &mut rigs, &recorder).await,
+        "letting go",
     );
 
     assert_eq!(a_log.talking(None), vec![true, false]);
