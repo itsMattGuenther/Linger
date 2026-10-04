@@ -7,6 +7,10 @@ import { expect, type Page, test } from "@playwright/test";
 // a fake microphone playing a tone. The panel itself, sending, and a voice
 // message in the conversation are next-chat-parity.spec.ts's.
 
+// Chromium only, and skipped before a browser starts: WebKit won't start at
+// all with Chromium's fake-microphone switches below.
+test.skip(({ browserName }) => browserName !== "chromium", "The phone's engine is Chromium, and only it stands in a microphone here.");
+
 test.use({
   viewport: { width: 411, height: 914 },
   permissions: ["microphone"],
@@ -34,8 +38,7 @@ async function inGeneral(page: Page) {
 
 const panel = (page: Page) => page.getByRole("group", { name: "Voice message for #general" });
 
-test("records from the phone's own microphone, lines moving, and plays back as the same kind of file", async ({ page, browserName }) => {
-  test.skip(browserName !== "chromium", "The phone's engine is Chromium, and only it stands in a microphone here.");
+test("records from the phone's own microphone, lines moving, and plays back as the same kind of file", async ({ page }) => {
   await inGeneral(page);
   await page.getByRole("button", { name: "Record a voice message" }).click();
   await panel(page).getByRole("button", { name: "Record" }).click();
