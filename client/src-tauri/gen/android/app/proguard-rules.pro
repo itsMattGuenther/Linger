@@ -19,3 +19,9 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Sign-ins live in the Android Keystore (src-tauri/src/secrets.rs). Rust
+# registers this native method by its Java name, which the release build's
+# shrinking would otherwise be free to change (T-1604).
+-keep class io.crates.keyring.Keyring { *; }
+-keep class io.crates.keyring.Keyring$Companion { *; }
