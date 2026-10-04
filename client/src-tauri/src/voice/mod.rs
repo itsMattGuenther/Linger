@@ -85,6 +85,11 @@ pub trait Watcher: Send + Sync + 'static {
     /// mic is live in the same way it shows everybody else. Fired on change
     /// only (see `level::Gate`), so a quiet room sends nothing.
     fn speaking(&self, _peer: Option<&str>, _speaking: bool) {}
+
+    /// The microphone picked by name wouldn't open, so the default is in its
+    /// place, or (`None`) that's over: another device picked, or the call
+    /// rejoined. Fired on change only (#398).
+    fn microphone_refused(&self, _refused: Option<&audio::Refused>) {}
 }
 
 /// The one connection to the server's voice forwarding (#197). The server
@@ -558,9 +563,17 @@ async fn pump<W: Watcher>(
         }
     };
     let mut gate = level::Gate::default();
+    let mut refused = None;
     let quiet = vec![0i16; audio::FRAME_SAMPLES];
     watcher.audio_state("sending");
     while let Some(frame) = source.frame().await {
+        // Read on every frame, since the device under the source can change
+        // in a call (#249); said only when it does.
+        let now = source.refused();
+        if now != refused {
+            watcher.microphone_refused(now.as_ref());
+            refused = now;
+        }
         let frame = if closed.now() { &quiet } else { &frame };
         if let Some(talking) = gate.update(level::rms(frame), Instant::now()) {
             watcher.speaking(None, talking);

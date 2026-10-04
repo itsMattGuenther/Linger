@@ -78,7 +78,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
     people,
     muted: mine.muted,
     deafened: mine.deafened,
-    line: microphoneLine(mine.audio, waitingForKey(mine), talkKey),
+    line: microphoneLine(mine.audio, waitingForKey(mine), talkKey, mine.refused),
   };
 }
 

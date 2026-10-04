@@ -37,6 +37,7 @@ const state = new URLSearchParams(location.search).has("voice")
         talkHeld: false,
         moved: false,
         audio: "sending" as const,
+        refused: null,
         peers: {},
         speaking: {},
         talking: false,

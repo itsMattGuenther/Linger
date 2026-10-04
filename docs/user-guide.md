@@ -524,7 +524,11 @@ Linger's own sounds (chimes, knocks, the voice and mute sounds) come out of the
 speakers you pick too, in a call and out of one. A change applies at once,
 even in the middle of a call: you carry on talking
 through the new device without leaving. If a device you picked isn't plugged
-in, or won't open, the system default is used and the picker says so.
+in, or won't open, the system default is used so you can still talk. The
+picker marks one that isn't plugged in. If the microphone you picked is
+plugged in but won't open (another program holding on to it, say), the voice
+bar says so, with your computer's reason, for as long as you're on the
+default.
 
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking. Click it for the whole reason, including your computer's

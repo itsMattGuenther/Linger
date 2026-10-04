@@ -1082,6 +1082,16 @@ test.describe("in voice", () => {
     await expect(page.getByRole("region", { name: "In voice in #general" }).getByRole("status")).toHaveCount(0);
   });
 
+  test("says when the microphone picked in Settings wouldn't open, wrapped inside the bar (#398)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice&ptt&refused");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    const line = bar.getByRole("status");
+    // Ahead of the push-to-talk reminder: on the default, the key opens a microphone you didn't pick.
+    await expect(line).toHaveText("Headset Microphone (SteelSeries Arctis Nova 5) wouldn't open, so you're on the system default (the device is in use)");
+    const [lineBox, barBox] = [await line.boundingBox(), await bar.boundingBox()];
+    expect(lineBox && barBox && lineBox.x >= barBox.x && lineBox.x + lineBox.width <= barBox.x + barBox.width + 0.5).toBe(true);
+  });
+
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");
     const scroll = await page.locator(".nx-list-scroll").boundingBox();

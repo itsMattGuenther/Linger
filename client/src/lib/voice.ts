@@ -76,17 +76,38 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
 }
 
 /**
+ * The microphone picked in Settings, when it wouldn't open and the system
+ * default is in its place (#398): its name as picked, and why, in the
+ * system's words. From the desktop shell's `voice:microphone` event.
+ */
+export interface RefusedMicrophone {
+  name: string;
+  why: string;
+}
+
+/**
  * The one line the bar says about your own microphone, or null when there
  * is nothing worth a word. The mute button already says "muted"; this is for
  * the states a button cannot carry. `waitingForKey` is push-to-talk with its
  * key up and nothing else closing the microphone (`waitingForKey` in
  * lib/gateway.ts): the one time holding the key would open it.
+ *
+ * `refused` is the microphone picked in Settings that wouldn't open (#398).
+ * Linger carries on with the system default, which keeps you talking, but on
+ * its own that looks like the microphone you picked not hearing you, so it's
+ * said, ahead of the push-to-talk reminder.
  */
-export function microphoneLine(audio: string, waitingForKey: boolean, talkKey = PUSH_TO_TALK_KEY.toLowerCase()): string | null {
+export function microphoneLine(
+  audio: string,
+  waitingForKey: boolean,
+  talkKey = PUSH_TO_TALK_KEY.toLowerCase(),
+  refused: RefusedMicrophone | null = null,
+): string | null {
   switch (audio) {
     case "opening":
       return "opening the microphone…";
     case "sending":
+      if (refused !== null) return `${refused.name} wouldn't open, so you're on the system default (${refused.why})`;
       return waitingForKey ? `hold ${talkKey} to talk` : null;
     case "stopped":
       return "the microphone stopped — leave and join again";

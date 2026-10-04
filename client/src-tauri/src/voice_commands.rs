@@ -87,7 +87,38 @@ impl voice::Watcher for VoiceWatcher {
             },
         );
     }
+
+    fn microphone_refused(&self, refused: Option<&voice::audio::Refused>) {
+        let _ = self.app.emit(
+            VOICE_MICROPHONE_EVENT,
+            VoiceMicrophoneEvent {
+                server: &self.server,
+                refused: refused.map(|refused| RefusedMicrophone {
+                    name: &refused.name,
+                    why: &refused.why,
+                }),
+            },
+        );
+    }
 }
+
+/// The microphone picked in Settings wouldn't open, so the system default is
+/// in its place (#398); `refused` null when that's over.
+#[derive(Clone, Serialize)]
+struct VoiceMicrophoneEvent<'a> {
+    server: &'a str,
+    refused: Option<RefusedMicrophone<'a>>,
+}
+
+/// Which microphone, by the name it was picked by, and why, in the system's words.
+#[derive(Clone, Serialize)]
+struct RefusedMicrophone<'a> {
+    name: &'a str,
+    why: &'a str,
+}
+
+/// The event a picked microphone refusing, or no longer, arrives on.
+pub const VOICE_MICROPHONE_EVENT: &str = "voice:microphone";
 
 /// Somebody started or stopped talking. `peer` is null for you.
 #[derive(Clone, Serialize)]

@@ -60,6 +60,25 @@ pub trait Source: Send + Sync + 'static {
     /// (#249). Frames keep coming from the same source; only the device under
     /// it changes. The stand-ins have no device and ignore it.
     fn choose(&self, _name: Option<&str>) {}
+
+    /// The device picked by name, and why it wouldn't open, while this source
+    /// is the default standing in for it (#398). `None` on the device asked
+    /// for, or when the default was what was asked for. The stand-ins have no
+    /// device, so theirs is always `None`.
+    fn refused(&self) -> Option<Refused> {
+        None
+    }
+}
+
+/// A device picked by name that wouldn't open, so the default is in its
+/// place. Said out loud: on its own it looks like "the microphone I picked
+/// doesn't hear me", when Linger is listening to another one (#398).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refused {
+    /// The device as it was picked, by name.
+    pub name: String,
+    /// Why it wouldn't open, in the system's words.
+    pub why: String,
 }
 
 /// Where the sound coming in goes.

@@ -85,6 +85,8 @@ const state = query.has("voice")
         talkHeld: false,
         moved: false,
         audio: "sending",
+        // `?refused`: the microphone picked in Settings wouldn't open (#398).
+        refused: query.has("refused") ? { name: "Headset Microphone (SteelSeries Arctis Nova 5)", why: "the device is in use" } : null,
         peers: query.has("mics") ? { "s-jules": "failed" } : {},
         speaking: { "s-eli": true },
         talking: false,

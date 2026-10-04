@@ -56,6 +56,7 @@ function seat(extra: Partial<MyVoice> = {}): MyVoice {
     talkHeld: false,
     moved: false,
     audio: "sending",
+    refused: null,
     peers: {},
     speaking: {},
     talking: false,
