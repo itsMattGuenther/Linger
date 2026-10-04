@@ -353,7 +353,6 @@ export const MessageRow = memo(function MessageRow({
             excerpt={message.body}
             host={actions.report.host}
             cohosts={actions.report.cohosts}
-            aboutCohost={author?.is_cohost === true}
             onSend={(note) => actions.report?.send(message, note) ?? Promise.resolve("Reporting isn't available here.")}
             onDone={() => {
               setReporting(null);

@@ -809,9 +809,10 @@ be there. "Stand up a new server" is too big an answer for a week's holiday.
 - **Two exceptions, and only two.** A co-host can't make or clear co-hosts,
   and can't act on the host: remove them, take them out of voice, delete
   their messages or revoke their invites.
-- **Reports go to the host and every co-host.** A report about a co-host
-  reaches that co-host too; the report form says so rather than claiming
-  they aren't told.
+- **Reports go to the host and every co-host, except a report about a
+  co-host, which that co-host never sees or closes.** The person reported
+  isn't told, so they mustn't learn who reported them; the host sees every
+  report, so none goes unread.
 - **Running or updating the server machine** stays with whoever runs it.
   The app has nothing to do with that, so the server's version in Settings
   is the host's alone.

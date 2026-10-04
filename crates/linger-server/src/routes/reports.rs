@@ -18,7 +18,7 @@ use linger_core::wire::{Report, ReportRequest, ReportedMessage};
 use linger_core::{MessageId, ReportId, RoomId, UserId};
 use sqlx::Row;
 
-use crate::auth::{AuthedUser, HostOrCohost};
+use crate::auth::{AuthedUser, HostOrCohost, Standing};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::repo;
@@ -125,15 +125,20 @@ async fn send_report(
 }
 
 /// `GET /reports` — the open reports, newest first, for the host and the
-/// co-hosts.
+/// co-hosts. A co-host never sees a report about themselves (#424): the
+/// person reported isn't told, so they must not learn who reported them, or
+/// close it. The host sees every one, so none goes unread.
 async fn open_reports(
     State(state): State<AppState>,
-    _host: HostOrCohost,
+    host: HostOrCohost,
 ) -> Result<Json<Vec<Report>>, ApiError> {
     let rows = sqlx::query(
         "SELECT id, reporter_id, user_id, message_id, room_id, excerpt, message_at, note, created_at
-         FROM reports WHERE closed_at IS NULL ORDER BY created_at DESC, id DESC",
+         FROM reports WHERE closed_at IS NULL AND (? OR user_id != ?)
+         ORDER BY created_at DESC, id DESC",
     )
+    .bind(host.standing == Standing::Host)
+    .bind(host.id.to_vec())
     .fetch_all(&state.db.read)
     .await?;
     let reports = rows
@@ -167,20 +172,24 @@ async fn open_reports(
 }
 
 /// `DELETE /reports/:id` — the host or a co-host dealt with it. Closing one already closed
-/// changes nothing; one that never existed is not found.
+/// changes nothing; one that never existed is not found, and neither is one
+/// about the co-host asking, which they never see (`open_reports`).
 async fn close_report(
     State(state): State<AppState>,
-    _host: HostOrCohost,
+    host: HostOrCohost,
     Path(id): Path<ReportId>,
 ) -> Result<StatusCode, ApiError> {
-    let exists: Option<(Option<i64>,)> =
-        sqlx::query_as("SELECT closed_at FROM reports WHERE id = ?")
+    let exists: Option<(Option<i64>, Vec<u8>)> =
+        sqlx::query_as("SELECT closed_at, user_id FROM reports WHERE id = ?")
             .bind(id.to_vec())
             .fetch_optional(&state.db.read)
             .await?;
-    let Some((closed_at,)) = exists else {
+    let Some((closed_at, about)) = exists else {
         return Err(ApiError::not_found("No such report."));
     };
+    if host.standing == Standing::Cohost && about == host.id.to_vec() {
+        return Err(ApiError::not_found("No such report."));
+    }
     if closed_at.is_none() {
         sqlx::query("UPDATE reports SET closed_at = ? WHERE id = ? AND closed_at IS NULL")
             .bind(now_ms())

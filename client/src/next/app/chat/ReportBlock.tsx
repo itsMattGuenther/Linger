@@ -23,8 +23,6 @@ export interface ReportFormProps {
   host: string;
   /** It goes to co-hosts as well as the host (#424), so it says so. */
   cohosts?: boolean;
-  /** Whoever it's about is a co-host, so they see it too, and it says so. */
-  aboutCohost?: boolean;
   /** Send it with the note, or none. */
   onSend: Ask<string | null>;
   /** Back to what opened it, unsent or sent. */
@@ -37,7 +35,7 @@ export interface ReportFormProps {
  * any (#424), and nobody else, and the person isn't told. Once sent, it says
  * so in the same place.
  */
-export function ReportForm({ who, excerpt, host, cohosts = false, aboutCohost = false, onSend, onDone }: ReportFormProps) {
+export function ReportForm({ who, excerpt, host, cohosts = false, onSend, onDone }: ReportFormProps) {
   // Who it goes to, said the same way in each place it's said.
   const to = cohosts ? `${host} and the co-hosts` : host;
   const [note, setNote] = useState("");
@@ -82,7 +80,7 @@ export function ReportForm({ who, excerpt, host, cohosts = false, aboutCohost = 
       <h3 className="nx-report-title">{excerpt === undefined ? `Report ${who}` : `Report ${who}'s message`}</h3>
       <p className="nx-report-lead">
         {cohosts ? `It goes to ${to}, and to nobody else.` : `It goes to ${host}, who hosts this server, and to nobody else.`}{" "}
-        {aboutCohost ? `${who} is a co-host, so sees it too.` : `${who} isn't told.`}
+        {who} isn't told.
       </p>
       {excerpt === undefined ? null : <p className="nx-report-quote">{excerpt.trim() === "" ? "A file" : excerpt}</p>}
       <TextField label={cohosts ? "A note for them, if you like" : `A note for ${host}, if you like`} value={note} onChange={setNote} placeholder="What's going on?" autoFocus />

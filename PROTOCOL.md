@@ -527,6 +527,10 @@ Anything else in a DM stays out of their sight. Ten reports an hour per reporter
 `GET /reports` answers the open reports, newest first, to the host and the
 co-hosts; anybody else gets `FORBIDDEN`.
 
+A co-host never sees a report about themselves: their `GET /reports` leaves it out, and
+their `DELETE /reports/:id` on it is 404, as for one that doesn't exist. The person
+reported isn't told, co-host or not. The host sees every report.
+
 ```ts
 type Report = {
   id: string;

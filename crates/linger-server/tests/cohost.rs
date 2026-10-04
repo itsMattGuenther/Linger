@@ -500,3 +500,60 @@ async fn removing_a_cohost_ends_it_and_a_restore_brings_back_a_member() {
         .unwrap();
     assert_eq!(refused.status(), 403);
 }
+
+#[tokio::test]
+async fn a_cohost_never_sees_or_closes_a_report_about_themselves() {
+    let (server, host, _room, cohost, member) = with_a_cohost().await;
+    let sent: serde_json::Value = client()
+        .post(server.url("/reports"))
+        .bearer_auth(&member.access_token)
+        .json(&json!({ "user_id": cohost.user.id, "note": "not great tonight" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let id = sent["id"].as_str().expect("the report's id").to_string();
+
+    let open = |token: String| {
+        let server_url = server.url("/reports");
+        async move {
+            let list: Vec<serde_json::Value> = client()
+                .get(server_url)
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            list.into_iter()
+                .map(|report| report["id"].as_str().unwrap_or_default().to_string())
+                .collect::<Vec<_>>()
+        }
+    };
+    // The host sees it; the co-host it's about doesn't, so they can't learn
+    // who reported them (the person reported isn't told).
+    assert_eq!(open(host.access_token.clone()).await, vec![id.clone()]);
+    assert!(open(cohost.access_token.clone()).await.is_empty());
+
+    // Nor close it: as far as they're concerned, there's no such report.
+    let closed = client()
+        .delete(server.url(&format!("/reports/{id}")))
+        .bearer_auth(&cohost.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(closed.status(), 404);
+    assert_eq!(open(host.access_token.clone()).await, vec![id.clone()]);
+
+    // The host can.
+    let closed = client()
+        .delete(server.url(&format!("/reports/{id}")))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(closed.status(), 204);
+}

@@ -136,7 +136,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
     return (
       <Popover label={`Report ${user.display_name}`} tint={paletteKey(user) ?? undefined} at={at} onClose={onClose}>
         <div className="nx-person" ref={first}>
-          <ReportForm who={user.display_name} host={safety.host} cohosts={safety.cohosts} aboutCohost={user.is_cohost === true} onSend={safety.report} onDone={back} />
+          <ReportForm who={user.display_name} host={safety.host} cohosts={safety.cohosts} onSend={safety.report} onDone={back} />
         </div>
       </Popover>
     );
