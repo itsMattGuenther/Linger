@@ -143,6 +143,42 @@
   font-size: var(--text-meta);
 }
 
+/* A message with no words (only pictures, a file, a voice message or a
+   link's card): its marks sit beside the bottom of what it shows, the way
+   they follow the last line of words. What it shows is as wide as its own
+   content, so the pin stays beside a small picture rather than out at the
+   row's edge; the cards that take their width from the row get theirs back. */
+.nx-msg-tail {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1-5);
+}
+
+.nx-msg-tail-shown {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.nx-msg-tail .nx-linkcard {
+  width: var(--linkcard-w);
+  max-width: 100%;
+}
+
+.nx-msg-tail .nx-att-card[data-kind="audio"] {
+  width: var(--media-max-w);
+  max-width: 100%;
+}
+
+.nx-msg-marks {
+  flex: none;
+  margin: 0;
+  line-height: var(--line-meta);
+}
+
+.nx-msg-marks > :first-child {
+  margin-left: 0;
+}
+
 .nx-msg-problem {
   margin: var(--space-1) 0 0;
   color: var(--text-danger);
