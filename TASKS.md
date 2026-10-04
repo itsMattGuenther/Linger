@@ -26,14 +26,14 @@ default.
 
 ## How to run a task
 
-**0.4.7 release — ✅ published 2026-10-03.** Headsets and voice messages: gaming
-headsets on Windows open in their own format (#398), voice messages recorded
-in the message box (#401, the server takes `audio/webm`; no database change),
-away that's hard to miss (#392), picture previews (#397), the first close to
-the tray says where Linger went (#400), and the reason voice didn't start in
-full (#399); notes in `docs/releases/0.4.7.md`. 0.4.6 (2026-10-02) was
-lighter: 960 px photo copies (#382, a database change), media that loads
-nothing until played (#381), and minimize on Windows (#386).
+**0.4.8 release — ⏳ Matt, 2026-10-04.** The phone app: the first signed
+Android `.apk` on a release (#253, T-1604), with report and block in both apps
+(T-1605, a database change) and voice messages on the phone (#401). Wireless
+headsets heard at last (#398: a glitch no longer restarts the microphone), the
+voice bar says when a picked microphone won't open, being in a room's voice is
+being in the room (#420), the host can take somebody out of voice (#423), and
+pins show beside pictures and links; notes in `docs/releases/0.4.8.md`. 0.4.7
+(2026-10-03) was headsets in their own format and voice messages (#398, #401).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
