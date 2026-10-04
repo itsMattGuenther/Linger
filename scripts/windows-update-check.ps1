@@ -25,14 +25,24 @@ function Get-LingerShortcuts {
 $installerLimitSeconds = 300
 
 function Invoke-Installer([string]$File, [string]$Arguments) {
-    $process = Start-Process $File -ArgumentList $Arguments -PassThru
-    # Held so ExitCode can still be read once the process has gone.
-    $null = $process.Handle
-    if (-not $process.WaitForExit($installerLimitSeconds * 1000)) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    # Start-Process -Wait waits for everything the installer starts as well,
+    # which the checks below need: NSIS's uninstaller hands off to a copy of
+    # itself and exits, and the copy removes the files and shortcuts. Waiting
+    # on the first process alone checked them too early. So the whole wait
+    # runs in a job, and the job gets the limit.
+    $job = Start-ThreadJob -ArgumentList $File, $Arguments -ScriptBlock {
+        param($File, $Arguments)
+        (Start-Process $File -ArgumentList $Arguments -Wait -PassThru).ExitCode
+    }
+    if (-not (Wait-Job $job -Timeout $installerLimitSeconds)) {
+        Remove-Job $job -Force
+        Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($File)) -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
         throw "Installer stuck: $(Split-Path -Leaf $File) $Arguments was still running after $installerLimitSeconds seconds, and was stopped"
     }
-    if ($process.ExitCode -notin @(0, 3010)) { throw "Installer failed: $($process.ExitCode)" }
+    $exitCode = Receive-Job $job -ErrorAction Stop
+    Remove-Job $job
+    if ($exitCode -notin @(0, 3010)) { throw "Installer failed: $exitCode" }
 }
 
 function Install-Package([string]$Kind, [string]$Package, [string]$Log, [switch]$Update) {
