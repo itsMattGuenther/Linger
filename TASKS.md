@@ -575,6 +575,10 @@ macOS runners, or a friend's Mac.
   box's hint wrapped, "Say something in #screenshots and" with a sliver of
   a second line, since Android's engine doesn't cut a text box's hint with a
   "…"; the box now says just "Say something" when the long hint won't fit.
+  **Voice messages record on the phone too** (#401, 2026-10-03), in the page
+  (`app/chat/recorders.ts`), into the same file as the desktop's; Android asks
+  for the microphone the first time Record is pressed. Still to try on the
+  Pixel.
   **Waiting for the iPhone** (Android first): an edge swipe
   for Back, since the iPhone has no Back of its own, and checking that an
   iPhone camera photo uploads as something the server reads (iPhones save
@@ -590,7 +594,9 @@ macOS runners, or a friend's Mac.
 - ⏸ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
   *Waiting (Matt, 2026-10-03):* starts once T-1605 is done and Matt says go.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
-  has worked well there.
+  has worked well there. The listing's privacy answers ("Data safety") must
+  say the app uses the microphone only to record a voice message the person
+  chooses to send.
   Friends first, then the stores. Android: a signed APK on the GitHub release
   (Google requires registered developers even outside its store, worldwide
   from 2027). iPhone: TestFlight, which needs the Apple Developer Program

@@ -467,8 +467,10 @@ Voice**, or your computer's default. If you move to another conversation
 while recording, it stops, and the clip waits in the one you recorded it in.
 
 A voice message shows in the conversation with a microphone, a play button
-and its length, and everyone can play it, whatever they're on. The desktop
-app records them today; the phone app will later.
+and its length, and everyone can play it, whatever they're on, phone or
+computer. On the phone it works the same way. The first time you press
+**Record** there, Android asks whether Linger may use the microphone. It
+uses it for voice messages and nothing else.
 
 ## Talking
 

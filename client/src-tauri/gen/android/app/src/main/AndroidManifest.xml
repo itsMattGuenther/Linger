@@ -8,6 +8,13 @@
     <!-- A chime with the phone on vibrate buzzes instead (lib/sound.ts,
          src-tauri/src/ringer.rs). No prompt: a normal permission. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Voice messages (#401): the web view records one with the page's own
+         microphone (app/chat/recorders.ts). Android asks the person the first
+         time they press Record, and never before; nothing else uses it, and
+         voice rooms stay off the phone (SPEC §4.15). The web view's own
+         client asks for both when a page asks for a microphone. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

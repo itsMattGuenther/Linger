@@ -161,8 +161,6 @@ test("a room opens as the whole screen, with Back to the list and no tabs", asyn
   await expect(screen(page).getByRole("tablist")).toHaveCount(0);
   await expect(screen(page).getByRole("button", { name: "Fold back to your list" })).toHaveCount(0);
   await expect(screen(page).getByRole("button", { name: "Open in its own window" })).toHaveCount(0);
-  // No voice message button: the recorder is the desktop app's for now (#401).
-  await expect(screen(page).getByRole("button", { name: "Record a voice message" })).toHaveCount(0);
 
   await back(page).click();
   await expect(list(page)).toBeVisible();
@@ -176,7 +174,6 @@ test("a room opens as the whole screen, with Back to the list and no tabs", asyn
   await room(page, "general").click();
   await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Record a voice message" })).toBeVisible();
 });
 
 test("screens stack: a search hit opens over Search, and Back goes back down through them", async ({ page }) => {

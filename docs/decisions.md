@@ -725,8 +725,13 @@ it, on the desktop and, later, the phone. Discord offers it only on phones.
   in the device's own format (`src-tauri/src/clip.rs`, #398), and the page puts
   the packets in a WebM file (`client/src/lib/webm.ts`). WebKitGTK's own
   recording isn't something to lean on, and this way every desktop records
-  the same file. The phone will record with its WebView and use the same file
-  writer.
+  the same file. The phone records in the page instead (`app/chat/recorders.ts`,
+  Matt, 2026-10-03: "the plan was for it to be both"): the web view's own
+  microphone, with the phone's echo cancelling and noise suppression, encoded
+  by WebCodecs as Opus at the same 64 kbit/s, into the same file writer. The
+  shell has no audio code on a phone, and the web view already asks Android
+  for the microphone when a page wants it. The app asks for `RECORD_AUDIO`
+  only then: the first time Record is pressed.
 - **Five minutes at most**, about 2.4 MB at 64 kbit/s, Discord's default for
   a voice (Matt, 2026-10-03, up from 32: a message is heard again, so it gets
   more bits than a live call; voice rooms stay at the encoder's own rate). It
