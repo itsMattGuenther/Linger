@@ -976,7 +976,7 @@ Beyond that, the client must re-identify and refetch.
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
 | `reports.changed` | `{}` — **sent to the host's and the co-hosts' sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
-| `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
+| `voice.offer` | `{ sdp, tracks: [{ mid, session_id }], bitrate? }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves. `bitrate` is what to send the microphone at, in bits a second (#431) |
 | `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
 
 ```ts
@@ -1087,6 +1087,16 @@ only way voice travels (#306). A server without it carries no voice at all: ever
   while its person is talking (Opus DTX, its "still here" frames left unsent too), so the
   server forwards little but the people talking; an app from before 0.4.9 sends silence
   as well, which works and costs the server more.
+- **Quality is the room's** (#431). Every `voice.offer` carries `bitrate`: 128,000 in a
+  room of up to twenty sessions, 96,000 from twenty-one, back to 128,000 once the room is
+  down to sixteen (`linger-sfu`'s `SMALL_ROOM_BITS`, `BIG_ROOM_BITS`, `BIG_ROOM`,
+  `SMALL_AGAIN`). A room's size changes only when somebody joins or leaves, and both send
+  everybody in it a new offer, so the newest offer is always right. The app sends its
+  microphone at that rate from its next frame, held to 16,000–128,000 whatever a server
+  says; Opus changes rate between packets with nothing renegotiated. An app from before
+  0.4.9 ignores it and lets Opus choose (about 51 kbit/s), and a server from before leaves
+  it out, which an app takes the same way. The forwarding server's work doesn't change
+  with it, since it passes packets on unopened; the host's upload does.
 
 ### Fan-out rules
 

@@ -180,7 +180,7 @@ impl Gateway {
                         session_id: track.session.clone(),
                     })
                     .collect();
-                engine.on_offer(&offer.sdp, &tracks).await;
+                engine.on_offer(&offer.sdp, &tracks, Some(offer.bits)).await;
             }
         }
     }
@@ -265,6 +265,9 @@ async fn a_tone_crosses_the_forwarding_server() {
         "what arrived is not the tone: {crossings} crossings per frame"
     );
     assert!(a.is_forward_connected().await && b.is_forward_connected().await);
+    // Each was told the room's quality on its offer (#431): two is a small room.
+    assert_eq!(a.bits(), Some(linger_sfu::SMALL_ROOM_BITS));
+    assert_eq!(b.bits(), Some(linger_sfu::SMALL_ROOM_BITS));
 
     // A leaves: B's next offer drops A, and B forgets A.
     a.leave().await;

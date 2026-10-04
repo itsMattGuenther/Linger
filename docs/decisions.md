@@ -856,3 +856,31 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
   with 3 talking went from 74% of a core and 68% heard to 24% and all heard with
   silence unsent, and 10% with the loop change; 60 with 5 talking, 17% and all heard. The droplet's shared core is slower: a test against it decides whether raid
   night wants a temporary second core.
+
+## Decided — voice sounds better: 128 kbit/s up to twenty, 96 from twenty-one
+
+**Matt, 2026-10-04 (#431, part of #197).** Friends asked for better-sounding voice. Live
+voice let Opus choose its own rate, about 51 kbit/s; voice messages were already 64.
+
+- **The forwarding server's work doesn't depend on quality**, only on how many packets
+  it passes on, since it never opens them. Measured with 50 people and 8 talking at once
+  (`load.rs`, a desktop core): 16% at 64k, 15% at 96k, 21% at 128k, everybody heard in
+  full each time.
+- **What quality costs is the host's upload**: talkers × listeners × rate, about 150
+  kbit/s a stream on the wire at 128k and 120 at 96k. Twenty people with eight talking at
+  128k is about 23 Mbps; fifty at 96k, about 46; fifty at 128k would be about 59.
+- **So: 128 kbit/s up to twenty, 96 from twenty-one, back to 128 at sixteen.** Twenty
+  covers every ordinary evening at the better quality; a raid gets more than Discord's
+  default 64, at a cost a droplet carries. The gap between twenty-one and sixteen keeps a
+  room filling before a raid from flipping with every arrival. Matt asked whether 96 was
+  possible past twenty rather than 64; it was, since the server's CPU is the same either
+  way and the bandwidth fits.
+- **The server decides, per room, on the offer.** A room's size changes only when
+  somebody joins or leaves, and both already send everybody a new `voice.offer`, so the
+  rate rides on it. Nobody sets it, and nothing shows it. Opus changes rate between one
+  packet and the next, so nobody hears a room change.
+- **Old apps and old servers are unaffected**: an app before 0.4.9 ignores the field and
+  sends at Opus's own rate; a new app on an old server gets no field and does the same.
+  An app never sends above 128 kbit/s or below 16, whatever a server asks.
+- **Silence still isn't sent at the higher rates**: Opus encodes them differently, so
+  that was checked rather than assumed (`at_every_room_s_quality_talking_is_sent_and_silence_isn_t`).

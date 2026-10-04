@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use linger_sfu::{Offer, Sfu};
+use linger_sfu::{Offer, Sfu, BIG_ROOM, BIG_ROOM_BITS, SMALL_AGAIN, SMALL_ROOM_BITS};
 use str0m::change::SdpOffer;
 use str0m::crypto::from_feature_flags;
 use str0m::media::{MediaTime, Mid};
@@ -28,6 +28,8 @@ struct Client {
     /// Voice heard, by the session it came from.
     heard: Vec<String>,
     sent: u64,
+    /// What the latest offer said to send voice at (#431).
+    bits: Option<u32>,
 }
 
 impl Client {
@@ -49,6 +51,7 @@ impl Client {
             connected: false,
             heard: Vec::new(),
             sent: 0,
+            bits: None,
         }
     }
 
@@ -65,6 +68,7 @@ impl Client {
             .iter()
             .map(|track| (Mid::from(track.mid.as_str()), track.session.clone()))
             .collect();
+        self.bits = Some(offer.bits);
         answer.to_sdp_string()
     }
 
@@ -312,4 +316,87 @@ fn a_room_filling_at_once_never_names_an_m_line_twice() {
         assert!(Instant::now() < until, "the room never settled");
         std::thread::sleep(Duration::from_millis(2));
     }
+}
+
+/// Answer offers until everybody in `room` has an m-line for each of the
+/// others, and say what each was last told to send at.
+fn settle(sfu: &Sfu, offers: &Receiver<Offer>, room: &mut [(String, Client)]) -> Vec<u32> {
+    let until = Instant::now() + Duration::from_secs(60);
+    loop {
+        while let Ok(offer) = offers.try_recv() {
+            if let Some((_, client)) = room.iter_mut().find(|(name, _)| *name == offer.session) {
+                let answer = client.answer(&offer);
+                sfu.answer(&offer.session, &answer);
+            }
+        }
+        if room
+            .iter()
+            .all(|(_, client)| client.tracks.len() == room.len() - 1)
+        {
+            return room
+                .iter()
+                .map(|(_, client)| client.bits.expect("an offer"))
+                .collect();
+        }
+        assert!(Instant::now() < until, "the room never settled");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+/// A room sends voice at the better quality until it holds twenty-one, then
+/// steps down, and steps back up only once it is down to sixteen (#431), and
+/// everybody in it is told on the offer their join or leave brought.
+#[test]
+fn a_room_steps_its_quality_down_at_twenty_one_and_back_up_at_sixteen() {
+    let (sfu, offers) = start();
+    let mut room: Vec<(String, Client)> = Vec::new();
+    let join = |room: &mut Vec<(String, Client)>| {
+        let name = format!("p{:02}", room.len());
+        sfu.join(&name, "raid");
+        room.push((name, Client::new()));
+    };
+    let leave = |room: &mut Vec<(String, Client)>| {
+        let (name, _) = room.pop().expect("somebody to leave");
+        sfu.leave(&name);
+    };
+
+    for _ in 0..BIG_ROOM - 1 {
+        join(&mut room);
+    }
+    let all = |bits: u32, n: usize| vec![bits; n];
+    assert_eq!(
+        settle(&sfu, &offers, &mut room),
+        all(SMALL_ROOM_BITS, BIG_ROOM - 1),
+        "twenty send at the better quality"
+    );
+
+    join(&mut room);
+    assert_eq!(
+        settle(&sfu, &offers, &mut room),
+        all(BIG_ROOM_BITS, BIG_ROOM),
+        "the twenty-first steps everybody down"
+    );
+
+    while room.len() > SMALL_AGAIN + 1 {
+        leave(&mut room);
+    }
+    assert_eq!(
+        settle(&sfu, &offers, &mut room),
+        all(BIG_ROOM_BITS, SMALL_AGAIN + 1),
+        "down to seventeen, the room stays where it was"
+    );
+
+    leave(&mut room);
+    assert_eq!(
+        settle(&sfu, &offers, &mut room),
+        all(SMALL_ROOM_BITS, SMALL_AGAIN),
+        "at sixteen it steps back up"
+    );
+
+    join(&mut room);
+    assert_eq!(
+        settle(&sfu, &offers, &mut room),
+        all(SMALL_ROOM_BITS, SMALL_AGAIN + 1),
+        "and seventeen again doesn't step it down"
+    );
 }

@@ -26,7 +26,7 @@ pub mod device;
 pub mod level;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -117,6 +117,10 @@ pub struct Engine<S: Signaller, W: Watcher> {
     /// the key isn't muting yourself, so nobody is shown a mute for it; they
     /// hear you when you hold it, and the "talking" mark follows the audio.
     push_to_talk_closed: Arc<AtomicBool>,
+    /// What the room's latest offer said to send at, in bits a second
+    /// (#431); 0 when it said nothing, and Opus chooses. The sending loop
+    /// reads it every frame and changes its encoder when it changes.
+    bits: Arc<AtomicU32>,
 }
 
 #[derive(Default)]
@@ -154,6 +158,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             inner: Arc::new(Mutex::new(Inner::default())),
             muted: Arc::new(AtomicBool::new(false)),
             push_to_talk_closed: Arc::new(AtomicBool::new(false)),
+            bits: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -286,6 +291,8 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         if let Some(previous) = previous {
             previous.abort();
         }
+        // A new room's quality comes on its first offer.
+        self.bits.store(0, Ordering::Relaxed);
         let pump = tokio::spawn(pump(
             Arc::clone(&self.inner),
             source,
@@ -294,6 +301,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
                 muted: Arc::clone(&self.muted),
                 push_to_talk: Arc::clone(&self.push_to_talk_closed),
             },
+            Arc::clone(&self.bits),
         ));
         self.inner.lock().await.pump = Some(pump);
         let inner = self.inner.lock().await;
@@ -343,7 +351,10 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
     }
 
     /// The forwarding server's offer (#197): answer it, on the one connection.
-    pub async fn on_offer(&self, sdp: &str, tracks: &[VoiceTrack]) {
+    /// `bits` is the room's quality (#431), which the sending loop takes up
+    /// on its next frame; `None` from a server that doesn't say.
+    pub async fn on_offer(&self, sdp: &str, tracks: &[VoiceTrack], bits: Option<u32>) {
+        self.bits.store(bits.unwrap_or(0), Ordering::Relaxed);
         if let Err(error) = self.apply_offer(sdp, tracks).await {
             tracing_error("the forwarding server", &error);
         }
@@ -509,6 +520,14 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         restart_forward(&self.inner, &*self.signaller, &*self.watcher).await;
     }
 
+    /// What the room's latest offer said to send at (#431); `None` when it
+    /// said nothing. Public for the tests.
+    #[must_use]
+    pub fn bits(&self) -> Option<u32> {
+        let bits = self.bits.load(Ordering::Relaxed);
+        (bits != 0).then_some(bits)
+    }
+
     /// Whether the connection to the forwarding server is up.
     pub async fn is_forward_connected(&self) -> bool {
         let conn = self
@@ -556,6 +575,7 @@ async fn pump<W: Watcher>(
     source: Arc<dyn Source>,
     watcher: Arc<W>,
     closed: Closed,
+    bits: Arc<AtomicU32>,
 ) {
     let mut encoder = match codec::Encoder::new() {
         Ok(encoder) => encoder,
@@ -564,6 +584,8 @@ async fn pump<W: Watcher>(
             return;
         }
     };
+    // What the encoder sends at: the room's quality (#431), 0 for Opus's own.
+    let mut sending_at = 0;
     let mut gate = level::Gate::default();
     let mut refused = None;
     // Frames left unsent since the last one sent: silence (#197).
@@ -579,6 +601,13 @@ async fn pump<W: Watcher>(
             refused = now;
         }
         let frame = if closed.now() { &quiet } else { &frame };
+        let wanted = bits.load(Ordering::Relaxed);
+        if wanted != sending_at {
+            match encoder.set_bits((wanted != 0).then_some(wanted)) {
+                Ok(()) => sending_at = wanted,
+                Err(error) => eprintln!("voice: bitrate {wanted}: {error}"),
+            }
+        }
         if let Some(talking) = gate.update(level::rms(frame), Instant::now()) {
             watcher.speaking(None, talking);
         }

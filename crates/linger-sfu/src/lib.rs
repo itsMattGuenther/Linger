@@ -49,14 +49,35 @@ const TICK: Duration = Duration::from_millis(20);
 /// this only stops a loop that can't end.
 const DRAWS: usize = 32;
 
+/// What everybody in a room of up to twenty sends their voice at, in bits a
+/// second (#431): clearly better than the ~51 kbit/s Opus picks on its own,
+/// and in a room this size the host's upload barely notices.
+pub const SMALL_ROOM_BITS: u32 = 128_000;
+
+/// What everybody in a bigger room sends at (#431). The forwarding server's
+/// work is the same at any quality, since it passes on packets without
+/// opening them; what grows is the host's upload, talkers × listeners ×
+/// this, and at a raid's size the busiest moments are what it has to carry.
+pub const BIG_ROOM_BITS: u32 = 96_000;
+
+/// The size at which a room steps down to [`BIG_ROOM_BITS`].
+pub const BIG_ROOM: usize = 21;
+
+/// The size at which a room that stepped down steps back up. Lower than
+/// [`BIG_ROOM`], so a room filling before a raid, with people drifting in and
+/// out around twenty, doesn't change quality with every one of them.
+pub const SMALL_AGAIN: usize = 16;
+
 /// An offer for one session to answer: the SDP, and whose voice each of its
 /// receiving m-lines carries. The m-line not in `tracks` is the one the
-/// session sends its own microphone on.
+/// session sends its own microphone on. `bits` is what the room sends its
+/// voice at, as of this offer (#431).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
     pub session: String,
     pub sdp: String,
     pub tracks: Vec<Track>,
+    pub bits: u32,
 }
 
 /// One receiving m-line and the session whose voice it carries.
@@ -197,6 +218,9 @@ struct Client {
     /// When `str0m` next wants the time, from its last `Output::Timeout`:
     /// only connections that are due are given it (#197).
     due: Instant,
+    /// What its room sends voice at (#431), the same for everybody in it,
+    /// and told to this client on its next offer.
+    bits: u32,
 }
 
 impl Client {
@@ -281,6 +305,7 @@ impl Client {
                 session: self.session.clone(),
                 sdp: offer.to_sdp_string(),
                 tracks,
+                bits: self.bits,
             });
             return;
         }
@@ -384,6 +409,7 @@ impl Hub<'_> {
             }
         }
         let notify = self.notify;
+        let bits = self.resize(&room, 1);
         let mut outs = Vec::new();
         for other in self.clients.iter_mut().filter(|c| c.room == room) {
             outs.push(Out {
@@ -404,9 +430,24 @@ impl Hub<'_> {
             pending: None,
             outs,
             due: Instant::now(),
+            bits,
         };
         client.negotiate(notify);
         self.clients.push(client);
+    }
+
+    /// Settle what `room` sends voice at now that it holds `extra` more than
+    /// the clients in it, and set it on each of them, ready for their next
+    /// offers: a room's size changes only when somebody joins or leaves, and
+    /// both send everybody in it a new offer.
+    fn resize(&mut self, room: &str, extra: usize) -> u32 {
+        let there = self.clients.iter().filter(|c| c.room == room);
+        let before = there.clone().next().map_or(SMALL_ROOM_BITS, |c| c.bits);
+        let bits = bits_for(there.count() + extra, before);
+        for client in self.clients.iter_mut().filter(|c| c.room == room) {
+            client.bits = bits;
+        }
+        bits
     }
 
     fn remove(&mut self, session: &str) {
@@ -415,6 +456,7 @@ impl Hub<'_> {
         };
         let mut gone = self.clients.remove(at);
         gone.rtc.disconnect();
+        self.resize(&gone.room, 0);
         let notify = self.notify;
         for other in self.clients.iter_mut().filter(|c| c.room == gone.room) {
             other.forget(session);
@@ -433,6 +475,19 @@ impl Hub<'_> {
         for session in dead {
             self.remove(&session);
         }
+    }
+}
+
+/// What a room of `people` sends voice at, given what it sent at before
+/// (#431): down at [`BIG_ROOM`], back up at [`SMALL_AGAIN`], and in between
+/// whatever it was.
+fn bits_for(people: usize, before: u32) -> u32 {
+    if people >= BIG_ROOM {
+        BIG_ROOM_BITS
+    } else if people <= SMALL_AGAIN {
+        SMALL_ROOM_BITS
+    } else {
+        before
     }
 }
 

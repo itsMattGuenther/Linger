@@ -264,10 +264,18 @@ pub enum ServerEvent {
     /// other person in the room. `tracks` says whose voice each receiving
     /// m-line carries; the one it doesn't name is the microphone's. Sent again,
     /// whole, whenever somebody joins or leaves.
+    ///
+    /// `bitrate` is what to send the microphone at, in bits a second (#431):
+    /// the room's, the same for everybody in it, and set by its size, which
+    /// changes only when somebody joins or leaves. A server from before it
+    /// leaves it out, and the app lets Opus choose, as it always did.
     #[serde(rename = "voice.offer")]
     VoiceOffer {
         sdp: String,
         tracks: Vec<VoiceTrack>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        bitrate: Option<u32>,
     },
     /// The host took this session out of voice in `room_id` (#423), sent to
     /// that session alone, just before the room's `voice.state` without it.
@@ -396,10 +404,21 @@ mod tests {
                 mid: "1".into(),
                 session_id: "s-eli".into(),
             }],
+            bitrate: Some(96_000),
         });
         let wire = serde_json::to_value(&offer).unwrap();
         assert_eq!(wire["op"], "voice.offer");
         assert_eq!(wire["d"]["tracks"][0]["session_id"], "s-eli");
+        assert_eq!(wire["d"]["bitrate"], 96_000);
+        // A server from before #431 says nothing about quality.
+        let older: ServerFrame = serde_json::from_value(
+            serde_json::json!({"op":"voice.offer","d":{"sdp":"v=0","tracks":[]}}),
+        )
+        .unwrap();
+        assert!(matches!(
+            older.event,
+            ServerEvent::VoiceOffer { bitrate: None, .. }
+        ));
         let answer: ClientFrame =
             serde_json::from_value(serde_json::json!({"op":"voice.answer","d":{"sdp":"v=0"}}))
                 .unwrap();

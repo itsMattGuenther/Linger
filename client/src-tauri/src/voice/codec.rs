@@ -34,6 +34,11 @@ pub fn is_silence(packet: &[u8]) -> bool {
 /// How many bits a second a voice message is encoded at (#401).
 pub const CLIP_BITS_PER_SECOND: i32 = 64_000;
 
+/// The least and the most bits a second live voice is sent at, whatever a
+/// server asks (#431). A voice is still clear at the least; past the most, a
+/// mono voice gains nothing anybody can hear, and the host's upload pays.
+pub const LIVE_BITS: (i32, i32) = (16_000, 128_000);
+
 /// Turns frames of samples into Opus packets.
 pub struct Encoder(opus::Encoder);
 
@@ -60,7 +65,7 @@ impl Encoder {
     /// longest clip. A message is heard again and kept, so it's worth more
     /// bits than a live call, and nothing of the loss repair a live call
     /// needs, since a recording never crosses a network packet by packet.
-    /// Voice rooms keep the encoder's own rate (`new`).
+    /// Voice rooms send at the room's quality instead (`set_bits`, #431).
     pub fn for_clip() -> Result<Self, opus::Error> {
         let mut inner =
             opus::Encoder::new(SAMPLE_RATE, opus::Channels::Mono, opus::Application::Voip)?;
@@ -78,6 +83,18 @@ impl Encoder {
     /// One frame, one packet.
     pub fn encode(&mut self, frame: &[i16]) -> Result<Vec<u8>, opus::Error> {
         self.0.encode_vec(frame, MAX_PACKET)
+    }
+
+    /// Send at `bits` a second from the next frame on, as the room's
+    /// `voice.offer` said (#431), kept within `LIVE_BITS`. `None`, from a
+    /// server from before that, is Opus's own choice, about 51 kbit/s. Opus
+    /// changes rate between one packet and the next with nothing to
+    /// renegotiate, so a room changing quality is heard by nobody.
+    pub fn set_bits(&mut self, bits: Option<u32>) -> Result<(), opus::Error> {
+        self.0.set_bitrate(bits.map_or(opus::Bitrate::Auto, |bits| {
+            let (least, most) = LIVE_BITS;
+            opus::Bitrate::Bits(i32::try_from(bits).unwrap_or(most).clamp(least, most))
+        }))
     }
 
     /// Whether the last frame was silence to Opus's DTX: a "still here" it
@@ -258,6 +275,92 @@ mod tests {
         let back = encoder.encode(&tone(60)).expect("encode");
         assert!(!is_silence(&back), "talking again was held back");
         assert_eq!(decoder.decode(&back).expect("decode").len(), FRAME_SAMPLES);
+    }
+
+    /// A room's quality is what the encoder sends at (#431), within bounds a
+    /// server can't push it past, and a server that says nothing leaves it
+    /// to Opus.
+    #[test]
+    fn the_room_s_quality_is_what_live_voice_is_sent_at() {
+        let mut encoder = Encoder::new().expect("encoder");
+        let own = encoder.0.get_bitrate().expect("bitrate");
+        for (asked, sent) in [
+            (96_000, 96_000),
+            (128_000, 128_000),
+            (510_000, LIVE_BITS.1),
+            (u32::MAX, LIVE_BITS.1),
+            (6_000, LIVE_BITS.0),
+        ] {
+            encoder.set_bits(Some(asked)).expect("set");
+            assert_eq!(
+                encoder.0.get_bitrate().expect("bitrate"),
+                opus::Bitrate::Bits(sent),
+                "asked for {asked}"
+            );
+        }
+        encoder.set_bits(None).expect("set");
+        assert_eq!(encoder.0.get_bitrate().expect("bitrate"), own);
+    }
+
+    /// The better qualities cost what they should while talking, and still
+    /// send nothing while quiet (#431): Opus encodes them differently from
+    /// its own rate, and its silence has to hold in both ways.
+    #[test]
+    fn at_every_room_s_quality_talking_is_sent_and_silence_isn_t() {
+        let quiet = vec![0i16; FRAME_SAMPLES];
+        for bits in [None, Some(96_000), Some(128_000)] {
+            let mut encoder = Encoder::new().expect("encoder");
+            encoder.set_bits(bits).expect("set");
+            let mut decoder = Decoder::new().expect("decoder");
+            let mut talked = 0;
+            let mut last = Vec::new();
+            for n in 0..50 {
+                let packet = encoder.encode(&noisy(n)).expect("encode");
+                assert!(
+                    !is_silence(&packet),
+                    "{bits:?}: talking was taken for silence"
+                );
+                talked += packet.len();
+                last = decoder.decode(&packet).expect("decode");
+            }
+            assert!(rms(&last) > 1000.0, "{bits:?}: the voice was lost");
+            // A second of talking, in bits, against what was asked.
+            let rate = talked * 8;
+            if let Some(bits) = bits {
+                let bits = usize::try_from(bits).expect("bits");
+                assert!(
+                    rate > bits * 3 / 4 && rate < bits * 5 / 4,
+                    "{bits} asked, {rate} sent"
+                );
+            }
+            let sent = (0..100)
+                .filter(|_| {
+                    let packet = encoder.encode(&quiet).expect("encode");
+                    !is_silence(&packet) && !encoder.was_silence()
+                })
+                .count();
+            assert!(
+                sent <= 15,
+                "{bits:?}: two seconds of silence sent {sent} of 100"
+            );
+        }
+    }
+
+    /// Something closer to a voice than a tone: one with noise through it,
+    /// which a codec can't squeeze below what it's asked to spend.
+    fn noisy(n: usize) -> Vec<i16> {
+        let mut seed = u32::try_from(n).expect("n").wrapping_mul(2_654_435_761) | 1;
+        tone(n)
+            .into_iter()
+            .map(|s| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                let hiss = (seed >> 20) as i16 - 2048;
+                s.saturating_add(hiss)
+            })
+            .collect()
     }
 
     /// Voice messages keep every frame: a recording isn't a call.

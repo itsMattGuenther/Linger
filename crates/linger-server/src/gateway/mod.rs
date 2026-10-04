@@ -226,6 +226,7 @@ impl Gateway {
                 ServerEvent::VoiceOffer {
                     sdp: offer.sdp,
                     tracks,
+                    bitrate: Some(offer.bits),
                 },
             );
         })?;

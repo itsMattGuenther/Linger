@@ -273,8 +273,12 @@ know straight away.
 Voice goes through your server: everybody sends their voice to it once, and
 it passes it on to everyone else in the room, up to 60 at a time. Apps send
 voice only while somebody is talking, so a big room costs the server what its
-talkers do: roughly 50 kbit/s of upload for each talker to each listener, about
-7 Mbps with three people talking to fifty. It needs one
+talkers do: upload for each talker to each listener. A room of up to twenty
+sounds its best, at about 150 kbit/s for each of those on the wire; from
+twenty-one it steps down to about 120 kbit/s, so fifty people with three
+talking take about 17 Mbps of upload, and closer to 50 Mbps in the moments
+when eight talk at once. A three-hour evening of fifty is about 23 GB of data
+out, which matters if your provider counts it. It needs one
 setting and one open port. Without them the server carries no voice at all,
 and the app tells people voice isn't set up rather than offering a call nobody
 could hear. (Servers used to fall back to an older way when this wasn't set,
