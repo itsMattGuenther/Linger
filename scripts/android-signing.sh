@@ -93,9 +93,15 @@ case "${1:-}" in
     apk="${2:-}"
     [ -f "$apk" ] || fail "no APK at '$apk'"
     printed="$("$(apksigner_bin)" verify --print-certs "$apk" 2>&1)" || fail "apksigner rejected $apk: $printed"
-    signers="$(printf '%s\n' "$printed" | sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: //p')"
-    [ "$signers" = "$(expected)" ] ||
+    # Any signer line counts, however this apksigner words it ("Signer #1
+    # certificate SHA-256 digest: …" here; 0.4.8's release run found none in
+    # what the runner's printed), and every signer must be the release key.
+    signers="$(printf '%s\n' "$printed" | sed -n 's/^Signer[^:]*SHA-256 digest: *//p' | tr -d ': \r' | tr 'A-F' 'a-f' | sort -u)"
+    if [ "$signers" != "$(expected)" ]; then
+      echo "apksigner said:" >&2
+      printf '%s\n' "$printed" >&2
       fail "$apk is signed by '$signers', not only by the release key $(expected)"
+    fi
     echo "$apk is signed with the release key"
     ;;
   *)
