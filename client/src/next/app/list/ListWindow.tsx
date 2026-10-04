@@ -1304,7 +1304,8 @@ function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: s
       const session = model.people.find((one) => one.user.id === person.user.id)?.session;
       if (session) setVoiceVolume(server, session, volume);
     },
-    // The host can take somebody out of voice from their chip (#423).
+    // The host or a co-host can take somebody out of voice from their chip
+    // (#423, #424); the dock never offers it on the host's chip.
     ...(canTakeOut(state) ? { onTakeOut: (person: { user: { id: string } }) => takeOutOfVoice(server, model.roomId, person.user.id) } : {}),
   };
 }

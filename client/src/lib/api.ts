@@ -675,6 +675,13 @@ export class AuthedApi {
     );
   }
 
+  /** The host makes somebody a co-host, or they stop being one (#424): the
+   *  person as they are now. The server refuses anybody but the host. */
+  setCohost(id: UserId, on: boolean): Promise<User> {
+    const path = `/users/${encodeURIComponent(id)}/cohost`;
+    return this.#withAuth((accessToken) => requestJson<User>(this.baseUrl, on ? "PUT" : "DELETE", path, { accessToken }));
+  }
+
   // --- uploads and the media collection (PROTOCOL §6) -----------------------
 
   /** Reserve a slot. The bytes go straight at `slot.url`, never through here. */

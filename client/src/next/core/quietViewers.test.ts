@@ -55,6 +55,7 @@ function person(id: string, name: string): User {
     username: name,
     display_name: name,
     is_host: false,
+    is_cohost: false,
     style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color: "azure" }, effect: "none", msg_font_key: null },
     status: null,
     entrance_sound: null,

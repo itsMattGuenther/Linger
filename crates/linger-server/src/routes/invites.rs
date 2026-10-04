@@ -10,7 +10,7 @@ use linger_core::wire::{CreateInviteRequest, Invite};
 use linger_core::UserId;
 use rand::RngCore;
 
-use crate::auth::AuthedUser;
+use crate::auth::{self, AuthedUser, Standing};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -130,16 +130,25 @@ async fn revoke(
         return Err(ApiError::not_found("No such invite."));
     };
 
-    let is_creator = UserId::from_slice(&created_by).map_err(anyhow::Error::from)? == auth.id;
-    let is_host: bool = sqlx::query_scalar("SELECT is_host FROM users WHERE id = ?")
-        .bind(auth.id.to_vec())
-        .fetch_optional(&state.db.read)
-        .await?
-        .unwrap_or(false);
-    if !is_creator && !is_host {
-        return Err(ApiError::forbidden(
-            "Only the inviter or the host can revoke an invite.",
-        ));
+    // The inviter revokes their own; the host or a co-host revokes anybody's,
+    // except that a co-host can't revoke the host's (#424).
+    let created_by = UserId::from_slice(&created_by).map_err(anyhow::Error::from)?;
+    if created_by != auth.id {
+        let standing = auth::standing(&state.db.read, auth.id)
+            .await?
+            .unwrap_or(Standing::Member);
+        if !standing.hosts() {
+            return Err(ApiError::forbidden(
+                "Only the inviter, the host or a co-host can revoke an invite.",
+            ));
+        }
+        auth::refuse_on_the_host(
+            &state.db.read,
+            standing,
+            created_by,
+            "A co-host can't revoke the host's invites.",
+        )
+        .await?;
     }
 
     sqlx::query("UPDATE invites SET revoked_at = ? WHERE code = ? AND revoked_at IS NULL")

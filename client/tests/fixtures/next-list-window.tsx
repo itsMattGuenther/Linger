@@ -35,7 +35,9 @@
  * as `size <w>x<h>` and `position <x>,<y>`.
  *
  * Report and block (T-1605), on The Good Company: `?guest` has Eli host it
- * instead of you, so there's somebody to report to; `?blocked` has you
+ * instead of you, so there's somebody to report to; `?cohost` has Eli host it
+ * and you a co-host, and `?cohosts` has Dave a co-host (#424), whose switch
+ * is written down as `cohost u-… on|off`; `?blocked` has you
  * blocking Jules already; `?reports` has one report open for you, the host,
  * from Eli about a message of Jules's in #general. Blocks, reports and
  * closing one are written down (`block u-…`, `report {…}`, `close r-…`) and
@@ -80,10 +82,16 @@ const states: Record<string, GatewayState> = {
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };
-// `?guest`: Eli hosts The Good Company, and you don't (T-1605).
-if (query.has("guest")) {
+// `?guest`: Eli hosts The Good Company, and you don't (T-1605). `?cohost`:
+// the same, with you a co-host (#424). `?cohosts`: Dave is a co-host.
+if (query.has("guest") || query.has("cohost") || query.has("cohosts")) {
   const good = states[SERVER];
-  const host = (user: User): User => ({ ...user, is_host: user.id === people.eli.id });
+  const eliHosts = query.has("guest") || query.has("cohost");
+  const host = (user: User): User => ({
+    ...user,
+    is_host: eliHosts ? user.id === people.eli.id : user.is_host,
+    is_cohost: (query.has("cohost") && user.id === good?.me?.id) || (query.has("cohosts") && user.id === people.dave.id),
+  });
   if (good?.me) states[SERVER] = { ...good, me: host(good.me), users: good.users.map(host) };
 }
 /** Who you've blocked on The Good Company, as its server keeps them. */
@@ -529,7 +537,23 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return json(report, 201);
   }
   if (server === SERVER && path === "/reports" && method === "GET") {
-    return state.me?.is_host ? json(reports) : json({ error: { code: "FORBIDDEN", message: "Only the host sees reports.", retry_after_ms: null } }, 403);
+    return state.me?.is_host || state.me?.is_cohost
+      ? json(reports)
+      : json({ error: { code: "FORBIDDEN", message: "Only the host or a co-host sees reports.", retry_after_ms: null } }, 403);
+  }
+  // The co-host switch (#424): the host's alone, answered with the person as
+  // they are now and the `user.update` the server sends everybody.
+  const cohostOf = server === SERVER ? /^\/users\/([^/]+)\/cohost$/.exec(path) : null;
+  if (cohostOf && (method === "PUT" || method === "DELETE")) {
+    const id = decodeURIComponent(cohostOf[1] ?? "");
+    const on = method === "PUT";
+    note(`cohost ${id} ${on ? "on" : "off"}`);
+    if (!state.me?.is_host) return json({ error: { code: "FORBIDDEN", message: "Only the host can do that.", retry_after_ms: null } }, 403);
+    const found = state.users.find((user) => user.id === id);
+    if (!found) return json({ error: { code: "NOT_FOUND", message: "No such person on this server.", retry_after_ms: null } }, 404);
+    const user: User = { ...found, is_cohost: on };
+    window.setTimeout(() => window.core?.frame(SERVER, { op: "user.update", d: user } as Omit<ServerFrame, "s">), 10);
+    return json(user);
   }
   const reportOf = server === SERVER ? /^\/reports\/([^/]+)$/.exec(path) : null;
   if (reportOf && method === "DELETE") {
@@ -541,7 +565,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   const takeOutOf = /^\/rooms\/([^/]+)\/voice\/([^/]+)$/.exec(path);
   if (takeOutOf && method === "DELETE") {
-    if (!state.me?.is_host) return json({ error: { code: "FORBIDDEN", message: "Only the host can do that.", retry_after_ms: null } }, 403);
+    // The host or a co-host (#424).
+    if (!state.me?.is_host && !state.me?.is_cohost) return json({ error: { code: "FORBIDDEN", message: "Only the host or a co-host can do that.", retry_after_ms: null } }, 403);
     note(`takeout ${decodeURIComponent(takeOutOf[1] ?? "")} ${decodeURIComponent(takeOutOf[2] ?? "")}`);
     return new Response(null, { status: 204 });
   }

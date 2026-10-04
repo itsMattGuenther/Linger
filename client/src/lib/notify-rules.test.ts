@@ -18,6 +18,7 @@ function person(id: string, username: string): User {
     username,
     display_name: username,
     is_host: false,
+    is_cohost: false,
     style: {
       font_key: "sans",
       weight: 400,

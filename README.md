@@ -77,6 +77,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.
+- **A co-host** for when the host is away: one switch the host gives
+  somebody, so they can look after rooms, reports and people. It isn't a
+  role system; there is nothing else to set.
 - **Full export.** Anyone can export public rooms and their own DMs, with
   files, without asking the host.
 - **Linux and Windows** (Tauri 2, not Electron). macOS builds from source.

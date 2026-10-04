@@ -8,6 +8,7 @@ const matt: User = {
   username: "matt",
   display_name: "Matt",
   is_host: true,
+  is_cohost: false,
   style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color: "azure" }, effect: "none", msg_font_key: null },
   status: null,
   entrance_sound: null,

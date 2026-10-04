@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { Invite } from "../generated/Invite";
 import type { Room } from "../generated/Room";
 import { parsePastedLink } from "./link";
-import { deadWords, expiryWords, inviteState, inviteUrl, moveRoom, useWords } from "./host";
+import { deadWords, expiryWords, hostsHere, inviteState, inviteUrl, mayActOn, moveRoom, useWords } from "./host";
 
 const NOW = 1_700_000_000_000;
 const HOUR = 3_600_000;
@@ -141,5 +141,31 @@ describe("moveRoom", () => {
 
   it("says nothing about a room it has never heard of", () => {
     expect(moveRoom(rooms, "01900000-0000-7000-8000-0000000000ff", 1)).toEqual([]);
+  });
+});
+
+describe("the host's powers (#424)", () => {
+  const host = { is_host: true, is_cohost: false };
+  const cohost = { is_host: false, is_cohost: true };
+  const member = { is_host: false, is_cohost: false };
+
+  it("belong to the host and every co-host, and nobody else", () => {
+    expect(hostsHere(host)).toBe(true);
+    expect(hostsHere(cohost)).toBe(true);
+    expect(hostsHere(member)).toBe(false);
+    expect(hostsHere(null)).toBe(false);
+    // A server from before co-hosts leaves the field out: a member.
+    expect(hostsHere(JSON.parse('{"is_host":false}'))).toBe(false);
+  });
+
+  it("reach anybody but the host, unless you are the host", () => {
+    expect(mayActOn(host, member)).toBe(true);
+    expect(mayActOn(host, cohost)).toBe(true);
+    expect(mayActOn(cohost, member)).toBe(true);
+    expect(mayActOn(cohost, cohost)).toBe(true);
+    expect(mayActOn(cohost, host)).toBe(false);
+    expect(mayActOn(member, member)).toBe(false);
+    // Somebody this app doesn't know is the server's to judge.
+    expect(mayActOn(cohost, undefined)).toBe(true);
   });
 });

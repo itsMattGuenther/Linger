@@ -134,6 +134,7 @@ function person(id: string, name: string): User {
     username: name,
     display_name: name,
     is_host: false,
+    is_cohost: false,
     style: {
       font_key: "inter",
       weight: 400,
@@ -1335,5 +1336,34 @@ describe("report and block (PROTOCOL §5, T-1605)", () => {
     // A member's app never asks: `fakeApi` without answers would throw.
     await loadReports(member);
     expect(serverState(HOME).reports).toBeNull();
+  });
+
+  it("a co-host's reports load too: when the host makes them one, and gone when they stop being one (#424)", async () => {
+    const asked: string[] = [];
+    const callie = person("u-callie", "Callie");
+    const api = fakeApi(HOME, (path) => {
+      asked.push(path);
+      return [{ id: "r1", reporter_id: "u-dex", user_id: "u-sam", message: null, note: null, created_at: 1 }];
+    });
+    await disconnect(HOME);
+    await connect(api);
+    arrive(HOME, ready({ user: callie }));
+    await loadReports(api);
+    expect(asked).toEqual([]);
+
+    // Made a co-host while connected: their app asks then, not at the next `ready`.
+    arrive(HOME, { s: 2, op: "user.update", d: { ...callie, is_cohost: true } });
+    await vi.waitFor(() => expect(serverState(HOME).reports?.map((report) => report.id)).toEqual(["r1"]));
+    arrive(HOME, { s: 3, op: "reports.changed", d: {} } as ServerFrame);
+    await vi.waitFor(() => expect(asked.filter((path) => path === "/reports")).toHaveLength(2));
+
+    // Somebody else's change asks nothing.
+    arrive(HOME, { s: 4, op: "user.update", d: { ...person("u-dex", "Dex"), is_cohost: true } });
+    expect(asked.filter((path) => path === "/reports")).toHaveLength(2);
+
+    // No longer one: the reports go with it.
+    arrive(HOME, { s: 5, op: "user.update", d: callie });
+    expect(serverState(HOME).reports).toBeNull();
+    await disconnect(HOME);
   });
 });

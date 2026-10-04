@@ -44,6 +44,9 @@ settings are database rows edited from inside the app — never a config file.
 else. If the host goes quiet, the friends stand up a new server. That is a real
 answer for a group of eight, and it keeps a second root from growing on a product
 whose anti-goals include a permission matrix (AGENTS rule 10).
+*Partly reversed on 2026-10-04:* the host can name co-hosts, who do what the
+host does in the app while they're away. `is_host` itself still can't be
+handed on. See *Decided — a co-host, for when the host is away*.
 
 **Removal, not banning** — T-413. A ban needs something durable to ban *by*, an
 address or a device id, and Linger does not store either and should not. It would
@@ -788,3 +791,38 @@ all anybody could do was turn him down for themselves.
 - **Older apps can't bounce back.** The server ends the person's seats and announces
   the room's `voice.state` without them; every app since 0.4.1 leaves on that, and a
   restart without a seat is ignored. The new `voice.removed` only says why.
+
+## Decided — a co-host, for when the host is away
+
+**Matt, 2026-10-04 (#424).** This reverses part of "No host transfer" (*the
+host's side*, 2026-08-21). When the host is away, nobody else can handle a
+report, take somebody out of voice (#423), or remove somebody who shouldn't
+be there. "Stand up a new server" is too big an answer for a week's holiday.
+
+- **One switch per person, `is_cohost`.** Only the host turns it on or off,
+  from the person's card. Never on the host, never on yourself. The host
+  stays the host: `is_host` still can't be handed to anybody.
+- **A co-host can do everything the host does in the app:** rooms (make,
+  edit, archive), the server's name and color, reports, removing and
+  restoring members, deleting messages, revoking invites, and taking
+  somebody out of voice.
+- **Two exceptions, and only two.** A co-host can't make or clear co-hosts,
+  and can't act on the host: remove them, take them out of voice, delete
+  their messages or revoke their invites.
+- **Reports go to the host and every co-host.** A report about a co-host
+  reaches that co-host too; the report form says so rather than claiming
+  they aren't told.
+- **Running or updating the server machine** stays with whoever runs it.
+  The app has nothing to do with that, so the server's version in Settings
+  is the host's alone.
+- **Taken out of voice, the strip says "You were taken out of voice."**
+  rather than "The host took you out" (#423), since a co-host may have.
+- **Removing a co-host ends it.** Letting them back in brings back a member,
+  as a restore never undoes everything (*the host's side*, above), and only
+  the host can make them a co-host again.
+
+This is one switch with a fixed meaning, not roles. The anti-goal "a
+role/permission matrix" (SPEC §2) still stands, and this must not grow
+toward it: no other levels, no per-power switches, no second kind of
+co-host. A request for any of those is the matrix in its first disguise.
+

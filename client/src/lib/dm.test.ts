@@ -17,6 +17,7 @@ function person(id: string, name: string): User {
     username: name.toLowerCase(),
     display_name: name,
     is_host: false,
+    is_cohost: false,
     style: {
       font_key: "inter",
       weight: 400,

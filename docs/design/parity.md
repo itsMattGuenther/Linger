@@ -509,6 +509,7 @@ there or where the design puts it.
 | HOST-10 | Every host action is enforced by the server; the client only decides what's drawn. | server `FORBIDDEN` | Same | C (server tests) | ✅ (server tests) |
 | HOST-11 | A locked-out host recovers with `linger-server reset-password` on the server (no email, no link). | `crates/linger-server/src/reset.rs`, host guide | Same (docs only) | — | ✅ (docs; nothing to build) |
 | HOST-12 | The release the server runs, and when a newer one is out, with how to update and what's new. Only the host sees it; the server says on `/health`, and the newest comes from the release feed, whoever installed the app (#314). | new | Settings → Hosting → Server, "Version" | U + F | ✅ (lib/updates.test.ts; next-settings.spec.ts and next-settings-window.spec.ts "the server's version") |
+| HOST-13 | A co-host (#424, SPEC §4.16): the host makes somebody one, or stops it, from their card's ···; the card says "co-host"; a co-host gets Hosting and the reports, but not the server's version, can't name co-hosts and can't act on the host. | new | A person's card, ···; Settings → Hosting | U + F + C | ✅ (lib/host.test.ts, core/safety.test.ts, gateway.test.ts; next-report-block.spec.ts "co-host"; server tests/cohost.rs) |
 
 ## MULTI — several servers
 

@@ -7,7 +7,7 @@
  *
  * Open it at /tests/fixtures/next-settings-window.html. Options:
  * `?section=invites` opens on a section; `?member` is you as a member, not
- * the host; `?refuse` has the list window refuse a rule or a password;
+ * the host; `?cohost` is you as a co-host, with Eli the host (#424); `?refuse` has the list window refuse a rule or a password;
  * `?servers` signs in to the guild and Lisbon too, so Servers shows.
  * Starting at sign-in (#228) is off on this computer; `?autostart=on` has it
  * on already, `?autostart=refuse` has the computer refuse to change it,
@@ -40,12 +40,14 @@ import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
 const night = evening(serverState(SERVER));
-const me = { ...people.matt, is_host: !query.has("member") };
+// `?cohost`: Eli hosts, and you're a co-host (#424).
+const cohost = query.has("cohost");
+const me = { ...people.matt, is_host: !query.has("member") && !cohost, is_cohost: cohost };
 let info: ServerInfo = { name: SERVER_NAME, accent_key: "amber", icon_key: null, member_count: 7, created_at: NOW - 90 * 86_400_000 } as ServerInfo;
 const invites: Invite[] = [];
 let blocked: string[] = query.has("blocked") ? [people.jules.id] : [];
 const reported = (messages["r-general"] ?? []).find((message) => message.author_id === people.jules.id);
-let reports: Report[] | null = !me.is_host
+let reports: Report[] | null = !me.is_host && !me.is_cohost
   ? null
   : query.has("reports") && reported
     ? [
@@ -71,7 +73,7 @@ const desktop = fakeDesktop({
   query,
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)), [LISBON]: lisbon(serverState(LISBON)) } : {},
   infos: query.has("servers") ? serverInfo : {},
-  ownerState: { ...night, me, users: night.users.map((user) => (user.id === me.id ? me : user)), blocked, reports },
+  ownerState: { ...night, me, users: night.users.map((user) => (user.id === me.id ? me : cohost && user.id === people.eli.id ? { ...user, is_host: true } : user)), blocked, reports },
   asks: {
     "next:notify": (asked) => {
       if (query.has("refuse")) return { problem: "The server is busy." };

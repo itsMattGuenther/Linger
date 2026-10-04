@@ -26,9 +26,10 @@ import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useF
 import "../chat/ReportBlock.css";
 
 /**
- * Hosting: running the server from Settings (HOST-1 to HOST-9). A member
- * never sees these: they are absent, not greyed out, and the server refuses
- * every one of them to anybody but the host (HOST-10).
+ * Hosting: running the server from Settings (HOST-1 to HOST-9), for the host
+ * and any co-host they named (#424). A member never sees these: they are
+ * absent, not greyed out, and the server refuses every one of them to
+ * anybody else (HOST-10).
  */
 
 /** Escape backs out of an inline form or a question and returns focus to what opened it. */
@@ -416,7 +417,7 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
 
   return (
     <>
-      {reports && reports.open.length > 0 ? <ReportsBlock reports={reports} remove={remove} meId={meId} /> : null}
+      {reports && reports.open.length > 0 ? <ReportsBlock reports={reports} remove={remove} meId={meId} members={members} /> : null}
       <Block heading={HEADINGS.members}>
         <ul className="nx-set-list" ref={list} aria-label="Members">
           {ordered.map((person) => (
@@ -426,10 +427,13 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
                   <Marker {...markerOf(person, presenceOf(person.id))} size="md" />
                 </span>
                 <Name person={person} />
-                <span className="nx-set-item-sub nx-set-mono">@{person.username}</span>
+                <span className="nx-set-item-sub nx-set-mono">
+                  @{person.username}
+                  {person.is_cohost === true && person.id !== meId ? " · co-host" : ""}
+                </span>
                 <span className="nx-set-item-buttons">
                   {person.id === meId ? (
-                    <span className="nx-set-tag">You, the host</span>
+                    <span className="nx-set-tag">{person.is_host ? "You, the host" : "You, a co-host"}</span>
                   ) : person.is_host ? (
                     <span className="nx-set-tag">The host</span>
                   ) : asking === person.id ? null : (
@@ -498,13 +502,15 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
  * remove the person (asking first, as the members list does), or let it go.
  * There's no count of them anywhere (AGENTS rule 3).
  */
-function ReportsBlock({ reports, remove, meId }: { reports: HostReports; remove: HostPeopleProps["remove"]; meId: string }) {
+function ReportsBlock({ reports, remove, meId, members }: { reports: HostReports; remove: HostPeopleProps["remove"]; meId: string; members: readonly User[] }) {
   const [asking, setAsking] = useState<string | null>(null);
   const save = useSave();
   const busy = save.phase.kind === "saving";
   const nameOf = (userId: string) => reports.personOf(userId)?.display_name ?? "somebody";
+  // Reports reach the host and every co-host (#424): said as it is.
+  const shared = members.some((person) => person.id !== meId && (person.is_host || person.is_cohost === true));
   return (
-    <Block heading={HEADINGS.reports} lead="Sent to you and nobody else. Whoever they're about isn't told.">
+    <Block heading={HEADINGS.reports} lead={shared ? "Sent to the host and the co-hosts, and nobody else. Whoever they're about isn't told, unless they're one of them." : "Sent to you and nobody else. Whoever they're about isn't told."}>
       <ul className="nx-set-list" aria-label="Reports">
         {reports.open.map((report) => {
           const about = reports.personOf(report.user_id);
@@ -572,9 +578,10 @@ function ReportsBlock({ reports, remove, meId }: { reports: HostReports; remove:
 export interface HostServerProps {
   /**
    * The release the server runs, in words, and whether a newer one is out
-   * (#314): `serverVersionLine` in lib/updates.ts. Only a host sees it.
+   * (#314): `serverVersionLine` in lib/updates.ts. Only the host sees it;
+   * left out for a co-host, since who runs the machine updates it (#424).
    */
-  version: {
+  version?: {
     words: string;
     behind: boolean;
     /** The newest release, when known: what "What's new" opens. */
@@ -607,22 +614,24 @@ export function ServerSection({ version, name: savedName, accent: savedAccent, s
     if (next.accent !== undefined) setAccent(next.accent);
     save.reset();
   };
-  const newest = version.newest;
+  const newest = version?.newest ?? null;
   return (
     <>
-      <Block heading={HEADINGS.serverVersion}>
-        <Note tone="status">{version.words}</Note>
-        {version.behind && newest !== null ? (
-          <Actions start>
-            <Button icon="go" onClick={version.openGuide}>
-              How to update
-            </Button>
-            <Button variant="quiet" icon="go" onClick={() => version.openNotes(newest)}>
-              What's new
-            </Button>
-          </Actions>
-        ) : null}
-      </Block>
+      {version ? (
+        <Block heading={HEADINGS.serverVersion}>
+          <Note tone="status">{version.words}</Note>
+          {version.behind && newest !== null ? (
+            <Actions start>
+              <Button icon="go" onClick={version.openGuide}>
+                How to update
+              </Button>
+              <Button variant="quiet" icon="go" onClick={() => version.openNotes(newest)}>
+                What's new
+              </Button>
+            </Actions>
+          ) : null}
+        </Block>
+      ) : null}
       <Block heading={HEADINGS.serverName}>
         <TextField label="Server name" hideLabel value={name} hint="What the list says, and what an invite link tells a stranger." onChange={(value) => change({ name: value })} onEnter={submit} />
       </Block>

@@ -1,9 +1,10 @@
 //! Report (SPEC §4.15, PROTOCOL §5 "Report and block", T-1605): a message or a
-//! person, sent to the host, and to nobody else — a self-hosted server has
-//! nobody else to send it to. The host already has what to do about one:
-//! delete the message, remove the person (`routes/users.rs`), or let it go.
+//! person, sent to the host and the co-hosts they named (#424), and to nobody
+//! else — a self-hosted server has nobody else to send it to. They already
+//! have what to do about one: delete the message, remove the person
+//! (`routes/users.rs`), or let it go.
 //!
-//! There is no count anywhere (AGENTS rule 3). The host's sessions hear
+//! There is no count anywhere (AGENTS rule 3). Their sessions hear
 //! `reports.changed` and ask for the list again; the list is the reports, and
 //! the app shows one quiet row while there are any.
 
@@ -17,7 +18,7 @@ use linger_core::wire::{Report, ReportRequest, ReportedMessage};
 use linger_core::{MessageId, ReportId, RoomId, UserId};
 use sqlx::Row;
 
-use crate::auth::{AuthedUser, HostUser};
+use crate::auth::{AuthedUser, HostOrCohost};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::repo;
@@ -123,10 +124,11 @@ async fn send_report(
     Ok((StatusCode::CREATED, Json(report)))
 }
 
-/// `GET /reports` — the open reports, newest first, for the host.
+/// `GET /reports` — the open reports, newest first, for the host and the
+/// co-hosts.
 async fn open_reports(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
 ) -> Result<Json<Vec<Report>>, ApiError> {
     let rows = sqlx::query(
         "SELECT id, reporter_id, user_id, message_id, room_id, excerpt, message_at, note, created_at
@@ -164,11 +166,11 @@ async fn open_reports(
     Ok(Json(reports))
 }
 
-/// `DELETE /reports/:id` — the host dealt with it. Closing one already closed
+/// `DELETE /reports/:id` — the host or a co-host dealt with it. Closing one already closed
 /// changes nothing; one that never existed is not found.
 async fn close_report(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Path(id): Path<ReportId>,
 ) -> Result<StatusCode, ApiError> {
     let exists: Option<(Option<i64>,)> =
@@ -190,12 +192,16 @@ async fn close_report(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `reports.changed` to every session the host has open, and nobody else's.
+/// `reports.changed` to every session the host and each co-host has open,
+/// and nobody else's (#424). Asked of the database each time rather than
+/// remembered, so somebody made a co-host hears the next change, and
+/// somebody who stops being one doesn't.
 async fn tell_the_host(state: &AppState) -> Result<(), ApiError> {
-    let hosts: Vec<(Vec<u8>,)> =
-        sqlx::query_as("SELECT id FROM users WHERE is_host = 1 AND deactivated_at IS NULL")
-            .fetch_all(&state.db.read)
-            .await?;
+    let hosts: Vec<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT id FROM users WHERE (is_host = 1 OR is_cohost = 1) AND deactivated_at IS NULL",
+    )
+    .fetch_all(&state.db.read)
+    .await?;
     for (host,) in hosts {
         let host = UserId::from_slice(&host).map_err(anyhow::Error::from)?;
         state

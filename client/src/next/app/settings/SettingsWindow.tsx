@@ -12,7 +12,7 @@ import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
-import { inviteUrl, moveRoom } from "../../../lib/host";
+import { hostsHere, inviteUrl, moveRoom } from "../../../lib/host";
 import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
@@ -364,20 +364,23 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     return () => abort.abort();
   }, []);
 
-  // The host's lists, read when the window opens.
-  const host = state?.me?.is_host === true;
+  // The host's lists, read when the window opens: the host's, or a
+  // co-host's, who has the same Hosting sections (#424).
+  const hosting = hostsHere(state?.me);
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [removed, setRemoved] = useState<User[] | null>(null);
   const readHostLists = useCallback(() => {
-    if (!api || !host) return;
+    if (!api || !hosting) return;
     void api.invites().then(setInvites, () => setInvites([]));
     void api.removedUsers().then(setRemoved, () => setRemoved([]));
-  }, [api, host]);
+  }, [api, hosting]);
   useEffect(readHostLists, [readHostLists]);
 
   // Which release the server runs, and the newest there is, so a host hears
   // when theirs is behind (#314). The server says on /health, which needs no
   // sign-in and every server answers; nobody but the host is asked or told.
+  // Not a co-host: running the server machine isn't the app's (#424).
+  const host = state?.me?.is_host === true;
   const [serverVersion, setServerVersion] = useState<ServerVersion>({ kind: "looking" });
   const [newest, setNewest] = useState<string | null>(null);
   useEffect(() => {
@@ -594,9 +597,10 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         onAddServer: addServer,
       }}
       hosting={
-        host
+        hosting
           ? {
               serverName,
+              cohost: !host,
               rooms: {
                 rooms,
                 create: (room) => said(api.createRoom({ slug: room.slug, name: room.name, topic: room.topic }), "Couldn't make the room."),
@@ -668,12 +672,15 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   : undefined,
               },
               server: {
-                version: {
-                  ...serverVersionLine(serverVersion, newest),
-                  newest,
-                  openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
-                  openGuide: () => openExternal(HOST_UPDATE_GUIDE_URL),
-                },
+                // The host's alone (#424): a co-host isn't who updates it.
+                version: host
+                  ? {
+                      ...serverVersionLine(serverVersion, newest),
+                      newest,
+                      openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
+                      openGuide: () => openExternal(HOST_UPDATE_GUIDE_URL),
+                    }
+                  : undefined,
                 name: serverName,
                 accent: info?.accent_key ?? null,
                 save: async (change) => {

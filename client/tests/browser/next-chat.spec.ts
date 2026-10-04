@@ -659,7 +659,7 @@ test.describe("voice here", () => {
   test("taken out by the host, the strip says so, and Join is still there (#423)", async ({ page }) => {
     await open(page, "?voice=elsewhere&tab=r-general&takenout");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });
-    await expect(strip.getByRole("status")).toHaveText("The host took you out of voice.");
+    await expect(strip.getByRole("status")).toHaveText("You were taken out of voice.");
     await expect(strip.getByRole("button", { name: /Join|Start talking|Move/ })).toBeVisible();
   });
 

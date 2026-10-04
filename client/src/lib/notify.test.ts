@@ -22,7 +22,7 @@ const { serverState } = await import("./gateway");
 const server = "https://sound.example";
 const room: Room = { id: "room", name: "room", slug: "room", kind: "room", topic: null, member_ids: null, position: 0, archived_at: null, last_message_id: null };
 const snapshot: GatewayState = { ...serverState(server), rooms: [room], dms: [{ ...room, id: "dm", kind: "dm", member_ids: ["me", "friend"] }], me: {
-  id: "me", username: "me", display_name: "Me", is_host: false, status: null, entrance_sound: null, last_seen_at: null,
+  id: "me", username: "me", display_name: "Me", is_host: false, is_cohost: false, status: null, entrance_sound: null, last_seen_at: null,
   style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color: "azure" }, effect: "none", msg_font_key: null },
 } };
 const message: Message = { id: "message", room_id: "dm", author_id: "friend", body: "hello", attachments: [], reply_to: null, reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: 0 };

@@ -133,6 +133,7 @@ fn ready_frame(session_id: &str) -> Value {
         username: "matt".into(),
         display_name: "Matt".into(),
         is_host: true,
+        is_cohost: false,
         style: linger_core::wire::Style::default(),
         status: None,
         entrance_sound: None,

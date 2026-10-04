@@ -22,10 +22,12 @@ import { hasWindowsChoices, type WindowsProps, WindowsSection } from "./WindowsS
 import { useBackButton } from "../useBackButton";
 import "./SettingsView.css";
 
-/** Everything the host can change, for the server you host. */
+/** Everything the host can change, for the server you host or co-host. */
 export interface HostingProps {
   /** The server's name, under the Hosting label. */
   serverName: string;
+  /** You're a co-host here, not the host (#424): the words say so. */
+  cohost?: boolean;
   rooms: HostRoomsProps;
   invites: HostInvitesProps;
   people: HostPeopleProps;
@@ -48,7 +50,7 @@ export interface SettingsViewProps {
   account: AccountProps;
   /** With more than one server; leave out with one. */
   servers?: ServersProps;
-  /** Only for the host; leave out for a member (SRV-8). */
+  /** Only for the host or a co-host; leave out for a member (SRV-8, #424). */
   hosting?: HostingProps;
   /** The phone app (SPEC §4.15): no Notifications, and Sound and Account say less. */
   phone?: boolean;
@@ -78,6 +80,7 @@ const ICONS: Record<SettingsKey, IconName> = {
 export function SettingsView(props: SettingsViewProps) {
   const scope: SettingsScope = {
     hosting: props.hosting?.serverName ?? null,
+    cohost: props.hosting?.cohost === true,
     severalServers: (props.servers?.servers.length ?? 0) > 1,
     windows: hasWindowsChoices(props.windows),
     phone: props.phone === true,

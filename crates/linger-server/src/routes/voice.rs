@@ -19,7 +19,7 @@ use axum::{Json, Router};
 use linger_core::wire::IceServers;
 use linger_core::{RoomId, UserId};
 
-use crate::auth::{AuthedUser, HostUser};
+use crate::auth::{AuthedUser, HostOrCohost};
 use crate::error::ApiError;
 use crate::repo;
 use crate::state::AppState;
@@ -31,14 +31,14 @@ pub fn router() -> Router<AppState> {
         .route("/rooms/{id}/voice/{user_id}", delete(take_out))
 }
 
-/// `DELETE /rooms/{id}/voice/{user_id}` — the host takes somebody out of
-/// a room's voice (#423): somebody who walked away with their microphone on,
-/// say. Not a ban; they can join again. Only in a room the host can see, so a
-/// DM's call stays as private as the DM, and never the host themselves, who
-/// has Leave.
+/// `DELETE /rooms/{id}/voice/{user_id}` — the host or a co-host takes
+/// somebody out of a room's voice (#423, #424): somebody who walked away with
+/// their microphone on, say. Not a ban; they can join again. Only in a room
+/// they can see, so a DM's call stays as private as the DM, never themselves,
+/// who have Leave, and for a co-host never the host.
 async fn take_out(
     State(state): State<AppState>,
-    host: HostUser,
+    host: HostOrCohost,
     Path((room_id, user_id)): Path<(RoomId, UserId)>,
 ) -> Result<StatusCode, ApiError> {
     if user_id == host.id {
@@ -46,6 +46,12 @@ async fn take_out(
             "To leave voice yourself, press Leave.",
         ));
     }
+    host.not_on_the_host(
+        &state.db.read,
+        user_id,
+        "A co-host can't take the host out of voice.",
+    )
+    .await?;
     repo::rooms::visible_to(&state.db.read, room_id, host.id).await?;
     if !state.gateway.voice_take_out(room_id, user_id) {
         return Err(ApiError::not_found("They aren't in voice there."));

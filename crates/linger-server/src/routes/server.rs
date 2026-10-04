@@ -7,7 +7,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use linger_core::wire::{ColorKey, ServerInfo, UpdateServerRequest};
 
-use crate::auth::{AuthedUser, HostUser};
+use crate::auth::{AuthedUser, HostOrCohost};
 use crate::error::ApiError;
 use crate::repo;
 use crate::state::AppState;
@@ -59,7 +59,7 @@ async fn info(
 
 async fn update(
     State(state): State<AppState>,
-    _host: HostUser,
+    _host: HostOrCohost,
     Json(req): Json<UpdateServerRequest>,
 ) -> Result<Json<ServerInfo>, ApiError> {
     if let Some(name) = &req.name {

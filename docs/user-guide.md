@@ -516,11 +516,12 @@ window, so you don't need the list in front to mute:
 - **Mute** (the microphone) stops sending, instantly, and nobody else can
   change it. Nobody can mute you either, and nobody can turn your microphone
   on. While you're muted, the microphone is crossed out and lit.
-- **The host can take somebody out of voice**: somebody who walked away with
-  their microphone on, say. Click their name in the voice bar (or open their
-  card and its **···**) and choose **Take out of voice**. They leave the call
-  as if they'd pressed Leave, their app says the host took them out, and they
-  can join again whenever they're back.
+- **The host, or a co-host, can take somebody out of voice**: somebody who
+  walked away with their microphone on, say. Click their name in the voice bar
+  (or open their card and its **···**) and choose **Take out of voice**. They
+  leave the call as if they'd pressed Leave, their app says they were taken
+  out, and they can join again whenever they're back. A co-host can't take
+  the host out.
 - **Deafen** (the headphones) silences incoming voice and mutes your
   microphone together. Pressing it again restores your previous mic choice.
   Deafen doesn't change notification sounds.
@@ -835,8 +836,9 @@ to save memory, and scrolling down picks them up again.
 
 Among friends these should hardly ever come up, so they stay out of the way.
 
-**Report** sends a message, or a person, to whoever hosts the server, and to
-nobody else. The person isn't told.
+**Report** sends a message, or a person, to whoever hosts the server and any
+co-hosts they've named, and to nobody else. The person isn't told, unless
+they're a co-host themselves; the form says so when they are.
 
 - **A message:** on a computer, its **···** and then **Report to host…**, the
   last item. On the phone, hold the message, and choose **Report to host…**.
@@ -858,11 +860,17 @@ aren't told, and they still see what you say in rooms. For you:
 To undo it, choose **Unblock** on their card, or open **Settings → Account &
 App → Blocked**, which lists everyone you've blocked on that server.
 
-**If you host:** when somebody reports something, a row saying **A report to
+**If you host, or co-host:** when somebody reports something, a row saying **A report to
 look at** lights up in your list. It never shows how many. It opens
 **Settings → People**, which shows who sent each report, what it's about and
 their note. From there you can delete the message, remove the person, or
-**Let it go**. Each of those closes the report.
+**Let it go**. Each of those closes the report, for the host and every co-host.
+
+**Co-hosts.** The host can make somebody a co-host for when they're away, from
+that person's card. A co-host has the host's **Hosting** sections in Settings
+and can do what the host does in the app, except make co-hosts or act on the
+host. Their card says "co-host". The [host guide](host-guide.md#running-it-day-to-day)
+has the details.
 
 ## Taking everything with you
 

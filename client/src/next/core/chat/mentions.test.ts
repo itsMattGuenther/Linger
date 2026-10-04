@@ -19,6 +19,7 @@ function person(id: string, display_name: string, username = display_name.toLowe
     username,
     display_name,
     is_host: false,
+    is_cohost: false,
     style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color: "azure" }, effect: "none", msg_font_key: null },
     status: null,
     entrance_sound: null,

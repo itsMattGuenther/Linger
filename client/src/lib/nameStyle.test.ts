@@ -126,6 +126,7 @@ describe("previewUser", () => {
       username: "dave",
       display_name: "Dave",
       is_host: false,
+      is_cohost: false,
       entrance_sound: null,
       last_seen_at: null,
       status: null,

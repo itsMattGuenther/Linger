@@ -9,6 +9,29 @@
 import type { Invite } from "../generated/Invite";
 import type { Room } from "../generated/Room";
 import type { RoomId } from "../generated/RoomId";
+import type { User } from "../generated/User";
+
+/**
+ * Whether this person has the host's powers here: the host, or a co-host the
+ * host named (#424). Everything the app gates on hosting asks this, except
+ * the few things that are the host's alone: naming co-hosts, and the
+ * server's version (running the server machine isn't the app's).
+ *
+ * A server from before co-hosts leaves `is_cohost` out, which is false.
+ */
+export function hostsHere(user: Pick<User, "is_host" | "is_cohost"> | null | undefined): boolean {
+  return user?.is_host === true || user?.is_cohost === true;
+}
+
+/**
+ * Whether `me` may use the host's powers on `them` (#424): you have them, and
+ * they aren't the host, unless you are. A co-host can't act on the host.
+ * Somebody this app doesn't know is the server's to judge.
+ */
+export function mayActOn(me: Pick<User, "is_host" | "is_cohost"> | null | undefined, them: Pick<User, "is_host"> | null | undefined): boolean {
+  if (!hostsHere(me)) return false;
+  return me?.is_host === true || them?.is_host !== true;
+}
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;

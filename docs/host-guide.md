@@ -156,7 +156,8 @@ open it from your application menu, or the same way you installed it.
 ## 7. Invite people
 
 Open Settings (the gear at the top of your list, or **Ctrl+,**). As the host
-you have a **Hosting** group there that nobody else sees.
+you have a **Hosting** group there that nobody else sees, unless you make them
+a [co-host](#running-it-day-to-day).
 
 First make a room: **Hosting → Rooms → New Room**. Give it a name, and a topic
 if you like. The slug, the short form people type after the `#`, fills itself
@@ -229,9 +230,18 @@ Newcomers start on the name color the fewest people on the server wear, so a
 big group isn't a list of gray names. Anyone can change theirs in **Settings →
 Profile**.
 
-Two things worth knowing. There is **no way to hand the host role to somebody
-else**, on purpose. And there are no permissions to configure — if a group needs
-that, it has outgrown what this app is for.
+**Going away? Make somebody a co-host.** Open their card (click their name),
+then **···** and **Make Jules a co-host**. A co-host gets the same **Hosting**
+sections and can do everything above, handle reports, and take somebody out
+of voice. They can't make other co-hosts, and they can't act on you: remove
+you, take you out of voice, delete your messages or revoke your invites. Their
+card says "co-host". To stop it, choose **Jules stops being a co-host** on the
+same menu. Only you see the server's version, since updating the server is
+still yours to do.
+
+Two things worth knowing. There is **no way to hand the host role itself to
+somebody else**, on purpose. And there are no permissions to configure beyond
+that one switch. If a group needs more, it has outgrown what this app is for.
 
 ---
 

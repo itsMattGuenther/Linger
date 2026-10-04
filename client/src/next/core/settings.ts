@@ -27,8 +27,10 @@ export type SettingsKey =
 
 /** What the window has to show, which decides which sections exist. */
 export interface SettingsScope {
-  /** The server you host, by name, or null: Hosting appears only for the host (SRV-8). */
+  /** The server you host, by name, or null: Hosting appears only for the host or a co-host (SRV-8, #424). */
   hosting: string | null;
+  /** You co-host it rather than host it (#424). */
+  cohost?: boolean;
   /** More than one server signed in: Servers appears only then. */
   severalServers: boolean;
   /** Something to choose in Windows (it appears only when there is). */
@@ -110,13 +112,14 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "servers":
       return "Each server is its own account: its own you, its own look. The order is yours; nothing reshuffles by activity.";
     case "rooms":
-      return `You host ${scope.hosting ?? "this server"}. What you change here changes it for everyone.`;
+      return `You ${scope.cohost === true ? "co-host" : "host"} ${scope.hosting ?? "this server"}. What you change here changes it for everyone.`;
     case "invites":
       return "A link lets somebody make an account here. Make one for the person you're asking.";
     case "people":
       return "Manage who can use this server. Removing someone asks you first.";
     case "server":
-      return "The version it runs, and its name and color as everyone sees them.";
+      // Only the host sees the version (#424): who runs the machine updates it.
+      return scope.cohost === true ? "Its name and color as everyone sees them." : "The version it runs, and its name and color as everyone sees them.";
   }
 }
 

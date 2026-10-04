@@ -134,12 +134,12 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
                              voice? }
-PATCH /server            (host only) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
+PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
-POST /rooms              (host only) { slug, name, topic? }         → Room
-PATCH /rooms/:id         (host only) { name?, topic?, position? }   → Room
-POST /rooms/:id/archive  (host only)                                → Room
+POST /rooms              (host or co-host) { slug, name, topic? }         → Room
+PATCH /rooms/:id         (host or co-host) { name?, topic?, position? }   → Room
+POST /rooms/:id/archive  (host or co-host)                                → Room
 
 GET  /dms                → Room[]                       # the DMs you are in
 POST /dms                { user_ids }                   → Room
@@ -284,7 +284,8 @@ The current client uses none of this: reactions are out of the app as a trial (S
 it ignores the `reactions` field. The server keeps all of it, unchanged, so older clients
 still work and the trial can end either way without a migration.
 
-Edits are only permitted by the author. Deletes are permitted by the author or the host.
+Edits are only permitted by the author. Deletes are permitted by the author, the host or
+a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
 
 **Read markers**
@@ -312,23 +313,46 @@ GET  /me/notify-rules     → NotifyRule[]
 PUT  /me/notify-rules     { target_user_id, room_id | null }   → 204
 DELETE /me/notify-rules   { target_user_id, room_id | null }   → 204
 
-GET  /users/removed       → User[]                  # host-only
-POST /users/:id/remove    → 204                     # host-only
-POST /users/:id/restore   → 204                     # host-only
+GET  /users/removed       → User[]                  # host or co-host
+POST /users/:id/remove    → 204                     # host or co-host
+POST /users/:id/restore   → 204                     # host or co-host
+PUT    /users/:id/cohost  → User                    # the host only: make a co-host
+DELETE /users/:id/cohost  → User                    # the host only: not a co-host
 
 GET    /me/blocks           → UserId[]                         # who you've blocked
 PUT    /me/blocks/:user_id  → 204
 DELETE /me/blocks/:user_id  → 204
 
 POST   /reports             { message_id } | { user_id }, note? → 201 Report   # 10/hour
-GET    /reports             → Report[]                          # host-only, open ones
-DELETE /reports/:id         → 204                               # host-only: dealt with
+GET    /reports             → Report[]                          # host or co-host, open ones
+DELETE /reports/:id         → 204                               # host or co-host: dealt with
 ```
+
+### Co-host (SPEC §4.16, #424)
+
+One switch per person, `is_cohost` on `User`. A co-host can call every endpoint marked
+"host or co-host", and gets `reports.changed` and `GET /reports` like the host. Two
+things stay the host's alone, and nothing else is split off:
+
+- **Making and clearing co-hosts.** `PUT /users/:id/cohost` turns it on and
+  `DELETE /users/:id/cohost` turns it off. Neither carries a body; both answer the
+  person as they are now and fan out `user.update` to everybody, so their own app learns
+  it can show them the host's controls (or stop). Setting it to what it already is
+  changes nothing and answers the same. Anybody but the host gets `FORBIDDEN`, co-hosts
+  included. The host naming themselves is `VALIDATION_FAILED`, and somebody who isn't a
+  member now (never was, or removed) is `NOT_FOUND`.
+- **Acting on the host.** A co-host can't remove the host, take them out of voice,
+  delete their messages or revoke their invites: each is `FORBIDDEN`.
+
+Removing a co-host turns the switch off, and `restore` brings them back as a member.
+A server that updates to #424 has no co-hosts until its host names one (migration
+`0010_cohost.sql`); a server from before it leaves `is_cohost` out, which reads as false.
 
 ### Removing a member
 
-`remove` sets `deactivated_at`; `restore` clears it. Neither carries a body. The host
-cannot remove themselves — that answers `FORBIDDEN`. There is no ban and no ban list:
+`remove` sets `deactivated_at`; `restore` clears it. Neither carries a body. The host or a
+co-host can remove anybody but themselves (that answers `FORBIDDEN`), and a co-host
+can't remove the host. There is no ban and no ban list:
 usernames are unique and immutable, the account row survives, and registration is
 invite-only, so the host is already the only way back in. Nothing durable enough to ban
 by (an address, a device id) is stored anywhere in Linger, and nothing is going to be.
@@ -371,6 +395,7 @@ validated against `linger-core::ENTRANCE_SOUNDS` until custom uploads land in M4
 type User = {
   id: string; username: string; display_name: string;
   is_host: boolean;
+  is_cohost: boolean;                 // a co-host the host named (#424); never with is_host
   style: Style;
   status: UserStatus | null;
   entrance_sound: string | null;      // bundled key or object key
@@ -489,18 +514,18 @@ A change reaches every session of the person who made it as
 `block.update { user_id, blocked }`, so a block made on a phone holds on the
 computer at once. Nobody else's session hears of it.
 
-**Report** goes to the host and nobody else; a self-hosted server has nobody
-else to send it to. A report names a message (`message_id`: one the reporter can
+**Report** goes to the host and any co-hosts, and nobody else; a self-hosted
+server has nobody else to send it to. A report names a message (`message_id`: one the reporter can
 read, and not their own) or a person (`user_id`: anybody but yourself). The
 `note` is optional, up to 1000 characters. The server keeps the message's words as
 they were when it was reported (`excerpt`), so the host still sees what was
 reported after it has been edited or deleted. A report about a DM shows the host
-that one message, which is what the reporter is asking for. Anything else in a DM
-stays out of the host's sight. Ten reports an hour per reporter
+and the co-hosts that one message, which is what the reporter is asking for.
+Anything else in a DM stays out of their sight. Ten reports an hour per reporter
 (`RATE_REPORT_PER_HOUR`).
 
-`GET /reports` answers the open reports, newest first, to the host; anybody else
-gets `FORBIDDEN`.
+`GET /reports` answers the open reports, newest first, to the host and the
+co-hosts; anybody else gets `FORBIDDEN`.
 
 ```ts
 type Report = {
@@ -513,14 +538,17 @@ type Report = {
 }
 ```
 
-`DELETE /reports/:id` closes one: the host dealt with it, by deleting the
-message, removing the person, or letting it go. A closed report isn't listed
-again, and nothing reopens it.
+`DELETE /reports/:id` closes one: the host or a co-host dealt with it, by
+deleting the message, removing the person, or letting it go. A closed report
+isn't listed again, and nothing reopens it.
 
 Whenever the open reports change (one sent, one closed), every session the host
-has open gets `reports.changed`, with nothing in it, and the client asks
-`GET /reports` again. There is **no count** anywhere (AGENTS rule 3): the host's
-list shows one quiet row while any report is open, never how many.
+and each co-host has open gets `reports.changed`, with nothing in it, and the
+client asks `GET /reports` again. Who that is gets read from the database each
+time, so somebody just made a co-host hears the next one. A client also asks
+when its own `user.update` says it has just become a co-host. There is **no
+count** anywhere (AGENTS rule 3): the list shows one quiet row while any report
+is open, never how many.
 
 ### Palette validation (server-side, mandatory)
 
@@ -794,7 +822,7 @@ POST /export             → { job_id }                        # any member, 1/h
 GET  /export/:job_id     → { job_id, state, progress, url? } # the asker's own only
 POST /knock              { target_user_id }                 → 204   # 3/hour per target
 GET  /voice/ice          → { servers: IceServer[], ttl_secs } # the voice relay, for you
-DELETE /rooms/:id/voice/:user_id → 204   # host only: take them out of that room's voice (#423)
+DELETE /rooms/:id/voice/:user_id → 204   # host or co-host: take them out of that room's voice (#423)
 ```
 
 ```ts
@@ -807,7 +835,9 @@ number is that many uses; `0` is `VALIDATION_FAILED`. A plain JSON parser reads
 a missing field and `null` alike, so the server tells them apart on purpose,
 and a client asking for no limit must send the `null` rather than leave the
 field out (#246). `expires_in_hours` left out or `null` is never. An `Invite`
-comes back with `max_uses: null` when it has no limit.
+comes back with `max_uses: null` when it has no limit. `DELETE /invites/:code`
+is for whoever made the invite, the host or a co-host; a co-host can't revoke
+the host's invites (§5, "Co-host").
 
 **Voice relay** (SPEC §4.14, T-1403). What a client puts in its peer connections'
 ICE configuration before joining voice: the host's STUN and TURN addresses, with a
@@ -940,10 +970,10 @@ Beyond that, the client must re-identify and refetch.
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
-| `reports.changed` | `{}` — **sent to the host's sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
+| `reports.changed` | `{}` — **sent to the host's and the co-hosts' sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }] }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves |
-| `voice.removed` | `{ room_id }` — **addressed to one session**: the host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
+| `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
 
 ```ts
 type PresenceEntry = {
@@ -980,14 +1010,15 @@ without them does not erase known state. Reports are held in memory, survive
 resume with the seat, and disappear on leaving. They use the ordinary
 membership-filtered `voice.state`, including inside DMs.
 
-**The host can take somebody out of a room's voice** (#423): `DELETE /rooms/:id/voice/:user_id`,
+**The host or a co-host can take somebody out of a room's voice** (#423, #424): `DELETE /rooms/:id/voice/:user_id`,
 for somebody who walked away with their microphone on. Every seat that person has in that
 room ends (a laptop and a desktop are two); each of those sessions gets `voice.removed`, and
 then the room gets its `voice.state` without them. It isn't a ban: they can join again. It is
 the one thing anybody can do to somebody else's voice, and it isn't a remote mute: their
 microphone is closed by their own app leaving, and nothing turns anybody's microphone on.
-Only in a room the host can see, so a DM's call is as private as the DM; never the host
-themselves (422, they have Leave); 404 when the person isn't in that room's voice.
+Only in a room the host can see, so a DM's call is as private as the DM; never the one
+asking (422, they have Leave); for a co-host never the host (403); 404 when the person
+isn't in that room's voice.
 
 Old servers ignore the extra join field and old clients ignore the extra peer field. New
 clients still enforce local controls on an old server, but cannot show others' state. Mic
@@ -1085,7 +1116,8 @@ told the thing.
   the wire — the receiver is the only one who gets the frame, so a field naming
   them would carry nothing (SPEC §4.9, T-1101).
 - `block.update` and `reports.changed` are addressed too: the first to the
-  sessions of the person who blocked or unblocked, the second to the host's.
+  sessions of the person who blocked or unblocked, the second to the host's and
+  every co-host's.
   Neither names a room.
 
 ---
