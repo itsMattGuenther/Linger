@@ -143,6 +143,16 @@
   font-size: var(--text-meta);
 }
 
+/* The marks under a link's card, when the message is only the link. */
+.nx-msg-marks {
+  margin: var(--space-1) 0 0;
+  line-height: var(--line-meta);
+}
+
+.nx-msg-marks > :first-child {
+  margin-left: 0;
+}
+
 .nx-msg-problem {
   margin: var(--space-1) 0 0;
   color: var(--text-danger);

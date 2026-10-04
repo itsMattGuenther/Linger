@@ -410,7 +410,7 @@ Enter to open the message actions; Escape closes the menu and returns focus.
 - **Edit**: your own messages only. **Shortcut: press Up arrow in an empty box**
   to edit the last thing you said.
 - **Pin** (or **Unpin**): anyone can pin a message, and it gets a small pin
-  after its words. Media's **Pinned** filter collects them, and a file on a
+  after its words (under the card, for a message that's only a link). Media's **Pinned** filter collects them, and a file on a
   pinned message never expires.
 - **Delete**: asks once, then it's gone.
 

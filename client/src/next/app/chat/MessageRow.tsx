@@ -99,6 +99,20 @@ export const MessageRow = memo(function MessageRow({
   const namesMe = me !== null && !deleted && mentionHandles(message.body).includes(me.username);
   const links = deleted || editing ? [] : linkTargets(message.body);
   const justCard = cardOnly(message.body, links, (url) => previews[url] !== undefined);
+  // Pinned and edited, said after the words, or under the card when there
+  // are none.
+  const marks =
+    message.edited_at === null && message.pinned_at === null ? undefined : (
+      <>
+        {message.pinned_at === null ? null : (
+          <span className="nx-msg-pinned" title="Pinned">
+            <Icon name="pin" size="sm" />
+            <span className="k-sr-only">pinned</span>
+          </span>
+        )}
+        {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
+      </>
+    );
   // Rows exist only while on screen (the list is virtualized), so this asks
   // about the links people can see and nothing further back. Keyed on the
   // joined list: the array is rebuilt every render.
@@ -262,24 +276,7 @@ export const MessageRow = memo(function MessageRow({
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
           <Fold id={message.id}>
-            <MessageText
-              source={message.body}
-              mentions={mentions}
-              onOpenLink={actions.openLink}
-              trailing={
-                message.edited_at === null && message.pinned_at === null ? undefined : (
-                  <>
-                    {message.pinned_at === null ? null : (
-                      <span className="nx-msg-pinned" title="Pinned">
-                        <Icon name="pin" size="sm" />
-                        <span className="k-sr-only">pinned</span>
-                      </span>
-                    )}
-                    {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
-                  </>
-                )
-              }
-            />
+            <MessageText source={message.body} mentions={mentions} onOpenLink={actions.openLink} trailing={marks} />
           </Fold>
         )}
         {deleted || editing ? null : (
@@ -288,6 +285,9 @@ export const MessageRow = memo(function MessageRow({
             {links.map((url) => (
               <LinkCard key={url} url={url} preview={previews[url]} onOpen={actions.openLink} />
             ))}
+            {/* A message that's only a link shows only its card, and has no
+                words for the marks to follow: they go under the card. */}
+            {justCard && marks !== undefined ? <p className="nx-msg-marks">{marks}</p> : null}
           </>
         )}
         {problem ? (

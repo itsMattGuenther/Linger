@@ -314,6 +314,24 @@ test.describe("what a message says", () => {
   });
 });
 
+test.describe("a message that's only a link", () => {
+  test("shows its pin under its card, where there are no words to follow (T-908)", async ({ page }) => {
+    await open(page);
+    const only = row(page, "m000013");
+    await expect(only.locator(".nx-linkcard")).toBeVisible();
+    await expect(only.locator(".nx-text")).toHaveCount(0);
+    await only.hover();
+    await only.getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Pin" }).click();
+    const pin = only.locator(".nx-msg-pinned");
+    await expect(pin).toBeVisible();
+    await expect(pin).toHaveAttribute("title", "Pinned");
+    // Under the card, inside the row.
+    const [card, mark] = [await only.locator(".nx-linkcard").boundingBox(), await pin.boundingBox()];
+    expect(card && mark && mark.y >= card.y + card.height).toBe(true);
+  });
+});
+
 test.describe("changing a message", () => {
   const MINE = "m000014";
 
