@@ -1083,7 +1083,10 @@ only way voice travels (#306). A server without it carries no voice at all: ever
 - **Limits.** `voice.answer`'s `sdp` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything
   larger is dropped. Answers and restarts are rate-limited per session
   (`RATE_VOICE_SIGNAL`), loosely, because a busy room re-offers everybody each time
-  somebody comes or goes. A room holds `MAX_VOICE_PEERS` (25).
+  somebody comes or goes. A room holds `MAX_VOICE_PEERS` (60). An app sends voice only
+  while its person is talking (Opus DTX, its "still here" frames left unsent too), so the
+  server forwards little but the people talking; an app from before 0.4.9 sends silence
+  as well, which works and costs the server more.
 
 ### Fan-out rules
 

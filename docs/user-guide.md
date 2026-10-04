@@ -595,7 +595,8 @@ Then press **Start talking** again.
 
 **Voice goes through the server.** Your voice goes to the server once and the
 server passes it on to everyone else in the room, which is what lets a room of
-up to 25 talk at once. The host has to turn it on. On a server where they
+up to 60 talk at once. Linger sends your voice only while you're talking, so a
+quiet room costs nothing. The host has to turn it on. On a server where they
 haven't, a room's voice line says **Voice isn't set up on this server**
 instead of offering to start. Linger 0.4.0 and older sent voice straight to
 each person, a way that is gone now, so people on those versions need to

@@ -113,14 +113,15 @@ pub const MIN_PASSWORD_CHARS: usize = 8;
 pub const INVITE_CODE_CHARS: usize = 12;
 
 /// A client's answer to the forwarding server's offer (SPEC §4.14, PROTOCOL
-/// §8). An SDP answer for a room of 25 is a few kilobytes; sixteen is far
-/// above that and far below anything worth carrying.
-pub const MAX_VOICE_PAYLOAD_BYTES: usize = 16 * 1024;
+/// §8). The answer carries a few hundred bytes for every other person in the
+/// room, so a room of 60 answers in tens of kilobytes; 16 KB, enough for 25,
+/// would have dropped the answers of the last people into a raid (#197).
+pub const MAX_VOICE_PAYLOAD_BYTES: usize = 128 * 1024;
 
-/// How many people can be in one voice room (#197). Each person sends once
-/// and hears everybody else through the server, so the ceiling is what one
-/// laptop can decode and mix.
-pub const MAX_VOICE_PEERS: usize = 25;
+/// How many people can be in one voice room (#197): a 40-person raid and the
+/// people around it. Each person sends once, only while talking (silence isn't
+/// sent), and hears everybody else through the server.
+pub const MAX_VOICE_PEERS: usize = 60;
 
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;

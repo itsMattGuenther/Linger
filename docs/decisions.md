@@ -827,3 +827,32 @@ role/permission matrix" (SPEC §2) still stands, and this must not grow
 toward it: no other levels, no per-power switches, no second kind of
 co-host. A request for any of those is the matrix in its first disguise.
 
+
+## Decided — a voice room holds a raid: 60, and silence isn't sent
+
+**Matt, 2026-10-04 (#197).** A WoW raid of 40, about 50 in one voice room, in a month,
+on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
+
+- **Silence isn't sent.** Every app used to send 50 packets a second of silence
+  (muted and push-to-talk included), and the server copied each to everybody: at 50
+  people about 120,000 packets a second through one thread. Discord's apps send only
+  while you talk (five silence frames, then nothing), and now Linger's do too: Opus DTX
+  on the live-voice encoder, and its "still here" frames left unsent as well. Listeners'
+  talking lights go out after the usual 300 ms pause with nothing arriving.
+- **60 a room**, and the answer to the server's offer may be 128 KB: it grows a few
+  hundred bytes for every other person, and at 50 a stand-in's was 42 KB, past the old
+  16 KB, which would have shut the last people into a raid out.
+- **The forwarding loop takes every waiting packet in one turn** and gives the time only
+  to connections that are due; it used to walk every connection for every packet.
+- **A bug the load test found: a room filling at once could cut somebody off.** `str0m`
+  names each new m-line with a random three-character mid and checks it against the
+  agreed ones only, not the others in the same offer. A newcomer's first offer adds one
+  for everybody there, so at raid size two sometimes matched, the app refused the offer
+  as reordered, and that person heard nobody: about one 60-person join in ten. The
+  server now throws such an offer away and draws again (`negotiate`); 40 joins of 60
+  without one since, and `a_room_filling_at_once_never_names_an_m_line_twice` checks
+  every offer.
+- **Measured** (`crates/linger-sfu/tests/load.rs`, on a fast desktop core): 50 people
+  with 3 talking went from 74% of a core and 68% heard to 24% and all heard with
+  silence unsent, and 10% with the loop change; 60 with 5 talking, 17% and all heard. The droplet's shared core is slower: a test against it decides whether raid
+  night wants a temporary second core.

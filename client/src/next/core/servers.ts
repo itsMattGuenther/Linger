@@ -16,8 +16,8 @@ import type { User } from "../../generated/User";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
 import { anyDmFresh, type ListModel, type PersonRow, type Present } from "./list";
 
-/** `linger-core::limits::MAX_VOICE_PEERS`: voice holds 25 a room, through the server (#197). */
-export const MAX_VOICE_PEERS = 25;
+/** `linger-core::limits::MAX_VOICE_PEERS`: voice holds 60 a room, through the server (#197). */
+export const MAX_VOICE_PEERS = 60;
 
 const WORDS = ["no", "one", "two"] as const;
 
