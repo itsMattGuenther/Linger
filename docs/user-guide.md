@@ -24,10 +24,11 @@ current installers are for 64-bit Intel/AMD computers (`x64`, `x86_64` and
 | Fedora or openSUSE | File ending in `x86_64.rpm` → [Linux packages](#linux-packages) |
 | Omarchy or Arch | Nothing to download → [Arch and Omarchy](#arch-and-omarchy) |
 | Any other Linux | File ending in `amd64.AppImage` → [AppImage](#linux-appimage) |
+| An Android phone | File ending in `android-arm64.apk`, on the phone → [Android](#android) |
 
 You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
-There are no macOS or ARM desktop installers yet.
+There are no macOS or ARM desktop installers yet, and no iPhone app.
 
 ### Windows
 
@@ -118,6 +119,31 @@ sudo zypper install ~/Downloads/Linger-0.3.0-1.x86_64.rpm
 
 Open **Linger** from your application launcher, now and whenever you want to
 reopen it. Then go to [Getting in](#getting-in).
+
+### Android
+
+The phone app is on the release page from 0.4.8, until it's in the Play
+Store. It's for seeing who's around and answering them: rooms, DMs, your
+status, media, search, pictures and voice messages. It doesn't join voice
+rooms, and it never shows a notification, open or closed (when you open it,
+it catches up).
+
+1. On the phone, open the
+   [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
+   and download the file ending in `android-arm64.apk`.
+2. Open it from the download. Android says it won't install apps from your
+   browser: tap **Settings**, turn on **Allow from this source**, and go back.
+   That's Android's rule for any app that isn't from the Play Store.
+3. Tap **Install**. If Play Protect asks, it's because it hasn't seen this app
+   before; choose to install anyway.
+4. Open **Linger**, then continue to [Getting in](#getting-in): an invite link
+   opened on the phone works the same way.
+
+**It doesn't update itself.** For a new version, download the new `.apk` from
+its release page and install it over the old one. You stay signed in. Every
+release is signed with the same key, which is what lets it install over the
+last one; if Android ever says the app "conflicts with an existing package",
+it isn't from this project's release page.
 
 ## Getting in
 
@@ -863,6 +889,10 @@ installer/AppImage from [Releases](https://github.com/itsMattGuenther/Linger/rel
 and use the installation steps above. Close the old app first. For an
 AppImage, make the new file executable and launch that file, not the old one.
 Do not delete your account or application data to update.
+
+**The Android app** doesn't update itself: install the newer `.apk` from
+[Releases](https://github.com/itsMattGuenther/Linger/releases/latest) over
+the old one, as in [Android](#android).
 
 A code push to GitHub is **not a release**. New downloads appear when a
 desktop release is published. Updating your app also does not update the

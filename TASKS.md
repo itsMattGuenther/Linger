@@ -595,8 +595,16 @@ macOS runners, or a friend's Mac.
   commands, so all of those have to open inside the list's window instead.
   *Accept:* usable one-handed on a phone somebody actually owns.
 
-- ⏸ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
-  *Waiting (Matt, 2026-10-03):* starts once T-1605 is done and Matt says go.
+- 🟡 **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
+  *Started (Matt, 2026-10-03): friends first.* Each release carries a signed
+  `Linger_<version>_android-arm64.apk` (release.yml's `android` job;
+  `scripts/android-key.sh` makes the key, `scripts/android-signing.sh` checks
+  it against `client/src-tauri/android-release-cert.sha256` before and after
+  the build; docs/development.md, "The release key"). A release build signed
+  with a throwaway key opened in the emulator and reached Matt's server.
+  **Still to do:** Matt makes the real key and sets the two secrets, the first
+  release with an `.apk` (0.4.8), and his wife installs it from the release
+  page on her Android phone. Then Google Play, when Matt says go.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person

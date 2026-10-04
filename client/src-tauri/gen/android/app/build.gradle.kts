@@ -13,6 +13,18 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The release key (T-1604): keystore.properties is written by the release
+// workflow (scripts/android-signing.sh setup), or by hand on a machine that
+// holds the key (scripts/android-key.sh), and git ignores it. Without it a
+// release build comes out unsigned, which is fine for anything but shipping.
+// Debug builds always use Android's own debug key.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "io.github.itsmattguenther.linger"
@@ -23,6 +35,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (keystoreProperties.containsKey("storeFile")) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("password")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("password")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -37,6 +59,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

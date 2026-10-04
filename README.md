@@ -112,6 +112,7 @@ covers each step and what to do when something goes wrong.
 | **Ubuntu, Debian, Mint** | The `…amd64.deb`: `sudo apt install ~/Downloads/Linger_<version>_amd64.deb` |
 | **Fedora, openSUSE** | The `…x86_64.rpm`: `sudo dnf install` (or `zypper install`) it |
 | **Any other Linux** | The `…amd64.AppImage`: `chmod +x` it, then run it |
+| **An Android phone** | The `…android-arm64.apk`, downloaded and opened on the phone (from 0.4.8; Android asks you to allow installs from your browser) |
 
 ```bash
 # Omarchy and Arch: trusts Linger's signing key, adds its repository, installs
