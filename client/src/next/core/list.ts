@@ -19,7 +19,7 @@ import type { User } from "../../generated/User";
 import { dmLabel, orderDms, others, peopleIn } from "../../lib/dm";
 import { type GatewayState, hasNewActivity, voicePeersIn } from "../../lib/gateway";
 import { occupantsOf } from "../../lib/occupancy";
-import { buildRoster, type RosterEntry, shortAgo } from "../../lib/roster";
+import { buildRoster, type RosterEntry, shortAgo, shownState, voiceRoomsOf } from "../../lib/roster";
 
 export interface ListModel {
   /** You, as the list's top card. Null until the server has said who you are. */
@@ -109,15 +109,17 @@ export function listModel(state: GatewayState, now: number): ListModel {
         id: room.id,
         name: room.name,
         fresh: hasNewActivity(state, room.id),
-        people: occupantsOf(room.id, state.occupancy, state.presence, users),
+        people: occupantsOf(room.id, state.occupancy, state.presence, users, voicePeersIn(state, room.id)),
         voice: voicePeersIn(state, room.id).length > 0,
       }),
     );
 
   const presenceOf = new Map(state.presence.map((entry) => [entry.user_id, entry.state]));
+  // In a room's voice is in that room (#420), wherever they're drawn.
+  const voiceRooms = voiceRoomsOf(state.voice, state.rooms);
   // No entry means the server isn't tracking them, and it tracks only
   // connected clients: absent is offline (the same rule as the roster).
-  const stateOf = (id: string): PresenceState => presenceOf.get(id) ?? "offline";
+  const stateOf = (id: string): PresenceState => shownState(presenceOf.get(id) ?? "offline", voiceRooms.has(id));
 
   // A DM with exactly one other person the server lists is that person's;
   // every other DM is a group, drawn with the rooms (#351).
@@ -152,6 +154,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
     offlineAt: state.offlineAt,
     now,
     inVoice,
+    voiceRooms,
   });
 
   const people: PeopleGroups = { here: [], away: [], offline: [] };

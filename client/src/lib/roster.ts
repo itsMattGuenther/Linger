@@ -14,7 +14,9 @@
 import type { PresenceEntry } from "../generated/PresenceEntry";
 import type { PresenceState } from "../generated/PresenceState";
 import type { Room } from "../generated/Room";
+import type { RoomId } from "../generated/RoomId";
 import type { User } from "../generated/User";
+import type { VoicePeer } from "../generated/VoicePeer";
 
 /** One person's card, with everything it needs already looked up. */
 export interface RosterEntry {
@@ -73,9 +75,12 @@ export function buildRoster(input: {
   now: number;
   /** User ids with a microphone on anywhere we can see. Nobody, if absent. */
   inVoice?: ReadonlySet<string>;
+  /** Who is in a room's voice, and which room (`voiceRoomsOf`). Nobody, if absent. */
+  voiceRooms?: ReadonlyMap<string, RoomId>;
 }): RosterEntry[] {
   const { users, presence, rooms, meId, offlineAt, now } = input;
   const inVoice = input.inVoice ?? new Set<string>();
+  const voiceRooms = input.voiceRooms ?? new Map<string, RoomId>();
   const byUser = new Map(presence.map((entry) => [entry.user_id, entry]));
   const roomsById = new Map(rooms.map((room) => [room.id, room]));
 
@@ -83,10 +88,15 @@ export function buildRoster(input: {
     const entry = byUser.get(user.id);
     // No entry at all means the server is not tracking them, and it only
     // tracks connected clients. Absent is offline.
-    const state = entry?.state ?? "offline";
-    const here = state !== "offline";
+    const sent = entry?.state ?? "offline";
+    const here = sent !== "offline";
+    // In a room's voice is in that room (#420), and it's the room they're
+    // shown in, even while they read another one.
+    const voiceRoomId = voiceRooms.get(user.id);
+    const voiceRoom = voiceRoomId === undefined ? null : (roomsById.get(voiceRoomId) ?? null);
+    const state = shownState(sent, voiceRoom !== null);
     const roomId = (here ? entry?.room_id : null) ?? null;
-    const room = roomId === null ? null : (roomsById.get(roomId) ?? null);
+    const room = (state === "in_room" ? voiceRoom : null) ?? (roomId === null ? null : (roomsById.get(roomId) ?? null));
     // What they last left on their status. Presence carries the live one and
     // wins; this is the one that outlives the session it was written in.
     const kept = user.status?.away_message ?? null;
@@ -108,6 +118,33 @@ export function buildRoster(input: {
         sensitivity: "base",
       }),
   );
+}
+
+/**
+ * Somebody's presence as Linger draws it. In a room's voice is in that room
+ * (SPEC §4.1, #420): talking in #general with a game in front of them, they
+ * are neither just around nor idle. An away they chose still shows: they
+ * said so. Offline can't be in voice.
+ */
+export function shownState(state: PresenceState, inRoomVoice: boolean): PresenceState {
+  return inRoomVoice && (state === "around" || state === "idle") ? "in_room" : state;
+}
+
+/**
+ * Who is in a room's voice, and which room, from the server's voice lists.
+ * Rooms only: a DM's voice isn't a place anybody else is shown in (being in
+ * a DM is being around, SPEC §4.13). Somebody on two computers in two rooms'
+ * voices is shown in the first, in list order.
+ */
+export function voiceRoomsOf(voice: Readonly<Record<string, readonly VoicePeer[]>>, rooms: readonly Room[]): Map<string, RoomId> {
+  const found = new Map<string, RoomId>();
+  for (const room of [...rooms].sort((a, b) => a.position - b.position)) {
+    if (room.archived_at !== null) continue;
+    for (const peer of voice[room.id] ?? []) {
+      if (!found.has(peer.user_id)) found.set(peer.user_id, room.id);
+    }
+  }
+  return found;
 }
 
 const MINUTE_MS = 60_000;

@@ -657,11 +657,16 @@ away or offline, the lights are off: their name turns a plain grey, and the
 dot tells you which. It's dimmed for idle, a dimmed moon for away, and just
 an outline for offline.
 
-- **in a room** — they are in that room right now
+- **in a room** — they are in that room right now, or in its voice
 - **around** — the app is in front of them, but not in a room
 - **idle** — no typing or clicking for ten minutes
 - **away** — they set an away message on purpose
 - **offline** — the app is closed
+
+Being in a room's voice counts as being in that room, even with a game in
+front of you and Linger behind it: you show in the room, and you're never
+"idle" while you're in its voice. Reading another room while you talk, you
+show in both. An away you set still shows.
 
 Their colors come back the moment they're around or in a room again. An away
 message keeps its warm color, since it's there for you to read.

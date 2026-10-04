@@ -174,6 +174,12 @@ A room is a place, not a filing cabinet.
   room's name and topic and no names (#145 — in a DM the list only repeated the
   title).
 - Backgrounding the app or idling >90 seconds takes you out of the room.
+- **Being in a room's voice is being in the room** (Matt, 2026-10-04, #420), whatever
+  has your attention: talking in #general with a game in front of you, you show in
+  #general, and you aren't idle. Reading another room while you talk, you are in
+  both, and People names the one you're talking in. An away you chose still shows.
+  This is drawn from the server's voice lists, so no presence frame changes and it
+  works for people on older apps; a DM's voice isn't a room anybody is shown in.
 
 **Entrance sounds.** Each user picks a personal sound that plays for others already
 in a room when they arrive. This is the cheapest piece of emotional design
@@ -284,7 +290,8 @@ the line for at least one month of real use before revisiting.
 ### 4.3 Presence
 
 Presence states: `in_room`, `around` (app focused, no room), `idle` (no
-input >10 min), `away` (explicit, with message), `offline`.
+input >10 min; never shown for somebody in a room's voice, §4.1), `away` (explicit,
+with message), `offline`.
 
 That is the whole of it. Where somebody is, and nothing about what they are doing.
 Nor which device they are on: a phone shows the same states (§4.15).

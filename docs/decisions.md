@@ -751,3 +751,23 @@ it, on the desktop and, later, the phone. Discord offers it only on phones.
   taken as sound. The app shows one named `Voice message.webm` as a voice
   message. Nothing on the wire changes.
 
+
+## Decided — being in a room's voice is being in that room
+
+**Matt, 2026-10-04 (#420).** A friend talking in #general's voice with a game in
+front of him had Linger behind it, so the 90-second clock took him out of the room
+and the ten-minute one made him idle: #general showed voice bars and no dot for him,
+and People said "idle" while he talked. That's backwards; being in a room's voice is
+the most present anybody is.
+
+- **His dot shows on the room for as long as he's in its voice**, and People says
+  "in #general". Idle doesn't apply while he's in a room's voice. An away he chose
+  still shows, because he said so.
+- **Reading another room while talking in one, he's in both** (Matt's call). Both are
+  true. People names the room he's talking in.
+- **It's drawn, not sent.** Every app already gets the server's voice lists, so the
+  list counts them (`occupantsOf`, `shownState` in `lib/roster.ts`); no presence frame
+  changes, nothing on the wire changes, and it works for people on older apps, since
+  only the one looking needs the update.
+- **A DM's voice isn't a room.** Being in a DM is being around (§4.13), so a DM call
+  doesn't put anybody "in" anything.

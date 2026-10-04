@@ -263,10 +263,61 @@ describe("the buddy list for one server", () => {
 
   it("says 'around' for somebody in a DM, even one we're in, as an older server reports it (decision 21)", () => {
     for (const where of ["r-private", "d-jules"]) {
-      const state = { ...evening(), presence: [presence("u-eli", "in_room", where)] };
+      // Out of voice: in a room's voice, they'd be in that room (#420).
+      const state = { ...evening(), voice: {}, presence: [presence("u-eli", "in_room", where)] };
       const eliRow = listModel(state, NOW).people.here.find((row) => row.user.id === "u-eli");
       expect(eliRow?.note).toBe("around");
     }
+  });
+
+  describe("in a room's voice is in that room (#420)", () => {
+    const names = (users: readonly User[]) => users.map((user) => user.display_name);
+    const rowOf = (model: ReturnType<typeof listModel>, id: string) =>
+      [...model.people.here, ...model.people.away, ...model.people.offline].find((row) => row.user.id === id);
+
+    it("whatever has their attention: a game in front of them, Linger idle behind it", () => {
+      for (const sent of ["idle", "around"] as const) {
+        const model = listModel({ ...evening(), presence: [presence("u-eli", sent)], occupancy: {} }, NOW);
+        expect(names(model.rooms.find((row) => row.name === "general")?.people ?? [])).toEqual(["Eli"]);
+        const eliRow = rowOf(model, "u-eli");
+        expect(eliRow?.state).toBe("in_room");
+        expect(eliRow?.note).toBe("in #general");
+        expect(model.people.here.map((row) => row.user.id)).toContain("u-eli");
+      }
+    });
+
+    it("reading another room while they talk here, they're in both, and People names the one they're talking in", () => {
+      const state = { ...evening(), presence: [presence("u-eli", "in_room", "r-listening")], occupancy: { "r-listening": ["u-eli"] } };
+      const model = listModel(state, NOW);
+      expect(names(model.rooms.find((row) => row.name === "general")?.people ?? [])).toEqual(["Eli"]);
+      expect(names(model.rooms.find((row) => row.name === "listening-room")?.people ?? [])).toEqual(["Eli"]);
+      expect(rowOf(model, "u-eli")?.note).toBe("in #general");
+    });
+
+    it("an away they chose still shows, and they're still in the room they're talking in", () => {
+      const model = listModel({ ...evening(), presence: [presence("u-eli", "away", null, "making dinner")], occupancy: {} }, NOW);
+      const eliRow = rowOf(model, "u-eli");
+      expect(eliRow?.state).toBe("away");
+      expect(eliRow?.note).toBe("away");
+      expect(model.people.away.map((row) => row.user.id)).toEqual(["u-eli"]);
+      expect(names(model.rooms.find((row) => row.name === "general")?.people ?? [])).toEqual(["Eli"]);
+    });
+
+    it("a DM's voice isn't a room anybody's shown in", () => {
+      const state = { ...evening(), voice: { "d-jules": [{ session_id: "s-jules", user_id: "u-jules" }] }, presence: [presence("u-jules", "idle")] };
+      const model = listModel(state, NOW);
+      expect(rowOf(model, "u-jules")?.note).toBe("idle");
+      expect(model.rooms.every((row) => !names(row.people).includes("Jules"))).toBe(true);
+    });
+
+    it("draws them in a group conversation's dots as in a room, too", () => {
+      const state = { ...evening(), presence: [presence("u-eli", "idle"), presence("u-sam", "idle")] };
+      const group = listModel(state, NOW).groups.find((row) => row.id === "d-eli-sam");
+      expect(group?.people.map((member) => [member.user.id, member.state])).toEqual([
+        ["u-eli", "in_room"],
+        ["u-sam", "idle"],
+      ]);
+    });
   });
 
   it("is empty but well-formed before the server has said anything", () => {
