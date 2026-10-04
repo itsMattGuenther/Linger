@@ -1092,6 +1092,23 @@ test.describe("in voice", () => {
     expect(lineBox && barBox && lineBox.x >= barBox.x && lineBox.x + lineBox.width <= barBox.x + barBox.width + 0.5).toBe(true);
   });
 
+  test("the host takes somebody out of voice from their chip's card; nobody else is offered it (#423)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice&takeout");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await bar.getByRole("button", { name: /^Eli's volume/ }).click();
+    const card = page.getByRole("dialog", { name: "Eli's volume" });
+    await card.getByRole("button", { name: "Take out of voice" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-opened", "takeout:r-general:u-eli");
+    await expect(card).toHaveCount(0);
+
+    // Refused: the card stays, and says why.
+    await page.goto("/tests/fixtures/next-list.html?voice&takeout&takeoutfail");
+    await page.getByRole("region", { name: "In voice in #general" }).getByRole("button", { name: /^Eli's volume/ }).click();
+    const refused = page.getByRole("dialog", { name: "Eli's volume" });
+    await refused.getByRole("button", { name: "Take out of voice" }).click();
+    await expect(refused.getByRole("alert")).toHaveText("They aren't in voice there.");
+  });
+
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");
     const scroll = await page.locator(".nx-list-scroll").boundingBox();

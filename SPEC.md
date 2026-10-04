@@ -708,7 +708,10 @@ short-lived password for it at the moment they join. A host who runs no relay ha
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's
-microphone on. Mute stops your outgoing voice. Deafen stops all incoming voice
+microphone on. The one exception is the host, who can **take somebody out of voice**
+(Matt, 2026-10-04, #423): somebody who walked away with their microphone on leaves the
+call as if they'd pressed Leave, their app says the host took them out, and they can
+join again. It's not a mute, and not a ban. Mute stops your outgoing voice. Deafen stops all incoming voice
 and mutes your microphone together. Undeafening restores your previous mic
 choice; with push-to-talk it stays closed until you press the key again.
 Deafen does not change per-person volume or notification preferences. Its

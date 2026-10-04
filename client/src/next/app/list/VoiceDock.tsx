@@ -54,6 +54,8 @@ export interface VoiceDockProps {
   onLeave: () => void;
   /** How loud somebody plays for you, from their chip (decision 8). Left out: chips open nothing. */
   onVolume?: (person: VoiceDockPerson, volume: number) => void;
+  /** The host taking somebody out of voice, from their chip's card (#423). Left out for everybody else. */
+  onTakeOut?: (person: VoiceDockPerson) => Promise<string | null>;
 }
 
 /**
@@ -63,7 +65,7 @@ export interface VoiceDockProps {
  * closing a chat tab or window never ends voice. The room's chat window has
  * the same three (#216), and the tray menu has Mute and Leave.
  */
-export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut }: VoiceDockProps) {
   // Whose volume is open, and the chip it opened from.
   const [volumeOf, setVolumeOf] = useState<{ id: string } | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -130,7 +132,14 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         </p>
       ) : null}
       {open && onVolume && volumeOf ? (
-        <VolumeCard user={open.user} volume={open.volume ?? 1} anchor={opener} onVolume={(volume) => onVolume(open, volume)} onClose={closeVolume} />
+        <VolumeCard
+          user={open.user}
+          volume={open.volume ?? 1}
+          anchor={opener}
+          onVolume={(volume) => onVolume(open, volume)}
+          {...(onTakeOut ? { onTakeOut: () => onTakeOut(open) } : {})}
+          onClose={closeVolume}
+        />
       ) : null}
       {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
           Mute shows with push-to-talk too: it's a choice of its own, which the key can't undo (#232). */}

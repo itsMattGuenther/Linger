@@ -19,6 +19,8 @@ import {
   setVoiceMuted,
   setVoiceTalking,
   setVoiceVolume,
+  takeOutOfVoice,
+  canTakeOut,
   useGateway,
   useServers,
 } from "../../../lib/gateway";
@@ -1302,6 +1304,8 @@ function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: s
       const session = model.people.find((one) => one.user.id === person.user.id)?.session;
       if (session) setVoiceVolume(server, session, volume);
     },
+    // The host can take somebody out of voice from their chip (#423).
+    ...(canTakeOut(state) ? { onTakeOut: (person: { user: { id: string } }) => takeOutOfVoice(server, model.roomId, person.user.id) } : {}),
   };
 }
 

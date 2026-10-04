@@ -126,8 +126,8 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
 
         // Addressed to one session, which is narrower than any room check
         // could be: the forwarding server's offer to one client in voice
-        // (#197).
-        ServerEvent::VoiceOffer { .. } => None,
+        // (#197), and the host taking that client out of voice (#423).
+        ServerEvent::VoiceOffer { .. } | ServerEvent::VoiceRemoved { .. } => None,
 
         // About a person, not a place.
         ServerEvent::PresenceUpdate(_)
@@ -510,6 +510,35 @@ impl Gateway {
         if let Some(room_id) = self.voice_leave(session_id) {
             self.announce_voice(room_id);
         }
+    }
+
+    /// The host taking somebody out of a room's voice (#423): every seat this
+    /// person has there (a laptop and a desktop are two), each session told
+    /// why first (`voice.removed`), then the room told once. Answers whether
+    /// they were in that room's voice at all.
+    ///
+    /// Leaving is the room's `voice.state`, so an app from before
+    /// `voice.removed` drops the unknown frame, sees its seat gone, and
+    /// leaves the same; with no seat, its restarts are ignored
+    /// (`voice_restart`). They can join again whenever they like.
+    pub fn voice_take_out(&self, room_id: RoomId, user_id: UserId) -> bool {
+        // Collected first: removing from a `DashMap` while iterating it
+        // deadlocks.
+        let seats: Vec<String> = self
+            .voice
+            .iter()
+            .filter(|seat| seat.value().user_id == user_id && seat.value().room_id == room_id)
+            .map(|seat| seat.key().clone())
+            .collect();
+        if seats.is_empty() {
+            return false;
+        }
+        for session in &seats {
+            self.publish_to_session(session, ServerEvent::VoiceRemoved { room_id });
+            self.voice_leave(session);
+        }
+        self.announce_voice(room_id);
+        true
     }
 
     /// Presence snapshot for `ready`, as this person is allowed to see it.

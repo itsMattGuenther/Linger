@@ -656,6 +656,13 @@ test.describe("voice here", () => {
 
   // Starting voice used to fail with nothing to show for it: the strip
   // blinked and went back (#261). It says why now, on its one line.
+  test("taken out by the host, the strip says so, and Join is still there (#423)", async ({ page }) => {
+    await open(page, "?voice=elsewhere&tab=r-general&takenout");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await expect(strip.getByRole("status")).toHaveText("The host took you out of voice.");
+    await expect(strip.getByRole("button", { name: /Join|Start talking|Move/ })).toBeVisible();
+  });
+
   test("a start that failed says why, keeps the strip's height, and offers another try (#261)", async ({ page }) => {
     const reason = "the microphone wouldn't open: Permission denied. Grant the required access and retry.";
     await page.goto(`/tests/fixtures/next-chat.html?voice=off&windows&voicefail=${encodeURIComponent(reason)}`);

@@ -22,6 +22,7 @@
  * - `?voicefail=<the shell's reason>`: starting voice in the tab showing
  *   failed last time (#261); `&windows` words it for Windows. It asked for
  *   the system's default devices, or `&picked` for devices picked by name (#273).
+ * - `?takenout`: the host took you out of voice in the tab showing (#423).
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -370,6 +371,7 @@ function Fixture() {
               onPickDevice,
               controls: myVoice === id ? controls : undefined,
               failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
+              takenOut: query.has("takenout") && myVoice !== id,
             },
       people: everyone,
       me,

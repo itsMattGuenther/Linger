@@ -269,6 +269,15 @@ pub enum ServerEvent {
         sdp: String,
         tracks: Vec<VoiceTrack>,
     },
+    /// The host took this session out of voice in `room_id` (#423), sent to
+    /// that session alone, just before the room's `voice.state` without it.
+    /// It says why the call ended, so the app can say so; leaving is the
+    /// `voice.state`, which an app from before this frame acts on the same.
+    /// Not a ban: the person can join again whenever they're back.
+    #[serde(rename = "voice.removed")]
+    VoiceRemoved {
+        room_id: RoomId,
+    },
     /// A nudge from one person to one person (SPEC §4.9, T-1101).
     ///
     /// Sent to the target's sessions and nobody else's — the only frame on the

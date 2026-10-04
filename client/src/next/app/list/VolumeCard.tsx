@@ -19,6 +19,7 @@ export function VolumeCard({
   volume,
   anchor,
   onVolume,
+  onTakeOut,
   onClose,
 }: {
   user: User;
@@ -27,8 +28,15 @@ export function VolumeCard({
   /** The chip that opened it: the card sits over it, wherever it has moved to. */
   anchor: RefObject<HTMLElement | null>;
   onVolume: (volume: number) => void;
+  /**
+   * The host taking them out of voice (#423): null when it's done, or why
+   * not. Left out for everybody but the host.
+   */
+  onTakeOut?: () => Promise<string | null>;
   onClose: () => void;
 }) {
+  const [taking, setTaking] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const body = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState({ x: EDGE, y: EDGE });
 
@@ -70,6 +78,34 @@ export function VolumeCard({
           <Button size="sm" variant="secondary" onClick={() => onVolume(1)}>
             Back to 100%
           </Button>
+        ) : null}
+        {onTakeOut ? (
+          <>
+            {/* For everybody, not just you: somebody who walked away with
+                their microphone on (#423). They can join again. */}
+            <Button
+              size="sm"
+              variant="danger"
+              icon="leave"
+              busy={taking}
+              onClick={() => {
+                setTaking(true);
+                setProblem(null);
+                void onTakeOut().then((said) => {
+                  setTaking(false);
+                  if (said === null) onClose();
+                  else setProblem(said);
+                });
+              }}
+            >
+              Take out of voice
+            </Button>
+            {problem ? (
+              <p className="nx-volume-problem" role="alert">
+                {problem}
+              </p>
+            ) : null}
+          </>
         ) : null}
       </div>
     </Popover>

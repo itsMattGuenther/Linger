@@ -558,6 +558,13 @@ export class AuthedApi {
     );
   }
 
+  /** The host takes somebody out of a room's voice (PROTOCOL §8, #423). */
+  takeOutOfVoice(roomId: string, userId: string): Promise<void> {
+    return this.#withAuth((accessToken) =>
+      requestVoid(this.baseUrl, "DELETE", `/rooms/${encodeURIComponent(roomId)}/voice/${encodeURIComponent(userId)}`, { accessToken }),
+    );
+  }
+
   /** Pin a message, or take its pin off (PROTOCOL §4): the message as it is now. */
   pinMessage(id: string, pinned: boolean): Promise<Message> {
     const path = `/messages/${encodeURIComponent(id)}/pin`;

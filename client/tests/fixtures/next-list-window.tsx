@@ -39,7 +39,9 @@
  * blocking Jules already; `?reports` has one report open for you, the host,
  * from Eli about a message of Jules's in #general. Blocks, reports and
  * closing one are written down (`block u-…`, `report {…}`, `close r-…`) and
- * answered with the frames the server sends.
+ * answered with the frames the server sends. Taking somebody out of voice
+ * (#423) is written down as `takeout <room> <user>`, and refused unless
+ * you're the host.
  *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.status(server, status)` its connection's state;
@@ -535,6 +537,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     note(`close ${id}`);
     reports = reports.filter((report) => report.id !== id);
     window.setTimeout(() => window.core?.frame(SERVER, { op: "reports.changed", d: {} } as Omit<ServerFrame, "s">), 10);
+    return new Response(null, { status: 204 });
+  }
+  const takeOutOf = /^\/rooms\/([^/]+)\/voice\/([^/]+)$/.exec(path);
+  if (takeOutOf && method === "DELETE") {
+    if (!state.me?.is_host) return json({ error: { code: "FORBIDDEN", message: "Only the host can do that.", retry_after_ms: null } }, 403);
+    note(`takeout ${decodeURIComponent(takeOutOf[1] ?? "")} ${decodeURIComponent(takeOutOf[2] ?? "")}`);
     return new Response(null, { status: 204 });
   }
   if (path === "/server" && query.has("noinfo") && server === LISBON) return json({ error: { code: "UNAVAILABLE", message: "Busy.", retry_after_ms: null } }, 503);
