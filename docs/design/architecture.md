@@ -459,7 +459,8 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
 - **No desktop furniture.** No notifications at all (`setNoNotifications`
   in `lib/notify.ts`, set at startup: no banner, nothing asking for
   attention; in-app sounds still play), no close button on the list (the
-  phone closes apps), no pop-out, no voice line, and Settings has no Windows or
+  phone closes apps), no pop-out, no voice line (voice messages, yes: the page
+  records them itself, `app/chat/recorders.ts`), and Settings has no Windows or
   Notifications, no microphones, no updates and no Interface size: it zooms
   the window, which the phone can't, and the phone's own display and text
   size do that job.

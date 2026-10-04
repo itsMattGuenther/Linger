@@ -55,10 +55,12 @@
   outline: none;
 }
 
+/* One line: a hint that wraps puts its second line out of sight. The box
+   picks a shorter hint when the long one won't fit (useFitsOneLine), since
+   Android's engine doesn't cut a text box's hint with a "…"; where an engine
+   does, this keeps the cut tidy for a hint that's still too long. */
 .nx-composer-input::placeholder {
   color: var(--text-muted);
-  /* One line, cut with a "…" when it doesn't fit, as on a phone with its
-     text turned up: a hint that wraps puts its second line out of sight. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

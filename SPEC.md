@@ -682,8 +682,8 @@ you hear it back, then **Send** it or **Discard** it, and nothing of it leaves y
 computer until you press Send. It runs to five minutes at most, and stops there by
 itself. Sent, it is an ordinary audio file in the conversation (Opus in WebM, which
 every engine Linger runs in plays), shown as a voice message with a play button and its
-length. The desktop app records it today; the phone app will, once it asks for the
-microphone.
+length. Both apps record them: the phone asks for the microphone the first time
+Record is pressed there, and for nothing else (§4.15).
 
 **The host's server passes voice along, so the host could listen.** Voice is encrypted
 on the wire, but each hop ends at the server, which forwards the packets without decoding
@@ -791,7 +791,11 @@ light up or chime, their knocks never arrive, and nothing of theirs shows in Med
 Search. The host learns of a report from one quiet row in the list, never a count.
 PROTOCOL §5 has the details.
 
-**What it does not do, yet: voice.** Phone voice would not pass through Apple or
+**Voice messages, yes** (#401): a clip recorded on the phone is the same kind of file
+as one recorded on a computer, and plays on both. Android asks for the microphone the
+first time Record is pressed, never before, and the app uses it for nothing else.
+
+**What it does not do, yet: voice rooms.** Phone voice would not pass through Apple or
 Google, since it goes to the host's server as desktop voice does. It is left out
 because a phone on speaker needs echo cancelling, which the desktop app does not
 have, and phone voice elsewhere is rarely pleasant for anyone. It comes back only if

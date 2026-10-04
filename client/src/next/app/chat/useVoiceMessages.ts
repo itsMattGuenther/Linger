@@ -1,14 +1,14 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type AuthedApi, UnconfirmedError } from "../../../lib/api";
 import { sendMessage } from "../../../lib/gateway";
 import { uploadFile } from "../../../lib/upload";
 import { loadVoicePrefs, onWindows, startProblemWords, voiceStartProblem } from "../../../lib/voice";
-import { opusWebm, PACKET_MS, readClip } from "../../../lib/webm";
-import { tauriBus } from "../../core/bus";
+import { opusWebm, PACKET_MS } from "../../../lib/webm";
 import { onPhone } from "../../core/phone";
 import { FULL_NOTE, LOST_NOTE, SHORTEST_MS, TOO_SHORT, VOICE_MESSAGE_NAME, type VoiceMessage, withLevel } from "../../core/chat/voiceMessage";
 import type { TabKey } from "../../core/tabs";
+import { canRecordInPage, pageRecorder, type Recorder, type RecorderEvents, shellRecorder } from "./recorders";
 
 /** What the message box does with a voice message (#401), for the conversation showing. */
 export interface VoiceMessageControls {
@@ -25,13 +25,14 @@ export interface VoiceMessageControls {
 
 /**
  * Voice messages (#401), per conversation, in one window: the panel's state
- * in each, and the one recording, which the desktop shell makes
- * (src-tauri/src/clip.rs). Moving to another conversation while recording
- * stops it, and the clip waits where it was recorded, to hear back and send
- * or discard. Closing the window throws it away.
+ * in each, and the one recording (`recorders.ts`): the desktop shell's on a
+ * computer, the page's own on the phone. Moving to another conversation
+ * while recording stops it, and the clip waits where it was recorded, to
+ * hear back and send or discard. Closing the window throws it away.
  *
- * Undefined outside the desktop app, where there's no recorder: the phone
- * app has none yet (SPEC §4.15, #401), so it offers no microphone button.
+ * Undefined where there's no recorder: outside the apps, and on a phone whose
+ * web view can't record (no microphone, or no Opus encoder), which then
+ * offers no microphone button.
  */
 export function useVoiceMessages(
   paneId: string | null,
@@ -43,7 +44,9 @@ export function useVoiceMessages(
   clipsNow.current = clips;
   /** The conversation being recorded in, if any. */
   const recordingIn = useRef<string | null>(null);
-  const desktop = isTauri() && !onPhone();
+  /** Which recorder this app has, if any: decided once, as the app doesn't change. */
+  const [kind] = useState<"shell" | "page" | null>(() => (!isTauri() ? null : onPhone() ? (canRecordInPage() ? "page" : null) : "shell"));
+  const recorder = useRef<Recorder | null>(null);
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {
@@ -62,9 +65,8 @@ export function useVoiceMessages(
       recordingIn.current = null;
       put(conversation, { kind: "stopping" });
       try {
-        const bytes = await invoke<ArrayBuffer>("clip_stop");
-        const clip = readClip(new Uint8Array(bytes));
-        if (clip === null) throw new Error("unreadable");
+        const clip = await recorder.current?.stop();
+        if (!clip) throw new Error("unreadable");
         const ms = clip.packets.length * PACKET_MS;
         if (ms < SHORTEST_MS) {
           put(conversation, { kind: "ready", problem: TOO_SHORT });
@@ -79,18 +81,12 @@ export function useVoiceMessages(
     [put],
   );
 
-  // How loud you are, while recording; and the recorder stopping by itself.
+  // The recorder, telling the panel how loud you are while recording, and
+  // when it stopped by itself.
   useEffect(() => {
-    if (!desktop) return;
-    const bus = tauriBus();
-    const stops: Array<() => void> = [];
-    let gone = false;
-    const hold = (unlisten: () => void) => {
-      if (gone) unlisten();
-      else stops.push(unlisten);
-    };
-    void bus
-      .listen<number>("clip:level", (level) => {
+    if (kind === null) return;
+    const events: RecorderEvents = {
+      level: (level) => {
         const conversation = recordingIn.current;
         if (conversation === null) return;
         setClips((held) => {
@@ -98,15 +94,18 @@ export function useVoiceMessages(
           if (now?.kind !== "recording") return held;
           return new Map(held).set(conversation, { ...now, levels: withLevel(now.levels, level) });
         });
-      })
-      .then(hold);
-    void bus.listen("clip:full", () => recordingIn.current !== null && void finish(recordingIn.current, FULL_NOTE)).then(hold);
-    void bus.listen("clip:lost", () => recordingIn.current !== null && void finish(recordingIn.current, LOST_NOTE)).then(hold);
-    return () => {
-      gone = true;
-      for (const stop of stops) stop();
+      },
+      ended: (why) => {
+        if (recordingIn.current !== null) void finish(recordingIn.current, why === "full" ? FULL_NOTE : LOST_NOTE);
+      },
     };
-  }, [desktop, finish]);
+    const made = kind === "shell" ? shellRecorder(events, () => loadVoicePrefs().devices.input) : pageRecorder(events);
+    recorder.current = made;
+    return () => {
+      made.dispose();
+      if (recorder.current === made) recorder.current = null;
+    };
+  }, [kind, finish]);
 
   // Another conversation shown while recording: stop, and keep the clip where it was made.
   useEffect(() => {
@@ -117,7 +116,7 @@ export function useVoiceMessages(
   // The window going: whatever is recording is thrown away, and every kept clip let go of.
   useEffect(
     () => () => {
-      if (recordingIn.current !== null) void invoke("clip_cancel").catch(() => undefined);
+      if (recordingIn.current !== null) recorder.current?.cancel();
       recordingIn.current = null;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
     },
@@ -135,12 +134,14 @@ export function useVoiceMessages(
     if (conversation === null || recordingIn.current !== null) return;
     put(conversation, { kind: "starting" });
     const devices = loadVoicePrefs().devices;
-    invoke("clip_start", { input: devices.input }).then(
+    const starting = recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+    starting.then(
       () => {
         recordingIn.current = conversation;
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },
-      (error: unknown) => put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(String(error), onWindows(), devices)) }),
+      (error: unknown) =>
+        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices)) }),
     );
   }, [paneId, put]);
 
@@ -153,7 +154,7 @@ export function useVoiceMessages(
     const now = clipsNow.current.get(paneId);
     if (recordingIn.current === paneId) {
       recordingIn.current = null;
-      void invoke("clip_cancel").catch(() => undefined);
+      recorder.current?.cancel();
     }
     if (now?.kind === "kept") URL.revokeObjectURL(now.url);
     put(paneId, null);
@@ -184,5 +185,5 @@ export function useVoiceMessages(
     })();
   }, [paneId, apis, find, put]);
 
-  return useMemo(() => (desktop ? { state, open, record, stop, discard, send } : undefined), [desktop, state, open, record, stop, discard, send]);
+  return useMemo(() => (kind !== null ? { state, open, record, stop, discard, send } : undefined), [kind, state, open, record, stop, discard, send]);
 }

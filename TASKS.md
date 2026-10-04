@@ -569,11 +569,17 @@ macOS runners, or a friend's Mac.
   and Back returns to Search as it was left. Settings goes back with ← too.
   Rows and the title bar are 44 and 48 px tall, so a thumb hits them, and
   `next-phone.spec.ts` checks that no screen reaches past the phone's edge.
-  Checked in the emulator with Android's own Back. **Still to do, on Matt's
-  Pixel:** one-hand reach (open a room, scroll back, send, Back, Media,
-  Search, a friend's card, Away and back, all with one thumb), the same at
-  Android's largest Font size, and a photo from the gallery and one taken
-  with the camera. **Waiting for the iPhone** (Android first): an edge swipe
+  Checked in the emulator with Android's own Back. **On Matt's Pixel
+  (2026-10-03):** one-handed use, Android's largest Font size, and sending a
+  picture all worked. The one thing he saw: in a room with a long name the
+  box's hint wrapped, "Say something in #screenshots and" with a sliver of
+  a second line, since Android's engine doesn't cut a text box's hint with a
+  "…"; the box now says just "Say something" when the long hint won't fit.
+  **Voice messages record on the phone too** (#401, 2026-10-03), in the page
+  (`app/chat/recorders.ts`), into the same file as the desktop's; Android asks
+  for the microphone the first time Record is pressed. Still to try on the
+  Pixel.
+  **Waiting for the iPhone** (Android first): an edge swipe
   for Back, since the iPhone has no Back of its own, and checking that an
   iPhone camera photo uploads as something the server reads (iPhones save
   HEIC).
@@ -588,7 +594,9 @@ macOS runners, or a friend's Mac.
 - ⏸ **T-1604 · Getting it onto a phone that is not yours** — effort: **treacherous**
   *Waiting (Matt, 2026-10-03):* starts once T-1605 is done and Matt says go.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
-  has worked well there.
+  has worked well there. The listing's privacy answers ("Data safety") must
+  say the app uses the microphone only to record a voice message the person
+  chooses to send.
   Friends first, then the stores. Android: a signed APK on the GitHub release
   (Google requires registered developers even outside its store, worldwide
   from 2027). iPhone: TestFlight, which needs the Apple Developer Program

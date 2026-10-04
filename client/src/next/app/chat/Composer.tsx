@@ -12,6 +12,7 @@ import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
 import "./Composer.css";
 import type { DraftFile } from "../../core/chat/drafts";
+import { useFitsOneLine } from "./useFitsOneLine";
 import { useMentions } from "./useMentions";
 import type { VoiceMessageControls } from "./useVoiceMessages";
 import { VoiceMessagePanel } from "./VoiceMessagePanel";
@@ -378,7 +379,10 @@ export const Composer = memo(function Composer({
   };
 
   const left = MAX_MESSAGE_CHARS - draft.length;
-  const placeholder = replyTo ? "Say something back" : isDm ? `Say something to ${title}` : `Say something in ${title}`;
+  // Who it's to, when that fits on the box's one line; just "Say something"
+  // when it doesn't, as on a phone, where the screen's title says it anyway.
+  const named = replyTo ? "Say something back" : isDm ? `Say something to ${title}` : `Say something in ${title}`;
+  const placeholder = useFitsOneLine(box, named) ? named : replyTo ? "Say something back" : "Say something";
 
   return (
     <form
