@@ -99,8 +99,10 @@ export const MessageRow = memo(function MessageRow({
   const namesMe = me !== null && !deleted && mentionHandles(message.body).includes(me.username);
   const links = deleted || editing ? [] : linkTargets(message.body);
   const justCard = cardOnly(message.body, links, (url) => previews[url] !== undefined);
-  // Pinned and edited, said after the words, or under the card when there
-  // are none.
+  // Pinned and edited, said after the words; or, for a message with none
+  // (only pictures, a file, a voice message or a link's card), beside the
+  // bottom of what it shows.
+  const wordless = justCard || message.body.trim() === "";
   const marks =
     message.edited_at === null && message.pinned_at === null ? undefined : (
       <>
@@ -113,6 +115,15 @@ export const MessageRow = memo(function MessageRow({
         {message.edited_at === null ? null : <span className="nx-msg-edited">edited</span>}
       </>
     );
+  // What it shows besides its words: files, then the links' cards.
+  const shown = (
+    <>
+      <Attachments files={message.attachments} mediaUrl={mediaUrl} onOpenImage={actions.openImage} onDownload={actions.download} />
+      {links.map((url) => (
+        <LinkCard key={url} url={url} preview={previews[url]} onOpen={actions.openLink} />
+      ))}
+    </>
+  );
   // Rows exist only while on screen (the list is virtualized), so this asks
   // about the links people can see and nothing further back. Keyed on the
   // joined list: the array is rebuilt every render.
@@ -276,19 +287,16 @@ export const MessageRow = memo(function MessageRow({
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
           <Fold id={message.id}>
-            <MessageText source={message.body} mentions={mentions} onOpenLink={actions.openLink} trailing={marks} />
+            <MessageText source={message.body} mentions={mentions} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} />
           </Fold>
         )}
-        {deleted || editing ? null : (
-          <>
-            <Attachments files={message.attachments} mediaUrl={mediaUrl} onOpenImage={actions.openImage} onDownload={actions.download} />
-            {links.map((url) => (
-              <LinkCard key={url} url={url} preview={previews[url]} onOpen={actions.openLink} />
-            ))}
-            {/* A message that's only a link shows only its card, and has no
-                words for the marks to follow: they go under the card. */}
-            {justCard && marks !== undefined ? <p className="nx-msg-marks">{marks}</p> : null}
-          </>
+        {deleted || editing ? null : wordless && marks !== undefined ? (
+          <div className="nx-msg-tail">
+            <div className="nx-msg-tail-shown">{shown}</div>
+            <p className="nx-msg-marks">{marks}</p>
+          </div>
+        ) : (
+          shown
         )}
         {problem ? (
           <p className="nx-msg-problem" role="alert">

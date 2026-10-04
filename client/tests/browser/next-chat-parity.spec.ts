@@ -314,21 +314,38 @@ test.describe("what a message says", () => {
   });
 });
 
-test.describe("a message that's only a link", () => {
-  test("shows its pin under its card, where there are no words to follow (T-908)", async ({ page }) => {
+test.describe("a pinned message with no words (T-908)", () => {
+  /** The pin sits beside the bottom of what the message shows, as it follows the last line of words. */
+  async function besideTheBottom(page: Page, id: string, shown: string) {
+    const [thing, mark] = [await row(page, id).locator(shown).first().boundingBox(), await row(page, id).locator(".nx-msg-pinned").boundingBox()];
+    expect(thing && mark && mark.x >= thing.x + thing.width).toBe(true);
+    expect(thing && mark && Math.abs(mark.y + mark.height - (thing.y + thing.height)) <= 8).toBe(true);
+  }
+  async function pin(page: Page, id: string) {
+    await row(page, id).hover();
+    await row(page, id).getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Pin" }).click();
+    await expect(row(page, id).locator(".nx-msg-pinned")).toBeVisible();
+  }
+
+  test("only a link: its pin is beside its card", async ({ page }) => {
     await open(page);
     const only = row(page, "m000013");
     await expect(only.locator(".nx-linkcard")).toBeVisible();
     await expect(only.locator(".nx-text")).toHaveCount(0);
-    await only.hover();
-    await only.getByRole("button", { name: /^Actions for/ }).click();
-    await page.getByRole("menuitem", { name: "Pin" }).click();
-    const pin = only.locator(".nx-msg-pinned");
-    await expect(pin).toBeVisible();
-    await expect(pin).toHaveAttribute("title", "Pinned");
-    // Under the card, inside the row.
-    const [card, mark] = [await only.locator(".nx-linkcard").boundingBox(), await pin.boundingBox()];
-    expect(card && mark && mark.y >= card.y + card.height).toBe(true);
+    await pin(page, "m000013");
+    await besideTheBottom(page, "m000013", ".nx-linkcard");
+  });
+
+  test("only a picture: its pin is beside the picture, not above it", async ({ page }) => {
+    await open(page);
+    const id = await post(page, "", "u-eli", {
+      attachments: [
+        { id: "pinned-pic", filename: "porch.png", mime: "image/png", size_bytes: 48_000, url: "/media/pinned-pic", width: 240, height: 160, duration_ms: null, blurhash: null, poster_url: null, starred_at: null, uploader_id: "u-eli", created_at: Date.parse("2026-09-25T22:50:00") },
+      ],
+    });
+    await pin(page, id);
+    await besideTheBottom(page, id, ".nx-att-image");
   });
 });
 
