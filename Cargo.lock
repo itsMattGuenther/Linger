@@ -1714,6 +1714,7 @@ version = "0.4.8"
 dependencies = [
  "str0m",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

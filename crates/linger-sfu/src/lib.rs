@@ -44,6 +44,11 @@ use str0m::{Candidate, Event, Input, Output, Rtc};
 /// again, so a join or an answer never waits behind a quiet room.
 const TICK: Duration = Duration::from_millis(20);
 
+/// How many times an offer is drawn again for a repeated mid (`negotiate`).
+/// A repeat is rare even in a room of sixty, and two in a row rarer still;
+/// this only stops a loop that can't end.
+const DRAWS: usize = 32;
+
 /// An offer for one session to answer: the SDP, and whose voice each of its
 /// receiving m-lines carries. The m-line not in `tracks` is the one the
 /// session sends its own microphone on.
@@ -189,56 +194,97 @@ struct Client {
     /// changes meanwhile waits for the next one.
     pending: Option<SdpPendingOffer>,
     outs: Vec<Out>,
+    /// When `str0m` next wants the time, from its last `Output::Timeout`:
+    /// only connections that are due are given it (#197).
+    due: Instant,
 }
 
 impl Client {
     /// Offer whatever has changed, unless an offer is already out.
+    ///
+    /// `str0m` names each new m-line with a random three-character mid and
+    /// checks it only against m-lines already agreed, not against the others
+    /// in the same offer. A newcomer's first offer adds one for everybody
+    /// already in the room, so in a room of fifty two of them sometimes drew
+    /// the same mid: the app saw an m-line it knew at a new position and
+    /// refused the offer, and that person heard nobody (#197). Nothing
+    /// changes until an offer is applied, so one with a repeated mid is
+    /// thrown away and drawn again.
     fn negotiate(&mut self, notify: &dyn Notify) {
         if self.pending.is_some() {
             return;
         }
-        let mut change = self.rtc.sdp_api();
-        if self.mic.is_none() {
-            self.mic =
-                Some(change.add_media(MediaKind::Audio, Direction::RecvOnly, None, None, None));
-        }
-        for out in &mut self.outs {
-            match out.state {
-                OutState::ToOpen => {
-                    let mid =
-                        change.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
-                    out.state = OutState::Negotiating(mid);
+        for _ in 0..DRAWS {
+            let mut change = self.rtc.sdp_api();
+            let mut drawn: Vec<Mid> = Vec::new();
+            let mic = if self.mic.is_none() {
+                let mid = change.add_media(MediaKind::Audio, Direction::RecvOnly, None, None, None);
+                drawn.push(mid);
+                Some(mid)
+            } else {
+                None
+            };
+            let mut opened: Vec<(usize, Mid)> = Vec::new();
+            let mut stopped: Vec<(usize, Mid)> = Vec::new();
+            for (at, out) in self.outs.iter().enumerate() {
+                match out.state {
+                    OutState::ToOpen => {
+                        let mid = change.add_media(
+                            MediaKind::Audio,
+                            Direction::SendOnly,
+                            None,
+                            None,
+                            None,
+                        );
+                        drawn.push(mid);
+                        opened.push((at, mid));
+                    }
+                    OutState::ToStop(mid) => {
+                        change.stop_media(mid);
+                        stopped.push((at, mid));
+                    }
+                    _ => {}
                 }
-                OutState::ToStop(mid) => {
-                    change.stop_media(mid);
-                    out.state = OutState::NegotiatingStop(mid);
-                }
-                _ => {}
             }
-        }
-        if !change.has_changes() {
+            let mut seen = std::collections::HashSet::with_capacity(drawn.len());
+            if !drawn.iter().all(|mid| seen.insert(*mid)) {
+                continue;
+            }
+            if !change.has_changes() {
+                return;
+            }
+            let Some((offer, pending)) = change.apply() else {
+                return;
+            };
+            if let Some(mid) = mic {
+                self.mic = Some(mid);
+            }
+            for (at, mid) in opened {
+                self.outs[at].state = OutState::Negotiating(mid);
+            }
+            for (at, mid) in stopped {
+                self.outs[at].state = OutState::NegotiatingStop(mid);
+            }
+            self.pending = Some(pending);
+            let tracks = self
+                .outs
+                .iter()
+                .filter_map(|out| match out.state {
+                    OutState::Negotiating(mid) | OutState::Open(mid) => Some(Track {
+                        mid: mid.to_string(),
+                        session: out.origin.clone(),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            notify.offer(Offer {
+                session: self.session.clone(),
+                sdp: offer.to_sdp_string(),
+                tracks,
+            });
             return;
         }
-        let Some((offer, pending)) = change.apply() else {
-            return;
-        };
-        self.pending = Some(pending);
-        let tracks = self
-            .outs
-            .iter()
-            .filter_map(|out| match out.state {
-                OutState::Negotiating(mid) | OutState::Open(mid) => Some(Track {
-                    mid: mid.to_string(),
-                    session: out.origin.clone(),
-                }),
-                _ => None,
-            })
-            .collect();
-        notify.offer(Offer {
-            session: self.session.clone(),
-            sdp: offer.to_sdp_string(),
-            tracks,
-        });
+        tracing::warn!(session = %self.session, "voice: no offer without a repeated mid after {DRAWS} draws");
     }
 
     /// Apply the answer to the offer that's out.
@@ -357,6 +403,7 @@ impl Hub<'_> {
             mic: None,
             pending: None,
             outs,
+            due: Instant::now(),
         };
         client.negotiate(notify);
         self.clients.push(client);
@@ -425,6 +472,7 @@ fn run(
                         }
                     }
                     Ok(Output::Timeout(at)) => {
+                        client.due = at;
                         next = next.min(at);
                         break;
                     }
@@ -477,24 +525,27 @@ fn run(
         if socket.set_read_timeout(Some(wait)).is_err() {
             return;
         }
+        // Wait for the first packet, then take every one already waiting:
+        // in a busy room, a turn per packet was a pass over every connection
+        // per packet, and the time went there (#197).
         match socket.recv_from(&mut buffer) {
             Ok((size, source)) => {
-                if let Ok(contents) = buffer[..size].try_into() {
-                    let input = Input::Receive(
-                        Instant::now(),
-                        Receive {
-                            proto: Protocol::Udp,
-                            source,
-                            destination: address,
-                            contents,
-                        },
-                    );
-                    if let Some(client) = hub.clients.iter_mut().find(|c| c.rtc.accepts(&input)) {
-                        if let Err(error) = client.rtc.handle_input(input) {
-                            tracing::debug!(session = %client.session, %error, "voice: bad input");
-                            client.rtc.disconnect();
+                receive(&mut hub, address, &buffer[..size], source);
+                if socket.set_nonblocking(true).is_err() {
+                    return;
+                }
+                for _ in 0..MOST_AT_ONCE {
+                    match socket.recv_from(&mut buffer) {
+                        Ok((size, source)) => receive(&mut hub, address, &buffer[..size], source),
+                        Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                        Err(error) => {
+                            tracing::warn!(%error, "voice: the forwarding socket failed");
+                            return;
                         }
                     }
+                }
+                if socket.set_nonblocking(false).is_err() {
+                    return;
                 }
             }
             Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
@@ -504,11 +555,40 @@ fn run(
             }
         }
 
+        // The time, to the connections that asked for it by now and no
+        // others: each says when next in its `Output::Timeout`.
         let now = Instant::now();
         for client in &mut hub.clients {
-            if client.rtc.is_alive() {
+            if client.due <= now && client.rtc.is_alive() {
                 let _ = client.rtc.handle_input(Input::Timeout(now));
             }
+        }
+    }
+}
+
+/// The most packets taken from the socket in one turn, before the
+/// connections send what they now have to: a bound, so a flood can't starve
+/// everybody's sending.
+const MOST_AT_ONCE: usize = 256;
+
+/// One packet in, to the connection it belongs to.
+fn receive(hub: &mut Hub<'_>, address: SocketAddr, packet: &[u8], source: SocketAddr) {
+    let Ok(contents) = packet.try_into() else {
+        return;
+    };
+    let input = Input::Receive(
+        Instant::now(),
+        Receive {
+            proto: Protocol::Udp,
+            source,
+            destination: address,
+            contents,
+        },
+    );
+    if let Some(client) = hub.clients.iter_mut().find(|c| c.rtc.accepts(&input)) {
+        if let Err(error) = client.rtc.handle_input(input) {
+            tracing::debug!(session = %client.session, %error, "voice: bad input");
+            client.rtc.disconnect();
         }
     }
 }

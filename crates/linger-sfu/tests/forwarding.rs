@@ -265,3 +265,51 @@ fn somebody_leaving_is_taken_out_of_the_others_offers() {
         a.tracks, b.tracks
     );
 }
+
+/// A room filling at once, as a raid does: no offer names an m-line twice
+/// (#197). `str0m` draws each new mid at random and used to check it only
+/// against the agreed ones, so a newcomer's first offer, an m-line for
+/// everybody there, could repeat one: the app refused it as reordered, and
+/// that person heard nobody. Every offer is checked as it goes out.
+#[test]
+fn a_room_filling_at_once_never_names_an_m_line_twice() {
+    let (sfu, offers) = start();
+    let names: Vec<String> = (0..40).map(|n| format!("p{n:02}")).collect();
+    let mut clients: Vec<Client> = names.iter().map(|_| Client::new()).collect();
+    for name in &names {
+        sfu.join(name, "raid");
+    }
+    let until = Instant::now() + Duration::from_secs(60);
+    loop {
+        while let Ok(offer) = offers.try_recv() {
+            let mids: Vec<&str> = offer
+                .sdp
+                .lines()
+                .filter_map(|line| line.strip_prefix("a=mid:"))
+                .collect();
+            let distinct: std::collections::HashSet<&str> = mids.iter().copied().collect();
+            assert_eq!(
+                distinct.len(),
+                mids.len(),
+                "an offer named an m-line twice: {mids:?}"
+            );
+            let at = names
+                .iter()
+                .position(|name| *name == offer.session)
+                .expect("an offer for somebody in the room");
+            let answer = clients[at].answer(&offer);
+            sfu.answer(&offer.session, &answer);
+        }
+        for client in &mut clients {
+            client.turn();
+        }
+        if clients
+            .iter()
+            .all(|client| client.connected && client.tracks.len() == names.len() - 1)
+        {
+            break;
+        }
+        assert!(Instant::now() < until, "the room never settled");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
