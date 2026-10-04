@@ -130,14 +130,20 @@ it catches up).
 
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
-   and download the file ending in `android-arm64.apk`.
-2. Open it from the download. Android says it won't install apps from your
-   browser: tap **Settings**, turn on **Allow from this source**, and go back.
-   That's Android's rule for any app that isn't from the Play Store.
-3. Tap **Install**. If Play Protect asks, it's because it hasn't seen this app
-   before; choose to install anyway.
-4. Open **Linger**, then continue to [Getting in](#getting-in): an invite link
-   opened on the phone works the same way.
+   in Chrome, scroll to **Assets** (tap it if it's folded up), and tap the file
+   ending in `android-arm64.apk`.
+2. Chrome may say the file **might be harmful**: tap **Download anyway**. It
+   says that about any app that isn't from the Play Store.
+3. Tap **Open** when it's downloaded (or find it in the **Files** app, under
+   **Downloads**). Android says it isn't allowed to install unknown apps from
+   this source: tap **Settings**, turn on **Allow from this source**, and tap
+   back.
+4. Tap **Install**. If **Google Play Protect** asks, it's because it hasn't
+   seen this app before: tap **More details**, then **Install anyway** (or
+   **Install without scanning**).
+5. Open **Linger**, then continue to [Getting in](#getting-in): paste the
+   invite link from your host, or your server's address if you already have
+   an account.
 
 **It doesn't update itself.** For a new version, download the new `.apk` from
 its release page and install it over the old one. You stay signed in. Every
