@@ -524,6 +524,19 @@ even in the middle of a call: you carry on talking
 through the new device without leaving. If a device you picked isn't plugged
 in, or won't open, the system default is used and the picker says so.
 
+On Windows, the system default microphone is the one Windows has set for
+calls, its **Default Communication Device**, when that's a different one from
+its **Default Device**. Discord, Teams and Zoom left on their own default use
+that one too, so a headset that works there works here. The picker shows its
+name next to **System default**.
+
+**If you're in a call and your name never lights when you talk**, Linger is
+probably listening to a different microphone from the one you're talking
+into. Pick yours by name in **Settings → Sound & Voice**. To see which
+microphone hears you on Windows, open **Control Panel → Sound** (or press
+Windows+R and type `mmsys.cpl`), go to **Recording**, and talk: the
+microphone whose green bars move is the one to pick.
+
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking. Click it for the whole reason, including your computer's
 own words for what failed, with a **Copy** button for sending it to your

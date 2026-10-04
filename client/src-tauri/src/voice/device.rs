@@ -28,6 +28,11 @@
 //!   is told to build its stream again, now, on the device just chosen. The
 //!   call never notices: the microphone's frames and the speaker's lanes are
 //!   the same objects before and after, only the stream under them changes.
+//! - **Which microphone "the default" is, on Windows** (#398). Windows keeps
+//!   two: the Default Device and the Default Communication Device, the one
+//!   for calls. Discord, Teams and Zoom left on their own default use the one
+//!   for calls, so that is the headset a person is used to being heard
+//!   through; `default_input` uses it too when the two differ.
 //!
 //! **Threads.** A `cpal` stream is driven by a thread the library owns, and
 //! the stream handle itself is not something to hand between threads. So each
@@ -116,7 +121,7 @@ pub fn list() -> Result<DeviceList, DeviceError> {
     Ok(DeviceList {
         inputs: names(host.input_devices()?),
         outputs: names(host.output_devices()?),
-        default_input: host.default_input_device().and_then(|d| name_of(&d)),
+        default_input: default_input(&host).and_then(|d| name_of(&d)),
         default_output: host.default_output_device().and_then(|d| name_of(&d)),
     })
 }
@@ -153,6 +158,97 @@ fn find(
     default.ok_or(DeviceError::NoDevice(kind))
 }
 
+/// The microphone "System default" means: the system's default input, or on
+/// Windows the microphone set for calls when that is a different one (#398).
+///
+/// A headset plugged into Windows is often made the microphone for calls and
+/// not the Default Device, which stays on, say, the motherboard's empty jack.
+/// Discord left on "Default" hears the headset; Linger asking for the Default
+/// Device hears the jack, joins fine and sends silence. Most computers have
+/// one microphone in both roles, and then this is the system default exactly,
+/// as before: the handle that follows the default when it changes in the
+/// middle of a call. The microphone for calls, when it is a different one, is
+/// opened as itself, and changing it in Windows takes effect on the next join.
+fn default_input(host: &cpal::Host) -> Option<cpal::Device> {
+    let default = host.default_input_device();
+    let Some(calls) = calls_microphone() else {
+        return default;
+    };
+    let Ok(devices) = host.input_devices() else {
+        return default;
+    };
+    for_calls(&calls, default, device_id, devices)
+}
+
+/// Of `devices`, the one whose ID is `calls`. The default itself when it is
+/// that one already, or when nothing listed is (a headset unplugged since).
+fn for_calls<D>(
+    calls: &str,
+    default: Option<D>,
+    id: impl Fn(&D) -> Option<String>,
+    devices: impl IntoIterator<Item = D>,
+) -> Option<D> {
+    if default.as_ref().and_then(&id).as_deref() == Some(calls) {
+        return default;
+    }
+    devices
+        .into_iter()
+        .find(|device| id(device).as_deref() == Some(calls))
+        .or(default)
+}
+
+/// A device's ID as the system knows it; on Windows, the endpoint's ID.
+fn device_id(device: &cpal::Device) -> Option<String> {
+    device.id().ok().map(|id| id.id().to_owned())
+}
+
+/// The ID of the microphone Windows has set for calls, the Default
+/// Communication Device (Sound › Recording). `cpal` only asks Windows for the
+/// Default Device, so this asks for the other one itself.
+#[cfg(target_os = "windows")]
+fn calls_microphone() -> Option<String> {
+    use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
+    use windows::Win32::Media::Audio::{
+        eCapture, eCommunications, IMMDeviceEnumerator, MMDeviceEnumerator,
+    };
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
+        COINIT_APARTMENTTHREADED,
+    };
+    // SAFETY: COM is started on this thread in the mode `cpal` uses, and
+    // stopped again only if this call is what started it (a second start on
+    // the same thread is counted, and so is its stop). The enumerator and the
+    // device are dropped before COM is stopped, and the ID's memory, which
+    // Windows allocated for us, is freed once it has been copied.
+    unsafe {
+        let started = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        if started.is_err() && started != RPC_E_CHANGED_MODE {
+            return None;
+        }
+        let id = (|| {
+            let enumerator: IMMDeviceEnumerator =
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+            let device = enumerator
+                .GetDefaultAudioEndpoint(eCapture, eCommunications)
+                .ok()?;
+            let raw = device.GetId().ok()?;
+            let id = raw.to_string().ok();
+            CoTaskMemFree(Some(raw.as_ptr() as *const _));
+            id
+        })();
+        if started.is_ok() {
+            CoUninitialize();
+        }
+        id
+    }
+}
+
+/// Only Windows has a second default microphone.
+#[cfg(not(target_os = "windows"))]
+fn calls_microphone() -> Option<String> {
+    None
+}
+
 /// The frames a microphone produces, and a way to stop it.
 pub struct Microphone {
     frames: tokio::sync::Mutex<mpsc::Receiver<Vec<i16>>>,
@@ -182,13 +278,13 @@ impl Microphone {
                 let device = find(
                     name.as_deref(),
                     host.input_devices()?,
-                    host.default_input_device(),
+                    default_input(&host),
                     "input",
                 )?;
                 let stream = or_default(
                     name.as_deref(),
                     &device,
-                    || host.default_input_device(),
+                    || default_input(&host),
                     "microphone",
                     |device| input_stream(device, &tx, alarm),
                 )?;
@@ -1194,6 +1290,52 @@ mod tests {
             cpal::SupportedBufferSize::Unknown,
             format,
         )
+    }
+
+    /// A device for `for_calls`: what it is, and its ID.
+    type Listed = (&'static str, &'static str);
+
+    fn listed_id(device: &Listed) -> Option<String> {
+        Some(device.1.to_owned())
+    }
+
+    const JACK: Listed = ("the default, following changes", "{realtek}");
+    const LISTED: [Listed; 2] = [
+        ("the jack, as itself", "{realtek}"),
+        ("the headset", "{arctis}"),
+    ];
+
+    #[test]
+    fn the_microphone_for_calls_is_the_default_when_it_is_a_different_one() {
+        // Windows' Default Device is the jack, and the headset is set for
+        // calls (#398): Linger hears the headset, as Discord does.
+        assert_eq!(
+            for_calls("{arctis}", Some(JACK), listed_id, LISTED),
+            Some(("the headset", "{arctis}"))
+        );
+    }
+
+    #[test]
+    fn one_microphone_in_both_roles_keeps_the_default_that_follows_changes() {
+        // Most computers: nothing changes, down to the handle that moves
+        // with the default in the middle of a call.
+        assert_eq!(
+            for_calls("{realtek}", Some(JACK), listed_id, LISTED),
+            Some(JACK)
+        );
+    }
+
+    #[test]
+    fn a_microphone_for_calls_that_isnt_there_leaves_the_default() {
+        assert_eq!(
+            for_calls("{unplugged}", Some(JACK), listed_id, LISTED),
+            Some(JACK)
+        );
+        // And with no default at all, the one for calls still answers.
+        assert_eq!(
+            for_calls("{arctis}", None, listed_id, LISTED),
+            Some(("the headset", "{arctis}"))
+        );
     }
 
     #[test]

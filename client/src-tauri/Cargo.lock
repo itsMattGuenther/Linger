@@ -2880,6 +2880,7 @@ dependencies = [
  "tokio-tungstenite",
  "webkit2gtk-sys",
  "webrtc",
+ "windows 0.62.2",
  "winreg",
 ]
 

@@ -100,6 +100,10 @@ keyring = { version = "3", features = ["windows-native"] }
 # (`autostart.rs`). Already in the tree for Windows builds (embed-resource
 # uses it at build time), over the same windows-sys the rest links.
 winreg = "0.55"
+# The microphone Windows has set for calls (#398, `voice::device`), which
+# `cpal` doesn't ask for. The same `windows` crate `cpal` already builds, at
+# its version, so nothing new is compiled or shipped.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com"] }
 
 # Everything the desktop app has and the phone app doesn't (SPEC §4.15):
 # notifications, remembered windows, one copy at a time, voice and its
