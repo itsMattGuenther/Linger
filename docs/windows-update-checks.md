@@ -60,6 +60,12 @@ MSI uninstall-link validity and uninstall cleanup. Installer logs are uploaded
 with the workflow evidence. This isolates installer behavior; it does not
 repeat signature download verification or a real user's update session.
 
+Each install, update and uninstall gets five minutes (they take seconds), and
+each scenario is named as it starts. Once an NSIS update sat for 29 minutes
+until the job was cancelled, with nothing in the log to say where (#414); now
+a stuck installer is stopped and the check fails naming the package and its
+arguments, in its scenario.
+
 ## Fixed-package results, 2026-09-22
 
 [Windows package check](https://github.com/itsMattGuenther/Linger/actions/runs/35766081266/job/106875831477)

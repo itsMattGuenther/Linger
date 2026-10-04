@@ -19,8 +19,19 @@ function Get-LingerShortcuts {
     }
 }
 
+# Every install, update and uninstall here takes seconds. One that hasn't
+# finished in five minutes is stuck: once an NSIS update sat for 29 minutes
+# until the job was cancelled, saying nothing about where (#414).
+$installerLimitSeconds = 300
+
 function Invoke-Installer([string]$File, [string]$Arguments) {
-    $process = Start-Process $File -ArgumentList $Arguments -Wait -PassThru
+    $process = Start-Process $File -ArgumentList $Arguments -PassThru
+    # Held so ExitCode can still be read once the process has gone.
+    $null = $process.Handle
+    if (-not $process.WaitForExit($installerLimitSeconds * 1000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Installer stuck: $(Split-Path -Leaf $File) $Arguments was still running after $installerLimitSeconds seconds, and was stopped"
+    }
     if ($process.ExitCode -notin @(0, 3010)) { throw "Installer failed: $($process.ExitCode)" }
 }
 
@@ -59,6 +70,8 @@ foreach ($kind in @('msi', 'nsis')) {
     Invoke-WebRequest "https://github.com/itsMattGuenther/Linger/releases/download/v0.3.0/$name" -OutFile $old
 
     foreach ($scenario in @('original', 'renamed', 'moved', 'deleted', 'fresh')) {
+        # Said before it starts, so a stuck installer is seen in its scenario.
+        Write-Output "$kind ${scenario}: installing"
         $prefix = Join-Path $Output "$kind-$scenario"
         $initial = if ($scenario -eq 'fresh') { $upgrade } else { $old }
         Install-Package $kind $initial "$prefix-install.log"
