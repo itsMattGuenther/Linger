@@ -16,7 +16,7 @@
 //!   replace it without touching anything else.
 //! - **Hotplug and the default device changing** (T-1405). A device that
 //!   disappears kills its stream, and the stream's error callback rings an
-//!   alarm the worker thread is waiting on. The worker drops the dead stream
+//!   alarm the worker thread is waiting on (a glitch doesn't: `on_error`). The worker drops the dead stream
 //!   and opens the device again — the *default* device, if that is what was
 //!   asked for, which is how "the OS switched to the headphones" becomes
 //!   "audio continues on the headphones". It tries every half second for
@@ -267,11 +267,7 @@ fn open_input(
 ) -> Result<cpal::Stream, DeviceError> {
     let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
     let config_format = config.sample_format();
-    let alarm = alarm.clone();
-    let died = move |error: cpal::Error| {
-        eprintln!("voice: microphone: {error}");
-        alarm.ring();
-    };
+    let died = on_error("microphone", alarm.clone());
     let config = config.config();
     Ok(match config_format {
         SampleFormat::I16 => device.build_input_stream(
@@ -563,11 +559,7 @@ fn open_output(
     // A sound half played on the old device was at its rate; let it go.
     lock(cues).clear();
     rate.store(device_rate, Ordering::Relaxed);
-    let alarm = alarm.clone();
-    let died = move |error: cpal::Error| {
-        eprintln!("voice: speaker: {error}");
-        alarm.ring();
-    };
+    let died = on_error("speaker", alarm.clone());
     let (lanes, cues, deafened) = (Arc::clone(lanes), Arc::clone(cues), Arc::clone(deafened));
     let format = config.sample_format();
     let config = config.config();
@@ -1014,6 +1006,36 @@ impl Alarm {
     }
 }
 
+/// A stream's error callback: ring the alarm when the error means the stream
+/// is over, and carry on when it doesn't.
+///
+/// `cpal` reports two things through the same callback that leave the stream
+/// playing, in its own words: a glitch (`Xrun`, a buffer that came too early
+/// or too late) and a refused real-time priority. Rebuilding on those threw a
+/// working stream away. A wireless headset's dongle can mark a glitch every
+/// few packets, and a SteelSeries Arctis Nova 5 was rebuilt so often that it
+/// never delivered one 20 ms frame: its owner talked, Linger heard nothing,
+/// and a plain stream on the same device heard him fine (#398).
+fn on_error(what: &'static str, alarm: Alarm) -> impl FnMut(cpal::Error) + Send + 'static {
+    move |error: cpal::Error| {
+        if ends_the_stream(&error) {
+            eprintln!("voice: {what}: {error}");
+            alarm.ring();
+        }
+    }
+}
+
+/// Whether a running stream's error means it is over and has to be built
+/// again. Everything but a glitch and a refused priority: a device that went
+/// away, a stream Windows invalidated, the default that moved (rebuilding
+/// opens the new default in its own format), or anything `cpal` can't name.
+fn ends_the_stream(error: &cpal::Error) -> bool {
+    !matches!(
+        error.kind(),
+        cpal::ErrorKind::Xrun | cpal::ErrorKind::RealtimeDenied
+    )
+}
+
 /// How hard a worker tries to get a device back before giving up.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Retry {
@@ -1435,6 +1457,31 @@ mod tests {
             open_unless_busy,
         );
         assert!(built.is_err());
+    }
+
+    #[test]
+    fn a_glitch_leaves_the_stream_alone_and_a_lost_device_rebuilds_it() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut died = on_error("microphone", Alarm(tx));
+        // A wireless headset's glitches, many of them (#398): no rebuild.
+        for _ in 0..50 {
+            died(cpal::Error::new(cpal::ErrorKind::Xrun));
+        }
+        died(cpal::Error::new(cpal::ErrorKind::RealtimeDenied));
+        assert!(rx.try_recv().is_err(), "a glitch rang the alarm");
+        // The device going away, or the default moving: rebuilt, as before.
+        for kind in [
+            cpal::ErrorKind::DeviceNotAvailable,
+            cpal::ErrorKind::StreamInvalidated,
+            cpal::ErrorKind::DeviceChanged,
+            cpal::ErrorKind::BackendError,
+        ] {
+            died(cpal::Error::new(kind));
+            assert!(
+                matches!(rx.try_recv(), Ok(Wake::Died)),
+                "{kind:?} didn't ring the alarm"
+            );
+        }
     }
 
     #[test]
