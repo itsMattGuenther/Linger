@@ -61,8 +61,9 @@ if on rust; then
 fi
 
 if on coturn; then
-  echo "== update script =="
+  echo "== update and setup scripts =="
   bash scripts/update-test.sh
+  bash scripts/setup-test.sh
 fi
 
 if on web; then

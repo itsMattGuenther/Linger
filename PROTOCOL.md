@@ -180,8 +180,8 @@ They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
 inside the app — see `docs/decisions.md`.
 
-**`voice`** says whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
-(§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so
+**`voice`** says whether this server carries voice: it has a voice address, set or worked
+out from its domain (§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so
 rather than offering a call. A server from before the field leaves it out, which a client
 reads as "maybe" (#306).
 
@@ -1043,10 +1043,13 @@ it missed, the server's latest offer included.
 
 ### Voice forwarding (#197)
 
-A server with `LINGER_VOICE_ADDRESS` set **forwards voice**: each client sends its voice
-once, to the server, and the server passes it on to everyone else in the room. It is the
-only way voice travels (#306). A server without it carries no voice at all: every
-`voice.join` there is refused, and `GET /server` says `voice: false` (§3).
+A server with a voice address **forwards voice**: each client sends its voice once, to the
+server, and the server passes it on to everyone else in the room. It is the only way voice
+travels (#306). The address is `LINGER_VOICE_ADDRESS`, or with that unset, the first
+public address `LINGER_DOMAIN` looks up to, once, at startup (#440). A server without one
+(the setting is `off`, or there's no domain to look up, or it gives only private
+addresses) carries no voice at all: every `voice.join` there is refused, and `GET /server`
+says `voice: false` (§3).
 
 - **Who gets a seat.** A `voice.join` that carries `forwarding`, true or false, on a
   server that forwards. Every app from 0.4.1 sends it; 0.4.1 to 0.4.3 send `false` when
@@ -1065,8 +1068,8 @@ only way voice travels (#306). A server without it carries no voice at all: ever
   When somebody joins or leaves, everybody else gets a new offer, whole. Only one offer
   is out per session at a time: a change while one is out waits for its `voice.answer`.
   Two offers can never cross.
-- **Full ICE, one address.** The server's offer carries one host candidate, the public
-  address in `LINGER_VOICE_ADDRESS`, on one UDP port (3479 by default) that carries every
+- **Full ICE, one address.** The server's offer carries one host candidate, its voice
+  address, on one UDP port (3479 by default) that carries every
   voice connection. The client needs no candidates from the server and sends none: the
   server learns where a client is from the checks that client sends, and a client that
   can't reach UDP goes through the TURN relay to that address. The server checks each

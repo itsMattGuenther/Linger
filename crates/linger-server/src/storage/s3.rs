@@ -354,6 +354,7 @@ mod tests {
             file_expiry_days: Some(linger_core::limits::DEFAULT_FILE_EXPIRY_DAYS),
             turn: None,
             voice_forwarding: None,
+            voice_from_domain: None,
         }))
         .unwrap();
         store

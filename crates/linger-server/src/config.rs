@@ -1,7 +1,7 @@
 //! Server configuration. Environment variables only — a server is configured by
 //! its compose file, not a config-file format to document and version.
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use linger_core::limits::{DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, MAX_FILE_BYTES};
@@ -87,6 +87,13 @@ pub struct Config {
     /// (#197). `None` means this server carries no voice at all (#306), and
     /// says so at startup and in its info.
     pub voice_forwarding: Option<VoiceForwarding>,
+    /// `LINGER_VOICE_ADDRESS` left unset on a server with a domain (#440):
+    /// where to listen once the domain's own address has been looked up at
+    /// startup, for [`public_address`] to choose from. The host already
+    /// pointed the domain at this machine, so that address is where clients
+    /// can send voice, and nobody has to type an IP. `None` when an address
+    /// is set, when it is `off`, and on a server with no domain.
+    pub voice_from_domain: Option<SocketAddr>,
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -234,7 +241,10 @@ impl Config {
             Storage::S3 => Some(Self::s3_from_env()?),
         };
 
-        let domain = std::env::var("LINGER_DOMAIN").ok();
+        // An empty one is unset: `.env` hands over a line left blank (#440).
+        let domain = std::env::var("LINGER_DOMAIN")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         let media_domain =
             media_domain(domain.as_deref(), std::env::var("LINGER_MEDIA_DOMAIN").ok())?;
 
@@ -243,6 +253,12 @@ impl Config {
             std::env::var("LINGER_TURN_SECRET").ok(),
             std::env::var("LINGER_TURN_URLS").ok(),
         )?;
+
+        let (voice_forwarding, voice_from_domain) = voice_setting(
+            std::env::var("LINGER_VOICE_ADDRESS").ok(),
+            std::env::var("LINGER_VOICE_BIND").ok(),
+        )?
+        .with_domain(domain.as_deref());
 
         Ok(Self {
             data_dir,
@@ -254,10 +270,8 @@ impl Config {
             pool_bytes: pool_bytes(std::env::var("LINGER_POOL_BYTES").ok())?,
             file_expiry_days: file_expiry_days(std::env::var("LINGER_FILE_EXPIRY_DAYS").ok())?,
             turn,
-            voice_forwarding: voice_forwarding(
-                std::env::var("LINGER_VOICE_ADDRESS").ok(),
-                std::env::var("LINGER_VOICE_BIND").ok(),
-            )?,
+            voice_forwarding,
+            voice_from_domain,
         })
     }
 
@@ -495,27 +509,55 @@ fn media_domain(
 /// server's own name, on the standard port, over UDP and TCP, plus STUN on
 /// the same. TCP is there for the networks that eat UDP; it is slower and
 /// ICE will not pick it unless it has to.
-/// `LINGER_VOICE_ADDRESS` and `LINGER_VOICE_BIND` into a [`VoiceForwarding`],
-/// or `None` when no public address is set. The address has to be an IP:
-/// it goes into every offer as the one place clients send voice, and a name
-/// would need resolving on every client in a way SDP doesn't allow.
-fn voice_forwarding(
+/// What `LINGER_VOICE_ADDRESS` says, with `LINGER_VOICE_BIND`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VoiceSetting {
+    /// Unset: the address comes from the domain at startup (#440), and voice
+    /// is forwarded on this bind.
+    FromDomain(SocketAddr),
+    /// `off`: no voice, on purpose.
+    Off,
+    /// An address, with the bind.
+    At(VoiceForwarding),
+}
+
+impl VoiceSetting {
+    /// Into [`Config::voice_forwarding`] and [`Config::voice_from_domain`].
+    /// With no domain there is nothing to look up, and no voice.
+    fn with_domain(self, domain: Option<&str>) -> (Option<VoiceForwarding>, Option<SocketAddr>) {
+        match self {
+            Self::At(voice) => (Some(voice), None),
+            Self::Off => (None, None),
+            Self::FromDomain(bind) => (None, domain.map(|_| bind)),
+        }
+    }
+}
+
+/// `LINGER_VOICE_ADDRESS` and `LINGER_VOICE_BIND` into a [`VoiceSetting`].
+/// The address has to be an IP: it goes into every offer as the one place
+/// clients send voice, and a name would need resolving on every client in a
+/// way SDP doesn't allow. Unset, the server looks its own domain up once at
+/// startup instead (#440).
+fn voice_setting(
     address: Option<String>,
     bind: Option<String>,
-) -> Result<Option<VoiceForwarding>, ConfigError> {
-    let Some(address) = address.filter(|value| !value.trim().is_empty()) else {
-        return Ok(None);
-    };
+) -> Result<VoiceSetting, ConfigError> {
     let bind = match bind.filter(|value| !value.trim().is_empty()) {
         Some(raw) => raw
             .parse()
             .map_err(|_| ConfigError::VoiceBind(raw.clone()))?,
         None => SocketAddr::from(([0, 0, 0, 0], DEFAULT_VOICE_PORT)),
     };
+    let Some(address) = address.filter(|value| !value.trim().is_empty()) else {
+        return Ok(VoiceSetting::FromDomain(bind));
+    };
     let address = address.trim();
+    if address.eq_ignore_ascii_case("off") {
+        return Ok(VoiceSetting::Off);
+    }
     let public = match address.parse::<SocketAddr>() {
         Ok(public) => public,
-        Err(_) => match address.parse::<std::net::IpAddr>() {
+        Err(_) => match address.parse::<IpAddr>() {
             Ok(ip) => SocketAddr::new(ip, bind.port()),
             Err(_) => return Err(ConfigError::VoiceAddress(address.to_string())),
         },
@@ -523,7 +565,81 @@ fn voice_forwarding(
     if public.ip().is_unspecified() {
         return Err(ConfigError::VoiceAddress(address.to_string()));
     }
-    Ok(Some(VoiceForwarding { bind, public }))
+    Ok(VoiceSetting::At(VoiceForwarding { bind, public }))
+}
+
+/// Where clients send voice, from the addresses the server's domain looked
+/// up to (#440): the first public IPv4, or failing that the first public
+/// IPv6. A private, loopback or link-local address is only reachable from
+/// one network, so it is never chosen: a server whose name points at one is
+/// on a LAN, or its DNS isn't pointed at it yet.
+pub fn public_address(found: impl IntoIterator<Item = IpAddr>) -> Option<IpAddr> {
+    let public: Vec<IpAddr> = found.into_iter().filter(|ip| is_public(*ip)).collect();
+    public
+        .iter()
+        .find(|ip| ip.is_ipv4())
+        .or_else(|| public.first())
+        .copied()
+}
+
+/// Where clients send voice, from what `domain` looks up to (#440), or
+/// `None` and a warning saying why there's no voice. Looked up once, at
+/// startup: a host who points the name somewhere new restarts the server, as
+/// they would after changing any setting.
+pub async fn voice_from_domain(domain: &str, bind: SocketAddr) -> Option<VoiceForwarding> {
+    let found: Vec<IpAddr> = match tokio::net::lookup_host((domain, bind.port())).await {
+        Ok(found) => found.map(|address| address.ip()).collect(),
+        Err(error) => {
+            tracing::warn!(
+                %domain, %error,
+                "Couldn't look LINGER_DOMAIN up to work out where voice goes, so this server \
+                 carries no voice until it restarts and can. Point the name at this machine, \
+                 or set LINGER_VOICE_ADDRESS to its public IP address — see docs/host-guide.md."
+            );
+            return None;
+        }
+    };
+    let Some(ip) = public_address(found.iter().copied()) else {
+        tracing::warn!(
+            %domain, addresses = ?found,
+            "LINGER_DOMAIN points only at addresses one local network can reach, so this \
+             server carries no voice. Set LINGER_VOICE_ADDRESS to the public IP address people \
+             reach it at — see docs/host-guide.md."
+        );
+        return None;
+    };
+    tracing::info!(
+        %domain, %ip,
+        "voice goes to the address LINGER_DOMAIN points at. Set LINGER_VOICE_ADDRESS to send it \
+         somewhere else, or to off for no voice."
+    );
+    Some(VoiceForwarding {
+        bind,
+        public: SocketAddr::new(ip, bind.port()),
+    })
+}
+
+fn is_public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            // 100.64.0.0/10 is a carrier's own network (carrier-grade NAT).
+            let carrier = a == 100 && (b & 0xC0) == 64;
+            !(v4.is_unspecified()
+                || v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || carrier)
+        }
+        IpAddr::V6(v6) => {
+            let first = v6.segments()[0];
+            // fc00::/7 is a network's own (unique local), fe80::/10 one link's.
+            let local = (first & 0xFE00) == 0xFC00 || (first & 0xFFC0) == 0xFE80;
+            !(v6.is_unspecified() || v6.is_loopback() || v6.is_multicast() || local)
+        }
+    }
 }
 
 fn default_turn_urls(domain: &str) -> Vec<String> {
@@ -677,7 +793,117 @@ mod tests {
             file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
             turn: None,
             voice_forwarding: None,
+            voice_from_domain: None,
         }
+    }
+
+    fn ip(raw: &str) -> IpAddr {
+        raw.parse().unwrap()
+    }
+
+    #[test]
+    fn unset_voice_comes_from_the_domain_and_off_is_none_at_all() {
+        let bind: SocketAddr = "0.0.0.0:3479".parse().unwrap();
+        assert_eq!(
+            voice_setting(None, None).unwrap(),
+            VoiceSetting::FromDomain(bind)
+        );
+        assert_eq!(
+            voice_setting(Some("  ".into()), Some("0.0.0.0:4000".into())).unwrap(),
+            VoiceSetting::FromDomain("0.0.0.0:4000".parse().unwrap())
+        );
+        assert_eq!(
+            voice_setting(None, None)
+                .unwrap()
+                .with_domain(Some("linger.example")),
+            (None, Some(bind))
+        );
+        // No domain, nothing to look up: no voice, as before (#306).
+        assert_eq!(
+            voice_setting(None, None).unwrap().with_domain(None),
+            (None, None)
+        );
+        for off in ["off", "OFF", " Off "] {
+            assert_eq!(
+                voice_setting(Some(off.into()), None)
+                    .unwrap()
+                    .with_domain(Some("linger.example")),
+                (None, None)
+            );
+        }
+    }
+
+    #[test]
+    fn a_set_voice_address_wins_over_the_domain() {
+        let (voice, from_domain) = voice_setting(Some("203.0.113.7".into()), None)
+            .unwrap()
+            .with_domain(Some("linger.example"));
+        assert_eq!(from_domain, None);
+        let voice = voice.unwrap();
+        assert_eq!(voice.public, "203.0.113.7:3479".parse().unwrap());
+        assert_eq!(voice.bind, "0.0.0.0:3479".parse().unwrap());
+        assert_eq!(
+            voice_setting(Some("203.0.113.7:4000".into()), None).unwrap(),
+            VoiceSetting::At(VoiceForwarding {
+                bind: "0.0.0.0:3479".parse().unwrap(),
+                public: "203.0.113.7:4000".parse().unwrap(),
+            })
+        );
+        assert!(matches!(
+            voice_setting(Some("linger.example".into()), None),
+            Err(ConfigError::VoiceAddress(_))
+        ));
+        assert!(matches!(
+            voice_setting(Some("0.0.0.0".into()), None),
+            Err(ConfigError::VoiceAddress(_))
+        ));
+    }
+
+    #[test]
+    fn the_domain_gives_its_first_public_address_ipv4_first() {
+        assert_eq!(
+            public_address([ip("10.0.0.5"), ip("203.0.113.7"), ip("198.51.100.1")]),
+            Some(ip("203.0.113.7"))
+        );
+        assert_eq!(
+            public_address([ip("2606:4700::6810:1"), ip("203.0.113.7")]),
+            Some(ip("203.0.113.7"))
+        );
+        assert_eq!(
+            public_address([ip("2606:4700::6810:1")]),
+            Some(ip("2606:4700::6810:1"))
+        );
+    }
+
+    #[test]
+    fn a_domain_pointing_somewhere_only_one_network_reaches_gives_nothing() {
+        for local in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.9",
+            "192.168.1.20",
+            "169.254.0.1",
+            "100.64.12.1",
+            "0.0.0.0",
+            "::1",
+            "fd12:3456::1",
+            "fe80::1",
+        ] {
+            assert_eq!(public_address([ip(local)]), None, "{local}");
+        }
+        assert_eq!(public_address([]), None);
+    }
+
+    #[tokio::test]
+    async fn the_domain_is_looked_up_once_and_a_local_answer_gives_no_voice() {
+        // An address written as the name looks up to itself, with no DNS.
+        let bind: SocketAddr = "0.0.0.0:3479".parse().unwrap();
+        let voice = voice_from_domain("203.0.113.7", bind).await.unwrap();
+        assert_eq!(voice.public, "203.0.113.7:3479".parse().unwrap());
+        assert_eq!(voice.bind, bind);
+        assert_eq!(voice_from_domain("192.168.1.20", bind).await, None);
+        // `.invalid` never resolves (RFC 2606).
+        assert_eq!(voice_from_domain("linger.invalid", bind).await, None);
     }
 
     #[test]

@@ -151,17 +151,14 @@ machine:
 
 ```bash
 mkdir linger && cd linger
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/Caddyfile
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh && chmod +x update.sh
-# put your two names (yours, and cdn. in front of it) in both files
-docker compose run --rm --user root --entrypoint chown linger linger:linger /data
-docker compose up -d
-docker compose logs linger   # prints a one-time setup link
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/setup.sh
+bash setup.sh   # asks for your name, checks it, starts the server, prints a setup link
 ```
 
-Paste the setup link into the app. It makes your account, makes you the host
-and names the server. To update later, run `./update.sh` in the same folder: it
+The script fetches the server's files, writes your settings into `.env` (the
+one file you'd ever edit), opens the firewall ports and prints a one-time setup
+link. Paste that link into the app. It makes your account, makes you the host
+and names the server. Voice needs UDP 3479 open, and nothing else. To update later, run `./update.sh` in the same folder: it
 backs up the database, updates and restarts, and prints the version it's on.
 
 ## 🐞 Reporting a problem
@@ -181,7 +178,7 @@ client/                the desktop app: Tauri 2 shell (src-tauri) and React
                        share, and src/generated the wire types); the phone
                        app, started, builds from the same shell
                        (src-tauri/gen/android)
-deploy/                Dockerfile, compose and Caddyfile
+deploy/                Dockerfile, compose, Caddyfile, .env.example, setup.sh, update.sh
 packaging/arch/        the Arch/Omarchy package and its repository
 docs/                  guides, decisions, design, release notes
 scripts/               check.sh (the local gate) and what it calls

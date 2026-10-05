@@ -63,7 +63,7 @@ esac
 FAKE
 chmod +x "$work/bin/docker"
 
-config() { # voice address, image
+config() { # voice address, image, and the domain line (a domain unless told otherwise)
   cat <<EOF
 name: linger
 services:
@@ -72,7 +72,7 @@ services:
   linger:
     environment:
       LINGER_DATA_DIR: /data
-      LINGER_DOMAIN: linger.example.com
+${3-      LINGER_DOMAIN: linger.example.com}
 $1
     image: $2
     volumes:
@@ -149,6 +149,7 @@ check "the newer old ones stay" \
 check "the old image is removed" called "docker image rm sha256:old"
 check "no relay flag where there's no relay" never "--profile voice pull"
 check "no voice warning when voice is set" lacks "carries no voice"
+check "nothing about the domain's address when one is set" lacks "Voice goes to the address"
 
 # --- Already the newest ---------------------------------------------------------
 
@@ -209,10 +210,25 @@ check "it says where compose.yaml should be" has "there's no compose.yaml in $di
 # --- Warnings that don't stop it ------------------------------------------------
 
 setup novoice
+config "" ghcr.io/itsmattguenther/linger:latest "" >"$FAKE/config"
+run
+check "no voice address and no domain still updates" test "$code" -eq 0
+check "it warns there's no voice" has "carries no voice"
+
+setup voicefromdomain
 config "" ghcr.io/itsmattguenther/linger:latest >"$FAKE/config"
 run
-check "no voice address still updates" test "$code" -eq 0
-check "it warns there's no voice" has "carries no voice"
+check "no voice address with a domain updates" test "$code" -eq 0
+check "it says voice goes where the domain points (#440)" has "Voice goes to the address linger.example.com points at"
+check "and how to turn it off" has "LINGER_VOICE_ADDRESS set to off turns voice off"
+check "it doesn't warn there's no voice" lacks "carries no voice"
+
+setup voiceoff
+config '      LINGER_VOICE_ADDRESS: "off"' ghcr.io/itsmattguenther/linger:latest >"$FAKE/config"
+run
+check "voice turned off updates" test "$code" -eq 0
+check "it says voice is off" has "Voice is off here"
+check "it doesn't say where voice goes" lacks "Voice goes to the address"
 
 setup pinned
 config "$VOICE" ghcr.io/itsmattguenther/linger:0.4.3 >"$FAKE/config"

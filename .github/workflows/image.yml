@@ -35,6 +35,7 @@ on:
       - Cargo.toml
       - Cargo.lock
       - .github/workflows/image.yml
+      - scripts/image-start-test.sh
   workflow_dispatch:
 
 # Image names cannot contain capital letters. github.repository is
@@ -116,9 +117,18 @@ jobs:
           # runner and push by digest, not under emulation here.
           platforms: linux/amd64
           push: ${{ github.ref_type == 'tag' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # A pull request's image is kept here, to be started below. It has
+          # no version to be tagged with, so it gets a name of its own.
+          load: ${{ github.ref_type != 'tag' }}
+          tags: ${{ github.ref_type == 'tag' && steps.meta.outputs.tags || 'linger:image-start-test' }}
           labels: ${{ steps.meta.outputs.labels }}
           # A cache that survives between runs, so a tag build is not a cold
           # `cargo build --release` from scratch every time.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Built is not started: an image whose entry point can't run builds
+      # fine (#440). This starts it as a host's would.
+      - name: the image starts as it ships
+        if: github.ref_type != 'tag'
+        run: bash scripts/image-start-test.sh linger:image-start-test

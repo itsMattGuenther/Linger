@@ -111,8 +111,14 @@ async fn serve() -> anyhow::Result<()> {
         )
         .init();
 
-    let config = linger_server::config::Config::from_env()?;
+    let mut config = linger_server::config::Config::from_env()?;
     tracing::info!(data_dir = %config.data_dir.display(), bind = %config.bind, "starting linger-server");
+
+    // No voice address set: the domain already points at this machine, so
+    // its address is where clients send voice (#440).
+    if let (Some(bind), Some(domain)) = (config.voice_from_domain, config.domain.clone()) {
+        config.voice_forwarding = linger_server::config::voice_from_domain(&domain, bind).await;
+    }
 
     // Said at every start, not only the first one: a server with no name runs
     // perfectly well and is unreachable from every installed client, and the
@@ -133,13 +139,16 @@ async fn serve() -> anyhow::Result<()> {
     // Same idea for voice: a server without forwarding carries none at all
     // since the mesh was taken out (#306). The app says so to everybody, and
     // the host should hear it first, here.
-    if config.voice_forwarding.is_none() {
+    // A domain that couldn't give an address has said why already.
+    if config.voice_forwarding.is_none() && config.voice_from_domain.is_none() {
         tracing::warn!(
-            "LINGER_VOICE_ADDRESS is not set, so this server carries no voice: nobody can \
-             join a voice room, and the app says voice isn't set up here. Set it to this \
-             machine's public IP address and open UDP port 3479 — see docs/host-guide.md."
+            "This server carries no voice: LINGER_VOICE_ADDRESS is off, or it isn't set \
+             and there's no LINGER_DOMAIN to work it out from. Nobody can join a voice \
+             room, and the app says voice isn't set up here. Point LINGER_DOMAIN at this \
+             machine (or set LINGER_VOICE_ADDRESS to its public IP address) and open UDP \
+             port 3479 — see docs/host-guide.md."
         );
-    } else if config.turn.is_none() {
+    } else if config.voice_forwarding.is_some() && config.turn.is_none() {
         // The relay is for the people voice can't reach otherwise: a network
         // that blocks the voice port fails looking exactly like a bug in the
         // app, the first time somebody tries from one.

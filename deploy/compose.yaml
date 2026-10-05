@@ -1,11 +1,16 @@
 # A Linger server in two containers: linger itself and Caddy for automatic TLS.
 # Target: a non-expert friend gets this running in under 15 minutes.
 #
+# The quick way is setup.sh, next to this file: it asks for your domain,
+# writes .env, opens the firewall and starts everything (docs/host-guide.md).
+# By hand:
+#
 #   1. Point your domain's DNS at this machine — two records, the domain
 #      itself and `cdn.` in front of it. Uploaded files are served from the
 #      second one so somebody else's file is never same-origin with the app.
-#   2. Set LINGER_DOMAIN below (and both blocks of the Caddyfile) to that
-#      domain.
+#   2. Copy .env.example to .env and put your domain in it. Every setting
+#      lives in .env: you never edit this file or the Caddyfile, and a newer
+#      copy of either can simply replace the old one.
 #   3. docker compose up -d
 #   4. docker compose logs linger   ← prints the one-time host-setup URL
 #
@@ -20,16 +25,14 @@
 # Images are published for x86-64 (Intel or AMD) only. A Raspberry Pi or an
 # ARM cloud server can't run them.
 #
-# Voice (SPEC §4.14) goes through the linger container: set
-# LINGER_VOICE_ADDRESS below and open UDP 3479. Without it this server carries
-# no voice, and says so at startup. The third container, coturn, is a relay
-# for people whose network blocks UDP (some offices, some public wifi). It is
-# optional, and the server says so at startup when it's missing. To run it: copy `.env.example` to `.env`, put a long random secret
-# in it (`openssl rand -hex 32`), set the realm to your domain below, open
-# port 3478 (TCP and UDP) and UDP 49160–49200 on your firewall, and start with
-# `docker compose up -d`: `.env.example`'s COMPOSE_PROFILES=voice starts the
-# relay too. The secret is read from `.env` so it is never in this file, which
-# people share.
+# Voice (SPEC §4.14) goes through the linger container, on UDP 3479: open it
+# in your firewall (and forward it, at home). The server sends voice through
+# the address your domain points at, unless .env says otherwise. The third
+# container, coturn, is a relay for people whose network blocks UDP (some
+# offices, some public wifi). It is optional, and the server says so at
+# startup when it's missing. .env turns it on: a secret in LINGER_TURN_SECRET
+# and COMPOSE_PROFILES=voice. Open port 3478 (TCP and UDP) and UDP
+# 49160–49200 for it too.
 
 services:
   linger:
@@ -37,47 +40,14 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/data
+    # Every LINGER_* setting comes from .env: .env.example lists them, and
+    # docs/host-guide.md says what each does.
+    env_file: .env
     environment:
-      LINGER_DOMAIN: linger.example.com
       LINGER_DATA_DIR: /data
-      LINGER_STORAGE: local
-      # Files are served from cdn.<LINGER_DOMAIN> unless you say otherwise.
-      # Set this only if that name is taken or you want files somewhere else;
-      # it has to be a different host from LINGER_DOMAIN, and the Caddyfile
-      # block has to match it.
-      # LINGER_MEDIA_DOMAIN: files.linger.example.com
-      # How much this server will hold in total, and how long a file stands
-      # before it is swept. The defaults are 50 GB and a year; a starred file,
-      # and a file on a pinned message, never expire. Sizes take a unit
-      # (250GB, 500MB, 2TB) or a plain number of bytes; LINGER_FILE_EXPIRY_DAYS
-      # takes a number of days, or `off` to keep everything for good.
-      # LINGER_POOL_BYTES: 50GB
-      # LINGER_FILE_EXPIRY_DAYS: 365
-      # Files in an S3 bucket instead of ./data/objects — Cloudflare R2 is the
-      # one to pick, because it charges nothing for bytes going out. Set
-      # LINGER_STORAGE to s3 and fill these in; the server refuses to start if
-      # any of them are missing.
-      # LINGER_S3_BUCKET: linger
-      # LINGER_S3_ENDPOINT: https://ACCOUNT.r2.cloudflarestorage.com
-      # LINGER_S3_REGION: auto
-      # LINGER_S3_ACCESS_KEY_ID: ...
-      # LINGER_S3_SECRET_ACCESS_KEY: ...
-      # The voice relay's shared secret, from .env (see .env.example). Set it
-      # here and in coturn below, or leave it unset for no relay. If you set
-      # this and want the relay somewhere other than turn:<LINGER_DOMAIN>:3478,
-      # list the URIs in LINGER_TURN_URLS, separated by commas.
-      LINGER_TURN_SECRET: ${LINGER_TURN_SECRET:-}
-      # LINGER_TURN_URLS: turn:relay.example.com:3478?transport=udp,stun:relay.example.com:3478
-      # Voice through this server (#197): everybody sends their voice once,
-      # here, and the server passes it to everyone else in the room, up to 25
-      # people. Set this to the machine's public IP address (not a name) and
-      # open UDP 3479 on the firewall. Unset, this server carries no voice.
-      # The server passes voice along without keeping it; SPEC §4.14 says what
-      # that means for privacy.
-      # LINGER_VOICE_ADDRESS: 203.0.113.7
     ports:
-      # Voice forwarding's one UDP port. Nothing listens on it unless
-      # LINGER_VOICE_ADDRESS is set.
+      # Voice forwarding's one UDP port. Nothing listens on it when
+      # LINGER_VOICE_ADDRESS is off.
       - "3479:3479/udp"
 
   caddy:
@@ -86,6 +56,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # The Caddyfile's two names are made from this.
+      LINGER_DOMAIN: ${LINGER_DOMAIN:?Put your server's name in .env as LINGER_DOMAIN (copy .env.example to .env, or run setup.sh)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -96,13 +69,14 @@ services:
   coturn:
     image: coturn/coturn:4
     restart: unless-stopped
-    # Behind a profile so a plain `docker compose up -d` still works with no
-    # `.env` and no relay. `.env.example` turns the profile on
-    # (COMPOSE_PROFILES=voice), so the relay starts once `.env` is in place.
+    # Behind a profile so a plain `docker compose up -d` doesn't start it for
+    # a host who never asked for a relay. COMPOSE_PROFILES=voice in .env turns
+    # the profile on, so the relay starts with everything else.
     profiles: ["voice"]
     network_mode: host
     environment:
       LINGER_TURN_SECRET: ${LINGER_TURN_SECRET:-}
+      LINGER_RELAY_EXTERNAL_IP: ${LINGER_RELAY_EXTERNAL_IP:-}
     # The secret is checked here, when the relay starts, and not by compose
     # when the file is read — a `${VAR:?}` in this file would refuse a plain
     # `docker compose up -d` for a host who never asked for a relay. An empty
@@ -111,12 +85,12 @@ services:
     command:
       - |
         if [ -z "$$LINGER_TURN_SECRET" ]; then
-          echo "coturn: LINGER_TURN_SECRET is empty. Copy .env.example to .env and put a long random secret in it." >&2
+          echo "coturn: LINGER_TURN_SECRET is empty. Put a long random secret in .env (openssl rand -hex 32), or take COMPOSE_PROFILES=voice out of it for no relay." >&2
           exit 1
         fi
         exec turnserver \
           --listening-port=3478 \
-          --realm=linger.example.com \
+          --realm=${LINGER_DOMAIN} \
           --use-auth-secret \
           --static-auth-secret="$$LINGER_TURN_SECRET" \
           --min-port=49160 \
@@ -125,10 +99,11 @@ services:
           --no-cli \
           --no-tls \
           --no-multicast-peers \
-          --log-file=stdout
-        # Behind a home router rather than on a machine with a public address?
-        # Add your public IP to the list above so the relay tells clients where
-        # it really is:   --external-ip=203.0.113.7 \
+          --log-file=stdout \
+          $${LINGER_RELAY_EXTERNAL_IP:+--external-ip=$$LINGER_RELAY_EXTERNAL_IP}
+        # Behind a home router rather than on a machine with a public address,
+        # the relay has to say where it really is: LINGER_RELAY_EXTERNAL_IP in
+        # .env (setup.sh sets it when it sees a router in front).
 
 volumes:
   caddy_data: {}

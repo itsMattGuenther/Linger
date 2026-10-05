@@ -169,7 +169,7 @@ Linger always connects securely, so `http://` or `https://` in front of the
 address makes no difference.
 
 **Making the host account?** Paste the entire private `/setup?token=…` link
-from the server log. Follow [host guide step 6](host-guide.md#6-make-your-host-account).
+from the server log. Follow [host guide step 4](host-guide.md#4-make-your-host-account).
 Setup links work once and belong only to the host; send friends invites instead.
 
 **Seeing a password-mismatch error before you've made an account?** You likely

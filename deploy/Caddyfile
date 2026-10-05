@@ -1,8 +1,9 @@
-# Replace linger.example.com with your domain (both blocks). Two DNS records,
-# both pointing at this machine: the domain itself, and `cdn.` in front of it.
-# Caddy fetches and renews TLS certificates automatically — no certbot, ever.
+# Nothing to edit here: both names come from LINGER_DOMAIN in .env (#440).
+# Two DNS records, both pointing at this machine: the domain itself, and
+# `cdn.` in front of it. Caddy fetches and renews TLS certificates
+# automatically — no certbot, ever.
 
-linger.example.com {
+{$LINGER_DOMAIN} {
 	reverse_proxy linger:8420
 }
 
@@ -13,7 +14,9 @@ linger.example.com {
 #
 # The headers are belt and braces on top of what the server already sends —
 # nothing served here may run a script, reach the network, or be guessed at.
-cdn.linger.example.com {
+# Files served from a name other than cdn.<your domain> (LINGER_MEDIA_DOMAIN
+# in .env)? Write that name here in place of this one.
+cdn.{$LINGER_DOMAIN} {
 	header {
 		X-Content-Type-Options nosniff
 		Content-Security-Policy "default-src 'none'; sandbox"
