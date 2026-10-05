@@ -39,7 +39,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -1197,26 +1197,33 @@ fn strongest(wake: &std::sync::mpsc::Receiver<Wake>, first: Wake) -> Wake {
     strongest
 }
 
-/// Sleep for `pause`, unless something arrives first. True means stop. A
-/// switch cuts the wait short and starts the count of failures again, since
-/// the device being tried is a new one.
+/// Sleep for `pause`, unless a stop or a switch arrives first. True means
+/// stop. A switch cuts the wait short and starts the count of failures again,
+/// since the device being tried is a new one. A death doesn't: nothing is open
+/// while it waits, so a death now is another ring of the one being waited out,
+/// and it ending the wait reopened a device that had just died at once, and
+/// opened it once more ahead of a stop that followed (#442).
 fn wait_or_stop(
     wake: &std::sync::mpsc::Receiver<Wake>,
     pause: Duration,
     failures: &mut u32,
 ) -> bool {
-    let woke = match wake.recv_timeout(pause) {
-        Ok(woke) => strongest(wake, woke),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return false,
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return true,
-    };
-    match woke {
-        Wake::Stop => true,
-        Wake::Switch => {
-            *failures = 0;
-            false
+    let until = Instant::now() + pause;
+    loop {
+        let left = until.saturating_duration_since(Instant::now());
+        let woke = match wake.recv_timeout(left) {
+            Ok(woke) => strongest(wake, woke),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return false,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return true,
+        };
+        match woke {
+            Wake::Stop => return true,
+            Wake::Switch => {
+                *failures = 0;
+                return false;
+            }
+            Wake::Died => {}
         }
-        Wake::Died => false,
     }
 }
 
@@ -2068,6 +2075,41 @@ mod tests {
             1,
             "built after being stopped"
         );
+    }
+
+    /// A death that rings again while the worker waits it out doesn't end
+    /// the wait: the device opens again after the pause, not at once (#442).
+    #[test]
+    fn a_second_ring_of_one_death_waits_out_the_pause() {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let alarm_out: Arc<Mutex<Option<Alarm>>> = Arc::new(Mutex::new(None));
+        let (b, a) = (Arc::clone(&builds), Arc::clone(&alarm_out));
+        let _worker = Worker::start(
+            move |alarm: &Alarm| {
+                b.fetch_add(1, Ordering::SeqCst);
+                *a.lock().unwrap() = Some(alarm.clone());
+                Ok((Fake, ()))
+            },
+            || {},
+            Retry {
+                pause: Duration::from_millis(600),
+                attempts: 3,
+            },
+        )
+        .expect("first open");
+        let alarm = alarm_out.lock().unwrap().clone().unwrap();
+        alarm.ring();
+        // Well inside the pause, the same death rings again.
+        std::thread::sleep(Duration::from_millis(100));
+        alarm.ring();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            1,
+            "a second ring opened the device before the pause was out"
+        );
+        // ...and once it's out, the device opens again.
+        assert_eq!(wait_until(&builds, 2), 2);
     }
 
     #[test]
