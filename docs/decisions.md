@@ -856,6 +856,35 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
   with 3 talking went from 74% of a core and 68% heard to 24% and all heard with
   silence unsent, and 10% with the loop change; 60 with 5 talking, 17% and all heard. The droplet's shared core is slower: a test against it decides whether raid
   night wants a temporary second core.
+- **Measured against a droplet** (2026-10-05, `crates/linger-server/examples/voice_load.rs`):
+  a throwaway `s-1vcpu-2gb` in nyc1, the plan the raid's server is on, running the
+  server in Docker, with 50 stand-ins on a home desktop reaching it over the internet
+  through sign-up, the gateway and UDP. Its shared core is about eight times slower per
+  packet than the desktop's: 50 people with 1 talking took 66% of it, 3 took 81%, 8 took
+  97%, and packets ran late whenever a neighbour on the same host took CPU. `perf` put
+  nearly all of it in `str0m`'s bookkeeping per m-line; each connection carries one
+  m-line per other person, so every packet passed on is a walk over fifty.
+- **Three changes to the forwarding loop**, each measured on that droplet (50 people,
+  1 / 3 / 8 talking, share of the core):
+  - Only connections something reached are asked what they have to send: 66 → ~50,
+    81 → 76, 97 → 96.
+  - A connection asking for a moment already past is given the time at once, in the
+    same pass. Without bandwidth estimation `str0m` sends one packet and then asks for
+    exactly that, and it turns voice handed to it into packets only when given the time,
+    so it gets the time once before it is asked: → 37, 62, 88.
+  - **Nothing is held back past a gap** (#438). By default `str0m` held a voice for up to 15
+    packets (300 ms) after a missing one, waiting for it, so one packet lost on a
+    talker's way in stopped them for the whole room and then arrived in a lump the apps
+    could only throw away. At 60 people with 8 talking the server fell into it and
+    stayed there: 78% heard, a steady 300 ms late, a sixth of what came in dropped.
+    `set_reordering_size_audio(0)` makes that 99% heard and 80 ms (the trip from the
+    desktop and back alone is 48 ms). Each app's own buffer covers gaps and reorders.
+- **Where that leaves one shared core**: 50 people with 3 talking about 65%, with 8
+  about 90%; 60 with 8 talking 96% and 5% of packets late. Ten people on an app from
+  before 0.4.9, sending silence, take 50 with 3 talking to the limit (95% heard), so a
+  raid wants everybody updated. Bigger droplets measured with the first two changes:
+  the forwarding is one thread, so a second core only takes the kernel's share of the
+  work; premium AMD (`s-1vcpu-2gb-amd`) ran it about 15% faster than the regular core.
 
 ## Decided — voice sounds better: 128 kbit/s up to twenty, 96 from twenty-one
 

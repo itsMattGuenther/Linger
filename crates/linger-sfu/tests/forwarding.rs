@@ -30,6 +30,8 @@ struct Client {
     sent: u64,
     /// What the latest offer said to send voice at (#431).
     bits: Option<u32>,
+    /// The next voice packet it sends is lost on the way.
+    lose_next_voice: bool,
 }
 
 impl Client {
@@ -52,6 +54,7 @@ impl Client {
             heard: Vec::new(),
             sent: 0,
             bits: None,
+            lose_next_voice: false,
         }
     }
 
@@ -77,6 +80,10 @@ impl Client {
         loop {
             match self.rtc.poll_output().expect("output") {
                 Output::Transmit(transmit) => {
+                    if self.lose_next_voice && is_rtp(&transmit.contents) {
+                        self.lose_next_voice = false;
+                        continue;
+                    }
                     let _ = self
                         .socket
                         .send_to(&transmit.contents, transmit.destination);
@@ -136,6 +143,12 @@ impl Client {
         let time = MediaTime::new(self.sent * 960, str0m::media::Frequency::FORTY_EIGHT_KHZ);
         let _ = writer.write(pt, Instant::now(), time, vec![0xF8, 0xFF, 0xFE]);
     }
+}
+
+/// RTP, as opposed to RTCP, STUN or DTLS sharing the socket (RFC 5761, 7983):
+/// version 2, and a second byte that isn't one of RTCP's packet types.
+fn is_rtp(packet: &[u8]) -> bool {
+    packet.len() > 1 && packet[0] & 0xC0 == 0x80 && !(192..=223).contains(&packet[1])
 }
 
 fn start() -> (Sfu, Receiver<Offer>) {
@@ -398,5 +411,59 @@ fn a_room_steps_its_quality_down_at_twenty_one_and_back_up_at_sixteen() {
         settle(&sfu, &offers, &mut room),
         all(SMALL_ROOM_BITS, SMALL_AGAIN + 1),
         "and seventeen again doesn't step it down"
+    );
+}
+
+#[test]
+fn a_packet_lost_on_the_way_in_doesnt_hold_up_the_voice_after_it() {
+    let (sfu, offers) = start();
+    let mut a = Client::new();
+    let mut b = Client::new();
+    sfu.join("a", "room");
+    sfu.join("b", "room");
+    let talking = drive(
+        &sfu,
+        &offers,
+        &mut [("a", &mut a), ("b", &mut b)],
+        |clients| clients[1].1.heard.iter().any(|from| from == "a"),
+    );
+    assert!(talking, "b never heard a");
+    // What's in flight lands, with nobody talking.
+    let until = Instant::now() + Duration::from_millis(200);
+    while Instant::now() < until {
+        a.turn();
+        b.turn();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+
+    // One packet lost on a's way in, then ten more, a frame's 20 ms apart.
+    // `str0m` held a voice back after a gap until fifteen more had arrived
+    // (300 ms) by default, so b heard none of these while a said them (#438).
+    a.lose_next_voice = true;
+    a.speak();
+    let before = b.heard.len();
+    for _ in 0..10 {
+        let next = Instant::now() + Duration::from_millis(20);
+        a.speak();
+        while Instant::now() < next {
+            a.turn();
+            b.turn();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    let until = Instant::now() + Duration::from_millis(40);
+    while Instant::now() < until {
+        a.turn();
+        b.turn();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let heard = b.heard[before..].iter().filter(|from| *from == "a").count();
+    assert!(
+        heard >= 5,
+        "b heard {heard} of the ten frames a said after the lost one, while a said them"
+    );
+    assert!(
+        !a.lose_next_voice,
+        "a never sent the packet that was to be lost"
     );
 }
