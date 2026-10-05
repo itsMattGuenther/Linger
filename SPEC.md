@@ -55,7 +55,7 @@ the process that hosts an instance, never the instance itself.
 Discord's interface is built for a stadium of 50,000 strangers. Linger is built for
 people who already know each other: five friends or a whole guild. How many is the
 host's call. A limit that remains is what the software can carry today (a voice room
-holds 25, #197), never a verdict on how big a group should be. Nearly every complaint
+holds 60, #197), never a verdict on how big a group should be. Nearly every complaint
 about Discord traces back to that mismatch:
 
 | Stadium feature | Effect among friends |
@@ -665,10 +665,12 @@ joined. People already in that voice session may hear a quiet join/leave cue,
 controlled by their notification sound settings (§4.2). Muting or unmuting
 someone else's microphone never makes a sound on your computer.
 
-**Through the host's server, up to 25** (#197). Each person sends their voice once, to
+**Through the host's server, up to 60** (#197). Each person sends their voice once, to
 the host's server, which passes it on to everyone else in the room. It is part of the
 server a host already runs (one UDP port more), so there is nothing new to install, and
-it is what lets a raid night of twenty people talk at once. It is the only way voice
+it is what lets a 40-person raid talk in one room. **Silence isn't sent** (2026-10-04):
+an app sends only while its person is talking, as Discord's do, so in a room of fifty
+the people not talking cost the server nothing; muted and push-to-talk are silence too. It is the only way voice
 travels (#306): the mesh that came first, where every laptop sent to every other, stopped
 working somewhere past ten and is gone. A server whose host hasn't set forwarding up
 carries no voice, and the app says so in plain words rather than offering a call nobody

@@ -17,6 +17,20 @@ use crate::voice::audio::{FRAME_SAMPLES, SAMPLE_RATE};
 /// frame at 1275; the rest is headroom that costs nothing.
 const MAX_PACKET: usize = 1500;
 
+/// The longest packet Opus's discontinuous transmission (DTX) hands back for
+/// a moment of silence: a byte or two that only says "still quiet" (#197).
+/// Live voice doesn't send these, as WebRTC and Discord don't: in a room of
+/// fifty, the people not talking send almost nothing, where every app used to
+/// send fifty packets a second of silence, for the server to copy to everyone.
+pub const SILENCE_MAX: usize = 2;
+
+/// Whether a packet from the live-voice encoder is DTX's "still quiet",
+/// to be left unsent (#197).
+#[must_use]
+pub fn is_silence(packet: &[u8]) -> bool {
+    packet.len() <= SILENCE_MAX
+}
+
 /// How many bits a second a voice message is encoded at (#401).
 pub const CLIP_BITS_PER_SECOND: i32 = 64_000;
 
@@ -34,6 +48,10 @@ impl Encoder {
             opus::Encoder::new(SAMPLE_RATE, opus::Channels::Mono, opus::Application::Voip)?;
         inner.set_inband_fec(true)?;
         inner.set_packet_loss_perc(10)?;
+        // Silence becomes a byte or two (`is_silence`), sent by nobody. Opus
+        // eases into it over its first fifth of a second, so a word never
+        // ends in a click, and sends a quiet "still here" every 400 ms.
+        inner.set_dtx(true)?;
         Ok(Self(inner))
     }
 
@@ -60,6 +78,15 @@ impl Encoder {
     /// One frame, one packet.
     pub fn encode(&mut self, frame: &[i16]) -> Result<Vec<u8>, opus::Error> {
         self.0.encode_vec(frame, MAX_PACKET)
+    }
+
+    /// Whether the last frame was silence to Opus's DTX: a "still here" it
+    /// sends now and then while quiet, or one it didn't encode at all (#197).
+    /// Neither is sent, as Discord sends nothing once you stop talking: the
+    /// frames Opus eases out with before it decides are sent, so a word still
+    /// ends cleanly.
+    pub fn was_silence(&mut self) -> bool {
+        self.0.get_in_dtx().unwrap_or(false)
     }
 }
 
@@ -202,5 +229,44 @@ mod tests {
         let packet = encoder.encode(&vec![0i16; FRAME_SAMPLES]).expect("encode");
         assert!(!packet.is_empty());
         assert!(packet.len() < 100, "silence took {} bytes", packet.len());
+    }
+
+    /// A second of silence after talking settles into packets that aren't
+    /// sent (#197), all but a "still here" now and then; talking again is
+    /// sent at once, and decodes.
+    #[test]
+    fn silence_goes_unsent_and_talking_comes_back_at_once() {
+        let mut encoder = Encoder::new().expect("encoder");
+        let mut decoder = Decoder::new().expect("decoder");
+        for n in 0..10 {
+            let packet = encoder.encode(&tone(n)).expect("encode");
+            assert!(!is_silence(&packet), "talking was taken for silence");
+        }
+        let quiet = vec![0i16; FRAME_SAMPLES];
+        let sent = (0..100)
+            .filter(|_| {
+                let packet = encoder.encode(&quiet).expect("encode");
+                !is_silence(&packet) && !encoder.was_silence()
+            })
+            .count();
+        // Opus eases into it over its first frames, and then nothing at all:
+        // not even its "still here" every 400 ms.
+        assert!(
+            sent <= 15,
+            "two seconds of silence sent {sent} packets of 100"
+        );
+        let back = encoder.encode(&tone(60)).expect("encode");
+        assert!(!is_silence(&back), "talking again was held back");
+        assert_eq!(decoder.decode(&back).expect("decode").len(), FRAME_SAMPLES);
+    }
+
+    /// Voice messages keep every frame: a recording isn't a call.
+    #[test]
+    fn a_voice_message_keeps_its_silences() {
+        let mut encoder = Encoder::for_clip().expect("encoder");
+        let quiet = vec![0i16; FRAME_SAMPLES];
+        for _ in 0..50 {
+            assert!(!is_silence(&encoder.encode(&quiet).expect("encode")));
+        }
     }
 }

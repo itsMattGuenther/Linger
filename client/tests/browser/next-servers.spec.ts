@@ -46,7 +46,7 @@ test("one list, a section per server in your order, the first open and the rest 
 test("a folded server still shows its lights: one plain line about what's happening there", async ({ page }) => {
   await open(page, "&folded");
   expect(await words(lineOf(page, "The Good Company"))).toBe("Eli and Jules in #general");
-  // Seven of 25: far from full, so nothing is said about room (a count would be a counter).
+  // Seven of 60: far from full, so nothing is said about room (a count would be a counter).
   expect(await words(lineOf(page, "Ashen Lanterns"))).toBe("#raid-night in voice");
   expect(await words(lineOf(page, "Casa da Ribeira"))).toBe("quiet · Rui's up");
   // Names in the line are drawn in their own faces.

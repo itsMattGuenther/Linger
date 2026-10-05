@@ -81,7 +81,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Files and media.** 500 MB uploads, EXIF always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
-  goes through the host's server, which passes it on so up to 25 can talk at
+  goes through the host's server, which passes it on so up to 60 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.
   Voice rooms are never recorded.
 - **Voice messages**: record a clip in the message box, hear it back, then

@@ -542,10 +542,12 @@ impl Closed {
 /// on the source — a microphone delivers a frame every 20 ms, and so do the
 /// stand-ins.
 ///
-/// Mute and push-to-talk are applied here, by sending a frame of zeros in
-/// place of the real one. Silence rather than nothing, so the far end's
-/// decoder keeps its clock; and the level gate sees what is *sent*, so the
-/// "you are talking" mark goes out when the microphone does.
+/// Mute and push-to-talk are applied here, by encoding a frame of zeros in
+/// place of the real one; the level gate sees what is *sent*, so the "you
+/// are talking" mark goes out when the microphone does. Silence isn't sent
+/// at all (#197): Opus's DTX eases out over a few quiet frames and then
+/// hands back only "still quiet", which stays here, and the next frame sent
+/// says how many weren't, so the far end's clock keeps time.
 ///
 /// It ends when the source does. That is a microphone that went away, and
 /// until T-1405 makes it recover, the honest thing is to say so and stop.
@@ -564,6 +566,8 @@ async fn pump<W: Watcher>(
     };
     let mut gate = level::Gate::default();
     let mut refused = None;
+    // Frames left unsent since the last one sent: silence (#197).
+    let mut unsent: u16 = 0;
     let quiet = vec![0i16; audio::FRAME_SAMPLES];
     watcher.audio_state("sending");
     while let Some(frame) = source.frame().await {
@@ -585,6 +589,13 @@ async fn pump<W: Watcher>(
                 continue;
             }
         };
+        // Silence isn't sent (#197), as Discord doesn't send it: in a room of
+        // fifty, everybody not talking sends nothing. Muted and push-to-talk
+        // are silence too, so they stop sending as well.
+        if codec::is_silence(&packet) || encoder.was_silence() {
+            unsent = unsent.saturating_add(1);
+            continue;
+        }
         let track = inner
             .lock()
             .await
@@ -594,6 +605,9 @@ async fn pump<W: Watcher>(
         let sample = Sample {
             data: Bytes::from(packet),
             duration: Duration::from_millis(u64::from(audio::FRAME_MS)),
+            // The frames not sent move this packet's timestamp on by their
+            // length, so the far end's clock keeps time across the pause.
+            prev_dropped_packets: std::mem::take(&mut unsent),
             ..Default::default()
         };
         if let Some(track) = track {
@@ -687,7 +701,21 @@ async fn receive_forwarded<W: Watcher>(
 ) {
     let mut current: Option<(String, codec::Decoder, level::Gate)> = None;
     let mut expected: Option<u16> = None;
-    while let Ok((packet, _)) = track.read_rtp().await {
+    loop {
+        // Somebody who stops talking stops sending (#197), so their light
+        // goes off when nothing has come for as long as a pause takes.
+        let packet = match tokio::time::timeout(level::HANGOVER, track.read_rtp()).await {
+            Ok(Ok((packet, _))) => packet,
+            Ok(Err(_)) => break,
+            Err(_quiet) => {
+                if let Some((who, _, gate)) = current.as_mut() {
+                    if let Some(talking) = gate.update(0.0, Instant::now()) {
+                        watcher.speaking(Some(who), talking);
+                    }
+                }
+                continue;
+            }
+        };
         let Some(peer) = inner.lock().await.tracks.get(&mid).cloned() else {
             continue;
         };

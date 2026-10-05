@@ -107,6 +107,23 @@ a window built from a synchronous command deadlocks WebView2 (#205), so every
 window-building command in `src-tauri/src/window.rs` is `async`. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
+## Voice at raid size (#197)
+
+`crates/linger-sfu/tests/load.rs` puts 50 stand-in people in one voice room on
+the forwarding server, joining at once, then measures ten seconds with three
+talking: once with silence sent the old way and once with it unsent, as the
+apps now do. It prints the forwarding thread's CPU (from /proc, so Linux), the
+packets a second it delivered, the worst share of a talker any listener heard,
+and the longest answer to an offer. It's ignored in ordinary runs:
+
+```bash
+cargo test -p linger-sfu --release --test load -- --ignored --nocapture
+LINGER_LOAD_PEOPLE=60 LINGER_LOAD_TALKERS=5 cargo test -p linger-sfu --release --test load -- --ignored --nocapture
+```
+
+It measures the server's share of the work on this machine, not how a raid
+sounds across real networks.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so

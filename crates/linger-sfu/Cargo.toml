@@ -13,3 +13,7 @@ repository.workspace = true
 # keeps the server image free of OpenSSL and C toolchains.
 str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }
 tracing = { workspace = true }
+
+[dev-dependencies]
+# The load test shows the server's own warnings (tests/load.rs).
+tracing-subscriber = { workspace = true }
