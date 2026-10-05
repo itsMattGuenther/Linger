@@ -214,6 +214,9 @@ async fn handshake(
             // client drawing the server's rooms cannot draw somebody's private
             // conversation by forgetting a filter.
             let dms = repo::rooms::dms_for(&state.db.read, user_id).await.ok()?;
+            // The server's own emoji (#359): the whole set, kept current
+            // afterwards by `emoji.update`.
+            let emoji = repo::emoji::all(&state.db.read, &state.config).await.ok()?;
             let ready = ReadyData {
                 session_id: session_id.clone(),
                 user,
@@ -222,8 +225,7 @@ async fn handshake(
                 dms,
                 presence: state.gateway.presence_snapshot(user_id),
                 voice: Some(state.gateway.voice_snapshot(user_id)),
-                // TODO(#359): the server's emoji, once the table exists.
-                emoji: None,
+                emoji: Some(emoji),
             };
             let frame = ServerFrame::sequenced(ServerEvent::Ready(ready), 0);
             sink.send(serde_json::to_string(&frame).ok()?).await.ok()?;

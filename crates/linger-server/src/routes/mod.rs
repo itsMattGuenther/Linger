@@ -15,6 +15,7 @@
 mod auth;
 mod blocks;
 mod dms;
+mod emoji;
 mod export;
 mod health;
 mod invites;
@@ -107,6 +108,7 @@ pub fn router(state: AppState) -> Router {
         .merge(reports::router())
         .merge(voice::router())
         .merge(links::router())
+        .merge(emoji::router())
         .route("/gateway", any(crate::gateway::ws_route))
         .fallback(api_not_found);
 
