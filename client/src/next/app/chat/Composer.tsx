@@ -1,11 +1,12 @@
 import { type FormEvent, type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { useAutoGrow } from "../../../lib/autoGrow";
 import { insertGlyph } from "../../../lib/composerEmoji";
-import { loadEmoji, withTone } from "../../../lib/emoji";
+import { emojiIndex as loadedEmoji, loadEmoji, onEmojiLoaded, withTone } from "../../../lib/emoji";
 import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
@@ -269,24 +270,31 @@ export const Composer = memo(function Composer({
   });
   // The emoji list, once there's a `:` that might be a shortcode or the
   // picker is open: a finished `:smiley:` needs it to become 😃.
-  const emojiIndex = useEmojiIndex(emoji || draft.includes(":"));
+  useEmojiIndex(emoji || draft.includes(":"));
   const glyphOf = (name: string): string | null => {
     // A server's own emoji by that name wins on its server: it stays `:name:`.
     if (customEmoji.some((one) => one.name === name)) return null;
-    const found = emojiIndex?.byShortcode.get(name);
+    // The list as it is now, not as it was when the box last drew: it can
+    // arrive between two keys.
+    const found = loadedEmoji()?.byShortcode.get(name);
     return found ? withTone(found, skinTone()) : null;
   };
 
-  // Shortcodes finished before the list had loaded become emoji once it has.
-  const hadIndex = useRef(emojiIndex !== null);
-  useEffect(() => {
-    if (emojiIndex === null || hadIndex.current) return;
-    hadIndex.current = true;
-    const done = convertShortcodes(draft, box.current?.selectionStart ?? draft.length, glyphOf);
-    if (done.text === draft) return;
+  // Shortcodes finished before the list had loaded become emoji the moment
+  // it arrives. The box itself says what's typed, since a key can be in it
+  // before it's in the draft, and the change is drawn at once: a key pressed
+  // straight after lands on the new words instead of putting the old ones back
+  // with the caret where the new ones would have had it.
+  const catchUp = useRef(() => {});
+  catchUp.current = () => {
+    const field = box.current;
+    if (!field) return;
+    const done = convertShortcodes(field.value, field.selectionStart, glyphOf);
+    if (done.text === field.value) return;
     caretAfter.current = done.caret;
-    change(done.text);
-  }, [emojiIndex]);
+    flushSync(() => change(done.text));
+  };
+  useEffect(() => onEmojiLoaded(() => catchUp.current()), []);
 
   useLayoutEffect(() => {
     const at = caretAfter.current;

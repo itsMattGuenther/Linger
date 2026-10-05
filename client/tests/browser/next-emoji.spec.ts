@@ -131,6 +131,23 @@ test.describe("shortcodes in the box", () => {
     await expect(box(page)).toHaveValue("😃🔥 :party_parrot:");
   });
 
+  test("a :name: finished before the list has loaded becomes the emoji when it arrives, and typing carries on where it was", async ({ page }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/src/lib/emoji/data.ts*", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await chat(page);
+    await box(page).click();
+    await box(page).pressSequentially("sounds good :thumbsup: at 1");
+    await expect(box(page)).toHaveValue("sounds good :thumbsup: at 1");
+    // The list arrives while the time is still being typed.
+    release();
+    await box(page).pressSequentially("2:30 ok");
+    await expect(box(page)).toHaveValue("sounds good 👍 at 12:30 ok");
+  });
+
   test("Escape closes the list and keeps what was typed", async ({ page }) => {
     await chat(page);
     await box(page).click();
@@ -158,8 +175,9 @@ test.describe("in messages", () => {
     const words = lastMessage(page).locator(".nx-text");
     await expect(words).toHaveAttribute("data-jumbo", "yes");
     await expect(words.getByRole("img", { name: ":party_parrot:" })).toHaveCount(2);
-    const size = await words.getByRole("img").first().boundingBox();
-    expect(size?.height).toBeGreaterThan(40);
+    // Measured once the message has settled: a sent message is swapped for
+    // the server's copy, and a measure in between finds nothing.
+    await expect.poll(async () => (await words.getByRole("img").first().boundingBox())?.height ?? 0).toBeGreaterThan(40);
 
     await send(page, "😂😂");
     await expect(lastMessage(page).locator(".nx-text")).toHaveAttribute("data-jumbo", "yes");
