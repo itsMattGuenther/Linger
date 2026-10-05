@@ -122,11 +122,15 @@ WebKitGTK 2.50.4 aborts creating a GBM display on NVIDIA + Wayland machines
 (#187), and off under X11. If a launch that tried it dies before drawing, the
 next launch notices and writes `~/.local/state/linger/gbm-off-<webkit version>`,
 keeping that WebKit off it (delete the file to try again). An explicit
-`WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins. On NVIDIA's legacy driver
-(the 580 branch and older), startup also sets `GDK_GL=disable`, because GTK's
-GL drawing crashed there when a Linger window was resized with another open
-(#229); WebKit then paints on the CPU. An explicit `GDK_GL` always wins. These
-choices happen before GTK and change no desktop settings.
+`WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins. With GBM off on a computer
+with two GPUs, the page can draw on a different GPU from the window, which then
+stays grey (#433), so startup also sets `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`
+there unless it is set: frames go to the window in ordinary memory. On
+NVIDIA's legacy driver (the 580 branch and older), startup also sets
+`GDK_GL=disable`, because GTK's GL drawing crashed there when a Linger window
+was resized with another open (#229); WebKit then paints on the CPU. An
+explicit `GDK_GL` always wins. These choices happen before GTK and change no
+desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
 ## The Buddy list client

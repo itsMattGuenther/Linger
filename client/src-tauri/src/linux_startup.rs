@@ -22,6 +22,12 @@ const NVIDIA_VERSION: &str = "/sys/module/nvidia/version";
 /// NVIDIA's 590 driver dropped Maxwell, Pascal and Volta cards. They stay on
 /// the 580 branch (`nvidia-580xx` on Arch).
 const NVIDIA_CURRENT: u32 = 590;
+/// Holds a `renderD<n>` entry for every GPU that can draw.
+const DRM_CLASS: &str = "/sys/class/drm";
+/// WebKit's switch for handing finished frames to the window in ordinary
+/// memory rather than as GPU buffers. Set by [`configure`] on some computers
+/// (#433) unless somebody set it.
+const FORCE_SHM: &str = "WEBKIT_DMABUF_RENDERER_FORCE_SHM";
 
 fn backend(
     value: Option<&OsStr>,
@@ -134,6 +140,41 @@ fn choose_gbm(launch: &Launch, state: Option<&Path>) -> Gbm {
     }
 }
 
+/// Whether WebKit reads this `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` as off: any
+/// value but `0`, the empty one included.
+fn gbm_disabled(value: Option<&OsStr>) -> bool {
+    value.is_some_and(|value| value != OsStr::new("0"))
+}
+
+/// How many GPUs this computer can draw with, counted by their `renderD<n>`
+/// entries in [`DRM_CLASS`]. Unreadable counts as none.
+fn gpus(drm_class: &Path) -> usize {
+    fs::read_dir(drm_class).map_or(0, |entries| {
+        entries
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().as_encoded_bytes().starts_with(b"renderD"))
+            .count()
+    })
+}
+
+/// Whether WebKit hands finished frames to the window in ordinary memory
+/// (#433).
+///
+/// With GBM off, WebKit's page process no longer draws on the GPU WebKit
+/// chose for the window. It opens a surfaceless EGL display instead, which
+/// lands on whichever GPU the graphics drivers offer, and still hands its
+/// frames over as GPU buffers (DMA-BUFs). With two GPUs that can be the other
+/// one, and then the window can't import a single frame (`Failed to create EGL
+/// image from DMABuf`): it stays grey while the page draws behind it, so the
+/// GBM probe never notices. On the RTX 4090 + AMD Raphael Omarchy machine it
+/// came down to boot order, which numbered the two GPUs differently on
+/// 2026-10-05 than on the boots before. Ordinary memory is something every
+/// GPU's window can show. With one GPU there is no other to land on, and with
+/// GBM on WebKit draws on the window's own GPU, so neither changes.
+fn force_shm(gbm_disabled: bool, gpus: usize) -> bool {
+    gbm_disabled && gpus > 1
+}
+
 /// The WebKitGTK this process is about to run, as `major.minor.micro`. In the
 /// AppImage that is the bundled copy, elsewhere the system's.
 fn webkit_version() -> String {
@@ -190,6 +231,19 @@ pub fn configure() -> Result<(), &'static str> {
         };
         if choose_gbm(&launch, graphics::state_dir().as_deref()) == Gbm::Off {
             std::env::set_var(GBM, "1");
+        }
+    }
+    // Whoever turned GBM off, Linger or somebody by hand. Somebody's own
+    // `WEBKIT_DMABUF_RENDERER_FORCE_SHM` always wins.
+    if std::env::var_os(FORCE_SHM).is_none() {
+        let gpus = gpus(Path::new(DRM_CLASS));
+        if force_shm(gbm_disabled(std::env::var_os(GBM).as_deref()), gpus) {
+            std::env::set_var(FORCE_SHM, "1");
+            eprintln!(
+                "Linger: WebKit's GPU path (GBM) is off and this computer has {gpus} GPUs, \
+                 so pages reach the window in ordinary memory (#433). Setting \
+                 {FORCE_SHM} yourself overrides this."
+            );
         }
     }
     ignore_terminal_hangup();
@@ -412,6 +466,51 @@ mod tests {
         // Unreadable means leave the GPU on, as without NVIDIA at all.
         assert_eq!(legacy_nvidia(""), None);
         assert_eq!(legacy_nvidia("unknown"), None);
+    }
+
+    #[test]
+    fn two_gpus_with_gbm_off_hand_frames_over_in_memory() {
+        // The RTX 4090 + AMD Raphael machine with `gbm-off-2.52.6`: the page
+        // drew on the NVIDIA card, the window was on the AMD (#433).
+        assert!(force_shm(true, 2));
+        assert!(force_shm(true, 3));
+        // One GPU: the page can only land on the window's.
+        assert!(!force_shm(true, 1));
+        // GBM on: WebKit draws on the window's GPU itself.
+        assert!(!force_shm(false, 2));
+        // Nothing readable in /sys: leave WebKit as it was.
+        assert!(!force_shm(true, 0));
+    }
+
+    #[test]
+    fn gbm_is_off_for_any_value_but_0() {
+        // WebKit's own test is `value && strcmp(value, "0")`.
+        assert!(!gbm_disabled(None));
+        assert!(!gbm_disabled(Some(OsStr::new("0"))));
+        assert!(gbm_disabled(Some(OsStr::new("1"))));
+        assert!(gbm_disabled(Some(OsStr::new(""))));
+        assert!(gbm_disabled(Some(OsStr::new("yes"))));
+    }
+
+    #[test]
+    fn gpus_are_counted_by_their_render_nodes() {
+        let root = scratch("drm-class");
+        // What the Omarchy machine's /sys/class/drm holds: connectors and the
+        // version file are not GPUs.
+        for name in [
+            "card0",
+            "card0-DP-1",
+            "card1",
+            "card1-HDMI-A-1",
+            "renderD128",
+            "renderD129",
+            "version",
+        ] {
+            fs::create_dir_all(root.join(name)).unwrap();
+        }
+        assert_eq!(gpus(&root), 2);
+        assert_eq!(gpus(&root.join("missing")), 0);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     /// A fresh directory for one test, under the system temp dir.

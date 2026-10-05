@@ -1,10 +1,11 @@
 //! Whether WebKit's GPU display path (GBM) works on this computer (#169).
 //!
-//! With GBM off, WebKitGTK copies every finished frame through ordinary
-//! memory before the compositor gets it, and that copy is a frame of delay
-//! you can feel while typing or scrolling. With GBM on, some computers abort
-//! at startup (`Could not create GBM EGL display`). The only way to find out
-//! which kind this computer is, is to try.
+//! With GBM off, typing and scrolling run a frame behind, and the page draws
+//! on whichever GPU the graphics drivers offer rather than the window's, which
+//! on a computer with two GPUs takes `linux_startup::force_shm` to show at all
+//! (#433). With GBM on, some computers abort at startup (`Could not create GBM
+//! EGL display`). The only way to find out which kind this computer is, is to
+//! try.
 //!
 //! So the binary's `linux_startup` decides, before GTK starts, whether this
 //! launch tries the GPU path. A launch that tries it leaves `PROBE` behind in

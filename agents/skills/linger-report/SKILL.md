@@ -151,9 +151,12 @@ person.
    WebKit's GPU display path failed; search for that exact text (step 4). If
    the user would rather not launch it, you can often still match a known issue
    from the pattern (a SIGABRT a second or two after launch, a `gbm-off` file);
-   say in the report that the error text wasn't captured. To see whether it is
-   running right now, use `pgrep -x linger-client` (not `pgrep -f`, which
-   matches its own command line).
+   say in the report that the error text wasn't captured. A window that opens
+   but stays grey, with `Failed to create EGL image from DMABuf` printed over
+   and over, means the page drew on a different GPU from the window: a
+   computer with two GPUs and the GPU path off (#433, fixed after 0.4.8). To
+   see whether it is running right now, use `pgrep -x linger-client` (not
+   `pgrep -f`, which matches its own command line).
 4. **Stacks from AppImages are unreadable.** `coredumpctl info <pid>` shows the
    signal, but for an AppImage the stack ends in `n/a (n/a + 0x0)`: the
    AppImage has unpacked into a temporary folder that is gone by the time you

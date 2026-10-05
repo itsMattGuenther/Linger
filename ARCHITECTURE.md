@@ -98,14 +98,23 @@ hardware limits.
 
 WebKit's GPU display path (GBM) is decided per launch unless
 `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` is set explicitly. It is on under native
-Wayland for builds that run the system's WebKitGTK, because without it every
-frame is copied through memory and typing runs a frame behind (#169). It is off
+Wayland for builds that run the system's WebKitGTK, because without it typing
+runs a frame behind (#169). It is off
 in the AppImage, whose bundled WebKitGTK 2.50.4 aborts creating a GBM display
 on NVIDIA + Wayland machines (#187), and off under X11. A launch that tries it
 leaves a probe in `$XDG_STATE_HOME/linger` naming its WebKit version; the page
 clears it after drawing two frames. A probe still there at the next launch
 means that launch died, so `gbm-off-<version>` keeps that WebKit off the GPU
 path (`client/src-tauri/src/graphics.rs`, `linux_startup.rs`).
+
+With GBM off, WebKit's page process draws through a surfaceless EGL display on
+whichever GPU the graphics drivers offer, not the window's, and still hands its
+frames over as GPU buffers. On a computer with two GPUs the window may be unable
+to read any of them and stays grey while the page draws (#433). So whenever GBM
+is off, by Linger or by hand, and `/sys/class/drm` lists more than one
+`renderD<n>`, startup also sets `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` unless it
+is already set: frames reach the window in ordinary memory, which any GPU can
+show.
 
 On NVIDIA's legacy driver (the 580 branch and older, which Maxwell, Pascal and
 Volta cards need), startup sets `GDK_GL=disable` unless `GDK_GL` is already
