@@ -449,7 +449,8 @@ test.describe("emoji", () => {
     await page.getByRole("button", { name: "Emoji" }).click();
     const panel = page.getByRole("dialog", { name: "Emoji" });
     await expect(panel).toBeVisible();
-    await panel.getByRole("button").first().click();
+    // The first emoji in the grid (#359): the picker's search, tone and tabs come before it.
+    await panel.getByRole("region", { name: "Smileys & emotion" }).getByRole("button").first().click();
     await expect(panel).toHaveCount(0);
     await expect(box(page)).toBeFocused();
     expect(await box(page).inputValue()).toMatch(/^porch light \p{Extended_Pictographic}/u);
