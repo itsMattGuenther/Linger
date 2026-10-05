@@ -1695,6 +1695,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "str0m",
  "tempfile",
  "thiserror",
  "tokio",

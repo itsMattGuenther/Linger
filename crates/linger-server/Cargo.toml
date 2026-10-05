@@ -56,4 +56,7 @@ uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+# The raid-sized voice load test (examples/voice_load.rs) stands in for the
+# app's WebRTC with the same library the server forwards with.
+str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }
 tokio-tungstenite = "0.29"

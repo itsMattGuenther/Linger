@@ -218,6 +218,18 @@ struct Client {
     /// When `str0m` next wants the time, from its last `Output::Timeout`:
     /// only connections that are due are given it (#197).
     due: Instant,
+    /// Something reached this connection since it was last asked what it
+    /// has to send: a packet, voice to pass on, the time, an offer or an
+    /// answer. Only these are asked (#197). Asking one with nothing new
+    /// costs a walk over every m-line it has, one per person in the room,
+    /// and asking all fifty of a raid on every packet that arrived, the
+    /// listeners' own reports included, was a quarter of the forwarding's
+    /// work with one person talking.
+    stirred: bool,
+    /// Voice was handed to this connection to pass on this turn, and it
+    /// hasn't been given the time since: `str0m` turns what it was given into
+    /// packets only then, so it gets the time once, before it is asked.
+    fed: bool,
     /// What its room sends voice at (#431), the same for everybody in it,
     /// and told to this client on its next offer.
     bits: u32,
@@ -393,11 +405,18 @@ impl Hub<'_> {
         // app's WebRTC stack sends those only when the line goes quiet: with
         // voice both ways, the server dropped everyone about 15 seconds in.
         // A full agent checks the app itself, every few seconds.
+        // Voice is passed on the moment it arrives, even past a gap or out of
+        // order (#438). By default `str0m` holds a voice back after a missing
+        // packet, waiting up to fifteen packets (300 ms) for it to turn up, so
+        // one packet lost on a talker's wifi stopped their voice for the
+        // whole room and then delivered it in a lump the apps could only
+        // throw away. Each app's own audio buffer covers gaps and reorders.
         let mut rtc = Rtc::builder()
             .set_ice_lite(false)
             .set_crypto_provider(Arc::clone(self.crypto))
             .clear_codecs()
             .enable_opus(true, false)
+            .set_reordering_size_audio(0)
             .build(Instant::now());
         match Candidate::host(self.address, "udp") {
             Ok(candidate) => {
@@ -430,6 +449,8 @@ impl Hub<'_> {
             pending: None,
             outs,
             due: Instant::now(),
+            stirred: true,
+            fed: false,
             bits,
         };
         client.negotiate(notify);
@@ -506,18 +527,38 @@ fn run(
     };
     let mut buffer = vec![0u8; 2000];
     loop {
+        let mut commanded = false;
         loop {
             match commands.try_recv() {
                 Ok(Command::Stop) | Err(TryRecvError::Disconnected) => return,
-                Ok(command) => hub.command(command),
+                Ok(command) => {
+                    hub.command(command);
+                    commanded = true;
+                }
                 Err(TryRecvError::Empty) => break,
             }
         }
+        // A join, an answer or a leave changes the connections of a whole
+        // room at once. They are rare next to packets, so everybody is asked.
+        if commanded {
+            for client in &mut hub.clients {
+                client.stirred = true;
+            }
+        }
 
-        // Everything each connection wants to send, and the voice that came in.
+        // Everything each stirred connection wants to send, and the voice
+        // that came in.
         let mut next = Instant::now() + TICK;
         let mut heard: Vec<(String, String, MediaData)> = Vec::new();
         for client in &mut hub.clients {
+            if !std::mem::take(&mut client.stirred) {
+                next = next.min(client.due);
+                continue;
+            }
+            if std::mem::take(&mut client.fed) && client.rtc.is_alive() {
+                let _ = client.rtc.handle_input(Input::Timeout(Instant::now()));
+            }
+            let mut rounds = 0;
             while client.rtc.is_alive() {
                 match client.rtc.poll_output() {
                     Ok(Output::Transmit(transmit)) => {
@@ -525,6 +566,15 @@ fn run(
                         {
                             tracing::debug!(%error, "voice: a packet that didn't go");
                         }
+                    }
+                    // Without bandwidth estimation `str0m` sends one packet
+                    // and then wants the time before it sends another: it
+                    // asks for a moment already past. Given it here, in this
+                    // pass, the rest go now, rather than each waiting for a
+                    // turn of the loop of its own (#197).
+                    Ok(Output::Timeout(at)) if at <= Instant::now() && rounds < ROUNDS => {
+                        rounds += 1;
+                        let _ = client.rtc.handle_input(Input::Timeout(Instant::now()));
                     }
                     Ok(Output::Timeout(at)) => {
                         client.due = at;
@@ -569,6 +619,8 @@ fn run(
                     {
                         tracing::debug!(%error, "voice: couldn't pass a packet on");
                     }
+                    client.stirred = true;
+                    client.fed = true;
                 }
             }
             continue;
@@ -616,10 +668,16 @@ fn run(
         for client in &mut hub.clients {
             if client.due <= now && client.rtc.is_alive() {
                 let _ = client.rtc.handle_input(Input::Timeout(now));
+                client.stirred = true;
             }
         }
     }
 }
+
+/// The most times one connection is given the time in one pass because it
+/// asked for a moment already past: about one for each packet it has waiting
+/// to go. A bound, so a connection that keeps asking can't hold up the rest.
+const ROUNDS: usize = 64;
 
 /// The most packets taken from the socket in one turn, before the
 /// connections send what they now have to: a bound, so a flood can't starve
@@ -645,5 +703,6 @@ fn receive(hub: &mut Hub<'_>, address: SocketAddr, packet: &[u8], source: Socket
             tracing::debug!(session = %client.session, %error, "voice: bad input");
             client.rtc.disconnect();
         }
+        client.stirred = true;
     }
 }
