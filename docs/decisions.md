@@ -913,3 +913,37 @@ voice let Opus choose its own rate, about 51 kbit/s; voice messages were already
   An app never sends above 128 kbit/s or below 16, whatever a server asks.
 - **Silence still isn't sent at the higher rates**: Opus encodes them differently, so
   that was checked rather than assumed (`at_every_room_s_quality_talking_is_sent_and_silence_isn_t`).
+
+## Decided — hosting from one settings file and a setup script
+
+**Matt, 2026-10-05 (#440, part of #81).** Setting a server up meant editing
+three files, typing the machine's IP in for voice, and running a `chown` whose
+purpose nobody could guess: every one a place a first-time host went wrong.
+
+- **Every setting lives in `.env`.** `compose.yaml` hands it to the server
+  (`env_file`) and the Caddyfile builds its two names from `{$LINGER_DOMAIN}`,
+  so a host never edits either, and a newer copy can replace the old one. An
+  older `compose.yaml` with its settings inline keeps working; nothing makes a
+  host move.
+- **`deploy/setup.sh`** asks for the name and whether to run the relay, checks
+  both names point at the machine before writing anything, writes `.env` with
+  a fresh relay secret and a file pool that fits the disk, opens `ufw`, says
+  which ports to forward when a router or a cloud network sits in front, starts
+  the server and prints the setup link. It refuses a folder that already runs a
+  server. It asks `api.ipify.org` for the public address, as the host guide
+  already told hosts to do by hand; that is the one outside service it uses.
+- **Voice's address comes from the domain.** Unset, the server looks
+  `LINGER_DOMAIN` up once at startup and uses its first public address: the
+  host already pointed the name at the machine. Private addresses are never
+  chosen. The setting still wins, and `off` turns voice off on purpose. **This
+  changes existing servers**: one with a domain and no voice address gets
+  voice after updating to 0.4.9, which the release notes and `update.sh` say.
+- **The image fixes its own data folder.** It starts as root only to give
+  `/data` to `linger`, then runs the server as `linger` through `setpriv`;
+  `reset-password` comes through the same door, so nothing is ever written as
+  root. Starting as root at all was the cost, and dropping it straight away in
+  a short, readable script is the usual way to pay it.
+- **The deploy files on `main` still work with the image that's out.** The host
+  guide downloads them from `main`, so they can't wait for a release:
+  `setup.sh` writes the voice address and runs the old `chown` itself on a
+  server image from before 0.4.9.

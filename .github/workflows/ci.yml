@@ -48,7 +48,7 @@ jobs:
           CI_SCOPE_ALL: ${{ inputs.all }}
         run: node scripts/ci-scope.mjs
 
-  # What hosts run from deploy/: the relay, and the update script (#312).
+  # What hosts run from deploy/: the relay, and the update and setup scripts (#312, #440).
   coturn:
     name: deploy
     needs: changes
@@ -59,10 +59,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: shipped relay starts and refuses an empty secret
         run: bash scripts/coturn-test.sh
-      - name: update script passes shellcheck
-        run: shellcheck deploy/update.sh scripts/update-test.sh scripts/update-docker-test.sh
+      - name: update and setup scripts pass shellcheck
+        run: shellcheck deploy/update.sh deploy/setup.sh deploy/entrypoint.sh scripts/update-test.sh scripts/update-docker-test.sh scripts/setup-test.sh scripts/coturn-test.sh
       - name: update script, against a stand-in docker
         run: bash scripts/update-test.sh
+      - name: setup script, against stand-ins (#440)
+        run: bash scripts/setup-test.sh
       - name: update script, updating a real 0.4.2 server to 0.4.3
         run: bash scripts/update-docker-test.sh
 

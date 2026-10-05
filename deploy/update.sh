@@ -76,9 +76,18 @@ then run this again." ;;
     say "Note: compose.yaml runs ${image:-no image} for the server, not $IMAGE_REPO; updating it anyway." ;;
 esac
 
-if ! grep -Eq '^[[:space:]]+LINGER_VOICE_ADDRESS:[[:space:]]*"?[^[:space:]"]' <<<"$config"; then
-  say "Warning: LINGER_VOICE_ADDRESS isn't set, so this server carries no voice. To turn voice"
-  say "on, see https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice"
+# Where voice goes (#440): an address that's set, off, or unset, when a
+# server from 0.4.9 uses the address its domain points at.
+setting() { sed -En "s/^[[:space:]]+$1:[[:space:]]*\"?([^\"]*)\"?[[:space:]]*\$/\1/p" <<<"$config" | head -1; }
+voice="$(setting LINGER_VOICE_ADDRESS)"
+if [[ "${voice,,}" == off ]]; then
+  say "Voice is off here (LINGER_VOICE_ADDRESS is off)."
+elif [[ -z "$voice" && -n "$(setting LINGER_DOMAIN)" ]]; then
+  say "Voice goes to the address $(setting LINGER_DOMAIN) points at, since LINGER_VOICE_ADDRESS isn't"
+  say "set (from 0.4.9). It needs UDP 3479 open; LINGER_VOICE_ADDRESS set to off turns voice off."
+elif [[ -z "$voice" ]]; then
+  say "Warning: neither LINGER_VOICE_ADDRESS nor LINGER_DOMAIN is set, so this server"
+  say "carries no voice. To turn voice on, see https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice"
 fi
 
 [[ -f data/linger.db ]] ||

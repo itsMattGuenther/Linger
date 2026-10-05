@@ -68,80 +68,94 @@ your existing `@` or `www` records. Give DNS a few minutes to catch up. If
 you're hosting at home, use your [home connection's public IPv4](#hosting-at-home)
 instead.
 
-## 3. Get the server files
+## 3. Run the setup script
 
-Run these commands **on the server**, in a terminal. They make a `linger`
-folder in your current directory and put three files inside it: the two setup
-files, and the script that updates the server later:
+Run these commands **on the server**. They make a `linger` folder, fetch the
+setup script into it, and run it:
 
 ```bash
 mkdir linger
 cd linger
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/Caddyfile
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh
-chmod +x update.sh
+curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/setup.sh
+bash setup.sh
 ```
 
-The Docker images download automatically later. The app on the Releases page
-is only for people's computers.
+It asks two things: your server's main name, such as `linger.example.com`,
+and whether to run the [voice relay](#the-voice-relay) for people on networks
+that block voice (yes is a good answer). Then it:
 
-## 4. Edit each file once
-
-Open `nano compose.yaml` and make these changes together:
-
-- Set `LINGER_DOMAIN` to your main name, such as `linger.example.com`, without
-  `https://`.
-- **On a 50 GiB disk**, remove the `#` before `LINGER_POOL_BYTES` and change
-  its value to `10GB`. Keep it aligned with the other environment settings.
-  The default 50 GB file pool leaves too little room for Ubuntu and Docker.
-- **For voice**, remove the `#` before `LINGER_VOICE_ADDRESS` and put the
-  server's public IP address after it (`curl -4 https://api.ipify.org` prints
-  it). Without it the server carries no voice, and the app says voice isn't
-  set up. [Voice](#voice) says more.
-- **If you'll run the voice relay**, also change `--realm=linger.example.com`
-  to that same main name. [The relay steps](#the-voice-relay) add a secret and
-  start it.
-
-Save with **Ctrl+O**, Enter, then **Ctrl+X**.
-
-Next, open `nano Caddyfile`. Replace both example names: the first block uses
-your main name, and the `cdn.` block uses your file name, such as
-`cdn.linger.example.com`. Keep them as **different names**. Save and exit.
-
-## 5. Start the server
-
-Still inside the `linger` folder, run:
-
-```bash
-docker compose run --rm --user root --entrypoint chown linger linger:linger /data
-docker compose up -d
-docker compose logs --tail=60 linger
-```
-
-The first command gives Linger permission to write its database in the `data`
-folder. It also prevents the `unable to open database file` error seen on some
-hosts. In the log, look for a **one-time setup link** like:
+- downloads the server's files into the folder: `compose.yaml`, `Caddyfile`,
+  `update.sh` and `.env.example`;
+- checks that both names point at this machine, and stops if one doesn't yet,
+  so you can fix it and run the script again;
+- writes `.env`, the one file that holds your settings, with a new secret for
+  the relay and a storage limit that fits your disk;
+- opens the ports in the server's own firewall (`ufw`), and lists the ports to
+  forward when a home router or your cloud's network sits in front of it;
+- starts the server and prints a **one-time setup link** like:
 
 ```text
 https://linger.example.com/setup?token=…
 ```
 
 Keep the entire link, including `?token=…`, private. Paste it into the Linger
-desktop app in step 6, **not a browser**. Restarting Linger before you use the
-link creates a new one and invalidates the old one. If you accidentally share
-the link, restart Linger to replace it.
+desktop app in step 4, **not a browser**. Restarting Linger before you use the
+link creates a new one and invalidates the old one, and
+`docker compose logs linger` prints the new one. If you accidentally share the
+link, restart Linger to replace it.
 
-You may also see a warning that `LINGER_VOICE_ADDRESS` is not set, which means
-no voice until you set it, or that `LINGER_TURN_SECRET` is not set, which is
-about the optional voice relay. Neither stops the server or text chat.
+The script can't change your provider's own firewall (DigitalOcean's Cloud
+Firewalls, say): open the ports there yourself, as in step 1. It sends nothing
+anywhere except GitHub for the files and
+[api.ipify.org](https://api.ipify.org) to learn the server's public address.
+Running it again is safe: it keeps an `.env` that's already there, and it
+won't touch a folder that already runs a server.
 
 From **your own computer**, check the address before opening the app:
 `curl -f https://linger.example.com/api/v1/health` (replace the example name with
 yours). If it does not return a short JSON response, use
 [the connection checklist](#the-app-cannot-reach-the-server) first.
 
-## 6. Make your host account
+### By hand, instead of the script
+
+The same steps, one at a time. Using [two free names](#using-free-names)
+rather than `cdn.` in front of yours? This is your way, since the script
+checks for `cdn.`.
+
+```bash
+mkdir linger
+cd linger
+for file in compose.yaml Caddyfile update.sh .env.example; do
+  curl -fLO "https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/$file"
+done
+chmod +x update.sh
+cp .env.example .env
+nano .env
+```
+
+In `.env`, put your main name after `LINGER_DOMAIN=`, without `https://`. On a
+50 GiB disk, also remove the `#` before `LINGER_POOL_BYTES=10GB`: the default
+50 GB file pool leaves too little room for Ubuntu and Docker. For the relay,
+follow [its steps](#the-voice-relay) now or later. Save with **Ctrl+O**,
+Enter, then **Ctrl+X**. Every setting lives in `.env`: you never edit
+`compose.yaml` or the `Caddyfile`.
+
+```bash
+docker compose up -d
+docker compose logs --tail=60 linger
+```
+
+The log prints the setup link. You may also see a warning that
+`LINGER_TURN_SECRET` is not set, which is about the optional voice relay. It
+doesn't stop the server, text chat or voice.
+
+A server image from before 0.4.9 needs two more things, once: run
+`docker compose run --rm --user root --entrypoint chown linger linger:linger /data`
+before `docker compose up -d`, so it can write its database, and put the
+server's public IP (`curl -4 https://api.ipify.org`) after
+`LINGER_VOICE_ADDRESS=` in `.env` for voice. The script does both by itself.
+
+## 4. Make your host account
 
 [Install and open the app](user-guide.md#installing-linger) on your own computer.
 Paste the **whole setup link** into the **Server or link** box and press
@@ -153,7 +167,7 @@ If the app says it cannot reach the server, check
 for a new token. The desktop app does not start when you run Docker commands;
 open it from your application menu, or the same way you installed it.
 
-## 7. Invite people
+## 5. Invite people
 
 Open Settings (the gear at the top of your list, or **Ctrl+,**). As the host
 you have a **Hosting** group there that nobody else sees, unless you make them
@@ -173,7 +187,7 @@ newer one is out, with a link to [updating the server](#updating-the-server).
 Only you see it.
 
 An invite link is the only way to get an account. There is no public sign-up.
-Text chat is ready, and so is voice if you set `LINGER_VOICE_ADDRESS`. For
+Text chat is ready, and so is voice once UDP 3479 is open ([Voice](#voice)). For
 friends on networks that block voice (some offices, some public wifi), also set
 up [the voice relay](#the-voice-relay) below.
 
@@ -188,9 +202,16 @@ not, you may be behind another router or carrier-grade NAT, and ordinary port
 forwarding may not work.
 
 In the router, reserve a **local IP address** for the computer and forward
-**TCP 80 and 443** to that address. Allow those ports in the computer's firewall
-too. This is the extra step a VPS avoids. DNS alone does not make a home server
-reachable.
+these ports to that address:
+
+- **TCP 80 and 443**, for the app;
+- **UDP 3479**, for voice. Without it text chat works and nobody hears anybody;
+- if you run [the relay](#the-voice-relay), **TCP and UDP 3478** and **UDP
+  49160 to 49200** too.
+
+Allow the same ports in the computer's firewall (the setup script does this
+when `ufw` is on, and lists them for you). This is the extra step a VPS avoids.
+DNS alone does not make a home server reachable.
 
 Anyone on the internet can then reach Linger through those ports. That does
 not mean your computer will be instantly compromised, but keep the operating
@@ -206,9 +227,11 @@ dynamic-DNS provider such as DuckDNS can give you two, for example
 `yourgroup.duckdns.org` and `yourgroupfiles.duckdns.org`. Set both to your
 server's public IP on the provider's site (or use its IP updater).
 
-In `compose.yaml`, set `LINGER_DOMAIN` to the first name and uncomment
-`LINGER_MEDIA_DOMAIN` for the second. Put the same names in the two Caddyfile
-blocks. Do not assume the provider lets you add `cdn.` in front of a free name.
+Set up [by hand](#by-hand-instead-of-the-script): in `.env`, set
+`LINGER_DOMAIN` to the first name, and remove the `#` before
+`LINGER_MEDIA_DOMAIN` and put the second name after it. In the `Caddyfile`,
+replace `cdn.{$LINGER_DOMAIN}` with the second name. Do not assume the provider
+lets you add `cdn.` in front of a free name.
 
 ---
 
@@ -247,8 +270,11 @@ that one switch. If a group needs more, it has outgrown what this app is for.
 
 ## Settings you might want to change
 
-These go in `compose.yaml`, under `environment:`. Most people never touch them.
-After a change, run `docker compose up -d` again.
+These go in `.env`, each as `NAME=value` on a line of its own; most are there
+already as comments, so remove the `#`. Most people never touch them. After a
+change, run `docker compose up -d` again. (A server set up before 0.4.9 may
+have them in `compose.yaml` under `environment:` instead, written `NAME: value`.
+That keeps working, and [Updating](#updating-the-server) says how to move them.)
 
 | Setting | What it does | Default |
 |---|---|---|
@@ -256,14 +282,14 @@ After a change, run `docker compose up -d` again.
 | `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps everything forever. Starred files never expire. | `365` |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
-| `LINGER_DATA_DIR` | Where the database and files live inside the container. | `/data` |
-| `LINGER_TURN_SECRET` | Shared key for Linger and the relay. Goes in `.env`, not here; you must also start the relay below. | unset — no relay |
+| `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
+| `LINGER_TURN_SECRET` | Shared key for Linger and the relay; you must also start the relay below. | unset — no relay |
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
 
 One file can be up to 500 MB.
 
-**Using a cloud bucket instead of the machine's disk.** Set `LINGER_STORAGE: s3`
-and fill in the five `LINGER_S3_*` lines already written in `compose.yaml` as
+**Using a cloud bucket instead of the machine's disk.** Set `LINGER_STORAGE=s3`
+and fill in the five `LINGER_S3_*` lines already written in `.env` as
 comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
@@ -278,31 +304,34 @@ sounds its best, at about 150 kbit/s for each of those on the wire; from
 twenty-one it steps down to about 120 kbit/s, so fifty people with three
 talking take about 17 Mbps of upload, and closer to 50 Mbps in the moments
 when eight talk at once. A three-hour evening of fifty is about 23 GB of data
-out, which matters if your provider counts it. It needs one
-setting and one open port. Without them the server carries no voice at all,
-and the app tells people voice isn't set up rather than offering a call nobody
-could hear. (Servers used to fall back to an older way when this wasn't set,
-voice straight between people's computers. That's gone.)
+out, which matters if your provider counts it. It needs one open port, and
+nothing else: the server sends voice through the address your name points at,
+the one from [step 2](#2-point-two-names-at-the-server). Without a way to work
+that out the server carries no voice at all, and the app tells people voice
+isn't set up rather than offering a call nobody could hear. (Servers used to
+fall back to an older way, voice straight between people's computers. That's
+gone.)
 
-1. Find the server's public IP address: `curl -4 https://api.ipify.org`.
-2. In `compose.yaml`, remove the `#` before `LINGER_VOICE_ADDRESS` and put that
-   address after it. A `compose.yaml` from before 0.4.1 has neither that line
-   nor the port, so add both to the `linger` service:
+1. Allow **UDP 3479** in the cloud firewall, and in the machine's own (the
+   setup script does that one; by hand it's `sudo ufw allow 3479/udp`). At
+   home, forward it in the router too.
+2. `docker compose logs linger` says `voice goes to the address LINGER_DOMAIN
+   points at` and `voice forwarding is on`.
 
-   ```yaml
-       environment:
-         # ...what's there already...
-         LINGER_VOICE_ADDRESS: 203.0.113.7
-       ports:
-         - "3479:3479/udp"
-   ```
-3. Allow **UDP 3479** in the cloud firewall (and the machine's own, if it has
-   one: `sudo ufw allow 3479/udp`).
-4. `docker compose pull && docker compose up -d` (with `--profile voice` if you
-   run the relay). `docker compose logs linger` says `voice forwarding is on`.
+**Sending voice somewhere else.** If your name doesn't point straight at the
+server (behind Cloudflare's proxy, say, it points at Cloudflare, which can't
+carry voice), set `LINGER_VOICE_ADDRESS` in `.env` to the server's public IP:
+`curl -4 https://api.ipify.org` prints it. To run a server with no voice, set
+it to `off`. A server from before 0.4.9 can't work the address out, and needs
+it set either way.
 
-The address is an IP address, not a name, so there's nothing to change in
-your DNS.
+A `compose.yaml` from before 0.4.1 has no voice port. Add it to the `linger`
+service, then `docker compose up -d`:
+
+```yaml
+    ports:
+      - "3479:3479/udp"
+```
 
 Your server passes voice along. It keeps none of it and plays none of it,
 but it is on your machine, so you *could* listen, the same way you could read
@@ -317,36 +346,32 @@ any home router. Some networks block it: some offices, some public wifi. The
 container in `compose.yaml`. It is yours, on your machine; what passes through
 it is scrambled sound it cannot listen to.
 
-Run these steps **on the server**, inside the `linger` folder containing
-`compose.yaml`.
+Said yes to the relay in the setup script? It's set up and running: skip to
+step 4 to check it. Otherwise, run these steps **on the server**, inside the
+`linger` folder containing `compose.yaml`.
 
-1. Download the secret template and make your `.env` file. If you already have
-   a `.env`, keep it; do not run the copy command again.
-
-   ```bash
-   curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/.env.example
-   cp .env.example .env
-   ```
-2. Run `openssl rand -hex 32`, then open `nano .env`. Paste the generated value
-   after `LINGER_TURN_SECRET=`. Save with **Ctrl+O**, Enter, then **Ctrl+X**.
-   Keep it private. Compose gives the same secret to Linger and coturn.
-3. If you did not already set the realm in step 4 of the host setup, change
-   `--realm=linger.example.com` in `compose.yaml` to your server's name,
-   without `https://` (for example, `--realm=linger.example.org`).
-4. Allow inbound port **3478**, both TCP and UDP, and UDP ports **49160 to
+1. Run `openssl rand -hex 32` to make a secret, then open `nano .env`. Paste
+   the secret after `LINGER_TURN_SECRET=`, and remove the `#` before
+   `COMPOSE_PROFILES=voice`, which tells Docker to start the relay with
+   everything else. Save with **Ctrl+O**, Enter, then **Ctrl+X**. Keep the
+   secret private. Compose gives it to Linger and coturn alike. (No `.env`
+   yet, on a server set up before 0.4.9? Download `.env.example` from the
+   [server files](#by-hand-instead-of-the-script), `cp .env.example .env`, and
+   fill in just those two lines.)
+2. Allow inbound port **3478**, both TCP and UDP, and UDP ports **49160 to
    49200** in the provider's firewall and any firewall on the server. Keep
-   TCP **80 and 443** open too. (If the machine is behind a home
-   router rather than on a public address, also uncomment `--external-ip` and
-   put your public IP there.)
-5. Start Linger and the relay together so both read the secret:
+   TCP **80 and 443** open too. If the machine is behind a home router rather
+   than on a public address, forward them as well, and remove the `#` before
+   `LINGER_RELAY_EXTERNAL_IP` in `.env` with your public IP after it, so the
+   relay tells people where it really is.
+3. Start Linger and the relay together so both read the secret:
    ```bash
    docker compose up -d
    ```
-   The `.env` from step 1 has `COMPOSE_PROFILES=voice`, which tells Docker to
-   start the relay with everything else. A `.env` made before 0.4.5 doesn't
-   have it: add it once with `echo COMPOSE_PROFILES=voice >> .env`, or type
-   `--profile voice` after `docker compose` every time.
-6. Check that it **stays running**, not just that Docker printed `Started`:
+   A `.env` made before 0.4.5 doesn't have `COMPOSE_PROFILES=voice`: add it
+   once with `echo COMPOSE_PROFILES=voice >> .env`, or type `--profile voice`
+   after `docker compose` every time.
+4. Check that it **stays running**, not just that Docker printed `Started`:
 
    ```bash
    docker compose --profile voice ps -a
@@ -369,7 +394,8 @@ running**; it does not prove that the firewall or voice connection works.
 ## Backups
 
 The whole server is the `data` folder next to your `compose.yaml`. It holds
-`linger.db` (every message) and `objects/` (every uploaded file).
+`linger.db` (every message) and `objects/` (every uploaded file). Keep a copy
+of `.env` somewhere safe too: it holds your settings and the relay's secret.
 
 Copy it while the server is stopped, so you never catch the database mid-write:
 
@@ -467,6 +493,29 @@ If you run the relay and your `.env` has no `COMPOSE_PROFILES=voice` line, add
 `--profile voice` after `docker compose` in both commands, or the relay stays
 on its old version.
 
+**A newer `compose.yaml` or `Caddyfile`.** A server set up with the setup
+script, or by hand from 0.4.9, keeps every setting in `.env`, so a newer copy
+of either file can replace the old one as it is:
+`curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml`
+(and the same for `Caddyfile`), then `./update.sh`.
+
+**Moving an older server's settings into `.env`.** A server set up before
+0.4.9 has its settings written into `compose.yaml` and its name into the
+`Caddyfile`. That keeps working, and nothing makes you move. To move, so
+newer files can simply replace the old ones:
+
+1. Keep the old files: `cp compose.yaml compose.yaml.old` and
+   `cp Caddyfile Caddyfile.old`.
+2. Download the new `compose.yaml`, `Caddyfile` and `.env.example` (the
+   commands are in [By hand](#by-hand-instead-of-the-script)).
+3. No `.env` yet? `cp .env.example .env`. Then copy each setting from the
+   `environment:` part of `compose.yaml.old` into `.env`, as `NAME=value`:
+   `LINGER_DOMAIN` always, and any others you changed. A relay's
+   `LINGER_TURN_SECRET` is in `.env` already. If the old file's coturn
+   `command:` had an `--external-ip`, that address goes in
+   `LINGER_RELAY_EXTERNAL_IP`.
+4. `docker compose up -d`, then check the app still connects.
+
 Repeat the [relay check](#the-voice-relay) after updating.
 
 ## Somebody forgot their password
@@ -501,8 +550,10 @@ a connection failure.
 
 ### Voice cannot connect
 
-- **The voice line says `Voice isn't set up on this server`:**
-  `LINGER_VOICE_ADDRESS` isn't set. Follow [Voice](#voice).
+- **The voice line says `Voice isn't set up on this server`:** the server
+  couldn't work out where voice goes. `docker compose logs linger` says why
+  near the top: `LINGER_VOICE_ADDRESS` is `off`, or the name doesn't point at
+  a public address (yet). Follow [Voice](#voice).
 - **It says the server needs an update:** the app is newer than the server.
   Run the update steps above.
 - **Nobody hears anybody:** check that inbound UDP 3479 is open in both
@@ -531,10 +582,12 @@ Do not share your `.env` or setup token when asking for help.
 ### Other problems
 
 - **`unable to open database file` repeats in Linger's log.** The `data`
-  folder is not writable by the container. Run the permission command in
-  step 5, then `docker compose up -d` again. It does not delete the database.
+  folder is not writable by the container, on a server from before 0.4.9
+  (from 0.4.9 it fixes that itself). Run
+  `docker compose run --rm --user root --entrypoint chown linger linger:linger /data`,
+  then `docker compose up -d` again. It does not delete the database.
 - **Chat works but uploads fail.** The `cdn.` record is missing, or the second
-  block of the Caddyfile still says `linger.example.com`.
+  block of an older Caddyfile still says `linger.example.com`.
 - **`docker compose pull` says `unauthorized`, or the image line still names
   `matthewguenther`.** The published image is
   `ghcr.io/itsmattguenther/linger` (all lowercase). GitHub Container Registry

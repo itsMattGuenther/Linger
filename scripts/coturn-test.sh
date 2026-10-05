@@ -5,8 +5,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 project="linger-coturn-test-$$"
-# Override any caller's secret; do not read deploy/.env.
+# Override any caller's settings; do not read deploy/.env. compose.yaml needs
+# a domain for Caddy's names and the relay's realm (#440).
 export LINGER_TURN_SECRET=linger-startup-test-only-not-a-real-secret
+export LINGER_DOMAIN=relay.test
 compose() {
   timeout 120s docker compose --env-file /dev/null --project-name "$project" \
     -f deploy/compose.yaml -f - --profile voice "$@" <<'YAML'
