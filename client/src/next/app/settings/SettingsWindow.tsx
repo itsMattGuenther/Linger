@@ -8,6 +8,8 @@ import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 import { displayNameRequest } from "../../../lib/account";
 import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../lib/api";
+import { emojiPicture } from "../../../lib/emoji/picture";
+import { uploadFile } from "../../../lib/upload";
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
@@ -635,6 +637,27 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   if (problem === null) setInvites((list) => (list ?? []).filter((invite) => invite.code !== code));
                   return problem;
                 },
+              },
+              // The server's own emoji (#359): the list follows `emoji.update`.
+              emoji: {
+                emoji: state.emoji,
+                serverName,
+                nameOf: (userId) => state.users.find((user) => user.id === userId)?.display_name ?? "someone",
+                add: async (file, name) => {
+                  const ready = await emojiPicture(file);
+                  if (typeof ready === "string") return ready;
+                  try {
+                    const picture = await uploadFile(api, ready);
+                    await api.createEmoji({ name, attachment_id: picture.id });
+                    return null;
+                  } catch (error: unknown) {
+                    return inWords(error, "Couldn't add the emoji.");
+                  }
+                },
+                rename: (id, name) => said(api.renameEmoji(id, { name }), "Couldn't rename the emoji."),
+                remove: (id) => said(api.removeEmoji(id), "Couldn't remove the emoji."),
+                supported: state.ownEmoji,
+                openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
               },
               people: {
                 members: state.users,

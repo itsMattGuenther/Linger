@@ -238,6 +238,20 @@
   --line-body: 20px;
   /* A message's words fold past this many lines (#304). */
   --message-fold: calc(20 * var(--line-body));
+  /* Emoji (#359). A server's own emoji sits in a line of words at the line's
+     height; a message of only a few emoji is drawn big, as Discord does,
+     a little smaller than Discord's (Matt, 2026-10-05). */
+  --emoji-inline: 20px;
+  --emoji-jumbo: 36px;
+  --text-emoji-jumbo: 30px;
+  --line-emoji-jumbo: 40px;
+  /* The picker: a grid of control-sized cells, nine across. */
+  --emoji-cell: 32px;
+  --text-emoji-cell: 22px;
+  /* A server's picture in a cell: as big as a glyph there draws. */
+  --emoji-cell-art: 26px;
+  --emoji-picker-w: calc(9 * var(--emoji-cell) + 2 * var(--space-3));
+  --emoji-picker-h: 380px;
   --pane-head: 40px;
   --voice-strip: 40px;
   --measure: 80ch; /* the longest a line of a search result runs; a message's words run to its time column (#334) */
@@ -251,7 +265,6 @@
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
   --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */
-  --emoji-grid: 8; /* columns in the composer's emoji panel */
 
   /* Search and media (docs/design/system.md, "Search and media"). */
   --media-tile: 152px; /* the narrowest a media tile gets; the grid fits as many as it can */
@@ -395,6 +408,15 @@
   --line-meta: calc(16px * var(--text-scale));
   --line-display: calc(28px * var(--text-scale));
   --line-body: calc(20px * var(--text-scale));
+  --emoji-inline: calc(20px * var(--text-scale));
+  --emoji-jumbo: calc(36px * var(--text-scale));
+  --text-emoji-jumbo: calc(30px * var(--text-scale));
+  --line-emoji-jumbo: calc(40px * var(--text-scale));
+  /* The picker's cells are for a finger here (#359), and stay that size
+     whatever the Font size, as icons do. */
+  --emoji-cell: 44px;
+  --text-emoji-cell: 28px;
+  --emoji-cell-art: 32px;
   --pane-head: calc(40px * var(--text-scale));
   --voice-strip: calc(40px * var(--text-scale));
   --menu-w: calc(200px * var(--text-scale));

@@ -29,7 +29,7 @@ const said = (scope: Locator) => scope.locator(".nx-set-said");
 test.describe("what's there", () => {
   test("a host sees their own sections and Hosting under the server's name, in the design's order", async ({ page }) => {
     await open(page);
-    await expect(nav(page).getByRole("tab")).toHaveText(["Profile", "Appearance", "Windows", "Sound & Voice", "Notifications", "Account & App", "Rooms", "Invites", "People", "Server"]);
+    await expect(nav(page).getByRole("tab")).toHaveText(["Profile", "Appearance", "Windows", "Sound & Voice", "Notifications", "Account & App", "Rooms", "Invites", "People", "Emoji", "Server"]);
     await expect(nav(page)).toContainText("The Good Company");
     await expect(page.locator(".k-titlebar")).toHaveText("Settings");
   });

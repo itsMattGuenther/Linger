@@ -11,6 +11,10 @@ export type RowLead =
   | { kind: "room" }
   /** A mark of its own, like the flag on the host's "A report to look at" (T-1605). */
   | { kind: "icon"; icon: IconName }
+  /** An emoji, as the `:` list in the message box offers it (#359). */
+  | { kind: "emoji"; glyph: string }
+  /** A server's own emoji's picture (#359). Decorative: the row's title names it. */
+  | { kind: "picture"; url: string }
   | { kind: "none" };
 
 export interface RowProps {
@@ -90,6 +94,20 @@ function Lead({ lead }: { lead: RowLead }) {
       return (
         <MarkerSlot>
           <Icon name={lead.icon} size="sm" />
+        </MarkerSlot>
+      );
+    case "emoji":
+      return (
+        <MarkerSlot>
+          <span className="nx-row-emoji" aria-hidden="true">
+            {lead.glyph}
+          </span>
+        </MarkerSlot>
+      );
+    case "picture":
+      return (
+        <MarkerSlot>
+          <img className="nx-row-picture" src={lead.url} alt="" draggable={false} />
         </MarkerSlot>
       );
     case "none":

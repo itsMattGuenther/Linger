@@ -438,8 +438,22 @@ Enter to open the message actions; Escape closes the menu and returns focus.
 Click anybody's name in a conversation to open their card, with **Message**
 and **Knock**. Your own name opens your card, as friends see it.
 
-The **smile** on the right of the box opens a small set of ordinary emoji to
-drop into what you are typing. Hover it for **Emoji**. There are no custom emoji.
+**Emoji.** The **smile** on the right of the box opens every emoji there is,
+with this server's own first. Type in its search to find one by name or by a
+word for it ("hello" finds 👋), or jump to a group with the row of tabs. The
+hand beside the search sets a skin tone once for every emoji that has one, and
+the emoji you use come back at the top.
+
+Faster still, type a colon and a couple of letters, `:smi`, and pick from the
+list with the arrows and Enter or Tab. A whole name, `:smiley:`, turns into 😃
+as you type it. The names are Discord's (`:thumbsup:`, `:slight_smile:`,
+`:joy:`), and GitHub's and Slack's work too. The picker's bottom line tells
+you an emoji's name when you point at it.
+
+A server can have **its own emoji**, pictures its host added. They're in the
+picker under the server's name and in the colon list, and they go into a
+message as `:name:`, which everyone on that server sees as the picture. A
+message of just a few emoji is drawn big.
 
 There are no reactions on messages, for now. They are out as a trial: to answer
 something, reply to it, emoji and all.

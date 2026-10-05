@@ -23,6 +23,7 @@ export type SettingsKey =
   | "rooms"
   | "invites"
   | "people"
+  | "emoji"
   | "server";
 
 /** What the window has to show, which decides which sections exist. */
@@ -54,6 +55,7 @@ export const SECTION_LABELS: Record<SettingsKey, string> = {
   rooms: "Rooms",
   invites: "Invites",
   people: "People",
+  emoji: "Emoji",
   server: "Server",
 };
 
@@ -77,7 +79,7 @@ export function settingsEntries(scope: SettingsScope): SettingsEntry[] {
     ...(scope.severalServers ? [item("servers")] : []),
     ...(scope.hosting === null
       ? []
-      : [{ kind: "group" as const, label: "Hosting", sub: scope.hosting }, item("rooms"), item("invites"), item("people"), item("server")]),
+      : [{ kind: "group" as const, label: "Hosting", sub: scope.hosting }, item("rooms"), item("invites"), item("people"), item("emoji"), item("server")]),
   ];
 }
 
@@ -117,6 +119,8 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
       return "A link lets somebody make an account here. Make one for the person you're asking.";
     case "people":
       return "Manage who can use this server. Removing someone asks you first.";
+    case "emoji":
+      return "Pictures everyone here can put in a message by name, like :party_parrot:.";
     case "server":
       // Only the host sees the version (#424): who runs the machine updates it.
       return scope.cohost === true ? "Its name and color as everyone sees them." : "The version it runs, and its name and color as everyone sees them.";
@@ -150,6 +154,8 @@ export const HEADINGS = {
   removed: "Removed",
   blocked: "Blocked",
   reports: "Reports",
+  addEmoji: "Add Emoji",
+  emoji: "This Server's Emoji",
   serverVersion: "Version",
   serverName: "Name",
   accent: "Accent",

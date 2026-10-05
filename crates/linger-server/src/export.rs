@@ -476,6 +476,10 @@ struct MediaRow {
 /// it went into *everybody's* archive, which meant a file somebody had picked
 /// out to send in a DM and not yet sent was already in the next export anybody
 /// asked for.
+///
+/// A server emoji's picture (#359) is an unposted upload too, of whoever added
+/// it. It isn't one of their files, and it stays out of every archive: the
+/// messages there keep `:name:` as they were written.
 async fn media_rows(state: &AppState, asker: UserId) -> anyhow::Result<Vec<MediaRow>> {
     let rows = sqlx::query(&format!(
         "SELECT a.object_key, a.filename, a.mime, a.size_bytes, a.uploader_id,
@@ -484,7 +488,8 @@ async fn media_rows(state: &AppState, asker: UserId) -> anyhow::Result<Vec<Media
          LEFT JOIN messages m ON m.id = a.message_id
          WHERE a.state = 'complete'
            AND (
-             (a.message_id IS NULL AND a.uploader_id = ?)
+             (a.message_id IS NULL AND a.uploader_id = ?
+              AND a.id NOT IN (SELECT attachment_id FROM custom_emoji))
              OR {visible}
            )
          ORDER BY a.created_at, a.id",

@@ -71,33 +71,13 @@
   display: inline-flex;
 }
 
-.nx-composer-emoji {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--space-2));
-  z-index: var(--z-popover);
-  display: grid;
-  grid-template-columns: repeat(var(--emoji-grid), var(--control-md));
-  gap: var(--space-0-5);
-  padding: var(--space-1-5);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--white-a10);
-  background: var(--surface-popover);
-  box-shadow: var(--shadow-popover);
+/* The phone's emoji picker spans the whole box (EmojiPicker.css). */
+:root[data-shell="phone"] .nx-composer-box {
+  position: relative;
 }
 
-.nx-composer-emoji-mark {
-  display: grid;
-  place-items: center;
-  width: var(--control-md);
-  height: var(--control-md);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-name);
-  line-height: 1;
-}
-
-.nx-composer-emoji-mark:hover {
-  background: var(--surface-hover);
+:root[data-shell="phone"] .nx-composer-emoji-anchor {
+  position: static;
 }
 
 /* Above the box: the reply, unsent messages, problems, files. */

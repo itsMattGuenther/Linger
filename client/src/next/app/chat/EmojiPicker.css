@@ -1,0 +1,216 @@
+/* The emoji picker (#359): above the box's emoji button, a fixed size, its
+   grid the one thing that scrolls. Every size and color is a token. */
+.nx-emoji-picker {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--emoji-picker-w);
+  height: var(--emoji-picker-h);
+  max-height: calc(var(--window-height) - var(--space-8) * 4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+}
+
+.nx-emoji-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.nx-emoji-search {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: 400 var(--text-control) / 1 var(--font-ui);
+}
+
+.nx-emoji-search::placeholder {
+  color: var(--text-muted);
+}
+
+.nx-emoji-search:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The tone button, and the row of tones it opens in its place. */
+.nx-emoji-tone-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.nx-emoji-tone,
+.nx-emoji-tab,
+.nx-emoji-cell {
+  display: grid;
+  place-items: center;
+  width: var(--emoji-cell);
+  height: var(--emoji-cell);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-emoji-cell);
+  line-height: 1;
+}
+
+.nx-emoji-tone:hover,
+.nx-emoji-tab:hover,
+.nx-emoji-cell:hover,
+.nx-emoji-cell:focus-visible {
+  background: var(--surface-hover);
+}
+
+.nx-emoji-tones {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+}
+
+.nx-emoji-tone[aria-pressed="true"] {
+  background: var(--surface-hover);
+}
+
+.nx-emoji-tabs {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.nx-emoji-tab {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  font-size: var(--text-name);
+  opacity: 0.7;
+}
+
+.nx-emoji-tab:hover {
+  opacity: 1;
+}
+
+.nx-emoji-tab img,
+.nx-emoji-cell img,
+.nx-emoji-foot-glyph img {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  object-fit: contain;
+}
+
+.nx-emoji-cell img {
+  width: var(--emoji-cell-art);
+  height: var(--emoji-cell-art);
+}
+
+.nx-emoji-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-2);
+  overscroll-behavior: contain;
+}
+
+/* Only the sections in view are laid out and drawn: 1,900 emoji open fast. */
+.nx-emoji-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--emoji-picker-h);
+}
+
+.nx-emoji-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: var(--space-2) var(--space-0-5) var(--space-1);
+  background: var(--surface-popover);
+  color: var(--text-muted);
+  font: 400 var(--text-label) / 1 var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-emoji-cells {
+  display: grid;
+  grid-template-columns: repeat(9, var(--emoji-cell));
+}
+
+.nx-emoji-note {
+  margin: var(--space-4) 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  text-align: center;
+}
+
+/* What's under the pointer or the keyboard: its look, its :name:, its name. */
+.nx-emoji-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-lg);
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--hairline);
+  background: var(--surface-raised);
+}
+
+.nx-emoji-foot-glyph {
+  display: grid;
+  place-items: center;
+  font-size: var(--text-emoji-cell);
+  line-height: 1;
+}
+
+.nx-emoji-foot-name {
+  color: var(--text-primary);
+  font-size: var(--text-control);
+  white-space: nowrap;
+}
+
+.nx-emoji-foot-note {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* On the phone (SPEC §4.15) the picker spans the message box, over the
+   messages, and its cells are a finger's size (`--emoji-cell`): as many
+   across as the screen fits, sharing what's left over. The group tabs share
+   the width the same way. The box is what it's placed against
+   (Composer.css), not the emoji button at its right end. */
+:root[data-shell="phone"] .nx-emoji-picker {
+  left: 0;
+  width: auto;
+}
+
+:root[data-shell="phone"] .nx-emoji-cells {
+  grid-template-columns: repeat(auto-fill, minmax(var(--emoji-cell), 1fr));
+}
+
+:root[data-shell="phone"] .nx-emoji-cell {
+  width: auto;
+}
+
+:root[data-shell="phone"] .nx-emoji-tab {
+  flex: 1;
+  width: auto;
+  height: var(--emoji-cell);
+}

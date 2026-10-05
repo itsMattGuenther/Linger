@@ -87,3 +87,23 @@
 .nx-mention[data-me="yes"] {
   color: var(--text-accent);
 }
+
+/* A server's own emoji (#359), on the line like a letter, a line high. */
+.nx-emoji {
+  display: inline-block;
+  width: var(--emoji-inline);
+  height: var(--emoji-inline);
+  object-fit: contain;
+  vertical-align: bottom;
+}
+
+/* A message of a few emoji and nothing else is drawn big (#359). */
+.nx-text[data-jumbo] .nx-text-p {
+  font-size: var(--text-emoji-jumbo);
+  line-height: var(--line-emoji-jumbo);
+}
+
+.nx-text[data-jumbo] .nx-emoji {
+  width: var(--emoji-jumbo);
+  height: var(--emoji-jumbo);
+}

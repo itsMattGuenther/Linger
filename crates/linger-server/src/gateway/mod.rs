@@ -129,6 +129,9 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
         // (#197), and the host taking that client out of voice (#423).
         ServerEvent::VoiceOffer { .. } | ServerEvent::VoiceRemoved { .. } => None,
 
+        // The server's emoji are everybody's on it (#359): no room.
+        ServerEvent::EmojiUpdate { .. } => None,
+
         // About a person, not a place.
         ServerEvent::PresenceUpdate(_)
         | ServerEvent::UserUpdate(_)

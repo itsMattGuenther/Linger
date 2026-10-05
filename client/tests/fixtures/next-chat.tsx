@@ -42,7 +42,7 @@ import { voiceStartProblem } from "../../src/lib/voice";
 import { closeTab, keyOf, openTab, selectTab, type TabKey, type Tabs } from "../../src/next/core/tabs";
 import { markerOf, type TabItem } from "../../src/next/kit";
 import "../../src/next/styles/app.css";
-import { NOW, SERVER, dms, leftOff, messages as evening, people, previews, rooms } from "./next/evening";
+import { customEmoji, NOW, SERVER, SERVER_NAME, dms, leftOff, messages as evening, people, previews, rooms } from "./next/evening";
 
 const query = new URLSearchParams(location.search);
 const BIG = query.has("big");
@@ -374,6 +374,9 @@ function Fixture() {
               takenOut: query.has("takenout") && myVoice !== id,
             },
       people: everyone,
+      // The server's own emoji (#359); `?noemoji` has none.
+      customEmoji: query.has("noemoji") ? [] : customEmoji,
+      serverName: SERVER_NAME,
       me,
       speaking: SPEAKING,
       typing: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []),

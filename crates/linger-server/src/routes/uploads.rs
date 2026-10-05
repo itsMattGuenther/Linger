@@ -290,6 +290,11 @@ async fn cancel(
             "That file is on a message. Delete the message instead.",
         ));
     }
+    if repo::emoji::is_picture(&state.db.read, attachment_id).await? {
+        return Err(ApiError::conflict(
+            "That picture is one of the server's emoji. Remove the emoji instead.",
+        ));
+    }
 
     let _ = state.storage.discard(upload_id).await;
     let _ = state.storage.delete_object(&record.object_key).await;

@@ -27,6 +27,10 @@
 //! is a finished upload that never became a message, and rule 3 takes it like
 //! any other.
 //!
+//! A server's emoji (#359) is the one finished upload with no message that
+//! rule 3 leaves alone: it is in use for as long as the emoji is, whatever its
+//! age, and removing the emoji removes it.
+//!
 //! Deleting is bytes first, row second. The other order can lose an object with
 //! nothing left pointing at it — a file nobody can see and nobody can remove.
 //! Doing it this way, a crash in between leaves a row whose bytes are gone,
@@ -132,7 +136,8 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
                   (m.id IS NOT NULL AND m.deleted_at IS NOT NULL)
                OR (a.starred_at IS NULL AND (
                      (m.id IS NOT NULL AND m.pinned_at IS NULL AND a.created_at < ?)
-                  OR (m.id IS NULL AND a.created_at < ?)))
+                  OR (m.id IS NULL AND a.created_at < ?
+                      AND a.id NOT IN (SELECT attachment_id FROM custom_emoji))))
             )
           ORDER BY a.created_at
           LIMIT ?",

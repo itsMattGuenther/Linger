@@ -200,6 +200,12 @@ async fn check_attachments(
         if record.message_id.is_some() {
             return Err(ApiError::conflict("That file is already on a message."));
         }
+        // On a message, it would go when the message is deleted (#359).
+        if repo::emoji::is_picture(&state.db.read, *id).await? {
+            return Err(ApiError::conflict(
+                "That picture is one of the server's emoji.",
+            ));
+        }
     }
     Ok(())
 }

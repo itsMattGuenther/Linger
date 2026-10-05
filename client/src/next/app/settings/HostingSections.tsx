@@ -1,10 +1,13 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import type { CustomEmoji } from "../../../generated/CustomEmoji";
+import type { EmojiId } from "../../../generated/EmojiId";
 import type { Invite } from "../../../generated/Invite";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { Report } from "../../../generated/Report";
 import type { Room } from "../../../generated/Room";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
+import { EMOJI_NAME_RULE, emojiNameFrom, emojiNameOk, MAX_CUSTOM_EMOJI } from "../../../lib/emoji/names";
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
 import { fullTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
@@ -248,6 +251,253 @@ function Question({ words, yes, no, busy, onYes, onNo }: { words: string; yes: s
           {yes}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Emoji (#359)
+
+export interface HostEmojiProps {
+  /** The server's own emoji, by name. */
+  emoji: readonly CustomEmoji[];
+  /** What everyone's picker calls them: the server's name. */
+  serverName: string;
+  /** Who added one, by name. */
+  nameOf: (userId: string) => string;
+  /** Make a picture an emoji called `name`: null, or what went wrong. */
+  add: (file: File, name: string) => Promise<string | null>;
+  rename: (id: EmojiId, name: string) => Promise<string | null>;
+  remove: (id: EmojiId) => Promise<string | null>;
+  /** False on a server too old for emoji of its own (`GatewayState.ownEmoji`). */
+  supported: boolean;
+  /** The host guide's "Updating the server": the host's alone, as the version line is (#424). */
+  openGuide?: () => void;
+}
+
+/** A picture on its way to being an emoji. */
+interface Adding {
+  key: number;
+  name: string;
+  problem: string | null;
+}
+
+const PICTURES = "image/png,image/gif,image/webp,image/jpeg,.png,.gif,.webp,.jpg,.jpeg";
+
+/**
+ * A server's own emoji (#359): add pictures, rename them, remove them. As
+ * little in the way as Discord's: choose or drop any number of pictures and
+ * each becomes an emoji at once, named from its file, a big picture shrunk to
+ * fit and a GIF kept moving. A name is changed after, in place, if wanted.
+ */
+export function EmojiSection({ emoji, serverName, nameOf, add, rename, remove, supported, openGuide }: HostEmojiProps) {
+  const [adding, setAdding] = useState<Adding[]>([]);
+  const [over, setOver] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [full, setFull] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement | null>(null);
+  const list = useRef<HTMLUListElement | null>(null);
+  const serial = useRef(0);
+  const save = useSave();
+  const busy = save.phase.kind === "saving";
+  const ordered = [...emoji].sort((a, b) => a.name.localeCompare(b.name));
+  const room = MAX_CUSTOM_EMOJI - emoji.length;
+
+  const addFiles = async (files: File[]) => {
+    const pictures = files.filter((file) => file.type.startsWith("image/") || /\.(png|gif|webp|jpe?g)$/i.test(file.name));
+    const taking = pictures.slice(0, Math.max(0, room - adding.length));
+    setFull(
+      pictures.length > taking.length
+        ? `This server has room for ${MAX_CUSTOM_EMOJI} emoji, so ${pictures.length - taking.length === 1 ? "one picture wasn't" : `${pictures.length - taking.length} pictures weren't`} added.`
+        : null,
+    );
+    const taken = new Set([...emoji.map((one) => one.name), ...adding.map((one) => one.name)]);
+    const queued = taking.map((file) => {
+      const name = emojiNameFrom(file.name, taken);
+      taken.add(name);
+      serial.current += 1;
+      return { file, row: { key: serial.current, name, problem: null } satisfies Adding };
+    });
+    setAdding((held) => [...held, ...queued.map((one) => one.row)]);
+    // One at a time: each is an upload, and the host's connection is shared.
+    for (const { file, row } of queued) {
+      const problem = await add(file, row.name);
+      setAdding((held) => (problem === null ? held.filter((one) => one.key !== row.key) : held.map((one) => (one.key === row.key ? { ...one, problem } : one))));
+    }
+  };
+
+  // A server from before emoji of its own would refuse the add, so it says
+  // what to do instead (#315: an older server gets words, not a failure).
+  if (!supported) {
+    return (
+      <Block heading={HEADINGS.emoji}>
+        <Note>
+          This server runs a Linger from before servers had emoji of their own. {openGuide ? "Once you've updated it" : "Once the host updates it"}, you can add
+          them here.
+        </Note>
+        {openGuide ? (
+          <Actions start>
+            <Button icon="go" onClick={openGuide}>
+              How to update
+            </Button>
+          </Actions>
+        ) : null}
+      </Block>
+    );
+  }
+
+  return (
+    <>
+      <Block heading={HEADINGS.addEmoji}>
+        <div
+          className="nx-set-drop"
+          data-over={over ? "yes" : undefined}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setOver(false);
+            void addFiles([...event.dataTransfer.files]);
+          }}
+        >
+          <Button variant="primary" size="sm" disabled={room <= 0} onClick={() => picker.current?.click()}>
+            Choose pictures
+          </Button>
+          <span className="nx-set-drop-words">or drop them here</span>
+          <input
+            ref={picker}
+            type="file"
+            accept={PICTURES}
+            multiple
+            hidden
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              void addFiles([...(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
+        </div>
+        {adding.length > 0 ? (
+          <ul className="nx-set-list" aria-label="Being added">
+            {adding.map((one) => (
+              <li key={one.key} className="nx-set-item">
+                <div className="nx-set-item-line">
+                  <span className="nx-set-item-mark" />
+                  <span className="nx-set-emoji-name">:{one.name}:</span>
+                  <span className="nx-set-item-sub" data-tone={one.problem ? "problem" : undefined} role={one.problem ? "alert" : "status"}>
+                    {one.problem ?? "Adding…"}
+                  </span>
+                  {one.problem ? (
+                    <span className="nx-set-item-buttons">
+                      <IconButton icon="close" label={`Forget :${one.name}:`} size="sm" onClick={() => setAdding((held) => held.filter((row) => row.key !== one.key))} />
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {full ? <Note tone="problem">{full}</Note> : null}
+        <Note>
+          Each one is named from its file: <span className="nx-set-mono">party-parrot.gif</span> is :party_parrot:. PNG, GIF, WebP or JPEG; a big picture is
+          made small, and a GIF keeps moving if it's under 256 KB. {emoji.length} of {MAX_CUSTOM_EMOJI} used.
+        </Note>
+      </Block>
+
+      <Block heading={HEADINGS.emoji}>
+        {ordered.length === 0 ? (
+          <Note>No emoji yet. The first one you add is in everyone's emoji picker at once, under {serverName}.</Note>
+        ) : (
+          <ul className="nx-set-list" ref={list} aria-label="This server's emoji">
+            {ordered.map((one) => (
+              <li key={one.id} className="nx-set-item" data-emoji={one.id}>
+                {renaming === one.id ? (
+                  <RenameEmoji
+                    emoji={one}
+                    taken={emoji}
+                    rename={rename}
+                    onDone={() => {
+                      setRenaming(null);
+                      requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-emoji="${CSS.escape(one.id)}"] [data-do="rename"] button`)?.focus());
+                    }}
+                  />
+                ) : (
+                  <div className="nx-set-item-line">
+                    <span className="nx-set-item-mark nx-set-emoji">
+                      <img src={one.url} alt="" draggable={false} />
+                    </span>
+                    <span className="nx-set-emoji-name">:{one.name}:</span>
+                    <span className="nx-set-item-sub">added by {nameOf(one.created_by)}</span>
+                    <span className="nx-set-item-buttons">
+                      {asking === one.id ? null : (
+                        <>
+                          <span data-do="rename">
+                            <Button size="sm" variant="quiet" disabled={busy} onClick={() => setRenaming(one.id)}>
+                              Rename
+                            </Button>
+                          </span>
+                          <span data-do="remove">
+                            <Button size="sm" disabled={busy} onClick={() => setAsking(one.id)}>
+                              Remove
+                            </Button>
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {asking === one.id ? (
+                  <Question
+                    words={`Remove :${one.name}:? Messages that used it show :${one.name}: as words from now on.`}
+                    yes="Yes, remove"
+                    no="Keep it"
+                    busy={busy}
+                    onYes={() => void save.run(remove(one.id)).then((ok) => ok && setAsking(null))}
+                    onNo={() => {
+                      setAsking(null);
+                      requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-emoji="${CSS.escape(one.id)}"] [data-do="remove"] button`)?.focus());
+                    }}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+      </Block>
+    </>
+  );
+}
+
+function RenameEmoji({ emoji, taken, rename, onDone }: { emoji: CustomEmoji; taken: readonly CustomEmoji[]; rename: HostEmojiProps["rename"]; onDone: () => void }) {
+  const [name, setName] = useState(emoji.name);
+  const save = useSave();
+  const busy = save.phase.kind === "saving";
+  const typed = name.trim().toLowerCase();
+  const clash = typed !== emoji.name && taken.some((one) => one.name === typed);
+  const problem = typed === "" ? null : !emojiNameOk(typed) ? EMOJI_NAME_RULE : clash ? `There's already an emoji called :${typed}:.` : null;
+  const submit = async () => {
+    if (busy || problem !== null || typed === "") return;
+    if (typed === emoji.name) return onDone();
+    if (await save.run(rename(emoji.id, typed))) onDone();
+  };
+  const onKeyDown = useBackOut(onDone, () => null);
+  return (
+    <div className="nx-set-edit" role="group" aria-label={`Renaming :${emoji.name}:`} onKeyDown={onKeyDown}>
+      <TextField label="Name" value={name} autoFocus onChange={setName} onEnter={() => void submit()} />
+      <Actions phase={problem ? { kind: "problem", words: problem } : save.phase}>
+        <Button variant="quiet" size="sm" disabled={busy} onClick={onDone}>
+          Cancel
+        </Button>
+        <Button size="sm" variant="primary" disabled={typed === "" || problem !== null} busy={busy} onClick={() => void submit()}>
+          Save
+        </Button>
+      </Actions>
     </div>
   );
 }

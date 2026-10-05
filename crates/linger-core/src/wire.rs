@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::id::{AttachmentId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};
+use crate::id::{AttachmentId, EmojiId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};
 
 // NOTE on 64-bit integers: ts-rs maps i64/u64 to `bigint`, but JSON.parse hands
 // the frontend plain numbers. Every 64-bit value on this wire (Unix ms, byte
@@ -721,6 +721,40 @@ pub struct PresenceEntry {
 // ---------------------------------------------------------------------------
 // Invites, notify rules, export (PROTOCOL §§5, 7)
 // ---------------------------------------------------------------------------
+
+/// A server's own emoji (SPEC §4.8, PROTOCOL §5 "Custom emoji", #359): a
+/// picture the host or a co-host added, written `:name:` in a message and drawn
+/// as the picture by every app on the server. The message keeps the text, so
+/// search and export see `:name:`, and a removed emoji reads as its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CustomEmoji {
+    pub id: EmojiId,
+    /// Between the colons: `[a-z0-9_]`, 2–32 characters, one per server.
+    pub name: String,
+    /// The picture, on the media origin like an attachment's (§6).
+    pub url: String,
+    pub animated: bool,
+    pub created_by: UserId,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+/// `POST /emoji`: a finished upload of the caller's, not on a message, made
+/// into an emoji called `name`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateEmojiRequest {
+    pub name: String,
+    pub attachment_id: AttachmentId,
+}
+
+/// `PATCH /emoji/:id`: a new name.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RenameEmojiRequest {
+    pub name: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]

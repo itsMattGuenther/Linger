@@ -1,4 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -10,7 +11,7 @@ import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { type MessageActions, MessageRow } from "./MessageRow";
-import type { MentionLookup } from "./MessageText";
+import type { CustomEmojiByName, MentionLookup } from "./MessageText";
 import "./Conversation.css";
 
 /** Start fetching older history this close to the top: about two screens. */
@@ -61,6 +62,8 @@ export interface ConversationProps {
    * would leave replies to them answering nothing (SPEC §4.15).
    */
   blocked?: ReadonlySet<string>;
+  /** The server's own emoji (#359), drawn for their `:name:`. */
+  customEmoji?: readonly CustomEmoji[];
   now: number;
   previews: Readonly<Record<string, LinkPreview>>;
   mediaUrl: (path: string) => string;
@@ -108,6 +111,8 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     },
     [byHandle, me?.id],
   );
+
+  const emojiByName = useMemo<CustomEmojiByName>(() => new Map((props.customEmoji ?? []).map((one) => [one.name, one])), [props.customEmoji]);
 
   const scroller = useRef<HTMLDivElement | null>(null);
   // Follow what arrives at the bottom only while the room holds its newest
@@ -383,6 +388,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                     flash={flash}
                     previews={props.previews}
                     mentions={mentions}
+                    emoji={emojiByName}
                     mediaUrl={props.mediaUrl}
                     actions={actions}
                   />
@@ -416,6 +422,7 @@ function RowView({
   flash,
   previews,
   mentions,
+  emoji,
   mediaUrl,
   actions,
 }: {
@@ -432,6 +439,7 @@ function RowView({
   flash: MessageId | null;
   previews: Readonly<Record<string, LinkPreview>>;
   mentions: MentionLookup;
+  emoji: CustomEmojiByName;
   mediaUrl: (path: string) => string;
   actions: MessageActions;
 }) {
@@ -470,6 +478,7 @@ function RowView({
           flashing={flash === message.id}
           previews={previews}
           mentions={mentions}
+          emoji={emoji}
           mediaUrl={mediaUrl}
           actions={actions}
         />

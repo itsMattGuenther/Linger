@@ -9,6 +9,8 @@ import {
   type HostPeopleProps,
   type HostRoomsProps,
   type HostServerProps,
+  EmojiSection,
+  type HostEmojiProps,
   InvitesSection,
   PeopleSection,
   RoomsSection,
@@ -31,6 +33,7 @@ export interface HostingProps {
   rooms: HostRoomsProps;
   invites: HostInvitesProps;
   people: HostPeopleProps;
+  emoji: HostEmojiProps;
   server: HostServerProps;
 }
 
@@ -67,6 +70,7 @@ const ICONS: Record<SettingsKey, IconName> = {
   rooms: "hash",
   invites: "link",
   people: "people",
+  emoji: "smile",
   server: "house",
 };
 
@@ -177,6 +181,8 @@ function Section({ section, ...props }: SettingsViewProps & { section: SettingsK
       return props.hosting ? <InvitesSection {...props.hosting.invites} /> : null;
     case "people":
       return props.hosting ? <PeopleSection {...props.hosting.people} /> : null;
+    case "emoji":
+      return props.hosting ? <EmojiSection {...props.hosting.emoji} /> : null;
     case "server":
       return props.hosting ? <ServerSection {...props.hosting.server} /> : null;
   }

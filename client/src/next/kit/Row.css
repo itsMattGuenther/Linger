@@ -237,3 +237,15 @@
     outline-offset: calc(var(--focus-width) * -1);
   }
 }
+
+/* An emoji or a server's emoji picture in the lead slot (#359), the slot's size. */
+.nx-row-emoji {
+  font-size: var(--marker-slot);
+  line-height: 1;
+}
+
+.nx-row-picture {
+  width: var(--marker-slot);
+  height: var(--marker-slot);
+  object-fit: contain;
+}

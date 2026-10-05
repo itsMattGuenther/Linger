@@ -174,7 +174,8 @@ draws the first two (SPEC §5.6). `storage_used_bytes` counts stored objects *an
 uploads still in flight, because a slot already handed out is not space anybody else can
 have. `storage_limit_bytes` is the pool ceiling. `file_expiry_days` is how long a file
 stands before the server sweeps it, or `null` on a server that keeps files for good;
-starred files and files on pinned messages never expire whatever it says (SPEC §4.10).
+starred files, files on pinned messages and the server's emoji pictures (§5, "Custom
+emoji") never expire whatever it says (SPEC §4.10).
 
 They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
@@ -554,6 +555,61 @@ when its own `user.update` says it has just become a co-host. There is **no
 count** anywhere (AGENTS rule 3): the list shows one quiet row while any report
 is open, never how many.
 
+### Custom emoji (SPEC §4.8, #359)
+
+A server's own emoji: pictures the host or a co-host adds for everybody on the server,
+written `:name:` in a message and drawn as the picture.
+
+```
+GET    /emoji                                        → CustomEmoji[]   # any member, by name
+POST   /emoji        { name, attachment_id }         → CustomEmoji     # host or co-host
+PATCH  /emoji/:id    { name }                        → CustomEmoji     # host or co-host
+DELETE /emoji/:id                                    → 204             # host or co-host
+```
+
+```ts
+type CustomEmoji = {
+  id: string; name: string;
+  url: string;          // the picture, on the media origin like an attachment's (§6)
+  animated: boolean;    // a GIF: it stays animated
+  created_by: string; created_at: number;
+}
+```
+
+**Adding one** makes a finished upload into an emoji: the app uploads the picture
+through `POST /uploads` like any file (§6), so its type is what its bytes say and nothing
+hidden in it survives the re-encoding, then names it here. The checks, in order:
+
+| Refusal | When |
+|---|---|
+| `422 VALIDATION_FAILED` "An emoji's name is 2 to 32 lowercase letters, digits or underscores." | the name isn't `[a-z0-9_]{2,32}` (`linger-core::limits::emoji_name_ok`) |
+| `422 VALIDATION_FAILED` "A server has room for 200 emoji. Remove one to add another." | it has `MAX_CUSTOM_EMOJI` (200) already |
+| `404 NOT_FOUND` "No such upload." | the upload isn't finished, or isn't the caller's |
+| `409 CONFLICT` "That picture is on a message. Upload it again to make it an emoji." | the upload went out on a message |
+| `409 CONFLICT` "That picture is already an emoji." | it is one already |
+| `415 UNSUPPORTED_MEDIA` "An emoji is a PNG, GIF, WebP or JPEG picture." | anything else |
+| `422 VALIDATION_FAILED` "An emoji's picture can be at most 256 KB and 512 pixels wide or tall." | `MAX_EMOJI_BYTES`, `MAX_EMOJI_EDGE` |
+| `409 CONFLICT` "There's already an emoji called :name:." | the name is taken |
+
+A plain member gets `403 FORBIDDEN` from the three that change the set. A rename is held
+to the same name rule and the same clash (its own name again is none); an unknown id is
+`404 NOT_FOUND` "No such emoji." Removing an emoji removes its picture.
+
+**Everybody hears every change** as the whole set, in `emoji.update` (§8), and `ready`
+carries it too. There are no per-room or per-person emoji, and nobody's emoji are for
+sale (AGENTS rule 13).
+
+**A message keeps the text.** `:name:` is stored as typed, so search and export see
+`:name:`, a renamed emoji leaves older messages saying the old name, and a removed one
+reads as its name. An app draws `:name:` as the picture only when it is one of the
+message's own server's emoji, never inside code, and reads it as `:name:` to a screen
+reader. Reactions stay off while #168's trial runs: emoji are for message text.
+
+**The picture is the emoji's.** It never expires (§3), `DELETE /uploads/:id` on it is
+`409 CONFLICT` "That picture is one of the server's emoji. Remove the emoji instead.",
+and putting it on a message is `409 CONFLICT` "That picture is one of the server's
+emoji." It doesn't show in the media collection and isn't in anybody's export.
+
 ### Palette validation (server-side, mandatory)
 
 There is no runtime color clamping, because there are no arbitrary colors. The server
@@ -612,7 +668,10 @@ cannot be retried, because resending the same bytes under the same declaration c
 make them acceptable.
 
 `DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
-`CONFLICT` once the attachment is on a message; delete the message instead.
+`CONFLICT` once the attachment is on a message; delete the message instead. It is
+`CONFLICT` for a picture that is one of the server's emoji too (§5, "Custom emoji"):
+remove the emoji, which takes its picture with it. An unposted upload ages out after the
+file expiry window like any file, except an emoji's picture, which never does.
 
 **Serving.** `Attachment.url` (and `poster_url` and `display_url`) point at the object store, on the media
 origin — a host of its own, `cdn.<LINGER_DOMAIN>` by default, which serves `/objects/...`
@@ -916,9 +975,13 @@ C→S  { "op": "identify", "d": { "token": "<access_jwt>", "client": "linger-des
 S→C  { "op": "ready",  "d": { "session_id", "user", "users": User[],
                               "rooms": Room[], "dms": Room[],
                               "presence": PresenceEntry[],
-                              "voice"?: VoiceRoomState[] },
+                              "voice"?: VoiceRoomState[],
+                              "emoji"?: CustomEmoji[] },
                               "s": 0 }
 ```
+
+`ready.emoji` is the server's own emoji, the whole set (§5, "Custom emoji"); a server
+from before them leaves it out, which a client reads as none.
 
 `VoiceRoomState` is `{ room_id, peers: VoicePeer[] }`. New servers include
 `ready.voice` for occupied rooms visible to this member, including their DMs.
@@ -975,6 +1038,7 @@ Beyond that, the client must re-identify and refetch.
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
 | `reports.changed` | `{}` — **sent to the host's and the co-hosts' sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
+| `emoji.update` | `{ emoji: CustomEmoji[] }` — the server's emoji changed (one added, renamed or removed, §5): the whole set every time, to everybody |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }], bitrate? }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves. `bitrate` is what to send the microphone at, in bits a second (#431) |
 | `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |

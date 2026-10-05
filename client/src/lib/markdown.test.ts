@@ -329,3 +329,21 @@ describe("linkTargets", () => {
     expect(linkTargets(many)).toHaveLength(4);
   });
 });
+
+describe("shortcodes (#359)", () => {
+  const names = (source: string) =>
+    (parseMarkdown(source)[0] as { children: { kind: string; name?: string }[] }).children.filter((node) => node.kind === "shortcode").map((node) => node.name);
+
+  it("reads :name: at the start of a word, and one straight after another", () => {
+    expect(names("hi :party_parrot: there")).toEqual(["party_parrot"]);
+    expect(names(":party_parrot::party_parrot::fire:")).toEqual(["party_parrot", "party_parrot", "fire"]);
+    expect(names(":+1: and :-1:")).toEqual(["+1", "-1"]);
+  });
+
+  it("leaves a time, an address and code alone", () => {
+    expect(names("at 12:30:45")).toEqual([]);
+    expect(names("see http://a:b:c")).toEqual([]);
+    expect(names("`:fire:`")).toEqual([]);
+    expect(plainText("great :fire: night")).toBe("great :fire: night");
+  });
+});

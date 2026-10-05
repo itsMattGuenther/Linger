@@ -4,6 +4,7 @@
 pub mod attachments;
 pub mod colors;
 pub mod dms;
+pub mod emoji;
 pub mod links;
 pub mod media;
 pub mod messages;
