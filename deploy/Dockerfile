@@ -19,7 +19,11 @@ RUN apt-get update \
 COPY --from=build /src/target/release/linger-server /usr/local/bin/linger-server
 # Starts as root only to give the data folder to `linger`, then runs the
 # server as `linger` (#440): no `chown` before the first start.
+# chmod here rather than trusting the checkout: a repository with
+# core.fileMode off commits it without its x bit, and the image then can't
+# start at all.
 COPY deploy/entrypoint.sh /usr/local/bin/linger-entrypoint
+RUN chmod 755 /usr/local/bin/linger-entrypoint
 
 ENV LINGER_DATA_DIR=/data
 VOLUME /data

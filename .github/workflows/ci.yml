@@ -60,7 +60,7 @@ jobs:
       - name: shipped relay starts and refuses an empty secret
         run: bash scripts/coturn-test.sh
       - name: update and setup scripts pass shellcheck
-        run: shellcheck deploy/update.sh deploy/setup.sh deploy/entrypoint.sh scripts/update-test.sh scripts/update-docker-test.sh scripts/setup-test.sh scripts/coturn-test.sh
+        run: shellcheck deploy/update.sh deploy/setup.sh deploy/entrypoint.sh scripts/update-test.sh scripts/update-docker-test.sh scripts/setup-test.sh scripts/coturn-test.sh scripts/image-start-test.sh
       - name: update script, against a stand-in docker
         run: bash scripts/update-test.sh
       - name: setup script, against stand-ins (#440)

@@ -271,8 +271,9 @@ Your one-time setup link:
 
 Install the Linger app on your own computer, paste the whole link into its
 "Server or link" box and press Continue: into the app, not a browser. Keep it
-private: whoever uses it first becomes the host. It stops working once used, or if the server restarts first
-(docker compose logs linger then prints a new one).
+private: whoever uses it first becomes the host. It stops working once used,
+or if the server restarts first (docker compose logs linger then prints a new
+one).
 
 If your provider has a firewall of its own (DigitalOcean's Cloud Firewalls,
 say), open these ports there too: ${ports[*]}.
