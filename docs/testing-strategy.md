@@ -70,8 +70,9 @@ version check, and the tests of these scripts themselves
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
-because the change didn't touch it, and fails when any failed or was
-cancelled. A new job joins by being listed in its `needs`, and
+because the change didn't touch it. Anything else fails it: a job that failed,
+was cancelled, or never ran because GitHub had no machine for it, which
+GitHub reports as `abandoned` (#445). A new job joins by being listed in its `needs`, and
 `scripts/ci-gate.test.mjs` fails if one isn't. The package checks run in their
 own workflow and don't block a merge; the nightly run and every release run
 them.

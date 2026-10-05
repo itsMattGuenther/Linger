@@ -2,6 +2,7 @@
 // missing from its `needs` is a job nothing enforces. This reads ci.yml
 // without a YAML library: job ids are the two-space keys under `jobs:`.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
@@ -18,4 +19,24 @@ test("ci.yml has an all-green job that runs whatever happened above it", () => {
 });
 test("every other job is in all-green's needs, and nothing else is", () => {
   assert.deepEqual([...needs].sort(), jobs.filter((job) => job !== "all-green").sort());
+});
+
+// The gate's own jq filter, run on the results GitHub can give a job. Only
+// `success` and `skipped` pass. A job GitHub never found a machine for is
+// `abandoned` in `needs` (#445): the old filter, which only failed on
+// `failure` and `cancelled`, let a run with nothing tested show green.
+const filter = /jq -e '([^']+)' <<<"\$RESULTS"/.exec(gate)?.[1];
+const failsGate = (results) => {
+  const needs = Object.fromEntries(results.map((result, at) => [`job${at}`, { result, outputs: {} }]));
+  const run = spawnSync("jq", ["-e", filter], { input: JSON.stringify(needs), encoding: "utf8" });
+  assert.ok(run.status === 0 || run.status === 1, `jq ran: ${run.stderr}`);
+  return run.status === 0;
+};
+
+test("all-green passes only when every job passed or had nothing to check", () => {
+  assert.ok(filter, "all-green tests $RESULTS with one jq -e '…' filter");
+  assert.equal(failsGate(["success", "skipped", "success"]), false);
+  for (const result of ["failure", "cancelled", "abandoned", "something GitHub adds later"]) {
+    assert.equal(failsGate(["success", result, "skipped"]), true, result);
+  }
 });
