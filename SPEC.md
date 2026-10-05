@@ -670,7 +670,12 @@ the host's server, which passes it on to everyone else in the room. It is part o
 server a host already runs (one UDP port more), so there is nothing new to install, and
 it is what lets a 40-person raid talk in one room. **Silence isn't sent** (2026-10-04):
 an app sends only while its person is talking, as Discord's do, so in a room of fifty
-the people not talking cost the server nothing; muted and push-to-talk are silence too. It is the only way voice
+the people not talking cost the server nothing; muted and push-to-talk are silence too.
+**A room of up to twenty sounds better** (#431): everybody in it sends at 128 kbit/s, and
+from twenty-one at 96 kbit/s, which keeps a raid's busiest moments within what a small
+server can send; a room steps back up once it is down to sixteen, so people drifting in
+and out around twenty don't flip it. The server decides for the whole room, nobody sets
+it, and nobody hears it change. It is the only way voice
 travels (#306): the mesh that came first, where every laptop sent to every other, stopped
 working somewhere past ten and is gone. A server whose host hasn't set forwarding up
 carries no voice, and the app says so in plain words rather than offering a call nobody

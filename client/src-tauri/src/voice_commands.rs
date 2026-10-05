@@ -334,7 +334,12 @@ pub async fn voice_frame(app: AppHandle, base_url: String, frame: ServerFrame) {
     let engine = engine_for(&app, &base_url);
     // The forwarding server's offer is the one frame the engine acts on
     // (#197). Who is in voice is the frontend's to draw.
-    if let linger_core::gateway::ServerEvent::VoiceOffer { sdp, tracks } = frame.event {
-        engine.on_offer(&sdp, &tracks).await;
+    if let linger_core::gateway::ServerEvent::VoiceOffer {
+        sdp,
+        tracks,
+        bitrate,
+    } = frame.event
+    {
+        engine.on_offer(&sdp, &tracks, bitrate).await;
     }
 }

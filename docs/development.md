@@ -111,8 +111,9 @@ is shipped in the app. See [the testing strategy](testing-strategy.md).
 
 `crates/linger-sfu/tests/load.rs` puts 50 stand-in people in one voice room on
 the forwarding server, joining at once, then measures ten seconds with three
-talking: once with silence sent the old way and once with it unsent, as the
-apps now do. It prints the forwarding thread's CPU (from /proc, so Linux), the
+talking, at the quality the server's offers ask for (96 kbit/s at fifty, 128
+at twenty or fewer, #431): once with silence sent the old way and once with it
+unsent, as the apps now do. It prints the forwarding thread's CPU (from /proc, so Linux), the
 packets a second it delivered, the worst share of a talker any listener heard,
 and the longest answer to an offer. It's ignored in ordinary runs:
 

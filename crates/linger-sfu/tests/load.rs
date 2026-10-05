@@ -32,8 +32,11 @@ use str0m::media::{Frequency, MediaTime, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, Input, Output, Rtc};
 
-/// A talking frame: about what Opus makes of 20 ms of a voice.
-const TALKING: usize = 80;
+/// A talking frame at the quality the room's offer asks for (#431): 20 ms
+/// of it, fifty to a second.
+fn talking_frame(bits: u32) -> usize {
+    usize::try_from(bits / 8 / 50).expect("a frame's bytes")
+}
 /// A silent frame sent the old way: Opus's three bytes of silence.
 const SILENT: usize = 3;
 
@@ -47,6 +50,8 @@ struct Client {
     /// Packets heard, by whose voice they were.
     heard: HashMap<String, u64>,
     frames: u64,
+    /// What the latest offer said to send at (#431).
+    bits: u32,
 }
 
 impl Client {
@@ -69,6 +74,7 @@ impl Client {
             connected: false,
             heard: HashMap::new(),
             frames: 0,
+            bits: 0,
         }
     }
 
@@ -84,6 +90,7 @@ impl Client {
             .iter()
             .map(|track| (Mid::from(track.mid.as_str()), track.session.clone()))
             .collect();
+        self.bits = offer.bits;
         answer.to_sdp_string()
     }
 
@@ -276,7 +283,7 @@ fn raid(
                 }
                 for client in &mut mine {
                     let size = if talking.contains(&client.name) {
-                        Some(TALKING)
+                        Some(talking_frame(client.bits))
                     } else if silence_sent {
                         Some(SILENT)
                     } else {
@@ -353,9 +360,10 @@ fn a_raid_sized_room() {
         .collect();
     let (joined_in, longest_answer) = join(&sfu, &offers, &mut clients);
     println!(
-        "{people} people joined at once and heard everybody in {:.1} s; the longest answer was {} KB",
+        "{people} people joined at once and heard everybody in {:.1} s; the longest answer was {} KB; talking at {} kbit/s",
         joined_in.as_secs_f64(),
-        longest_answer / 1024
+        longest_answer / 1024,
+        clients[0].bits / 1000
     );
 
     // Unsent first, so the old way's backlog can't spill into it.
