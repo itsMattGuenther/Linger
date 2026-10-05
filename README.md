@@ -1,5 +1,17 @@
 <div align="center">
 <img src="assets/logo/linger_v2.png" width="600px" alt="Linger">
+
+<p>
+<a href="https://github.com/itsMattGuenther/Linger/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/itsMattGuenther/Linger?label=release&labelColor=131a28&color=2e3b54"></a>
+<a href="https://github.com/itsMattGuenther/Linger/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI on main" src="https://github.com/itsMattGuenther/Linger/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+<a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2e3b54?labelColor=131a28"></a>
+<a href="#-installing-the-app"><img alt="Runs on Windows, Linux and Android" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20Linux%20%C2%B7%20Android-2e3b54?labelColor=131a28"></a>
+<a href="#-running-a-server"><img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-f3b55c"></a>
+<a href="#-privacy"><img alt="Zero telemetry" src="https://img.shields.io/badge/zero%20telemetry-7cc98f"></a>
+<a href="docs/development.md"><img alt="Built with Rust, Tauri and React" src="https://img.shields.io/badge/built%20with-Rust%20%C2%B7%20Tauri%20%C2%B7%20React-2e3b54?labelColor=131a28"></a>
+</p>
+
+<p><strong><a href="https://linger-site.netlify.app">Website</a></strong> · <a href="https://github.com/itsMattGuenther/Linger/releases/latest">Download</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/host-guide.md">Host guide</a></p>
 </div>
 
 # Linger

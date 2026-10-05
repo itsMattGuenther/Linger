@@ -81,6 +81,42 @@ previous release used.
 **4. Publish it.** Publishing is what makes installed copies see the update, and
 it is a person's click on purpose. It also starts the Arch package job (below).
 
+**5. The website.** The site ([linger-site.netlify.app](https://linger-site.netlify.app),
+built from the private `itsMattGuenther/linger-site` repo) shows the version,
+the downloads and pictures of the app, and keeps those current itself: once a
+day it looks for a new release, and opens a pull request with the new
+download links and every screenshot retaken from the release's own code. Start
+it now rather than wait:
+
+```bash
+gh workflow run new-release.yml -R itsMattGuenther/linger-site
+```
+
+The pull request opens a few minutes later (`gh pr list -R itsMattGuenther/linger-site`),
+and its description is the checklist. Work through it on its branch; the
+site's README says how to build it and retake a picture locally.
+
+- **Pictures that couldn't be taken.** A screen changed, so a scene's clicks
+  in `shots/shoot.mjs` no longer reach it, and the site keeps the old picture.
+  Fix the scene, then run the job again with `-f retake=true`.
+- **Pictures that changed a lot.** Re-read their captions and alt text in
+  `site/index.html`; they may describe the old screen.
+- **What's new.** Read the release notes with one question: would somebody
+  deciding whether to try Linger want to see this? A new kind of thing (the
+  phone app, voice messages, co-hosts) gets a line on the page, and, if it has
+  a screen of its own, a part of the tour: a scene in `shots/shoot.mjs` and a
+  tab in `site/index.html`. Fixes, polish and anything a visitor wouldn't
+  notice get nothing, and most releases need nothing.
+- **The words stay true.** Something that moved, was renamed or was cut comes
+  out of `site/index.html` and `site/llms.txt`, as it would out of the README.
+- **The video.** The description says which version it was recorded on. When
+  the app has visibly moved on from it, say so to Matt; it's re-recorded by
+  hand from the hype kit.
+
+Push any changes to that branch, look through Netlify's deploy preview at
+desktop width and at phone width, and leave the merge to Matt: merging is what
+publishes it.
+
 ## The Arch and Omarchy package
 
 Publishing a `v…` release runs `.github/workflows/arch-repo.yml`. It repackages
