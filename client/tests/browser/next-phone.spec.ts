@@ -347,3 +347,31 @@ test("the message box's hint fits on one line: who it's to when that fits, and j
   await room(page, "general").click();
   await expect(page.getByRole("combobox", { name: /^Message/ })).toHaveAttribute("placeholder", "Say something in #general");
 });
+
+// Emoji on the phone (#359): the picker spans the message box, its emoji are
+// a finger's size, and the keyboard stays down until Search is tapped, since
+// it would cover half the picker.
+test("the emoji picker spans the message box, its emoji a finger's size, and leaves the keyboard down", async ({ page }) => {
+  await phone(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  await page.getByRole("button", { name: "Emoji", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Emoji" });
+  const first = picker.getByRole("region", { name: "Smileys & emotion" }).getByRole("button").first();
+  await expect(first).toBeVisible();
+
+  const cell = await first.boundingBox();
+  expect(cell?.width).toBeGreaterThanOrEqual(44);
+  expect(cell?.height).toBeGreaterThanOrEqual(44);
+  const spans = await picker.boundingBox();
+  const box = await page.locator(".nx-composer-box").boundingBox();
+  // Inside the box's own border, to the pixel.
+  expect(Math.abs((spans?.x ?? 0) - (box?.x ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((spans?.x ?? 0) + (spans?.width ?? 0) - (box?.x ?? 0) - (box?.width ?? 0))).toBeLessThanOrEqual(1);
+  await expect(picker.getByRole("searchbox", { name: "Find an emoji" })).toBeVisible();
+  await expect(picker.getByRole("searchbox", { name: "Find an emoji" })).not.toBeFocused();
+  expect(await sticksOut(page), "the emoji picker").toEqual([]);
+
+  await first.click();
+  await expect(page.getByRole("combobox", { name: /^Message/ })).toHaveValue(/^\p{Extended_Pictographic}/u);
+});

@@ -190,3 +190,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* On the phone (SPEC §4.15) the picker spans the message box, over the
+   messages, and its cells are a finger's size (`--emoji-cell`): as many
+   across as the screen fits, sharing what's left over. The group tabs share
+   the width the same way. The box is what it's placed against
+   (Composer.css), not the emoji button at its right end. */
+:root[data-shell="phone"] .nx-emoji-picker {
+  left: 0;
+  width: auto;
+}
+
+:root[data-shell="phone"] .nx-emoji-cells {
+  grid-template-columns: repeat(auto-fill, minmax(var(--emoji-cell), 1fr));
+}
+
+:root[data-shell="phone"] .nx-emoji-cell {
+  width: auto;
+}
+
+:root[data-shell="phone"] .nx-emoji-tab {
+  flex: 1;
+  width: auto;
+  height: var(--emoji-cell);
+}

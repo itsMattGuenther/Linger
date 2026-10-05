@@ -71,6 +71,15 @@
   display: inline-flex;
 }
 
+/* The phone's emoji picker spans the whole box (EmojiPicker.css). */
+:root[data-shell="phone"] .nx-composer-box {
+  position: relative;
+}
+
+:root[data-shell="phone"] .nx-composer-emoji-anchor {
+  position: static;
+}
+
 /* Above the box: the reply, unsent messages, problems, files. */
 .nx-composer-reply,
 .nx-composer-unsent,

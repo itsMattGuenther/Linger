@@ -960,9 +960,11 @@ and §6 change with it.
   skin tones), from Emojibase by `client/scripts/emoji-data.mjs`: about 245 KB,
   60 KB compressed, loaded the first time the picker or a `:` wants it. Bundling
   Discord-style pictures (Twemoji) would draw them the same everywhere but costs
-  several MB, past AGENTS' 2 MB line, so it's not done; an emoji too new for this
-  computer's font is left out of the picker instead (`lib/emoji/support.ts`
-  draws one emoji of each Unicode version on a canvas to find out).
+  several MB, past AGENTS' 2 MB line, so it's not done (Matt: emoji looking a
+  little different on each computer is fine, and the pictures would be bloat);
+  an emoji too new for this computer's font is left out of the picker instead
+  (`lib/emoji/support.ts` draws one emoji of each Unicode version on a canvas to
+  find out).
 - **Discord's names.** Discord took EmojiOne's shortcodes, which Emojibase keeps
   as JoyPixels'; GitHub's and Slack's are aliases. A finished `:smiley:` becomes
   the emoji in the box, so a message holds the emoji; a `:name:` that reaches a
@@ -979,5 +981,10 @@ and §6 change with it.
   name; a removed emoji reads as its name; another server's app never draws
   this server's pictures. A custom emoji with a built-in's name wins on its
   own server.
-- **A few emoji and nothing else are drawn big** (up to 27, as Discord does).
+- **A few emoji and nothing else are drawn big** (up to 27, as Discord does),
+  a quarter smaller than first built: 30px glyphs and 36px pictures (Matt).
+- **On the phone the picker spans the message box**, its emoji a finger's
+  44px as everything tapped there is, as many across as fit; and it leaves
+  the keyboard down until Search is tapped, since the keyboard would cover
+  half of it.
 - **Not reactions**, while #168's trial has them out, and **never for sale**.

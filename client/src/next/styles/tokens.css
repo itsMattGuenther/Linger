@@ -239,11 +239,12 @@
   /* A message's words fold past this many lines (#304). */
   --message-fold: calc(20 * var(--line-body));
   /* Emoji (#359). A server's own emoji sits in a line of words at the line's
-     height; a message of only a few emoji is drawn big, as Discord does. */
+     height; a message of only a few emoji is drawn big, as Discord does,
+     a little smaller than Discord's (Matt, 2026-10-05). */
   --emoji-inline: 20px;
-  --emoji-jumbo: 48px;
-  --text-emoji-jumbo: 40px;
-  --line-emoji-jumbo: 52px;
+  --emoji-jumbo: 36px;
+  --text-emoji-jumbo: 30px;
+  --line-emoji-jumbo: 40px;
   /* The picker: a grid of control-sized cells, nine across. */
   --emoji-cell: 32px;
   --text-emoji-cell: 22px;
@@ -408,6 +409,14 @@
   --line-display: calc(28px * var(--text-scale));
   --line-body: calc(20px * var(--text-scale));
   --emoji-inline: calc(20px * var(--text-scale));
+  --emoji-jumbo: calc(36px * var(--text-scale));
+  --text-emoji-jumbo: calc(30px * var(--text-scale));
+  --line-emoji-jumbo: calc(40px * var(--text-scale));
+  /* The picker's cells are for a finger here (#359), and stay that size
+     whatever the Font size, as icons do. */
+  --emoji-cell: 44px;
+  --text-emoji-cell: 28px;
+  --emoji-cell-art: 32px;
   --pane-head: calc(40px * var(--text-scale));
   --voice-strip: calc(40px * var(--text-scale));
   --menu-w: calc(200px * var(--text-scale));

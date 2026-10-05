@@ -3,6 +3,7 @@ import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import { GROUPS, searchEmoji, shortcodeOf, type SkinTone, type UnicodeEmoji, withTone } from "../../../lib/emoji";
 import { type RecentEmoji, recentEmoji, rememberEmoji, setSkinTone, skinTone } from "../../../lib/emoji/recent";
 import { supportedVersion } from "../../../lib/emoji/support";
+import { onPhone } from "../../core/phone";
 import "./EmojiPicker.css";
 import { useEmojiIndex } from "./useEmojiIndex";
 
@@ -23,8 +24,14 @@ interface Section {
 /** The tones' own hands, for the tone button and its choices. */
 const TONE_HANDS = ["✋", "✋🏻", "✋🏼", "✋🏽", "✋🏾", "✋🏿"] as const;
 const TONE_NAMES = ["No skin tone", "Light skin tone", "Medium-light skin tone", "Medium skin tone", "Medium-dark skin tone", "Dark skin tone"] as const;
-/** A grid row: the keyboard's Up and Down move this far. */
-const ACROSS = 9;
+/**
+ * A grid row, which the keyboard's Up and Down move by: nine on a computer,
+ * as many as fit on a phone (EmojiPicker.css), so it's read from the grid.
+ */
+function across(cells: Element | null | undefined): number {
+  const columns = cells ? getComputedStyle(cells).gridTemplateColumns.split(" ").length : 0;
+  return columns > 0 ? columns : 9;
+}
 
 /**
  * Every emoji (#359), as Discord's picker has them: search at the top, tabs
@@ -55,7 +62,13 @@ export function EmojiPicker({
   const search = useRef<HTMLInputElement | null>(null);
   const grid = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => search.current?.focus(), []);
+  // Typing finds an emoji at once on a computer. On a phone the keyboard
+  // would come up and cover half the picker, so it waits for a tap on the
+  // search field.
+  const phone = onPhone();
+  useEffect(() => {
+    if (!phone) search.current?.focus();
+  }, [phone]);
 
   const drawable = useMemo(() => {
     if (index === null) return [];
@@ -110,12 +123,13 @@ export function EmojiPicker({
     setTone(next);
     setSkinTone(next);
     setChoosingTone(false);
-    search.current?.focus();
+    if (!phone) search.current?.focus();
   };
 
-  // Arrows through the grid's buttons, nine to a row.
+  // Arrows through the grid's buttons, a row at a time.
   const onGridKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -ACROSS, ArrowDown: ACROSS }[event.key];
+    const row = across(grid.current?.querySelector(".nx-emoji-cells"));
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -row, ArrowDown: row }[event.key];
     if (step === undefined) return;
     const cells = [...(grid.current?.querySelectorAll<HTMLButtonElement>(".nx-emoji-cell") ?? [])];
     const at = cells.findIndex((cell) => cell === document.activeElement);

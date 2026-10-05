@@ -91,6 +91,8 @@ test.describe("the picker", () => {
     await page.getByRole("button", { name: "Emoji", exact: true }).click();
     const find = picker(page).getByRole("searchbox", { name: "Find an emoji" });
     await find.fill("cat");
+    // The list loads when the picker opens; Down has nothing to go to before.
+    await expect(picker(page).getByRole("button", { name: "cat face", exact: true })).toBeVisible();
     await find.press("ArrowDown");
     const first = picker(page).locator(".nx-emoji-cell").first();
     await expect(first).toBeFocused();
@@ -177,7 +179,8 @@ test.describe("in messages", () => {
     await expect(words.getByRole("img", { name: ":party_parrot:" })).toHaveCount(2);
     // Measured once the message has settled: a sent message is swapped for
     // the server's copy, and a measure in between finds nothing.
-    await expect.poll(async () => (await words.getByRole("img").first().boundingBox())?.height ?? 0).toBeGreaterThan(40);
+    // Half again a line of words (20px) or more.
+    await expect.poll(async () => (await words.getByRole("img").first().boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(30);
 
     await send(page, "😂😂");
     await expect(lastMessage(page).locator(".nx-text")).toHaveAttribute("data-jumbo", "yes");
