@@ -125,6 +125,25 @@ LINGER_LOAD_PEOPLE=60 LINGER_LOAD_TALKERS=5 cargo test -p linger-sfu --release -
 It measures the server's share of the work on this machine, not how a raid
 sounds across real networks.
 
+`crates/linger-server/examples/voice_load.rs` is the same room against a real
+server somewhere else. It signs the stand-ins up on a fresh server, joins them
+through the gateway and sends their voice over UDP from this machine, the way
+the app does. It prints how much of each talker every listener heard, and how
+long a packet took from here, through the server and back, overall and five
+seconds at a time. It needs a server with `LINGER_VOICE_ADDRESS` set, no data
+yet, and its port 8420 reachable over plain HTTP, so use a throwaway one and
+never a real server. Give it the setup token from that server's log:
+
+```bash
+LINGER_LOAD_SERVER=http://203.0.113.7:8420 LINGER_LOAD_SETUP=<token> \
+  cargo run -p linger-server --release --example voice_load
+```
+
+`LINGER_LOAD_PEOPLE` (50), `LINGER_LOAD_TALKERS` (8), `LINGER_LOAD_SECONDS`
+(60) and `LINGER_LOAD_OLD` (0, people on an app from before 0.4.9 sending
+silence) change the room. It can't see the server's CPU; watch that on the
+server itself (`top`) while it runs.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so
