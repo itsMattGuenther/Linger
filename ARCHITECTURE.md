@@ -750,18 +750,16 @@ services:
     image: ghcr.io/OWNER/linger:latest
     restart: unless-stopped
     volumes: [ "./data:/data" ]
+    env_file: .env                         # every LINGER_* setting (#440)
     environment:
-      LINGER_DOMAIN: linger.example.com
       LINGER_DATA_DIR: /data
-      LINGER_STORAGE: local
-      # uploads are served from cdn.<LINGER_DOMAIN>; override with
-      # LINGER_MEDIA_DOMAIN
-      # LINGER_VOICE_ADDRESS: 203.0.113.7   # voice, through this server (#197)
     ports: [ "3479:3479/udp" ]             # voice forwarding's one port
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports: [ "80:80", "443:443" ]
+    environment:
+      LINGER_DOMAIN: ${LINGER_DOMAIN:?...}   # the Caddyfile's two names
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -772,9 +770,23 @@ services:
 volumes: { caddy_data: {} }
 ```
 
-Voice goes through the `linger` container itself (#197): with `LINGER_VOICE_ADDRESS` set
-to the machine's public IP and UDP 3479 open, each client sends its voice there once and
-the server passes it on. Without it the server carries no voice (#306).
+**One settings file** (#440). A host's choices all live in `.env`, next to the compose
+file: the domain, the relay's secret, the file pool. Compose hands it to `linger`, and the
+Caddyfile builds its two names from `{$LINGER_DOMAIN}`, so a host never edits either file
+and a newer copy can replace the old one. `deploy/setup.sh` writes `.env` (it asks for the
+name, checks the DNS, makes the secret, opens `ufw`) and starts everything; doing it by
+hand is copying `.env.example`. An older compose file with its settings written inline
+keeps working.
+
+Voice goes through the `linger` container itself (#197): with UDP 3479 open, each client
+sends its voice there once and the server passes it on. Where clients send it is
+`LINGER_VOICE_ADDRESS` if set; unset, the server looks `LINGER_DOMAIN` up once at startup
+and uses its first public address (#440), since the host already pointed it at this
+machine. `off`, or no domain to look up, and the server carries no voice (#306).
+
+The image starts as root only to give the data folder to its `linger` user, then runs the
+server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
+root, which used to need a `chown` before the first start.
 
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`

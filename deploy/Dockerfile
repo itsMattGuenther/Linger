@@ -17,9 +17,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home /data linger
 COPY --from=build /src/target/release/linger-server /usr/local/bin/linger-server
+# Starts as root only to give the data folder to `linger`, then runs the
+# server as `linger` (#440): no `chown` before the first start.
+COPY deploy/entrypoint.sh /usr/local/bin/linger-entrypoint
 
-USER linger
 ENV LINGER_DATA_DIR=/data
 VOLUME /data
 EXPOSE 8420
-ENTRYPOINT ["linger-server"]
+ENTRYPOINT ["linger-entrypoint"]
