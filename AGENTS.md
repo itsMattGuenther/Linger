@@ -152,6 +152,10 @@ quirks in `CLAUDE.md` exist because they were not written down the first time. S
 the README promising something the code no longer does; that is worse than saying
 nothing, so when a feature moves or gets cut, fix the README in the same commit.
 
+The website (`itsMattGuenther/linger-site`, private) is the other front door. It
+is brought up to date once per release, not in feature pull requests: step 5 of
+`docs/releasing.md`.
+
 ---
 
 ## Build and check
