@@ -208,6 +208,20 @@ again later, delete the `gbm-off-…` file in `~/.local/state/linger/`. Setting
 v0.3.5's AppImage hit this once after updating on NVIDIA + Wayland machines;
 newer AppImages don't try the GPU path at all.
 
+**The window opens but stays grey:** this can happen on a computer with two
+graphics chips (a graphics card and the processor's own graphics, say) while
+WebKit's GPU path is off. The page draws on one chip and the window can't show
+what it drew on the other. Releases after 0.4.8 sort this out themselves. On
+0.4.8 and earlier, start Linger from a terminal like this (for the AppImage,
+use its file name in place of `linger-client`):
+
+```bash
+WEBKIT_DMABUF_RENDERER_FORCE_SHM=1 linger-client
+```
+
+The page then reaches the window through ordinary memory, which either chip
+can show. It changes only this launch.
+
 **Typing or scrolling feels a beat behind:** the AppImage keeps WebKit's GPU
 path off, because the WebKit it carries can't use it on some graphics setups,
 and without it every frame arrives a beat late. The `.deb` and `.rpm` packages
