@@ -222,6 +222,8 @@ async fn handshake(
                 dms,
                 presence: state.gateway.presence_snapshot(user_id),
                 voice: Some(state.gateway.voice_snapshot(user_id)),
+                // TODO(#359): the server's emoji, once the table exists.
+                emoji: None,
             };
             let frame = ServerFrame::sequenced(ServerEvent::Ready(ready), 0);
             sink.send(serde_json::to_string(&frame).ok()?).await.ok()?;

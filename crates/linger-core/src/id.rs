@@ -125,6 +125,11 @@ define_id!(
     /// A report a member sent the host (SPEC §4.15, PROTOCOL §5, T-1605).
     ReportId
 );
+define_id!(
+    /// A picture the host added for everybody on the server to use as an
+    /// emoji (SPEC §4.8, #359).
+    EmojiId
+);
 
 #[cfg(test)]
 mod tests {

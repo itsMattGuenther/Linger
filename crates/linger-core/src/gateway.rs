@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::id::{MessageId, RoomId, UserId};
-use crate::wire::{Message, PresenceEntry, PresenceState, Room, User};
+use crate::wire::{CustomEmoji, Message, PresenceEntry, PresenceState, Room, User};
 
 // ---------------------------------------------------------------------------
 // Client → server
@@ -168,6 +168,11 @@ pub struct ReadyData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub voice: Option<Vec<VoiceRoomState>>,
+    /// The server's own emoji (#359), the whole set. Servers from before
+    /// custom emoji omit it, which an app reads as none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub emoji: Option<Vec<CustomEmoji>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -308,6 +313,13 @@ pub enum ServerEvent {
     /// (AGENTS rule 3).
     #[serde(rename = "reports.changed")]
     ReportsChanged {},
+    /// The server's emoji changed (#359): one was added, renamed or removed.
+    /// The whole set every time, like `voice.state`, so an app replaces what
+    /// it had and a missed frame is mended by the next.
+    #[serde(rename = "emoji.update")]
+    EmojiUpdate {
+        emoji: Vec<CustomEmoji>,
+    },
 }
 
 /// A server frame: an event plus its sequence number. `hello`, `heartbeat_ack`,

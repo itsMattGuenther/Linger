@@ -129,6 +129,31 @@ pub const RESUME_BUFFER_FRAMES: usize = 500;
 pub const RESUME_WINDOW_MS: u64 = 120_000;
 
 /// Rate limits (ARCHITECTURE §7). Format: (events, per_seconds).
+/// A server's own emoji (SPEC §4.8, #359): pictures the host or a co-host adds
+/// for everybody on it, written `:name:` in a message.
+pub const MAX_CUSTOM_EMOJI: usize = 200;
+/// A custom emoji's name, between the colons: `[a-z0-9_]`, this long.
+pub const EMOJI_NAME_MIN_CHARS: usize = 2;
+pub const EMOJI_NAME_MAX_CHARS: usize = 32;
+/// A custom emoji's picture: PNG, GIF (animated or not), WebP or JPEG, at
+/// most this big and this wide or tall. The app shrinks a still picture to
+/// emoji size before it uploads, so a host never has to.
+pub const MAX_EMOJI_BYTES: u64 = 256 * 1024;
+pub const MAX_EMOJI_EDGE: u32 = 512;
+pub const EMOJI_MIMES: [&str; 4] = ["image/png", "image/gif", "image/webp", "image/jpeg"];
+
+/// Whether `name` is a custom emoji's name: lowercase letters, digits and
+/// underscores, [`EMOJI_NAME_MIN_CHARS`] to [`EMOJI_NAME_MAX_CHARS`] long.
+/// The server holds every name to it; the app shapes a picture's file name
+/// into one so the host rarely has to type.
+#[must_use]
+pub fn emoji_name_ok(name: &str) -> bool {
+    (EMOJI_NAME_MIN_CHARS..=EMOJI_NAME_MAX_CHARS).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
 pub const RATE_LOGIN_PER_IP: (u32, u64) = (5, 60);
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
@@ -152,3 +177,33 @@ pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
 pub const RATE_VOICE_SIGNAL: (u32, u64) = (300, 10);
 /// Read-marker updates are debounced client-side to once per 5s per room.
 pub const READ_MARKER_DEBOUNCE_MS: u64 = 5_000;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_emoji_name_is_lowercase_letters_digits_and_underscores() {
+        for good in [
+            "ok",
+            "party_parrot",
+            "cat2",
+            "a_b_c",
+            &"x".repeat(EMOJI_NAME_MAX_CHARS),
+        ] {
+            assert!(emoji_name_ok(good), "{good}");
+        }
+        for bad in [
+            "",
+            "x",
+            "Party",
+            "party-parrot",
+            "party parrot",
+            ":ok:",
+            "émoji",
+            &"x".repeat(EMOJI_NAME_MAX_CHARS + 1),
+        ] {
+            assert!(!emoji_name_ok(bad), "{bad}");
+        }
+    }
+}
