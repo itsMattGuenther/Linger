@@ -5,6 +5,7 @@
  * prototype it was built from.
  */
 import type { Attachment } from "../../../src/generated/Attachment";
+import type { CustomEmoji } from "../../../src/generated/CustomEmoji";
 import type { LinkPreview } from "../../../src/generated/LinkPreview";
 import type { Message } from "../../../src/generated/Message";
 import type { PresenceEntry } from "../../../src/generated/PresenceEntry";
@@ -296,3 +297,17 @@ export const leftOff: Record<string, string> = {
   "r-plans": "m000023",
   "d-jules": "m000025",
 };
+
+/**
+ * The server's own emoji (#359): small pictures drawn here, as a host might
+ * add, one of them moving like an animated GIF.
+ */
+export const customEmoji: CustomEmoji[] = [
+  { id: "e-porch_light", name: "porch_light", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='28' r='26' fill='%23ffb84d' opacity='.35'/%3E%3Ccircle cx='32' cy='28' r='16' fill='%23ffd27a'/%3E%3Crect x='24' y='44' width='16' height='12' rx='3' fill='%233a3550'/%3E%3Crect x='28' y='40' width='8' height='6' fill='%2355506e'/%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 1 * 86_400_000 },
+  { id: "e-wave_hi", name: "wave_hi", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%237ad0c4'/%3E%3Ccircle cx='23' cy='27' r='4' fill='%23173a36'/%3E%3Ccircle cx='41' cy='27' r='4' fill='%23173a36'/%3E%3Cpath d='M20 39 q12 12 24 0' stroke='%23173a36' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 2 * 86_400_000 },
+  { id: "e-brb", name: "brb", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='14' width='56' height='36' rx='10' fill='%23e8636f'/%3E%3Ctext x='32' y='41' font-family='Arial, sans-serif' font-weight='900' font-size='22' text-anchor='middle' fill='%23fff'%3EBRB%3C/text%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 3 * 86_400_000 },
+  { id: "e-gg", name: "gg", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%236d7cf0'/%3E%3Ctext x='32' y='42' font-family='Arial, sans-serif' font-weight='900' font-size='28' text-anchor='middle' fill='%23fff'%3EGG%3C/text%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 4 * 86_400_000 },
+  { id: "e-coffee_time", name: "coffee_time", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M14 26 h30 v16 a12 12 0 0 1 -12 12 h-6 a12 12 0 0 1 -12 -12 z' fill='%23c98a5a'/%3E%3Cpath d='M44 30 h4 a6 6 0 0 1 0 12 h-4' stroke='%23c98a5a' stroke-width='4' fill='none'/%3E%3Cpath d='M22 10 q4 6 0 10 M30 8 q4 6 0 12' stroke='%23d8d0c8' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 5 * 86_400_000 },
+  { id: "e-lamp", name: "lamp", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 8 h28 l8 22 h-44 z' fill='%23f2c14e'/%3E%3Crect x='30' y='30' width='4' height='22' fill='%238a7a64'/%3E%3Crect x='18' y='52' width='28' height='6' rx='3' fill='%238a7a64'/%3E%3C/svg%3E", animated: false, created_by: "u-matt", created_at: NOW - 6 * 86_400_000 },
+  { id: "e-party_parrot", name: "party_parrot", url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg%3E%3CanimateTransform attributeName='transform' type='rotate' values='-12 32 40;12 32 40;-12 32 40' dur='0.6s' repeatCount='indefinite'/%3E%3Cellipse cx='32' cy='38' rx='18' ry='20' fill='%23ff5d73'%3E%3Canimate attributeName='fill' values='%23ff5d73;%23ffd23f;%233bceac;%236d7cf0;%23ff5d73' dur='1.2s' repeatCount='indefinite'/%3E%3C/ellipse%3E%3Ccircle cx='38' cy='28' r='4' fill='%23fff'/%3E%3Ccircle cx='39' cy='28' r='2' fill='%23111'/%3E%3Cpath d='M46 32 l10 4 l-10 4 z' fill='%23ffd23f'/%3E%3C/g%3E%3C/svg%3E", animated: true, created_by: "u-matt", created_at: NOW - 7 * 86_400_000 },
+];

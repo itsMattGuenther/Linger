@@ -947,3 +947,37 @@ purpose nobody could guess: every one a place a first-time host went wrong.
   guide downloads them from `main`, so they can't wait for a release:
   `setup.sh` writes the voice address and runs the old `chown` itself on a
   server image from before 0.4.9.
+
+## Decided — every emoji, Discord's shortcodes, and a server's own emoji
+
+**Matt, 2026-10-05 (#359).** "A lot of my favorite emojis are missing… look at
+what Discord is doing", with `:smiley:` shorthand, and hosts able to upload
+their own, "not too much friction where people will never use it." Custom emoji
+were on SPEC §6's "V3 or never" list; this is Matt's go-ahead, and §4.8, §4.17
+and §6 change with it.
+
+- **Every Unicode emoji, drawn by the system's font.** 1,914 of them (330 with
+  skin tones), from Emojibase by `client/scripts/emoji-data.mjs`: about 245 KB,
+  60 KB compressed, loaded the first time the picker or a `:` wants it. Bundling
+  Discord-style pictures (Twemoji) would draw them the same everywhere but costs
+  several MB, past AGENTS' 2 MB line, so it's not done; an emoji too new for this
+  computer's font is left out of the picker instead (`lib/emoji/support.ts`
+  draws one emoji of each Unicode version on a canvas to find out).
+- **Discord's names.** Discord took EmojiOne's shortcodes, which Emojibase keeps
+  as JoyPixels'; GitHub's and Slack's are aliases. A finished `:smiley:` becomes
+  the emoji in the box, so a message holds the emoji; a `:name:` that reaches a
+  message anyway (typed before the list loaded, from an older app) is drawn as
+  the emoji too.
+- **A server's own: the host or a co-host adds, everyone uses.** No new kind of
+  person: the same two who run the server's other Hosting sections. Upload is
+  the ordinary upload path, so the server sniffs and re-encodes the picture as it
+  does every image (GIFs stay animated, frame by frame); `POST /emoji` makes a
+  finished upload into an emoji. Limits: 200 a server, 256 KB and 512 px a
+  picture, names `[a-z0-9_]{2,32}`. The app shrinks a still picture to 128 px
+  first and names it from its file, so adding one is choosing a file.
+- **The message keeps `:name:`.** Search, export and notifications see the
+  name; a removed emoji reads as its name; another server's app never draws
+  this server's pictures. A custom emoji with a built-in's name wins on its
+  own server.
+- **A few emoji and nothing else are drawn big** (up to 27, as Discord does).
+- **Not reactions**, while #168's trial has them out, and **never for sale**.

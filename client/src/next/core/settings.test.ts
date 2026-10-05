@@ -43,7 +43,7 @@ describe("the Settings sidebar", () => {
   });
 
   it("adds Hosting under the server's name only for the host", () => {
-    expect(settingsKeys(HOST).slice(-4)).toEqual(["rooms", "invites", "people", "server"]);
+    expect(settingsKeys(HOST).slice(-5)).toEqual(["rooms", "invites", "people", "emoji", "server"]);
     expect(settingsEntries(HOST)).toContainEqual({ kind: "group", label: "Hosting", sub: "The Good Company" });
     expect(settingsEntries(MEMBER).some((entry) => entry.kind === "group" && entry.label === "Hosting")).toBe(false);
   });
@@ -56,7 +56,7 @@ describe("the Settings sidebar", () => {
 
   it("leaves the phone without Windows and Notifications, and keeps the host's sections (SPEC §4.15)", () => {
     const phone = { ...HOST, phone: true };
-    expect(settingsKeys(phone)).toEqual(["profile", "appearance", "sound", "account", "rooms", "invites", "people", "server"]);
+    expect(settingsKeys(phone)).toEqual(["profile", "appearance", "sound", "account", "rooms", "invites", "people", "emoji", "server"]);
     expect(showable(phone, "notifications")).toBe("profile");
   });
 

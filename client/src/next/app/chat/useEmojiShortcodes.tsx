@@ -83,7 +83,9 @@ export function useEmojiShortcodes({
         return {
           id: `u:${emoji.glyph}`,
           pick: { glyph } as ShortcodePick,
-          item: { lead: { kind: "emoji" as const, glyph }, title: `:${shortcodeOf(emoji)}:`, note: emoji.label, label: `${shortcodeOf(emoji)}, ${emoji.label}` },
+          // Just the emoji and its name, as Discord's list: Unicode's long
+          // description stays for a screen reader.
+          item: { lead: { kind: "emoji" as const, glyph }, title: `:${shortcodeOf(emoji)}:`, label: `${shortcodeOf(emoji)}, ${emoji.label}` },
         };
       }),
     ];

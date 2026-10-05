@@ -813,3 +813,44 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* Emoji (#359): somewhere to drop pictures, and each emoji's picture in the
+   lead slot, a line high and wider than a marker, then its :name:. */
+.nx-set-drop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-md);
+}
+
+.nx-set-drop[data-over] {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.nx-set-drop-words {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+}
+
+.nx-set-item-mark.nx-set-emoji {
+  width: var(--emoji-inline);
+}
+
+.nx-set-emoji img {
+  width: var(--emoji-inline);
+  height: var(--emoji-inline);
+  object-fit: contain;
+}
+
+.nx-set-emoji-name {
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  white-space: nowrap;
+}
+
+.nx-set-item-sub[data-tone="problem"] {
+  color: var(--text-danger);
+}

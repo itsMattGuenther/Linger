@@ -24,14 +24,17 @@ export interface ShortcodeTyping {
 export const SHORTCODE_MIN = 2;
 
 /**
- * Whether a `:` at `at` can start a shortcode: at the start of the box, or
- * after a space or an opening bracket or quote. `12:30`, `http://` and
- * `a:b` never offer emoji.
+ * Whether a `:` at `at` can start a shortcode, by the message parser's own
+ * rule (`lib/markdown.ts`): not straight after a letter or a digit, so
+ * `12:30`, `http://` and `a:b` never offer emoji, and straight after another
+ * `:name:` (`:a::b:`) or an emoji.
  */
 export function shortcodeCanStart(text: string, at: number): boolean {
   if (text[at] !== ":") return false;
   if (at === 0) return true;
-  return /[\s([{"'“‘]/.test(text[at - 1] ?? "");
+  const before = text[at - 1] ?? "";
+  if (before === ":") return /:[a-z0-9_+-]+:$/i.test(text.slice(0, at));
+  return !/[\p{L}\p{N}_]/u.test(before);
 }
 
 /** The shortcode being typed at the caret, or null. */
@@ -80,4 +83,41 @@ export function putShortcode(text: string, typing: ShortcodeTyping, insert: stri
   const next = text.slice(0, typing.start) + spaced + rest;
   if (next.length > max) return null;
   return { text: next, caret: typing.start + spaced.length };
+}
+
+/**
+ * Every finished `:name:` in `text` that `glyphOf` knows, turned into its
+ * emoji, outside code: what typing them does, for shortcodes finished before
+ * the emoji list had loaded. `caret` moves with the text before it.
+ */
+export function convertShortcodes(text: string, caret: number, glyphOf: (name: string) => string | null): { text: string; caret: number } {
+  let out = "";
+  let moved = caret;
+  // Where each part starts in `text`, which `caret` is measured in.
+  let offset = 0;
+  // Code, inline or fenced, is left as typed.
+  for (const part of text.split(/(```[\s\S]*?```|`[^`\n]*`)/)) {
+    if (part.startsWith("`")) {
+      out += part;
+      offset += part.length;
+      continue;
+    }
+    let at = 0;
+    for (const found of part.matchAll(/:([a-z0-9_+-]+):/g)) {
+      const start = found.index;
+      if (start < at || !shortcodeCanStart(text, offset + start)) continue;
+      const glyph = glyphOf(found[1] ?? "");
+      if (glyph === null) continue;
+      out += part.slice(at, start) + glyph;
+      const from = offset + start;
+      const to = from + found[0].length;
+      // After it, the caret moves back by what got shorter; inside it, to its end.
+      if (caret >= to) moved -= found[0].length - glyph.length;
+      else if (caret > from) moved = out.length;
+      at = start + found[0].length;
+    }
+    out += part.slice(at);
+    offset += part.length;
+  }
+  return { text: out, caret: Math.max(0, moved) };
 }

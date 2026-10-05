@@ -86,6 +86,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   Voice rooms are never recorded.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
+- **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
+  host can add its own emoji too, animated GIFs included.
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.

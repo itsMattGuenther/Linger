@@ -12,7 +12,11 @@ import type { Attachment } from "../generated/Attachment";
 import type { AttachmentId } from "../generated/AttachmentId";
 import type { AuthResponse } from "../generated/AuthResponse";
 import type { ChangePasswordRequest } from "../generated/ChangePasswordRequest";
+import type { CreateEmojiRequest } from "../generated/CreateEmojiRequest";
 import type { CreateInviteRequest } from "../generated/CreateInviteRequest";
+import type { CustomEmoji } from "../generated/CustomEmoji";
+import type { EmojiId } from "../generated/EmojiId";
+import type { RenameEmojiRequest } from "../generated/RenameEmojiRequest";
 import type { CreateDmRequest } from "../generated/CreateDmRequest";
 import type { CreateRoomRequest } from "../generated/CreateRoomRequest";
 import type { ErrorBody } from "../generated/ErrorBody";
@@ -781,6 +785,24 @@ export class AuthedApi {
 
   revokeInvite(code: string): Promise<void> {
     return this.delete(`/invites/${encodeURIComponent(code)}`);
+  }
+
+  /** The server's own emoji (#359, PROTOCOL §5). The gateway's `emoji.update` keeps them current. */
+  emoji(signal?: AbortSignal): Promise<CustomEmoji[]> {
+    return this.get<CustomEmoji[]>("/emoji", signal);
+  }
+
+  /** A finished upload of yours made into an emoji: the host or a co-host only. */
+  createEmoji(request: CreateEmojiRequest): Promise<CustomEmoji> {
+    return this.post<CustomEmoji>("/emoji", request);
+  }
+
+  renameEmoji(id: EmojiId, request: RenameEmojiRequest): Promise<CustomEmoji> {
+    return this.patch<CustomEmoji>(`/emoji/${encodeURIComponent(id)}`, request);
+  }
+
+  removeEmoji(id: EmojiId): Promise<void> {
+    return this.delete(`/emoji/${encodeURIComponent(id)}`);
   }
 
   async #withAuth<T>(call: (accessToken: string) => Promise<T>): Promise<T> {

@@ -30,10 +30,12 @@
  */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { CustomEmoji } from "../../src/generated/CustomEmoji";
 import type { Invite } from "../../src/generated/Invite";
 import type { NotifyRule } from "../../src/generated/NotifyRule";
 import type { Room } from "../../src/generated/Room";
 import type { User } from "../../src/generated/User";
+import { emojiPicture } from "../../src/lib/emoji/picture";
 import { type ExportPhase } from "../../src/lib/export";
 import { inviteUrl } from "../../src/lib/host";
 import { DEFAULT_SOUND_PREFS, type SoundPrefs } from "../../src/lib/sound";
@@ -43,7 +45,7 @@ import { type SettingsKey } from "../../src/next/core/settings";
 import { SettingsView } from "../../src/next/app/settings/SettingsView";
 import type { CloseList, ConversationMode } from "../../src/next/app/settings/WindowsSection";
 import "../../src/next/styles/app.css";
-import { NOW, SERVER, SERVER_NAME, ownFields, people, rooms as eveningRooms, withFields } from "./next/evening";
+import { customEmoji, NOW, SERVER, SERVER_NAME, ownFields, people, rooms as eveningRooms, withFields } from "./next/evening";
 
 const query = new URLSearchParams(location.search);
 
@@ -120,6 +122,8 @@ function Fixture() {
   const [looking, setLooking] = useState(false);
   const [rooms, setRooms] = useState<Room[]>(startRooms);
   const [invites, setInvites] = useState<Invite[]>(startInvites);
+  // The server's own emoji (#359); `?noemoji` starts with none.
+  const [emoji, setEmoji] = useState<CustomEmoji[]>(query.has("noemoji") ? [] : customEmoji);
   const [members, setMembers] = useState<User[]>([matt, ...cast]);
   const [removed, setRemoved] = useState<User[]>(removedPeople);
   const [server, setServer] = useState({ name: SERVER_NAME, accent: "amber" as string | null });
@@ -337,6 +341,34 @@ function Fixture() {
                 revoke: async (code) => {
                   const problem = await saving(`revoke:${code}`);
                   if (problem === null) setInvites((held) => held.map((invite) => (invite.code === code ? { ...invite, revoked_at: NOW } : invite)));
+                  return problem;
+                },
+              },
+              emoji: {
+                emoji,
+                serverName: server.name,
+                nameOf: (id) => members.find((person) => person.id === id)?.display_name ?? "someone",
+                // The app's own picture preparing, then a server that takes a beat.
+                add: async (file, name) => {
+                  const ready = await emojiPicture(file);
+                  if (typeof ready === "string") return ready;
+                  note(`emoji-add:${name}:${ready.type}:${ready.size <= 256 * 1024 ? "fits" : "big"}`);
+                  await new Promise((settle) => window.setTimeout(settle, 120));
+                  if (FAIL) return "Couldn't add the emoji.";
+                  setEmoji((held) => [
+                    ...held,
+                    { id: `e-${name}`, name, url: URL.createObjectURL(ready), animated: ready.type === "image/gif", created_by: "u-matt", created_at: NOW },
+                  ]);
+                  return null;
+                },
+                rename: async (id, name) => {
+                  const problem = await saving(`emoji-rename:${id}:${name}`);
+                  if (problem === null) setEmoji((held) => held.map((one) => (one.id === id ? { ...one, name } : one)));
+                  return problem;
+                },
+                remove: async (id) => {
+                  const problem = await saving(`emoji-remove:${id}`);
+                  if (problem === null) setEmoji((held) => held.filter((one) => one.id !== id));
                   return problem;
                 },
               },

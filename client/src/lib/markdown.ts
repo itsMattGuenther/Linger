@@ -264,6 +264,8 @@ function parseInline(source: string, depth: number): Inline[] {
   };
 
   let at = 0;
+  // Where the last `:name:` ended: another may follow it at once (`:a::b:`).
+  let shortcodeEnd = -1;
   while (at < source.length) {
     const ch = source[at] ?? "";
 
@@ -319,11 +321,12 @@ function parseInline(source: string, depth: number): Inline[] {
     }
 
     if (ch === ":") {
-      const found = matchShortcode(source, at);
+      const found = matchShortcode(source, at, at === shortcodeEnd);
       if (found) {
         flush();
         nodes.push(found.node);
         at = found.next;
+        shortcodeEnd = at;
         continue;
       }
     }
@@ -463,10 +466,10 @@ function matchMention(source: string, at: number): Match | null {
 
 /**
  * A `:name:`, or nothing. It starts a word, so `12:30:45` stays a time and
- * `http://` an address.
+ * `http://` an address, or follows another straight on (`:a::b:`).
  */
-function matchShortcode(source: string, at: number): Match | null {
-  if (isWordChar(source[at - 1]) || source[at - 1] === ":") return null;
+function matchShortcode(source: string, at: number, afterAnother: boolean): Match | null {
+  if (isWordChar(source[at - 1]) || (source[at - 1] === ":" && !afterAnother)) return null;
   const name = SHORTCODE.exec(source.slice(at))?.[1];
   if (name === undefined) return null;
   return { node: { kind: "shortcode", name }, next: at + name.length + 2 };

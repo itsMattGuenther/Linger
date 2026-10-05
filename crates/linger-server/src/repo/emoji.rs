@@ -1,8 +1,8 @@
 //! Assembling `wire::CustomEmoji` (#359): a `custom_emoji` row and the
 //! attachment that is its picture.
 
-use linger_core::EmojiId;
 use linger_core::wire::CustomEmoji;
+use linger_core::EmojiId;
 use linger_core::{AttachmentId, UserId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};

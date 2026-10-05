@@ -247,6 +247,8 @@
   /* The picker: a grid of control-sized cells, nine across. */
   --emoji-cell: 32px;
   --text-emoji-cell: 22px;
+  /* A server's picture in a cell: as big as a glyph there draws. */
+  --emoji-cell-art: 26px;
   --emoji-picker-w: calc(9 * var(--emoji-cell) + 2 * var(--space-3));
   --emoji-picker-h: 380px;
   --pane-head: 40px;

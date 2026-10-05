@@ -242,6 +242,19 @@ Their Playwright specs (`kit.spec.ts`, `next-list.spec.ts`,
 list window and the server, and `next-side.spec.ts` the tabs beside the list in
 the real list window: unfolding, folding and the window's size (#337).
 
+## The emoji list (#359)
+
+`client/src/lib/emoji/data.ts` is every Unicode emoji with its shortcodes,
+made from Emojibase (a dev dependency; only what the script writes ships):
+
+```bash
+cd client && node scripts/emoji-data.mjs
+```
+
+Run it after updating `emojibase-data` for a new Unicode emoji version, and
+commit the result. The app loads the list the first time the picker or a `:`
+in the message box wants it.
+
 ## Icons and Windows packaging
 
 The desktop icon comes from the friend group's selected

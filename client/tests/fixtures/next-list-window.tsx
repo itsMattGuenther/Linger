@@ -63,7 +63,7 @@ import type { Message } from "../../src/generated/Message";
 import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
 import { json, PHOTO_PATH } from "./next/desktop";
-import { SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
+import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
@@ -115,6 +115,8 @@ function ready(server: string): ServerFrame {
       dms: state.dms,
       presence: state.presence,
       voice: Object.entries(state.voice).map(([room_id, peers]) => ({ room_id, peers })),
+      // The home server's own emoji (#359); `?noemoji` has none.
+      emoji: server === SERVER && !query.has("noemoji") ? customEmoji : [],
     },
   } as ServerFrame;
 }

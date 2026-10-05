@@ -112,8 +112,8 @@
 }
 
 .nx-emoji-cell img {
-  width: var(--emoji-inline);
-  height: var(--emoji-inline);
+  width: var(--emoji-cell-art);
+  height: var(--emoji-cell-art);
 }
 
 .nx-emoji-grid {

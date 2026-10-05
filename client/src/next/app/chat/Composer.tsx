@@ -5,9 +5,9 @@ import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { useAutoGrow } from "../../../lib/autoGrow";
 import { insertGlyph } from "../../../lib/composerEmoji";
-import { withTone } from "../../../lib/emoji";
+import { loadEmoji, withTone } from "../../../lib/emoji";
 import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
-import { completeShortcode, putShortcode } from "../../../lib/emoji/shortcodes";
+import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
@@ -277,6 +277,17 @@ export const Composer = memo(function Composer({
     return found ? withTone(found, skinTone()) : null;
   };
 
+  // Shortcodes finished before the list had loaded become emoji once it has.
+  const hadIndex = useRef(emojiIndex !== null);
+  useEffect(() => {
+    if (emojiIndex === null || hadIndex.current) return;
+    hadIndex.current = true;
+    const done = convertShortcodes(draft, box.current?.selectionStart ?? draft.length, glyphOf);
+    if (done.text === draft) return;
+    caretAfter.current = done.caret;
+    change(done.text);
+  }, [emojiIndex]);
+
   useLayoutEffect(() => {
     const at = caretAfter.current;
     if (at === null) return;
@@ -524,6 +535,8 @@ export const Composer = memo(function Composer({
           onFocus={(event) => {
             mentions.field.onFocus(event);
             shortcodes.track(event.currentTarget);
+            // Ready before the first `:`, so a quick :smiley: still becomes 😃.
+            void loadEmoji();
           }}
           onBlur={() => {
             mentions.field.onBlur();

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import rows from "./data";
 import { GROUPS, indexOf, searchEmoji, shortcodeOf, withTone } from "./index";
-import { completeShortcode, putShortcode, shortcodeAt, shortcodeCanStart } from "./shortcodes";
+import { emojiNameFrom, emojiNameOk } from "./names";
+import { completeShortcode, convertShortcodes, putShortcode, shortcodeAt, shortcodeCanStart } from "./shortcodes";
 
 // The real list, as the app loads it.
 const index = indexOf(rows);
@@ -82,5 +83,54 @@ describe("shortcodes in the message box (#359)", () => {
       caret: 17,
     });
     expect(putShortcode("hi :smi", { start: 3, end: 7, query: "smi" }, "😄", 5)).toBeNull();
+  });
+});
+
+describe("a server's own emoji's name (#359)", () => {
+  it("follows the server's rule", () => {
+    expect(emojiNameOk("party_parrot")).toBe(true);
+    expect(emojiNameOk("ok")).toBe(true);
+    for (const bad of ["x", "Party", "party-parrot", "party parrot", "x".repeat(33)]) expect(emojiNameOk(bad), bad).toBe(false);
+  });
+
+  it("comes from the picture's file name, so adding one needs no typing", () => {
+    const none = new Set<string>();
+    expect(emojiNameFrom("Party Parrot (1).gif", none)).toBe("party_parrot_1");
+    expect(emojiNameFrom("café-time.PNG", none)).toBe("cafe_time");
+    expect(emojiNameFrom("x.png", none)).toBe("x_emoji");
+    expect(emojiNameFrom("🎉.png", none)).toBe("emoji");
+    expect(emojiNameFrom(`${"long".repeat(20)}.png`, none)).toHaveLength(32);
+    for (const file of ["Party Parrot (1).gif", "café-time.PNG", "x.png", "🎉.png"]) expect(emojiNameOk(emojiNameFrom(file, none)), file).toBe(true);
+  });
+
+  it("gets a number when its name is taken", () => {
+    expect(emojiNameFrom("parrot.gif", new Set(["parrot"]))).toBe("parrot_2");
+    expect(emojiNameFrom("parrot.gif", new Set(["parrot", "parrot_2"]))).toBe("parrot_3");
+    expect(emojiNameFrom(`${"a".repeat(32)}.png`, new Set(["a".repeat(32)]))).toBe(`${"a".repeat(30)}_2`);
+  });
+});
+
+describe("searching short typing (#359)", () => {
+  it("doesn't put a flag's two letters first: :sm finds :smile:", () => {
+    const found = searchEmoji(index.all, "sm", 3).map((emoji) => shortcodeOf(emoji));
+    expect(found[0]).toBe("smile");
+    expect(found).not.toContain("flag_sm");
+  });
+});
+
+describe("emoji written back to back (#359)", () => {
+  it("offers emoji straight after another one, but not inside a time or an address", () => {
+    expect(shortcodeAt(":fire::thu", 10)).toEqual({ start: 6, end: 10, query: "thu" });
+    expect(shortcodeAt("🔥:thu", 6)?.query).toBe("thu");
+    expect(shortcodeAt("x::thu", 6)).toBeNull();
+    expect(completeShortcode(":party_parrot::fire:", 20, glyphOf)).toEqual({ text: ":party_parrot:🔥", caret: 16 });
+  });
+});
+
+describe("shortcodes finished before the list loaded (#359)", () => {
+  it("are turned into emoji once it has, outside code, and the caret moves with them", () => {
+    expect(convertShortcodes("good :thumbsup: and :fire:", 26, glyphOf)).toEqual({ text: "good 👍 and 🔥", caret: 14 });
+    expect(convertShortcodes("at 12:30 `:fire:` :party_parrot:", 32, glyphOf).text).toBe("at 12:30 `:fire:` :party_parrot:");
+    expect(convertShortcodes(":fire: hi", 2, glyphOf)).toEqual({ text: "🔥 hi", caret: 2 });
   });
 });

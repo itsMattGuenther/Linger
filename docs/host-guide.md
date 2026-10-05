@@ -268,6 +268,27 @@ that one switch. If a group needs more, it has outgrown what this app is for.
 
 ---
 
+## Your server's own emoji
+
+Pictures everyone on your server can put in a message, like Discord's server
+emoji. In the app: **Settings → Emoji**, under Hosting (you or a co-host).
+
+- **Choose pictures**, or drop them on the box. Each becomes an emoji at once,
+  named from its file: `party-parrot.gif` is `:party_parrot:`. Pick several at
+  a time if you like.
+- PNG, GIF, WebP or JPEG. A big picture is made emoji-sized for you; an
+  animated GIF stays animated if it's under 256 KB. A server holds up to 200.
+- **Rename** one in place. Names are 2 to 32 lowercase letters, digits or
+  underscores.
+- **Remove** asks first. Messages that used it show its `:name:` as words from
+  then on.
+
+They're in everyone's picker straight away, under your server's name. The
+pictures are kept with your server's files and never expire; a backup of
+`data` has them. An export doesn't include them.
+
+---
+
 ## Settings you might want to change
 
 These go in `.env`, each as `NAME=value` on a line of its own; most are there

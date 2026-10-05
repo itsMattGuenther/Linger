@@ -34,6 +34,9 @@ export interface EmojiGroup {
   glyph: string;
 }
 
+/** The flags' group, which search puts last among equals. */
+const FLAGS = 9;
+
 /** Unicode's groups, in its order. Group 2 (bare skin tones, hair) is left out. */
 export const GROUPS: readonly EmojiGroup[] = [
   { id: 0, label: "Smileys & emotion", glyph: "😀" },
@@ -124,20 +127,28 @@ export function searchEmoji(emoji: readonly UnicodeEmoji[], query: string, limit
   const q = query.trim().toLowerCase().replace(/^:|:$/g, "");
   if (q === "") return [];
   const words = (text: string) => text.toLowerCase().split(/[^a-z0-9+-]+/);
-  const scored: { emoji: UnicodeEmoji; score: number; at: number }[] = [];
+  const scored: { emoji: UnicodeEmoji; score: number; length: number; at: number }[] = [];
   emoji.forEach((one, at) => {
     let score = 0;
     for (const code of one.shortcodes) {
-      if (code === q) score = Math.max(score, 5);
+      // A flag's two letters (`:sm:` is San Marino) match short typing by
+      // accident: they don't come first for it.
+      if (code === q) score = Math.max(score, one.group === FLAGS && code.length === 2 ? 3 : 5);
       else if (code.startsWith(q)) score = Math.max(score, 4);
       else if (code.split("_").some((part) => part.startsWith(q))) score = Math.max(score, 3);
       else if (code.includes(q)) score = Math.max(score, 1);
     }
     if (score < 3 && words(one.label).some((word) => word.startsWith(q))) score = Math.max(score, 3);
     if (score < 2 && one.tags.some((tag) => tag.startsWith(q))) score = 2;
-    if (score > 0) scored.push({ emoji: one, score, at });
+    if (score > 0) {
+      // Among equals the shortest name first: `:smi` is :smile:, then :smiley:.
+      const length = Math.min(...one.shortcodes.filter((code) => code.includes(q)).map((code) => code.length), Number.POSITIVE_INFINITY);
+      scored.push({ emoji: one, score, length, at });
+    }
   });
-  scored.sort((a, b) => b.score - a.score || a.at - b.at);
+  scored.sort(
+    (a, b) => b.score - a.score || Number(a.emoji.group === FLAGS) - Number(b.emoji.group === FLAGS) || a.length - b.length || a.at - b.at,
+  );
   return scored.slice(0, limit).map((found) => found.emoji);
 }
 

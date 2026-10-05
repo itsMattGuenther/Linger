@@ -465,8 +465,8 @@ Not in the Buddy list client yet: it waits for an evening version of its colors.
 
 **Taken out of the app, as a trial (Matt, 2026-09-24, #168).** The client shows
 no reactions and offers no way to add one. People answer a message by saying
-something — a reply or a new message — and the composer's small emoji selector
-puts ordinary Unicode emoji into that text. Marks collecting under messages
+something — a reply or a new message — and the composer's emoji picker puts
+emoji into that text (§4.17). Marks collecting under messages
 cluttered the conversation; the trial is whether it reads better without them,
 and whether people miss them. This goes against the original design on
 purpose. See `docs/decisions.md`.
@@ -479,9 +479,10 @@ protocol change and gets its own decision if the trial sticks.
 
 If reactions return, they return as designed below.
 
-Fixed palette of 12. No custom emoji in V1. Reactions are those twelve keys —
-there is no picker of arbitrary marks. The composer can insert ordinary Unicode
-emoji into a message body from a small selector; that is typing, not a reaction.
+Fixed palette of 12. Reactions are those twelve keys — there is no picker of
+arbitrary marks, and a server's own emoji (§4.17) are for message text, never
+reactions. Putting emoji into a message body from the picker is typing, not a
+reaction.
 
 Reactions accumulate **visibly by weight, not by number**. Six people hitting the same
 reaction produces a denser, larger mark, not `👍 6`. Hover reveals who.
@@ -850,6 +851,29 @@ somebody out of voice or remove somebody who shouldn't be there.
 This is not roles. The anti-goal "a role/permission matrix" (§2) still stands: no
 other levels, no per-power switches. `docs/decisions.md` has why.
 
+### 4.17 Emoji
+
+**Every emoji, found by name, and a server's own (Matt, 2026-10-05, #359).**
+People wanted the emoji they're used to from Discord, and the picker had 66.
+
+- **Every Unicode emoji** is in the composer's picker: search by name or by a
+  word for it ("hello" finds 👋), Unicode's groups, the ones you used lately and
+  a skin tone chosen once, all kept on this computer. They are drawn by the
+  computer's own emoji font, and one that font is too old to draw is left out
+  rather than offered as an empty box.
+- **Shortcodes.** A colon and two characters in the message box offer emoji by
+  name: Discord's names (`:smiley:`, `:thumbsup:`, `:slight_smile:`), and
+  GitHub's and Slack's too. A finished `:smiley:` becomes 😃 as it's typed, so
+  a message holds the emoji itself.
+- **A server's own emoji.** The host or a co-host adds pictures (PNG, GIF,
+  WebP or JPEG; up to 200; an animated GIF keeps moving), each named from its
+  file and renamed if wanted, and everyone on the server can put them in a
+  message. A message keeps the text `:name:`, which that server's apps draw as
+  the picture: search and export see the name, and an emoji that's removed
+  reads as its name. A message of a few emoji and nothing else is drawn big.
+- **Not reactions**, while reactions are out (§4.8), and **never for sale**
+  (AGENTS rule 13): no packs, no paid slots, nothing held back.
+
 ---
 
 ## 5. Design system
@@ -995,13 +1019,13 @@ says what replaced it: a status somebody typed.
 - Search (§4.12)
 - Knock (§4.9)
 - A phone app for iPhone and Android, text first, with no push (§4.15)
+- Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 
 ### V3 or never
 
 - Opt-in public directory (must never be load-bearing)
 - Sandboxed client scripting (the real mIRC nostalgia answer; also a real security
   surface)
-- Custom emoji
 - **Custom themes** — a person's own colour scheme for the whole app, shared as a file
   (Matt, 2026-08-31). It is the personalization thesis one size up from a styled name.
   Three things bound it and none of them is settled: a theme is **a list of values, not
