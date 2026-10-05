@@ -14,7 +14,7 @@ import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
 import { onPhone } from "../../core/phone";
 import { FloatingForm, ReportForm } from "./ReportBlock";
-import { type MentionLookup, MessageText } from "./MessageText";
+import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
 import "./MessageRow.css";
 
 /** What a message row can ask for. Stable, so a scroll doesn't redraw rows (L-14). */
@@ -67,6 +67,7 @@ export const MessageRow = memo(function MessageRow({
   flashing,
   previews,
   mentions,
+  emoji,
   mediaUrl,
   actions,
 }: {
@@ -85,6 +86,8 @@ export const MessageRow = memo(function MessageRow({
   flashing: boolean;
   previews: Readonly<Record<string, LinkPreview>>;
   mentions: MentionLookup;
+  /** The server's own emoji (#359). */
+  emoji?: CustomEmojiByName;
   mediaUrl: (path: string) => string;
   actions: MessageActions;
 }) {
@@ -287,7 +290,7 @@ export const MessageRow = memo(function MessageRow({
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
           <Fold id={message.id}>
-            <MessageText source={message.body} mentions={mentions} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} />
+            <MessageText source={message.body} mentions={mentions} emoji={emoji} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} />
           </Fold>
         )}
         {deleted || editing ? null : wordless && marks !== undefined ? (

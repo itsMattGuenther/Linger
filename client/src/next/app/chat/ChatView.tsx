@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
@@ -67,6 +68,10 @@ export interface ChatPane {
   } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
+  /** The conversation's server's own emoji (#359): drawn in messages, offered in the box. */
+  customEmoji?: readonly CustomEmoji[];
+  /** The conversation's server's name, which the picker calls its own emoji by. */
+  serverName?: string;
   me: User | null;
   /** Who you've blocked: each of their messages is a grey line you can open (PROTOCOL §5). */
   blocked?: ReadonlySet<string>;
@@ -240,6 +245,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             people={pane.people}
             me={pane.me}
             blocked={pane.blocked}
+            customEmoji={pane.customEmoji}
             editing={editing?.tab === pane.id ? editing.id : null}
             empty={
               pane.header.kind === "room"
@@ -258,6 +264,8 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             onRestoreReply={onRestoreReply}
             onEditLast={onEditLast}
             mentionable={pane.mentionable}
+            customEmoji={pane.customEmoji}
+            serverName={pane.serverName}
             {...pane.composer}
           />
         </section>

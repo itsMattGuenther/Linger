@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, patch};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::id::EmojiId;
+use linger_core::EmojiId;
 use linger_core::limits::{
     emoji_name_ok, EMOJI_MIMES, MAX_CUSTOM_EMOJI, MAX_EMOJI_BYTES, MAX_EMOJI_EDGE,
 };

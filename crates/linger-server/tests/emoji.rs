@@ -518,7 +518,7 @@ async fn a_full_server_refuses_one_more() {
         .await
         .unwrap();
         sqlx::query("INSERT INTO custom_emoji (id, name, attachment_id, created_by, created_at) VALUES (?, ?, ?, ?, 0)")
-            .bind(linger_core::id::EmojiId::new().to_vec())
+            .bind(linger_core::EmojiId::new().to_vec())
             .bind(format!("filler_{n}"))
             .bind(attachment.to_vec())
             .bind(host.user.id.to_vec())

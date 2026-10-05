@@ -40,7 +40,13 @@ export type Inline =
    * the handle and stops there — `MarkdownBody.tsx` is where a handle either
    * resolves to a person or falls back to the characters that were typed.
    */
-  | { kind: "mention"; handle: string };
+  | { kind: "mention"; handle: string }
+  /**
+   * `:name:` (#359): a server's own emoji, or a Unicode one typed by its
+   * shortcode. Like a mention, the parser doesn't know which names exist:
+   * `MessageText.tsx` draws the picture or the emoji, or the characters typed.
+   */
+  | { kind: "shortcode"; name: string };
 
 export type Block =
   | { kind: "paragraph"; children: Inline[] }
@@ -218,6 +224,8 @@ const AUTOLINK = /^https?:\/\/[^\s<>]+/i;
  * mention of `matt` — it is the word somebody typed.
  */
 const MENTION = /^@([a-z0-9_]{2,24})/;
+/** `:name:`: a custom emoji's name, or a Unicode shortcode (`+1`, `-1`). */
+const SHORTCODE = /^:([a-z0-9_+-]{1,64}):/;
 
 function isWordChar(ch: string | undefined): boolean {
   return ch !== undefined && /[\p{L}\p{N}_]/u.test(ch);
@@ -302,6 +310,16 @@ function parseInline(source: string, depth: number): Inline[] {
 
     if ((ch === "h" || ch === "H") && !isWordChar(source[at - 1])) {
       const found = matchAutolink(source, at);
+      if (found) {
+        flush();
+        nodes.push(found.node);
+        at = found.next;
+        continue;
+      }
+    }
+
+    if (ch === ":") {
+      const found = matchShortcode(source, at);
       if (found) {
         flush();
         nodes.push(found.node);
@@ -443,6 +461,17 @@ function matchMention(source: string, at: number): Match | null {
   return { node: { kind: "mention", handle }, next };
 }
 
+/**
+ * A `:name:`, or nothing. It starts a word, so `12:30:45` stays a time and
+ * `http://` an address.
+ */
+function matchShortcode(source: string, at: number): Match | null {
+  if (isWordChar(source[at - 1]) || source[at - 1] === ":") return null;
+  const name = SHORTCODE.exec(source.slice(at))?.[1];
+  if (name === undefined) return null;
+  return { node: { kind: "shortcode", name }, next: at + name.length + 2 };
+}
+
 function countOf(text: string, ch: string): number {
   let total = 0;
   for (const found of text) if (found === ch) total += 1;
@@ -524,6 +553,8 @@ function flattenInline(nodes: readonly Inline[]): string {
           return node.text;
         case "mention":
           return `@${node.handle}`;
+        case "shortcode":
+          return `:${node.name}:`;
         case "link":
           return flattenInline(node.children);
         case "strong":
@@ -633,6 +664,7 @@ function collectInline(nodes: readonly Inline[], into: string[], want: Want): vo
         break;
       case "text":
       case "code":
+      case "shortcode":
         break;
     }
   }

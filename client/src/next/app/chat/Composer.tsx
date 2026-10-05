@@ -1,18 +1,25 @@
 import { type FormEvent, type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { useAutoGrow } from "../../../lib/autoGrow";
-import { COMPOSER_EMOJI, insertGlyph } from "../../../lib/composerEmoji";
+import { insertGlyph } from "../../../lib/composerEmoji";
+import { withTone } from "../../../lib/emoji";
+import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
+import { completeShortcode, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
+import { EmojiPicker, type PickedEmoji } from "./EmojiPicker";
 import "./Composer.css";
 import type { DraftFile } from "../../core/chat/drafts";
 import { useFitsOneLine } from "./useFitsOneLine";
+import { useEmojiIndex } from "./useEmojiIndex";
+import { useEmojiShortcodes } from "./useEmojiShortcodes";
 import { useMentions } from "./useMentions";
 import type { VoiceMessageControls } from "./useVoiceMessages";
 import { VoiceMessagePanel } from "./VoiceMessagePanel";
@@ -34,6 +41,7 @@ const MIDDLE_PASTE_MS = 1000;
 export type { DraftFile };
 
 const NOBODY: readonly MentionPerson[] = [];
+const NO_EMOJI: readonly CustomEmoji[] = [];
 
 export interface ComposerProps {
   /**
@@ -97,6 +105,10 @@ export interface ComposerProps {
    * for this conversation. Left out where there's no recorder.
    */
   voiceMessage?: VoiceMessageControls;
+  /** The conversation's server's own emoji (#359), offered after a `:` and in the picker. */
+  customEmoji?: readonly CustomEmoji[];
+  /** The server's name, which the picker calls its own emoji by. */
+  serverName?: string;
 }
 
 /**
@@ -114,6 +126,9 @@ export interface ComposerProps {
  * - A picture pasted from the clipboard goes on the draft like a file added
  *   with the + button, and wins over any words copied with it (#276,
  *   core/chat/paste.ts).
+ * - A `:` and two characters offer emoji by name (#359, `useEmojiShortcodes`),
+ *   and a finished `:smiley:` becomes 😃 as it's typed. A server's own emoji
+ *   goes in as its `:name:`, which the conversation draws as the picture.
  */
 export const Composer = memo(function Composer({
   conversation,
@@ -136,6 +151,8 @@ export const Composer = memo(function Composer({
   mentionable = NOBODY,
   clipboardImage,
   voiceMessage,
+  customEmoji = NO_EMOJI,
+  serverName = "This server",
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -232,6 +249,34 @@ export const Composer = memo(function Composer({
       onTyping();
     },
   });
+  const shortcodes = useEmojiShortcodes({
+    box,
+    anchor: boxRow,
+    conversation,
+    custom: customEmoji,
+    put: (typing, pick) => {
+      const insert = "glyph" in pick ? pick.glyph : `:${pick.custom.name}:`;
+      const next = putShortcode(draft, typing, insert, MAX_MESSAGE_CHARS);
+      if (next === null) {
+        say(`A message can be at most ${MAX_MESSAGE_CHARS} characters.`);
+        return;
+      }
+      rememberEmoji("glyph" in pick ? { glyph: pick.glyph } : { name: pick.custom.name });
+      caretAfter.current = next.caret;
+      change(next.text);
+      onTyping();
+    },
+  });
+  // The emoji list, once there's a `:` that might be a shortcode or the
+  // picker is open: a finished `:smiley:` needs it to become 😃.
+  const emojiIndex = useEmojiIndex(emoji || draft.includes(":"));
+  const glyphOf = (name: string): string | null => {
+    // A server's own emoji by that name wins on its server: it stays `:name:`.
+    if (customEmoji.some((one) => one.name === name)) return null;
+    const found = emojiIndex?.byShortcode.get(name);
+    return found ? withTone(found, skinTone()) : null;
+  };
+
   useLayoutEffect(() => {
     const at = caretAfter.current;
     if (at === null) return;
@@ -289,7 +334,8 @@ export const Composer = memo(function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // The @ list, while it's open, has the arrows, Enter, Tab and Escape.
+    // The : and @ lists, while one is open, have the arrows, Enter, Tab and Escape.
+    if (shortcodes.onKey(event)) return;
     if (mentions.onKey(event)) return;
     if (event.key === "Escape" && emoji) {
       event.preventDefault();
@@ -361,9 +407,13 @@ export const Composer = memo(function Composer({
       .catch(() => undefined);
   };
 
-  const putEmoji = (glyph: string) => {
+  const putEmoji = (picked: PickedEmoji) => {
     const field = box.current;
-    const next = insertGlyph(draft, glyph, field?.selectionStart ?? draft.length, field?.selectionEnd ?? draft.length, MAX_MESSAGE_CHARS);
+    const from = field?.selectionStart ?? draft.length;
+    // A server's own emoji goes in as `:name:`, a word of its own.
+    const glyph =
+      "glyph" in picked ? picked.glyph : `${from > 0 && !/\s/.test(draft[from - 1] ?? "") ? " " : ""}:${picked.custom.name}: `;
+    const next = insertGlyph(draft, glyph, from, field?.selectionEnd ?? draft.length, MAX_MESSAGE_CHARS);
     if (next === null) {
       say(`A message can be at most ${MAX_MESSAGE_CHARS} characters.`);
       return;
@@ -466,10 +516,31 @@ export const Composer = memo(function Composer({
           aria-label={isDm ? `Message ${title}` : `Message in ${title}`}
           autoComplete="off"
           {...mentions.field}
+          {...(shortcodes.open ? shortcodes.aria : {})}
+          onSelect={(event) => {
+            mentions.field.onSelect(event);
+            shortcodes.track(event.currentTarget);
+          }}
+          onFocus={(event) => {
+            mentions.field.onFocus(event);
+            shortcodes.track(event.currentTarget);
+          }}
+          onBlur={() => {
+            mentions.field.onBlur();
+            shortcodes.close();
+          }}
+          onCompositionEnd={(event) => {
+            mentions.field.onCompositionEnd(event);
+            shortcodes.track(event.currentTarget);
+          }}
           onChange={(event) => {
-            change(event.target.value);
-            mentions.track(event.target);
-            if (event.target.value !== "") onTyping();
+            const node = event.target;
+            const done = completeShortcode(node.value, node.selectionStart, glyphOf);
+            if (done) caretAfter.current = done.caret;
+            change(done ? done.text : node.value);
+            mentions.track(node);
+            shortcodes.track(node);
+            if (node.value !== "") onTyping();
           }}
           onKeyDown={onKeyDown}
           onMouseDown={(event) => {
@@ -490,23 +561,15 @@ export const Composer = memo(function Composer({
         <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
           <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />
           {emoji ? (
-            <div
-              className="nx-composer-emoji"
-              role="dialog"
-              aria-label="Emoji"
-              onKeyDown={(event) => {
-                if (event.key !== "Escape") return;
-                event.preventDefault();
+            <EmojiPicker
+              custom={customEmoji}
+              serverName={serverName}
+              onPick={putEmoji}
+              onClose={() => {
                 setEmoji(false);
                 box.current?.focus();
               }}
-            >
-              {COMPOSER_EMOJI.map((one) => (
-                <button key={`${one.label}:${one.glyph}`} type="button" className="nx-composer-emoji-mark" aria-label={one.label} onClick={() => putEmoji(one.glyph)}>
-                  {one.glyph}
-                </button>
-              ))}
-            </div>
+            />
           ) : null}
         </span>
         <IconButton icon="send" label="Send" tone="accent" disabled={draft.trim().length === 0 && ready.length === 0} onClick={submit} />
@@ -525,6 +588,7 @@ export const Composer = memo(function Composer({
       </div>
 
       {mentions.list}
+      {shortcodes.list}
 
       {/* Only near the ceiling: a counter that is always on is a scold. */}
       {left <= 200 ? <p className="nx-composer-left">{left} characters left</p> : null}

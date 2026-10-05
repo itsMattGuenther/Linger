@@ -446,6 +446,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         takenOut: state.voiceTakenOut === room.id && state.myVoice?.roomId !== room.id,
       },
       people,
+      customEmoji: state.emoji,
+      serverName: serverTag(active.server).name,
       me: state.me,
       blocked: new Set(state.blocked),
       speaking: talking,

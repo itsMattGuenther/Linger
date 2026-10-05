@@ -238,6 +238,17 @@
   --line-body: 20px;
   /* A message's words fold past this many lines (#304). */
   --message-fold: calc(20 * var(--line-body));
+  /* Emoji (#359). A server's own emoji sits in a line of words at the line's
+     height; a message of only a few emoji is drawn big, as Discord does. */
+  --emoji-inline: 20px;
+  --emoji-jumbo: 48px;
+  --text-emoji-jumbo: 40px;
+  --line-emoji-jumbo: 52px;
+  /* The picker: a grid of control-sized cells, nine across. */
+  --emoji-cell: 32px;
+  --text-emoji-cell: 22px;
+  --emoji-picker-w: calc(9 * var(--emoji-cell) + 2 * var(--space-3));
+  --emoji-picker-h: 380px;
   --pane-head: 40px;
   --voice-strip: 40px;
   --measure: 80ch; /* the longest a line of a search result runs; a message's words run to its time column (#334) */
@@ -251,7 +262,6 @@
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
   --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */
-  --emoji-grid: 8; /* columns in the composer's emoji panel */
 
   /* Search and media (docs/design/system.md, "Search and media"). */
   --media-tile: 152px; /* the narrowest a media tile gets; the grid fits as many as it can */
@@ -395,6 +405,7 @@
   --line-meta: calc(16px * var(--text-scale));
   --line-display: calc(28px * var(--text-scale));
   --line-body: calc(20px * var(--text-scale));
+  --emoji-inline: calc(20px * var(--text-scale));
   --pane-head: calc(40px * var(--text-scale));
   --voice-strip: calc(40px * var(--text-scale));
   --menu-w: calc(200px * var(--text-scale));
