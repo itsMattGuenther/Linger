@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import { still } from "./still";
+
 // Report and block (SPEC §4.15, PROTOCOL §5, T-1605) on a computer, in the
 // real list window (tests/fixtures/next-list-window.tsx) and the real
 // Settings window (tests/fixtures/next-settings-window.tsx). The least UI
@@ -31,13 +33,22 @@ async function inGeneral(page: Page, query: string) {
 
 const card = (page: Page, who: string) => page.getByRole("dialog", { name: who, exact: true });
 const more = (page: Page, who: string) => page.getByRole("button", { name: `More for ${who}` });
-/** Open somebody's card from their name in the conversation. */
-const openCard = (page: Page, who: string) => page.getByRole("log").locator(".nx-msg [data-kit='Name']", { hasText: who }).first().click();
+/**
+ * Open somebody's card from their name in the conversation, once the name
+ * holds still: the conversation is still settling when it first shows, and a
+ * click pressed on the name and let go beside it opens nothing (#436).
+ */
+async function openCard(page: Page, who: string) {
+  const name = page.getByRole("log").locator(".nx-msg [data-kit='Name']", { hasText: who }).first();
+  await still(name);
+  await name.click();
+}
 const greyLines = (page: Page) => page.getByRole("log").getByText("From Jules, who you blocked");
 
 /** A message's actions, from its ··· (hovered into view, as with a mouse). */
 async function actionsFor(page: Page, words: string) {
   const row = page.locator(".nx-msg", { hasText: words }).last();
+  await still(row);
   await row.hover();
   await row.getByRole("button", { name: /^Actions for/ }).click();
   return page.getByRole("menu");
