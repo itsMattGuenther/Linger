@@ -9,9 +9,15 @@ project="linger-coturn-test-$$"
 # a domain for Caddy's names and the relay's realm (#440).
 export LINGER_TURN_SECRET=linger-startup-test-only-not-a-real-secret
 export LINGER_DOMAIN=relay.test
+# compose.yaml reads the server's settings from the .env beside it (#440),
+# and some Compose versions refuse a project whose .env is missing, so it
+# runs from a folder of its own with an empty one.
+dir="$(mktemp -d)"
+cp deploy/compose.yaml "$dir/"
+: >"$dir/.env"
 compose() {
   timeout 120s docker compose --env-file /dev/null --project-name "$project" \
-    -f deploy/compose.yaml -f - --profile voice "$@" <<'YAML'
+    -f "$dir/compose.yaml" -f - --profile voice "$@" <<'YAML'
 services:
   coturn:
     # Isolate the test from the host network; publish no ports.
@@ -22,6 +28,7 @@ YAML
 
 cleanup() {
   compose down --volumes >/dev/null
+  rm -rf "$dir"
 }
 trap cleanup EXIT
 
