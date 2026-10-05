@@ -382,9 +382,10 @@ jobs:
   all-green:
     # The one required check (the "Protect main" ruleset). It passes when
     # every job passed or was skipped because the change didn't touch it, and
-    # fails when any failed or was cancelled. A new job joins by being listed
-    # here; scripts/ci-gate.test.mjs fails if one isn't. Renaming or adding
-    # jobs never needs a settings change.
+    # fails on any other result: failed, cancelled, or `abandoned`, which is
+    # what a job GitHub never found a machine for reports (#445). A new job
+    # joins by being listed here; scripts/ci-gate.test.mjs fails if one isn't.
+    # Renaming or adding jobs never needs a settings change.
     name: all green
     if: always()
     needs: [changes, coturn, rust, s3, web, web-browser, new-tests, tauri-shell, rules]
@@ -396,7 +397,7 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$RESULTS"
-          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<<"$RESULTS" >/dev/null; then
-            echo "::error title=all green::a job above failed or was cancelled"
+          if jq -e 'any(.[]; .result != "success" and .result != "skipped")' <<<"$RESULTS" >/dev/null; then
+            echo "::error title=all green::a job above failed, was cancelled, or never ran"
             exit 1
           fi
