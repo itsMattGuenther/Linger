@@ -122,7 +122,8 @@ function Fixture() {
   const [looking, setLooking] = useState(false);
   const [rooms, setRooms] = useState<Room[]>(startRooms);
   const [invites, setInvites] = useState<Invite[]>(startInvites);
-  // The server's own emoji (#359); `?noemoji` starts with none.
+  // The server's own emoji (#359); `?noemoji` starts with none, and
+  // `?oldserver` is a server from before them.
   const [emoji, setEmoji] = useState<CustomEmoji[]>(query.has("noemoji") ? [] : customEmoji);
   const [members, setMembers] = useState<User[]>([matt, ...cast]);
   const [removed, setRemoved] = useState<User[]>(removedPeople);
@@ -371,6 +372,8 @@ function Fixture() {
                   if (problem === null) setEmoji((held) => held.filter((one) => one.id !== id));
                   return problem;
                 },
+                supported: !query.has("oldserver"),
+                openGuide: () => note("open-update-guide"),
               },
               people: {
                 members,

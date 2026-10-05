@@ -275,6 +275,14 @@ test.describe("the host's Emoji settings", () => {
     await expect(page.getByText("No emoji yet. The first one you add is in everyone's emoji picker at once, under The Good Company.")).toBeVisible();
   });
 
+  test("a server from before its own emoji says to update it, and offers nothing that would fail", async ({ page }) => {
+    await settings(page, "&oldserver");
+    await expect(page.getByText("This server runs a Linger from before servers had emoji of their own. Once you've updated it, you can add them here.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Choose pictures" })).toHaveCount(0);
+    await page.getByRole("button", { name: "How to update" }).click();
+    await expect.poll(async () => did(page)).toContain("open-update-guide");
+  });
+
   test("a picture that isn't one is refused in words, and can be let go", async ({ page }) => {
     await settings(page);
     const chooser = page.waitForEvent("filechooser");

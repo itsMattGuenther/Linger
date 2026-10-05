@@ -287,6 +287,10 @@ They're in everyone's picker straight away, under your server's name. The
 pictures are kept with your server's files and never expire; a backup of
 `data` has them. An export doesn't include them.
 
+A server from before 0.4.9 can't hold emoji of its own, and Settings → Emoji
+says so: [update the server](#updating-the-server) first. Friends still on an
+older app see a server emoji's `:name:` as words until they update.
+
 ---
 
 ## Settings you might want to change

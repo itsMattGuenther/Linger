@@ -13,6 +13,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { CustomEmoji } from "../generated/CustomEmoji";
 import type { Message } from "../generated/Message";
 import type { ReadyData } from "../generated/ReadyData";
 import type { Room } from "../generated/Room";
@@ -1365,5 +1366,29 @@ describe("report and block (PROTOCOL §5, T-1605)", () => {
     arrive(HOME, { s: 5, op: "user.update", d: callie });
     expect(serverState(HOME).reports).toBeNull();
     await disconnect(HOME);
+  });
+});
+
+describe("a server's own emoji (#359)", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+  });
+
+  const porch: CustomEmoji = { id: "e1", name: "porch_light", url: "/files/e1", animated: false, created_by: "u-matt", created_at: 1_790_000_000_000 };
+
+  it("come with ready and are replaced whole by an update", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), emoji: [] }));
+    expect(serverState(HOME).emoji).toEqual([]);
+    expect(serverState(HOME).ownEmoji).toBe(true);
+    arrive(HOME, { s: 2, op: "emoji.update", d: { emoji: [porch] } });
+    expect(serverState(HOME).emoji).toEqual([porch]);
+  });
+
+  it("a server from before them has none, and says it can't hold any", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    expect(serverState(HOME).emoji).toEqual([]);
+    expect(serverState(HOME).ownEmoji).toBe(false);
   });
 });

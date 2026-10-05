@@ -987,4 +987,9 @@ and §6 change with it.
   44px as everything tapped there is, as many across as fit; and it leaves
   the keyboard down until Search is tapped, since the keyboard would cover
   half of it.
+- **Both ways across versions (#315).** An app from before ignores
+  `emoji.update` and the new `ready` field, and shows a server's `:name:` as
+  the words. A new app on an older server finds no `emoji` in `ready`, and its
+  host's Settings → Emoji says to update the server rather than offering an
+  add that would fail.
 - **Not reactions**, while #168's trial has them out, and **never for sale**.

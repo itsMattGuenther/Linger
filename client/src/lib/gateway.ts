@@ -252,6 +252,12 @@ export interface GatewayState {
    */
   emoji: CustomEmoji[];
   /**
+   * Whether this server can hold emoji of its own: false on one from before
+   * them (0.4.8 and older), whose `ready` has no `emoji` (#359). Its host's
+   * Settings say to update it rather than offering an add that would fail.
+   */
+  ownEmoji: boolean;
+  /**
    * Our own seat, while we have one. Local state: the server knows we are
    * in voice and our self-reported controls. Device health, speaking levels
    * and per-person volume remain local (SPEC §4.14).
@@ -362,6 +368,7 @@ const EMPTY: GatewayState = {
   sessionId: null,
   voice: {},
   emoji: [],
+  ownEmoji: false,
   myVoice: null,
   voiceFailed: null,
   voiceTakenOut: null,
@@ -628,6 +635,7 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         sessionId: frame.d.session_id,
         voice: Object.fromEntries((frame.d.voice ?? []).map((room) => [room.room_id, room.peers])),
         emoji: frame.d.emoji ?? [],
+        ownEmoji: Array.isArray(frame.d.emoji),
         myVoice: null,
         // `read` and `leftOff` survive: one is a copy of something the server
         // is holding for us, and the other is where this session started, which
@@ -833,8 +841,8 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       return { ...current, blocked: blocked ? [...without, user_id] : without };
     }
     case "emoji.update":
-      // The whole set, every time (#359).
-      return { ...current, emoji: frame.d.emoji };
+      // The whole set, every time (#359), from a server that has them.
+      return { ...current, emoji: frame.d.emoji, ownEmoji: true };
     // `reports.changed` only says to ask again, which isn't the fold's to do:
     // the listener below asks.
     // `reaction.update` is still sent, and deliberately not applied: the app

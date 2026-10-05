@@ -269,6 +269,10 @@ export interface HostEmojiProps {
   add: (file: File, name: string) => Promise<string | null>;
   rename: (id: EmojiId, name: string) => Promise<string | null>;
   remove: (id: EmojiId) => Promise<string | null>;
+  /** False on a server too old for emoji of its own (`GatewayState.ownEmoji`). */
+  supported: boolean;
+  /** The host guide's "Updating the server": the host's alone, as the version line is (#424). */
+  openGuide?: () => void;
 }
 
 /** A picture on its way to being an emoji. */
@@ -286,7 +290,7 @@ const PICTURES = "image/png,image/gif,image/webp,image/jpeg,.png,.gif,.webp,.jpg
  * each becomes an emoji at once, named from its file, a big picture shrunk to
  * fit and a GIF kept moving. A name is changed after, in place, if wanted.
  */
-export function EmojiSection({ emoji, serverName, nameOf, add, rename, remove }: HostEmojiProps) {
+export function EmojiSection({ emoji, serverName, nameOf, add, rename, remove, supported, openGuide }: HostEmojiProps) {
   const [adding, setAdding] = useState<Adding[]>([]);
   const [over, setOver] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -322,6 +326,26 @@ export function EmojiSection({ emoji, serverName, nameOf, add, rename, remove }:
       setAdding((held) => (problem === null ? held.filter((one) => one.key !== row.key) : held.map((one) => (one.key === row.key ? { ...one, problem } : one))));
     }
   };
+
+  // A server from before emoji of its own would refuse the add, so it says
+  // what to do instead (#315: an older server gets words, not a failure).
+  if (!supported) {
+    return (
+      <Block heading={HEADINGS.emoji}>
+        <Note>
+          This server runs a Linger from before servers had emoji of their own. {openGuide ? "Once you've updated it" : "Once the host updates it"}, you can add
+          them here.
+        </Note>
+        {openGuide ? (
+          <Actions start>
+            <Button icon="go" onClick={openGuide}>
+              How to update
+            </Button>
+          </Actions>
+        ) : null}
+      </Block>
+    );
+  }
 
   return (
     <>

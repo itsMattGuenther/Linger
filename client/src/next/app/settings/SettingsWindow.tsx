@@ -656,6 +656,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 },
                 rename: (id, name) => said(api.renameEmoji(id, { name }), "Couldn't rename the emoji."),
                 remove: (id) => said(api.removeEmoji(id), "Couldn't remove the emoji."),
+                supported: state.ownEmoji,
+                openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
               },
               people: {
                 members: state.users,
