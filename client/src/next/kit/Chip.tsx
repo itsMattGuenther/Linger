@@ -19,6 +19,7 @@ export function Chip({
   onActivate,
   actionLabel,
   expanded = false,
+  fill = false,
 }: {
   /** What the chip shows: a `Name`, or words. */
   children: ReactNode;
@@ -44,6 +45,12 @@ export function Chip({
   actionLabel?: string;
   /** Whether what it opens is open now. */
   expanded?: boolean;
+  /**
+   * As wide as the place it sits in, rather than its words: a seat in a big
+   * voice room's voice bar (#197), so seats line up in columns and a new
+   * talker taking a seat never moves the others.
+   */
+  fill?: boolean;
 }) {
   const inner = (
     <>
@@ -66,6 +73,7 @@ export function Chip({
         className="k-chip"
         data-kit="Chip"
         data-active={active ? "yes" : undefined}
+        data-fill={fill ? "yes" : undefined}
         data-kit-control=""
         aria-label={actionLabel ?? label}
         aria-haspopup="dialog"
@@ -77,11 +85,11 @@ export function Chip({
     );
   }
   return onRemove ? (
-    <button type="button" className="k-chip" data-kit="Chip" data-remove="" data-active={active ? "yes" : undefined} data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
+    <button type="button" className="k-chip" data-kit="Chip" data-remove="" data-active={active ? "yes" : undefined} data-fill={fill ? "yes" : undefined} data-kit-control="" aria-label={`Remove ${label}`} onClick={onRemove}>
       {inner}
     </button>
   ) : (
-    <span className="k-chip" data-kit="Chip" data-active={active ? "yes" : undefined}>
+    <span className="k-chip" data-kit="Chip" data-active={active ? "yes" : undefined} data-fill={fill ? "yes" : undefined}>
       {inner}
     </span>
   );

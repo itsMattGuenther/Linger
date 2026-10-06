@@ -1,0 +1,59 @@
+/* Everyone in a big voice room (#197). Layout only; the field and rows are
+   kit pieces. Tokens only. */
+.nx-everyone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+/* Clear of the card's close button, as the volume card's name is. */
+.nx-everyone-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-sm);
+  margin: 0;
+  padding-right: var(--space-6);
+}
+
+.nx-everyone-label {
+  flex: none;
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-everyone-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-control);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The people scroll inside the card, so it never grows past the window.
+   Nine and a half rows: the half row says there are more below. */
+.nx-everyone-list {
+  max-height: calc(var(--row-1) * 9.5);
+  overflow-y: auto;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 0 var(--space-1);
+}
+
+.nx-everyone-state {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-muted);
+}
+
+.nx-everyone-none {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: var(--text-meta);
+  font-style: italic;
+  color: var(--text-muted);
+}

@@ -33,10 +33,10 @@ import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, v
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
 import { clipboardImageReader } from "../../core/chat/paste";
-import { voiceStrip } from "../../core/chat/voice";
+import { type VoiceStrip as VoiceStripModel, voiceStrip } from "../../core/chat/voice";
 import { knockOfflineLine, knockOn } from "../../core/knock";
 import { cardSafety, hostName, reportsReachCohosts, said } from "../../core/safety";
-import { personRow } from "../../core/list";
+import { personRow, talkingFirstIds } from "../../core/list";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { keyOf, type TabKey } from "../../core/tabs";
 import { talkingNow } from "../../core/voice";
@@ -426,7 +426,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
       header,
       // The phone is text only for now (SPEC §4.15): no voice line to join from.
       voice: onPhone() ? null : {
-        strip: voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false),
+        strip: friendsFirst(state, voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false)),
         onJoin,
         onPickDevice,
         mics: micsHere(state, room.id),
@@ -536,4 +536,14 @@ function rethrowInWords(fallback: string): (error: unknown) => never {
   return (error: unknown) => {
     throw new Error(error instanceof ApiError || error instanceof TransportError ? error.message : fallback);
   };
+}
+
+/**
+ * A voice room you aren't in shows the people you talk to first (#197):
+ * who's talking there isn't known until you join, and a friend in a crowd
+ * of fifty is the reason to. In your own room the strip seats who just
+ * talked instead (VoiceStrip).
+ */
+function friendsFirst(state: GatewayState, strip: VoiceStripModel): VoiceStripModel {
+  return strip.kind === "others" ? { ...strip, people: talkingFirstIds(state, strip.people) } : strip;
 }

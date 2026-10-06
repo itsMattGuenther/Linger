@@ -1,12 +1,9 @@
-import { type RefObject, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
 import { Button, Name, Popover, Slider } from "../../kit";
+import { useAbove } from "./useAbove";
 import "./VolumeCard.css";
-
-/** Space kept between the card, its chip and the window's edges. */
-const GAP = 4;
-const EDGE = 8;
 
 /**
  * How loud one person plays for you (decision 8, VOICE-10): opened from their
@@ -25,7 +22,7 @@ export function VolumeCard({
   user: User;
   /** 0 to 2; 1 is as they sent it. */
   volume: number;
-  /** The chip that opened it: the card sits over it, wherever it has moved to. */
+  /** The chip (or a big room's crowd, #197) that opened it: the card sits over it, wherever it has moved to. */
   anchor: RefObject<HTMLElement | null>;
   onVolume: (volume: number) => void;
   /**
@@ -38,25 +35,8 @@ export function VolumeCard({
   const [taking, setTaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const body = useRef<HTMLDivElement | null>(null);
-  const [at, setAt] = useState({ x: EDGE, y: EDGE });
-
-  // Over the chip (the voice bar is at the bottom of the list), never off
-  // the window. Measured on every draw, before it is painted: the voice bar
-  // grows and shrinks as people come and go, and the chip moves with it.
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
-  useLayoutEffect(() => {
-    const card = body.current?.parentElement;
-    const chip = anchor.current?.getBoundingClientRect();
-    if (!card || !chip) return;
-    const { offsetWidth: width, offsetHeight: height } = card;
-    const y = Math.max(EDGE, Math.round(chip.top) - GAP - height);
-    const x = Math.max(EDGE, Math.min(Math.round(chip.left), window.innerWidth - width - EDGE));
-    setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
-  });
-  useEffect(() => {
-    window.addEventListener("resize", redraw);
-    return () => window.removeEventListener("resize", redraw);
-  }, []);
+  // Over the chip (the voice bar is at the bottom of the list), never off the window.
+  const at = useAbove(anchor, body);
 
   // The slider has the keyboard as soon as it opens.
   useEffect(() => {

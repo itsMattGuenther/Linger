@@ -30,11 +30,18 @@ export function Marker({
   state,
   size = "md",
   typing = false,
+  lit = false,
   label,
 }: MarkerPerson & {
   size?: "md" | "sm";
   /** Breathing: they're typing. */
   typing?: boolean;
+  /**
+   * Ringed in the lamp: they're talking, in a big voice room's crowd (#197),
+   * where the marker is all there is of them. The same lamp as a talking
+   * chip, around the dot rather than over it, so their color still shows.
+   */
+  lit?: boolean;
   /** Give it a name for assistive technology; otherwise it is decoration. */
   label?: string;
 }) {
@@ -45,6 +52,7 @@ export function Marker({
       data-state={state}
       data-size={size}
       data-typing={typing ? "yes" : undefined}
+      data-lit={lit ? "yes" : undefined}
       style={colorStyle(color)}
       role={label ? "img" : undefined}
       aria-label={label ? `${label}, ${MARKER_WORDS[state]}` : undefined}

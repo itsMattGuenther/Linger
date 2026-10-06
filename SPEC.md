@@ -130,6 +130,11 @@ status. A one-to-one DM has no row of its own: it lives on its person. Their row
 lit while they've written something you haven't read, and in each group the people
 you're talking to come first: whoever wrote to you, then whoever you've talked with
 most recently, then everyone else, so the people you DM never sink on a big server.
+**On a big server** (#197), with more than twelve people here or away, People shows only
+the people you talk to, and everyone else folds under **Everyone else**: a crowd shows in
+its room's own row, up to sixteen dots with no number, where it pulls people in, rather
+than as a sea of names. A smaller server's list is as it always was. Anybody can choose
+**one line per person** in Settings → Appearance, with the status shown on hover.
 Clicking somebody opens them beside the list: their card on top, your conversation
 underneath. Offline people show
 when they were last here and their away message, and their name is a dim grey in its
@@ -450,7 +455,10 @@ height, click to expand.
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface
 scale is an optional reading preference, not a requirement for a usable layout.
-There is no Density setting or Compact/IRC presentation.
+There is no Density setting or Compact/IRC presentation for conversations. The one
+choice of density is the list's (#197): **one line per person**, in Settings →
+Appearance, for a quieter list on a big server. It is off to start, a person's status
+shows when you point at them, and the phone keeps two lines, sized for a thumb.
 Rooms and DMs share tight text spacing: 1.3 line height, 2px between prose
 blocks and 8px before a sender group at default scale. One-line continuations
 occupy 24px, including their action target; multiline messages grow with their
@@ -681,6 +689,17 @@ travels (#306): the mesh that came first, where every laptop sent to every other
 working somewhere past ten and is gone. A server whose host hasn't set forwarding up
 carries no voice, and the app says so in plain words rather than offering a call nobody
 could hear. Apps from before 0.4.1, which spoke only the mesh, can't join voice.
+
+**A big room shows who's talking, not a wall of names** (#197, decided 2026-10-06). Up to
+six people, the voice bar shows everybody as a chip, as it always has. Past six it has
+six seats: you first, then whoever just talked, lit while they talk. A seat changes hands
+only when somebody without one starts talking, and goes to whoever spoke longest ago, so
+nobody moves while they talk. Everybody in the room is a small dot in their own color
+under the seats, ringed in the lamp while they talk: a busy room reads as lights, never
+as a number. The dots open everyone by name, with a search box, which is how you find
+somebody to make quieter. A room's voice line in its conversation does the same with the
+chips it has room for; before you join, when who's talking isn't known, it shows the
+people you talk to first.
 
 **Voice follows the room's membership.** A voice room inside a DM is as private as the
 DM (§4.13) — who is in voice is a fact about a room, so it reaches the room's members

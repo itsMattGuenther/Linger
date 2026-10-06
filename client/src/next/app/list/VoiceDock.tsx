@@ -1,11 +1,21 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
-import { Chip, IconButton, Name, VoiceGlyph } from "../../kit";
+import { Chip, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
+import { useTalkSeats } from "../useTalkSeats";
+import { EveryoneCard } from "./EveryoneCard";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
 import { VolumeCard } from "./VolumeCard";
+
+/**
+ * A room shows everybody as chips up to this many people, you included.
+ * Past it (#197) the bar keeps this many seats, you and the people who just
+ * talked, and everybody is a marker in the crowd under them: two lines of
+ * three, whatever the room's size.
+ */
+export const VOICE_SEATS = 6;
 
 export interface VoiceDockPerson {
   user: User;
@@ -64,17 +74,76 @@ export interface VoiceDockProps {
  * always here: the list is always open, so they're always in reach, and
  * closing a chat tab or window never ends voice. The room's chat window has
  * the same three (#216), and the tray menu has Mute and Leave.
+ *
+ * A big room (#197) doesn't show fifty chips: past `VOICE_SEATS` it shows
+ * seats for you and whoever just talked, and everybody as a crowd of markers
+ * that light while they talk and open everyone by name.
  */
 export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut }: VoiceDockProps) {
-  // Whose volume is open, and the chip it opened from.
+  // Whose volume is open, and the chip (or crowd) it opened from.
   const [volumeOf, setVolumeOf] = useState<{ id: string } | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
+  // A big room's everyone card (#197), and the crowd that opened it.
+  const [everyone, setEveryone] = useState(false);
+  const crowd = useRef<HTMLButtonElement | null>(null);
   const open = volumeOf ? people.find((person) => person.user.id === volumeOf.id && !person.you) : undefined;
   const closeVolume = () => {
     setVolumeOf(null);
     opener.current?.focus();
   };
+  const closeEveryone = () => {
+    setEveryone(false);
+    crowd.current?.focus();
+  };
   const anyone = people.some((person) => person.speaking);
+
+  // The seats: who just talked, kept still (core/seats.ts). Worked out in
+  // small rooms too, so a room growing past the chips starts with a memory.
+  const others = people.filter((person) => !person.you);
+  const talkingKey = others
+    .filter((person) => person.speaking)
+    .map((person) => person.user.id)
+    .join("\n");
+  const talking = useMemo(() => new Set(talkingKey === "" ? [] : talkingKey.split("\n")), [talkingKey]);
+  const seatIds = useTalkSeats(
+    others.map((person) => person.user.id),
+    talking,
+    VOICE_SEATS - 1,
+  );
+  const big = people.length > VOICE_SEATS;
+  const you = people.find((person) => person.you);
+  const seated = [...(you ? [you] : []), ...seatIds.flatMap((id) => others.find((person) => person.user.id === id) ?? [])];
+
+  const chip = (person: VoiceDockPerson, fill: boolean) => (
+    <li key={person.user.id}>
+      <Chip
+        label={person.you ? "you" : person.user.display_name}
+        marker={markerFor(person.user, "in_room")}
+        active={person.speaking}
+        state={stateOf(person)}
+        note={noteOf(person)}
+        fill={fill}
+        {...(onVolume && !person.you
+          ? {
+              actionLabel: `${person.user.display_name}'s volume, ${volumeLabel(person.volume ?? 1)}`,
+              expanded: volumeOf?.id === person.user.id,
+              onActivate: (event) => {
+                setEveryone(false);
+                if (volumeOf?.id === person.user.id) {
+                  closeVolume();
+                  return;
+                }
+                opener.current = event.currentTarget;
+                setVolumeOf({ id: person.user.id });
+              },
+            }
+          : {})}
+      >
+        {person.you ? "you" : <Name person={person.user} size="control" />}
+      </Chip>
+    </li>
+  );
+
   return (
     <section className="nx-voice" aria-label={server ? `In voice in ${where} on ${server.name}` : `In voice in ${where}`}>
       <div className="nx-voice-head">
@@ -97,39 +166,48 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           ) : null}
         </p>
       ) : null}
-      <ul className="nx-voice-people" aria-label="Who's in voice">
-        {people.map((person) => (
-          <li key={person.user.id}>
-            <Chip
-              label={person.you ? "you" : person.user.display_name}
-              marker={markerFor(person.user, "in_room")}
-              active={person.speaking}
-              state={stateOf(person)}
-              note={noteOf(person)}
-              {...(onVolume && !person.you
-                ? {
-                    actionLabel: `${person.user.display_name}'s volume, ${volumeLabel(person.volume ?? 1)}`,
-                    expanded: volumeOf?.id === person.user.id,
-                    onActivate: (event) => {
-                      if (volumeOf?.id === person.user.id) {
-                        closeVolume();
-                        return;
-                      }
-                      opener.current = event.currentTarget;
-                      setVolumeOf({ id: person.user.id });
-                    },
-                  }
-                : {})}
-            >
-              {person.you ? "you" : <Name person={person.user} size="control" />}
-            </Chip>
-          </li>
-        ))}
-      </ul>
+      {big ? (
+        <>
+          {/* You, then whoever just talked: two lines of three, still while people talk (#197). */}
+          <ul className="nx-voice-seats" aria-label="You and who just talked">
+            {seated.map((person) => chip(person, true))}
+          </ul>
+          <div className="nx-voice-crowd">
+            <MarkerCrowd
+              label="Everyone in voice"
+              people={people.map((person) => ({ ...markerFor(person.user, "in_room"), lit: person.speaking }))}
+              expanded={everyone}
+              onActivate={(event) => {
+                crowd.current = event.currentTarget;
+                if (volumeOf) setVolumeOf(null);
+                setEveryone((shown) => !shown);
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <ul className="nx-voice-people" aria-label="Who's in voice">
+          {people.map((person) => chip(person, false))}
+        </ul>
+      )}
       {line ? (
         <p className="nx-voice-line" role="status">
           {line}
         </p>
+      ) : null}
+      {big && everyone ? (
+        <EveryoneCard
+          people={others}
+          where={where}
+          anchor={crowd}
+          // Somebody found: their volume card, over the crowd, in this one's place.
+          onPick={(person) => {
+            setEveryone(false);
+            opener.current = crowd.current;
+            setVolumeOf({ id: person.user.id });
+          }}
+          onClose={closeEveryone}
+        />
       ) : null}
       {open && onVolume && volumeOf ? (
         <VolumeCard

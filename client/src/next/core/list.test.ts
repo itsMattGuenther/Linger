@@ -10,7 +10,7 @@ vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { apply, serverState } = await import("../../lib/gateway");
-const { listModel, personRow, splitRooms } = await import("./list");
+const { listModel, personRow, splitPeople, splitRooms, talkingFirstIds, PEOPLE_SHOWN } = await import("./list");
 type RoomRow = import("./list").RoomRow;
 type GatewayState = import("../../lib/gateway").GatewayState;
 
@@ -356,3 +356,67 @@ describe("a long room list", () => {
   });
 });
 
+describe("a big server's People (#197)", () => {
+  // Twelve guild members besides Matt's friends from `evening`: Eli and
+  // Jules here, Sam away, Jen offline. Matt has written with Jules (and she
+  // wrote back, unread) and once with Sam.
+  const guild = Array.from({ length: 12 }, (_, n) => person(`u-g${n}`, `Raider${String(n).padStart(2, "0")}`));
+  function raidNight(): GatewayState {
+    const night = evening();
+    return {
+      ...night,
+      users: [...night.users, ...guild],
+      dms: [...night.dms, room("d-sam", "d-sam", 0, { kind: "dm", member_ids: ["u-matt", "u-sam"], last_message_id: "m000002" })],
+      presence: [...night.presence, ...guild.map((user) => presence(user.id, "in_room", "r-general"))],
+    };
+  }
+  const names = (rows: { user: User }[] | undefined) => (rows ?? []).map((row) => row.user.display_name);
+
+  it("is as it always was until more than twelve people are here or away", () => {
+    expect(PEOPLE_SHOWN).toBe(12);
+    expect(splitPeople(listModel(evening(), NOW).people)).toBeNull();
+    const fewer = { ...raidNight(), users: raidNight().users.slice(0, 5 + 9) };
+    // Eli, Jules, Sam and nine raiders: twelve on, still one list.
+    expect(splitPeople(listModel(fewer, NOW).people)).toBeNull();
+  });
+
+  it("puts the people you talk to first, here then away, and everyone else after, here then away", () => {
+    const split = splitPeople(listModel(raidNight(), NOW).people);
+    // Jules wrote to you (unread) and is here; Sam you talked with, and is away.
+    expect(names(split?.yours)).toEqual(["Jules", "Sam"]);
+    expect(names(split?.others)).toEqual(["Eli", ...guild.map((user) => user.display_name)]);
+  });
+
+  it("counts a DM as talking only once something has been said in it", () => {
+    const quiet = { ...raidNight(), dms: [...raidNight().dms, room("d-eli", "d-eli", 0, { kind: "dm", member_ids: ["u-matt", "u-eli"] })] };
+    const eliRow = listModel(quiet, NOW).people.here.find((row) => row.user.id === "u-eli");
+    expect(eliRow?.dm).toBe("d-eli");
+    expect(eliRow?.talked).toBe(false);
+    expect(names(splitPeople(listModel(quiet, NOW).people)?.yours)).toEqual(["Jules", "Sam"]);
+  });
+
+  it("leaves the groups whole for everything else that reads them", () => {
+    const { people } = listModel(raidNight(), NOW);
+    expect(people.here).toHaveLength(14);
+    expect(names(people.away)).toEqual(["Sam"]);
+    expect(names(people.offline)).toEqual(["Jen"]);
+  });
+});
+
+describe("the people you talk to, by id (#197)", () => {
+  it("puts whoever wrote to you first, then whoever you talked with, newest first, then the rest as given", () => {
+    const held: GatewayState = {
+      ...evening(),
+      dms: [
+        room("d-jules", "d-jules", 0, { kind: "dm", member_ids: ["u-matt", "u-jules"] }),
+        room("d-sam", "d-sam", 0, { kind: "dm", member_ids: ["u-matt", "u-sam"], last_message_id: "m000002" }),
+        room("d-jen", "d-jen", 0, { kind: "dm", member_ids: ["u-matt", "u-jen"], last_message_id: "m000005" }),
+      ],
+      newest: { "d-jules": "m000010" },
+      read: {},
+    };
+    expect(talkingFirstIds(held, ["u-eli", "u-sam", "u-jen", "u-jules"])).toEqual(["u-jules", "u-jen", "u-sam", "u-eli"]);
+    // Nobody you talk to: the order given.
+    expect(talkingFirstIds(held, ["u-eli", "u-matt"])).toEqual(["u-eli", "u-matt"]);
+  });
+});

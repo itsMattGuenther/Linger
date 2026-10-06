@@ -83,6 +83,11 @@ export interface PersonRow {
   dm: RoomId | null;
   /** They've written there and you haven't read it: the row is lit (#291, #351). */
   fresh: boolean;
+  /**
+   * You talk to them: they've written to you, or your DM has anything in it
+   * at all. On a big server these come first and everyone else folds (#197).
+   */
+  talked: boolean;
 }
 
 /**
@@ -121,16 +126,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
   // connected clients: absent is offline (the same rule as the roster).
   const stateOf = (id: string): PresenceState => shownState(presenceOf.get(id) ?? "offline", voiceRooms.has(id));
 
-  // A DM with exactly one other person the server lists is that person's;
-  // every other DM is a group, drawn with the rooms (#351).
-  const listed = new Set(users.map((user) => user.id));
-  const oneToOne = new Map<string, Room>();
-  const groupDms: Room[] = [];
-  for (const room of state.dms) {
-    const [other, ...rest] = others(room, meId);
-    if (other !== undefined && rest.length === 0 && listed.has(other) && !oneToOne.has(other)) oneToOne.set(other, room);
-    else groupDms.push(room);
-  }
+  const { byPerson: oneToOne, groups: groupDms } = dmsByPerson(state);
   const groups = orderDms(groupDms, (room: Room) => hasNewActivity(state, room.id), state.newest).map(
     (room): DmRow => ({
       id: room.id,
@@ -140,10 +136,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
       fresh: hasNewActivity(state, room.id),
     }),
   );
-  // When you last talked, by the newest message either way; nothing said yet
-  // is not talking. Ids are UUIDv7, so comparing them compares times (lib/dm).
-  const talkedAt = (room: Room | undefined): MessageId | null =>
-    room === undefined ? null : (state.newest[room.id] ?? room.last_message_id ?? null);
+  const talkedAt = (room: Room | undefined): MessageId | null => talkedIn(state, room);
 
   const inVoice = new Set(Object.values(state.voice).flatMap((peers) => peers.map((peer) => peer.user_id)));
   const roster = buildRoster({
@@ -169,6 +162,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
       inVoice: entry.inVoice,
       dm: dm?.id ?? null,
       fresh: dm !== undefined && hasNewActivity(state, dm.id),
+      talked: dm !== undefined && (hasNewActivity(state, dm.id) || talkedAt(dm) !== null),
     };
     if (entry.isMe) me = row;
     else if (entry.state === "away") people.away.push(row);
@@ -195,8 +189,32 @@ export function listModel(state: GatewayState, now: number): ListModel {
  * something new or not.
  */
 export function talkingFirst(rows: readonly PersonRow[], talkedAt: (row: PersonRow) => string | null): PersonRow[] {
-  const rank = (row: PersonRow) => (row.fresh ? 0 : talkedAt(row) !== null ? 1 : 2);
-  return [...rows].sort((a, b) => {
+  return byTalking(rows, (row) => row.fresh, talkedAt);
+}
+
+/**
+ * People by user id, the ones you're talking to first, by the same rule as
+ * the list (#351): whoever wrote something you haven't read, then whoever
+ * you've talked with, newest first, then everyone else in the order given.
+ * For a voice room you aren't in (#197), where who's talking isn't known:
+ * the people you talk to are the ones worth showing.
+ */
+export function talkingFirstIds(state: GatewayState, ids: readonly string[]): string[] {
+  const { byPerson } = dmsByPerson(state);
+  return byTalking(
+    ids,
+    (id) => {
+      const room = byPerson.get(id);
+      return room !== undefined && hasNewActivity(state, room.id);
+    },
+    (id) => talkedIn(state, byPerson.get(id)),
+  );
+}
+
+/** The order behind both: something new first, then talked with (newest first), then the rest as they came. */
+function byTalking<T>(items: readonly T[], fresh: (item: T) => boolean, talkedAt: (item: T) => string | null): T[] {
+  const rank = (item: T) => (fresh(item) ? 0 : talkedAt(item) !== null ? 1 : 2);
+  return [...items].sort((a, b) => {
     const byRank = rank(a) - rank(b);
     if (byRank !== 0) return byRank;
     const at = talkedAt(a);
@@ -204,6 +222,32 @@ export function talkingFirst(rows: readonly PersonRow[], talkedAt: (row: PersonR
     if (at === null || bt === null || at === bt) return 0;
     return at < bt ? 1 : -1;
   });
+}
+
+/**
+ * Your DMs: a DM with exactly one other person the server lists is that
+ * person's; every other DM is a group, drawn with the rooms (#351).
+ */
+function dmsByPerson(state: GatewayState): { byPerson: Map<string, Room>; groups: Room[] } {
+  const meId = state.me?.id ?? null;
+  const listed = new Set(state.users.map((user) => user.id));
+  const byPerson = new Map<string, Room>();
+  const groups: Room[] = [];
+  for (const room of state.dms) {
+    const [other, ...rest] = others(room, meId);
+    if (other !== undefined && rest.length === 0 && listed.has(other) && !byPerson.has(other)) byPerson.set(other, room);
+    else groups.push(room);
+  }
+  return { byPerson, groups };
+}
+
+/**
+ * When you last talked in a DM, by its newest message either way; nothing
+ * said yet is not talking. Ids are UUIDv7, so comparing them compares times
+ * (lib/dm).
+ */
+function talkedIn(state: GatewayState, room: Room | undefined): MessageId | null {
+  return room === undefined ? null : (state.newest[room.id] ?? room.last_message_id ?? null);
 }
 
 /** A DM you're in has something you haven't read, on a person's row or a group's. */
@@ -243,6 +287,26 @@ export function personRow(state: GatewayState, userId: string, now: number): Per
   const { me, people } = listModel(state, now);
   if (me?.user.id === userId) return me;
   return [...people.here, ...people.away, ...people.offline].find((row) => row.user.id === userId) ?? null;
+}
+
+/**
+ * How many people here or away a server's list shows in full before the
+ * ones you don't talk to fold away (#197).
+ */
+export const PEOPLE_SHOWN = 12;
+
+/**
+ * A big server's People, split (#197, decided 2026-10-06): past twelve
+ * people here or away, the people you talk to come first, here then away,
+ * and everyone else folds under "Everyone else", here then away. A crowd
+ * shows in its room's row, where it pulls people in, rather than as a sea of
+ * names under People. Null for a smaller server, whose list is as it always
+ * was. Offline is its own fold either way.
+ */
+export function splitPeople(people: PeopleGroups, limit = PEOPLE_SHOWN): { yours: PersonRow[]; others: PersonRow[] } | null {
+  const on = [...people.here, ...people.away];
+  if (on.length <= limit) return null;
+  return { yours: on.filter((row) => row.talked), others: on.filter((row) => !row.talked) };
 }
 
 /** How many rooms a server's list shows before the quiet ones fold away (decision 22). */

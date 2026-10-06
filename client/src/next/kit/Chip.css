@@ -13,6 +13,11 @@
   font-size: var(--text-control);
 }
 
+/* A seat in a big voice room (#197): as wide as its column. */
+.k-chip[data-fill="yes"] {
+  width: 100%;
+}
+
 /* Talking: the lamp, as on the tab of the room you're in voice in. */
 .k-chip[data-active="yes"] {
   border-color: var(--accent-edge);

@@ -704,6 +704,41 @@ test("compact choice cards sit side by side with their titles on one line", asyn
   expect(new Set(titles).size).toBe(1);
 });
 
+test("a big voice room's crowd is one named button whose markers wrap at its width, a talker ringed without moving a marker (#197)", async ({ page }) => {
+  const crowd = page.getByTestId("crowd").getByRole("button", { name: "Everyone in voice" });
+  await expect(crowd).toHaveAttribute("aria-haspopup", "dialog");
+  const markers = crowd.locator("[data-kit='Marker']");
+  await expect(markers).toHaveCount(48);
+  await expect(crowd.locator("[data-kit='Marker'][data-lit='yes']")).toHaveCount(2);
+  const layout = await crowd.evaluate((button) => {
+    const box = button.getBoundingClientRect();
+    const dots = [...button.querySelectorAll<HTMLElement>("[data-kit='Marker']")].map((dot) => dot.getBoundingClientRect());
+    const lines = new Set(dots.map((dot) => Math.round(dot.top))).size;
+    const inside = dots.every((dot) => dot.left >= box.left && dot.right <= box.right && dot.top >= box.top && dot.bottom <= box.bottom);
+    const sizes = new Set(dots.map((dot) => `${dot.width}x${dot.height}`));
+    // Gaps along a line, so a lit ring (just outside its dot) never meets the next dot.
+    const gaps = dots.slice(1).flatMap((dot, at) => {
+      const before = dots[at];
+      return before && Math.round(before.top) === Math.round(dot.top) ? [dot.left - before.right] : [];
+    });
+    const ring = getComputedStyle(button.querySelector("[data-lit='yes']") as Element);
+    const reach = Number.parseFloat(ring.outlineWidth) + Number.parseFloat(ring.outlineOffset);
+    return { lines, inside, sizes: [...sizes], narrowestGap: Math.min(...gaps), reach };
+  });
+  expect(layout.lines).toBeGreaterThan(1);
+  expect(layout.inside).toBe(true);
+  expect(layout.sizes).toEqual(["6x6"]);
+  expect(layout.narrowestGap).toBeGreaterThanOrEqual(layout.reach * 2);
+});
+
+test("a seat is as wide as its column, whatever its words (#197)", async ({ page }) => {
+  const seats = page.getByTestId("seats").locator("[data-kit='Chip']");
+  const widths = await seats.evaluateAll((chips) => chips.map((chip) => chip.getBoundingClientRect().width));
+  const cells = await page.getByTestId("seats").locator("li").evaluateAll((items) => items.map((item) => item.getBoundingClientRect().width));
+  expect(widths).toEqual(cells);
+  expect(new Set(widths.slice(0, 3)).size).toBe(1);
+});
+
 test("review sheets: one screenshot per gallery section, for people to look at", async ({ page }) => {
   for (const section of await page.locator("[data-section]").all()) {
     const id = await section.getAttribute("data-section");

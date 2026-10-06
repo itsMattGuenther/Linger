@@ -23,10 +23,16 @@ export interface AppearanceProps {
   warmth?: Live<boolean>;
   /** Use plain names and message fonts (NAME-4). */
   plainNames: Live<boolean>;
+  /**
+   * One line per person in the list (#197): more people in the same height,
+   * for anybody who wants a quieter list. Left out on the phone, whose list
+   * rows are sized for a thumb.
+   */
+  oneLine?: Live<boolean>;
 }
 
-/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4). */
-export function AppearanceSection({ scale, warmth, plainNames }: AppearanceProps) {
+/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197). */
+export function AppearanceSection({ scale, warmth, plainNames, oneLine }: AppearanceProps) {
   return (
     <>
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
@@ -64,6 +70,16 @@ export function AppearanceSection({ scale, warmth, plainNames }: AppearanceProps
           control={<Switch label="Use plain names and message fonts" checked={plainNames.value} onChange={plainNames.onChange} />}
         />
       </Plain>
+      {oneLine ? (
+        <Plain>
+          <h3 className="nx-set-heading">{HEADINGS.list}</h3>
+          <SettingRow
+            title="One line per person"
+            description="Fits more people in your list. A status shows when you point at someone."
+            control={<Switch label="One line per person" checked={oneLine.value} onChange={oneLine.onChange} />}
+          />
+        </Plain>
+      ) : null}
     </>
   );
 }

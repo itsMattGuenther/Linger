@@ -309,7 +309,9 @@ Linger is one tall window: your **list**. From the top:
 - **People**: everyone on the server, with where they are and their status.
   Your DM with somebody lives on their row, which lights up when they've
   written something you haven't read. The people you're talking to come first.
-  **Away** and **Offline** fold up under them.
+  **Away** and **Offline** fold up under them. On a big server (more than
+  twelve people on), only the people you talk to show, and everyone else folds
+  under **Everyone else**; a busy room shows its crowd as dots on its own row.
 
 Click a room or a DM and it opens **beside the list**, in the same window: the
 window grows to the right to make room (to the left if your screen ends
@@ -376,7 +378,7 @@ Click the **gear** at the top of the list, or press **Ctrl+,** in any window.
 Settings opens in its own window:
 
 - **Profile**: your display name, your status, and how your name looks
-- **Appearance**: interface size, and plain names (below)
+- **Appearance**: interface size, plain names, and one line per person (below)
 - **Windows**: tabs or a window per conversation, and what closing the list does
 - **Sound & Voice**: how loud Linger's sounds are, notification chimes and
   quiet hours; microphone, speakers, push to talk
@@ -568,6 +570,13 @@ window, so you don't need the list in front to mute:
 - Click someone's name in the voice bar to set **how loud they are for you**,
   from silent to twice as loud. Linger remembers it for that person on this
   server, on this computer only; nobody else hears or sees the change.
+- **In a big room** (more than six people), the voice bar keeps six places:
+  you, then whoever just talked, lit while they talk. Somebody new who talks
+  takes the place of whoever spoke longest ago, so nobody jumps around while
+  they're talking. Everyone in the room is a small dot in their own color
+  under them, ringed while they talk. Click the dots to see everyone by name,
+  type to find somebody, and press **Enter** or click them to set their
+  volume.
 - The arrow beside the room's name opens its conversation.
 
 With the list tucked away in the tray, the tray icon's menu has **Mute** and
@@ -797,10 +806,14 @@ changes** returns to your saved look; **Save your look** publishes it.
 Also in settings:
 
 - **Interface Size**: enlarge text and controls from 100% to 200%. The default
-  layout is comfortable; there are no density modes to choose between.
+  layout is comfortable, and conversations have no density modes to choose
+  between.
 - **Use plain names and message fonts**: turns off other people's name styling
   and message fonts, for you only. Nobody is told. Use it if a room is too loud
   to read.
+- **One line per person**: every person in your list takes one line instead of
+  two, so more fit. Point at somebody to read their status. Off unless you turn
+  it on; the phone always keeps two lines.
 
 Linger is dark only; there is no light theme. The evening warmth of earlier
 versions comes back once the new look has an evening version of its own.

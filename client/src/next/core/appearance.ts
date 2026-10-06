@@ -1,6 +1,7 @@
 /**
  * How the new client looks on this computer, the same in every window: plain
- * names (NAME-4) and interface size (LOOK-1). Settings saves a change and
+ * names (NAME-4), interface size (LOOK-1) and one line per person in the
+ * list (#197). Settings saves a change and
  * announces it; every window applies it at once, and each applies what's
  * saved when it opens.
  *
@@ -48,6 +49,26 @@ export function saveScale(value: number): number {
   return scale;
 }
 
+/** One line per person in the list (#197): off unless turned on. */
+const ONE_LINE_KEY = "linger.next.peopleOneLine";
+
+export function loadOneLine(): boolean {
+  try {
+    return window.localStorage.getItem(ONE_LINE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Save one line per person; announce it with `announceAppearance`. */
+export function saveOneLine(on: boolean): void {
+  try {
+    window.localStorage.setItem(ONE_LINE_KEY, String(on));
+  } catch {
+    // Storage refused: this window still gets it, until it's opened again.
+  }
+}
+
 /** Plain names: applied to this window, and saved for the others. */
 export function saveNormalize(on: boolean): void {
   applyNormalize(on);
@@ -76,6 +97,19 @@ function sizedForKey(label: string): string {
  */
 let running: Promise<void> | null = null;
 let again = false;
+/** What a window draws from these choices itself, told when they're applied. */
+const listeners = new Set<() => void>();
+
+/**
+ * Hear every time this window applies what's saved: a choice a screen draws
+ * from rather than the page's CSS, like one line per person (#197). Returns
+ * how to stop.
+ */
+export function onAppearance(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 export function applyAppearance(): Promise<void> {
   if (running) {
     again = true;
@@ -95,6 +129,7 @@ export function applyAppearance(): Promise<void> {
 
 async function applyOnce(): Promise<void> {
   applyNormalize(loadNormalize());
+  for (const listener of listeners) listener();
   const scale = loadScale();
   if (!isTauri()) return;
   const current = getCurrentWindow();

@@ -177,3 +177,26 @@ body {
   border-radius: var(--radius-lg);
   background: var(--surface-sunken);
 }
+
+/* A voice bar's width for its crowd and seats (#197): 300 inside its padding. */
+.g-crowd {
+  width: 300px;
+}
+
+.g-crowd > [data-kit="MarkerCrowd"] {
+  flex: 1;
+}
+
+.g-seats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1-5);
+  width: 300px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g-seats li {
+  min-width: 0;
+}

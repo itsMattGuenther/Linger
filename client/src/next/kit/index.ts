@@ -11,6 +11,7 @@ export { Icon, type IconName, type IconSize } from "./Icon";
 export { IconButton, type IconButtonProps, type IconButtonTone } from "./IconButton";
 export { ICON_NAMES } from "./icons";
 export { GroupMarker, HashMark, Marker, MarkerCluster, MarkerSlot, type ColorKey, type MarkerPerson } from "./Marker";
+export { MarkerCrowd } from "./MarkerCrowd";
 export { Menu, type MenuAnchor, type MenuCloseReason, type MenuItem } from "./Menu";
 export { Name, type NameSize } from "./Name";
 export { NavList, type NavEntry } from "./NavList";

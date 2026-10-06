@@ -107,6 +107,21 @@ clicked. Mockups at real size compared three ways out; he chose the first:
   and DM rows that show the last line (still twice, and private words on the
   screen pull at you like an inbox).
 
+## Decided on 2026-10-06: raid night (#197)
+
+A guild's raid is about fifty people in one voice room, on a server of sixty. Mockups at
+real size (linked from #197) compared two voice bars and three lists; Matt chose:
+
+- **The voice bar keeps six seats in a big room:** you, then whoever just talked, lit
+  while they talk. A seat changes hands only when somebody new talks, so nobody moves
+  while they talk. Everybody is a small dot under the seats, ringed while they talk,
+  and the dots open everyone by name with a search box. Six or fewer, it's as before.
+- **The voice line in a conversation** does the same in your own room. In a room
+  you're not in, it shows the people you talk to first.
+- **On a big server, People is the people you talk to**, and everyone else folds under
+  "Everyone else". The room's own row is what shows a full raid: up to sixteen dots.
+- **One line per person** is a choice in Settings → Appearance.
+
 ## The idea
 
 Friends don't need Discord's four columns; they need a buddy list. The
@@ -199,6 +214,13 @@ From top to bottom, for each server:
    message, and a faint note on the right: "in #general", "around" or "last
    here yesterday". An offline person's name is a dim grey rather than their
    colors, so the Offline group reads as nobody home.
+
+   - **On a big server** (#197), more than twelve people here or away: only the
+     people you talk to show, here then away, and everybody else folds under
+     **Everyone else**, which starts folded and says "show". A full room shows in its
+     own row instead, with up to sixteen dots.
+   - **One line per person** (#197), a choice in Settings → Appearance: every person's
+     row is one line, their status in a tooltip when you point at them.
 
    **Somebody who has written to you is lit:** their row gets the lamp's soft
    fill and thin edge until you've read it (#291), even inside a folded Away
@@ -324,6 +346,11 @@ Khruangbin…`), which suits smaller windows.
   one room at a time, across every server.
 - **Mute, Deafen and Leave live in one place:** a voice bar at the bottom of the
   buddy list, which is always open.
+- **A big room fits the bar** (#197). Past six people the bar shows six seats, you and
+  whoever just talked, two lines of three, and everybody as a dot in their color under
+  them, ringed in the lamp while they talk. A new talker takes the seat of whoever
+  spoke longest ago, so nobody moves while they talk. The dots open everyone by name,
+  with a search box; picking somebody opens their volume.
 - **The tab of your voice room** shows moving sound bars.
 - **Other rooms offer "Move voice here"** (or "Talk here instead" when they're
   quiet), so moving is never mistaken for a fresh join.
@@ -352,7 +379,8 @@ regrouped, plus the new choices this design needs:
   - color theme (dark, light, or follow the system);
   - interface size, with a preview;
   - evening warmth;
-  - use plain names and message fonts (this one works in the prototype).
+  - use plain names and message fonts (this one works in the prototype);
+  - one line per person in the list (#197).
 - **Windows** (new): conversations open as tabs or windows (this works), and
   what closing the list does: keep Linger running in the tray, or quit.
 - **Sound & Voice:**
@@ -470,5 +498,6 @@ The principles don't change:
   is the kind of obligation Linger avoids, but some people will miss it.
 - **Many rooms.** The narrow list suits three to six rooms per server, not
   fifteen.
-- **Big groups.** Voice rooms hold 25, through the host's server. Bigger voice
-  rooms, and servers of 50–60 or more, haven't been tried; that work is #197.
+- **Big groups.** Voice rooms hold 60, through the host's server, and the voice bar
+  and the list were made to fit a raid of fifty on 2026-10-06 (above). Servers of
+  more than sixty haven't been tried.

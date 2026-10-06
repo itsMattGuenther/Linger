@@ -173,6 +173,15 @@ test("interface size and plain names are saved here and take effect at once", as
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
 });
 
+test("one line per person is off to start, and turning it on saves it for the list (#197)", async ({ page }) => {
+  await open(page, "?section=appearance");
+  const choice = page.getByRole("switch", { name: "One line per person" });
+  await expect(choice).toHaveAttribute("aria-checked", "false");
+  await choice.click();
+  await expect(choice).toHaveAttribute("aria-checked", "true");
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("linger.next.peopleOneLine"))).toBe("true");
+});
+
 test("asked for a section while it's open, it shows that section", async ({ page }) => {
   await open(page);
   await page.evaluate(() => window.shell?.section("invites"));

@@ -44,7 +44,7 @@ import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuest
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
-import { announceAppearance, loadScale, saveNormalize, saveScale } from "../../core/appearance";
+import { announceAppearance, loadOneLine, loadScale, saveNormalize, saveOneLine, saveScale } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
@@ -278,6 +278,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [sound, setSound] = useState<SoundPrefs>(loadSoundPrefs);
   const [voice, setVoice] = useState<VoicePrefs>(loadVoicePrefs);
   const [plain, setPlain] = useState<boolean>(loadNormalize);
+  const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
   const [scale, setScale] = useState<number>(loadScale);
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
@@ -460,6 +461,17 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             announceAppearance();
           },
         },
+        // The phone's rows are sized for a thumb (SPEC §4.15).
+        oneLine: phone
+          ? undefined
+          : {
+              value: oneLine,
+              onChange: (value) => {
+                setOneLine(value);
+                saveOneLine(value);
+                announceAppearance();
+              },
+            },
       }}
       windows={{
         conversations: {
