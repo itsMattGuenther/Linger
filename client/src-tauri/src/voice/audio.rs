@@ -164,12 +164,23 @@ impl Source for Silence {
 /// is a frame that really crossed a peer connection.
 pub struct Tone {
     at: std::sync::atomic::AtomicU64,
+    /// Its peak, out of `i16::MAX`.
+    peak: f32,
 }
 
 impl Default for Tone {
     fn default() -> Self {
+        Self::at(8000.0)
+    }
+}
+
+impl Tone {
+    /// A tone this loud at its peak: a quieter voice in a crowd (#197).
+    #[must_use]
+    pub fn at(peak: f32) -> Self {
         Self {
             at: std::sync::atomic::AtomicU64::new(0),
+            peak,
         }
     }
 }
@@ -186,7 +197,7 @@ impl Source for Tone {
                     #[allow(clippy::cast_precision_loss)]
                     let t = (start + n as u64) as f32 / SAMPLE_RATE as f32;
                     #[allow(clippy::cast_possible_truncation)]
-                    let value = (t * 440.0 * std::f32::consts::TAU).sin() * 8000.0;
+                    let value = (t * 440.0 * std::f32::consts::TAU).sin() * self.peak;
                     value as i16
                 })
                 .collect(),

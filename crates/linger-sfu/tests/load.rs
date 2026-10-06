@@ -1,7 +1,9 @@
 //! A voice room at raid size, on this machine (#197): how hard the forwarding
-//! server works with fifty people in one room, with silence sent the old way
-//! and with it left unsent (Opus DTX, as the desktop app now does: nothing
-//! from anybody who isn't talking).
+//! server works with fifty people in one room, with everybody not talking on
+//! an old app that sends silence, and with them on an app that sends nothing
+//! (Opus DTX, as the desktop app does from 0.4.9). The server passes neither
+//! silence nor more than its six loudest voices on, so the two should cost
+//! about the same, and a room with more than six talking about what six do.
 //!
 //! Ignored in ordinary runs, since it takes the better part of a minute and
 //! measures rather than checks. Run it by hand, built for release:
@@ -25,7 +27,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use linger_sfu::{Offer, Sfu};
+use linger_sfu::{Offer, Sfu, LOUDEST};
 use str0m::change::SdpOffer;
 use str0m::crypto::from_feature_flags;
 use str0m::media::{Frequency, MediaTime, Mid};
@@ -52,10 +54,12 @@ struct Client {
     frames: u64,
     /// What the latest offer said to send at (#431).
     bits: u32,
+    /// How loud it says it is when it talks, in negative decibels.
+    level: i8,
 }
 
 impl Client {
-    fn new(name: String) -> Self {
+    fn new(name: String, index: usize) -> Self {
         let socket = UdpSocket::bind("127.0.0.1:0").expect("a client socket");
         socket.set_nonblocking(true).expect("non-blocking");
         let mut rtc = Rtc::builder()
@@ -75,6 +79,7 @@ impl Client {
             heard: HashMap::new(),
             frames: 0,
             bits: 0,
+            level: -15 - 3 * i8::try_from(index.min(15)).unwrap_or(15),
         }
     }
 
@@ -154,6 +159,13 @@ impl Client {
             return;
         };
         let time = MediaTime::new(self.frames * 960, Frequency::FORTY_EIGHT_KHZ);
+        // How loud it is (RFC 6464), as the app says from 0.4.9: each talker
+        // a little quieter than the last, so the six loudest are clear.
+        let writer = if size > SILENT {
+            writer.audio_level(self.level, true)
+        } else {
+            writer
+        };
         let _ = writer.write(pt, Instant::now(), time, vec![0x0B; size]);
     }
 
@@ -309,13 +321,17 @@ fn raid(
         .flat_map(|handle| handle.join().expect("a client thread"))
         .collect();
     let sfu_cpu = sfu_cpu().saturating_sub(cpu_before);
-    // The worst delivery of any talker to any listener, as a share of what
-    // they said: what somebody would hear missing.
+    // The worst delivery, to any listener, of the voices it should hear, as
+    // a share of what they said: what somebody would hear missing. The
+    // server passes on the six loudest (#197): the first six talkers, each
+    // a little louder than the next. A listener among them hears the other
+    // five.
     let said = frames as f64;
+    let loudest = &talking[..talking.len().min(LOUDEST)];
     let talking_delivered = clients
         .iter()
         .flat_map(|client| {
-            talking
+            loudest
                 .iter()
                 .filter(move |talker| **talker != client.name)
                 .map(move |talker| client.heard.get(talker).copied().unwrap_or(0) as f64 / said)
@@ -356,7 +372,7 @@ fn a_raid_sized_room() {
     .expect("the forwarding server starts");
 
     let mut clients: Vec<Client> = (0..people)
-        .map(|n| Client::new(format!("s-{n:02}")))
+        .map(|n| Client::new(format!("s-{n:02}"), n))
         .collect();
     let (joined_in, longest_answer) = join(&sfu, &offers, &mut clients);
     println!(
@@ -370,11 +386,11 @@ fn a_raid_sized_room() {
     let (clients, new) = raid(clients, talkers, seconds, false);
     let (_clients, old) = raid(clients, talkers, seconds, true);
     for (label, run) in [
-        ("silence sent (before)", &old),
-        ("silence unsent (now)", &new),
+        ("everybody else on an old app, sending silence", &old),
+        ("everybody else sending nothing", &new),
     ] {
         println!(
-            "{label}: forwarding server CPU {:.0}% of one core; {:.0} packets a second delivered; the worst-heard talker reached {:.1}% of a listener",
+            "{label}: forwarding server CPU {:.0}% of one core; {:.0} packets a second delivered; the worst-heard of the six loudest reached {:.1}% of a listener",
             100.0 * run.sfu_cpu.as_secs_f64() / seconds as f64,
             run.packets_heard as f64 / seconds as f64,
             100.0 * run.talking_delivered

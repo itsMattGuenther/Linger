@@ -112,9 +112,12 @@ is shipped in the app. See [the testing strategy](testing-strategy.md).
 `crates/linger-sfu/tests/load.rs` puts 50 stand-in people in one voice room on
 the forwarding server, joining at once, then measures ten seconds with three
 talking, at the quality the server's offers ask for (96 kbit/s at fifty, 128
-at twenty or fewer, #431): once with silence sent the old way and once with it
-unsent, as the apps now do. It prints the forwarding thread's CPU (from /proc, so Linux), the
-packets a second it delivered, the worst share of a talker any listener heard,
+at twenty or fewer, #431): once with everybody else sending silence, as apps
+before 0.4.9 do, and once with them sending nothing, as the apps now do. Each
+talker says how loud it is, each a little quieter than the last, and the
+server passes on only the six loudest and never silence (#197). It prints the
+forwarding thread's CPU (from /proc, so Linux), the packets a second it
+delivered, the worst share any listener heard of the voices passed on to it,
 and the longest answer to an offer. It's ignored in ordinary runs:
 
 ```bash
@@ -128,9 +131,10 @@ sounds across real networks.
 `crates/linger-server/examples/voice_load.rs` is the same room against a real
 server somewhere else. It signs the stand-ins up on a fresh server, joins them
 through the gateway and sends their voice over UDP from this machine, the way
-the app does. It prints how much of each talker every listener heard, and how
-long a packet took from here, through the server and back, overall and five
-seconds at a time. It needs a server with `LINGER_VOICE_ADDRESS` set, no data
+the app does, each talker saying how loud it is. It prints how much of the
+voices passed on every listener heard (up to six, the most a room passes on,
+#197), how many voices each heard, and how long a packet took from here,
+through the server and back, overall and five seconds at a time. It needs a server with `LINGER_VOICE_ADDRESS` set, no data
 yet, and its port 8420 reachable over plain HTTP, so use a throwaway one and
 never a real server. Give it the setup token from that server's log:
 

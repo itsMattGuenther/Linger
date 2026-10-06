@@ -580,6 +580,9 @@ window, so you don't need the list in front to mute:
   under them, ringed while they talk. Click the dots to see everyone by name,
   type to find somebody, and press **Enter** or click them to set their
   volume.
+- **When lots of people talk at once**, you hear the six loudest. A cheer of
+  twelve still sounds like a crowd, and the server never has to carry more
+  than six voices at a time.
 - The arrow beside the room's name opens its conversation.
 
 With the list tucked away in the tray, the tray icon's menu has **Mute** and

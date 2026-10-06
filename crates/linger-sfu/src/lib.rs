@@ -22,11 +22,18 @@
 //!   from the connectivity checks that arrive, from wherever they come (a TURN
 //!   relay included), and checks each connection itself from then on (#210).
 //! - **Audio only, Opus only**, forwarded packet by packet with nothing decoded.
+//! - **The six loudest voices at once** ([`floor`]): a room passes on at most
+//!   [`LOUDEST`] voices, by the audio level each app puts on its packets, and
+//!   never passes on silence, so a dozen people cheering at once can't ask
+//!   the server for more than it has (#197).
 //!
 //! Everything runs on one thread with a blocking socket, the shape `str0m`'s
 //! own forwarding example uses. The rest of the server talks to it through a
 //! channel and hears back through [`Notify`].
 
+pub mod floor;
+
+use std::collections::HashMap;
 use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -39,6 +46,9 @@ use str0m::crypto::{from_feature_flags, CryptoProvider};
 use str0m::media::{Direction, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, Input, Output, Rtc};
+
+use floor::Floor;
+pub use floor::LOUDEST;
 
 /// The longest the loop waits on the socket before looking at its commands
 /// again, so a join or an answer never waits behind a quiet room.
@@ -373,6 +383,8 @@ impl Client {
 /// Every client, and what the loop needs to make new ones.
 struct Hub<'a> {
     clients: Vec<Client>,
+    /// Each room's seats: whose voice it passes on right now (#197).
+    floors: HashMap<String, Floor>,
     address: SocketAddr,
     crypto: &'a Arc<CryptoProvider>,
     notify: &'a dyn Notify,
@@ -477,6 +489,12 @@ impl Hub<'_> {
         };
         let mut gone = self.clients.remove(at);
         gone.rtc.disconnect();
+        if let Some(floor) = self.floors.get_mut(&gone.room) {
+            floor.forget(session);
+            if floor.is_empty() {
+                self.floors.remove(&gone.room);
+            }
+        }
         self.resize(&gone.room, 0);
         let notify = self.notify;
         for other in self.clients.iter_mut().filter(|c| c.room == gone.room) {
@@ -521,6 +539,7 @@ fn run(
 ) {
     let mut hub = Hub {
         clients: Vec::new(),
+        floors: HashMap::new(),
         address,
         crypto,
         notify,
@@ -596,10 +615,16 @@ fn run(
         }
         hub.sweep();
 
-        // Pass each voice on to everyone else in its room. What they now
-        // have to send goes out on the next turn, straight away.
+        // Pass each voice on to everyone else in its room, if it has one of
+        // the room's seats (#197). What they now have to send goes out on the
+        // next turn, straight away.
         if !heard.is_empty() {
+            let now = Instant::now();
             for (origin, room, data) in &heard {
+                let floor = hub.floors.entry(room.clone()).or_default();
+                if !floor.hear(origin, data.ext_vals.audio_level, data.data.len(), now) {
+                    continue;
+                }
                 for client in hub
                     .clients
                     .iter_mut()
