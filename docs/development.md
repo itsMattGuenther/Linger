@@ -158,7 +158,10 @@ a beat behind the keyboard (#169). It is off in the AppImage, whose bundled
 WebKitGTK 2.50.4 aborts creating a GBM display on NVIDIA + Wayland machines
 (#187), and off under X11. If a launch that tried it dies before drawing, the
 next launch notices and writes `~/.local/state/linger/gbm-off-<webkit version>`,
-keeping that WebKit off it (delete the file to try again). An explicit
+keeping that WebKit off it (delete the file to try again). A second copy
+started while Linger runs (`pnpm tauri dev` included) hands over to the running
+one and quits, and leaves that record alone, because the running copy holds
+`running.lock` there (#447). An explicit
 `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins. With GBM off on a computer
 with two GPUs, the page can draw on a different GPU from the window, which then
 stays grey (#433), so startup also sets `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`

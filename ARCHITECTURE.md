@@ -105,7 +105,11 @@ on NVIDIA + Wayland machines (#187), and off under X11. A launch that tries it
 leaves a probe in `$XDG_STATE_HOME/linger` naming its WebKit version; the page
 clears it after drawing two frames. A probe still there at the next launch
 means that launch died, so `gbm-off-<version>` keeps that WebKit off the GPU
-path (`client/src-tauri/src/graphics.rs`, `linux_startup.rs`).
+path (`client/src-tauri/src/graphics.rs`, `linux_startup.rs`). Every launch
+also holds a lock on `running.lock` there until it exits. A launch that finds
+it held is a second copy, which the single-instance plugin hands over to the
+running Linger before its page could draw, so it neither leaves a probe nor
+reads one (#447).
 
 With GBM off, WebKit's page process draws through a surfaceless EGL display on
 whichever GPU the graphics drivers offer, not the window's, and still hands its
