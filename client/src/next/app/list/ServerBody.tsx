@@ -3,9 +3,11 @@ import type { CardSafety } from "../../core/safety";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { hostsHere } from "../../../lib/host";
-import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitRooms } from "../../core/list";
+import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitPeople, splitRooms } from "../../core/list";
+import { onPhone } from "../../core/phone";
 import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
+import { useOneLine } from "../useOneLine";
 import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
 import { knockOfflineLine, type KnockResult } from "../../core/knock";
@@ -43,7 +45,14 @@ export interface ServerBodyActions {
   showing?: RoomId | null;
 }
 
-type Fold = "rooms" | "more" | "people" | "away" | "offline";
+type Fold = "rooms" | "more" | "people" | "away" | "others" | "offline";
+
+/**
+ * The most dots a room's row shows (#197): a full raid looks full, still
+ * with no number, as a folded server's header does. A room's name gives way
+ * first, ending in "…".
+ */
+const ROOM_DOTS = 16;
 
 /**
  * One server's places and people (docs/design/buddy-list.md, #351): its
@@ -78,9 +87,12 @@ export function ServerBody({
   idPrefix?: string;
   serverName?: string;
 }) {
-  // Offline and the quiet rooms past eight start folded (the design,
-  // decision 22); everything else starts open.
-  const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline", "more"]));
+  // Offline, the quiet rooms past eight (decision 22) and, on a big server,
+  // everyone you don't talk to (#197) start folded; everything else starts open.
+  const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline", "more", "others"]));
+  // One line per person, a choice in Settings → Appearance (#197). The
+  // phone's rows are sized for a thumb, so it keeps two.
+  const oneLine = useOneLine() && !onPhone();
   // The host or a co-host (#424): the ways from an empty place to Hosting.
   const host = hostsHere(model.me?.user);
   const toggle = (fold: Fold) =>
@@ -141,12 +153,13 @@ export function ServerBody({
     <Row
       key={row.user.id}
       lead={{ kind: "person", person: markerFor(row.user, row.state) }}
-      lines="two"
+      lines={oneLine ? "one" : "two"}
       // The lights are on only for somebody here (#301): idle, away and
       // offline names are the dim grey, and their mark says which.
       title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
       // Written to you and not read: said in words too, never a count (SPEC §4.2).
-      label={`${row.user.display_name}, ${row.note}${row.fresh ? ", wrote to you" : ""}`}
+      // One line per person has no second line, so the status goes in the words (#197).
+      label={`${row.user.display_name}, ${row.note}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}
       trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
       note={row.note}
       detail={row.line ?? undefined}
@@ -233,7 +246,7 @@ export function ServerBody({
         room.people.length > 0 || room.voice ? (
           <span className="nx-list-room-end">
             {room.voice ? <VoiceGlyph speaking={room.people.some(talking)} /> : null}
-            <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} />
+            <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} max={ROOM_DOTS} />
           </span>
         ) : undefined
       }
@@ -241,6 +254,8 @@ export function ServerBody({
     />
   );
   const nobodyElse = model.people.here.length + model.people.away.length + model.people.offline.length === 0;
+  // A big server (#197): the people you talk to, then everyone else folded.
+  const split = splitPeople(model.people);
 
   return (
     <>
@@ -306,10 +321,21 @@ export function ServerBody({
         <div id={id("people")}>
           {nobodyElse ? (
             <Empty words="Nobody else is here yet." action={host && onHost ? { label: "Invite people", run: () => onHost("invites") } : undefined} />
+          ) : split ? (
+            // Here and away together, each person's mark and note saying which.
+            split.yours.length > 0 ? (
+              <RowList label={on("People you talk to")}>{split.yours.map(person)}</RowList>
+            ) : null
           ) : (
             <RowList label={on("People here")}>{model.people.here.map(person)}</RowList>
           )}
-          {model.people.away.length > 0 ? (
+          {split && split.others.length > 0 ? (
+            <>
+              <SectionLabel label="Everyone else" level="group" open={open("others")} onToggle={() => toggle("others")} controls={id("others")} />
+              <Group fold="others" rows={split.others} open={open("others")} id={id("others")} label={on("Everyone else")} person={person} />
+            </>
+          ) : null}
+          {!split && model.people.away.length > 0 ? (
             <>
               <SectionLabel label="Away" level="group" open={open("away")} onToggle={() => toggle("away")} controls={id("away")} />
               <Group fold="away" rows={model.people.away} open={open("away")} id={id("away")} label={on("Away")} person={person} />
@@ -377,9 +403,9 @@ function roomLabel(name: string, people: number, voice: boolean): string {
 }
 
 /**
- * Away or Offline under People. Folded, it still shows anybody in it who has
- * written to you and you haven't read (#351): a DM is addressed to you, so
- * folding a group never hides it.
+ * Away, Everyone else (#197) or Offline under People. Folded, it still shows
+ * anybody in it who has written to you and you haven't read (#351): a DM is
+ * addressed to you, so folding a group never hides it.
  */
 function Group({
   fold,

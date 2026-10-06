@@ -135,6 +135,7 @@ export const HEADINGS = {
   theme: "Color Theme",
   size: "Interface Size",
   names: "Names",
+  list: "Your List",
   conversations: "Conversations Open",
   closing: "When You Close Your List",
   chimes: "A Familiar Little Sound",

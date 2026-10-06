@@ -230,7 +230,9 @@ on; the other three are dimmed, and their shape says which (#301):
 | away | a crescent moon, at half strength |
 | offline | a hollow dot: the dot's outline (`--marker-ring`, `--marker-ring-sm` at the small size), at 60% |
 
-`typing` makes a marker breathe. The hollow dot is the one ring: an outline of
+`typing` makes a marker breathe. `lit` rings it in the lamp, just outside the dot,
+while that person talks in a big voice room's crowd (#197), where the marker is all
+there is of them; it's an outline, so lighting never moves a dot. The hollow dot is the one ring: an outline of
 the dot itself, never a halo around one. A ring was kept out because one can
 stop reading as a ring at a small size, so the kit checks it's painted hollow
 at 6px and 8px, at 100% and 200%. It's drawn as an inner shadow rather than
@@ -247,7 +249,13 @@ from #259 is gone, and so is the lift that put it on the name's line.
   diagonal, three in a triangle, four in a square.
 - **`HashMark`** is a room's `#`, the same color for every room (Matt,
   2026-09-25).
-- **`MarkerCluster`** is a short run of small markers for who's in a room.
+- **`MarkerCluster`** is a short run of small markers for who's in a room: five by
+  default, sixteen in a room's row and a folded server's header (#197), so a full raid
+  looks full. Never a number.
+- **`MarkerCrowd`** is everybody in a big voice room (#197): one small marker each, in
+  the room's order, wrapping onto as many lines as it takes, and the people symbol at
+  the end. The whole of it is one button, which opens everyone by name. A talker's
+  marker is `lit`; markers sit far enough apart that a ring never touches the next.
 
 **Don't** draw a presence dot with anything else.
 
@@ -331,7 +339,9 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
   - `selected` means its card, tab or window is open.
   - `detailTip` shows the whole second line in a tooltip on hover or
     keyboard focus, when the row has had to cut it short: a person's status
-    (#351). It's in the row's text already for screen readers.
+    (#351). It's in the row's text already for screen readers. A one-line row
+    with a `detail` (one line per person, #197) shows it whenever there is one,
+    and its `label` says it for screen readers.
   - `knocked` means you just knocked on this person's door: the row gives one
     small shake (two slow durations long, so none under reduced motion).
 - **Actions:** up to three md `IconButton`s, shown on hover and keyboard focus.
@@ -556,6 +566,9 @@ reaches past its box and the pill's edge, as everywhere else (#287).
 - `onActivate` makes the whole chip a button that opens something about it,
   named by `actionLabel` ("Eli's volume, 100%"), with `expanded` while it's
   open: a voice chip opens that person's volume.
+- `fill` makes it as wide as the place it sits in rather than its words: a seat in a
+  big room's voice bar (#197), three to a line, so a new talker taking a seat never
+  moves the others.
 
 ### Slider
 
@@ -734,7 +747,9 @@ replaces an unread count.
 - **Pane header**, 40px: a room's `#name`, who's in it (markers) and its
   topic; a DM's people, a 1:1's status, and Knock.
 - **Voice strip**, 40px in every state, so voice changing never moves the
-  conversation: who's in voice as chips (lit while talking) and one way in
+  conversation: who's in voice as chips (lit while talking; in a room you're in with
+  more people than chips, you and whoever just talked, by the voice bar's seat rule;
+  in a room you're not in, the people you talk to first, #197) and one way in
   (Join, Move voice here, Start talking, Talk here instead). In the room
   you're in voice in, it ends with your Mute, Deafen and Leave voice as small
   plain `IconButton`s (#216), the same symbols, sizes and spacing as the
@@ -880,6 +895,9 @@ built on the rows' own grid so nothing new lines up by eye:
 | A DM you haven't read is lit (its person's row in People, or a group's row with the rooms; the heading above while folded; a folded server's header; its tab; a lit person shows in a folded group, #351) with a fill and an edge no read one has, and bold; rooms are bold only; reading puts it out, and a new DM lights it; text on the lamp keeps 4.5:1, hovered or not | `next-list.spec.ts`, `next-servers.spec.ts`, `next-chat.spec.ts` › lit; `contrast.test.ts` › a lit row, heading or tab; `core/servers.test.ts`, `core/chat/conversation.test.ts` |
 | Your own card while you're away (#392): washed in the away warm, I'm back filled in it and the away message boxed with the moon, none of it the lamp, with one server or several and in Settings; every name color and grey readable on it; back at the computer after ten minutes still away, a line says so beside I'm back, and nothing sets you back by itself | `next-list.spec.ts`, `next-servers.spec.ts`, `next-settings.spec.ts`, `next-list-window.spec.ts`, `contrast.test.ts`, `lib/watchPresence.windows.test.ts` |
 | DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
+| A big room (#197): six seats, you and whoever just talked, two lines of three, 24px, each as wide as its column; a seat changes hands only when somebody new talks, to whoever spoke longest ago, and nobody moves while they talk, in the voice bar and the conversation's strip; everybody a marker in the crowd, lit while talking, no digit in the bar; the crowd opens everyone but you, alphabetical, searchable, Enter opening the first one's volume, Escape giving the crowd the keyboard back; a small room's bar as before | `core/seats.test.ts`, `next-list.spec.ts` › raid night, `next-chat.spec.ts` › in a big room you're in, `kit.spec.ts` › a big voice room's crowd; a seat is as wide as its column |
+| A big server's People (#197): past twelve people here or away, the people you talk to, then "Everyone else" folded, with no Away group and no digit in any heading; a room's row shows up to sixteen markers | `core/list.test.ts` › a big server's People, `next-list.spec.ts` › raid night |
+| One line per person (#197): off to start; on, every person's row is 32px with no second line, the status in a tooltip and the row's name; turned on in Settings, an open list follows at once | `next-list.spec.ts` › one line per person, `next-settings-window.spec.ts` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |
 | No pixel value but `0` and `1px` outside `tokens.css` | `discipline.test.ts` › writes no pixel value but 0 and 1px |
 | No `!important` | `discipline.test.ts` › never uses !important |

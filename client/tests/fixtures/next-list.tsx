@@ -17,6 +17,11 @@
  *
  * `?fields`: Jules and you have fields with labels of your own and web
  * addresses in them (#270); `&long` makes them as long as the server takes.
+ *
+ * `?raid`: raid night (#197), forty-five more people in #general and its
+ * voice (next/raid.ts); with `?voice`, you're in it too, 48 in all, and
+ * `window.talk(ids)` says who is talking now. `&oneline`: one line per
+ * person, as Settings → Appearance can set (#197).
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -35,6 +40,7 @@ import "../../src/next/styles/app.css";
 import type { User } from "../../src/generated/User";
 import { NOW, SERVER, SERVER_NAME, dms, evening, ownFields, people, withFields } from "./next/evening";
 import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
+import { raid } from "./next/raid";
 
 // `?voice`: you're in voice in #general, Eli talking. `&ptt`: with push-to-talk,
 // the key up. `&mics`: Jules deafened and out of reach, Eli on a client that
@@ -47,12 +53,16 @@ const heldKnocks: ((ok: boolean) => void)[] = [];
 declare global {
   interface Window {
     answerKnock?: (ok: boolean) => void;
+    talk?: (ids: string[]) => void;
   }
 }
+// `&oneline`: one line per person (#197), saved before the list reads it;
+// without it, two lines, whatever an earlier page saved.
+window.localStorage.setItem("linger.next.peopleOneLine", String(query.has("oneline")));
 window.answerKnock = (ok) => heldKnocks.shift()?.(ok);
 // `?away`: you're away already, so the top card offers "I'm back", and the
 // server says so to everyone, as it does once an away message is saved.
-const night = evening(serverState(SERVER));
+const night = query.has("raid") ? raid(evening(serverState(SERVER))) : evening(serverState(SERVER));
 const base = query.has("away")
   ? (() => {
       const away = "walking the dog 🐕";
@@ -198,6 +208,14 @@ interface Live {
 /** One server, as the list has always been. */
 function OneServer() {
   const [held, setHeld] = useState<GatewayState>(described);
+  // `?raid`: who's talking changes when the spec says so.
+  const [talkers, setTalkers] = useState<ReadonlySet<string>>(speaking);
+  useEffect(() => {
+    if (!query.has("raid")) return;
+    window.talk = (ids) => setTalkers(new Set(ids));
+    document.body.dataset.raid = "ready";
+  }, []);
+  const voiceNow = query.has("raid") ? voiceModel(state, talkers) : voice;
   useEffect(() => {
     if (!query.has("live")) return;
     let next = 100;
@@ -224,7 +242,7 @@ function OneServer() {
     model: listModel(held, NOW),
     header: serverHeader(held, listModel(held, NOW), false),
     quiet: false,
-    speaking,
+    speaking: talkers,
     onOpenRoom: (id) => note(`room:${id}`),
     onOpenDm: (id) => note(`dm:${id}`),
     onOpenPerson: (user, dm) => note(`person:${user.id}:${dm ?? "new"}`),
@@ -253,20 +271,23 @@ function OneServer() {
     <ListView
       servers={[listing]}
       voice={
-        voice
+        voiceNow
           ? {
-              ...voice,
-              onGoToRoom: () => note(`go:${voice.roomId}`),
+              ...voiceNow,
+              onGoToRoom: () => note(`go:${voiceNow.roomId}`),
               onMute: (muted) => note(`mute:${muted}`),
               onDeafen: (deafened) => note(`deafen:${deafened}`),
               onLeave: () => note("leave"),
+              // `?raid`: chips and the everyone card open volumes (#197).
+              ...(query.has("takeout") || query.has("raid")
+                ? { onVolume: (person: { user: { id: string } }, volume: number) => note(`volume:${person.user.id}:${volume}`) }
+                : {}),
               // `?takeout`: you're the host, so a chip's card can take them
               // out of voice (#423); `&takeoutfail` has the server refuse.
               ...(query.has("takeout")
                 ? {
-                    onVolume: (person: { user: { id: string } }, volume: number) => note(`volume:${person.user.id}:${volume}`),
                     onTakeOut: async (person: { user: { id: string } }) => {
-                      note(`takeout:${voice.roomId}:${person.user.id}`);
+                      note(`takeout:${voiceNow.roomId}:${person.user.id}`);
                       return query.has("takeoutfail") ? "They aren't in voice there." : null;
                     },
                   }

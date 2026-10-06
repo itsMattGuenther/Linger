@@ -25,6 +25,7 @@ import {
   ICON_NAMES,
   Marker,
   MarkerCluster,
+  MarkerCrowd,
   MarkerSlot,
   Menu,
   Name,
@@ -439,8 +440,17 @@ function Gallery() {
               <Marker key={state} color="amber" state={state} size={size} label={`Eli (${size})`} />
             ))}
             <Marker color="fern" state="here" size={size} typing label="Jules typing" />
+            <Marker color="rose" state="here" size={size} lit label="Sable talking" />
           </div>
         ))}
+        <div className="g-row g-crowd" data-testid="crowd">
+          <Label>crowd</Label>
+          <MarkerCrowd
+            label="Everyone in voice"
+            people={Array.from({ length: 48 }, (_, n) => ({ color: PALETTE_KEYS[n % PALETTE_KEYS.length] ?? "slate", state: "here" as const, lit: n === 3 || n === 30 }))}
+            onActivate={() => {}}
+          />
+        </div>
         <div className="g-row">
           <Label>slot</Label>
           <MarkerSlot>
@@ -830,6 +840,16 @@ function Gallery() {
             Jules
           </Chip>
         </div>
+        {/* A big voice room's seats (#197): chips as wide as their column. */}
+        <ul className="g-seats" data-testid="seats">
+          {["you", "Kestrel", "A name much too long for its seat", "Bramble"].map((name, n) => (
+            <li key={name}>
+              <Chip label={name} marker={{ color: PALETTE_KEYS[n + 2] ?? "slate", state: "here" }} active={n === 1} fill>
+                {name}
+              </Chip>
+            </li>
+          ))}
+        </ul>
         <div className="g-row g-narrow" data-testid="narrow-things">
           <Chip label="A server whose name is much too long for this">A server whose name is much too long for this</Chip>
           <Notice icon="knock">Somebody with a long name knocked, just saying hi</Notice>

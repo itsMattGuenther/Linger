@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
 import { startProblemWords, type StartProblem } from "../../../lib/voice";
@@ -6,9 +6,13 @@ import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "
 import { verbFor } from "../../core/chat/words";
 import { copyText } from "../../core/copy";
 import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from "../../kit";
+import { useTalkSeats } from "../useTalkSeats";
 import "./VoiceStrip.css";
 
-/** Chips that fit on the strip's one line; past this it says "and others". */
+/**
+ * Chips that fit on the strip's one line; past this it says "and others".
+ * In a bigger room you're in, they're you and whoever just talked (#197).
+ */
 const MAX_CHIPS = 4;
 
 /**
@@ -84,6 +88,14 @@ export const VoiceStrip = memo(function VoiceStrip({
       </p>
     ) : null;
   const [why, setWhy] = useState<DOMRect | null>(null);
+  // A room too big for its chips, that you're in (#197): you first, then
+  // whoever just talked, kept still (core/seats.ts). Who's talking is known
+  // only in the room you're in; elsewhere the pane's order stands, with the
+  // people you talk to first.
+  const others = strip.kind === "mine" ? strip.people.filter((id) => id !== meId) : [];
+  const talkingKey = others.filter((id) => speaking.has(id)).join("\n");
+  const talkingHere = useMemo(() => new Set(talkingKey === "" ? [] : talkingKey.split("\n")), [talkingKey]);
+  const seats = useTalkSeats(others, talkingHere, MAX_CHIPS - 1);
   const lead = showFailed ? `Couldn't start voice. ${startProblemWords(showFailed)}` : "";
   const problem = showFailed ? (
     <p className="nx-strip-words" data-problem="yes" role="alert" title={`${lead}\n${showFailed.detail}`}>
@@ -127,7 +139,8 @@ export const VoiceStrip = memo(function VoiceStrip({
   }
 
   const here = strip.people.flatMap((id) => people.get(id) ?? []);
-  const shown = here.slice(0, MAX_CHIPS);
+  const seated = strip.kind === "mine" && here.length > MAX_CHIPS && meId !== null && strip.people.includes(meId);
+  const shown = (seated ? [meId, ...seats] : strip.people).flatMap((id) => people.get(id) ?? []).slice(0, MAX_CHIPS);
   const talking = here.some((user) => speaking.has(user.id));
   return (
     <div className="nx-strip" data-kind={strip.kind} role="group" aria-label="Voice in this conversation">

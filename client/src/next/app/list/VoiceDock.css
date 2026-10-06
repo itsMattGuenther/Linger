@@ -98,3 +98,23 @@
 .nx-voice-server-seats {
   flex: none;
 }
+
+/* A big room's seats (#197): you and whoever just talked, two lines of three
+   columns, so a new talker taking a seat never moves the others. */
+.nx-voice-seats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-voice-seats li {
+  min-width: 0;
+}
+
+/* The crowd's markers start on the chips' edge; its hover reaches past it. */
+.nx-voice-crowd {
+  margin: 0 calc(var(--space-1-5) * -1);
+}

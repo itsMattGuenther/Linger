@@ -1,0 +1,36 @@
+/* A big voice room's crowd (#197): small markers that wrap, and the people
+   symbol at the end. One button; it grows a line at a time as people come. */
+.k-crowd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-sm);
+  padding: var(--space-1-5);
+  border-radius: var(--radius-md);
+  color: var(--icon-muted);
+  cursor: pointer;
+}
+
+.k-crowd:hover,
+.k-crowd[aria-expanded="true"] {
+  background: var(--surface-subtle-hover);
+  color: var(--text-primary);
+}
+
+/* Wide enough apart that a lit marker's ring never touches the next one. */
+.k-crowd-dots {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.k-crowd-go {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+}

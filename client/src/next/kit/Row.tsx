@@ -31,7 +31,9 @@ export interface RowProps {
    * Show the whole second line in a tooltip on hover or keyboard focus, when
    * the row has had to cut it short (#351: a person's whole status, without
    * opening anything). It's in the row's text already for assistive
-   * technology, so the tooltip is for eyes only.
+   * technology, so the tooltip is for eyes only. A one-line row with a
+   * `detail` (one line per person, #197) has no second line to cut, so its
+   * tooltip shows whenever there's a detail; its `label` should say it.
    */
   detailTip?: boolean;
   /** A short faint note at the end of the first line: "in #general". */
@@ -144,12 +146,15 @@ export function Row({
   const count = Math.min(actions?.length ?? 0, 3);
   const detailNode = useRef<HTMLSpanElement | null>(null);
   const [tipAt, setTipAt] = useState<HTMLElement | null>(null);
+  // The second line, cut short where it shows, or not shown at all in a
+  // one-line row: either way the tooltip is the way to read it.
   const cut = () => {
+    if (lines === "one") return true;
     const node = detailNode.current;
     return node !== null && node.scrollWidth > node.clientWidth + 1;
   };
   const tip =
-    detailTip && lines === "two" && detail
+    detailTip && detail
       ? {
           onPointerEnter: (event: MouseEvent<HTMLButtonElement>) => {
             if (cut()) setTipAt(event.currentTarget);

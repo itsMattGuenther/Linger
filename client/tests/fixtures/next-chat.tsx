@@ -23,6 +23,8 @@
  *   failed last time (#261); `&windows` words it for Windows. It asked for
  *   the system's default devices, or `&picked` for devices picked by name (#273).
  * - `?takenout`: the host took you out of voice in the tab showing (#423).
+ * - `?raid`: forty-five more people in #general's voice (#197,
+ *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -43,6 +45,7 @@ import { closeTab, keyOf, openTab, selectTab, type TabKey, type Tabs } from "../
 import { markerOf, type TabItem } from "../../src/next/kit";
 import "../../src/next/styles/app.css";
 import { customEmoji, NOW, SERVER, SERVER_NAME, dms, leftOff, messages as evening, people, previews, rooms } from "./next/evening";
+import { RAIDERS } from "./next/raid";
 
 const query = new URLSearchParams(location.search);
 const BIG = query.has("big");
@@ -57,8 +60,9 @@ const PAGE = 150;
 const LONG = query.has("long");
 const VOICE_FAIL = query.get("voicefail");
 const ASKED = query.has("picked") ? { input: "USB Microphone", output: "Headphones" } : { input: null, output: null };
+const RAID = query.has("raid");
 const everyone: ReadonlyMap<string, User> = new Map(
-  Object.values(people).map((user) => [
+  [...Object.values(people), ...(RAID ? RAIDERS : [])].map((user) => [
     user.id,
     LONG && user.id === "u-eli" ? { ...user, display_name: "Eli Bartholomew-Maximilian the Considerably Long" } : user,
   ]),
@@ -71,7 +75,7 @@ const tabOf = (roomId: string): TabKey => ({ server: SERVER, roomId });
 const IN_ROOM: Record<string, string[]> = { "r-general": ["u-matt", "u-eli", "u-jules"], "r-listening": ["u-dave"] };
 const inVoice = (roomId: string): string[] => {
   if (VOICE === "off" || VOICE === "none") return [];
-  const others = roomId === "r-general" ? ["u-eli", "u-jules"] : [];
+  const others = roomId === "r-general" ? ["u-eli", "u-jules", ...(RAID ? RAIDERS.map((user) => user.id) : [])] : [];
   const mine = (VOICE === "mine" && roomId === "r-general") || (VOICE === "elsewhere" && roomId === "r-listening");
   return mine ? ["u-matt", ...others] : others;
 };
@@ -160,6 +164,8 @@ declare global {
       typing: (roomId: string, userIds: string[]) => void;
       /** With `?fail=held`, refuse every send still waiting. */
       refuse: () => void;
+      /** Who is talking now, by user id. */
+      talk: (userIds: string[]) => void;
     };
   }
 }
@@ -196,6 +202,7 @@ function Fixture() {
   const [files, setFiles] = useState<Record<string, DraftFile[]>>({});
   const serial = useRef(0);
   const loading = useRef(false);
+  const [speaking, setSpeaking] = useState<ReadonlySet<string>>(SPEAKING);
 
   const activeRoom = tabs.active?.roomId ?? null;
   const activeRef = useRef(activeRoom);
@@ -231,6 +238,7 @@ function Fixture() {
     },
     typing: (roomId, userIds) => setTyping((all) => ({ ...all, [roomId]: userIds })),
     refuse: () => refusals.splice(0).forEach((refuse) => refuse()),
+    talk: (userIds) => setSpeaking(new Set(userIds)),
   };
 
   const items: TabItem[] = tabs.open.map((tab) => {
@@ -248,7 +256,7 @@ function Fixture() {
       // A DM with something new is lit as well, as tabModel draws it (#291).
       lit: room?.kind === "dm" && fresh.has(tab.roomId),
       voice: mine ? "mine" : voice.length > 0 ? "others" : undefined,
-      speaking: voice.some((id) => SPEAKING.has(id)),
+      speaking: voice.some((id) => speaking.has(id)),
       closable: true,
     };
   });
@@ -378,7 +386,7 @@ function Fixture() {
       customEmoji: query.has("noemoji") ? [] : customEmoji,
       serverName: SERVER_NAME,
       me,
-      speaking: SPEAKING,
+      speaking,
       typing: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []),
       // As the window lists them (core/chat/mentions.ts): a DM's people, or the room's first.
       mentionable: (room.kind === "dm"

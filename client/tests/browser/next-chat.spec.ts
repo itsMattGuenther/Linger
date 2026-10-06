@@ -633,6 +633,25 @@ test.describe("voice here", () => {
     expect(await did(page)).toEqual(["mute"]);
   });
 
+  // A raid (#197): more people than the strip has chips. In the room you're
+  // in, it shows you and whoever just talked, still while they talk.
+  test("in a big room you're in, the strip shows you and whoever just talked, and nobody moves while they talk", async ({ page }) => {
+    await open(page, "?voice=mine&raid");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const chips = strip.getByRole("list", { name: "In voice here" }).getByRole("listitem");
+    // Eli was talking as it opened; the others are the first to join.
+    await expect(chips).toHaveText(["you", "Eli", "Jules", "Kestrel"]);
+    await expect(strip).toContainText("and others");
+    await page.evaluate(() => window.chat?.talk(["u-raid-12"]));
+    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Kestrel"]);
+    await expect(chips.filter({ hasText: "Fennick" }).locator("[data-kit='Chip']")).toHaveAttribute("data-active", "yes");
+    await page.evaluate(() => window.chat?.talk([]));
+    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Kestrel"]);
+    // Somebody new: the seat of whoever spoke longest ago (Kestrel never did).
+    await page.evaluate(() => window.chat?.talk(["u-raid-30"]));
+    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Yarrow"]);
+  });
+
   test("in voice elsewhere: offers to move, in words", async ({ page }) => {
     await open(page, "?voice=elsewhere");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });

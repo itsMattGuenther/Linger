@@ -993,3 +993,35 @@ and §6 change with it.
   host's Settings → Emoji says to update the server rather than offering an
   add that would fail.
 - **Not reactions**, while #168's trial has them out, and **never for sale**.
+
+## Decided — the voice bar and the list at raid size
+
+**Matt, 2026-10-06 (#197).** Chosen from mockups at real size of a 63-person server with
+48 in one voice room (a private canvas, linked from #197). Before this, a voice bar of 48
+would have been 48 chips, about 500px of a 900px window, and People 52 two-line rows.
+
+- **The voice bar: seats and a crowd** (option A of two). Up to six people, nothing
+  changes. Past six, six seats: you, then whoever just talked (`core/seats.ts`). A seat
+  changes hands only when somebody without one starts talking, and goes to whoever
+  spoke longest ago and isn't talking, so a chip never moves while its person talks and
+  a seat stays with whoever just finished until it's needed. Everybody is a 6px marker
+  in the crowd under them, ringed in the lamp while they talk (`MarkerCrowd`), and the
+  crowd opens everyone by name, alphabetical, with a search box; picking somebody opens
+  their volume card. Option B, everyone in a fold inside the bar, was turned down: open,
+  it pushes the list up.
+- **The voice line in a conversation** uses the same seats in the room you're in, with
+  the chips it has room for. In a room you're not in, who's talking isn't known (you hear
+  only your own room), so it shows the people you talk to first (`talkingFirstIds`).
+- **The list: your people, then everyone else** (option B of three). Past twelve people
+  here or away (`PEOPLE_SHOWN`), People shows the people you talk to (anyone whose DM
+  with you has anything in it), here then away, and everyone else folds under
+  "Everyone else" (`splitPeople`). Matt's reason: on raid night the busy room's own row,
+  its dots and its talking, is what should show a full room and pull people in, not a
+  sub-group of names under People. Turned down: grouping People by place (the room's
+  crowd as its own folded group), and one line each with nothing folded.
+- **A room's row shows up to sixteen dots**, up from five, as a folded server's header
+  already does, so a full raid looks full. Still no number.
+- **One line per person** is a setting in Settings → Appearance, off to start (Matt:
+  some people will want a more minimal view). This is SPEC §4.7's one exception to "no
+  Density setting", for the list only: conversations keep one layout. A person's status
+  shows in a tooltip and in their row's accessible name. The phone keeps two lines.

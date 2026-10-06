@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { still } from "./still";
 
 // The buddy list window on the prototype's Friday evening
 // (tests/fixtures/next-list.tsx). What it shows, that it is built the way
@@ -1222,5 +1223,176 @@ test.describe("you, at the top", () => {
     const box = await page.getByRole("dialog", { name: "Away message" }).boundingBox();
     const size = page.viewportSize();
     expect(box && size && box.x >= 8 && box.x + box.width <= size.width - 8 && box.y + box.height <= size.height - 8).toBe(true);
+  });
+});
+
+// Raid night (#197): 48 people in #general's voice, on a server big enough
+// that People folds everyone you don't talk to (fixtures/next/raid.ts).
+test.describe("raid night", () => {
+  async function raid(page: Page, extra = "") {
+    await page.goto(`/tests/fixtures/next-list.html?voice&raid${extra}`);
+    await expect(page.locator("body")).toHaveAttribute("data-raid", "ready");
+    await page.evaluate(() => document.fonts.ready);
+  }
+  const talk = (page: Page, ids: string[]) => page.evaluate((who) => window.talk?.(who), ids);
+  const seats = (page: Page) => page.getByRole("list", { name: "You and who just talked" }).getByRole("listitem");
+
+  test("a small room's voice bar is as it always was: everybody as a chip, and no crowd", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await expect(bar.getByRole("list", { name: "Who's in voice" }).getByRole("listitem")).toHaveText(["you", "Eli", "Jules"]);
+    await expect(bar.getByRole("button", { name: "Everyone in voice" })).toHaveCount(0);
+  });
+
+  test("a big room's voice bar seats you and whoever just talked, and nobody moves while they talk", async ({ page }) => {
+    await raid(page);
+    // Eli was talking as the bar opened; the other seats are the first to join.
+    await expect(seats(page)).toHaveText(["you", "Eli", "Jules", "Kestrel", "Bramble", "Oxbow"]);
+    // Fennick talks: he takes the seat of whoever spoke longest ago (Jules never did).
+    await talk(page, ["u-raid-12"]);
+    await expect(seats(page)).toHaveText(["you", "Eli", "Fennick", "Kestrel", "Bramble", "Oxbow"]);
+    await expect(seats(page).filter({ hasText: "Fennick" }).locator("[data-kit='Chip']")).toHaveAttribute("data-active", "yes");
+    // He stops: nothing moves, and nothing is lit.
+    await talk(page, []);
+    await expect(seats(page)).toHaveText(["you", "Eli", "Fennick", "Kestrel", "Bramble", "Oxbow"]);
+    await expect(seats(page).locator("[data-active='yes']")).toHaveCount(0);
+    // Yarrow talks: the oldest seat is Kestrel's, who never spoke; Eli and Fennick keep theirs.
+    await talk(page, ["u-raid-30"]);
+    await expect(seats(page)).toHaveText(["you", "Eli", "Fennick", "Yarrow", "Bramble", "Oxbow"]);
+    // Seats are two lines of three, every one 24px tall and as wide as its column.
+    const boxes = await seats(page)
+      .locator("[data-kit='Chip']")
+      .evaluateAll((chips) => chips.map((chip) => chip.getBoundingClientRect()).map((box) => ({ top: Math.round(box.top), width: Math.round(box.width), height: box.height })));
+    expect(new Set(boxes.map((box) => box.top)).size).toBe(2);
+    expect(new Set(boxes.map((box) => box.width)).size).toBe(1);
+    expect(new Set(boxes.map((box) => box.height))).toEqual(new Set([24]));
+  });
+
+  test("everybody in a big room is a marker in the crowd, lit while they talk, with no number anywhere", async ({ page }) => {
+    await raid(page);
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    const crowd = bar.getByRole("button", { name: "Everyone in voice" });
+    await expect(crowd.locator("[data-kit='Marker']")).toHaveCount(48);
+    await talk(page, ["u-raid-0", "u-raid-12", "u-raid-30"]);
+    await expect(crowd.locator("[data-lit='yes']")).toHaveCount(3);
+    expect(await bar.textContent()).not.toMatch(/\d/);
+  });
+
+  test("the crowd opens everyone but you by name, in order; a search finds somebody and Enter opens their volume", async ({ page }) => {
+    await raid(page);
+    const crowd = page.getByRole("button", { name: "Everyone in voice" });
+    await crowd.click();
+    await expect(crowd).toHaveAttribute("aria-expanded", "true");
+    const card = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+    const people = card.getByRole("list", { name: "In voice in #general" }).getByRole("listitem");
+    await expect(people).toHaveCount(47);
+    await expect(people.first()).toHaveText("Bramble");
+    // The search box has the keyboard already.
+    await page.keyboard.type("KAI");
+    await expect(people).toHaveText(["Kaito"]);
+    await page.keyboard.press("Enter");
+    await expect(card).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Kaito's volume" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Kaito's volume" })).toHaveCount(0);
+    await expect(crowd).toBeFocused();
+  });
+
+  test("a volume card opened from a seat stays put when that seat goes to somebody new", async ({ page }) => {
+    await raid(page);
+    await seats(page).filter({ hasText: "Bramble" }).getByRole("button").click();
+    const card = page.getByRole("dialog", { name: "Bramble's volume" });
+    // It scales in as it opens: measured once it has finished.
+    await still(card);
+    const before = await card.boundingBox();
+    // Three new talkers take the three seats nobody has spoken from: Jules's, Kestrel's, Bramble's.
+    await talk(page, ["u-raid-12", "u-raid-14", "u-raid-15"]);
+    await expect(seats(page).filter({ hasText: "Bramble" })).toHaveCount(0);
+    await expect(card).toBeVisible();
+    expect(await card.boundingBox()).toEqual(before);
+  });
+
+  test("a search that finds nobody says so; Escape closes it and gives the crowd back the keyboard", async ({ page }) => {
+    await raid(page);
+    const crowd = page.getByRole("button", { name: "Everyone in voice" });
+    await crowd.click();
+    await page.keyboard.type("zzz");
+    await expect(page.getByRole("dialog", { name: "Everyone in voice in #general" })).toContainText("Nobody by that name in voice.");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Everyone in voice in #general" })).toHaveCount(0);
+    await expect(crowd).toBeFocused();
+  });
+
+  test("somebody muted shows it in the card, and somebody talking shows the bars", async ({ page }) => {
+    await raid(page);
+    await talk(page, ["u-raid-0"]);
+    await page.getByRole("button", { name: "Everyone in voice" }).click();
+    const people = page.getByRole("dialog", { name: "Everyone in voice in #general" }).getByRole("listitem");
+    await expect(people.filter({ hasText: "Grimwald" })).toContainText("Muted");
+    await expect(people.filter({ hasText: "Kestrel" }).locator("[data-kit='VoiceGlyph'][data-speaking='yes']")).toHaveCount(1);
+  });
+
+  test("a busy room's row shows up to sixteen markers, and a small one shows its own", async ({ page }) => {
+    const markers = (page: Page) => page.getByRole("button", { name: /^#general,/ }).locator("[data-kit='Marker']");
+    await page.goto("/tests/fixtures/next-list.html");
+    await expect(markers(page)).toHaveCount(3);
+    await raid(page);
+    await expect(markers(page)).toHaveCount(16);
+  });
+
+  test("on a big server, People shows the people you talk to and folds everyone else, with no number (option B)", async ({ page }) => {
+    await raid(page);
+    await expect(rows(page, "People you talk to")).toHaveCount(1);
+    await expect(rows(page, "People you talk to").first()).toContainText("Jules");
+    const fold = page.getByRole("button", { name: /^Everyone else/ });
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(fold).toContainText("show");
+    await expect(page.getByRole("list", { name: "Everyone else" })).toHaveCount(0);
+    // Away has no group of its own here: Sam is with everyone else.
+    await expect(page.locator("[data-kit='SectionLabel']").filter({ hasText: /^Away/ })).toHaveCount(0);
+    await fold.click();
+    await expect(rows(page, "Everyone else").filter({ hasText: "Kestrel" })).toHaveCount(1);
+    await expect(rows(page, "Everyone else").filter({ hasText: "Sam" })).toHaveCount(1);
+    const headings = await page.locator("[data-kit='SectionLabel']").allTextContents();
+    expect(headings.join(" ")).not.toMatch(/\d/);
+  });
+});
+
+test.describe("one line per person (#197)", () => {
+  test("every person's row is one line, 32px, and their status shows on hover", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?oneline");
+    await page.evaluate(() => document.fonts.ready);
+    const people = rows(page, "People here");
+    const heights = await people.locator(".k-row-main").evaluateAll((all) => all.map((row) => row.getBoundingClientRect().height));
+    expect(new Set(heights)).toEqual(new Set([32]));
+    await expect(people.locator(".k-row-detail")).toHaveCount(0);
+    const dave = people.filter({ hasText: "Dave" });
+    await expect(dave.getByRole("button").first()).toHaveAccessibleName(/side two\. nobody talk to me/);
+    await dave.hover();
+    await expect(page.locator("[data-kit='Tooltip']")).toHaveText("side two. nobody talk to me");
+  });
+
+  test("turned on in Settings, a list already open goes to one line at once", async ({ page, context }) => {
+    await page.goto("/tests/fixtures/next-list.html");
+    const height = () =>
+      rows(page, "People here")
+        .first()
+        .locator(".k-row-main")
+        .evaluate((row) => row.getBoundingClientRect().height);
+    expect(await height()).toBe(48);
+    const settings = await context.newPage();
+    await settings.goto("/tests/fixtures/next-settings-window.html?section=appearance");
+    await settings.getByRole("switch", { name: "One line per person" }).click();
+    await expect.poll(height).toBe(32);
+    await settings.getByRole("switch", { name: "One line per person" }).click();
+    await expect.poll(height).toBe(48);
+  });
+
+  test("two lines are back without it", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html");
+    const heights = await rows(page, "People here")
+      .locator(".k-row-main")
+      .evaluateAll((all) => all.map((row) => row.getBoundingClientRect().height));
+    expect(new Set(heights)).toEqual(new Set([48]));
   });
 });
