@@ -135,7 +135,12 @@ person.
 2. **Linger's own records.** `ls -la ~/.local/state/linger/` and read what's
    there, **without deleting anything**:
    - `gbm-probe`: a launch that tried WebKit's GPU drawing path (GBM) and
-     hasn't drawn yet. Left behind after a crash.
+     hasn't drawn yet. Left behind after a crash, and by 0.4.8 and earlier
+     also when Linger was opened while it was already running (#447), so on
+     those versions a `gbm-off` file is not proof of a crash: check
+     `coredumpctl` for one at that time.
+   - `running.lock`: held by the Linger that is running. Harmless; its being
+     there means nothing.
    - `gbm-off` (written by 0.3.5) or `gbm-off-<webkit version>` (later
      versions): Linger saw a crash on the GPU path and keeps it off from then
      on. While it exists, the next launch will usually open, so a crash may not

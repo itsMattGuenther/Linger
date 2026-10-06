@@ -15,6 +15,10 @@
 //! WebKit it was running, and later launches with that WebKit stay off the GPU
 //! path.
 //!
+//! Every launch also holds `RUNNING` until it exits. A launch that finds it
+//! held is a second copy, which hands over to the running Linger and quits
+//! before it could draw, so it leaves the probe alone (#447).
+//!
 //! This lives in the library rather than beside `linux_startup` because the
 //! command that clears the probe has to be registered with the Tauri builder.
 
@@ -28,6 +32,10 @@ pub const PROBE: &str = "gbm-probe";
 /// AppImage's bundled WebKit and the system's are different libraries, and a
 /// WebKit update deserves a fresh try. Delete the file to try again.
 pub const OFF_PREFIX: &str = "gbm-off-";
+/// Locked (`flock`) by every running Linger for as long as it runs. The
+/// kernel lets go of it when the process ends, crash or not, so the file
+/// itself being there means nothing.
+pub const RUNNING: &str = "running.lock";
 /// 0.3.5's record, written without saying which WebKit crashed. Ignored and
 /// removed: it was usually the AppImage's WebKit, which never tries GBM now.
 pub const LEGACY_OFF: &str = "gbm-off";

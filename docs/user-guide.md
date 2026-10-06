@@ -226,7 +226,10 @@ can show. It changes only this launch.
 path off, because the WebKit it carries can't use it on some graphics setups,
 and without it every frame arrives a beat late. The `.deb` and `.rpm` packages
 use your system's WebKit and keep it on. On Omarchy or Arch, install the Arch
-package instead of the AppImage for the same result.
+package instead of the AppImage for the same result. On a package, 0.4.8 and
+earlier could turn it off by mistake if you opened Linger from the menu while
+it was already running. If `~/.local/state/linger/` holds a `gbm-off-…` file,
+delete it and open Linger again.
 
 For **v0.3.2 and earlier**, use this exact command with your downloaded filename:
 

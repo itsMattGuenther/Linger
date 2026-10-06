@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use linger_client_lib::desktop_entry::{
     self, exec_line, Chosen, APP_ID as MENU_ID, GBM, GDK_GL, NV_EXPLICIT_SYNC, WM_CLASS,
 };
-use linger_client_lib::graphics::{self, LEGACY_OFF, OFF_PREFIX, PROBE};
+use linger_client_lib::graphics::{self, LEGACY_OFF, OFF_PREFIX, PROBE, RUNNING};
 
 /// Exists while NVIDIA's kernel driver is loaded, and holds its version, e.g.
 /// `580.178.04`. The open and the closed kernel module both write it.
@@ -140,6 +140,52 @@ fn choose_gbm(launch: &Launch, state: Option<&Path>) -> Gbm {
     }
 }
 
+/// Where this launch may keep the GBM probe: `state`, unless another Linger
+/// is already running (#447).
+///
+/// `tauri_plugin_single_instance` stops a second copy, but only after
+/// [`configure`] has run: the copy brings the running Linger's list forward
+/// and quits, long before its page could draw. Given `state`, [`choose_gbm`]
+/// would leave a probe nothing clears, and the next start would read it as a
+/// crash and turn GBM off. Opening Linger from the menu while it runs did
+/// exactly that on the RTX 4090 + AMD Raphael Omarchy machine on 2026-10-05.
+/// A copy started before the first one has drawn would do worse, turning
+/// the first one's live probe into a crash record. So a second copy gets
+/// nowhere to keep a probe, which stays off the GPU path and touches no file.
+///
+/// Every launch takes [`RUNNING`] here, whatever it chose, and keeps it until
+/// it exits. Anything that stops the lock being taken counts as "the only
+/// Linger", which is how every launch behaved before.
+fn probe_state(state: Option<&Path>) -> Option<&Path> {
+    let state = state?;
+    match running_lock(state) {
+        Ok(Some(lock)) => {
+            // Kept open, and so held, until this process exits.
+            std::mem::forget(lock);
+            Some(state)
+        }
+        Ok(None) => None,
+        Err(_) => Some(state),
+    }
+}
+
+/// [`RUNNING`] in `state`, locked by this process, or `None` when another one
+/// holds it. The lock goes when the file is closed, and the kernel closes it
+/// when the process ends, crash or not.
+fn running_lock(state: &Path) -> io::Result<Option<fs::File>> {
+    fs::create_dir_all(state)?;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(state.join(RUNNING))?;
+    match file.try_lock() {
+        Ok(()) => Ok(Some(file)),
+        Err(fs::TryLockError::WouldBlock) => Ok(None),
+        Err(fs::TryLockError::Error(err)) => Err(err),
+    }
+}
+
 /// Whether WebKit reads this `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` as off: any
 /// value but `0`, the empty one included.
 fn gbm_disabled(value: Option<&OsStr>) -> bool {
@@ -219,6 +265,13 @@ pub fn configure() -> Result<(), &'static str> {
              GPU (#229). Setting GDK_GL yourself overrides this."
         );
     }
+    // Taken by every launch, whatever it chose, so a later copy can tell this
+    // one is running (#447).
+    let state = graphics::state_dir();
+    let probe_state = probe_state(state.as_deref());
+    // It hands over and quits before drawing anything, so its choices below
+    // are never used, and saying them would only mislead.
+    let second_copy = state.is_some() && probe_state.is_none();
     // Somebody's own `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` always wins; WebKit
     // reads it straight from the environment. With GTK's GL off, WebKit never
     // reaches the GPU path, so there is nothing to probe.
@@ -229,7 +282,7 @@ pub fn configure() -> Result<(), &'static str> {
             appimage: std::env::var_os("APPIMAGE").is_some(),
             webkit: &webkit,
         };
-        if choose_gbm(&launch, graphics::state_dir().as_deref()) == Gbm::Off {
+        if choose_gbm(&launch, probe_state) == Gbm::Off {
             std::env::set_var(GBM, "1");
         }
     }
@@ -239,11 +292,13 @@ pub fn configure() -> Result<(), &'static str> {
         let gpus = gpus(Path::new(DRM_CLASS));
         if force_shm(gbm_disabled(std::env::var_os(GBM).as_deref()), gpus) {
             std::env::set_var(FORCE_SHM, "1");
-            eprintln!(
-                "Linger: WebKit's GPU path (GBM) is off and this computer has {gpus} GPUs, \
-                 so pages reach the window in ordinary memory (#433). Setting \
-                 {FORCE_SHM} yourself overrides this."
-            );
+            if !second_copy {
+                eprintln!(
+                    "Linger: WebKit's GPU path (GBM) is off and this computer has {gpus} \
+                     GPUs, so pages reach the window in ordinary memory (#433). Setting \
+                     {FORCE_SHM} yourself overrides this."
+                );
+            }
         }
     }
     ignore_terminal_hangup();
@@ -626,6 +681,50 @@ mod tests {
         let blocked = root.join("state");
         fs::write(&blocked, b"not a directory").unwrap();
         assert_eq!(choose_gbm(&SYSTEM, Some(&blocked)), Gbm::Off);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_second_copy_leaves_the_probe_alone() {
+        // #447: opening Linger from the menu while it ran started a copy that
+        // wrote a probe, handed over and quit before drawing. The next start
+        // read the probe as a crash and turned GBM off.
+        let root = scratch("gbm-second-copy");
+        let state = root.join("state");
+
+        // The first copy tries GBM.
+        let first = probe_state(Some(&state));
+        assert_eq!(first, Some(state.as_path()));
+        assert_eq!(choose_gbm(&SYSTEM, first), Gbm::On);
+
+        // A second copy, before the first has drawn: it must not take the
+        // first one's probe for a crash...
+        let second = probe_state(Some(&state));
+        assert_eq!(second, None);
+        assert_eq!(choose_gbm(&SYSTEM, second), Gbm::Off);
+        assert_eq!(fs::read_to_string(state.join(PROBE)).unwrap(), "2.52.6");
+        assert!(!state.join("gbm-off-2.52.6").exists());
+
+        // ...and once the first has drawn, a third copy must not leave one.
+        fs::remove_file(state.join(PROBE)).unwrap();
+        assert_eq!(choose_gbm(&SYSTEM, probe_state(Some(&state))), Gbm::Off);
+        assert!(!state.join(PROBE).exists());
+
+        // So the next start, after the first copy quits, still tries GBM.
+        assert_eq!(choose_gbm(&SYSTEM, Some(&state)), Gbm::On);
+        assert!(!state.join("gbm-off-2.52.6").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_running_lock_goes_with_the_copy_that_held_it() {
+        let root = scratch("running-lock");
+        let state = root.join("state");
+        let held = running_lock(&state).unwrap().expect("nobody holds it yet");
+        assert!(running_lock(&state).unwrap().is_none());
+        // Closing it is what the kernel does when the process ends.
+        drop(held);
+        assert!(running_lock(&state).unwrap().is_some());
         fs::remove_dir_all(&root).unwrap();
     }
 
