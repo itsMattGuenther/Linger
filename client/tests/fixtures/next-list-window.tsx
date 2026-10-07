@@ -46,6 +46,8 @@
  * you're the host.
  *
  * `window.core.frame(server, frame)` delivers a gateway frame;
+ * `window.core.restart(server, read)` starts its session over, with read
+ * positions moved meanwhile;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
  * window would. What the window asked for is in `body[data-did]`, and every
@@ -101,14 +103,17 @@ const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
 const NO_KEYRING = "No usable keyring on this computer (no secret service).";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
 
-function ready(server: string): ServerFrame {
+/** How many times a session has started over (`window.core.restart`). */
+let restarts = 0;
+
+function ready(server: string, again = ""): ServerFrame {
   const state = states[server];
   if (!state?.me) throw new Error(`no fixture for ${server}`);
   return {
     s: 1,
     op: "ready",
     d: {
-      session_id: `s-${new URL(server).hostname}`,
+      session_id: `s-${new URL(server).hostname}${again}`,
       user: state.me,
       users: state.users,
       rooms: state.rooms,
@@ -292,6 +297,12 @@ declare global {
       unstall: () => void;
       /** The voice engine hears somebody start or stop talking (`peer` null for you). */
       speaking: (server: string, peer: string | null, speaking: boolean) => void;
+      /**
+       * The session starts over (#453): the server's read positions move
+       * first, as reading on another device would, then a fresh `ready`
+       * with a new session id.
+       */
+      restart: (server: string, read: Record<string, string>) => void;
     };
   }
 }
@@ -319,6 +330,14 @@ window.core = {
   },
   unstall: () => unstall(),
   speaking: (server, peer, speaking) => deliver("voice:speaking", { server, peer, speaking }),
+  restart: (server, read) => {
+    const state = states[server];
+    if (!state) return;
+    states[server] = { ...state, read: { ...state.read, ...read } };
+    restarts += 1;
+    seq[server] = 1;
+    deliver("gateway:frame", { server, frame: ready(server, `-${restarts}`) });
+  },
 };
 
 // --- the servers -----------------------------------------------------------

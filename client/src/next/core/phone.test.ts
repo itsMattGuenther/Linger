@@ -88,6 +88,28 @@ describe("the phone app in the background (SPEC §4.15)", () => {
     expect(heard).toEqual(["back", "away", "here"]);
   });
 
+  it("says the moment the app leaves the screen, once a trip, so what's waiting goes before Android blocks the network (#454)", () => {
+    vi.useFakeTimers();
+    const shown = page();
+    let left = 0;
+    watchBackground(
+      shown,
+      60_000,
+      () => undefined,
+      undefined,
+      () => (left += 1),
+    );
+    expect(left).toBe(0);
+    shown.show("hidden");
+    expect(left).toBe(1);
+    shown.show("hidden");
+    vi.advanceTimersByTime(60_000);
+    expect(left).toBe(1);
+    shown.show("visible");
+    shown.show("hidden");
+    expect(left).toBe(2);
+  });
+
   it("stops listening when asked", () => {
     vi.useFakeTimers();
     const shown = page();

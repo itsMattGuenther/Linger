@@ -1772,32 +1772,61 @@ export function enterRoom(server: string, roomId: RoomId): void {
 }
 
 /**
+ * How long to wait before asking again for read positions that didn't come,
+ * once per entry. After the last, the next fresh `ready` asks again.
+ */
+const READ_RETRY_MS = [2_000, 5_000, 15_000];
+
+/**
  * Fetch where you had got to in every room.
  *
  * `GET /read` answers with positions, not counts, and there is no endpoint that
- * would answer with a count (PROTOCOL §4). A failure is quiet: the worst case
- * is a session with no "you left off here" line, which is the app being less
- * helpful, not the app being wrong.
+ * would answer with a count (PROTOCOL §4). Asked again whenever a session
+ * starts over (`ServerLink`): a fresh `ready` brings each room's newest
+ * message, and without asking, anything read on another device meanwhile
+ * looks new here (#453).
+ *
+ * A failure is asked again a few times rather than left. With no read
+ * positions, every room that has ever had a message looks new, and a phone
+ * coming back from the background can ask before Android lets its network
+ * back in (#453). Opening a room doesn't wait for that: `readLoaded` is set
+ * either way.
  */
 export async function loadReadMarkers(api: AuthedApi): Promise<void> {
-  let map: Record<string, MessageId> = {};
-  try {
-    map = await api.get<Record<string, MessageId>>("/read");
-  } catch {
-    // An unavailable bookmark must not prevent opening the conversation.
+  for (let attempt = 0; ; attempt += 1) {
+    let map: Record<string, MessageId> | null = null;
+    try {
+      map = await api.get<Record<string, MessageId>>("/read");
+    } catch {
+      // An unavailable bookmark must not prevent opening the conversation.
+    }
+    await settled(api.baseUrl);
+    if (linkFor(api) === null) return;
+    keepReadMarkers(api.baseUrl, map ?? {});
+    const wait = READ_RETRY_MS[attempt];
+    if (map !== null || wait === undefined) return;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    if (linkFor(api) === null) return;
   }
-  await settled(api.baseUrl);
-  if (linkFor(api) === null) return;
-  const current = stateOf(api.baseUrl);
-  // Pin from the server's copy rather than the merged one. This answer and the
-  // gateway's `ready` race on every cold start, so by the time it lands the open
-  // room may already have been marked read — and the whole point of the line is
-  // where you were *before* this session began.
+}
+
+function keepReadMarkers(server: string, map: Record<string, MessageId>): void {
+  const current = stateOf(server);
+  // Pin from the server's copy rather than the merged one. By the time this
+  // answer lands, a room may already have moved here (something you said, or
+  // a room open on screen), and the whole point of the line is where you were
+  // *before* this session began.
   const leftOff = { ...current.leftOff };
+  // The later of the two positions, room by room: they only move forward. The
+  // server's is later when you read on another device; this device's, when
+  // it marked something read while the answer was on its way.
+  const read = { ...current.read };
   for (const [roomId, id] of Object.entries(map)) {
     leftOff[roomId] ??= id;
+    const held = read[roomId];
+    if (held === undefined || held < id) read[roomId] = id;
   }
-  publish(api.baseUrl, { ...current, read: { ...map, ...current.read }, leftOff, readLoaded: true });
+  publish(server, { ...current, read, leftOff, readLoaded: true });
 }
 
 /** PROTOCOL §4: at most one read-marker write per five seconds per room. */
@@ -1839,6 +1868,24 @@ export function markRead(api: AuthedApi, roomId: RoomId, messageId: MessageId): 
     delete link.readTimers[roomId];
     flushRead(api, roomId);
   }, READ_DEBOUNCE_MS - since);
+}
+
+/**
+ * Send every read position still waiting out its five seconds, now.
+ *
+ * For the phone app leaving the screen: Android stops its timers and blocks
+ * its network soon after, and a position still waiting is lost, so your
+ * other devices go on showing what you read here as new (#454). One write
+ * sooner than PROTOCOL §4's five seconds, once, as the app goes.
+ */
+export function flushReadMarkers(): void {
+  for (const link of links.values()) {
+    for (const [roomId, timer] of Object.entries(link.readTimers)) {
+      window.clearTimeout(timer);
+      delete link.readTimers[roomId];
+      flushRead(link.api, roomId);
+    }
+  }
 }
 
 /** True when a room holds something you have not seen (SPEC §4.2: weight, not a number). */

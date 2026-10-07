@@ -46,14 +46,23 @@ export interface Showing {
  * `onReturn` instead: the connections weren't closed, but Android blocks a
  * background app's network after about five seconds (Android 17 on a Pixel,
  * 2026-10-03), so they may be waiting out a retry that has backed off, and
- * should try again now. Answers how to stop.
+ * should try again now. `onLeave` hears the moment the app leaves the
+ * screen, for what has to be sent while the network is still let through.
+ * Answers how to stop.
  */
-export function watchBackground(page: Showing, graceMs: number, onChange: (away: boolean) => void, onReturn?: () => void): () => void {
+export function watchBackground(
+  page: Showing,
+  graceMs: number,
+  onChange: (away: boolean) => void,
+  onReturn?: () => void,
+  onLeave?: () => void,
+): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let away = false;
   const settle = () => {
     if (page.visibilityState === "hidden") {
       if (timer === null && !away) {
+        onLeave?.();
         timer = setTimeout(() => {
           timer = null;
           away = true;
