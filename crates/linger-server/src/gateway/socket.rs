@@ -125,8 +125,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     if said_goodbye {
         state.gateway.voice_part(&session_id);
     }
-    if let Some(entry) = find_session_for_cleanup(&state, user_id) {
-        let _ = entry.send(Ctl::Detach).await;
+    // This socket's own session, by id (#451). Any session of the same person
+    // is not the same thing once they have two: a phone and a computer, or the
+    // old session still waiting out its resume window behind a fresh one.
+    // Detaching the wrong one hung up on a healthy socket and left this one's
+    // session attached to nothing, so its voice seat outlived it.
+    let ctl = state
+        .gateway
+        .sessions
+        .get(&session_id)
+        .map(|entry| entry.value().ctl.clone());
+    if let Some(ctl) = ctl {
+        let _ = ctl.send(Ctl::Detach { from: sink.clone() }).await;
     }
     state.gateway.connection_closed(user_id);
     let _ = sqlx::query("UPDATE users SET last_seen_at = ? WHERE id = ?")
@@ -136,18 +146,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         .await;
     drop(sink);
     let _ = writer.await;
-}
-
-/// The session this socket was attached to. Sessions are per-socket in
-/// practice; matching by user is enough at this scale because a stale Detach
-/// to an already-detached session is a no-op.
-fn find_session_for_cleanup(state: &AppState, user_id: UserId) -> Option<mpsc::Sender<Ctl>> {
-    state
-        .gateway
-        .sessions
-        .iter()
-        .find(|e| e.value().user_id == user_id)
-        .map(|e| e.value().ctl.clone())
 }
 
 /// Run the handshake; `Some((user_id, session_id))` once a session is attached.

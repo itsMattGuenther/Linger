@@ -81,9 +81,13 @@ export function typingIn(state: GatewayState, roomId: RoomId, now: number): User
   return typistsIn(state, roomId, now).flatMap((id) => byId.get(id) ?? []);
 }
 
-/** Who is in voice here, by user id, in the server's order. */
+/**
+ * Who is in voice here, by user id, in the server's order. Each person once:
+ * the server's list has a seat per connection, so somebody on two computers
+ * is in it twice (#451), and the strip draws people.
+ */
 export function voiceHere(state: GatewayState, roomId: RoomId): string[] {
-  return voicePeersIn(state, roomId).map((peer) => peer.user_id);
+  return [...new Set(voicePeersIn(state, roomId).map((peer) => peer.user_id))];
 }
 
 /**

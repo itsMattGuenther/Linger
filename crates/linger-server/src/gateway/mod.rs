@@ -171,7 +171,10 @@ enum Ctl {
         /// Resume attaches get a `resumed` frame before the replay.
         is_resume: bool,
     },
-    Detach,
+    /// The socket whose sink is `from` has gone. Only the socket attached
+    /// right now detaches the session (#451): one that a resume has already
+    /// replaced ends too, and its cleanup must leave the new socket alone.
+    Detach { from: mpsc::Sender<String> },
     /// This session's user is off the server (T-413). Say so, hang up, stop.
     Close,
 }
@@ -848,10 +851,12 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                             detached_at = None;
                         }
                     }
-                    Some(Ctl::Detach) => {
-                        sink = None;
-                        closer = None;
-                        detached_at = Some(Instant::now());
+                    Some(Ctl::Detach { from }) => {
+                        if sink.as_ref().is_some_and(|attached| attached.same_channel(&from)) {
+                            sink = None;
+                            closer = None;
+                            detached_at = Some(Instant::now());
+                        }
                     }
                     Some(Ctl::Close) => {
                         // "unauthenticated" rather than a word of its own: it is
