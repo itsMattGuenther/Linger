@@ -364,6 +364,9 @@ jobs:
         run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
       - name: test the build's CSP check
         run: node --test scripts/csp-assets.test.mjs
+      - name: the release's Android check reads every apksigner's signer line
+        # 0.4.8 and 0.4.9 refused rightly signed APKs over one line's wording.
+        run: bash scripts/android-signing-test.sh
       - name: the Linux packages ask for the media plugins shared videos need
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).

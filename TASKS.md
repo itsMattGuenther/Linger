@@ -26,7 +26,7 @@ default.
 
 ## How to run a task
 
-**0.4.9 release — ⏳ Matt, 2026-10-07.** Room for a raid (#197): 60 people a
+**0.4.9 release — ✅ published 2026-10-07.** Room for a raid (#197): 60 people a
 voice room, silence never sent, the six loudest voices passed on, a voice bar
 and list built for a big room, and one line per person in Settings. A lost
 packet no longer cuts a voice out (#438), rooms up to twenty sound better
