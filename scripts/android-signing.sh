@@ -93,10 +93,13 @@ case "${1:-}" in
     apk="${2:-}"
     [ -f "$apk" ] || fail "no APK at '$apk'"
     printed="$("$(apksigner_bin)" verify --print-certs "$apk" 2>&1)" || fail "apksigner rejected $apk: $printed"
-    # Any signer line counts, however this apksigner words it ("Signer #1
-    # certificate SHA-256 digest: …" here; 0.4.8's release run found none in
-    # what the runner's printed), and every signer must be the release key.
-    signers="$(printf '%s\n' "$printed" | sed -n 's/^Signer[^:]*SHA-256 digest: *//p' | tr -d ': \r' | tr 'A-F' 'a-f' | sort -u)"
+    # Any signer line counts, however this apksigner words it, and every
+    # signer must be the release key. build-tools 35 and 36 here print
+    # "Signer #1 certificate SHA-256 digest: …"; the release runner's prints
+    # "V2 Signer: certificate SHA-256 digest: …", and 0.4.8's and 0.4.9's
+    # release runs refused a rightly signed APK for reading only the first
+    # (scripts/android-signing-test.sh has both).
+    signers="$(printf '%s\n' "$printed" | sed -n 's/^.*Signer.* certificate SHA-256 digest: *//p' | tr -d ': \r' | tr 'A-F' 'a-f' | sort -u)"
     if [ "$signers" != "$(expected)" ]; then
       echo "apksigner said:" >&2
       printf '%s\n' "$printed" >&2

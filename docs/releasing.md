@@ -72,7 +72,8 @@ only (ARM64 went after 0.4.4, `docs/decisions.md`). Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.
 
 **3. Check the draft.** All ten files are there (the `.exe`, `.msi`, AppImage,
-`.deb` and `.rpm`, each with its `.sig`), and `latest.json` lists the new version
+`.deb` and `.rpm`, each with its `.sig`), plus
+`Linger_<version>_android-arm64.apk`, and `latest.json` lists the new version
 with a signature for all seven platform entries, signed by the key in
 `tauri.conf.json`. Replace the draft's text with the release notes, swapping
 their short install section for the fuller download table and update steps the

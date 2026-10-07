@@ -365,7 +365,12 @@ over a release (or the other way round): uninstall first, which signs you out.
   `check` (also in preflight), then `setup`, which writes
   `gen/android/keystore.properties` for `build.gradle.kts` (git ignores it),
   then `verify` on the built `.apk` before adding it to the draft as
-  `Linger_<version>_android-arm64.apk`.
+  `Linger_<version>_android-arm64.apk`. `scripts/android-signing-test.sh`
+  (CI's rules job) feeds `verify` what real apksigners print.
+- If that job fails once the desktop draft is up, build the `.apk` from the
+  tagged commit with the key (below), check it with
+  `scripts/android-signing.sh verify`, and add it to the draft with
+  `gh release upload v<version> Linger_<version>_android-arm64.apk`.
 - To sign a release build on your own machine, with the key: export the two
   secrets' values and run `scripts/android-signing.sh setup`, then
   `pnpm tauri android build --target aarch64 --apk`. Without a
