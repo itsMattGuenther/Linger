@@ -26,15 +26,18 @@ default.
 
 ## How to run a task
 
-**0.4.8 release — ⏳ Matt, 2026-10-04.** The phone app: the first signed
-Android `.apk` on a release (#253, T-1604), with report and block in both apps
-(T-1605, a database change) and voice messages on the phone (#401). Wireless
-headsets heard at last (#398: a glitch no longer restarts the microphone), the
-voice bar says when a picked microphone won't open, being in a room's voice is
-being in the room (#420), the host can take somebody out of voice (#423) and
-name co-hosts (#424, a database change), and pins show beside pictures and
-links; notes in `docs/releases/0.4.8.md`. 0.4.7
-(2026-10-03) was headsets in their own format and voice messages (#398, #401).
+**0.4.9 release — ⏳ Matt, 2026-10-07.** Room for a raid (#197): 60 people a
+voice room, silence never sent, the six loudest voices passed on, a voice bar
+and list built for a big room, and one line per person in Settings. A lost
+packet no longer cuts a voice out (#438), rooms up to twenty sound better
+(#431), a person shows in voice once (#451), and read positions survive a
+reconnect and a phone put away (#453, #454). Every emoji, shortcodes and a
+server's own emoji (#359, a database change). Easier hosting (#440: one `.env`,
+`setup.sh`, voice from the domain, so a server without a voice address turns
+voice on). Linux: two GPUs show the app (#433), and a second launch no longer
+turns the GPU path off (#447); notes in `docs/releases/0.4.9.md`. 0.4.8
+(2026-10-04) was the phone app: the first signed Android `.apk`, report and
+block, and co-hosts (#253, T-1605, #424).
 Earlier releases' notes, with what each closed, are in `docs/releases/`.
 
 Any coding agent (or human) can run a task — the repo is tool-agnostic. Every
