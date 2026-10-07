@@ -157,6 +157,12 @@ async fn create(
             .await?;
     }
 
+    // Saying something is catching up: your own message never makes a room
+    // look new on any of your devices (#454). Moved here rather than left to
+    // the sending device, whose debounced write is lost when a phone is put
+    // away straight after sending.
+    advance_read_marker(&state, auth.id, room_id, id).await?;
+
     let message = repo::messages::expect(&state.db.read, &state.config, id).await?;
     state
         .gateway
@@ -432,19 +438,37 @@ async fn put_read_marker(
     if message.room_id != room_id {
         return Err(ApiError::validation("That message isn't in that room."));
     }
+    advance_read_marker(&state, auth.id, room_id, req.last_read_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Move a read marker to `message_id`, or leave it where it is if it is
+/// already there or later (PROTOCOL §4).
+///
+/// Forward only, because one person has several devices: a phone that comes
+/// back with an older position must not pull back what the desktop has
+/// already read (#454). Message ids are UUIDv7, and SQLite compares blobs
+/// byte by byte, so `>` on the column is "posted later".
+async fn advance_read_marker(
+    state: &AppState,
+    user_id: UserId,
+    room_id: RoomId,
+    message_id: MessageId,
+) -> Result<(), ApiError> {
     sqlx::query(
         "INSERT INTO read_markers (user_id, room_id, last_read_id, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, room_id) DO UPDATE SET
-           last_read_id = excluded.last_read_id, updated_at = excluded.updated_at",
+           last_read_id = excluded.last_read_id, updated_at = excluded.updated_at
+         WHERE excluded.last_read_id > read_markers.last_read_id",
     )
-    .bind(auth.id.to_vec())
+    .bind(user_id.to_vec())
     .bind(room_id.to_vec())
-    .bind(req.last_read_id.to_vec())
+    .bind(message_id.to_vec())
     .bind(now_ms())
     .execute(&state.db.write)
     .await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }
 
 async fn read_map(

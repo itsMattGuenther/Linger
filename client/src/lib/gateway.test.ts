@@ -64,6 +64,8 @@ const {
   loadNotifyRules,
   loadOlder,
   loadReadMarkers,
+  flushReadMarkers,
+  markRead,
   openAround,
   openRoom,
   releaseOtherRooms,
@@ -233,6 +235,107 @@ describe("what's fetched alongside a connection that's opening", () => {
     const loading = loadReadMarkers(api);
     await Promise.all([loading, disconnect(HOME)]);
     expect(serverState(HOME).readLoaded).toBe(false);
+  });
+});
+
+describe("read positions (#453, #454)", () => {
+  const matt = person("u-matt", "Matt");
+
+  beforeEach(async () => {
+    await disconnect(HOME);
+    vi.useRealTimers();
+  });
+
+  /** An API whose `GET /read` answers from `answers` in turn: a value, or an `Error` to fail with. */
+  function readApi(answers: unknown[], puts: { path: string; body: unknown }[] = []): AuthedApi {
+    let asked = 0;
+    const stub = {
+      baseUrl: HOME,
+      accessToken: async () => ({ token: "token", expiresAt: 0 }),
+      get: async (path: string) => {
+        if (path !== "/read") throw new Error(`unexpected GET ${path}`);
+        const answer = answers[Math.min(asked, answers.length - 1)];
+        asked += 1;
+        if (answer instanceof Error) throw answer;
+        return answer;
+      },
+      put: async (path: string, body: unknown) => {
+        puts.push({ path, body });
+      },
+    };
+    return stub as unknown as AuthedApi;
+  }
+
+  it("keeps the later of the server's position and this device's, room by room", async () => {
+    const api = readApi([{ "r-garage": id(9), "r-porch": id(3) }]);
+    await connect(api);
+    arrive(HOME, ready({ user: matt, rooms: [room("r-garage", "garage", id(9)), room("r-porch", "porch", id(5))] }));
+    // Said here, so read here; the server hears of r-porch's from the post itself.
+    arrive(HOME, { s: 2, op: "message.create", d: { ...message(4), room_id: "r-garage" } });
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(5), room_id: "r-porch" } });
+
+    await loadReadMarkers(api);
+
+    // Read on another device up to 9: this device's 4 is behind it.
+    expect(serverState(HOME).read["r-garage"]).toBe(id(9));
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(false);
+    // This device is ahead of what the server answered.
+    expect(serverState(HOME).read["r-porch"]).toBe(id(5));
+  });
+
+  it("asks again when the answer doesn't come, rather than leaving every room looking new", async () => {
+    vi.useFakeTimers();
+    const api = readApi([new Error("network blocked"), { "r-garage": id(9) }]);
+    await connect(api);
+    arrive(HOME, ready({ user: matt, rooms: [room("r-garage", "garage", id(9))] }));
+
+    const loading = loadReadMarkers(api);
+    await vi.advanceTimersByTimeAsync(0);
+    // A room can be opened meanwhile.
+    expect(serverState(HOME).readLoaded).toBe(true);
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await loading;
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(false);
+  });
+
+  it("stops asking for a server signed out of", async () => {
+    vi.useFakeTimers();
+    let asked = 0;
+    const api = fakeApi(HOME, () => {
+      asked += 1;
+      throw new Error("down");
+    });
+    await connect(api);
+    const loading = loadReadMarkers(api);
+    await vi.advanceTimersByTimeAsync(0);
+    await disconnect(HOME);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await loading;
+    expect(asked).toBe(1);
+  });
+
+  it("sends a position still waiting out its five seconds the moment it's asked to", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", globalThis);
+    try {
+      const puts: { path: string; body: unknown }[] = [];
+      const api = readApi([{}], puts);
+      await connect(api);
+      markRead(api, "r-garage", id(1));
+      markRead(api, "r-garage", id(2));
+      expect(puts.map((put) => put.body)).toEqual([{ last_read_id: id(1) }]);
+
+      // The phone app leaving the screen: Android stops its timers soon after.
+      flushReadMarkers();
+      expect(puts.map((put) => put.body)).toEqual([{ last_read_id: id(1) }, { last_read_id: id(2) }]);
+      // And it isn't sent twice.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(puts).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

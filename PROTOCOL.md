@@ -299,6 +299,19 @@ GET /read                → { [room_id]: last_read_id }
 The client sends this at most once per 5 seconds per room, debounced. **No count is ever
 returned by the server.** There is no unread-count endpoint and one must not be added.
 
+A marker only moves forward. A `PUT` naming a message earlier than the one held answers
+`204` and changes nothing, so a device that comes back with an older position can't pull
+back what another of your devices has read. Posting a message moves its author's marker
+to it: something you said is something you've seen, on every device (#454). A server from
+before these leaves both to the client, which has always moved its own copy forward only.
+
+`ready` doesn't carry markers, so a client asks `GET /read` on every fresh `ready`, not
+only the first: a session that started over has missed whatever was read elsewhere
+meanwhile, and the room's `last_message_id` in `ready` would make it look new (#453).
+Where the two disagree, the later position wins. The phone app sends a marker still
+waiting out its 5 seconds the moment it leaves the screen, since Android stops its timers
+and its network soon after (SPEC §4.15).
+
 ---
 
 ## 5. Users, styling, statuses

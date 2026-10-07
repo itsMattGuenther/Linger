@@ -14,6 +14,7 @@ import {
   retryAllNow,
   saveStatus,
   serverState,
+  flushReadMarkers,
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
@@ -206,7 +207,9 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
  */
 function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void; paused: boolean }) {
   const { api, baseUrl } = session;
-  const status = useGateway(baseUrl).status.kind;
+  const gateway = useGateway(baseUrl);
+  const status = gateway.status.kind;
+  const sessionId = gateway.sessionId;
 
   // Paused: the phone app a while in the background, so it shows offline,
   // or with no network. Opened again when it's back (SPEC §4.15, core/phone.ts).
@@ -221,10 +224,16 @@ function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInf
     };
   }, [api, baseUrl, paused]);
 
-  // Opening starts the server's state afresh, so these come again with it.
+  // Read positions: on opening, and again with every fresh session, since one
+  // that started over has missed what you read elsewhere meanwhile (#453).
   useEffect(() => {
     if (paused) return;
     void loadReadMarkers(api);
+  }, [api, paused, sessionId]);
+
+  // Opening starts the server's state afresh, so these come again with it.
+  useEffect(() => {
+    if (paused) return;
     void loadNotifyRules(api).catch(() => undefined);
     void loadBlocks(api).catch(() => undefined);
     // The host's reports come with the server's `ready` (lib/gateway.ts).
@@ -271,7 +280,7 @@ function Servers({
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   // The phone app, a while in the background (SPEC §4.15): its connections close.
   const [backgrounded, setBackgrounded] = useState(false);
-  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow()) : undefined), []);
+  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow(), flushReadMarkers) : undefined), []);
   // And with no network: closed, and opened again the moment there is one.
   const [offline, setOffline] = useState(false);
   useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);

@@ -4,6 +4,7 @@
 mod common;
 
 use linger_core::wire::{ErrorCode, ErrorEnvelope, Message};
+use linger_core::MessageId;
 
 async fn send(server: &common::TestServer, token: &str, room: &str, body: &str) -> Message {
     let resp = reqwest::Client::new()
@@ -414,6 +415,76 @@ async fn read_markers_round_trip_and_never_carry_counts() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 422);
+}
+
+async fn read_map(server: &common::TestServer, token: &str) -> serde_json::Value {
+    reqwest::Client::new()
+        .get(server.url("/read"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+async fn put_read(server: &common::TestServer, token: &str, room: &str, id: MessageId) {
+    let resp = reqwest::Client::new()
+        .put(server.url(&format!("/rooms/{room}/read")))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "last_read_id": id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+}
+
+/// #454: a message you sent from your phone made the room look new on your
+/// desktop, because only the sending device ever moved your read marker, and
+/// a phone put away straight after sending never got round to it.
+#[tokio::test]
+async fn sending_moves_your_own_read_marker_and_nobody_elses() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    let theirs = send(&server, &member.access_token, &room_id, "you around?").await;
+    put_read(&server, &host.access_token, &room_id, theirs.id).await;
+    let mine = send(&server, &host.access_token, &room_id, "yep").await;
+
+    let map = read_map(&server, &host.access_token).await;
+    assert_eq!(
+        map[room_id.as_str()],
+        serde_json::json!(mine.id.to_string())
+    );
+    // Callie read nothing after her own message: the host's reply is new for her.
+    let map = read_map(&server, &member.access_token).await;
+    assert_eq!(
+        map[room_id.as_str()],
+        serde_json::json!(theirs.id.to_string())
+    );
+}
+
+/// #454: two devices, one person. The one that comes back with an older
+/// position mustn't pull back what the other has already read.
+#[tokio::test]
+async fn a_read_marker_never_moves_backwards() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    let first = send(&server, &member.access_token, &room_id, "one").await;
+    let second = send(&server, &member.access_token, &room_id, "two").await;
+
+    put_read(&server, &host.access_token, &room_id, second.id).await;
+    put_read(&server, &host.access_token, &room_id, first.id).await;
+
+    let map = read_map(&server, &host.access_token).await;
+    assert_eq!(
+        map[room_id.as_str()],
+        serde_json::json!(second.id.to_string())
+    );
 }
 
 #[tokio::test]

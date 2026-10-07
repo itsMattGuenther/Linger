@@ -167,7 +167,7 @@ one on every change, so the newest is never older than the snapshot.
 | Field | Who changes it | How the other windows learn it |
 |---|---|---|
 | `myVoice` (your seat, mute, deafen, device health) | the owner: joining and controls; the Rust voice events for health and levels, which already reach every window | owner broadcast |
-| `read`, `readLoaded` | the owner loads markers; whichever window you read in marks them | intent to the owner, then owner broadcast |
+| `read`, `readLoaded` | the owner loads markers, again on every fresh `ready` (#453); whichever window you read in marks them | intent to the owner, then owner broadcast |
 | `notifyRules` | Settings | intent to the owner, then owner broadcast |
 | `leftOff` | the window showing the conversation | none: it matters only where the conversation is open |
 | `knocks` | frames; the fade timer runs where the card is shown (the list window) | frames |

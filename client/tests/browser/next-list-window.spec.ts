@@ -214,6 +214,20 @@ test("opening a room shows it beside the list, on that server (#337)", async ({ 
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
+test("a session that starts over asks where you'd read to again, so what you read elsewhere stops looking new (#453)", async ({ page }) => {
+  await open(page, "?one");
+  const fresh = page.getByRole("list", { name: "Rooms" }).locator("[data-fresh='yes']");
+  await expect(fresh).toHaveText([/listening-room/, /weekend-plans/]);
+  const asked = async () => (await did(page)).filter((line) => line === `GET ${HOME}/read`).length;
+  const before = await asked();
+  // Read on the phone while this computer slept, past the server's two
+  // minutes: it comes back to a fresh session, not a resumed one.
+  await page.evaluate((server) => window.core?.restart(server, { "r-listening": "m000020" }), HOME);
+  await expect.poll(asked).toBe(before + 1);
+  // #weekend-plans wasn't read anywhere: still new.
+  await expect(fresh).toHaveText([/weekend-plans/]);
+});
+
 test("the gear and Ctrl+, open Settings", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Settings" }).click();
