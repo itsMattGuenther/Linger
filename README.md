@@ -1,5 +1,8 @@
 <div align="center">
-<img src="assets/logo/linger_v2.png" width="600px" alt="Linger">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo/linger-logo.svg">
+  <img src="assets/logo/linger-logo-light.svg" width="440" alt="Linger">
+</picture>
 
 <p>
 <a href="https://github.com/itsMattGuenther/Linger/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/itsMattGuenther/Linger?label=release&labelColor=131a28&color=2e3b54"></a>
