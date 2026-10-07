@@ -100,6 +100,18 @@ describe("what the chat window shows about a conversation", () => {
     expect(voiceHere(state, "d-jules")).toEqual([]);
   });
 
+  it("names somebody in voice once, however many seats they hold (#451)", () => {
+    const voice = {
+      "r-general": [
+        { session_id: "s-1", user_id: "u-eli" },
+        { session_id: "s-2", user_id: "u-matt" },
+        { session_id: "s-3", user_id: "u-eli" },
+        { session_id: "s-4", user_id: "u-matt" },
+      ],
+    };
+    expect(voiceHere(evening({ voice }), "r-general")).toEqual(["u-eli", "u-matt"]);
+  });
+
   it("knows whose microphone is off in a conversation, yours from your own controls", () => {
     const voice = {
       "r-general": [

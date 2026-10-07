@@ -324,6 +324,113 @@ async fn resume_of_unknown_session_and_bad_identify_are_rejected() {
     assert_eq!(invalid["d"]["reason"], "unauthenticated");
 }
 
+/// Whether the server has hung up on this socket: reads whatever is waiting,
+/// and answers true at a close or the end of the stream, false once it goes
+/// quiet.
+async fn hung_up(ws: &mut Ws) -> bool {
+    loop {
+        match tokio::time::timeout(Duration::from_millis(100), ws.next()).await {
+            Err(_) => return false,
+            Ok(None | Some(Err(_) | Ok(WsMessage::Close(_)))) => return true,
+            Ok(Some(Ok(_))) => {}
+        }
+    }
+}
+
+/// #451. After a half-open blip the app has given up on its socket and
+/// resumed on a new one, while the server still has the old one open (it
+/// would notice after 75 seconds of silence). The resume takes the session
+/// over, which ends the old socket; the old socket's cleanup must leave the
+/// session on the new one, not hang up on that too.
+#[tokio::test]
+async fn resuming_while_the_old_socket_is_still_open_keeps_the_new_one() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+
+    let (mut old, session_id) = connect_ready(&server, &member.access_token).await;
+    let last_seen = drain_for(&mut old, Duration::from_millis(200))
+        .await
+        .iter()
+        .filter_map(|frame| frame["s"].as_u64())
+        .max()
+        .unwrap_or(0);
+
+    let (mut new, _) = connect_async(server.gateway_url())
+        .await
+        .expect("reconnect");
+    assert_eq!(recv_json(&mut new).await["op"], "hello");
+    send_json(
+        &mut new,
+        json!({ "op": "resume", "d": {
+            "session_id": session_id,
+            "token": member.access_token,
+            "s": last_seen,
+        }}),
+    )
+    .await;
+    wait_for(&mut new, "resumed").await;
+
+    assert!(hung_up(&mut old).await, "the replaced socket was left open");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        !hung_up(&mut new).await,
+        "the old socket's cleanup hung up on the socket that replaced it"
+    );
+    rest_send(
+        &server,
+        &host.access_token,
+        &room.id.to_string(),
+        "still there?",
+    )
+    .await;
+    let (frame, _) = wait_for(&mut new, "message.create").await;
+    assert_eq!(frame["d"]["body"], "still there?");
+}
+
+/// #451. One of a person's connections drops without a goodbye while their
+/// others are fine: a phone and a computer, or a fresh session while the old
+/// one waits out its resume window. The session that dropped is the one
+/// detached, and the others carry on.
+///
+/// The bug detached whichever of the person's sessions the server's map
+/// listed first, hanging up on a healthy one and leaving the dropped one
+/// attached to nothing, its voice seat with it. With four connections a
+/// person catches it three times in four; six people make it slip past about
+/// one run in four thousand.
+#[tokio::test]
+async fn dropping_one_connection_leaves_the_same_persons_others_alone() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let mut kept = Vec::new();
+    for n in 0..6 {
+        let person = common::join_member(&server, &host.access_token, &format!("person{n}")).await;
+        let (gone, _) = connect_ready(&server, &person.access_token).await;
+        let mut others = Vec::new();
+        for _ in 0..3 {
+            others.push(connect_ready(&server, &person.access_token).await.0);
+        }
+        drop(gone);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        for ws in &mut others {
+            assert!(
+                !hung_up(ws).await,
+                "person {n}: a healthy connection was hung up on when another of theirs dropped"
+            );
+        }
+        kept.extend(others);
+    }
+    rest_send(
+        &server,
+        &host.access_token,
+        &room.id.to_string(),
+        "everyone still here?",
+    )
+    .await;
+    for ws in &mut kept {
+        let (frame, _) = wait_for(ws, "message.create").await;
+        assert_eq!(frame["d"]["body"], "everyone still here?");
+    }
+}
+
 /// T-413. A removed member has to *leave the room*, and the socket is the part
 /// of that nothing else does: the token is checked once at identify, so an
 /// already-open connection keeps receiving every message on the server forever.
