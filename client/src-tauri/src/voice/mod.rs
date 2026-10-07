@@ -45,7 +45,10 @@ use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
-use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp::extension::audio_level_extension::AudioLevelExtension;
+use webrtc::rtp_transceiver::rtp_codec::{
+    RTCRtpCodecCapability, RTCRtpHeaderExtensionCapability, RTPCodecType,
+};
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -608,7 +611,8 @@ async fn pump<W: Watcher>(
                 Err(error) => eprintln!("voice: bitrate {wanted}: {error}"),
             }
         }
-        if let Some(talking) = gate.update(level::rms(frame), Instant::now()) {
+        let loudness = level::rms(frame);
+        if let Some(talking) = gate.update(loudness, Instant::now()) {
             watcher.speaking(None, talking);
         }
         let packet = match encoder.encode(frame) {
@@ -640,9 +644,20 @@ async fn pump<W: Watcher>(
             ..Default::default()
         };
         if let Some(track) = track {
+            // How loud this frame is goes with it (RFC 6464): the forwarding
+            // server passes on a room's six loudest voices by it (#197). A
+            // server that didn't agree to it is simply not told.
+            let level = AudioLevelExtension {
+                level: level::dbov(loudness),
+                voice: gate.is_on(),
+            };
             // A track whose connection is not up yet writes to nobody and
             // says so; that is the first second of every call, not an error.
-            let _ = track.write_sample(&sample).await;
+            let _ = track
+                .sample_writer()
+                .with_audio_level(level)
+                .write_sample(&sample)
+                .await;
         }
     }
     if gate.is_on() {
@@ -686,10 +701,19 @@ async fn restart_forward<S: Signaller, W: Watcher>(
     signaller.send(ClientFrame::VoiceRestart);
 }
 
-/// A WebRTC API with the default codecs and interceptors: NACKs, reports.
+/// A WebRTC API with the default codecs and interceptors (NACKs, reports),
+/// and the audio level each voice packet carries, which the forwarding server
+/// offers and ranks a room's voices by (#197).
 fn build_api() -> Result<webrtc::api::API, webrtc::Error> {
     let mut media = MediaEngine::default();
     media.register_default_codecs()?;
+    media.register_header_extension(
+        RTCRtpHeaderExtensionCapability {
+            uri: webrtc::sdp::extmap::AUDIO_LEVEL_URI.to_owned(),
+        },
+        RTPCodecType::Audio,
+        None,
+    )?;
     let mut registry = Registry::new();
     registry = register_default_interceptors(registry, &mut media)?;
     Ok(APIBuilder::new()

@@ -690,6 +690,13 @@ working somewhere past ten and is gone. A server whose host hasn't set forwardin
 carries no voice, and the app says so in plain words rather than offering a call nobody
 could hear. Apps from before 0.4.1, which spoke only the mesh, can't join voice.
 
+**The six loudest at once** (#197, decided 2026-10-06). A room passes on at most six
+voices at a time, picked by how loud each one is (every app puts the level of each
+frame on its packets), and never passes on silence. A cheer of twelve when the boss goes
+down still sounds like a crowd, and the server's work stops growing at six, so no
+moment in a game can ask the host's server for more than it has. A voice keeps its place
+while it's talking; a newcomer takes the quietest place only when it's clearly louder.
+
 **A big room shows who's talking, not a wall of names** (#197, decided 2026-10-06). Up to
 six people, the voice bar shows everybody as a chip, as it always has. Past six it has
 six seats: you first, then whoever just talked, lit while they talk. A seat changes hands

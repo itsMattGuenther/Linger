@@ -327,9 +327,10 @@ voice only while somebody is talking, so a big room costs the server what its
 talkers do: upload for each talker to each listener. A room of up to twenty
 sounds its best, at about 150 kbit/s for each of those on the wire; from
 twenty-one it steps down to about 120 kbit/s, so fifty people with three
-talking take about 17 Mbps of upload, and closer to 50 Mbps in the moments
-when eight talk at once. A three-hour evening of fifty is about 23 GB of data
-out, which matters if your provider counts it. It needs one open port, and
+talking take about 17 Mbps of upload. A room passes on at most six voices at
+once, the loudest, so however many people shout at the same moment, fifty
+people never take more than about 35 Mbps. A three-hour evening of fifty is
+about 23 GB of data out, which matters if your provider counts it. It needs one open port, and
 nothing else: the server sends voice through the address your name points at,
 the one from [step 2](#2-point-two-names-at-the-server). Without a way to work
 that out the server carries no voice at all, and the app tells people voice

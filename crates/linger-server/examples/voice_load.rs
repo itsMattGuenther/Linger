@@ -37,6 +37,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context};
 use futures_util::{SinkExt, StreamExt};
+use linger_sfu::LOUDEST;
 use serde_json::{json, Value};
 use str0m::change::SdpOffer;
 use str0m::crypto::from_feature_flags;
@@ -310,6 +311,13 @@ impl Client {
             }
         };
         let time = MediaTime::new(self.frames * 960, Frequency::FORTY_EIGHT_KHZ);
+        // How loud it is (RFC 6464), as the app says on every packet from
+        // 0.4.9 (#197): each talker a little quieter than the one before, so
+        // a server passing on the loudest has an order to keep.
+        let writer = match say {
+            Say::Talk => writer.audio_level(talker_level(self.index), true),
+            Say::Silence => writer,
+        };
         if writer.write(pt, Instant::now(), time, payload).is_ok() && say == Say::Talk {
             self.sent += 1;
         }
@@ -736,14 +744,28 @@ async fn main() -> anyhow::Result<()> {
         let _ = say.send(json!({ "op": "voice.leave", "d": {} }));
     }
 
-    // What everybody heard.
+    // What everybody heard. A server from 0.4.9 passes on a room's six
+    // loudest voices and no more (#197): the first six talkers here, since
+    // each says it's a little quieter than the one before. Each listener is
+    // judged on those six, less itself; how many voices it heard at all is
+    // said on its own.
     clients.sort_by_key(|client| client.index);
     let sent: Vec<u64> = clients.iter().map(|client| client.sent).collect();
+    let loudest = talkers.min(LOUDEST);
     let mut worst = f64::INFINITY;
     let mut total_share = 0.0;
     let mut pairs = 0u32;
+    let mut voices: Vec<usize> = Vec::new();
     for listener in clients.iter().filter(|client| client.ready()) {
-        for (talker, &said) in sent.iter().enumerate().take(talkers) {
+        voices.push(
+            sent.iter()
+                .enumerate()
+                .take(talkers)
+                .filter(|(talker, said)| *talker != listener.index && **said > 0)
+                .filter(|(talker, &said)| listener.heard[*talker] as f64 / said as f64 > 0.5)
+                .count(),
+        );
+        for (talker, &said) in sent.iter().enumerate().take(loudest) {
             if talker == listener.index || said == 0 {
                 continue;
             }
@@ -794,10 +816,13 @@ async fn main() -> anyhow::Result<()> {
     );
     if pairs > 0 {
         println!(
-            "delivery: worst listener heard {:.1}% of a talker; on average {:.2}%",
+            "delivery of the {loudest} loudest voices: worst listener heard {:.1}% of one; on average {:.2}%",
             100.0 * worst,
             100.0 * total_share / f64::from(pairs)
         );
+    }
+    if let (Some(most), Some(fewest)) = (voices.iter().max(), voices.iter().min()) {
+        println!("voices each listener heard most of: at most {most}, at fewest {fewest}");
     }
     println!(
         "trip here → server → here: fastest {:.0} ms, median {:.0} ms, 95% under {:.0} ms, 99% under {:.0} ms, slowest {:.0} ms",
@@ -840,4 +865,11 @@ async fn main() -> anyhow::Result<()> {
     let answered: u32 = clients.iter().map(|client| client.offers_answered).sum();
     println!("offers answered: {answered}");
     Ok(())
+}
+
+/// How loud talker `index` says it is, in RFC 6464's negative decibels:
+/// −15 for the first, three quieter for each after, down to −60.
+fn talker_level(index: usize) -> i8 {
+    let step = i8::try_from(index.min(15)).unwrap_or(15);
+    -15 - 3 * step
 }

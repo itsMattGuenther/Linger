@@ -34,6 +34,21 @@ pub fn rms(samples: &[i16]) -> f32 {
     mean
 }
 
+/// How loud a frame is, as the audio level each voice packet carries (RFC
+/// 6464): decibels below the loudest a sample can be, 0 the loudest and 127
+/// silence. The forwarding server passes on a room's six loudest voices by it
+/// (#197), so a dozen people cheering at once can't overload it.
+#[must_use]
+pub fn dbov(rms: f32) -> u8 {
+    if rms <= 0.0 {
+        return 127;
+    }
+    let below = -20.0 * (rms / f32::from(i16::MAX)).log10();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let level = below.round().clamp(0.0, 127.0) as u8;
+    level
+}
+
 /// One speaker's on/off state, with hysteresis in time.
 #[derive(Debug, Default)]
 pub struct Gate {
@@ -85,6 +100,18 @@ mod tests {
             .map(|n| if n % 2 == 0 { 8000 } else { -8000 })
             .collect();
         assert!((rms(&loud) - 8000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn a_frame_s_level_is_decibels_below_the_loudest() {
+        assert_eq!(dbov(0.0), 127);
+        assert_eq!(dbov(f32::from(i16::MAX)), 0);
+        // Half as loud is about 6 dB down; a tenth, 20.
+        assert_eq!(dbov(f32::from(i16::MAX) / 2.0), 6);
+        assert_eq!(dbov(f32::from(i16::MAX) / 10.0), 20);
+        // The talking threshold sits about 36 dB down, a quiet hiss far lower.
+        assert_eq!(dbov(THRESHOLD), 36);
+        assert_eq!(dbov(0.5), 96);
     }
 
     #[test]

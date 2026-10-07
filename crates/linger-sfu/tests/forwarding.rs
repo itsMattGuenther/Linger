@@ -9,7 +9,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use linger_sfu::{Offer, Sfu, BIG_ROOM, BIG_ROOM_BITS, SMALL_AGAIN, SMALL_ROOM_BITS};
+use linger_sfu::floor::SILENCE_MAX;
+use linger_sfu::{Offer, Sfu, BIG_ROOM, BIG_ROOM_BITS, LOUDEST, SMALL_AGAIN, SMALL_ROOM_BITS};
 use str0m::change::SdpOffer;
 use str0m::crypto::from_feature_flags;
 use str0m::media::{MediaTime, Mid};
@@ -32,7 +33,18 @@ struct Client {
     bits: Option<u32>,
     /// The next voice packet it sends is lost on the way.
     lose_next_voice: bool,
+    /// How loud it says it is on each packet (RFC 6464, negative decibels),
+    /// as the desktop engine does from 0.4.9; `None` for an older app.
+    level: Option<i8>,
+    /// How long each "voice" packet is: a short talking frame, or Opus's
+    /// three bytes of silence, as an app from before 0.4.9 sends it.
+    payload: usize,
+    /// It only listens.
+    quiet: bool,
 }
+
+/// A frame of talking, as short as the least an app sends (16 kbit/s).
+const VOICE_BYTES: usize = 40;
 
 impl Client {
     fn new() -> Self {
@@ -55,6 +67,9 @@ impl Client {
             sent: 0,
             bits: None,
             lose_next_voice: false,
+            level: Some(-30),
+            payload: VOICE_BYTES,
+            quiet: false,
         }
     }
 
@@ -128,9 +143,10 @@ impl Client {
         let _ = self.rtc.handle_input(Input::Timeout(Instant::now()));
     }
 
-    /// A frame of "voice": the server never decodes it, so any bytes do.
+    /// A frame of "voice": the server never decodes it, so any bytes do, as
+    /// long as there are more of them than silence has (#197).
     fn speak(&mut self) {
-        let (Some(mic), true) = (self.mic, self.connected) else {
+        let (Some(mic), true, false) = (self.mic, self.connected, self.quiet) else {
             return;
         };
         let Some(writer) = self.rtc.writer(mic) else {
@@ -141,7 +157,11 @@ impl Client {
         };
         self.sent += 1;
         let time = MediaTime::new(self.sent * 960, str0m::media::Frequency::FORTY_EIGHT_KHZ);
-        let _ = writer.write(pt, Instant::now(), time, vec![0xF8, 0xFF, 0xFE]);
+        let writer = match self.level {
+            Some(level) => writer.audio_level(level, true),
+            None => writer,
+        };
+        let _ = writer.write(pt, Instant::now(), time, vec![0xF8; self.payload]);
     }
 }
 
@@ -465,5 +485,91 @@ fn a_packet_lost_on_the_way_in_doesnt_hold_up_the_voice_after_it() {
     assert!(
         !a.lose_next_voice,
         "a never sent the packet that was to be lost"
+    );
+}
+
+/// Turn the clients and answer offers for `long`, whatever happens.
+fn run_for(sfu: &Sfu, offers: &Receiver<Offer>, clients: &mut [(String, Client)], long: Duration) {
+    let until = Instant::now() + long;
+    while Instant::now() < until {
+        while let Ok(offer) = offers.try_recv() {
+            if let Some((_, client)) = clients.iter_mut().find(|(name, _)| *name == offer.session) {
+                let answer = client.answer(&offer);
+                sfu.answer(&offer.session, &answer);
+            }
+        }
+        for (_, client) in clients.iter_mut() {
+            client.turn();
+            client.speak();
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Everybody cheering at once (#197): a room passes on its six loudest voices
+/// and no more, so the server's work stops growing at six, whatever happens in
+/// the game. Eight talk, each 8 dB quieter than the last, and one listens.
+#[test]
+fn a_room_passes_on_its_six_loudest_voices_and_no_more() {
+    let (sfu, offers) = start();
+    let mut room: Vec<(String, Client)> = (0..8_i8)
+        .map(|n| {
+            let mut client = Client::new();
+            client.level = Some(-10 - n * 8);
+            (format!("t{n}"), client)
+        })
+        .collect();
+    let mut ear = Client::new();
+    ear.quiet = true;
+    room.push(("ear".to_owned(), ear));
+    for (name, _) in &room {
+        sfu.join(name, "raid");
+    }
+    // Everybody connected and talking, and the seats settled on the loudest.
+    run_for(&sfu, &offers, &mut room, Duration::from_secs(3));
+    let ear = room.len() - 1;
+    assert_eq!(
+        room[ear].1.tracks.len(),
+        8,
+        "the listener was offered all eight voices"
+    );
+    room[ear].1.heard.clear();
+    run_for(&sfu, &offers, &mut room, Duration::from_millis(600));
+
+    let heard: std::collections::BTreeSet<String> = room[ear].1.heard.iter().cloned().collect();
+    let loudest: std::collections::BTreeSet<String> =
+        (0..LOUDEST).map(|n| format!("t{n}")).collect();
+    assert_eq!(heard, loudest, "the listener heard {heard:?}");
+    // The two quietest still went to the server; it just didn't pass them on.
+    assert!(room[6].1.sent > 20 && room[7].1.sent > 20);
+}
+
+/// Opus's three bytes of silence, fifty a second from an app from before
+/// 0.4.9 while it's muted, are never passed on (#197): they cost the server
+/// the reading and nothing more.
+#[test]
+fn silence_is_never_passed_on() {
+    let (sfu, offers) = start();
+    let mut room: Vec<(String, Client)> = vec![("talker".to_owned(), Client::new())];
+    let mut old = Client::new();
+    old.level = None;
+    old.payload = SILENCE_MAX;
+    room.push(("old".to_owned(), old));
+    let mut ear = Client::new();
+    ear.quiet = true;
+    room.push(("ear".to_owned(), ear));
+    for (name, _) in &room {
+        sfu.join(name, "room");
+    }
+    run_for(&sfu, &offers, &mut room, Duration::from_secs(2));
+    let ear = &room[2].1;
+    assert!(
+        ear.heard.iter().filter(|from| *from == "talker").count() > 20,
+        "the listener never heard the talker"
+    );
+    assert!(room[1].1.sent > 20, "the old app never sent anything");
+    assert!(
+        !ear.heard.iter().any(|from| from == "old"),
+        "silence was passed on"
     );
 }

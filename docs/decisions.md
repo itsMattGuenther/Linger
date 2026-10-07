@@ -1025,3 +1025,41 @@ would have been 48 chips, about 500px of a 900px window, and People 52 two-line 
   some people will want a more minimal view). This is SPEC §4.7's one exception to "no
   Density setting", for the list only: conversations keep one layout. A person's status
   shows in a tooltip and in their row's accessible name. The phone keeps two lines.
+
+## Decided — a room passes on its six loudest voices
+
+**Matt, 2026-10-06 (#197).** The question was what happens on raid night when the boss
+goes down and a dozen people cheer at once. Measured first, on a throwaway
+`s-1vcpu-2gb` (the raid's plan; tor1, as nyc1 had none free) with 50 stand-ins at
+96 kbit/s, as on 2026-10-05: 8 talking took 83% of its one core with 2.7% of packets late, 12 took 97%
+with 9% late, and all 50 shouting pinned it, 97% of packets late, a median trip of
+300 ms and listeners hearing about a fifth. Nothing crashed; the voice stopped being
+usable. Matt: make it safe, pass on only the six loudest.
+
+- **Six seats a room** (`linger-sfu`'s `floor`, `LOUDEST`). A free seat goes to the
+  first voice that needs one. With six taken, a newcomer takes the quietest holder's
+  seat only when it is 6 dB louder (`MARGIN`), a holder silent for 200 ms counting as
+  silent (`QUIET`), and a seat is free again after 500 ms of silence (`HOLD`), so a
+  voice is never cut off mid-word by one a little louder. Loudness is a short running
+  average of each frame's level, started fresh after a pause.
+- **The level is on the packet.** Every offer negotiates RFC 6464's audio level header
+  extension, and the app from 0.4.9 sets it on each frame (`level::dbov`, decibels below
+  full scale) along with whether its gate is open. The server never opens the audio.
+  A voice without a level, from an app before 0.4.9, counts as the quietest: it still
+  gets any free seat, and is the first left out when seven talk.
+- **Silence is never passed on**, whatever app sent it: a packet of three bytes or fewer
+  (`SILENCE_MAX`) holds no seat and goes nowhere. An app before 0.4.9 sending silence
+  costs the server only its receiving now: 50 people with 3 talking, everybody else on
+  an old app, took 16% of a desktop core against 7% on new apps (`load.rs`). On
+  2026-10-05 ten old apps took a droplet to its limit; now they're just heard last.
+- **Why six.** Six voices on top of each other already sound like a crowd, so a cheer
+  still sounds like one, and a raid leader's call-out still finds a seat beside it. It
+  caps the server's work and the host's upload at six streams to everybody: 50 people
+  is about 34 Mbps however many talk.
+- **Measured on the same droplet with the rule** (50 people): 8 talking 76% and 0.5%
+  late; 12 talking 76% and 0.3–0.6% late, the six loudest heard in full; all 50
+  shouting 77–82% and 0.6–5% late (the 5% with a neighbour taking 11% of the host),
+  listeners getting over 90% of the six loudest. Upload 34 Mbps in each, against
+  45 and 67 Mbps without it at 8 and 12.
+- **Nothing changes on the wire for a listener**: a voice without a seat sends nothing
+  for a while, as a pause does, and an old app hears the room as it always did.

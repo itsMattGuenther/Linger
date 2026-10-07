@@ -710,3 +710,116 @@ async fn push_to_talk_sends_nothing_through_the_server_until_the_key_is_held() {
     a.leave().await;
     b.leave().await;
 }
+
+/// A crowd (#197): seven people talking at once, one far quieter than the
+/// rest. Each engine puts how loud each frame is on its packets, and the
+/// forwarding server passes on a room's six loudest voices by it. The quiet
+/// one starts first and has a seat; once six louder ones are talking, it's
+/// the one left out. Without the level it would have kept its seat, and one
+/// of the six would have gone unheard.
+#[tokio::test(flavor = "multi_thread")]
+async fn past_six_talking_the_quietest_voice_is_left_out() {
+    let room = RoomId::new();
+    let mut gateway = Gateway::start(room);
+    let names: Vec<String> = (0..7).map(|n| format!("talker-{n}")).collect();
+    let quiet = &names[0];
+    let (ear, mut ear_rx, _) = engine("ear").await;
+    let recorder = Arc::new(Recorder::default());
+    ear.join(
+        room,
+        Devices {
+            source: Arc::new(Silence),
+            sink: Arc::clone(&recorder) as Arc<dyn Sink>,
+        },
+        Vec::new(),
+    )
+    .await;
+    let heard_from = |recorder: &Recorder| -> BTreeSet<String> {
+        recorder
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(peer, _)| peer.clone())
+            .collect()
+    };
+
+    let mut rigs = Vec::new();
+    let mut settled = false;
+    for (n, name) in names.iter().enumerate() {
+        let (engine, rx, _) = engine(name).await;
+        // About 18 dB apart: somebody murmuring, then six shouting.
+        let peak = if n == 0 { 1000.0 } else { 8000.0 };
+        engine
+            .join(
+                room,
+                Devices {
+                    source: Arc::new(Tone::at(peak)),
+                    sink: Arc::new(Discard),
+                },
+                Vec::new(),
+            )
+            .await;
+        rigs.push((engine, rx));
+        // The quiet one is heard, and has a seat, before anybody else talks.
+        if n > 0 {
+            continue;
+        }
+        for _ in 0..400 {
+            let mut routed: Vec<Routed<'_>> = rigs
+                .iter_mut()
+                .zip(names.iter())
+                .map(|((engine, rx), name)| (name.as_str(), &*engine, rx))
+                .collect();
+            routed.push(("ear", &ear, &mut ear_rx));
+            gateway.route(&mut routed).await;
+            if heard_from(&recorder).contains(quiet) {
+                settled = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+    assert!(settled, "the listener never heard the quiet one alone");
+
+    let loud: BTreeSet<String> = names[1..].iter().cloned().collect();
+    let mut all_six = false;
+    for _ in 0..600 {
+        let mut routed: Vec<Routed<'_>> = rigs
+            .iter_mut()
+            .zip(names.iter())
+            .map(|((engine, rx), name)| (name.as_str(), &*engine, rx))
+            .collect();
+        routed.push(("ear", &ear, &mut ear_rx));
+        gateway.route(&mut routed).await;
+        if loud.is_subset(&heard_from(&recorder)) {
+            all_six = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(
+        all_six,
+        "the listener heard only {:?}",
+        heard_from(&recorder)
+    );
+
+    // From here on: the six loud voices, and never the quiet one.
+    recorder.0.lock().unwrap().clear();
+    for _ in 0..60 {
+        let mut routed: Vec<Routed<'_>> = rigs
+            .iter_mut()
+            .zip(names.iter())
+            .map(|((engine, rx), name)| (name.as_str(), &*engine, rx))
+            .collect();
+        routed.push(("ear", &ear, &mut ear_rx));
+        gateway.route(&mut routed).await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    let heard = heard_from(&recorder);
+    assert!(
+        !heard.contains(quiet),
+        "the quietest of seven was passed on: {heard:?}"
+    );
+    assert_eq!(heard, loud, "the listener heard {heard:?}");
+}

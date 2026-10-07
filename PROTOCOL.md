@@ -1152,8 +1152,20 @@ says `voice: false` (§3).
   (`RATE_VOICE_SIGNAL`), loosely, because a busy room re-offers everybody each time
   somebody comes or goes. A room holds `MAX_VOICE_PEERS` (60). An app sends voice only
   while its person is talking (Opus DTX, its "still here" frames left unsent too), so the
-  server forwards little but the people talking; an app from before 0.4.9 sends silence
-  as well, which works and costs the server more.
+  server forwards little but the people talking. An app from before 0.4.9 sends silence
+  as well; the server reads it and passes none of it on (a packet of `SILENCE_MAX`, 3
+  bytes, or fewer is silence).
+- **The six loudest at once** (#197). A room passes on at most `LOUDEST` (6) voices at a
+  time, so however many talk, the server's work stops growing at six. Every offer
+  negotiates the audio level header extension (RFC 6464, `urn:ietf:params:rtp-hdrext:ssrc-audio-level`,
+  in `str0m`'s standard set), and the app from 0.4.9 puts each frame's level on its
+  packet (`level::dbov`). A voice holds a seat while it's passed on: a free seat goes to
+  the first voice that needs one; with all six taken, a newcomer takes the quietest
+  holder's seat only when it is 6 dB louder, a holder silent for 200 ms counting as
+  silent; a seat is free again after 500 ms of silence (`linger-sfu`'s `floor`). A
+  voice with no level, from an app before 0.4.9, counts as the quietest. Nothing changes
+  on the wire for a listener: a voice without a seat simply sends nothing for a while, as
+  a pause does.
 - **Quality is the room's** (#431). Every `voice.offer` carries `bitrate`: 128,000 in a
   room of up to twenty sessions, 96,000 from twenty-one, back to 128,000 once the room is
   down to sixteen (`linger-sfu`'s `SMALL_ROOM_BITS`, `BIG_ROOM_BITS`, `BIG_ROOM`,
