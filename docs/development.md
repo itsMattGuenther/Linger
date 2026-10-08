@@ -28,8 +28,10 @@ sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-p
 ## Checks
 
 **Before pushing, run `scripts/check.sh`.** It runs what CI runs for your
-branch's changes, sorted the way CI sorts them: a docs change runs the rules
-lint in under a second; a client change adds the typecheck, unit tests,
+branch's changes, sorted the way CI sorts them. Besides Rust and Node, it needs
+`python3`: the packaged audio check (`scripts/linux-audio-check.py`) is the one
+check still in Python, and `check.sh` runs its tests every time. A docs change
+runs the rules lint in under a second; a client change adds the typecheck, unit tests,
 Chromium browser tests (and any the branch added or edited, ten times) and the
 build's CSP check; a server change adds fmt,
 clippy, the Rust tests and bindings drift. `--all` runs everything. Green there
@@ -94,12 +96,12 @@ the media runtime. The AppImage plays shared videos with the libav GStreamer
 plugin on a trimmed FFmpeg (#358): install `gstreamer1.0-libav` and `nasm`, run
 `scripts/appimage-ffmpeg.sh /tmp/ffmpeg`, and build with
 `LD_LIBRARY_PATH=/tmp/ffmpeg/lib`, or the AppImage takes Ubuntu's full FFmpeg
-and grows by about 45 MB (`scripts/appimage-ffmpeg-check.py` catches it). See
+and grows by about 45 MB (`scripts/appimage-ffmpeg-check.sh` catches it). See
 [packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
 bundles the current sound player before running it inside each package.
-`scripts/linux-next-check.py` and `client/scripts/windows-next-check.mjs` check
+`scripts/linux-next-check.mjs` and `client/scripts/windows-next-check.mjs` check
 the Buddy list client itself starts in the packaged app, signed in nowhere,
 and the Windows one keeps a screenshot of it. The Windows check also opens
 Settings and a conversation's own window the way the list does and waits for each to draw:
@@ -267,13 +269,13 @@ in the message box wants it.
 The desktop icon comes from the friend group's selected
 [porch artwork](<../assets/logo/Linger Pixel Porch Icon Set FINAL.png>).
 To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
-source, run `python3 scripts/app-icons.py` from the repository root after
+source, run `node scripts/app-icons.mjs` from the repository root after
 `pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
 padding to make the source square, without cropping or stretching the artwork.
 The same script writes the phone app's Android launcher icons into
 `client/src-tauri/gen/android/app/src/main/res`: the artwork over the window's
 color (`--night-2`), which Android cuts to the phone's own icon shape.
-Use `python3 scripts/app-icons.py --check` to verify the committed files without
+Use `node scripts/app-icons.mjs --check` to verify the committed files without
 changing them. The [desktop icon audit](app-icon-checks.md) explains the
 package checks and remaining visual checks. Packaging changes run an unsigned
 Linux/Windows test build; these artifacts do not ship an update. Published

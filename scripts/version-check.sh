@@ -18,13 +18,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-conf=$(python3 -c 'import json;print(json.load(open("client/src-tauri/tauri.conf.json"))["version"])')
-pkg=$(python3 -c 'import json;print(json.load(open("client/package.json"))["version"])')
+# The JSON files' own top-level "version", two spaces in as both are formatted;
+# a nested one is further in. Read the same way as the Cargo files, so the check
+# needs nothing but the shell.
+json_version() { sed -n 's/^  "version": "\(.*\)",\{0,1\}$/\1/p' "$1" | head -1; }
+conf=$(json_version client/src-tauri/tauri.conf.json)
+pkg=$(json_version client/package.json)
 crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' client/src-tauri/Cargo.toml | head -1)
 server=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
 
 fail=0
 report() { echo "FAIL: $1"; fail=1; }
+
+# Four empty answers would agree with each other. A file this can't read is a
+# failure of its own.
+for found in "tauri.conf.json:$conf" "client/package.json:$pkg" "client/src-tauri/Cargo.toml:$crate" "Cargo.toml:$server"; do
+  [ -n "${found#*:}" ] || report "couldn't find a version in ${found%%:*}"
+done
 
 [ "$conf" = "$pkg" ] || report "client/package.json says $pkg, tauri.conf.json says $conf"
 [ "$conf" = "$crate" ] || report "client/src-tauri/Cargo.toml says $crate, tauri.conf.json says $conf"

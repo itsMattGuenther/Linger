@@ -949,7 +949,7 @@ look at it in WebKitGTK:
 - **The gallery in WebKitGTK's own browser:**
   `/usr/lib/webkit2gtk-4.1/MiniBrowser http://localhost:1431/tests/fixtures/kit.html`,
   on a machine where opening a window is fine.
-- **Headless, without anyone's screen:** `scripts/linux-next-check.py` runs
+- **Headless, without anyone's screen:** `scripts/linux-next-check.mjs` runs
   a built app on a private virtual display (Xvfb, `dbus-run-session`, an
   empty profile) and checks the list draws. It needs `xorg-server-xvfb`
   installed; see [`../development.md`](../development.md).

@@ -1,7 +1,7 @@
 // What the Linux packages ask the system for, read straight from their
 // definitions, so a missing media plugin fails on the machine that removed it
 // rather than as a silent video on somebody else's (#358). The built .deb and
-// .rpm are checked again in CI's package check (scripts/package-audio-deps.py).
+// .rpm are checked again in CI's package check (scripts/package-audio-deps.sh).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
