@@ -739,10 +739,10 @@ fn opus_capability() -> RTCRtpCodecCapability {
 /// "talking" mark goes out.
 ///
 /// An Opus RTP payload is one Opus packet (RFC 7587), so there is nothing to
-/// reassemble. Sequence numbers are watched for the one thing worth doing
-/// about a gap: asking the decoder to conceal each missing frame, so a lost
-/// packet is a smear rather than a click, and the far end's clock keeps its
-/// place. A gap of more than a few is a pause, not loss, and is left alone.
+/// reassemble. Each packet's place is read from its timestamp ([`arrival`]):
+/// a missing frame is concealed, so a lost packet is a smear rather than a
+/// click and the far end's clock keeps its place; a packet whose place has
+/// already been played is dropped rather than played out of order (#462).
 /// The level gate runs on what was decoded, so "they are talking" is judged
 /// on the same samples that reach the speaker.
 async fn receive_forwarded<W: Watcher>(
@@ -753,7 +753,7 @@ async fn receive_forwarded<W: Watcher>(
     watcher: Arc<W>,
 ) {
     let mut current: Option<(String, codec::Decoder, level::Gate)> = None;
-    let mut expected: Option<u16> = None;
+    let mut expected: Option<u32> = None;
     loop {
         // Somebody who stops talking stops sending (#197), so their light
         // goes off when nothing has come for as long as a pause takes.
@@ -790,18 +790,19 @@ async fn receive_forwarded<W: Watcher>(
         let Some((who, decoder, gate)) = current.as_mut() else {
             continue;
         };
-        let sequence = packet.header.sequence_number;
-        if let Some(expected) = expected {
-            let gap = sequence.wrapping_sub(expected);
-            if (1..5).contains(&gap) {
-                for _ in 0..gap {
+        let stamp = packet.header.timestamp;
+        match arrival(expected, stamp) {
+            Arrival::Late => continue,
+            Arrival::After(missing) => {
+                for _ in 0..missing {
                     if let Ok(guess) = decoder.conceal() {
                         sink.play(who, &guess).await;
                     }
                 }
             }
+            Arrival::Next | Arrival::Pause => {}
         }
-        expected = Some(sequence.wrapping_add(1));
+        expected = Some(stamp.wrapping_add(FRAME_TICKS));
         if packet.payload.is_empty() {
             continue;
         }
@@ -822,6 +823,56 @@ async fn receive_forwarded<W: Watcher>(
     }
 }
 
+/// One frame in RTP timestamp ticks. Opus's RTP clock is always 48 kHz (RFC
+/// 7587), the rate the engine runs at, so a frame's ticks are its samples.
+const FRAME_TICKS: u32 = audio::FRAME_SAMPLES as u32;
+
+/// The most frames a packet can be behind and still count as late, rather
+/// than the start of a fresh stream from the same person: 200 ms.
+const LATE_FRAMES: u32 = 10;
+
+/// Where an arriving packet goes in somebody's voice.
+#[derive(Debug, PartialEq, Eq)]
+enum Arrival {
+    /// The frame after the last one, or the first: play it.
+    Next,
+    /// This many frames before it never came: conceal them, then play it.
+    After(u32),
+    /// They stopped sending for a while (#197): play it, nothing to conceal.
+    Pause,
+    /// Its place has been played already: drop it.
+    Late,
+}
+
+/// Place a packet by its RTP timestamp against the one expected next.
+///
+/// Timestamps, not sequence numbers: the forwarding server numbers what it
+/// passes on afresh, so a packet lost on the way to it, or two that reached
+/// it out of order, look in order by number. Only the timestamp, which it
+/// keeps, says where a frame belongs. Since #439 it passes packets on as they
+/// arrive rather than putting them back in order, and a late one played as
+/// it came would be a moment of a voice played backwards: a click (#462). A
+/// gap of more than a few frames is somebody who stopped talking, so nothing
+/// is concealed for it, and a packet far behind is a stream that started
+/// again, not a late one.
+fn arrival(expected: Option<u32>, stamp: u32) -> Arrival {
+    let Some(expected) = expected else {
+        return Arrival::Next;
+    };
+    let ahead = stamp.wrapping_sub(expected);
+    if ahead < u32::MAX / 2 {
+        match ahead / FRAME_TICKS {
+            0 => Arrival::Next,
+            missing @ 1..=4 => Arrival::After(missing),
+            _ => Arrival::Pause,
+        }
+    } else if expected.wrapping_sub(stamp) <= LATE_FRAMES * FRAME_TICKS {
+        Arrival::Late
+    } else {
+        Arrival::Pause
+    }
+}
+
 /// Somewhere for an error to go that is not a panic and not silence.
 ///
 /// An offer that couldn't be answered is not fatal — the next offer, or a
@@ -829,4 +880,72 @@ async fn receive_forwarded<W: Watcher>(
 /// the call down with it.
 fn tracing_error(peer: &str, error: &webrtc::Error) {
     eprintln!("voice: peer {peer}: {error}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A voice from a stream that starts at `base`, `n` frames in.
+    fn at(base: u32, n: u32) -> u32 {
+        base.wrapping_add(n * FRAME_TICKS)
+    }
+
+    #[test]
+    fn frames_in_order_are_played_as_they_come() {
+        assert_eq!(arrival(None, 1234), Arrival::Next);
+        assert_eq!(arrival(Some(at(1234, 1)), at(1234, 1)), Arrival::Next);
+    }
+
+    /// Lost on either side of the server: its number may say nothing is
+    /// missing, its timestamp says what is.
+    #[test]
+    fn a_missing_frame_is_concealed() {
+        assert_eq!(arrival(Some(at(0, 5)), at(0, 6)), Arrival::After(1));
+        assert_eq!(arrival(Some(at(0, 5)), at(0, 9)), Arrival::After(4));
+    }
+
+    /// Two packets that reached the server out of order (#462): the later
+    /// one takes the earlier one's place, concealed, and the earlier one,
+    /// arriving after, isn't played backwards.
+    #[test]
+    fn a_packet_whose_place_was_played_is_dropped() {
+        let base = 4_000_000_000;
+        assert_eq!(arrival(Some(at(base, 10)), at(base, 11)), Arrival::After(1));
+        let expected = Some(at(base, 12));
+        assert_eq!(arrival(expected, at(base, 10)), Arrival::Late);
+        assert_eq!(arrival(expected, at(base, 12)), Arrival::Next);
+    }
+
+    /// Somebody who stopped talking sends nothing (#197): when they start
+    /// again there's nothing to conceal.
+    #[test]
+    fn a_pause_is_not_concealed() {
+        assert_eq!(arrival(Some(at(0, 5)), at(0, 5 + 50)), Arrival::Pause);
+    }
+
+    /// Far behind isn't late: it's the same person's voice starting over,
+    /// and it's played rather than dropped for good.
+    #[test]
+    fn a_stream_starting_over_is_played() {
+        assert_eq!(arrival(Some(at(0, 5000)), at(0, 7)), Arrival::Pause);
+    }
+
+    /// Timestamps wrap around after about a day at 48 kHz; a frame across
+    /// the wrap is still the next one.
+    #[test]
+    fn the_timestamp_wrapping_is_still_in_order() {
+        let last = u32::MAX - FRAME_TICKS / 2;
+        assert_eq!(
+            arrival(
+                Some(last.wrapping_add(FRAME_TICKS)),
+                last.wrapping_add(FRAME_TICKS)
+            ),
+            Arrival::Next
+        );
+        assert_eq!(
+            arrival(Some(last.wrapping_add(FRAME_TICKS)), last),
+            Arrival::Late
+        );
+    }
 }
