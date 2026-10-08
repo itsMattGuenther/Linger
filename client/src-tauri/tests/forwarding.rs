@@ -804,6 +804,42 @@ async fn past_six_talking_the_quietest_voice_is_left_out() {
         heard_from(&recorder)
     );
 
+    // The quiet one lost its seat to the last of the six, just now, and what
+    // the server passed on of it before then may still be on its way here: on
+    // a busy machine its last frames were played up to 15 ms after this point,
+    // though the server had stopped passing it on 10–46 ms before (#461). So
+    // wait until the listener has gone 200 ms without hearing it at all.
+    let quiet_frames = |recorder: &Recorder| -> usize {
+        recorder
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(peer, _)| peer == quiet)
+            .count()
+    };
+    let mut drained = false;
+    let mut still = 0;
+    let mut seen = quiet_frames(&recorder);
+    for _ in 0..200 {
+        let mut routed: Vec<Routed<'_>> = rigs
+            .iter_mut()
+            .zip(names.iter())
+            .map(|((engine, rx), name)| (name.as_str(), &*engine, rx))
+            .collect();
+        routed.push(("ear", &ear, &mut ear_rx));
+        gateway.route(&mut routed).await;
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        let now = quiet_frames(&recorder);
+        still = if now == seen { still + 1 } else { 0 };
+        seen = now;
+        if still >= 8 {
+            drained = true;
+            break;
+        }
+    }
+    assert!(drained, "the quiet one never stopped reaching the listener");
+
     // From here on: the six loud voices, and never the quiet one.
     recorder.0.lock().unwrap().clear();
     for _ in 0..60 {
