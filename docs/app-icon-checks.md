@@ -1,7 +1,7 @@
 # Desktop icon audit
 
 The approved artwork is `assets/logo/Linger Pixel Porch Icon Set FINAL.png`.
-Do not replace it or stretch it to a square. `scripts/app-icons.py` pads it
+Do not replace it or stretch it to a square. `scripts/app-icons.mjs` pads it
 transparently and generates the desktop formats with the pinned Tauri CLI.
 
 ## Finding, 2026-09-17
@@ -27,13 +27,13 @@ ICO. Both installer surfaces now explicitly use the porch ICO too.
 
 ```bash
 # Requires the existing client development dependencies; changes no assets.
-python scripts/app-icons.py --check
+node scripts/app-icons.mjs --check
 
 # After extracting a Debian, RPM or AppImage package:
-python scripts/package-icons.py --linux-root /path/to/extracted/package
+node scripts/package-icons.mjs --linux-root /path/to/extracted/package
 
 # An extracted Windows app and its NSIS installer:
-python scripts/package-icons.py --pe /path/to/linger-client.exe --pe /path/to/setup.exe
+node scripts/package-icons.mjs --pe /path/to/linger-client.exe --pe /path/to/setup.exe
 ```
 
 The source check regenerates all six formats in temporary storage and compares

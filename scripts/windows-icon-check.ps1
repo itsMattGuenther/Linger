@@ -8,7 +8,7 @@ $install = Join-Path $Output 'installed'
 $setup = Start-Process $installer -ArgumentList @('/S', "/D=$install") -Wait -PassThru
 if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
 $exe = Join-Path $install 'linger-client.exe'
-python scripts/package-icons.py --pe $installer --pe $exe --pe (Join-Path $install 'uninstall.exe')
+node scripts/package-icons.mjs --pe $installer --pe $exe --pe (Join-Path $install 'uninstall.exe')
 if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows icon mismatch' }
 
 # Each bundle stamps its format into the executable, so MSI/NSIS bytes differ
@@ -21,7 +21,7 @@ if ($extract.ExitCode -ne 0) { throw "MSI extraction failed: $($extract.ExitCode
 # NSIS retains the Cargo binary name (linger-client.exe).
 $msiExe = Get-ChildItem $msiRoot -Recurse -Filter 'linger*.exe' | Select-Object -First 1
 if (!$msiExe) { throw 'MSI application executable missing' }
-python scripts/package-icons.py --pe $msiExe.FullName
+node scripts/package-icons.mjs --pe $msiExe.FullName
 if ($LASTEXITCODE -ne 0) { throw 'MSI application icon mismatch' }
 
 $shell = New-Object -ComObject WScript.Shell

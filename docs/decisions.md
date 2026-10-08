@@ -414,7 +414,7 @@ as a way back. It's deleted, with everything only it used:
 - **Its checks.** The packaged audio checks keep testing sound inside the
   installed app, now on the Buddy list; their layout part measured the
   previous client's screens and went with it. The new client's start-up in
-  the packaged app is `linux-next-check.py` and `windows-next-check.mjs`.
+  the packaged app is `linux-next-check.mjs` and `windows-next-check.mjs`.
   `scripts/desktop-check.py`, the three-person walk-through that drove the
   previous client's screens, is retired; a Buddy list version is T-1820.
 
@@ -573,7 +573,7 @@ nothing to install.
   other packages use the system's full FFmpeg.
 - **Checked every build:** `linux-audio-check.py --video` plays an H.264 and
   AAC clip in the packaged AppImage and listens for its sound, and
-  `appimage-ffmpeg-check.py` fails an AppImage carrying the build machine's
+  `appimage-ffmpeg-check.sh` fails an AppImage carrying the build machine's
   FFmpeg instead of the trimmed one.
 - **Worth knowing:** the AppImage now ships an H.264 decoder itself, where
   the other packages leave that to the system and Windows to Microsoft. H.264

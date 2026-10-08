@@ -33,7 +33,7 @@ must respect are in [`lessons.md`](lessons.md).
 | **C** | Shared core, covered by its own tests in `client/src/lib/` (`gateway.ts`, `api.ts`, `session.ts` and others). The item also needs a **U** or **F** proving the new surface calls it correctly. |
 | **F** | Fixture test: Playwright on a fixture page with a fake store, in Chromium and WebKit. |
 | **G** | Geometry test: Playwright measuring boxes on the kit gallery or a fixture (heights, centers, alignment, overflow). |
-| **D** | Desktop check: the real app under WebKitGTK and WebView2. The packaged app starts in CI (`scripts/linux-next-check.py`, `client/scripts/windows-next-check.mjs`); a signed-in check through `tauri-driver` is T-1820, not built yet. |
+| **D** | Desktop check: the real app under WebKitGTK and WebView2. The packaged app starts in CI (`scripts/linux-next-check.mjs`, `client/scripts/windows-next-check.mjs`); a signed-in check through `tauri-driver` is T-1820, not built yet. |
 | **M** | Manual: people, real computers, real networks or ears. Only where nothing automated can do it. |
 
 - **Status:** where the new client stands on the item.
@@ -579,7 +579,7 @@ there or where the design puts it.
 | DESK-2 | Linux launch plumbing before GTK: native Wayland when available (dictation, #122); the GBM probe and per-WebKit-version memory (#114, #187); NVIDIA explicit sync off by default (#135); AppImage hang-up and menu entry. | `src-tauri/src/linux_startup.rs` | Same (Rust, unchanged) | C (Rust tests) + D | 🟡 unchanged Rust; needs a desktop check |
 | DESK-3 | The Arch package marker: the system updates it, and the stale AppImage menu entry is removed. | `packaging.rs`, `linux_startup.rs` | Same | C | ✅ (Rust tests; unchanged) |
 | DESK-4 | Windows upgrades keep existing shortcuts and create no duplicates (#108). | installer config, `windows-update-checks.md` | Same | D (Windows CI) | 🟡 unchanged; needs the Windows check |
-| DESK-5 | The selected app icon everywhere (T-919, T-925). | `scripts/app-icons.py` | Same | U (`--check`) | ✅ (`app-icons.py --check`; unchanged) |
+| DESK-5 | The selected app icon everywhere (T-919, T-925). | `scripts/app-icons.mjs` | Same | U (`--check`) | ✅ (`app-icons.mjs --check`; unchanged) |
 | DESK-6 | A CSP that requires HTTPS/WSS for remote servers and blocks remote scripts and fonts. A server needs a name, not a bare IP. | `tauri.conf.json` | Same, for every window | D | 🟡 one CSP covers every window; needs a desktop check |
 | DESK-7 | Chime playback works in every package (GStreamer plugins in the AppImage, .deb and .rpm; WebView2 on Windows). | `packaged-audio-checks.md` | Same | D (CI package checks) | 🟡 unchanged; needs the package checks |
 | DESK-8 | Dictation (Voxtype and `wtype`) types correctly into the composer on native Wayland. | `linux-input-checks.md` | Same | D + M | 🟡 needs a desktop check |

@@ -240,7 +240,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/package-audio-deps.py client/src-tauri/target/release/bundle
+          scripts/package-audio-deps.sh client/src-tauri/target/release/bundle
           mkdir -p package-check/deb package-check/rpm
           dpkg-deb -x client/src-tauri/target/release/bundle/deb/*.deb package-check/deb
           bsdtar -xf client/src-tauri/target/release/bundle/rpm/*.rpm -C package-check/rpm
@@ -248,7 +248,7 @@ jobs:
           # The AppImage carries its own GStreamer: a shared video's H.264 and
           # AAC play only if the build machine's libav decoders went in (#358).
           python3 scripts/linux-audio-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --video --output package-check/video-appimage
-          python3 scripts/appimage-ffmpeg-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage
+          scripts/appimage-ffmpeg-check.sh client/src-tauri/target/release/bundle/appimage/*.AppImage
           python3 scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python3 scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
       - name: The Buddy list starts in the signed Linux packages
@@ -258,8 +258,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/linux-next-check.py client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
-          python3 scripts/linux-next-check.py package-check/deb/usr/bin/linger-client --output package-check/next-deb
+          node scripts/linux-next-check.mjs client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
+          node scripts/linux-next-check.mjs package-check/deb/usr/bin/linger-client --output package-check/next-deb
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh

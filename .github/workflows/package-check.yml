@@ -55,7 +55,9 @@ jobs:
         with:
           node-version: 22
       - run: corepack enable
+      # For scripts/linux-audio-check.py; every other check here is Node or shell.
       - uses: actions/setup-python@v5
+        if: runner.os == 'Linux'
         with:
           python-version: '3.x'
       - uses: dtolnay/rust-toolchain@stable
@@ -82,7 +84,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: client
       - name: Approved artwork is current
-        run: python scripts/app-icons.py --check
+        run: node scripts/app-icons.mjs --check
       - name: Build unsigned packages without updater artifacts
         working-directory: client
         # Debug profile saves CI time; tauri build still packages the built frontend.
@@ -101,27 +103,27 @@ jobs:
           mkdir -p package-check/deb package-check/rpm package-check/appimage
           dpkg-deb -x client/src-tauri/target/debug/bundle/deb/*.deb package-check/deb
           bsdtar -xf client/src-tauri/target/debug/bundle/rpm/*.rpm -C package-check/rpm
-          python scripts/package-icons.py --linux-root package-check/deb
-          python scripts/package-icons.py --linux-root package-check/rpm
+          node scripts/package-icons.mjs --linux-root package-check/deb
+          node scripts/package-icons.mjs --linux-root package-check/rpm
           package=$(realpath client/src-tauri/target/debug/bundle/appimage/*.AppImage)
           (cd package-check/appimage && "$package" --appimage-extract >/dev/null)
-          python scripts/package-icons.py --linux-root package-check/appimage/squashfs-root
+          node scripts/package-icons.mjs --linux-root package-check/appimage/squashfs-root
       - name: Packaged Linux audio and dependency metadata
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          python scripts/package-audio-deps.py client/src-tauri/target/debug/bundle
+          scripts/package-audio-deps.sh client/src-tauri/target/debug/bundle
           python scripts/linux-audio-check.py client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --output package-check/audio-appimage
           python scripts/linux-audio-check.py client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --video --output package-check/video-appimage
-          python scripts/appimage-ffmpeg-check.py client/src-tauri/target/debug/bundle/appimage/*.AppImage
+          scripts/appimage-ffmpeg-check.sh client/src-tauri/target/debug/bundle/appimage/*.AppImage
           python scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
       - name: The Buddy list starts in the packaged Linux app
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          python scripts/linux-next-check.py client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
-          python scripts/linux-next-check.py package-check/deb/usr/bin/linger-client --output package-check/next-deb
+          node scripts/linux-next-check.mjs client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
+          node scripts/linux-next-check.mjs package-check/deb/usr/bin/linger-client --output package-check/next-deb
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh

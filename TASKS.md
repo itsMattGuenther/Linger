@@ -423,7 +423,7 @@ Rules for this milestone:
   The app's own commands are already limited per window (`build.rs`,
   `capabilities/`, `src-tauri/src/acl.rs`).
 - 🟡 **T-1812 · A packaged layout check for the Buddy list** —
-  `client/scripts/next-smoke-probe.js`, run by `scripts/linux-next-check.py`
+  `client/scripts/next-smoke-probe.js`, run by `scripts/linux-next-check.mjs`
   and `client/scripts/windows-next-check.mjs`, proves the list window starts
   in the packaged WebKitGTK and WebView2 with its stylesheet, fonts and mark,
   at every interface size, and keeps a Windows screenshot. The packaged audio
@@ -536,7 +536,7 @@ macOS runners, or a friend's Mac.
   the retries back off up to thirty, so now the app tries again at once when
   it comes back to the screen (`gateway_retry`). **Still to do:** iOS, which
   needs a Mac. The launcher icon is the porch artwork
-  (`scripts/app-icons.py`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
+  (`scripts/app-icons.mjs`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and voice, which

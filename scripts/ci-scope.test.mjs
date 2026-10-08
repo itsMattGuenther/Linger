@@ -20,7 +20,7 @@ test("browser assertions alone need no package rebuild", () => {
 });
 test("the packaged audio and video checks' own files rebuild only the packages", () => {
   for (const path of ["scripts/linux-audio-check.py", "scripts/video-runtime-probe.js", "scripts/fixtures/tone-h264-aac.mp4",
-    "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.py"])
+    "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.sh"])
     assert.deepEqual(active([path]), ["packages"], path);
 });
 test("server changes include real storage tests", () => {

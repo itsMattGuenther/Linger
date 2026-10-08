@@ -34,7 +34,7 @@ The package audio harness injects a test-only bundle of the real sound player
 into the installed app, signed in nowhere, and records what reaches a private
 virtual speaker. Until 0.4.3 it also measured the previous client's layout in
 the package; that part went with the previous client (#306). The Buddy list's
-own start-up and layout in the package are `scripts/linux-next-check.py` and
+own start-up and layout in the package are `scripts/linux-next-check.mjs` and
 `client/scripts/windows-next-check.mjs`. None of these is a live-server test;
 a signed-in desktop check is T-1820.
 
@@ -94,7 +94,7 @@ depends on timing.
 | A rule the server keeps: limits, who may do what, what an endpoint returns | An integration test in `crates/linger-server/tests/`, driving real HTTP against a temporary SQLite file |
 | What a screen looks like, or how it answers the keyboard and mouse | A browser test in `client/tests/browser/`, on a fixture page with the desktop shell and servers faked. The design system's rules (`docs/design/system.md`) are measured there |
 | Gateway resume, sequence numbers, reconnects | A test that really drops the connection, not a mock (`AGENTS.md`) |
-| The installed app: what it's allowed to load, its packages, native audio, shortcuts | The package checks: `scripts/csp-assets.mjs`, `scripts/linux-next-check.py`, `scripts/linux-audio-check.py`, `scripts/windows-*.ps1` |
+| The installed app: what it's allowed to load, its packages, native audio, shortcuts | The package checks: `scripts/csp-assets.mjs`, `scripts/linux-next-check.mjs`, `scripts/linux-audio-check.py`, `scripts/windows-*.ps1` |
 | Several computers, real networks, audio devices, operating-system versions | The [release checks](tasks/release-checks.md). No automated test covers these |
 
 ## Fixes need regression evidence

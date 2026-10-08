@@ -10,7 +10,7 @@ a unit test that reads the new client's source and CSS and fails on forbidden
 patterns (see [`architecture.md`](architecture.md)). "Geometry test" means
 Playwright measuring real boxes on the kit gallery or a screen fixture, in
 Chromium and WebKit. "Desktop check" means the real app: the packaged app in
-CI under WebKitGTK and WebView2 (`scripts/linux-next-check.py`,
+CI under WebKitGTK and WebView2 (`scripts/linux-next-check.mjs`,
 `client/scripts/windows-next-check.mjs`), and, once it's built, a signed-in
 check through `tauri-driver` (T-1820).
 
@@ -473,7 +473,7 @@ check through `tauri-driver` (T-1820).
   - Installer identity and icon generation stay as they are.
   - The new client honors the `managed` update state, and never offers to
     replace a system-managed install.
-- **Check:** the existing Windows update checks, `scripts/app-icons.py --check`,
+- **Check:** the existing Windows update checks, `scripts/app-icons.mjs --check`,
   and a unit test for the `managed` state in the new update screen.
 
 ### L-26 · Local paths resolved against the wrong origin
