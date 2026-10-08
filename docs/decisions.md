@@ -839,6 +839,11 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
   while you talk (five silence frames, then nothing), and now Linger's do too: Opus DTX
   on the live-voice encoder, and its "still here" frames left unsent as well. Listeners'
   talking lights go out after the usual 300 ms pause with nothing arriving.
+  **Its catch** (#462, found in 0.4.9): the listening app had kept a little slack
+  queued only because silence kept arriving. Without it every sentence started from an
+  empty queue, and one packet arriving late put a crackle in the first word. A voice
+  now starts again after a pause with 60 ms held back (`CUSHION_MS`), added only where
+  the last frame was quiet, so it is never heard.
 - **60 a room**, and the answer to the server's offer may be 128 KB: it grows a few
   hundred bytes for every other person, and at 50 a stand-in's was 42 KB, past the old
   16 KB, which would have shut the last people into a raid out.
@@ -878,7 +883,10 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
     could only throw away. At 60 people with 8 talking the server fell into it and
     stayed there: 78% heard, a steady 300 ms late, a sixth of what came in dropped.
     `set_reordering_size_audio(0)` makes that 99% heard and 80 ms (the trip from the
-    desktop and back alone is 48 ms). Each app's own buffer covers gaps and reorders.
+    desktop and back alone is 48 ms). Each app covers gaps and reorders itself: it
+    conceals a missing frame and drops one arriving after its place was played, both
+    read from the timestamps the server keeps, since it numbers packets afresh. Until
+    #462 (0.4.10) it played a late one backwards instead.
 - **Where that leaves one shared core**: 50 people with 3 talking about 65%, with 8
   about 90%; 60 with 8 talking 96% and 5% of packets late. Ten people on an app from
   before 0.4.9, sending silence, take 50 with 3 talking to the limit (95% heard), so a

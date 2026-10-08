@@ -50,6 +50,7 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::level;
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -416,6 +417,10 @@ struct Lane {
     /// Your volume for them. Applied on the way in, so the callback only
     /// ever sums.
     gain: f32,
+    /// Whether the last frame they sent was quiet: a pause, where silence
+    /// can be added without anybody hearing it (`CUSHION_MS`, #462). True
+    /// before their first.
+    quiet: bool,
 }
 
 impl Lane {
@@ -424,6 +429,47 @@ impl Lane {
             queue: VecDeque::new(),
             resampler: (rate != SAMPLE_RATE).then(|| Linear::new(SAMPLE_RATE, rate)),
             gain: 1.0,
+            quiet: true,
+        }
+    }
+
+    /// Queue one decoded frame for the output callback, at `rate`.
+    ///
+    /// In a pause it first tops the queue up to `CUSHION_MS` of silence, so
+    /// the next word starts with a little held back (#462). Apps from 0.4.9
+    /// send nothing while their person is quiet (#197), so without this
+    /// every sentence would start from an empty queue, and the first packet
+    /// to arrive a few milliseconds late would leave a hole in its first
+    /// word: a crackle. Whether it's a pause is judged by the sound, not by
+    /// timing: silence after a quiet frame can't be heard, silence inside a
+    /// word can, so in the middle of a word nothing is added.
+    fn feed(&mut self, samples: &[i16], rate: u32) {
+        let per_ms = (rate / 1000) as usize;
+        let cushion = per_ms * CUSHION_MS as usize;
+        if self.quiet && self.queue.len() < cushion {
+            self.queue.resize(cushion, 0);
+        }
+        // Judged before your volume for them: somebody you've turned down
+        // isn't in a pause all the time.
+        self.quiet = level::rms(samples) < level::THRESHOLD;
+        let scaled;
+        let samples = if (self.gain - 1.0).abs() < f32::EPSILON {
+            samples
+        } else {
+            scaled = scale(samples, self.gain);
+            &scaled
+        };
+        match self.resampler.as_mut() {
+            Some(resampler) => {
+                let mut out = Vec::with_capacity(samples.len());
+                resampler.push(samples, &mut out);
+                self.queue.extend(out);
+            }
+            None => self.queue.extend(samples),
+        }
+        let cap = per_ms * MAX_QUEUED_MS as usize;
+        while self.queue.len() > cap {
+            self.queue.pop_front();
         }
     }
 
@@ -616,36 +662,26 @@ fn open_output(
 /// delay to every word from here on.
 const MAX_QUEUED_MS: u32 = 200;
 
+/// How much of somebody's voice is held back when they start talking after
+/// a pause (#462): enough for a packet arriving late on home internet or
+/// Wi-Fi, or an output device that asks for its next chunk early, without
+/// leaving a hole in the first word. Before 0.4.9 the queue kept whatever
+/// slack it built up over a call, since silence was sent too; 60 ms is less
+/// than that usually came to, and is added only once per sentence.
+const CUSHION_MS: u32 = 60;
+
 #[async_trait]
 impl Sink for Speaker {
     async fn play(&self, peer: &str, samples: &[i16]) {
         let rate = self.rate.load(Ordering::Relaxed);
-        let cap = (rate / 1000 * MAX_QUEUED_MS) as usize;
         let mut lanes = lock(&self.lanes);
         if self.deafened.load(Ordering::Relaxed) {
             return;
         }
-        let lane = lanes
+        lanes
             .entry(peer.to_string())
-            .or_insert_with(|| Lane::new(rate));
-        let scaled;
-        let samples = if (lane.gain - 1.0).abs() < f32::EPSILON {
-            samples
-        } else {
-            scaled = scale(samples, lane.gain);
-            &scaled
-        };
-        match lane.resampler.as_mut() {
-            Some(resampler) => {
-                let mut out = Vec::with_capacity(samples.len());
-                resampler.push(samples, &mut out);
-                lane.queue.extend(out);
-            }
-            None => lane.queue.extend(samples),
-        }
-        while lane.queue.len() > cap {
-            lane.queue.pop_front();
-        }
+            .or_insert_with(|| Lane::new(rate))
+            .feed(samples, rate);
     }
 
     async fn forget(&self, peer: &str) {
@@ -1547,6 +1583,7 @@ mod tests {
                     queue: VecDeque::from(vec![level, -level, 100]),
                     resampler: None,
                     gain: 1.0,
+                    quiet: false,
                 },
             );
         }
@@ -1571,6 +1608,87 @@ mod tests {
         assert_eq!(out[7], 0);
     }
 
+    /// Play `ms` of what the lanes hold, as the output callback would.
+    fn listen(lanes: &Mutex<HashMap<String, Lane>>, ms: usize, heard: &mut Vec<i16>) {
+        let mut out = vec![0i16; ms * (SAMPLE_RATE / 1000) as usize];
+        mix(
+            lanes,
+            &Mutex::default(),
+            &AtomicBool::new(false),
+            1,
+            &mut out,
+            |s| s,
+        );
+        heard.extend(out);
+    }
+
+    /// A word: loud enough to be talking (`level::THRESHOLD`).
+    fn word() -> Vec<i16> {
+        vec![4000; FRAME_SAMPLES]
+    }
+
+    /// Somebody starts talking after a pause, and their second packet is
+    /// 30 ms late, as one often is on home internet or Wi-Fi (#462). Their
+    /// first word is held back a little, so it plays through without a hole.
+    /// Apps from 0.4.9 send nothing in a pause, so every sentence starts
+    /// from an empty queue; without the cushion this was the crackle at the
+    /// start of a sentence.
+    #[test]
+    fn a_voice_after_a_pause_plays_through_a_late_packet() {
+        let lanes = Mutex::new(HashMap::from([(
+            "friend".to_string(),
+            Lane::new(SAMPLE_RATE),
+        )]));
+        let feed = |samples: &[i16]| {
+            lock(&lanes)
+                .get_mut("friend")
+                .unwrap()
+                .feed(samples, SAMPLE_RATE)
+        };
+        let mut heard = Vec::new();
+        feed(&word());
+        // The second frame, due 20 ms after the first, comes 30 ms later.
+        listen(&lanes, 50, &mut heard);
+        feed(&word());
+        listen(&lanes, 70, &mut heard);
+        let start = heard
+            .iter()
+            .position(|s| *s != 0)
+            .expect("the word was heard");
+        assert!(
+            heard[start..start + 2 * FRAME_SAMPLES]
+                .iter()
+                .all(|s| *s != 0),
+            "a hole in the first word, {} ms in",
+            (heard[start..].iter().position(|s| *s == 0).unwrap_or(0)) / 48
+        );
+    }
+
+    /// In the middle of a word nothing is added: silence there would be
+    /// heard. A late packet mid-word is what it was before 0.4.9.
+    #[test]
+    fn nothing_is_added_in_the_middle_of_a_word() {
+        let mut lane = Lane::new(SAMPLE_RATE);
+        lane.feed(&word(), SAMPLE_RATE);
+        lane.queue.clear();
+        lane.feed(&word(), SAMPLE_RATE);
+        assert_eq!(lane.queue.len(), FRAME_SAMPLES);
+    }
+
+    /// A pause from an app that still sends its silence, or the quiet frames
+    /// an app eases out with, keep the cushion topped up and never grow it:
+    /// a voice is never further behind than the cushion and a frame.
+    #[test]
+    fn quiet_frames_keep_the_cushion_and_never_grow_it() {
+        let mut lane = Lane::new(SAMPLE_RATE);
+        let cushion = (SAMPLE_RATE / 1000 * CUSHION_MS) as usize;
+        for _ in 0..50 {
+            lane.feed(&[0; FRAME_SAMPLES], SAMPLE_RATE);
+            assert_eq!(lane.queue.len(), cushion + FRAME_SAMPLES);
+            lane.queue.drain(..FRAME_SAMPLES);
+        }
+    }
+
     #[test]
     fn deafen_discards_queued_voice_without_changing_personal_volume() {
         let lanes = Mutex::new(HashMap::from([(
@@ -1579,6 +1697,7 @@ mod tests {
                 queue: VecDeque::from(vec![4000; 20]),
                 resampler: None,
                 gain: 0.4,
+                quiet: false,
             },
         )]));
         let gate = AtomicBool::new(false);
@@ -1669,6 +1788,14 @@ mod tests {
     #[tokio::test]
     async fn sounds_play_over_voices_and_through_deafen() {
         let speaker = quiet_speaker(SAMPLE_RATE);
+        // Mid-sentence, so none of their voice is held back (`CUSHION_MS`).
+        lock(&speaker.lanes).insert(
+            "friend".to_string(),
+            Lane {
+                quiet: false,
+                ..Lane::new(SAMPLE_RATE)
+            },
+        );
         speaker.play("friend", &[1000; 4]).await;
         speaker.cue(&[10, 20, 30]);
         speaker.cue(&[1, 2]);
