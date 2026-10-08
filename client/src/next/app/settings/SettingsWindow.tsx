@@ -619,7 +619,11 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               rooms: {
                 rooms,
                 create: (room) => said(api.createRoom({ slug: room.slug, name: room.name, topic: room.topic }), "Couldn't make the room."),
-                update: (id, change) => said(api.updateRoom(id, { name: change.name, topic: change.topic, position: null }), "Couldn't save the room."),
+                update: (id, change) =>
+                  said(
+                    api.updateRoom(id, { name: change.name, topic: change.topic, position: null, ...(change.motd === undefined ? {} : { motd: change.motd }) }),
+                    "Couldn't save the room.",
+                  ),
                 move: (id, delta) =>
                   said(
                     (async () => {

@@ -296,8 +296,20 @@ function Fixture() {
                   return problem;
                 },
                 update: async (id, change) => {
-                  const problem = await saving(`update:${id}:${change.name}:${change.topic}`);
-                  if (problem === null) setRooms((held) => held.map((room) => (room.id === id ? { ...room, name: change.name, topic: change.topic === "" ? null : change.topic } : room)));
+                  // A message of the day goes only when it changed (#464).
+                  const motd = change.motd === undefined ? "" : `:motd=${change.motd}`;
+                  const problem = await saving(`update:${id}:${change.name}:${change.topic}${motd}`);
+                  if (problem === null) {
+                    setRooms((held) =>
+                      held.map((room) => {
+                        if (room.id !== id) return room;
+                        const changed = { ...room, name: change.name, topic: change.topic === "" ? null : change.topic };
+                        if (change.motd === undefined) return changed;
+                        const { motd: _old, ...rest } = changed;
+                        return change.motd === "" ? rest : { ...changed, motd: { text: change.motd, set_by: "u-matt", set_at: Date.now() } };
+                      }),
+                    );
+                  }
                   return problem;
                 },
                 move: async (id, delta) => {

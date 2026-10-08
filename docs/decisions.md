@@ -1071,3 +1071,30 @@ usable. Matt: make it safe, pass on only the six loudest.
   45 and 67 Mbps without it at 8 and 12.
 - **Nothing changes on the wire for a listener**: a voice without a seat sends nothing
   for a while, as a pause does, and an old app hears the room as it always did.
+
+## Decided — a room's message of the day, apart from its topic
+
+**Matt, 2026-10-08 (#464).** A friend asked for mIRC's message of the day: a note at the
+top of a room, set by the host, that also shows in the chat when it's set. Mockups showed
+it three ways; Matt chose a strip under the header, and kept it apart from the topic: the
+topic is what a room is about ("World of Warcraft news") and rarely changes, the message
+of the day is what's happening now ("We will be meeting on Friday, Oct 9 @ 8PM CDT…").
+
+- **Two fields, not one.** The topic stays the one line in the header. The message of the
+  day is a strip of its own under it, whole, with who set it and when.
+- **The host or a co-host sets it**, with `/motd` in the room's own box, the first `/`
+  command, or beside the topic in Settings. Nobody else can; their box says who can.
+  300 characters, so it stays a few sentences.
+- **Folding is each person's, on each device**, kept by when it was set: folded stays
+  folded through a restart (Matt: anything else annoys people), and a new one opens
+  again for everybody.
+- **Setting it is a line in the room** from whoever set it, so scrolling back shows when
+  it changed and what it said. It can't be edited, since it says what was set then.
+  Clearing it writes nothing.
+- **It calls nobody.** No notification or sound, even when it names somebody, and the
+  line never makes a room look new (it is never a room's `last_message_id`). A note
+  everybody sees is fine; one that rings everybody is `@everyone`, which Linger doesn't
+  have (SPEC §2).
+- **Set aside:** the whole message behind a click in the header (too easy to miss), and a
+  card at the top of the conversation (too easy to take for a pinned message, which
+  anybody can make). No end date for now; `/motd` on its own clears an old one.

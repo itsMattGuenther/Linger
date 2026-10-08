@@ -8,6 +8,7 @@ import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { dmLabel } from "../../../lib/dm";
 import { openExternal, openExternalChecked } from "../../../lib/external";
+import { hostsHere } from "../../../lib/host";
 import {
   deleteMessage,
   editMessage,
@@ -32,6 +33,7 @@ import { tauriBus } from "../../core/bus";
 import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere } from "../../core/chat/conversation";
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
+import { foldMotd, motdFolded } from "../../core/chat/motd";
 import { clipboardImageReader } from "../../core/chat/paste";
 import { type VoiceStrip as VoiceStripModel, voiceStrip } from "../../core/chat/voice";
 import { knockOfflineLine, knockOn } from "../../core/knock";
@@ -344,6 +346,39 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [save, remove, pin, download, wantCards, openPerson, report],
   );
 
+  // A room's message of the day (#464): `/motd` sets it, for the host or a
+  // co-host; anybody else's box says who can. A DM has none.
+  const isRoom = room?.kind === "room";
+  const mayHost = state ? hostsHere(state.me) : false;
+  const setMotd = useCallback(
+    async (text: string) => {
+      if (!api || roomId === null) throw new Error("This conversation isn't connected.");
+      await api
+        .updateRoom(roomId, { name: null, topic: null, position: null, motd: text })
+        .then(() => undefined)
+        .catch(rethrowInWords("Couldn't set the message of the day."));
+    },
+    [api, roomId],
+  );
+  const motdBox = useMemo(() => (isRoom ? { allowed: mayHost, set: setMotd } : undefined), [isRoom, mayHost, setMotd]);
+  // Its fold is kept on this device, so it's still folded after a restart;
+  // bumped to draw a fold just made.
+  const [foldings, setFoldings] = useState(0);
+  const motdNow = isRoom ? (room?.motd ?? null) : null;
+  const motdSetAt = motdNow?.set_at ?? null;
+  const folded = useMemo(
+    () => paneId !== null && motdSetAt !== null && motdFolded(draftStore(), paneId, motdSetAt),
+    [paneId, motdSetAt, foldings],
+  );
+  const onFoldMotd = useCallback(
+    (fold: boolean) => {
+      if (paneId === null || motdSetAt === null) return;
+      foldMotd(draftStore(), paneId, motdSetAt, fold);
+      setFoldings((count) => count + 1);
+    },
+    [paneId, motdSetAt],
+  );
+
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
   const onTyping = useCallback(() => {
     if (api && roomId !== null) startedTyping(api, roomId);
@@ -352,8 +387,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const composer = useMemo(
     // On the phone the cursor goes in the box when it's tapped: putting it there
     // on opening raises the keyboard over half the conversation (SPEC §4.15).
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage, motd: motdBox }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox],
   );
 
   const knock = useCallback(
@@ -424,6 +459,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     return {
       id: paneId,
       header,
+      motd: motdNow ? { motd: motdNow, folded, onFold: onFoldMotd } : null,
       // The phone is text only for now (SPEC §4.15): no voice line to join from.
       voice: onPhone() ? null : {
         strip: friendsFirst(state, voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false)),

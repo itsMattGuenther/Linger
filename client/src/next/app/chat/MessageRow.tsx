@@ -99,7 +99,10 @@ export const MessageRow = memo(function MessageRow({
 
   const deleted = message.deleted_at !== null;
   const mine = me !== null && message.author_id === me.id;
-  const namesMe = me !== null && !deleted && mentionHandles(message.body).includes(me.username);
+  // The line written when somebody set the room's message of the day (#464):
+  // who set it, and what to, quoted. It names nobody and isn't edited.
+  const motd = message.motd === true;
+  const namesMe = me !== null && !deleted && !motd && mentionHandles(message.body).includes(me.username);
   const links = deleted || editing ? [] : linkTargets(message.body);
   const justCard = cardOnly(message.body, links, (url) => previews[url] !== undefined);
   // Pinned and edited, said after the words; or, for a message with none
@@ -202,7 +205,7 @@ export const MessageRow = memo(function MessageRow({
               },
             ]
           : []),
-        ...(mine
+        ...(mine && !motd
           ? [
               {
                 id: "edit",
@@ -253,6 +256,7 @@ export const MessageRow = memo(function MessageRow({
       data-reply={reply ? "yes" : undefined}
       data-pending={pending ? "yes" : undefined}
       data-names-me={namesMe ? "yes" : undefined}
+      data-motd={motd ? "yes" : undefined}
       data-flash={flashing ? "yes" : undefined}
       data-menu={menu ? "yes" : undefined}
       data-message={message.id}
@@ -280,6 +284,7 @@ export const MessageRow = memo(function MessageRow({
           ) : (
             <span className="nx-msg-someone">someone</span>
           )}
+          {motd ? <span className="nx-msg-did">set the message of the day</span> : null}
         </span>
       ) : null}
 

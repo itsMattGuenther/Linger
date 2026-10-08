@@ -1,0 +1,51 @@
+/* A room's message of the day (#464): a strip under the header, as wide as
+   the pane, with the pin, the words, who set it, and the fold arrow on the
+   right. The window's own ground, not a wash: it's news, not a call. */
+.nx-motd {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2-5) var(--space-3-5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* The pin sits on the first line of words, and the arrow lines up with it. */
+.nx-motd > .k-icon {
+  margin-top: var(--space-2-5);
+  color: var(--icon-muted);
+}
+
+.nx-motd-words {
+  flex: 1;
+  min-width: 0;
+  padding-top: var(--space-1);
+}
+
+.nx-motd-by {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* Folded: one line that stays where it is, the rest of it behind the arrow. */
+.nx-motd[data-folded="yes"] {
+  align-items: center;
+  padding-bottom: var(--space-1);
+  padding-top: var(--space-1);
+}
+
+.nx-motd[data-folded="yes"] > .k-icon,
+.nx-motd[data-folded="yes"] .nx-motd-words {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.nx-motd[data-folded="yes"] .nx-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  color: var(--text-secondary);
+}

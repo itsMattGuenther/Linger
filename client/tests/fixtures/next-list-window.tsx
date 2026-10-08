@@ -45,6 +45,11 @@
  * (#423) is written down as `takeout <room> <user>`, and refused unless
  * you're the host.
  *
+ * The message of the day (#464): `?motd` has Eli's set in #general, just
+ * after the evening. Changing a room is written down as `room <id> <body>`,
+ * refused unless you host or co-host, and answered with the frames the
+ * server sends: the room, and for a new message of the day its line.
+ *
  * `window.core.frame(server, frame)` delivers a gateway frame;
  * `window.core.restart(server, read)` starts its session over, with read
  * positions moved meanwhile;
@@ -95,6 +100,15 @@ if (query.has("guest") || query.has("cohost") || query.has("cohosts")) {
     is_cohost: (query.has("cohost") && user.id === good?.me?.id) || (query.has("cohosts") && user.id === people.dave.id),
   });
   if (good?.me) states[SERVER] = { ...good, me: host(good.me), users: good.users.map(host) };
+}
+// `?motd`: #general's message of the day, set by Eli a minute after the
+// evening's last word there (#464). The same moment on every load, as a
+// server keeps it: a fold is kept by it.
+if (query.has("motd")) {
+  const good = states[SERVER];
+  const set_at = (messages["r-general"]?.at(-1)?.created_at ?? 0) + 60_000;
+  const motd = { text: "Raid night Friday at 8. Bring flasks, and @matt brings the snacks.", set_by: people.eli.id, set_at };
+  if (good) states[SERVER] = { ...good, rooms: good.rooms.map((room) => (room.id === "r-general" ? { ...room, motd } : room)) };
 }
 /** Who you've blocked on The Good Company, as its server keeps them. */
 const blocks = new Set<string>(query.has("blocked") ? [people.jules.id] : []);
@@ -496,6 +510,44 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return json(message, 201);
   }
   if (/^\/rooms\/[^/]+\/read$/.test(path)) return new Response(null, { status: 204 });
+  // Changing a room, as the host or a co-host does (#464): a new message of
+  // the day comes back as the room and a line in it, as the server sends them.
+  const roomOf = server === SERVER ? /^\/rooms\/([^/]+)$/.exec(path) : null;
+  if (roomOf && method === "PATCH") {
+    const id = decodeURIComponent(roomOf[1] ?? "");
+    note(`room ${id} ${JSON.stringify(body)}`);
+    if (!state.me?.is_host && !state.me?.is_cohost) return refuse(403, "FORBIDDEN", "Only the host or a co-host can do that.");
+    const found = state.rooms.find((room) => room.id === id);
+    if (!found) return refuse(404, "NOT_FOUND", "No such room on this server.");
+    const text = typeof body.motd === "string" ? body.motd.trim() : null;
+    if (text !== null && text.length > 300) return refuse(422, "VALIDATION_FAILED", "A message of the day is at most 300 characters.");
+    const at = Date.now();
+    const { motd: _old, ...rest } = found;
+    const room = text === null ? found : text === "" ? rest : { ...found, motd: { text, set_by: state.me.id, set_at: at } };
+    states[SERVER] = { ...state, rooms: state.rooms.map((one) => (one.id === id ? room : one)) };
+    window.setTimeout(() => {
+      window.core?.frame(SERVER, { op: "room.update", d: room } as Omit<ServerFrame, "s">);
+      if (text === null || text === "") return;
+      serial += 1;
+      const line: Message = {
+        id: `m${String(serial).padStart(6, "0")}`,
+        room_id: id,
+        author_id: state.me?.id ?? "",
+        body: text,
+        reply_to: null,
+        attachments: [],
+        reactions: [],
+        pinned_at: null,
+        edited_at: null,
+        deleted_at: null,
+        created_at: at,
+        motd: true,
+      };
+      history[id] = [...(history[id] ?? []), line];
+      window.core?.frame(SERVER, { op: "message.create", d: line } as Omit<ServerFrame, "s">);
+    }, 10);
+    return json(room);
+  }
   if (path === "/links/preview") return json([]);
   // Media and Search beside the list (#337), from the same finds as their own windows' page.
   if (path === "/search" && method === "GET") {

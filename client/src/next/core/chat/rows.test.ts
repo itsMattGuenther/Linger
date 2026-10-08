@@ -48,6 +48,15 @@ describe("the chat window's rows", () => {
     expect(heads(rows)).toEqual(["divider", ["m000001", true], ["m000002", true]]);
   });
 
+  it("gives a message-of-the-day line a group of its own, before and after (#464)", () => {
+    const rows = chatRows(
+      [message(1, "matt", T0), message(2, "matt", T0 + MIN, { motd: true }), message(3, "matt", T0 + 2 * MIN)],
+      [],
+      { atStart: true, leftOff: null },
+    );
+    expect(heads(rows)).toEqual(["divider", ["m000001", true], ["m000002", true], ["m000003", true]]);
+  });
+
   it("lets a deleted reply fall back into its group (its quote is gone too)", () => {
     const rows = chatRows(
       [message(1, "eli", T0), message(2, "eli", T0 + MIN, { reply_to: "m000001", deleted_at: T0 + 2 * MIN })],
@@ -81,5 +90,10 @@ describe("the chat window's rows", () => {
     expect(lastEditable(messages, "matt", true)?.id).toBe("m000001");
     expect(lastEditable(messages, "matt", false)).toBeNull();
     expect(lastEditable(messages, null, true)).toBeNull();
+  });
+
+  it("passes over a message-of-the-day line for Up's edit (#464)", () => {
+    const messages = [message(1, "matt", T0), message(2, "matt", T0 + MIN, { motd: true })];
+    expect(lastEditable(messages, "matt", true)?.id).toBe("m000001");
   });
 });

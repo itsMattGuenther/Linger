@@ -11,6 +11,7 @@ import { EMOJI_NAME_RULE, emojiNameFrom, emojiNameOk, MAX_CUSTOM_EMOJI } from ".
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
 import { fullTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
+import { MAX_MOTD_CHARS } from "../../core/chat/motd";
 import {
   draftSlug,
   HEADINGS,
@@ -52,7 +53,8 @@ export interface HostRoomsProps {
   /** The server's rooms, not archived, in their order. */
   rooms: readonly Room[];
   create: (room: { slug: string; name: string; topic: string | null }) => Promise<string | null>;
-  update: (id: RoomId, change: { name: string; topic: string }) => Promise<string | null>;
+  /** `motd` only when it changed: setting one puts a line in the room (#464). */
+  update: (id: RoomId, change: { name: string; topic: string; motd?: string }) => Promise<string | null>;
   move: (id: RoomId, delta: -1 | 1) => Promise<string | null>;
   archive: (id: RoomId) => Promise<string | null>;
 }
@@ -207,12 +209,16 @@ function NewRoom({ create }: { create: HostRoomsProps["create"] }) {
 function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps["update"]; onDone: () => void }) {
   const [name, setName] = useState(room.name);
   const [topic, setTopic] = useState(room.topic ?? "");
+  const [motd, setMotd] = useState(room.motd?.text ?? "");
   const save = useSave();
   const busy = save.phase.kind === "saving";
   const submit = async () => {
     if (busy || name.trim() === "") return;
     // The server writes any topic it's handed, so "" is how a topic is cleared.
-    if (await save.run(update(room.id, { name: name.trim(), topic: topic.trim() }))) onDone();
+    // The message of the day goes only when it changed: setting it puts a
+    // line in the room, and "" clears it (#464).
+    const changedMotd = motd.trim() === (room.motd?.text ?? "") ? {} : { motd: motd.trim() };
+    if (await save.run(update(room.id, { name: name.trim(), topic: topic.trim(), ...changedMotd }))) onDone();
   };
   const onKeyDown = useBackOut(onDone, () => null);
   return (
@@ -221,6 +227,15 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
         <TextField label="Name" value={name} autoFocus onChange={setName} onEnter={() => void submit()} />
         <TextField label="Topic" value={topic} placeholder="No topic" onChange={setTopic} onEnter={() => void submit()} />
       </Fields>
+      <TextField
+        label="Message of the day"
+        value={motd}
+        placeholder="None"
+        hint="What's happening now, shown whole under the room's header. Setting it puts a line in the room; /motd in the room does the same."
+        maxLength={MAX_MOTD_CHARS}
+        onChange={setMotd}
+        onEnter={() => void submit()}
+      />
       <Actions phase={save.phase}>
         <Button variant="quiet" size="sm" disabled={busy} onClick={onDone}>
           Cancel

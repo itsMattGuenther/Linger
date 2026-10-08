@@ -43,6 +43,8 @@ room, and a status are.
 | Somebody the host gave their powers in the app | **a co-host** | admin, moderator, mod |
 | Media/link archive | **media** | the shelf, gallery |
 | A user's status card | **their status** | their sign, bio, about me |
+| What a room is about | **its topic** | description, purpose |
+| A room's note on what's happening now | **its message of the day** (`/motd`) | announcement, banner |
 
 Language does more design work than features. Hold this vocabulary in the code too:
 `RoomId`, not `ChannelId`. One thing "server" is *not*: the `linger-server` binary is
@@ -179,6 +181,18 @@ A room is a place, not a filing cabinet.
   each person is in. That is where occupancy lives; the room header shows the
   room's name and topic and no names (#145 — in a DM the list only repeated the
   title).
+- **A room's message of the day** (#464, Matt 2026-10-08) is what's happening now,
+  where the topic is what the room is about: *"We will be meeting on Friday, Oct 9 @
+  8PM CDT…"* beside *"World of Warcraft news"*. The host or a co-host sets it with
+  `/motd <words>` in the room's own box (or beside the topic in Settings → Hosting →
+  Rooms), up to 300 characters, and clears it with `/motd` on its own. It shows whole
+  in a strip under the room's header, with who set it and when. Anybody can fold it to
+  one line that stays put; the fold is theirs, kept on that device through restarts,
+  and a new message of the day opens it again for everybody. Setting it puts a line in
+  the room, "Matt set the message of the day", with the words quoted, which stays in
+  the history and can't be edited. **It calls nobody**: no notification and no sound,
+  even when it names somebody, and it doesn't make the room look new. A note everybody
+  sees is fine; a note that rings everybody is `@everyone` (§2). DMs have none.
 - Backgrounding the app or idling >90 seconds takes you out of the room.
 - **Being in a room's voice is being in the room** (Matt, 2026-10-04, #420), whatever
   has your attention: talking in #general with a game in front of you, you show in

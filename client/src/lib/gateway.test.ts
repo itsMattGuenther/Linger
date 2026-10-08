@@ -1359,6 +1359,17 @@ describe("report and block (PROTOCOL §5, T-1605)", () => {
     expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
   });
 
+  it("a new message of the day is nothing new, though it's in the room (#464)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), rooms: [room("r-garage", "garage", null)] }));
+    // The line arrives like any message, so an open room shows it…
+    arrive(HOME, { s: 2, op: "message.create", d: { ...message(10), author_id: "u-callie", motd: true } } as ServerFrame);
+    // …but the room's label keeps its weight.
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(false);
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(11), author_id: "u-callie" } } as ServerFrame);
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
+  });
+
   it("loads who you've blocked, and a server from before blocks has nobody", async () => {
     let answer: () => unknown = () => ["u-dex"];
     const api = fakeApi(HOME, (path) => {

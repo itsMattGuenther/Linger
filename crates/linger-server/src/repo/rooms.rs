@@ -1,14 +1,15 @@
 //! Assembling `wire::Room`, for both kinds of room (SPEC §4.13).
 //!
 //! `last_message_id` is the newest non-tombstone message — deleting something
-//! must not make a room look newly active.
+//! must not make a room look newly active — and never a message-of-the-day
+//! line, which tells nobody to come and look (#464).
 //!
 //! **Every query here that a member could reach is membership-aware**, and the
 //! ones that are not say so in their name. `all` is the server's public rooms;
 //! `dms_for` is one person's DMs; `visible_to` answers "may this person see this
 //! room at all", which is the check every other surface asks before it answers.
 
-use linger_core::wire::{Room, RoomKind};
+use linger_core::wire::{Motd, Room, RoomKind};
 use linger_core::{MessageId, RoomId, UserId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
@@ -17,8 +18,9 @@ use crate::error::ApiError;
 
 const ROOM_SELECT: &str = "
     SELECT r.id, r.slug, r.name, r.topic, r.kind, r.position, r.archived_at,
+           r.motd, r.motd_set_by, r.motd_set_at,
            (SELECT MAX(m.id) FROM messages m
-             WHERE m.room_id = r.id AND m.deleted_at IS NULL) AS last_message_id
+             WHERE m.room_id = r.id AND m.deleted_at IS NULL AND m.motd = 0) AS last_message_id
     FROM rooms r";
 
 fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
@@ -42,7 +44,23 @@ fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
             .map(|b| MessageId::from_slice(&b))
             .transpose()
             .map_err(anyhow::Error::from)?,
+        motd: motd_of(row)?,
     })
+}
+
+/// The room's message of the day: all three columns, or none (0012_motd.sql).
+fn motd_of(row: &SqliteRow) -> Result<Option<Motd>, ApiError> {
+    let text: Option<String> = row.get("motd");
+    let set_by: Option<Vec<u8>> = row.get("motd_set_by");
+    let set_at: Option<i64> = row.get("motd_set_at");
+    let (Some(text), Some(set_by), Some(set_at)) = (text, set_by, set_at) else {
+        return Ok(None);
+    };
+    Ok(Some(Motd {
+        text,
+        set_by: UserId::from_slice(&set_by).map_err(anyhow::Error::from)?,
+        set_at,
+    }))
 }
 
 /// The server's public rooms. Never a DM — `GET /rooms` and the `ready` frame's

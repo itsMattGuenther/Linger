@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
@@ -10,6 +10,7 @@ import { emojiIndex as loadedEmoji, loadEmoji, onEmojiLoaded, withTone } from ".
 import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
+import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
@@ -110,6 +111,12 @@ export interface ComposerProps {
   customEmoji?: readonly CustomEmoji[];
   /** The server's name, which the picker calls its own emoji by. */
   serverName?: string;
+  /**
+   * `/motd` in a room's box (#464): whether you may set the room's message of
+   * the day (the host or a co-host), and setting it, which rejects with a
+   * sentence. Left out in a DM, which has none.
+   */
+  motd?: { allowed: boolean; set: (text: string) => Promise<void> };
 }
 
 /**
@@ -130,6 +137,8 @@ export interface ComposerProps {
  * - A `:` and two characters offer emoji by name (#359, `useEmojiShortcodes`),
  *   and a finished `:smiley:` becomes 😃 as it's typed. A server's own emoji
  *   goes in as its `:name:`, which the conversation draws as the picture.
+ * - `/motd` sets the room's message of the day instead of sending (#464), and
+ *   a line over the box says so from `/m` on. Typing it isn't "typing…".
  */
 export const Composer = memo(function Composer({
   conversation,
@@ -154,6 +163,7 @@ export const Composer = memo(function Composer({
   voiceMessage,
   customEmoji = NO_EMOJI,
   serverName = "This server",
+  motd,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
@@ -331,7 +341,43 @@ export const Composer = memo(function Composer({
     }
   };
 
+  // `/motd`: the room's message of the day, set rather than sent (#464). A
+  // refusal says why and leaves the box as it is; a failure puts the words
+  // back, unless something new was typed meanwhile.
+  const setMotd = (text: string) => {
+    if (!motd) {
+      say("A DM has no message of the day.");
+      return;
+    }
+    if (!motd.allowed) {
+      say("Only the host or a co-host can set the message of the day.");
+      return;
+    }
+    if ([...text].length > MAX_MOTD_CHARS) {
+      say(`A message of the day is at most ${MAX_MOTD_CHARS} characters.`);
+      return;
+    }
+    if (files.length > 0) {
+      say("A message of the day can't carry files. Send them on their own.");
+      return;
+    }
+    const where = conversation;
+    const typed = draft;
+    change("");
+    say(null);
+    box.current?.focus();
+    void motd.set(text).catch((error: unknown) => {
+      say(error instanceof Error ? error.message : "Couldn't set the message of the day.", where);
+      if (now.current.conversation === where && now.current.draft === "") change(typed, where);
+    });
+  };
+
   const submit = () => {
+    const command = motdCommand(draft);
+    if (command !== null) {
+      setMotd(command);
+      return;
+    }
     const verdict = canSend(draft, ready.length, uploading);
     if (!verdict.ok) {
       if (verdict.blocked) say(verdict.blocked);
@@ -448,6 +494,8 @@ export const Composer = memo(function Composer({
   };
 
   const left = MAX_MESSAGE_CHARS - draft.length;
+  const commandId = useId();
+  const commanding = typingMotd(draft);
   // Who it's to, when that fits on the box's one line; just "Say something"
   // when it doesn't, as on a phone, where the screen's title says it anyway.
   const named = replyTo ? "Say something back" : isDm ? `Say something to ${title}` : `Say something in ${title}`;
@@ -521,6 +569,19 @@ export const Composer = memo(function Composer({
 
       {voiceMessage ? <VoiceMessagePanel controls={voiceMessage} title={title} /> : null}
 
+      {commanding ? (
+        <p className="nx-composer-command" id={commandId}>
+          <span className="nx-composer-command-name">/motd</span>
+          <span className="nx-composer-command-what">
+            {motd?.allowed
+              ? `Sets ${title}'s message of the day. Enter sets it for everyone; /motd on its own clears it.`
+              : motd
+                ? "Only the host or a co-host can set the message of the day."
+                : "A DM has no message of the day."}
+          </span>
+        </p>
+      ) : null}
+
       <div className="nx-composer-box" ref={boxRow}>
         <span className="nx-composer-prompt" aria-hidden="true">
           ›
@@ -533,6 +594,7 @@ export const Composer = memo(function Composer({
           maxLength={MAX_MESSAGE_CHARS}
           placeholder={placeholder}
           aria-label={isDm ? `Message ${title}` : `Message in ${title}`}
+          aria-describedby={commanding ? commandId : undefined}
           autoComplete="off"
           {...mentions.field}
           {...(shortcodes.open ? shortcodes.aria : {})}
@@ -561,7 +623,8 @@ export const Composer = memo(function Composer({
             change(done ? done.text : node.value);
             mentions.track(node);
             shortcodes.track(node);
-            if (node.value !== "") onTyping();
+            // Setting the message of the day isn't saying something.
+            if (node.value !== "" && !typingMotd(node.value)) onTyping();
           }}
           onKeyDown={onKeyDown}
           onMouseDown={(event) => {

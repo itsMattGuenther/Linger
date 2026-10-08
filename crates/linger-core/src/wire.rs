@@ -366,6 +366,11 @@ pub struct UpdateRoomRequest {
     pub name: Option<String>,
     pub topic: Option<String>,
     pub position: Option<i32>,
+    /// A new message of the day, or `""` to clear it (#464). Left out, it stays
+    /// as it is. Setting it also puts a line in the room (`Message::motd`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub motd: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -412,7 +417,30 @@ pub struct Room {
     pub archived_at: Option<i64>,
     /// The client compares this to its read marker for the "left off here" line
     /// and the label-weight change. No count is ever computed server-side.
+    ///
+    /// A message-of-the-day line is never it (`Message::motd`): setting one
+    /// doesn't make a room look new to anybody (#464).
     pub last_message_id: Option<MessageId>,
+    /// The room's message of the day, when it has one (SPEC §4.1, #464).
+    /// Left out when it has none, and by a server from before it, which a
+    /// client reads the same way. A DM never has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub motd: Option<Motd>,
+}
+
+/// A room's message of the day (SPEC §4.1, #464): what's happening now, set by
+/// the host or a co-host and shown whole under the room's header. It is not the
+/// topic, which says what the room is about and rarely changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Motd {
+    pub text: String,
+    pub set_by: UserId,
+    /// When it was set. A client keys "folded away on this device" by it, so
+    /// a new message of the day opens again for everybody who folded the last.
+    #[ts(type = "number")]
+    pub set_at: i64,
 }
 
 /// Ask for a DM with these people (PROTOCOL §3.1).
@@ -460,6 +488,15 @@ pub struct Message {
     pub deleted_at: Option<i64>,
     #[ts(type = "number")]
     pub created_at: i64,
+    /// `true` on the line the server writes when somebody sets the room's
+    /// message of the day (#464), whose body is the message and whose author is
+    /// who set it. Left out on every other message. An app that doesn't know
+    /// the field shows it as an ordinary message from them.
+    ///
+    /// It never makes a room look new, never notifies, and can't be edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub motd: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

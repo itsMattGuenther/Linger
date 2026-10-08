@@ -138,7 +138,7 @@ PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   #
 
 GET  /rooms              → Room[]                       # public rooms only
 POST /rooms              (host or co-host) { slug, name, topic? }         → Room
-PATCH /rooms/:id         (host or co-host) { name?, topic?, position? }   → Room
+PATCH /rooms/:id         (host or co-host) { name?, topic?, position?, motd? }   → Room
 POST /rooms/:id/archive  (host or co-host)                                → Room
 
 GET  /dms                → Room[]                       # the DMs you are in
@@ -152,7 +152,8 @@ type Room = {
   id: string; slug: string; name: string; topic: string | null;
   kind: RoomKind; member_ids: string[] | null;
   position: number; archived_at: number | null;
-  last_message_id: string | null;   // client compares to read marker
+  last_message_id: string | null;   // client compares to read marker; never a motd line
+  motd?: { text: string; set_by: string; set_at: number };   // left out when none
 }
 ```
 
@@ -168,6 +169,22 @@ server is a different thing wearing the same field. A DM's `slug` and `name` are
 generated and are not for drawing: a DM is named by who is in it (SPEC §4.13), so a
 client draws `member_ids` and ignores both. The `dm-` slug prefix is reserved and
 `POST /rooms` refuses it.
+
+**A room's message of the day** (`motd`, SPEC §4.1, #464) is what's happening now; the
+topic is what the room is about. `PATCH /rooms/:id { motd }` sets it, trimmed, up to
+`linger-core::limits::MAX_MOTD_CHARS` (300) characters, longer is `VALIDATION_FAILED`;
+`""` clears it, and leaving `motd` out leaves it alone. Setting it also writes a line in
+the room, in the same transaction: a `Message` from whoever set it, with the words as
+its body, `created_at` equal to `set_at`, and `motd: true` (§4). Both arrive as frames,
+`room.update` then `message.create`. Clearing writes no line, and neither do the same
+words set again, which change nothing at all, `set_at` included: a client keys "folded
+on this device" by `set_at`, so only a new message of the day opens the strip again. A
+DM has none (`NOT_FOUND`, as for anything else a host would do to a DM), and an archived
+room takes no new one (`VALIDATION_FAILED`).
+
+The line is never a room's `last_message_id`, so it never makes a room look new, and a
+client neither notifies nor marks a mention for it. A room with no message of the day,
+and every server from before this, leaves `motd` out.
 
 **The three storage figures** are read-only and every member sees them; the status bar
 draws the first two (SPEC §5.6). `storage_used_bytes` counts stored objects *and*
@@ -273,6 +290,7 @@ type Message = {
   edited_at: number | null;
   deleted_at: number | null;                   // tombstone; body is "" when set
   created_at: number;
+  motd?: true;                                 // the line saying the message of the day was set (§3)
 }
 ```
 
@@ -285,7 +303,10 @@ The current client uses none of this: reactions are out of the app as a trial (S
 it ignores the `reactions` field. The server keeps all of it, unchanged, so older clients
 still work and the trial can end either way without a migration.
 
-Edits are only permitted by the author. Deletes are permitted by the author, the host or
+Edits are only permitted by the author, and never on a message-of-the-day line
+(`VALIDATION_FAILED`): it says what the message was set to, then (§3). An app from
+before the field shows the line as an ordinary message from whoever set it. Deletes are
+permitted by the author, the host or
 a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
 

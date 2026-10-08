@@ -41,14 +41,20 @@ export function chatRows(
   options: ChatRowOptions,
 ): ChatRow[] {
   const waiting = new Set(pending.map((message) => message.id));
+  let afterMotd = false;
   return buildRows([...messages, ...pending], options).map((row): ChatRow => {
     if (row.kind !== "message") return row;
     const reply = row.message.reply_to !== null && row.message.deleted_at === null;
+    // A message-of-the-day line says who set it on its own line (#464), and
+    // what's said next isn't part of it, so it starts a group of its own too.
+    const motd = row.message.motd === true;
+    const head = row.head || reply || motd || afterMotd;
+    afterMotd = motd;
     return {
       kind: "message",
       key: row.key,
       message: row.message,
-      head: row.head || reply,
+      head,
       pending: waiting.has(row.message.id),
     };
   });
@@ -66,13 +72,14 @@ export function rowIndex(rows: readonly ChatRow[]): Map<MessageId, number> {
 /**
  * The newest message you wrote and can still edit, for the composer's
  * Up-arrow. Only at the live end: inside a historical window the newest one
- * held is not the last thing you said.
+ * held is not the last thing you said. A message-of-the-day line is passed
+ * over: it says what the message was set to then, and isn't edited (#464).
  */
 export function lastEditable(messages: readonly Message[], meId: string | null, atEnd: boolean): Message | null {
   if (!atEnd || meId === null) return null;
   for (let at = messages.length - 1; at >= 0; at -= 1) {
     const message = messages[at];
-    if (message && message.author_id === meId && message.deleted_at === null) return message;
+    if (message && message.author_id === meId && message.deleted_at === null && message.motd !== true) return message;
   }
   return null;
 }
