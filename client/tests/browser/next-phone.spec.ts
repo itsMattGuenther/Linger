@@ -122,6 +122,20 @@ test("opens Settings over the list, as its sections and then one section, withou
   await expect(page.locator("[data-screen='list']")).toBeVisible();
 });
 
+test("Account & App says which version this is, under This Phone, and never looks for an update", async ({ page }) => {
+  await phone(page);
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  await settings.getByRole("navigation", { name: "Settings" }).getByText("Account & App").click();
+  await expect(settings.locator(".nx-set-title")).toHaveText("Account & App");
+  // A phone has no Updates of its own, so its version goes with This Phone:
+  // installing a newer release by hand starts with knowing this one (SPEC §4.15).
+  const thisPhone = settings.getByRole("region", { name: "This Phone" });
+  await expect(thisPhone.getByText("You're on version 0.3.6.", { exact: true })).toBeVisible();
+  await expect(settings.getByRole("region", { name: "Updates" })).toHaveCount(0);
+  expect(await did(page)).not.toContain("update_check");
+});
+
 /**
  * Words cut off top or bottom: a box that hides what doesn't fit, holding
  * words of its own, with more of them than it shows. That was a name at

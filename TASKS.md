@@ -606,9 +606,19 @@ macOS runners, or a friend's Mac.
   it against `client/src-tauri/android-release-cert.sha256` before and after
   the build; docs/development.md, "The release key"). A release build signed
   with a throwaway key opened in the emulator and reached Matt's server.
-  **Still to do:** Matt makes the real key and sets the two secrets, the first
-  release with an `.apk` (0.4.8), and his wife installs it from the release
-  page on her Android phone. Then Google Play, when Matt says go.
+  The real key and its two secrets are set, and 0.4.8 and 0.4.9 each carry
+  the `.apk`. Next is Google Play, when Matt says go.
+  **Play must keep our key** (2026-10-08). Play signs what it ships with an
+  app signing key of its own, and makes a new one unless it's given ours.
+  Android updates an app only with a copy signed by the same key, so with a
+  new key everyone who installed the `.apk` from GitHub gets "App not
+  installed" when Play's copy arrives, and has to uninstall once, which signs
+  them out. Matt's Pixel did exactly that on 2026-10-08, with a test build
+  left on it. So when setting up Play App Signing, upload the existing
+  release key (`android-release.jks`, its fingerprint in
+  `android-release-cert.sha256`) as the app signing key, and use a separate
+  upload key for the bundles. Follow Play's current steps; the choice can't
+  be undone for people who already have the app.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person

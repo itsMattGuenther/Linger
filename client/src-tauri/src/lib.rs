@@ -266,6 +266,16 @@ fn gateway_send(connections: State<'_, Connections>, base_url: String, frame: Cl
     connections.with(|held| held.get(&base_url).is_some_and(|handle| handle.send(frame)))
 }
 
+/// The version this build was compiled as, for the line in settings. Read from
+/// the bundle's own metadata, so it cannot disagree with what the desktop's
+/// updater compares against. The phone shows it too: its updates are a newer
+/// release installed over this one by hand (SPEC §4.15), and that starts with
+/// knowing which one you have.
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 /// Entry point for the desktop app (main.rs) and the phone app, which Tauri
 /// starts through `mobile_entry_point` instead of a `main`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -336,7 +346,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             voice_commands::voice_devices,
             voice_commands::sound_play,
             notifications::show_notification,
-            updates::app_version,
+            app_version,
             updates::update_check,
             updates::newest_version,
             updates::update_install,
@@ -358,7 +368,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
 
 /// What the phone app registers (SPEC §4.15): links to the browser, the
 /// sign-ins and the gateway connections, which are all a text-only app needs
-/// from Rust, and its sounds, which follow the phone's ringer. The window comes from `tauri.android.conf.json` and
+/// from Rust, its sounds, which follow the phone's ringer, and its own version
+/// for Settings. The window comes from `tauri.android.conf.json` and
 /// `tauri.ios.conf.json`. Every command here is granted by
 /// `capabilities/phone.json` and nothing else is; `src/acl.rs` checks that.
 #[cfg(mobile)]
@@ -375,6 +386,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             gateway_token,
             gateway_send,
             gateway_retry,
+            app_version,
             graphics::graphics_started,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,

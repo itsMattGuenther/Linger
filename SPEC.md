@@ -827,7 +827,8 @@ live on the server. A new phone signs in again.
 signed `.apk` from each GitHub release; Android asks them once to allow installs
 from their browser. It doesn't update itself: a newer release installs over the old
 one and keeps them signed in, because every release is signed with the same key.
-The iPhone has nothing yet (Android first, Apple after).
+Settings says which version it is (Account & App, under This Phone), since that is
+where updating by hand starts. The iPhone has nothing yet (Android first, Apple after).
 
 **Report and block come before any store listing** (T-1605). Both stores require them
 in apps where people post things. A report goes to the host and any co-hosts (§4.16),

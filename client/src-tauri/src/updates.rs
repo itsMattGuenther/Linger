@@ -88,14 +88,6 @@ fn ready(app: &AppHandle) -> bool {
     configured(app.config().plugins.0.get(PLUGIN))
 }
 
-/// The version this build was compiled as, for the line in settings. Read from
-/// the bundle's own metadata, so it cannot disagree with what the updater
-/// compares against.
-#[tauri::command]
-pub fn app_version(app: AppHandle) -> String {
-    app.package_info().version.to_string()
-}
-
 /// Ask the endpoint whether there is anything newer. Never fails: every outcome,
 /// including "you are offline", comes back as a variant the settings panel can
 /// put on screen.

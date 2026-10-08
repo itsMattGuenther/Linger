@@ -877,7 +877,8 @@ function Servers({
   // after a few seconds, a keyring that can't keep sign-ins, a new version.
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
   useEffect(() => {
-    if (!isTauri()) return;
+    // A phone app has no update check to ask (SPEC §4.15).
+    if (!isTauri() || onPhone()) return;
     let live = true;
     const look = () =>
       void checkForUpdate()
