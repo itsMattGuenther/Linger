@@ -61,6 +61,12 @@ describe("what is worth interrupting somebody for", () => {
     expect(notifyReason(message("@matt look at this"), me, [])).toBe("mention");
   });
 
+  it("says nothing about a new message of the day, even one that names you or whose author you asked to hear from (#464)", () => {
+    const motd = { ...message("@matt we meet Friday at 8"), motd: true };
+    expect(notifyReason(motd, me, [])).toBeNull();
+    expect(notifyReason(motd, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
+  });
+
   it("does not fire on your own message, even when you name yourself", () => {
     expect(notifyReason(message("@matt remember this", me.id), me, [])).toBeNull();
   });

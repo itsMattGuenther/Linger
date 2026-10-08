@@ -29,6 +29,8 @@ fn row_to_message(row: &SqliteRow) -> Result<Message, ApiError> {
         edited_at: row.get("edited_at"),
         deleted_at: row.get("deleted_at"),
         created_at: row.get("created_at"),
+        // Only ever sent as `true`: every other message leaves it out.
+        motd: row.get::<bool, _>("motd").then_some(true),
     })
 }
 

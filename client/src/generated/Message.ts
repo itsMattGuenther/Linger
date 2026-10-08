@@ -13,4 +13,13 @@ body: string, reply_to: MessageId | null, attachments: Array<Attachment>, reacti
 /**
  * Tombstone marker: deleted messages are kept so reply chains survive.
  */
-deleted_at: number | null, created_at: number, };
+deleted_at: number | null, created_at: number, 
+/**
+ * `true` on the line the server writes when somebody sets the room's
+ * message of the day (#464), whose body is the message and whose author is
+ * who set it. Left out on every other message. An app that doesn't know
+ * the field shows it as an ordinary message from them.
+ *
+ * It never makes a room look new, never notifies, and can't be edited.
+ */
+motd?: boolean, };

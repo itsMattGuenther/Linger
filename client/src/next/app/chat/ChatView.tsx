@@ -3,6 +3,7 @@ import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
+import type { Motd } from "../../../generated/Motd";
 import type { User } from "../../../generated/User";
 import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
@@ -13,6 +14,7 @@ import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
 import { ImageViewer } from "./ImageViewer";
 import type { MessageActions } from "./MessageRow";
+import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
 import { Typing } from "./Typing";
 import { type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
@@ -45,7 +47,7 @@ export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openL
 /** What the window does for the box: uploads and sending. */
 export type ChatComposer = Pick<
   ComposerProps,
-  "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep" | "clipboardImage" | "voiceMessage"
+  "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep" | "clipboardImage" | "voiceMessage" | "motd"
 >;
 
 /** The showing conversation. */
@@ -53,6 +55,11 @@ export interface ChatPane {
   /** The showing tab's id. */
   id: string;
   header: PaneHeaderProps;
+  /**
+   * A room's message of the day (#464), and whether it's folded to a line
+   * on this device; null when there's none.
+   */
+  motd?: { motd: Motd; folded: boolean; onFold: (folded: boolean) => void } | null;
   /** Voice in this conversation, or null where there's none to offer. */
   voice: {
     strip: VoiceStripModel;
@@ -134,7 +141,8 @@ function titleOf(header: PaneHeaderProps): string {
 /**
  * Conversations (docs/design/buddy-list.md, "Conversations beside the
  * list"): tabs in the title bar, and under them the showing conversation
- * with its header, its voice, its messages, who's typing and the box. Beside
+ * with its header, a room's message of the day, its voice, its messages,
+ * who's typing and the box. Beside
  * the list, in the list window; or one conversation in a window of its own.
  *
  * It holds only what the screen itself decides: which message you're
@@ -236,6 +244,18 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={alone ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
           {alone ? null : <PaneHeader {...pane.header} />}
+          {pane.motd ? (
+            <MotdStrip
+              motd={pane.motd.motd}
+              people={pane.people}
+              me={pane.me}
+              customEmoji={pane.customEmoji}
+              now={pane.stream.now}
+              folded={pane.motd.folded}
+              onFold={pane.motd.onFold}
+              onOpenLink={actions.openLink}
+            />
+          ) : null}
           {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} /> : null}
           <Conversation
             key={pane.id}

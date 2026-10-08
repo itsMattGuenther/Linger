@@ -244,6 +244,13 @@ async fn edit(
     if message.author_id != auth.id {
         return Err(ApiError::forbidden("Only the author can edit a message."));
     }
+    // The line says what the message of the day was set to, then. Changing it
+    // would make the room's history say something that never happened (#464).
+    if message.motd == Some(true) {
+        return Err(ApiError::validation(
+            "That line can't be edited. Set a new message of the day instead.",
+        ));
+    }
     let body = if message.attachments.is_empty() {
         validate::message_body(&req.body)?
     } else {

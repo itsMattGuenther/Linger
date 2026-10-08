@@ -668,10 +668,17 @@ fn message_markdown(
     } else {
         ""
     };
+    // The line written when somebody set the room's message of the day (#464).
+    let did = if message.motd == Some(true) {
+        " set the message of the day"
+    } else {
+        ""
+    };
     out.push_str(&format!(
-        "**{}** — {}{}\n",
+        "**{}** — {}{}{}\n",
         clock(message.created_at),
         who,
+        did,
         edited
     ));
 

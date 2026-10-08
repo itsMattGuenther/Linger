@@ -286,3 +286,26 @@ button.nx-quote:hover {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* The line saying somebody set the room's message of the day (#464): who,
+   what they did in quieter words beside the name, and the message quoted
+   under it, as the strip under the header shows it. */
+.nx-msg[data-motd="yes"] .nx-msg-who {
+  align-items: baseline;
+  gap: var(--space-1-5);
+}
+
+.nx-msg-did {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+}
+
+.nx-msg[data-motd="yes"] .nx-msg-fold {
+  padding-left: var(--space-2-5);
+  border-left: var(--rule-strong) solid var(--hairline-strong);
+}
+
+.nx-msg[data-motd="yes"] .nx-text {
+  color: var(--text-secondary);
+}

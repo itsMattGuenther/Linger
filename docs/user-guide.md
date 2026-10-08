@@ -466,6 +466,18 @@ message of just a few emoji is drawn big.
 There are no reactions on messages, for now. They are out as a trial: to answer
 something, reply to it, emoji and all.
 
+**A room's message of the day.** A room can have a note about what's happening
+now, like *"Raid night Friday at 8"*, apart from its topic, which says what the
+room is about. It sits whole under the room's header, with who set it and when.
+The arrow on its right folds it to one line; it stays folded on that computer or
+phone, even after you quit Linger, until somebody sets a new one. It never
+notifies anybody and never makes a room look new.
+
+The host or a co-host sets it from the room's own box: type `/motd` and the
+words, then Enter. `/motd` on its own clears it. Setting it puts a line in the
+room saying so, which can't be edited. It's also beside the topic in
+**Settings → Hosting → Rooms**. It can be up to 300 characters.
+
 ## Sharing files
 
 Three ways, all the same thing: the **+** in the message box, drag a file onto

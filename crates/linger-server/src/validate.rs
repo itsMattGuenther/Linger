@@ -5,8 +5,8 @@
 
 use linger_core::limits::{
     MAX_ACCENT_MARKS_PER_LETTER, MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MARKS_PER_LETTER,
-    MAX_MESSAGE_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS, MAX_STATUS_LABEL_CHARS,
-    MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
+    MAX_MESSAGE_CHARS, MAX_MOTD_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS,
+    MAX_STATUS_LABEL_CHARS, MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
 };
 use linger_core::wire::{Fill, StatusField, Style, UserStatus};
 use unicode_properties::{GeneralCategory, UnicodeEmoji, UnicodeGeneralCategory};
@@ -333,6 +333,18 @@ pub fn caption(s: &str) -> Result<String, ApiError> {
     let trimmed = s.trim();
     if trimmed.chars().count() > MAX_MESSAGE_CHARS {
         return Err(ApiError::validation("That's too long for one message."));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// A room's message of the day, trimmed (PROTOCOL §3, #464). Empty is allowed:
+/// it's how one is cleared.
+pub fn motd(s: &str) -> Result<String, ApiError> {
+    let trimmed = s.trim();
+    if trimmed.chars().count() > MAX_MOTD_CHARS {
+        return Err(ApiError::validation(format!(
+            "A message of the day is at most {MAX_MOTD_CHARS} characters."
+        )));
     }
     Ok(trimmed.to_string())
 }

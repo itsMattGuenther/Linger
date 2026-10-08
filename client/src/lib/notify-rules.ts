@@ -34,6 +34,10 @@ export function notifyReason(
   // Your own words, and a message that has since been taken back.
   if (message.author_id === me.id) return null;
   if (message.deleted_at !== null) return null;
+  // A new message of the day calls nobody, even when it names somebody: a
+  // note everybody sees is fine, a note that rings everybody is `@everyone`
+  // (#464).
+  if (message.motd === true) return null;
 
   if (mentionHandles(message.body).includes(me.username)) return "mention";
 

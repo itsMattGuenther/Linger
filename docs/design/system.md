@@ -746,6 +746,16 @@ replaces an unread count.
 
 - **Pane header**, 40px: a room's `#name`, who's in it (markers) and its
   topic; a DM's people, a 1:1's status, and Knock.
+- **A room's message of the day** (#464, `app/chat/MotdStrip.tsx`): a strip
+  under the header, on the window's own ground with a hairline under it (news,
+  never a wash or the lamp). The pin (`--icon-muted`), the words whole as a
+  message's are drawn (links, mentions, emoji), and under them in meta "Message
+  of the day, set by *name* at 10:52 PM" (`setWhen`: "yesterday", "on
+  Wednesday", a date). A small plain up arrow at the right folds it to one line
+  in `--text-secondary` that ends in "…" and stays where it is, with a down
+  arrow to open it; the fold is kept on the device by when the message was set,
+  so it outlasts a restart and a new one opens again. On the phone it sits
+  under the title bar the same way.
 - **Voice strip**, 40px in every state, so voice changing never moves the
   conversation: who's in voice as chips (lit while talking; in a room you're in with
   more people than chips, you and whoever just talked, by the voice bar's seat rule;
@@ -758,6 +768,10 @@ replaces an unread count.
   every side and a chip is as tall as it, so a glowing name's light stays
   inside its chip's border; across the chip it fades out as in the list's
   voice bar (#287; Matt, 2026-09-28).
+- **The line saying it was set**: the setter's name, "set the message of the
+  day" beside it in muted meta, and the words under it behind a 2px
+  `--hairline-strong` rule in `--text-secondary`, like a quote. It always
+  starts a group of its own, and so does whatever is said after it.
 - **Typing line**, 24px, always there, so the box never jumps.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
   then add-a-file, emoji and send (32px each). It grows with its text to
@@ -766,7 +780,10 @@ replaces an unread count.
   people to mention above it (#267, `app/chat/useMentions.tsx`). Files on
   their way are listed above it, one line each; a picture shows a small
   square copy of itself (`--composer-thumb`) in place of the file icon, made
-  on the device (#397). One this engine can't read keeps the icon.
+  on the device (#397). One this engine can't read keeps the icon. From `/m`
+  on, a line over the box with a 2px `--hairline-strong` rule says what
+  `/motd` does, the command in mono and its meaning in meta beside it, or who
+  can use it (#464).
 - **A voice message** (#401): the microphone button beside add-a-file opens
   a panel over the box. Record, then Stop (a toggle, never a hold), with the
   time in mono and lines in the lamp that move with your voice; then the
@@ -874,6 +891,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
 | Presence marks (#301): idle is the dot at half strength with no 💤, away the moon at half strength, offline the dot's outline in their color at both sizes, painted hollow at 6px and 8px at 100% and 200%; in the list an idle dot sits where any dot does, with or without a status line; an away name is grey with its message warm, and your own card stays lit | `kit.spec.ts` › idle and away are their mark at half strength; an offline dot is painted hollow; `next-list.spec.ts` › somebody idle; somebody away |
+| A room's message of the day (#464): whole under the header beside the topic, with who set it; folded to one line that stays folded after a restart and opens for a new one; `/motd` sets it for the host or a co-host, with a line over the box from `/m`, and anybody else's box says who can and keeps the words; `/motd` alone clears it; its line in the room, with no Edit; it never makes a room look new or notifies; the same on the phone; set beside the topic in Settings, sent only when changed | `next-motd.spec.ts`, `next-settings.spec.ts`, `core/chat/motd.test.ts`, `core/chat/rows.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `crates/linger-server/tests/motd.rs` |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared video and a shared audio file fetch nothing until they're played (#381) | `next-chat-parity.spec.ts` › fetches nothing until it's played, then loads |

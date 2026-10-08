@@ -440,6 +440,32 @@ test.describe("hosting", () => {
     await expect(rooms.first()).toContainText("Pull up a chair.");
   });
 
+  test("a room's message of the day is set beside its topic, and goes only when it changed (#464)", async ({ page }) => {
+    await open(page, "?section=rooms");
+    const rooms = page.getByRole("list", { name: "Rooms" }).locator(":scope > li");
+    const editing = page.getByRole("group", { name: "Editing #general" });
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    await editing.getByRole("textbox", { name: "Topic" }).fill("Raid talk.");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editing).toHaveCount(0);
+    // Untouched, it isn't sent: setting one puts a line in the room.
+    expect((await did(page)).filter((line) => line.startsWith("update:r-general"))).toEqual(["update:r-general:general:Raid talk."]);
+
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    await expect(editing.getByRole("textbox", { name: "Message of the day" })).toHaveAttribute("maxlength", "300");
+    await editing.getByRole("textbox", { name: "Message of the day" }).fill("  Raid Friday at 8.  ");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editing).toHaveCount(0);
+    expect(await did(page)).toContain("update:r-general:general:Raid talk.:motd=Raid Friday at 8.");
+
+    // It's there when the room is edited again, and emptied it clears.
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    await expect(editing.getByRole("textbox", { name: "Message of the day" })).toHaveValue("Raid Friday at 8.");
+    await editing.getByRole("textbox", { name: "Message of the day" }).fill("");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    expect(await did(page)).toContain("update:r-general:general:Raid talk.:motd=");
+  });
+
   test("a new room's name comes first, and its slug follows the name until it's typed in (#221)", async ({ page }) => {
     await open(page, "?section=rooms");
     const block = page.getByRole("region", { name: "New Room" });

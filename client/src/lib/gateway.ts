@@ -770,9 +770,11 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // Rooms nobody has opened have no stream to fold this into, and they are
       // exactly the rooms whose label has to change weight. So the newest id is
       // tracked separately from the history.
-      // Somebody you blocked saying something isn't something new for you.
+      // Somebody you blocked saying something isn't something new for you,
+      // and neither is a new message of the day: it's in the room for whoever
+      // comes in, and calls nobody over (#464).
       const held = next.newest[message.room_id];
-      if (frame.op === "message.create" && !next.blocked.includes(message.author_id) && (held === undefined || held < message.id)) {
+      if (frame.op === "message.create" && message.motd !== true && !next.blocked.includes(message.author_id) && (held === undefined || held < message.id)) {
         next = { ...next, newest: { ...next.newest, [message.room_id]: message.id } };
       }
       // Something you said, from this device or another one, is something

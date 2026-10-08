@@ -92,6 +92,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
   host can add its own emoji too, animated GIFs included.
 - **Knock** to nudge one person: a soft sound and a card that fades.
+- **A message of the day** for each room, beside its topic: the host or a
+  co-host types `/motd` and it sits whole under the room's header until you
+  fold it away. It never pings anybody.
 - **Search** through what people said and the files they shared.
 - **Several servers at once**, each a folding section of the list.
 - **A co-host** for when the host is away: one switch the host gives

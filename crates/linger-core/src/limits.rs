@@ -32,6 +32,10 @@ pub const MAX_STATUS_FIELDS: usize = 3;
 /// Message body cap, chars after trim (PROTOCOL §4).
 pub const MAX_MESSAGE_CHARS: usize = 8_000;
 
+/// A room's message of the day, chars after trim (PROTOCOL §3, #464). It sits
+/// whole under the room's header, so it is a few sentences, not a page.
+pub const MAX_MOTD_CHARS: usize = 300;
+
 /// Link cards and the media grid (SPEC §4.4/§5.6, PROTOCOL §6).
 ///
 /// A message with a dozen URLs in it is a link dump, and the stream renders one

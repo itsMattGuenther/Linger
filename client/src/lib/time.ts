@@ -110,6 +110,22 @@ export function clockTime(at: number): string {
   return CLOCK.format(at);
 }
 
+/**
+ * When something was set, the way the end of a sentence says it: "at 10:52
+ * PM" today, "yesterday", "on Wednesday" this week, "on October 3" further
+ * back, and the year once it isn't this one. For a room's message of the day
+ * (#464): "set by Matt at 10:52 PM".
+ */
+export function setWhen(at: number, now: number): string {
+  const then = new Date(at);
+  const today = new Date(now);
+  const days = daysBetween(then, today);
+  if (days <= 0) return `at ${CLOCK.format(at)}`;
+  if (days === 1) return "yesterday";
+  if (days < 7) return `on ${WEEKDAY.format(at)}`;
+  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR).format(at)}`;
+}
+
 /** The full date and time, for the tooltip on a timestamp. */
 export function fullTime(at: number): string {
   return FULL.format(at);

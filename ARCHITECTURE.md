@@ -259,7 +259,10 @@ CREATE TABLE rooms (
   member_key      TEXT UNIQUE,                 -- DMs: sorted member ids, canonical
   position        INTEGER NOT NULL,
   archived_at     INTEGER,
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+  motd            TEXT,                        -- message of the day (#464); the three
+  motd_set_by     BLOB REFERENCES users(id),   -- are null together, and always so
+  motd_set_at     INTEGER                      -- for a DM
 );
 
 -- Who is in a DM (SPEC §4.13). Rooms have no rows here: their members are
@@ -283,7 +286,9 @@ CREATE TABLE messages (
   pinned_at       INTEGER,
   edited_at       INTEGER,
   deleted_at      INTEGER,
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+  motd            INTEGER NOT NULL DEFAULT 0   -- 1: the line saying a message of the
+                                               -- day was set; never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;
