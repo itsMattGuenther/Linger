@@ -26,6 +26,12 @@ default.
 
 ## How to run a task
 
+**0.4.10 release — 2026-10-08, a quick one.** Voice no longer crackles when
+somebody starts talking after a pause (#462, in the app that's listening), every
+room can have a message of the day beside its topic, set with `/motd` by the host
+or a co-host (#464, a database change), and the phone app says which version it is
+(#459); notes in `docs/releases/0.4.10.md`.
+
 **0.4.9 release — ✅ published 2026-10-07.** Room for a raid (#197): 60 people a
 voice room, silence never sent, the six loudest voices passed on, a voice bar
 and list built for a big room, and one line per person in Settings. A lost
