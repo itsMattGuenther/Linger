@@ -214,6 +214,8 @@ mockIPC((cmd, args) => {
       // The engine opens the devices and starts sending, as the Rust core says.
       window.setTimeout(() => deliver("voice:audio", { server: String(a.baseUrl), state: "sending" }), 20);
       return null;
+    case "app_version":
+      return "0.3.6";
     case "update_check":
       note("update_check");
       return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };

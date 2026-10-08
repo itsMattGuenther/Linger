@@ -146,10 +146,13 @@ it catches up).
    an account.
 
 **It doesn't update itself.** For a new version, download the new `.apk` from
-its release page and install it over the old one. You stay signed in. Every
+its release page and install it over the old one. You stay signed in.
+**Settings → Account & App → This Phone** says which version you have. Every
 release is signed with the same key, which is what lets it install over the
-last one; if Android ever says the app "conflicts with an existing package",
-it isn't from this project's release page.
+last one. If Android says **App not installed** when you try (older Android
+says the app "conflicts with an existing package"), the Linger on your phone
+didn't come from this project's release page: a test build, usually. Uninstall
+it and install the new one. That signs you out once.
 
 ## Getting in
 

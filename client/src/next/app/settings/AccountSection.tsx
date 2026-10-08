@@ -15,6 +15,12 @@ export interface AccountProps {
   /** The server you sign in to, for the password's sentence. */
   serverName: string;
   /**
+   * This copy's version, or null outside the app. The desktop shows it with
+   * Updates; the phone, which has none, under This Phone, since updating it
+   * by hand starts with knowing which one you have (SPEC §4.15).
+   */
+  version: string | null;
+  /**
    * Change your password (SET-2). The wiring signs back in with the new one,
    * since a change ends every other sign-in; resolves to the problem in words, or null.
    */
@@ -24,8 +30,6 @@ export interface AccountProps {
   /** Updates (UPD-1 to UPD-4, UPD-6). */
   /** Leave out on the phone, which its store updates (SPEC §4.15). */
   updates?: {
-    /** This copy's version, or null outside the desktop app. */
-    version: string | null;
     check: UpdateCheck | null;
     looking: boolean;
     installing: boolean;
@@ -60,7 +64,7 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, changePassword, archive, updates, startAtSignIn, blocked, signOut, severalServers, addServer, phone = false }: AccountProps) {
+export function AccountSection({ serverName, version, changePassword, archive, updates, startAtSignIn, blocked, signOut, severalServers, addServer, phone = false }: AccountProps) {
   const device = thisDevice(phone);
   return (
     <>
@@ -93,7 +97,7 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
           heading={HEADINGS.updates}
           lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
         >
-          <Note tone="status">{updates.version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${updates.version}.`}</Note>
+          <Note tone="status">{version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${version}.`}</Note>
           <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
           <Actions start>
             <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
@@ -119,6 +123,7 @@ export function AccountSection({ serverName, changePassword, archive, updates, s
         </Block>
       )}
       <Block heading={phone ? HEADINGS.phone : HEADINGS.computer}>
+        {phone && version !== null ? <Note tone="status">{`You're on version ${version}.`}</Note> : null}
         {startAtSignIn ? (
           <>
             <SettingRow

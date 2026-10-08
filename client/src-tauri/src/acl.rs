@@ -58,7 +58,8 @@ const PHONE: &[&str] = &["android", "iOS"];
 
 /// Commands a phone never gets (SPEC §4.15): no voice, no notifications, no
 /// in-app updates, no other windows, no tray, nothing started at sign-in, no
-/// Linux clipboard workaround. Its chimes it does play (`phone_sound.rs`).
+/// Linux clipboard workaround. Its chimes it does play (`phone_sound.rs`), and
+/// it reads its own version (`app_version`), which installs nothing.
 fn never_on_a_phone(command: &str) -> bool {
     command.starts_with("voice_")
         || command.starts_with("update_")
@@ -66,7 +67,7 @@ fn never_on_a_phone(command: &str) -> bool {
         || command.starts_with("autostart_")
         || matches!(
             command,
-            "show_notification" | "app_version" | "newest_version" | "clipboard_image"
+            "show_notification" | "newest_version" | "clipboard_image"
         )
 }
 

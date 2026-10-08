@@ -323,8 +323,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   }, []);
   useEffect(() => {
     void appVersion().then(setVersion);
-    checkAgain();
-  }, [checkAgain]);
+    // A phone app has no update check to ask (SPEC §4.15).
+    if (!phone) checkAgain();
+  }, [checkAgain, phone]);
   // Starting at sign-in: what the computer says, asked when the window opens
   // and answered again after every change (core/autostart.ts).
   const [startup, setStartup] = useState<StartAtSignIn | null>(null);
@@ -541,6 +542,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       }}
       account={{
         serverName,
+        version,
         // Who you've blocked here (T-1605), by the names the server has for them.
         blocked: state
           ? {
@@ -563,7 +565,6 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         updates: phone
           ? undefined
           : {
-              version,
               check,
               looking,
               installing,

@@ -213,6 +213,7 @@ function Fixture() {
       }}
       account={{
         serverName: SERVER_NAME,
+        version: "0.3.6",
         changePassword: (current, next) => saving(`password:${current.length}:${next.length}`, "That isn't your current password."),
         archive: {
           phase: archive,
@@ -224,7 +225,6 @@ function Fixture() {
           download: (url) => note(`download:${url}`),
         },
         updates: {
-          version: "0.3.6",
           check,
           looking,
           installing: false,
