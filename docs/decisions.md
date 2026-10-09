@@ -844,6 +844,22 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
   empty queue, and one packet arriving late put a crackle in the first word. A voice
   now starts again after a pause with 60 ms held back (`CUSHION_MS`), added only where
   the last frame was quiet, so it is never heard.
+  **60 ms wasn't enough** (#470: 0.4.10 still garbled the start of sentences): before
+  0.4.9 that slack grew to whatever a connection needed, since every late packet left
+  the queue that much further behind for the rest of the call. A fixed amount, reset in
+  every pause, is right for one connection and too little for the next. So the
+  listening app now learns it per person: how late their packets come against the
+  first of their sentence, the latest one at once, let go at 2 ms a second of their
+  voice, and their next sentence starts that far behind and 20 ms more, from 60 to
+  150 ms (`Lane::late_ms`). Their own clock tells a pause from a late packet: a gap in
+  the timestamps is frames their app never sent (`Sink::resume`). A packet later than
+  the head start still leaves a gap, and it fades out and back in over a millisecond
+  or two instead of stopping dead, which is two clicks. Each such gap is printed to
+  the app's own output (stderr), so a real call shows whether it still happens.
+  Checked offline first: the start of a sentence decodes clean (the first packet after
+  a pause is bit-for-bit what it would have been with silence sent, and concealing or
+  resetting before it only made it worse), and silence detection doesn't cut off the
+  start of words. Lateness was what was left.
 - **60 a room**, and the answer to the server's offer may be 128 KB: it grows a few
   hundred bytes for every other person, and at 50 a stand-in's was 42 KB, past the old
   16 KB, which would have shut the last people into a raid out.

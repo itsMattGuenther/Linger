@@ -65,8 +65,10 @@ impl Log {
     }
 }
 
+/// Every frame played, by whom; and, by how many frames had been played
+/// from them at the time, every pause the receive loop told of (#462).
 #[derive(Default)]
-struct Recorder(Mutex<Vec<(String, Vec<i16>)>>);
+struct Recorder(Mutex<Vec<(String, Vec<i16>)>>, Mutex<Vec<(String, usize)>>);
 
 #[async_trait]
 impl Sink for Recorder {
@@ -75,6 +77,11 @@ impl Sink for Recorder {
             .lock()
             .unwrap()
             .push((peer.to_string(), samples.to_vec()));
+    }
+
+    async fn resume(&self, peer: &str) {
+        let played = heard(self, peer).len();
+        self.1.lock().unwrap().push((peer.to_string(), played));
     }
 }
 
@@ -594,6 +601,7 @@ async fn muting_stops_sending_through_the_server_and_the_mark_follows() {
         &goes_quiet(&mut gateway, &mut rigs, &recorder).await,
         "mute",
     );
+    let before = heard(&recorder, A).len();
 
     // Unmute: the tone is back on the same connection.
     a.set_controls(VoiceControls::default()).await;
@@ -605,6 +613,17 @@ async fn muting_stops_sending_through_the_server_and_the_mark_follows() {
         last(&recorder) > 2000.0,
         "the tone did not come back: rms {}",
         last(&recorder)
+    );
+    // B's speakers were told it came after a pause, by A's own clock, so
+    // they could hold its first word back rather than take it for late.
+    assert!(
+        recorder
+            .1
+            .lock()
+            .unwrap()
+            .contains(&(A.to_string(), before)),
+        "no pause told before the tone came back: {:?}",
+        recorder.1.lock().unwrap()
     );
 
     // Deafen also stops sending, even with the microphone asked to be on.
