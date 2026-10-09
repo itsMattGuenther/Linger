@@ -1039,6 +1039,123 @@ describe("letting go of history", () => {
 });
 
 /**
+ * A room whose first page didn't come (#468).
+ *
+ * Waking a computer after a long sleep starts the session over, which throws
+ * every room's history away, and the room on screen asks for its newest page
+ * while the network may still be coming back. A first page that failed used to
+ * leave the room in the store holding nothing, and opening it again did
+ * nothing, because a room in the store counted as loaded: the room stayed
+ * empty until the app was restarted.
+ */
+describe("a room whose first page didn't come (#468)", () => {
+  const kyle = person("u-kyle", "Kyle");
+
+  beforeEach(async () => {
+    await disconnect(HOME);
+    vi.useRealTimers();
+  });
+
+  /** Thirty messages, behind a network that fails every request while `down.now` is true. */
+  function wakingRoom(): { api: AuthedApi; down: { now: boolean }; asked: () => number } {
+    const down = { now: false };
+    let asked = 0;
+    const api = fakeApi(HOME, (path) => {
+      asked += 1;
+      if (down.now) throw new Error(`the network isn't back yet: ${path}`);
+      return pageOf(1, 30);
+    });
+    return { api, down, asked: () => asked };
+  }
+
+  function held(): string[] {
+    return (serverState(HOME).streams["r-garage"]?.messages ?? []).map((one) => one.id);
+  }
+
+  it("asks again on its own, and the room fills once the network is back", async () => {
+    vi.useFakeTimers();
+    const { api, down } = wakingRoom();
+    await connect(api);
+    arrive(HOME, ready({ user: kyle }));
+
+    down.now = true;
+    const opening = openRoom(api, "r-garage");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(held()).toEqual([]);
+    // Still trying, so nothing else asks for this room's pages meanwhile.
+    expect(serverState(HOME).streams["r-garage"]?.loading).toBe(true);
+
+    down.now = false;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await opening;
+    expect(held()).toHaveLength(30);
+    expect(serverState(HOME).streams["r-garage"]?.loading).toBe(false);
+  });
+
+  it("opening the room again tries again, rather than taking an empty room for a loaded one", async () => {
+    vi.useFakeTimers();
+    const { api, down } = wakingRoom();
+    await connect(api);
+    arrive(HOME, ready({ user: kyle, session_id: "before-sleep" }));
+    await openRoom(api, "r-garage");
+    expect(held()).toHaveLength(30);
+
+    // A night asleep: the server let the session go, so waking starts it over,
+    // and every try to load the room fails.
+    arrive(HOME, ready({ user: kyle, session_id: "after-wake" }));
+    down.now = true;
+    const opening = openRoom(api, "r-garage");
+    await vi.advanceTimersByTimeAsync(120_000);
+    await opening;
+    expect(held()).toEqual([]);
+    expect(serverState(HOME).streams["r-garage"]?.loading).toBe(false);
+
+    // Closing the room and opening it again, with the network back.
+    down.now = false;
+    releaseOtherRooms(HOME, "r-porch");
+    await openRoom(api, "r-garage");
+    expect(held()).toHaveLength(30);
+  });
+
+  it("stops asking once the room has been started over", async () => {
+    vi.useFakeTimers();
+    const { api, down, asked } = wakingRoom();
+    await connect(api);
+    arrive(HOME, ready({ user: kyle, session_id: "one" }));
+    down.now = true;
+    const first = openRoom(api, "r-garage");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked()).toBe(1);
+
+    // The connection starts over while the first opening waits to ask again,
+    // and the room is opened afresh.
+    arrive(HOME, ready({ user: kyle, session_id: "two" }));
+    down.now = false;
+    await openRoom(api, "r-garage");
+    expect(asked()).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    await first;
+    expect(asked()).toBe(2);
+    expect(held()).toHaveLength(30);
+  });
+
+  it("stops asking for a server signed out of", async () => {
+    vi.useFakeTimers();
+    const { api, down, asked } = wakingRoom();
+    await connect(api);
+    arrive(HOME, ready({ user: kyle }));
+    down.now = true;
+    const opening = openRoom(api, "r-garage");
+    await vi.advanceTimersByTimeAsync(0);
+    await disconnect(HOME);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await opening;
+    expect(asked()).toBe(1);
+  });
+});
+
+/**
  * DMs in the store (SPEC §4.13, T-1302).
  *
  * The one thing that must never happen here is a DM ending up in `rooms`. The
