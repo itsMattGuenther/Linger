@@ -45,6 +45,7 @@ node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.m
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs
 python3 scripts/linux-audio-check.test.py -q
 bash scripts/android-signing-test.sh >/dev/null
+bash scripts/tidy-branches-test.sh >/dev/null
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="
   docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color

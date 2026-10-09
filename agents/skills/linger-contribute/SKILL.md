@@ -86,4 +86,6 @@ commits that carry them (`scripts/lint-rules.sh`).
   it was tested, and what still needs a real computer to confirm.
 
 Only push and open the PR when the user says so, under their own GitHub
-account. Never merge it; the maintainer does that.
+account. Never merge it; the maintainer does that. Once it has merged, GitHub
+deletes the branch there, and `scripts/tidy-branches.sh` deletes the local
+copy.
