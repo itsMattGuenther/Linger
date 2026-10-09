@@ -108,8 +108,18 @@ export interface RoomStream {
    * `loadNewer` reads forwards until the room is whole again.
    */
   atEnd: boolean;
-  /** A page is in flight; stops the same backfill firing twice. */
+  /**
+   * A page is in flight, or an opening whose first page failed is waiting to
+   * ask again (`openRoom`). Stops the same backfill firing twice.
+   */
   loading: boolean;
+  /**
+   * True once a page has arrived. A room takes its place in the store before
+   * its first page, so a first page that fails leaves it there holding
+   * nothing, or only what was said since. That room is not loaded, and
+   * `openRoom` opens it again rather than leaving it empty (#468).
+   */
+  loaded: boolean;
   /**
    * Which opening of the room this history belongs to. `openRoom` and
    * `openAround` each start a new one, and `leaveWindow` goes through
@@ -1291,13 +1301,15 @@ function stillOpen(server: string, roomId: RoomId, opened: number): RoomStream |
  * Fetch the page before `from` and fold it in.
  *
  * A short answer is the start of the room: the range scan ran out before the
- * limit did.
+ * limit did. `retrying` is an opening that will ask again if this fails, so a
+ * failure leaves the room `loading` rather than looking finished in between.
  */
 async function fetchPage(
   api: AuthedApi,
   roomId: RoomId,
   before: MessageId | null,
   opened: number,
+  retrying = false,
 ): Promise<void> {
   const server = api.baseUrl;
   const room = encodeURIComponent(roomId);
@@ -1306,10 +1318,11 @@ async function fetchPage(
   try {
     page = await api.get<Message[]>(`/rooms/${room}/messages?limit=${PAGE_SIZE}${range}`);
   } catch {
-    // A page that didn't arrive doesn't need a state of its own. The status bar
-    // is already saying what is wrong, and the next scroll asks again.
+    // A page that didn't arrive doesn't need a state of its own. An older
+    // page is asked for again by the next scroll. A first page has nothing to
+    // scroll, so its opening asks again (`openRoom`, #468).
     const stream = stillOpen(server, roomId, opened);
-    if (linkFor(api) !== null && stream) putStream(server, roomId, { ...stream, loading: false });
+    if (linkFor(api) !== null && stream && !retrying) putStream(server, roomId, { ...stream, loading: false });
     return;
   }
   // A room opened again while this page was on the wire (Back to the newest,
@@ -1329,6 +1342,7 @@ async function fetchPage(
     // A short page means the range scan ran out of room: this is the beginning.
     atStart: page.length < PAGE_SIZE,
     loading: false,
+    loaded: true,
   });
 }
 
@@ -1406,11 +1420,19 @@ async function fetchWindow(
     atStart: replace ? older < WINDOW_OLDER : stream.atStart || older < WINDOW_OLDER,
     atEnd: pageEnds && !missedOne,
     loading: false,
+    loaded: true,
     pending: stream.pending,
     opened,
   });
   return pageEnds ? "end" : "window";
 }
+
+/**
+ * How long an opening waits before asking again for a first page that didn't
+ * come, once per wait. After the last it gives up until the room is opened
+ * again, or a fresh `ready` opens it.
+ */
+const FIRST_PAGE_RETRY_MS = [2_000, 5_000, 15_000, 30_000];
 
 /**
  * Open a room: take a place in the store first, then fetch the newest page.
@@ -1422,12 +1444,29 @@ async function fetchWindow(
  * Opening a room that is already loaded does nothing, which is what keeps its
  * newest page when you switch away and come back (the rest is let go of on
  * the way out, `releaseOtherRooms`).
+ *
+ * A first page that fails is asked for again, a few times, before giving up
+ * (#468). The commonest first page is the one a fresh `ready` sets off, and
+ * after a long sleep that arrives while the network is still coming back.
+ * A room that gave up holds nothing and is not `loaded`, so opening it again
+ * starts over rather than doing nothing.
  */
 export async function openRoom(api: AuthedApi, roomId: RoomId): Promise<void> {
-  if (linkFor(api) === null || stateOf(api.baseUrl).streams[roomId]) return;
+  if (linkFor(api) === null) return;
+  const held = stateOf(api.baseUrl).streams[roomId];
+  if (held && (held.loaded || held.loading)) return;
+  const server = api.baseUrl;
   const opened = ++openings;
-  putStream(api.baseUrl, roomId, { messages: [], atStart: false, atEnd: true, loading: true, pending: [], opened });
-  await fetchPage(api, roomId, null, opened);
+  // A send made into the empty room is still on its way; it stays in sight.
+  putStream(server, roomId, { messages: [], atStart: false, atEnd: true, loading: true, loaded: false, pending: held?.pending ?? [], opened });
+  // `loading` stays set between tries, so nothing else asks for a page meanwhile.
+  for (const wait of [...FIRST_PAGE_RETRY_MS, null]) {
+    await fetchPage(api, roomId, null, opened, wait !== null);
+    const stream = stillOpen(server, roomId, opened);
+    if (wait === null || linkFor(api) === null || !stream || stream.loaded) return;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    if (linkFor(api) === null || !stillOpen(server, roomId, opened)) return;
+  }
 }
 
 /**
@@ -1456,6 +1495,7 @@ export async function openAround(
     atStart: false,
     atEnd: false,
     loading: true,
+    loaded: false,
     pending: [],
     opened,
   });

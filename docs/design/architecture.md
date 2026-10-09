@@ -154,7 +154,10 @@ one on every change, so the newest is never older than the snapshot.
 **What is not shared through frames:**
 
 - **Loaded history.** Each window loads the conversations it shows, over REST
-  (`openRoom`, `loadOlder`, `loadNewer`).
+  (`openRoom`, `loadOlder`, `loadNewer`). A fresh `ready` throws it all away
+  and the conversation on screen loads again. A first page that fails is
+  asked for again a few times, and a conversation still empty after that
+  loads again when it is next opened (#468).
 - **Local-only state.** Some fields change without a frame. The server has no
   frame for read positions, for example, and your own voice seat is set the
   moment you join. For these, **the owner is the single keeper**:
