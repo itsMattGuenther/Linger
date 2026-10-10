@@ -9,7 +9,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { ageOpacity, clockTime, fullTime, hitTime, sessionLabel, setWhen } from "./time";
+import { ageOpacity, closesWhen, clockTime, fullTime, hitTime, sessionLabel, setWhen } from "./time";
 
 /** Local-time helper: `at(2026, 8, 15, 9, 14)` is 15 August 2026, 9:14am. */
 function at(year: number, month: number, day: number, hour: number, minute = 0): number {
@@ -142,5 +142,22 @@ describe("setWhen", () => {
     const withYear = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
     expect(setWhen(at(2026, 10, 1, 12, 0), now)).toBe(`on ${monthDay(at(2026, 10, 1, 12, 0))}`);
     expect(setWhen(at(2025, 12, 31, 12, 0), now)).toBe(`on ${withYear(at(2025, 12, 31, 12, 0))}`);
+  });
+});
+
+describe("closesWhen (#474)", () => {
+  const now = at(2026, 10, 8, 22, 52); // Thursday night
+
+  it("says the time today and tomorrow, and only the day further on", () => {
+    expect(closesWhen(at(2026, 10, 8, 23, 30), now)).toBe(`at ${clockTime(at(2026, 10, 8, 23, 30))}`);
+    expect(closesWhen(at(2026, 10, 9, 8, 0), now)).toBe(`tomorrow at ${clockTime(at(2026, 10, 9, 8, 0))}`);
+    expect(closesWhen(at(2026, 10, 14, 9, 0), now)).toBe(`on ${weekdayOf(at(2026, 10, 14, 9, 0))}`);
+  });
+
+  it("gives a date a week or more on, and the year once it isn't this one", () => {
+    const monthDay = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    const withYear = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+    expect(closesWhen(at(2026, 10, 15, 22, 52), now)).toBe(`on ${monthDay(at(2026, 10, 15, 22, 52))}`);
+    expect(closesWhen(at(2027, 1, 2, 12, 0), now)).toBe(`on ${withYear(at(2027, 1, 2, 12, 0))}`);
   });
 });

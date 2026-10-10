@@ -287,11 +287,16 @@ CREATE TABLE messages (
   edited_at       INTEGER,
   deleted_at      INTEGER,
   created_at      INTEGER NOT NULL,
-  motd            INTEGER NOT NULL DEFAULT 0   -- 1: the line saying a message of the
+  motd            INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying a message of the
                                                -- day was set; never last_message_id
+  voice_join      INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying somebody joined
+                                               -- voice (#473); never last_message_id
+  poll_closed     BLOB REFERENCES messages(id) -- on the line a closing poll leaves (#474):
+                                               -- which poll; never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;
+CREATE INDEX idx_messages_voice_join ON messages(room_id, author_id, created_at) WHERE voice_join = 1;
 
 CREATE TABLE attachments (
   id              BLOB PRIMARY KEY,
@@ -359,6 +364,31 @@ CREATE TABLE reactions (
   key             TEXT NOT NULL,               -- one of 12 fixed keys
   created_at      INTEGER NOT NULL,
   PRIMARY KEY (message_id, user_id, key)
+);
+
+-- Polls (SPEC §4.18, #474). A poll is a message; these hold its question, its
+-- choices, who picked what, and when it closes. Votes aren't secret.
+CREATE TABLE polls (
+  message_id      BLOB PRIMARY KEY REFERENCES messages(id),
+  question        TEXT NOT NULL,
+  multi           INTEGER NOT NULL DEFAULT 0,  -- 1: people may pick more than one
+  closes_at       INTEGER NOT NULL,            -- when it closes on its own
+  closed_at       INTEGER,
+  closed_by       BLOB REFERENCES users(id)    -- null when it closed on its own
+);
+CREATE INDEX idx_polls_open ON polls(closes_at) WHERE closed_at IS NULL;
+CREATE TABLE poll_choices (
+  message_id      BLOB NOT NULL REFERENCES polls(message_id),
+  position        INTEGER NOT NULL,            -- what a vote names; never changes
+  text            TEXT NOT NULL,
+  PRIMARY KEY (message_id, position)
+);
+CREATE TABLE poll_votes (
+  message_id      BLOB NOT NULL REFERENCES polls(message_id),
+  position        INTEGER NOT NULL,
+  user_id         BLOB NOT NULL REFERENCES users(id),
+  voted_at        INTEGER NOT NULL,
+  PRIMARY KEY (message_id, position, user_id)
 );
 
 CREATE TABLE read_markers (
@@ -703,8 +733,11 @@ so it works on S3, where the bucket answers requests for a copy and a copy could
 be made on its first request. Ten phone photos in a conversation cost a WebKit page
 about 65 MB with copies, against 800 to 900 without.
 
-**The sweeper** (`expiry.rs`) is the server's one recurring background task — spawned by `main`,
+**The sweeper** (`expiry.rs`) is one of the server's two recurring background tasks — spawned by `main`,
 not by `AppState`, so building the state in a test never starts a loop nobody asked for.
+The other closes polls whose time is up (`polls.rs`, #474): at startup, for any that ran
+out while the server was down, then every thirty seconds, each in one transaction with the
+line it leaves in the room.
 It runs at startup and every six hours, in batches, and takes three kinds of object:
 
 - files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a

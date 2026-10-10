@@ -1,0 +1,183 @@
+/*
+ * A poll in the conversation (#474): a card in a message's words column, at
+ * most --poll-w wide. Each choice a 32px row: its share as a neutral fill
+ * behind it (never the lamp), its box and words, and its voters' dots at its
+ * end, on top of the fill. Tokens only.
+ */
+.nx-poll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  inline-size: min(100%, var(--poll-w));
+  margin-top: var(--space-0-5);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+}
+
+.nx-poll p {
+  margin: 0;
+}
+
+.nx-poll-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.nx-poll-label {
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-poll-how,
+.nx-poll-note {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-poll-question {
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
+}
+
+.nx-poll-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-poll-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-md);
+  padding-inline-end: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: var(--text-control);
+}
+
+.nx-poll-choice:has(.nx-poll-pick:hover) {
+  border-color: var(--edge-hover);
+}
+
+.nx-poll-choice[data-picked="yes"] {
+  border-color: var(--edge-hover);
+  color: var(--text-primary);
+}
+
+.nx-poll-choice[data-lead="yes"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Its share of the people who voted, behind everything in the row. */
+.nx-poll-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  background: var(--surface-hover);
+}
+
+/* The box and the words: the part you press. It fills what the dots leave. */
+.nx-poll-pick {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  min-block-size: var(--control-md);
+  margin: 0;
+  padding: 0 0 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.nx-poll-pick {
+  cursor: pointer;
+}
+
+button.nx-poll-pick:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-width) * -1);
+  border-radius: var(--radius-sm);
+}
+
+/* The kit's checkbox box, round for pick-one, ticked in the lamp when picked. */
+.nx-poll-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-sunken);
+  color: var(--text-on-accent);
+}
+
+.nx-poll-box[data-round="yes"] {
+  border-radius: var(--radius-pill);
+}
+
+.nx-poll-choice[data-picked="yes"] .nx-poll-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.nx-poll-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nx-poll-who {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nx-poll-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nx-poll-dot {
+  display: inline-flex;
+}
+
+.nx-poll-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--control-sm);
+}
+
+.nx-poll-problem {
+  color: var(--text-danger);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}

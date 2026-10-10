@@ -1114,3 +1114,53 @@ of the day is what's happening now ("We will be meeting on Friday, Oct 9 @ 8PM C
 - **Set aside:** the whole message behind a click in the header (too easy to miss), and a
   card at the top of the conversation (too easy to take for a pinned message, which
   anybody can make). No end date for now; `/motd` on its own clears an old one.
+
+## Decided — a quiet line when somebody joins voice
+
+**Matt, 2026-10-10 (#473).** When somebody joins a room's voice, people reading the chat
+should see it, as subtle faded text. Mockups showed the line three ways
+(https://claude.ai/artifact/9mKcjUTn472rd26WesGBnW, private); Matt picked the quietest.
+
+- **All grey, the name too.** "Jules joined voice" in the muted text, the name drawn
+  `dim`. Set aside: the name in its own style (louder than wanted) and a centred line
+  between rules like the session divider (it reads as a break in the conversation,
+  which a join isn't).
+- **No line for leaving.** The voice strip already says who's in voice now; a leave line
+  doubles the lines on a raid night, and "Dave left voice" can read as pointed.
+- **DMs too**, just as quiet: it never lights a DM, and joining voice still rings nobody.
+- **It can't flood a room** (Matt: somebody must not be able to join, quit and join again
+  over and over). The server writes the line only once somebody has stayed ten seconds,
+  and at most once per person per room every ten minutes, counted from the lines it has
+  stored so a restart forgets nothing. Added in review: each person's arriving and
+  leaving chimes sound at most once a minute apiece, since flapping rang everybody
+  already in voice every time.
+- **A crowd is one line**, the way a poll's choice will be (#474): joins with nothing
+  said between them share a line, three names then dots, and past sixteen dots the
+  people mark lists everybody. Never "and 31 more".
+- **Stored, not drawn from the live voice lists.** Drawing it from `voice.state` needed no
+  server change, but anybody who wasn't watching would never see it, and it would be
+  gone after a restart.
+
+## Decided — polls, asked with /poll
+
+**Matt, 2026-10-10 (#474).** A friend running a WoW comeback wants the room's answer to
+questions like which faction and which kind of server, and more will come. Two rounds of
+mockups (https://claude.ai/artifact/9mKcjUTn472rd26WesGBnW, private).
+
+- **Every `/` command is the host's or a co-host's**, `/poll` included. Not a new level: a
+  co-host already has the host's powers in the app (SPEC §4.16).
+- **Dots, not numbers**, over a neutral fill for each choice's share ("option 1"). Past
+  sixteen dots a people mark lists everybody. Set aside: numbers (exact, but a count in the
+  UI, which AGENTS rule 3's wording would need an exception for), a thin bar under each row,
+  and "the dots are the bar" with no fill and every dot drawn, which I recommended and Matt
+  didn't pick.
+- **Everybody votes, whoever asked included, and can change or take back a vote until it
+  closes.** Results show before you vote; votes aren't secret.
+- **Only whoever asked can close it**, not the host or a co-host, who can still delete it.
+- **Every poll closes on its own**: a day, three, a week (the default), two weeks or four,
+  picked as it's asked. The server closes it on time even with nobody online.
+- **Closing leaves a quiet line at the bottom of the room** with how it came out and See
+  results, because after a fortnight the poll is a long way up (Matt's idea). It never
+  makes a room look new.
+- **It calls nobody.** A new poll makes the room bold like anything said, with no
+  notification or sound; votes and the closed line make nothing bold.

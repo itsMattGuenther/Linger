@@ -45,6 +45,7 @@ room, and a status are.
 | A user's status card | **their status** | their sign, bio, about me |
 | What a room is about | **its topic** | description, purpose |
 | A room's note on what's happening now | **its message of the day** (`/motd`) | announcement, banner |
+| A question the host or a co-host asks a room | **a poll** (`/poll`) | survey, vote, ballot |
 
 Language does more design work than features. Hold this vocabulary in the code too:
 `RoomId`, not `ChannelId`. One thing "server" is *not*: the `linger-server` binary is
@@ -200,6 +201,17 @@ A room is a place, not a filing cabinet.
   both, and People names the one you're talking in. An away you chose still shows.
   This is drawn from the server's voice lists, so no presence frame changes and it
   works for people on older apps; a DM's voice isn't a room anybody is shown in.
+- **Somebody joining voice puts a quiet line in the room** (#473, Matt 2026-10-10):
+  "Jules joined voice", so people reading the chat see the talk has moved to voice.
+  The whole line is grey, the name too: the quietest of three that were drawn. It is
+  written once somebody has stayed ten seconds, so a misclick on Join leaves nothing,
+  and at most once per person per room every ten minutes however often they join, so
+  joining and leaving over and over can't fill a room. Joins with nothing said between
+  them share one line; past four people the first three are named and everybody else is
+  a dot in their own color, and past sixteen dots the people mark lists everybody, never
+  "and 31 more". There is no line for leaving: the voice strip says who's in voice now.
+  It calls nobody: no sound, no notification, and the room doesn't turn bold. A DM's
+  voice gets the same line, just as quiet, and it doesn't light the DM.
 
 **Entrance sounds.** Each user picks a personal sound that plays for others already
 in a room when they arrive. This is the cheapest piece of emotional design
@@ -292,7 +304,9 @@ category switches work the same at any setting, and it never touches other
 people's voice.
 
 - Voice cues: your join, leave or move, and other sessions arriving/leaving
-  the voice session you are already in. No cue for browsing a text room, no
+  the voice session you are already in. Each other person's arriving, and their
+  leaving, sound at most once a minute apiece (#473), so somebody joining and
+  leaving over and over can't ring the room. No cue for browsing a text room, no
   ringing someone who has not joined voice, and no sound on push-to-talk edges.
 - DM/room-message cues: new messages from others, not messages currently being
   read in the focused app, edits, history loads, replay or duplicates. One
@@ -685,7 +699,8 @@ leave running is what this already is.
 
 **No ringing and no calling.** Joining voice never rings somebody who has not
 joined. People already in that voice session may hear a quiet join/leave cue,
-controlled by their notification sound settings (§4.2). Muting or unmuting
+controlled by their notification sound settings (§4.2). Staying puts one quiet grey
+line in the room or DM, "Jules joined voice" (§4.1, #473), which rings nobody. Muting or unmuting
 someone else's microphone never makes a sound on your computer.
 
 **Through the host's server, up to 60** (#197). Each person sends their voice once, to
@@ -919,6 +934,44 @@ People wanted the emoji they're used to from Discord, and the picker had 66.
 - **Not reactions**, while reactions are out (§4.8), and **never for sale**
   (AGENTS rule 13): no packs, no paid slots, nothing held back.
 
+### 4.18 Polls
+
+**A question the host or a co-host asks a room, answered with a click** (Matt,
+2026-10-10, #474). The first was for a WoW comeback: which faction (Horde, Alliance,
+don't care), and which kind of server. Answers in the chat get buried, and people change
+their minds two screens later; a poll is one place that shows where the room landed.
+
+- **Asking:** `/poll` in a room's own box, with the question after it if you like. Enter
+  opens a panel over the box: the question, two to ten choices, whether people can pick
+  more than one, and how long it runs (a day, three days, a week, two weeks or four; a
+  week unless changed). Nothing is posted until Post poll. Rooms only, as a message of
+  the day is.
+- **Every `/` command is the host's or a co-host's** (Matt, 2026-10-10): `/motd` and
+  `/poll` today, and any to come. Anybody else's box says who can, and Enter doesn't send
+  the words. Anything else starting with `/` is sent as typed. This isn't a level: a
+  co-host already has the host's powers in the app (§4.16), and the role matrix stays an
+  anti-goal (§2).
+- **The poll is a message** from whoever asked: a card with the question and a row per
+  choice. Each row has its share as a neutral fill behind it, never the lamp, and its
+  voters as dots in their colors, each with its person's name; past sixteen dots a
+  people mark lists everybody who picked it. **Never a number**: the dots and the fill
+  say it.
+- **Everybody in the room votes, whoever asked included**, with a click, and changes or
+  takes back their vote as often as they like until it closes. Results show before you
+  vote, and votes aren't secret: who picked what is there for the room to see, as hands
+  up around a table would be.
+- **Every poll closes.** Whoever asked can close it sooner; nobody else can, the host
+  included. Otherwise it closes on its own when its time is up, whether or not anybody is
+  online. A closed poll keeps how it came out, its winner in bold.
+- **Closing leaves a quiet line at the bottom of the room**, in the same grey as somebody
+  joining voice (§4.14): "Poll closed: “Which faction…?” Horde won. See results". After a
+  fortnight the poll itself is a long way up; See results goes to it.
+- **It calls nobody.** A new poll makes the room bold, as anything said there does, with
+  no notification and no sound, whoever it names. Votes make nothing bold. The closed
+  line doesn't either.
+- **No editing**, since votes would end up pointing at different words; deleting is as for
+  any message. The phone app has the same card; tap to vote.
+
 ---
 
 ## 5. Design system
@@ -1065,6 +1118,7 @@ says what replaced it: a status somebody typed.
 - Knock (§4.9)
 - A phone app for iPhone and Android, text first, with no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
+- Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
 
 ### V3 or never
 

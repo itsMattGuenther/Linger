@@ -193,14 +193,17 @@ async fn serve() -> anyhow::Result<()> {
         println!("  └─────────────────────────────────────────────────\n");
     }
 
-    // The one *scheduled* background job (ARCHITECTURE §1): files age out
+    // A *scheduled* background job (ARCHITECTURE §1): files age out
     // at LINGER_FILE_EXPIRY_DAYS unless they are starred or on a pinned
     // message. It sweeps once now and then every few hours, and it lives here
     // rather than in `AppState` so that building the state — which every
     // integration test does — never starts a task nobody asked for. Exports
-    // (T-801) are the other background work, but one is spawned per request
-    // rather than running on a clock.
+    // (T-801) are background work too, but one is spawned per request rather
+    // than running on a clock.
     let _sweeper = expiry::spawn(state.clone());
+    // Polls close on their own when their time is up (#474): once now, for
+    // any that ran out while the server was down, then every half minute.
+    let _polls = linger_server::polls::spawn(state.clone());
     // Display copies for images uploaded before the server made them (#382):
     // once, at startup, newest first, until every image has one.
     let _copies = display::spawn(state.clone());

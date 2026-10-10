@@ -47,7 +47,7 @@ export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openL
 /** What the window does for the box: uploads and sending. */
 export type ChatComposer = Pick<
   ComposerProps,
-  "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep" | "clipboardImage" | "voiceMessage" | "motd"
+  "files" | "onAttach" | "onRemoveFile" | "onRestoreFiles" | "onSend" | "onTyping" | "focusRequest" | "seed" | "onDraft" | "keep" | "clipboardImage" | "voiceMessage" | "motd" | "poll"
 >;
 
 /** The showing conversation. */

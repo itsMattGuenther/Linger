@@ -1,0 +1,18 @@
+/* Somebody joined voice (#473): the quiet line (QuietLine.css), and the dots
+   and people mark a crowd ends in. Tokens only. */
+.nx-join-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  vertical-align: middle;
+}
+
+.nx-join-dot {
+  display: inline-flex;
+}
+
+.nx-join-more {
+  display: inline-flex;
+  margin-left: var(--space-0-5);
+  vertical-align: middle;
+}

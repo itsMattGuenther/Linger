@@ -36,6 +36,7 @@ import type { LoginRequest } from "../generated/LoginRequest";
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
 import type { RefreshRequest } from "../generated/RefreshRequest";
+import type { CreatePollRequest } from "../generated/CreatePollRequest";
 import type { RefreshResponse } from "../generated/RefreshResponse";
 import type { RegisterRequest } from "../generated/RegisterRequest";
 import type { Room } from "../generated/Room";
@@ -48,6 +49,7 @@ import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
 import type { UploadSlot } from "../generated/UploadSlot";
 import type { UpdateRoomRequest } from "../generated/UpdateRoomRequest";
 import type { UpdateServerRequest } from "../generated/UpdateServerRequest";
+import type { VoteRequest } from "../generated/VoteRequest";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
 
@@ -573,6 +575,22 @@ export class AuthedApi {
   pinMessage(id: string, pinned: boolean): Promise<Message> {
     const path = `/messages/${encodeURIComponent(id)}/pin`;
     return this.#withAuth((accessToken) => requestJson<Message>(this.baseUrl, pinned ? "POST" : "DELETE", path, { accessToken }));
+  }
+
+  /** Ask a room a question (PROTOCOL §4, #474): the host or a co-host. The poll's message. */
+  createPoll(roomId: RoomId, request: CreatePollRequest): Promise<Message> {
+    return this.post<Message>(`/rooms/${encodeURIComponent(roomId)}/polls`, request);
+  }
+
+  /** Vote in a poll, change a vote, or take it back with none (#474): the poll as it is now. */
+  vote(id: string, request: VoteRequest): Promise<Message> {
+    const path = `/messages/${encodeURIComponent(id)}/vote`;
+    return this.#withAuth((accessToken) => requestJson<Message>(this.baseUrl, "PUT", path, { accessToken, body: request }));
+  }
+
+  /** Close a poll you asked, before its time (#474): the poll as it ended. */
+  closePoll(id: string): Promise<Message> {
+    return this.post<Message>(`/messages/${encodeURIComponent(id)}/close`);
   }
 
   /** `body` is for the two routes that identify what to remove in JSON rather

@@ -126,6 +126,22 @@ export function setWhen(at: number, now: number): string {
   return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR).format(at)}`;
 }
 
+/**
+ * When something will happen, the way the end of a sentence says it: "at
+ * 8:52 PM" today, "tomorrow at 8:52 PM", "on Friday" this week, "on October
+ * 24" further on, and the year once it isn't this one. For a poll closing
+ * (#474): "Closes tomorrow at 8:52 PM."
+ */
+export function closesWhen(at: number, now: number): string {
+  const then = new Date(at);
+  const today = new Date(now);
+  const days = daysBetween(today, then);
+  if (days <= 0) return `at ${CLOCK.format(at)}`;
+  if (days === 1) return `tomorrow at ${CLOCK.format(at)}`;
+  if (days < 7) return `on ${WEEKDAY.format(at)}`;
+  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR).format(at)}`;
+}
+
 /** The full date and time, for the tooltip on a timestamp. */
 export function fullTime(at: number): string {
   return FULL.format(at);

@@ -25,12 +25,22 @@
  * - `?takenout`: the host took you out of voice in the tab showing (#423).
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
+ * - `?joins`: people joining voice (#473). In #general Jules joins, says
+ *   something, then Dave and Callie join together; in the DM with Jules,
+ *   Jules joins. With `?raid` too, twenty-five raiders join after Dave and
+ *   Callie, with nothing said between.
+ * - `?polls`: polls (#474). Earlier in #general Eli asked "PvP or PvE?", which
+ *   closed, and its closed line is the newest thing there; before that, you
+ *   asked which faction, open, with votes. With `?raid` too, thirty raiders
+ *   pick Horde. `?member`: you aren't the host, so `/poll` isn't yours.
+ *   Votes, closes and new polls are written to `body[data-did]`.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
  */
 import { StrictMode, useCallback, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { CreatePollRequest } from "../../src/generated/CreatePollRequest";
 import type { Message } from "../../src/generated/Message";
 import type { MessageId } from "../../src/generated/MessageId";
 import type { PresenceState } from "../../src/generated/PresenceState";
@@ -154,6 +164,87 @@ const ALL: Record<string, Message[]> = {
   ...evening,
   ...(BIG ? { "r-general": bigRoom() } : query.has("file") ? { "r-general": withFile(evening["r-general"] ?? []) } : {}),
 };
+if (query.has("polls")) ALL["r-general"] = withPolls(ALL["r-general"] ?? [], RAID);
+if (query.has("joins")) {
+  ALL["r-general"] = withJoins(ALL["r-general"] ?? [], RAID);
+  ALL["d-jules"] = [...(ALL["d-jules"] ?? []), joinLine("d-jules", "m000027a", people.jules.id, NOW - 60_000)];
+}
+
+/** `?polls`: you asked which faction (open); Eli asked PvP or PvE, which closed. */
+function withPolls(list: Message[], raid: boolean): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const start = last.created_at;
+  const base = { reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, room_id: "r-general" };
+  const faction: Message = {
+    ...base,
+    id: `${last.id}p1`,
+    author_id: me.id,
+    body: "**Poll:** Which faction are we rolling on WoW Forever?\n\n- Horde\n- Alliance\n- Don't care",
+    created_at: start + 30_000,
+    poll: {
+      question: "Which faction are we rolling on WoW Forever?",
+      choices: [
+        { text: "Horde", voter_ids: ["u-eli", "u-dave", "u-callie", ...(raid ? RAIDERS.slice(0, 30).map((user) => user.id) : [])] },
+        { text: "Alliance", voter_ids: ["u-jules"] },
+        { text: "Don't care", voter_ids: ["u-sam"] },
+      ],
+      multi: false,
+      closes_at: NOW + 6 * 86_400_000,
+      closed_at: null,
+      closed_by: null,
+    },
+  };
+  const server: Message = {
+    ...base,
+    id: `${last.id}p2`,
+    author_id: people.eli.id,
+    body: "**Poll:** PvP or PvE server?\n\n- PvP\n- PvE",
+    created_at: start + 60_000,
+    poll: {
+      question: "PvP or PvE server?",
+      choices: [
+        { text: "PvP", voter_ids: ["u-eli", "u-dave"] },
+        { text: "PvE", voter_ids: ["u-jules", "u-callie", "u-matt"] },
+      ],
+      multi: false,
+      closes_at: NOW + 86_400_000,
+      closed_at: start + 120_000,
+      closed_by: people.eli.id,
+    },
+  };
+  const said: Message = { ...base, id: `${last.id}p3`, author_id: people.dave.id, body: "pvp would have been more fun", created_at: start + 90_000 };
+  const closed: Message = {
+    ...base,
+    id: `${last.id}p4`,
+    author_id: people.eli.id,
+    body: "Poll closed: “PvP or PvE server?” PvE won.",
+    created_at: start + 120_000,
+    poll_closed: { poll_id: server.id, question: "PvP or PvE server?", winners: ["PvE"] },
+  };
+  return [...list, faction, server, said, closed];
+}
+
+/** A line saying somebody joined voice (#473), as the server writes one. */
+function joinLine(roomId: string, id: string, authorId: string, at: number): Message {
+  return { id, room_id: roomId, author_id: authorId, body: "joined voice", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: at, voice_join: true };
+}
+
+/** `?joins`: #general after Eli opens the door to voice. Ids sort after the evening's last. */
+function withJoins(list: Message[], raid: boolean): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const start = last.created_at;
+  const here: Message = { ...last, id: `${last.id}b`, author_id: people.jules.id, body: "here! these speakers were worth every penny", reply_to: null, reactions: [], attachments: [], created_at: start + 120_000 };
+  return [
+    ...list,
+    joinLine("r-general", `${last.id}a`, people.jules.id, start + 60_000),
+    here,
+    joinLine("r-general", `${last.id}c`, people.dave.id, start + 150_000),
+    joinLine("r-general", `${last.id}d`, people.callie.id, start + 165_000),
+    ...(raid ? RAIDERS.slice(0, 25).map((user, n) => joinLine("r-general", `${last.id}r${String(n).padStart(2, "0")}`, user.id, start + 166_000 + n * 500)) : []),
+  ];
+}
 
 declare global {
   interface Window {
@@ -270,12 +361,29 @@ function Fixture() {
     setHeld((all) => edit(all, message, { body: "", deleted_at: NOW }));
   }, []);
   const openLink = useCallback((href: string) => note(`link:${href}`), []);
+  // A poll's vote and close (#474): written down, and put in place as the server would.
+  const vote = useCallback(async (message: Message, choices: number[]) => {
+    note(`vote:${message.id}:${choices.join(",")}`);
+    const poll = message.poll;
+    if (!poll) return;
+    const choicesNow = poll.choices.map((choice, at) => ({
+      ...choice,
+      voter_ids: [...choice.voter_ids.filter((id) => id !== me.id), ...(choices.includes(at) ? [me.id] : [])],
+    }));
+    setHeld((all) => edit(all, message, { poll: { ...poll, choices: choicesNow } }));
+  }, []);
+  const closePoll = useCallback(async (message: Message) => {
+    note(`close:${message.id}`);
+    const poll = message.poll;
+    if (!poll) return;
+    setHeld((all) => edit(all, message, { poll: { ...poll, closed_at: NOW, closed_by: me.id } }));
+  }, []);
   // `?downloadfail`: the desktop couldn't open a browser.
   const download = useCallback(async (file: { filename: string }) => {
     note(`download:${file.filename}`);
     if (query.has("downloadfail")) throw new Error("no browser to hand it to");
   }, []);
-  const actions = useMemo(() => ({ save, remove, openLink, download }), [save, remove, openLink, download]);
+  const actions = useMemo(() => ({ save, remove, openLink, download, vote, closePoll }), [save, remove, openLink, download, vote, closePoll]);
 
   const onNearStart = useCallback(() => {
     const roomId = activeRef.current;
@@ -344,6 +452,9 @@ function Fixture() {
   }, []);
   const onRestoreFiles = useCallback(() => undefined, []);
   const onTyping = useCallback(() => undefined, []);
+  const startPoll = useCallback(async (request: CreatePollRequest) => {
+    note(`poll:${JSON.stringify(request)}`);
+  }, []);
   const onJoin = useCallback(() => note("join"), []);
   const onPickDevice = useCallback(() => note("settings:sound"), []);
   // Your controls in the room you're in voice in (#216), as the chat window passes them.
@@ -412,7 +523,16 @@ function Fixture() {
         onBackToNewest,
       },
       actions,
-      composer: { files: files[activeRoom] ?? NO_FILES, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping },
+      composer: {
+        files: files[activeRoom] ?? NO_FILES,
+        onAttach,
+        onRemoveFile,
+        onRestoreFiles,
+        onSend,
+        onTyping,
+        // `/poll` (#474): yours as the host, unless `?member`; a DM has none.
+        poll: room.kind === "dm" ? undefined : { allowed: !query.has("member"), start: startPoll },
+      },
     };
   })();
 

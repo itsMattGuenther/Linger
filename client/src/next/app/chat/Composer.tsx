@@ -1,5 +1,6 @@
 import { type FormEvent, type KeyboardEvent, memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import type { CreatePollRequest } from "../../../generated/CreatePollRequest";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
@@ -11,6 +12,7 @@ import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
+import { MAX_POLL_QUESTION_CHARS, pollCommand, typingPoll } from "../../core/chat/poll";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
@@ -25,6 +27,7 @@ import { useEmojiShortcodes } from "./useEmojiShortcodes";
 import { useMentions } from "./useMentions";
 import type { VoiceMessageControls } from "./useVoiceMessages";
 import { VoiceMessagePanel } from "./VoiceMessagePanel";
+import { PollPanel } from "./PollPanel";
 
 /** `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE`, mirrored to refuse the eleventh file up front. */
 export const MAX_ATTACHMENTS = 10;
@@ -117,6 +120,12 @@ export interface ComposerProps {
    * sentence. Left out in a DM, which has none.
    */
   motd?: { allowed: boolean; set: (text: string) => Promise<void> };
+  /**
+   * `/poll` in a room's box (#474): whether you may ask the room a question
+   * (the host or a co-host, as with every `/` command), and asking it, which
+   * rejects with a sentence. Left out in a DM, which has none.
+   */
+  poll?: { allowed: boolean; start: (request: CreatePollRequest) => Promise<void> };
 }
 
 /**
@@ -164,12 +173,15 @@ export const Composer = memo(function Composer({
   customEmoji = NO_EMOJI,
   serverName = "This server",
   motd,
+  poll,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(new Map());
   const [problems, setProblems] = useState<ReadonlyMap<string, string>>(new Map());
   const [unsent, setUnsent] = useState<Submission[]>([]);
   const [inFlight, setInFlight] = useState<ReadonlySet<number>>(new Set());
   const [emoji, setEmoji] = useState(false);
+  // The poll being asked (#474), in the conversation it's for.
+  const [asking, setAsking] = useState<{ conversation: string; question: string } | null>(null);
   const serial = useRef(0);
   const box = useRef<HTMLTextAreaElement | null>(null);
   const boxRow = useRef<HTMLDivElement | null>(null);
@@ -372,7 +384,30 @@ export const Composer = memo(function Composer({
     });
   };
 
+  // `/poll`: ask the room a question (#474). Enter opens the panel with what
+  // was typed after it as the question. Where you can't, the line over the
+  // box already says why, so Enter just leaves the box as it is.
+  const startPoll = (question: string) => {
+    if (!poll?.allowed) return;
+    if (files.length > 0) {
+      say("A poll can't carry files. Send them on their own.");
+      return;
+    }
+    setAsking({ conversation, question: question.slice(0, MAX_POLL_QUESTION_CHARS) });
+    change("");
+    say(null);
+  };
+  const stopAsking = () => {
+    setAsking(null);
+    box.current?.focus();
+  };
+
   const submit = () => {
+    const asked = pollCommand(draft);
+    if (asked !== null) {
+      startPoll(asked);
+      return;
+    }
     const command = motdCommand(draft);
     if (command !== null) {
       setMotd(command);
@@ -495,7 +530,7 @@ export const Composer = memo(function Composer({
 
   const left = MAX_MESSAGE_CHARS - draft.length;
   const commandId = useId();
-  const commanding = typingMotd(draft);
+  const commanding = typingMotd(draft) ? "motd" : typingPoll(draft) ? "poll" : null;
   // Who it's to, when that fits on the box's one line; just "Say something"
   // when it doesn't, as on a phone, where the screen's title says it anyway.
   const named = replyTo ? "Say something back" : isDm ? `Say something to ${title}` : `Say something in ${title}`;
@@ -569,7 +604,24 @@ export const Composer = memo(function Composer({
 
       {voiceMessage ? <VoiceMessagePanel controls={voiceMessage} title={title} /> : null}
 
-      {commanding ? (
+      {poll && asking?.conversation === conversation ? (
+        <PollPanel key={conversation} title={title} question={asking.question} onPost={(request) => poll.start(request).then(stopAsking)} onCancel={stopAsking} />
+      ) : null}
+
+      {commanding === "poll" ? (
+        <p className="nx-composer-command" id={commandId}>
+          <span className="nx-composer-command-name">/poll</span>
+          <span className="nx-composer-command-what">
+            {poll?.allowed
+              ? `Asks ${title} a question. Enter opens it, so you can add the choices.`
+              : poll
+                ? "Only the host or a co-host can start a poll."
+                : "A DM has no polls."}
+          </span>
+        </p>
+      ) : null}
+
+      {commanding === "motd" ? (
         <p className="nx-composer-command" id={commandId}>
           <span className="nx-composer-command-name">/motd</span>
           <span className="nx-composer-command-what">
@@ -624,7 +676,7 @@ export const Composer = memo(function Composer({
             mentions.track(node);
             shortcodes.track(node);
             // Setting the message of the day isn't saying something.
-            if (node.value !== "" && !typingMotd(node.value)) onTyping();
+            if (node.value !== "" && !typingMotd(node.value) && !typingPoll(node.value)) onTyping();
           }}
           onKeyDown={onKeyDown}
           onMouseDown={(event) => {

@@ -251,6 +251,15 @@ async fn edit(
             "That line can't be edited. Set a new message of the day instead.",
         ));
     }
+    // Nor the line saying somebody joined voice (#473), or that a poll
+    // closed (#474): nobody typed them.
+    if message.voice_join == Some(true) || message.poll_closed.is_some() {
+        return Err(ApiError::validation("That line can't be edited."));
+    }
+    // Nor a poll: its votes would end up pointing at different words (#474).
+    if message.poll.is_some() {
+        return Err(ApiError::validation("A poll can't be edited."));
+    }
     let body = if message.attachments.is_empty() {
         validate::message_body(&req.body)?
     } else {
@@ -456,7 +465,7 @@ async fn put_read_marker(
 /// back with an older position must not pull back what the desktop has
 /// already read (#454). Message ids are UUIDv7, and SQLite compares blobs
 /// byte by byte, so `>` on the column is "posted later".
-async fn advance_read_marker(
+pub(crate) async fn advance_read_marker(
     state: &AppState,
     user_id: UserId,
     room_id: RoomId,

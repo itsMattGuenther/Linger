@@ -12,6 +12,7 @@ import { Button, Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } 
 import { Attachments } from "./Attachments";
 import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
+import { PollCard, type PollActions } from "./PollCard";
 import { onPhone } from "../../core/phone";
 import { FloatingForm, ReportForm } from "./ReportBlock";
 import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
@@ -43,7 +44,18 @@ export interface MessageActions {
    * there's nobody to report to, as for the host.
    */
   report?: { host: string; cohosts?: boolean; send: (message: Message, note: string | null) => Promise<string | null> };
+  /** Vote in a poll, and close one you asked (#474). Left out where there's no server to ask. */
+  vote?: PollActions["vote"];
+  closePoll?: PollActions["closePoll"];
 }
+
+const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
+
+/** Where a poll can't be answered, it says so rather than doing nothing. */
+const NO_POLL: PollActions = {
+  vote: () => Promise.reject(new Error("You can't vote from here.")),
+  closePoll: () => Promise.reject(new Error("You can't close it from here.")),
+};
 
 /**
  * One message (docs/design/system.md, "The conversation"). A run's first
@@ -70,6 +82,7 @@ export const MessageRow = memo(function MessageRow({
   emoji,
   mediaUrl,
   actions,
+  people,
 }: {
   message: Message;
   head: boolean;
@@ -90,6 +103,8 @@ export const MessageRow = memo(function MessageRow({
   emoji?: CustomEmojiByName;
   mediaUrl: (path: string) => string;
   actions: MessageActions;
+  /** Everybody the server knows, for the voters on a poll (#474). */
+  people?: ReadonlyMap<string, User>;
 }) {
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; confirming: boolean } | null>(null);
   // Reporting it to the host (T-1605): the form floats where the menu was.
@@ -102,8 +117,11 @@ export const MessageRow = memo(function MessageRow({
   // The line written when somebody set the room's message of the day (#464):
   // who set it, and what to, quoted. It names nobody and isn't edited.
   const motd = message.motd === true;
-  const namesMe = me !== null && !deleted && !motd && mentionHandles(message.body).includes(me.username);
-  const links = deleted || editing ? [] : linkTargets(message.body);
+  // A poll (#474): its card in place of its words, which are only there for
+  // an app that doesn't know polls. It calls nobody, whoever it names.
+  const poll = deleted ? null : (message.poll ?? null);
+  const namesMe = me !== null && !deleted && !motd && poll === null && mentionHandles(message.body).includes(me.username);
+  const links = deleted || editing || poll !== null ? [] : linkTargets(message.body);
   const justCard = cardOnly(message.body, links, (url) => previews[url] !== undefined);
   // Pinned and edited, said after the words; or, for a message with none
   // (only pictures, a file, a voice message or a link's card), beside the
@@ -205,7 +223,7 @@ export const MessageRow = memo(function MessageRow({
               },
             ]
           : []),
-        ...(mine && !motd
+        ...(mine && !motd && poll === null
           ? [
               {
                 id: "edit",
@@ -291,6 +309,18 @@ export const MessageRow = memo(function MessageRow({
       <div className="nx-msg-body" style={bodyStyle(ageOpacity(message.created_at, now), author)}>
         {deleted ? (
           <p className="nx-msg-gone">deleted</p>
+        ) : poll !== null ? (
+          <>
+            <PollCard
+              message={message}
+              poll={poll}
+              people={people ?? NO_PEOPLE}
+              me={me}
+              now={now}
+              actions={actions.vote && actions.closePoll ? { vote: actions.vote, closePoll: actions.closePoll } : NO_POLL}
+            />
+            {marks === undefined ? null : <p className="nx-msg-marks">{marks}</p>}
+          </>
         ) : editing ? (
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
@@ -298,7 +328,7 @@ export const MessageRow = memo(function MessageRow({
             <MessageText source={message.body} mentions={mentions} emoji={emoji} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} />
           </Fold>
         )}
-        {deleted || editing ? null : wordless && marks !== undefined ? (
+        {deleted || editing || poll !== null ? null : wordless && marks !== undefined ? (
           <div className="nx-msg-tail">
             <div className="nx-msg-tail-shown">{shown}</div>
             <p className="nx-msg-marks">{marks}</p>

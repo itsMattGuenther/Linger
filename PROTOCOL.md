@@ -291,6 +291,9 @@ type Message = {
   deleted_at: number | null;                   // tombstone; body is "" when set
   created_at: number;
   motd?: true;                                 // the line saying the message of the day was set (§3)
+  voice_join?: true;                           // the line saying somebody joined voice (§8, #473)
+  poll?: Poll;                                 // the poll this message asks (#474), below
+  poll_closed?: PollClosed;                    // on the line a closing poll leaves (#474), below
 }
 ```
 
@@ -305,7 +308,56 @@ still work and the trial can end either way without a migration.
 
 Edits are only permitted by the author, and never on a message-of-the-day line
 (`VALIDATION_FAILED`): it says what the message was set to, then (§3). An app from
-before the field shows the line as an ordinary message from whoever set it. Deletes are
+before the field shows the line as an ordinary message from whoever set it. Nor on a
+line saying somebody joined voice (`voice_join`, §8): nobody typed it. Its body is
+"joined voice" and its author whoever joined, so an app from before the field shows it
+as them saying so; it is never a room's `last_message_id`, search passes over it, and a
+client neither notifies nor sounds for it.
+
+**Polls** (SPEC §4.18, #474). A question the host or a co-host asks a room, which everybody
+in it answers with a click.
+
+```
+POST /rooms/:id/polls      (host or co-host) { question, choices, multi, closes_in_days } → Message
+PUT  /messages/:id/vote    { choices: number[] }                                       → Message
+POST /messages/:id/close   (whoever asked)                                             → Message
+```
+
+```ts
+type Poll = {
+  question: string;
+  choices: { text: string; voter_ids: string[] }[];   // in the order written; votes name choices by place
+  multi: boolean;                                      // people may pick more than one
+  closes_at: number;                                   // when it closes on its own
+  closed_at: number | null;
+  closed_by: string | null;                            // null when it closed on its own
+};
+type PollClosed = { poll_id: string; question: string; winners: string[] };   // winners: most votes; [] when nobody voted
+```
+
+- **Asking** is the host or a co-host (`FORBIDDEN` for anybody else), in a room, never a DM
+  (`NOT_FOUND`), and not an archived one. The question is trimmed, 1 to
+  `MAX_POLL_QUESTION_CHARS` (300); `MIN_POLL_CHOICES` to `MAX_POLL_CHOICES` (2 to 10)
+  choices, each trimmed, 1 to `MAX_POLL_CHOICE_CHARS` (80), none the same as another
+  ignoring case; `closes_in_days` is one of `POLL_DAYS` (1, 3, 7, 14, 28). Anything else is
+  `VALIDATION_FAILED`. It is a `Message` from whoever asked, sent as `message.create`, and it
+  is a room's `last_message_id` like anything said. Its body is the question and the choices
+  as a Markdown list, so an app from before polls shows them as words, and search finds them.
+  A client neither notifies nor sounds for one, whoever it names. It can't be edited.
+- **Voting** is anybody who can see the room, whoever asked included: the choices' places,
+  replacing any vote before, `[]` taking it back; more than one only when `multi`; at most
+  `RATE_POLL_VOTE` (20 in 10 s). A poll that is closed, or whose `closes_at` has passed, takes
+  no votes (`VALIDATION_FAILED`); a deleted one is `NOT_FOUND`. The poll as it stands goes to
+  the room as `message.update`, which never makes a room look new. Votes aren't secret, and
+  there is no count field anywhere: a client that needs one counts `voter_ids`.
+- **Closing** early is whoever asked, and nobody else, the host included (`FORBIDDEN`).
+  Otherwise the server closes it when `closes_at` comes, whether anybody is online or not, at
+  most half a minute late; `closed_by` is then null. Either way, one transaction sets
+  `closed_at` and writes a line in the room from whoever asked: body "Poll closed: “Which
+  faction…?” Horde won." ("Horde and Alliance tied.", "Nobody voted."), `poll_closed` set.
+  The room gets the poll as it ended (`message.update`), then the line (`message.create`).
+  The line is never a room's `last_message_id`, search passes over it, it can't be edited, and
+  a client neither notifies nor sounds for it. A deleted poll never closes and leaves no line. Deletes are
 permitted by the author, the host or
 a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
@@ -1127,6 +1179,18 @@ clients still enforce local controls on an old server, but cannot show others' s
 activity and output-device health are not inferred from these two booleans. Nor is
 push-to-talk: a client whose push-to-talk key is up sends silence but reports
 `muted: false`, because not holding the key isn't muting (SPEC §4.14, #232).
+
+**Joining puts a quiet line in the room** (SPEC §4.14, #473). A `voice.join` that gives a
+session a new seat (arriving, or moving here from another room; not a repeated join that
+only changes controls) starts a wait of `linger-core::limits::VOICE_JOIN_LINE_AFTER_MS`
+(10 s). If the session still holds that same seat when it ends, the server writes a
+`Message` in the room from that person, body "joined voice", `voice_join: true`, and sends
+it as `message.create` to the room's members, a DM's only to its people. It doesn't when
+that person already has a join line in that room from the last
+`VOICE_JOIN_LINE_EVERY_MS` (ten minutes), counted from the lines stored, so a restart
+forgets nothing; the check and the write are one statement, so two of somebody's
+devices joining together write one line. Nor in an archived room. A seat left inside
+the wait writes nothing, and leaving never writes a line.
 
 **`voice.state` is the whole list every time**, never a delta. It is sent to a room's
 members whenever anybody joins, leaves or changes controls, and a client can act on the

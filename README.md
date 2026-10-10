@@ -86,11 +86,15 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
   goes through the host's server, which passes it on so up to 60 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.
-  Voice rooms are never recorded.
+  Joining leaves a small grey line in the chat, so people reading it know the
+  talk moved to voice; it never rings anybody. Voice rooms are never recorded.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
   host can add its own emoji too, animated GIFs included.
+- **Polls**: the host or a co-host types `/poll`, and everybody votes with a
+  click. Who picked what shows as dots, never a tally, and every poll closes on
+  its own, leaving a line saying how it came out.
 - **Knock** to nudge one person: a soft sound and a card that fades.
 - **A message of the day** for each room, beside its topic: the host or a
   co-host types `/motd` and it sits whole under the room's header until you
