@@ -2,7 +2,8 @@
 //!
 //! `last_message_id` is the newest non-tombstone message — deleting something
 //! must not make a room look newly active — and never a message-of-the-day
-//! line, which tells nobody to come and look (#464).
+//! line (#464) or a line saying somebody joined voice (#473), which tell
+//! nobody to come and look.
 //!
 //! **Every query here that a member could reach is membership-aware**, and the
 //! ones that are not say so in their name. `all` is the server's public rooms;
@@ -20,7 +21,8 @@ const ROOM_SELECT: &str = "
     SELECT r.id, r.slug, r.name, r.topic, r.kind, r.position, r.archived_at,
            r.motd, r.motd_set_by, r.motd_set_at,
            (SELECT MAX(m.id) FROM messages m
-             WHERE m.room_id = r.id AND m.deleted_at IS NULL AND m.motd = 0) AS last_message_id
+             WHERE m.room_id = r.id AND m.deleted_at IS NULL
+               AND m.motd = 0 AND m.voice_join = 0) AS last_message_id
     FROM rooms r";
 
 fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {

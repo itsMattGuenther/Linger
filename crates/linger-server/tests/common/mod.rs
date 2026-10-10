@@ -67,6 +67,9 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
+        voice_line_after: std::time::Duration::from_millis(
+            linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
     }
 }
 
@@ -86,6 +89,9 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
+        voice_line_after: std::time::Duration::from_millis(
+            linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
     };
     spawn_with(dir, config).await
 }
@@ -130,6 +136,9 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
+        voice_line_after: std::time::Duration::from_millis(
+            linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
     };
     Some(spawn_with(dir, config).await)
 }
@@ -283,11 +292,21 @@ pub async fn server_with_room(slug: &str) -> (TestServer, AuthResponse, linger_c
 pub async fn voice_server_with_room(
     slug: &str,
 ) -> (TestServer, AuthResponse, linger_core::wire::Room) {
+    voice_server_tuned(slug, |_| {}).await
+}
+
+/// The same, with the configuration turned further: a join line's wait
+/// shortened, say (#473).
+pub async fn voice_server_tuned(
+    slug: &str,
+    tune: impl FnOnce(&mut Config),
+) -> (TestServer, AuthResponse, linger_core::wire::Room) {
     let server = spawn_tuned(|config| {
         config.voice_forwarding = Some(linger_server::config::VoiceForwarding {
             bind: "127.0.0.1:0".parse().unwrap(),
             public: "127.0.0.1:0".parse().unwrap(),
         });
+        tune(config);
     })
     .await;
     room_on(server, slug).await

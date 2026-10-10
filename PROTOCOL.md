@@ -291,6 +291,7 @@ type Message = {
   deleted_at: number | null;                   // tombstone; body is "" when set
   created_at: number;
   motd?: true;                                 // the line saying the message of the day was set (§3)
+  voice_join?: true;                           // the line saying somebody joined voice (§8, #473)
 }
 ```
 
@@ -305,7 +306,11 @@ still work and the trial can end either way without a migration.
 
 Edits are only permitted by the author, and never on a message-of-the-day line
 (`VALIDATION_FAILED`): it says what the message was set to, then (§3). An app from
-before the field shows the line as an ordinary message from whoever set it. Deletes are
+before the field shows the line as an ordinary message from whoever set it. Nor on a
+line saying somebody joined voice (`voice_join`, §8): nobody typed it. Its body is
+"joined voice" and its author whoever joined, so an app from before the field shows it
+as them saying so; it is never a room's `last_message_id`, search passes over it, and a
+client neither notifies nor sounds for it. Deletes are
 permitted by the author, the host or
 a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
@@ -1127,6 +1132,18 @@ clients still enforce local controls on an old server, but cannot show others' s
 activity and output-device health are not inferred from these two booleans. Nor is
 push-to-talk: a client whose push-to-talk key is up sends silence but reports
 `muted: false`, because not holding the key isn't muting (SPEC §4.14, #232).
+
+**Joining puts a quiet line in the room** (SPEC §4.14, #473). A `voice.join` that gives a
+session a new seat (arriving, or moving here from another room; not a repeated join that
+only changes controls) starts a wait of `linger-core::limits::VOICE_JOIN_LINE_AFTER_MS`
+(10 s). If the session still holds that same seat when it ends, the server writes a
+`Message` in the room from that person, body "joined voice", `voice_join: true`, and sends
+it as `message.create` to the room's members, a DM's only to its people. It doesn't when
+that person already has a join line in that room from the last
+`VOICE_JOIN_LINE_EVERY_MS` (ten minutes), counted from the lines stored, so a restart
+forgets nothing; the check and the write are one statement, so two of somebody's
+devices joining together write one line. Nor in an archived room. A seat left inside
+the wait writes nothing, and leaving never writes a line.
 
 **`voice.state` is the whole list every time**, never a delta. It is sent to a room's
 members whenever anybody joins, leaves or changes controls, and a client can act on the

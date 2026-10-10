@@ -3,8 +3,11 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::time::Duration;
 
-use linger_core::limits::{DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, MAX_FILE_BYTES};
+use linger_core::limits::{
+    DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, MAX_FILE_BYTES, VOICE_JOIN_LINE_AFTER_MS,
+};
 
 /// Where uploaded objects live (ARCHITECTURE §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +97,11 @@ pub struct Config {
     /// can send voice, and nobody has to type an IP. `None` when an address
     /// is set, when it is `off`, and on a server with no domain.
     pub voice_from_domain: Option<SocketAddr>,
+    /// How long somebody stays in a room's voice before the room gets a line
+    /// saying they joined (#473): `VOICE_JOIN_LINE_AFTER_MS`. Not an
+    /// environment variable; there is nothing for a host to tune. Tests
+    /// shorten it rather than wait.
+    pub voice_line_after: Duration,
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -272,6 +280,7 @@ impl Config {
             turn,
             voice_forwarding,
             voice_from_domain,
+            voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
         })
     }
 
@@ -794,6 +803,7 @@ mod tests {
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
+            voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
         }
     }
 

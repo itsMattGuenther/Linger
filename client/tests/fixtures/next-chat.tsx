@@ -25,6 +25,10 @@
  * - `?takenout`: the host took you out of voice in the tab showing (#423).
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
+ * - `?joins`: people joining voice (#473). In #general Jules joins, says
+ *   something, then Dave and Callie join together; in the DM with Jules,
+ *   Jules joins. With `?raid` too, twenty-five raiders join after Dave and
+ *   Callie, with nothing said between.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -154,6 +158,31 @@ const ALL: Record<string, Message[]> = {
   ...evening,
   ...(BIG ? { "r-general": bigRoom() } : query.has("file") ? { "r-general": withFile(evening["r-general"] ?? []) } : {}),
 };
+if (query.has("joins")) {
+  ALL["r-general"] = withJoins(ALL["r-general"] ?? [], RAID);
+  ALL["d-jules"] = [...(ALL["d-jules"] ?? []), joinLine("d-jules", "m000027a", people.jules.id, NOW - 60_000)];
+}
+
+/** A line saying somebody joined voice (#473), as the server writes one. */
+function joinLine(roomId: string, id: string, authorId: string, at: number): Message {
+  return { id, room_id: roomId, author_id: authorId, body: "joined voice", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: at, voice_join: true };
+}
+
+/** `?joins`: #general after Eli opens the door to voice. Ids sort after the evening's last. */
+function withJoins(list: Message[], raid: boolean): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const start = last.created_at;
+  const here: Message = { ...last, id: `${last.id}b`, author_id: people.jules.id, body: "here! these speakers were worth every penny", reply_to: null, reactions: [], attachments: [], created_at: start + 120_000 };
+  return [
+    ...list,
+    joinLine("r-general", `${last.id}a`, people.jules.id, start + 60_000),
+    here,
+    joinLine("r-general", `${last.id}c`, people.dave.id, start + 150_000),
+    joinLine("r-general", `${last.id}d`, people.callie.id, start + 165_000),
+    ...(raid ? RAIDERS.slice(0, 25).map((user, n) => joinLine("r-general", `${last.id}r${String(n).padStart(2, "0")}`, user.id, start + 166_000 + n * 500)) : []),
+  ];
+}
 
 declare global {
   interface Window {

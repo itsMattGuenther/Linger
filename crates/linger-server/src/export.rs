@@ -663,6 +663,15 @@ fn message_markdown(
         || "somebody who is gone".to_string(),
         |u| format!("{} (@{})", u.display_name, u.username),
     );
+    // The line written when somebody joined the room's voice (#473): the
+    // whole of it is who and when, with no words under it.
+    if message.voice_join == Some(true) {
+        return format!(
+            "**{}** — {} joined voice\n\n",
+            clock(message.created_at),
+            who
+        );
+    }
     let edited = if message.edited_at.is_some() {
         " *(edited)*"
     } else {
@@ -977,6 +986,29 @@ fn civil_date(unix_ms: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A line saying somebody joined voice reads as one line in the archive,
+    /// not as them having typed "joined voice" (#473).
+    #[test]
+    fn a_join_line_is_who_and_when_and_nothing_under_it() {
+        let line = Message {
+            id: MessageId::new(),
+            room_id: RoomId::new(),
+            author_id: UserId::new(),
+            body: crate::join_line::BODY.to_string(),
+            reply_to: None,
+            attachments: Vec::new(),
+            reactions: Vec::new(),
+            pinned_at: None,
+            edited_at: None,
+            deleted_at: None,
+            created_at: 20 * 3_600_000 + 50 * 60_000,
+            motd: None,
+            voice_join: Some(true),
+        };
+        let written = message_markdown(&line, &HashMap::new(), &HashMap::new(), &HashMap::new());
+        assert_eq!(written, "**20:50** — somebody who is gone joined voice\n\n");
+    }
 
     /// Uploaded filenames are somebody else's text, and this is the guard that
     /// stops one climbing out of `media/` when an archive is unzipped.

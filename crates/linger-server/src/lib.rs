@@ -12,6 +12,7 @@ pub mod error;
 pub mod expiry;
 pub mod export;
 pub mod gateway;
+pub mod join_line;
 pub mod links;
 pub mod media;
 pub mod ratelimit;

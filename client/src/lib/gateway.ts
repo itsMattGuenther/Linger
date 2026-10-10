@@ -61,11 +61,12 @@ import {
 import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound, type SoundCue } from "./sound";
-import { controlCue, voiceCue } from "./sound-events";
+import { controlCue, PeerCueLimit, voiceCueToPlay } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, type RefusedMicrophone, saveVoiceVolume } from "./voice";
 import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 import { hostsHere } from "./host";
+import { isQuietLine } from "./quietLines";
 
 /**
  * Mirrors `Status` in `src-tauri/src/gateway.rs`. Allowed to be hand-written:
@@ -781,10 +782,11 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // exactly the rooms whose label has to change weight. So the newest id is
       // tracked separately from the history.
       // Somebody you blocked saying something isn't something new for you,
-      // and neither is a new message of the day: it's in the room for whoever
-      // comes in, and calls nobody over (#464).
+      // and neither is a new message of the day or somebody joining voice:
+      // they're in the room for whoever comes in, and call nobody over
+      // (#464, #473).
       const held = next.newest[message.room_id];
-      if (frame.op === "message.create" && message.motd !== true && !next.blocked.includes(message.author_id) && (held === undefined || held < message.id)) {
+      if (frame.op === "message.create" && !isQuietLine(message) && !next.blocked.includes(message.author_id) && (held === undefined || held < message.id)) {
         next = { ...next, newest: { ...next.newest, [message.room_id]: message.id } };
       }
       // Something you said, from this device or another one, is something
@@ -901,6 +903,17 @@ const links = new Map<string, Link>();
  * The Buddy list client's owner window hands both to a window that opens late.
  */
 const positions = new Map<string, Position>();
+
+/** Each server's limit on other people's voice cues (#473): ids only mean something on their own server. */
+const peerCueLimits = new Map<string, PeerCueLimit>();
+function peerCueLimit(server: string): PeerCueLimit {
+  let limit = peerCueLimits.get(server);
+  if (limit === undefined) {
+    limit = new PeerCueLimit();
+    peerCueLimits.set(server, limit);
+  }
+  return limit;
+}
 
 // ---------------------------------------------------------------------------
 // Following without connecting: the viewer windows
@@ -1120,7 +1133,7 @@ async function attachListeners(): Promise<void> {
       if (frame.op === "ready" || frame.op === "reports.changed" || madeCohost) void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
       if (!replayed) {
         if (frame.op === "knock") void playKnock();
-        const cue = voiceCue(frame, before, next);
+        const cue = voiceCueToPlay(frame, before, next, peerCueLimit(server), Date.now());
         if (cue !== null) void playSound(cue);
       }
       // The forwarding server's offer is the core's business, not this

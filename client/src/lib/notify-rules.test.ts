@@ -67,6 +67,12 @@ describe("what is worth interrupting somebody for", () => {
     expect(notifyReason(motd, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
   });
 
+  it("says nothing about somebody joining voice, even somebody you asked to hear from (#473)", () => {
+    const joined = { ...message("joined voice"), voice_join: true };
+    expect(notifyReason(joined, me, [])).toBeNull();
+    expect(notifyReason(joined, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
+  });
+
   it("does not fire on your own message, even when you name yourself", () => {
     expect(notifyReason(message("@matt remember this", me.id), me, [])).toBeNull();
   });

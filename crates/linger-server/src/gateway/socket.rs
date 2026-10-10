@@ -15,7 +15,7 @@ use linger_core::limits::{
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{spawn_session, Ctl, SessionHandle};
+use super::{spawn_session, Ctl, SessionHandle, VoiceJoined};
 use crate::db::now_ms;
 use crate::repo;
 use crate::state::AppState;
@@ -372,9 +372,23 @@ async fn handle_client_frame(
             // Any `forwarding` at all is an app that takes voice through the
             // server (0.4.1 on); its value is left over from Settings' old
             // switch and no longer matters (#306).
-            state
-                .gateway
-                .voice_join(session_id, user_id, room_id, controls, forwarding.is_some());
+            let joined = state.gateway.voice_join(
+                session_id,
+                user_id,
+                room_id,
+                controls,
+                forwarding.is_some(),
+            );
+            // A new seat: the room gets its quiet line if they stay (#473).
+            if let VoiceJoined::Seated(number) = joined {
+                crate::join_line::after_join(
+                    state.clone(),
+                    session_id.to_string(),
+                    user_id,
+                    room_id,
+                    number,
+                );
+            }
         }
         ClientFrame::VoiceAnswer { sdp } => {
             if sdp.len() > MAX_VOICE_PAYLOAD_BYTES {

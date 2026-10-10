@@ -251,6 +251,10 @@ async fn edit(
             "That line can't be edited. Set a new message of the day instead.",
         ));
     }
+    // Nor the line saying somebody joined voice (#473): nobody typed it.
+    if message.voice_join == Some(true) {
+        return Err(ApiError::validation("That line can't be edited."));
+    }
     let body = if message.attachments.is_empty() {
         validate::message_body(&req.body)?
     } else {

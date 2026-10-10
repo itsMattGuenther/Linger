@@ -8,10 +8,17 @@
  * quote above a line with no name would read as a quote of the line above.
  * So a reply shows who is replying, and gets a group's space above it, which
  * is also what keeps it off the message before (#181).
+ *
+ * And one row the shared builder doesn't know: **somebody joining voice**
+ * (#473). Join lines with nothing said between them, each within the group
+ * break of the one before, are one row, "Jules and Dave joined voice", so a
+ * raid filling up reads as one quiet line rather than forty.
  */
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import { buildRows } from "../../../lib/rows";
+import { isQuietLine } from "../../../lib/quietLines";
+import { GROUP_BREAK_MS } from "../../../lib/time";
 
 export type ChatRow =
   /** A session break, labeled in natural words ("tonight"). */
@@ -22,7 +29,13 @@ export type ChatRow =
    * One message. `head` means it opens a group and shows its author's name
    * inline; a continuation lines its words up under the head's.
    */
-  | { kind: "message"; key: string; message: Message; head: boolean; pending: boolean };
+  | { kind: "message"; key: string; message: Message; head: boolean; pending: boolean }
+  /**
+   * Somebody joining voice (#473): one or more join lines, oldest first,
+   * drawn as one quiet line. Keyed by the first, so the row keeps its
+   * measured place as later joins add to it.
+   */
+  | { kind: "joins"; key: string; messages: Message[] };
 
 export interface ChatRowOptions {
   /** The oldest message held is the oldest there is. */
@@ -41,23 +54,44 @@ export function chatRows(
   options: ChatRowOptions,
 ): ChatRow[] {
   const waiting = new Set(pending.map((message) => message.id));
-  let afterMotd = false;
-  return buildRows([...messages, ...pending], options).map((row): ChatRow => {
-    if (row.kind !== "message") return row;
-    const reply = row.message.reply_to !== null && row.message.deleted_at === null;
+  const rows: ChatRow[] = [];
+  // The row just pushed was a line nobody typed (a message of the day, or a
+  // join): what's said next isn't part of it, so it starts a group of its own.
+  let afterLine = false;
+  for (const row of buildRows([...messages, ...pending], options)) {
+    if (row.kind !== "message") {
+      rows.push(row);
+      continue;
+    }
+    const { message } = row;
+    if (message.voice_join === true) {
+      // The app offers nobody a way to delete one; one taken back some other
+      // way just isn't there, rather than a "deleted" with nothing to say.
+      if (message.deleted_at !== null) continue;
+      const last = rows[rows.length - 1];
+      const joined = last?.kind === "joins" ? last.messages[last.messages.length - 1] : undefined;
+      if (last?.kind === "joins" && joined !== undefined && message.created_at - joined.created_at <= GROUP_BREAK_MS) {
+        last.messages.push(message);
+      } else {
+        rows.push({ kind: "joins", key: row.key, messages: [message] });
+      }
+      afterLine = true;
+      continue;
+    }
+    const reply = message.reply_to !== null && message.deleted_at === null;
     // A message-of-the-day line says who set it on its own line (#464), and
     // what's said next isn't part of it, so it starts a group of its own too.
-    const motd = row.message.motd === true;
-    const head = row.head || reply || motd || afterMotd;
-    afterMotd = motd;
-    return {
+    const motd = message.motd === true;
+    rows.push({
       kind: "message",
       key: row.key,
-      message: row.message,
-      head,
-      pending: waiting.has(row.message.id),
-    };
-  });
+      message,
+      head: row.head || reply || motd || afterLine,
+      pending: waiting.has(message.id),
+    });
+    afterLine = motd;
+  }
+  return rows;
 }
 
 /** Where each message sits in the rows, for jumping to one. */
@@ -65,6 +99,7 @@ export function rowIndex(rows: readonly ChatRow[]): Map<MessageId, number> {
   const index = new Map<MessageId, number>();
   rows.forEach((row, at) => {
     if (row.kind === "message") index.set(row.message.id, at);
+    else if (row.kind === "joins") for (const message of row.messages) index.set(message.id, at);
   });
   return index;
 }
@@ -72,14 +107,15 @@ export function rowIndex(rows: readonly ChatRow[]): Map<MessageId, number> {
 /**
  * The newest message you wrote and can still edit, for the composer's
  * Up-arrow. Only at the live end: inside a historical window the newest one
- * held is not the last thing you said. A message-of-the-day line is passed
- * over: it says what the message was set to then, and isn't edited (#464).
+ * held is not the last thing you said. A line nobody typed is passed over: a
+ * message-of-the-day line says what it was set to then (#464), and a join
+ * line says somebody joined voice (#473); neither is edited.
  */
 export function lastEditable(messages: readonly Message[], meId: string | null, atEnd: boolean): Message | null {
   if (!atEnd || meId === null) return null;
   for (let at = messages.length - 1; at >= 0; at -= 1) {
     const message = messages[at];
-    if (message && message.author_id === meId && message.deleted_at === null && message.motd !== true) return message;
+    if (message && message.author_id === meId && message.deleted_at === null && !isQuietLine(message)) return message;
   }
   return null;
 }

@@ -1,0 +1,29 @@
+/* Everybody behind a run of dots (#473). Layout only; the rows are kit
+   pieces. Tokens only. */
+.nx-people-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Clear of the card's close button, as the everyone card's label is. */
+.nx-people-card-head {
+  display: flex;
+  align-items: center;
+  height: var(--control-sm);
+  margin: 0;
+  padding-right: var(--space-6);
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The people scroll inside the card, so it never grows past the window.
+   Nine and a half rows: the half row says there are more below. */
+.nx-people-card-list {
+  max-height: calc(var(--row-1) * 9.5);
+  overflow-y: auto;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 0 var(--space-1);
+}

@@ -772,6 +772,20 @@ replaces an unread count.
   day" beside it in muted meta, and the words under it behind a 2px
   `--hairline-strong` rule in `--text-secondary`, like a quote. It always
   starts a group of its own, and so does whatever is said after it.
+- **The line saying somebody joined voice** (#473, `app/chat/JoinLine.tsx`): the
+  quietest line in the conversation. On the message grid, its words where a name
+  starts and its time in the time column, always shown: the idle voice glyph in
+  `--icon-faint`, then "Jules joined voice" all in `--text-muted` at the meta
+  size, the names `dim` too (Matt picked it over a name in its own style and a
+  centred divider, 2026-10-10). A run of joins with nothing said between them,
+  each within ten minutes of the last, is one line (`core/chat/rows.ts`): up to
+  four names; past that three, then everybody else as small markers with their
+  names as tooltips, and past sixteen markers the `people` mark as a small plain
+  `IconButton` that opens everybody by name (`PeopleCard`, a `Popover` over
+  it, drawn on the page's body since the rows are placed by a transform). One
+  line, ending in "…" where it runs out; never a number. It starts a group of
+  its own, so whoever speaks next is named. No actions, no hover. Somebody you
+  blocked isn't in it.
 - **Typing line**, 24px, always there, so the box never jumps.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
   then add-a-file, emoji and send (32px each). It grows with its text to
@@ -891,6 +905,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
 | Presence marks (#301): idle is the dot at half strength with no 💤, away the moon at half strength, offline the dot's outline in their color at both sizes, painted hollow at 6px and 8px at 100% and 200%; in the list an idle dot sits where any dot does, with or without a status line; an away name is grey with its message warm, and your own card stays lit | `kit.spec.ts` › idle and away are their mark at half strength; an offline dot is painted hollow; `next-list.spec.ts` › somebody idle; somebody away |
+| Somebody joining voice (#473): one grey line, the name grey too, its words where a name starts and its time showing; whoever speaks next is named; joins with nothing said between share a line; three names, sixteen markers with names, and the people mark listing everybody, on one line with no number; the same in a DM; never new, never a sound or a banner, in a room or a DM; a person's arriving and leaving chimes once a minute apiece | `next-voice-join.spec.ts`, `core/chat/rows.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `lib/gateway.voice.test.ts`, `crates/linger-server/tests/voice_join_line.rs` |
 | A room's message of the day (#464): whole under the header beside the topic, with who set it; folded to one line that stays folded after a restart and opens for a new one; `/motd` sets it for the host or a co-host, with a line over the box from `/m`, and anybody else's box says who can and keeps the words; `/motd` alone clears it; its line in the room, with no Edit; it never makes a room look new or notifies; the same on the phone; set beside the topic in Settings, sent only when changed | `next-motd.spec.ts`, `next-settings.spec.ts`, `core/chat/motd.test.ts`, `core/chat/rows.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `crates/linger-server/tests/motd.rs` |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |

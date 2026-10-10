@@ -497,6 +497,16 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub motd: Option<bool>,
+    /// `true` on the line the server writes when somebody joins the room's
+    /// voice and stays (#473): its author is who joined, its body "joined
+    /// voice". Left out on every other message, so an app that doesn't know
+    /// the field shows it as that person saying "joined voice".
+    ///
+    /// Like a message-of-the-day line it never makes a room look new, never
+    /// notifies, and can't be edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub voice_join: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

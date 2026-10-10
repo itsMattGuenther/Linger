@@ -13,6 +13,7 @@
 mod socket;
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -59,6 +60,9 @@ pub struct Gateway {
     /// connected right now, so a restart ending every call is correct rather
     /// than a gap, in the same way presence is (ARCHITECTURE §5).
     voice: DashMap<String, VoiceSeat>,
+    /// Numbers each seat as it is taken, so a seat held now can be told apart
+    /// from one the same session left and took again (#473).
+    seats: AtomicU64,
     /// The voice forwarding server, when this server runs one (#197). Set
     /// once at startup by [`Gateway::start_forwarding`]. Without it this
     /// server carries no voice at all: the mesh it used to fall back on is
@@ -72,6 +76,22 @@ struct VoiceSeat {
     room_id: RoomId,
     user_id: UserId,
     controls: Option<VoiceControls>,
+    /// Which seat this is (`Gateway::seats`). A repeated join that only
+    /// changes controls keeps it; moving or rejoining takes a new one.
+    number: u64,
+}
+
+/// What a `voice.join` did (PROTOCOL §8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VoiceJoined {
+    /// Nothing: this server carries no voice, the app can't forward, or the
+    /// room is full.
+    Refused,
+    /// The session already had its seat in that room; at most its controls
+    /// changed.
+    Again,
+    /// A new seat, numbered: somebody arrived, or moved here (#473).
+    Seated(u64),
 }
 
 /// One event on the bus, plus who it is for.
@@ -196,6 +216,7 @@ impl Gateway {
             conn_count: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
+            seats: AtomicU64::new(0),
             forwarding: OnceLock::new(),
         }
     }
@@ -421,7 +442,7 @@ impl Gateway {
 
     /// Put a session into a room's voice, taking it out of wherever it was.
     ///
-    /// Answers `false`, and changes nothing, when it can't be done: this
+    /// Answers `Refused`, and changes nothing, when it can't be done: this
     /// server carries no voice (`LINGER_VOICE_ADDRESS` isn't set), the app
     /// didn't say it can forward (one from before 0.4.1, which spoke only the
     /// mesh, gone since #306), or the room is full. The caller has already
@@ -433,12 +454,12 @@ impl Gateway {
         room_id: RoomId,
         controls: Option<VoiceControls>,
         can_forward: bool,
-    ) -> bool {
+    ) -> VoiceJoined {
         let Some(sfu) = self.forwarding.get() else {
-            return false;
+            return VoiceJoined::Refused;
         };
         if !can_forward {
-            return false;
+            return VoiceJoined::Refused;
         }
         let controls = controls.map(VoiceControls::normalized);
         if let Some(mut seat) = self.voice.get_mut(session_id) {
@@ -452,22 +473,24 @@ impl Gateway {
                 if changed {
                     self.announce_voice(room_id);
                 }
-                return true;
+                return VoiceJoined::Again;
             }
         }
         // Counted before the seat is taken, and only for a room this session is
         // not already in — otherwise re-joining the room you are in could be
         // refused by your own seat.
         if self.voice_peers(room_id).len() >= MAX_VOICE_PEERS {
-            return false;
+            return VoiceJoined::Refused;
         }
         let left = self.voice_leave(session_id);
+        let number = self.seats.fetch_add(1, Ordering::Relaxed) + 1;
         self.voice.insert(
             session_id.to_string(),
             VoiceSeat {
                 room_id,
                 user_id,
                 controls,
+                number,
             },
         );
         sfu.join(session_id, &room_id.to_string());
@@ -475,7 +498,17 @@ impl Gateway {
             self.announce_voice(previous);
         }
         self.announce_voice(room_id);
-        true
+        VoiceJoined::Seated(number)
+    }
+
+    /// Whether a session still holds the seat it took (#473): the same seat,
+    /// in the same room, never left in between. Leaving and joining again, or
+    /// moving away and back, is a different seat.
+    #[must_use]
+    pub fn holds_seat(&self, session_id: &str, room_id: RoomId, number: u64) -> bool {
+        self.voice
+            .get(session_id)
+            .is_some_and(|seat| seat.room_id == room_id && seat.number == number)
     }
 
     /// A session's answer to the forwarding server's latest offer (#197).
