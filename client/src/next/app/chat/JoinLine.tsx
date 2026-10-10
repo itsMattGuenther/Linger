@@ -17,6 +17,7 @@ import { clockTime, fullTime } from "../../../lib/time";
 import { IconButton, Marker, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { PeopleCard } from "./PeopleCard";
+import "./QuietLine.css";
 import "./JoinLine.css";
 
 /** Named when there are more than `NAMED + 1`; the rest are dots. */
@@ -48,12 +49,12 @@ export const JoinLine = memo(function JoinLine({ messages, people }: { messages:
   });
 
   return (
-    <div className="nx-join" data-join="">
-      <p className="nx-join-words">
-        <span className="nx-join-glyph">
+    <div className="nx-quiet" data-join="">
+      <p className="nx-quiet-words">
+        <span className="nx-quiet-glyph">
           <VoiceGlyph speaking={false} />
         </span>
-        <span className="nx-join-who">
+        <span className="nx-quiet-text">
           {names}
           {rest.length > 0 ? (
             <>

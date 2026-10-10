@@ -45,6 +45,7 @@ room, and a status are.
 | A user's status card | **their status** | their sign, bio, about me |
 | What a room is about | **its topic** | description, purpose |
 | A room's note on what's happening now | **its message of the day** (`/motd`) | announcement, banner |
+| A question the host or a co-host asks a room | **a poll** (`/poll`) | survey, vote, ballot |
 
 Language does more design work than features. Hold this vocabulary in the code too:
 `RoomId`, not `ChannelId`. One thing "server" is *not*: the `linger-server` binary is
@@ -931,6 +932,44 @@ People wanted the emoji they're used to from Discord, and the picker had 66.
 - **Not reactions**, while reactions are out (§4.8), and **never for sale**
   (AGENTS rule 13): no packs, no paid slots, nothing held back.
 
+### 4.18 Polls
+
+**A question the host or a co-host asks a room, answered with a click** (Matt,
+2026-10-10, #474). The first was for a WoW comeback: which faction (Horde, Alliance,
+don't care), and which kind of server. Answers in the chat get buried, and people change
+their minds two screens later; a poll is one place that shows where the room landed.
+
+- **Asking:** `/poll` in a room's own box, with the question after it if you like. Enter
+  opens a panel over the box: the question, two to ten choices, whether people can pick
+  more than one, and how long it runs (a day, three days, a week, two weeks or four; a
+  week unless changed). Nothing is posted until Post poll. Rooms only, as a message of
+  the day is.
+- **Every `/` command is the host's or a co-host's** (Matt, 2026-10-10): `/motd` and
+  `/poll` today, and any to come. Anybody else's box says who can, and Enter doesn't send
+  the words. Anything else starting with `/` is sent as typed. This isn't a level: a
+  co-host already has the host's powers in the app (§4.16), and the role matrix stays an
+  anti-goal (§2).
+- **The poll is a message** from whoever asked: a card with the question and a row per
+  choice. Each row has its share as a neutral fill behind it, never the lamp, and its
+  voters as dots in their colors, each with its person's name; past sixteen dots a
+  people mark lists everybody who picked it. **Never a number**: the dots and the fill
+  say it.
+- **Everybody in the room votes, whoever asked included**, with a click, and changes or
+  takes back their vote as often as they like until it closes. Results show before you
+  vote, and votes aren't secret: who picked what is there for the room to see, as hands
+  up around a table would be.
+- **Every poll closes.** Whoever asked can close it sooner; nobody else can, the host
+  included. Otherwise it closes on its own when its time is up, whether or not anybody is
+  online. A closed poll keeps how it came out, its winner in bold.
+- **Closing leaves a quiet line at the bottom of the room**, in the same grey as somebody
+  joining voice (§4.14): "Poll closed: “Which faction…?” Horde won. See results". After a
+  fortnight the poll itself is a long way up; See results goes to it.
+- **It calls nobody.** A new poll makes the room bold, as anything said there does, with
+  no notification and no sound, whoever it names. Votes make nothing bold. The closed
+  line doesn't either.
+- **No editing**, since votes would end up pointing at different words; deleting is as for
+  any message. The phone app has the same card; tap to vote.
+
 ---
 
 ## 5. Design system
@@ -1077,6 +1116,7 @@ says what replaced it: a status somebody typed.
 - Knock (§4.9)
 - A phone app for iPhone and Android, text first, with no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
+- Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
 
 ### V3 or never
 

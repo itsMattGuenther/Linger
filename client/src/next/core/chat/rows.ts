@@ -79,17 +79,19 @@ export function chatRows(
       continue;
     }
     const reply = message.reply_to !== null && message.deleted_at === null;
-    // A message-of-the-day line says who set it on its own line (#464), and
-    // what's said next isn't part of it, so it starts a group of its own too.
-    const motd = message.motd === true;
+    // A message-of-the-day line says who set it on its own line (#464), a
+    // poll always says who asked (#474), and a poll's closed line is a line
+    // of its own; what's said after any of them isn't part of it, so each
+    // starts a group of its own, and so does what follows.
+    const apart = message.motd === true || (message.poll != null && message.deleted_at === null) || message.poll_closed != null;
     rows.push({
       kind: "message",
       key: row.key,
       message,
-      head: row.head || reply || motd || afterLine,
+      head: row.head || reply || apart || afterLine,
       pending: waiting.has(message.id),
     });
-    afterLine = motd;
+    afterLine = apart;
   }
   return rows;
 }

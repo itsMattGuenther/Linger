@@ -11,6 +11,7 @@ import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
+import { PollClosedLine } from "./PollClosedLine";
 import { type MessageActions, MessageRow } from "./MessageRow";
 import type { CustomEmojiByName, MentionLookup } from "./MessageText";
 import "./Conversation.css";
@@ -471,6 +472,11 @@ function RowView({
       );
     case "message": {
       const { message } = row;
+      // A poll closing (#474): a quiet line saying how it came out, with a
+      // way back up to it.
+      if (message.poll_closed != null && message.deleted_at === null) {
+        return <PollClosedLine message={message} closed={message.poll_closed} onJump={actions.jumpTo} />;
+      }
       if (blocked?.has(message.author_id) && message.deleted_at === null && !shown.has(message.id)) {
         return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
       }
@@ -493,6 +499,7 @@ function RowView({
           emoji={emoji}
           mediaUrl={mediaUrl}
           actions={actions}
+          people={people}
         />
       );
     }

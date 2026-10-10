@@ -15,6 +15,7 @@ pub mod gateway;
 pub mod join_line;
 pub mod links;
 pub mod media;
+pub mod polls;
 pub mod ratelimit;
 pub mod repo;
 pub mod reset;

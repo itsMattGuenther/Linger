@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
+import type { CreatePollRequest } from "../../../generated/CreatePollRequest";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
@@ -19,6 +20,9 @@ import {
   noteDm,
   openAround,
   pinMessage,
+  askPoll,
+  closePoll,
+  votePoll,
   serverState,
   startedTyping,
   trimHistory,
@@ -300,6 +304,21 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     },
     [api],
   );
+  // A poll's votes and its close (#474): only whoever asked is offered Close.
+  const vote = useCallback(
+    async (message: Message, choices: number[]) => {
+      if (!api) throw new Error("This conversation isn't connected.");
+      await votePoll(api, message, choices).catch(rethrowInWords("Couldn't vote. Try again."));
+    },
+    [api],
+  );
+  const closeAsked = useCallback(
+    async (message: Message) => {
+      if (!api) throw new Error("This conversation isn't connected.");
+      await closePoll(api, message).catch(rethrowInWords("Couldn't close the poll. Try again."));
+    },
+    [api],
+  );
   const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
   const wantCards = useCallback(
     (urls: readonly string[]) => {
@@ -342,8 +361,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [api, host, cohosts],
   );
   const actions = useMemo(
-    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report }),
-    [save, remove, pin, download, wantCards, openPerson, report],
+    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report, vote, closePoll: closeAsked }),
+    [save, remove, pin, download, wantCards, openPerson, report, vote, closeAsked],
   );
 
   // A room's message of the day (#464): `/motd` sets it, for the host or a
@@ -361,6 +380,15 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [api, roomId],
   );
   const motdBox = useMemo(() => (isRoom ? { allowed: mayHost, set: setMotd } : undefined), [isRoom, mayHost, setMotd]);
+  // `/poll` (#474): the host or a co-host asks the room; a DM has none.
+  const startPoll = useCallback(
+    async (request: CreatePollRequest) => {
+      if (!api || roomId === null) throw new Error("This conversation isn't connected.");
+      await askPoll(api, roomId, request).catch(rethrowInWords("Couldn't post the poll."));
+    },
+    [api, roomId],
+  );
+  const pollBox = useMemo(() => (isRoom ? { allowed: mayHost, start: startPoll } : undefined), [isRoom, mayHost, startPoll]);
   // Its fold is kept on this device, so it's still folded after a restart;
   // bumped to draw a fold just made.
   const [foldings, setFoldings] = useState(0);
@@ -387,8 +415,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const composer = useMemo(
     // On the phone the cursor goes in the box when it's tapped: putting it there
     // on opening raises the keyboard over half the conversation (SPEC §4.15).
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage, motd: motdBox }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox],
+    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage, motd: motdBox, poll: pollBox }),
+    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox, pollBox],
   );
 
   const knock = useCallback(

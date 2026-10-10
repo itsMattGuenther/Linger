@@ -135,7 +135,8 @@ pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiE
          JOIN messages m ON m.rowid = message_fts.rowid
          WHERE message_fts MATCH ?
            AND m.deleted_at IS NULL
-           AND m.voice_join = 0",
+           AND m.voice_join = 0
+           AND m.poll_closed IS NULL",
     );
     // The index holds every message on the server, DMs included — it is built
     // by triggers on `messages` and has no idea what a room is. So this is the

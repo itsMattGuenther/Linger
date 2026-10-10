@@ -73,6 +73,14 @@ describe("what is worth interrupting somebody for", () => {
     expect(notifyReason(joined, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
   });
 
+  it("says nothing about a poll or a poll closing, whoever they name (#474)", () => {
+    const asked = { ...message("**Poll:** @matt which faction?"), poll: { question: "Which faction?", choices: [{ text: "Horde", voter_ids: [] }, { text: "Alliance", voter_ids: [] }], multi: false, closes_at: 9e12, closed_at: null, closed_by: null } };
+    expect(notifyReason(asked, me, [])).toBeNull();
+    expect(notifyReason(asked, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
+    const closed = { ...message("Poll closed: “@matt which faction?” Horde won."), poll_closed: { poll_id: "m1", question: "@matt which faction?", winners: ["Horde"] } };
+    expect(notifyReason(closed, me, [])).toBeNull();
+  });
+
   it("does not fire on your own message, even when you name yourself", () => {
     expect(notifyReason(message("@matt remember this", me.id), me, [])).toBeNull();
   });

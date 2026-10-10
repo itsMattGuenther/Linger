@@ -24,6 +24,7 @@ mod links;
 mod media;
 mod messages;
 mod objects;
+mod polls;
 mod reports;
 mod rooms;
 mod search;
@@ -99,6 +100,7 @@ pub fn router(state: AppState) -> Router {
         .merge(rooms::router())
         .merge(dms::router())
         .merge(messages::router())
+        .merge(polls::router())
         .merge(uploads::router())
         .merge(media::router())
         .merge(search::router())

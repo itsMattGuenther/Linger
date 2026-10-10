@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use linger_core::wire::{Message, ReactionGroup};
+use linger_core::wire::{Message, PollClosed, ReactionGroup};
 use linger_core::{MessageId, RoomId, UserId, REACTIONS};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
@@ -32,6 +32,19 @@ fn row_to_message(row: &SqliteRow) -> Result<Message, ApiError> {
         // Only ever sent as `true`: every other message leaves it out.
         motd: row.get::<bool, _>("motd").then_some(true),
         voice_join: row.get::<bool, _>("voice_join").then_some(true),
+        // `repo::polls::hydrate` fills the poll in, and the closed line's
+        // question and result; the row only says which poll a line is about.
+        poll: None,
+        poll_closed: row
+            .get::<Option<Vec<u8>>, _>("poll_closed")
+            .map(|id| MessageId::from_slice(&id))
+            .transpose()
+            .map_err(anyhow::Error::from)?
+            .map(|poll_id| PollClosed {
+                poll_id,
+                question: String::new(),
+                winners: Vec::new(),
+            }),
     })
 }
 
@@ -91,6 +104,7 @@ pub async fn by_id(
     let Some(row) = row else { return Ok(None) };
     let mut messages = vec![row_to_message(&row)?];
     hydrate_reactions(db, &mut messages).await?;
+    crate::repo::polls::hydrate(db, &mut messages).await?;
     crate::repo::attachments::hydrate(db, config, &mut messages).await?;
     Ok(messages.pop())
 }
@@ -135,6 +149,7 @@ pub async fn page(
         .map(row_to_message)
         .collect::<Result<Vec<_>, _>>()?;
     hydrate_reactions(db, &mut messages).await?;
+    crate::repo::polls::hydrate(db, &mut messages).await?;
     crate::repo::attachments::hydrate(db, config, &mut messages).await?;
     Ok(messages)
 }
@@ -189,6 +204,7 @@ pub async fn window(
         .map(row_to_message)
         .collect::<Result<Vec<_>, _>>()?;
     hydrate_reactions(db, &mut messages).await?;
+    crate::repo::polls::hydrate(db, &mut messages).await?;
     crate::repo::attachments::hydrate(db, config, &mut messages).await?;
     Ok(messages)
 }
@@ -225,6 +241,7 @@ pub async fn batch_ascending(
         .map(row_to_message)
         .collect::<Result<Vec<_>, _>>()?;
     hydrate_reactions(db, &mut messages).await?;
+    crate::repo::polls::hydrate(db, &mut messages).await?;
     crate::repo::attachments::hydrate(db, config, &mut messages).await?;
     Ok(messages)
 }

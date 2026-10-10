@@ -33,6 +33,7 @@ import type { Attachment } from "../generated/Attachment";
 import type { CreateMessageRequest } from "../generated/CreateMessageRequest";
 import type { CustomEmoji } from "../generated/CustomEmoji";
 import type { EditMessageRequest } from "../generated/EditMessageRequest";
+import type { CreatePollRequest } from "../generated/CreatePollRequest";
 import type { Message } from "../generated/Message";
 import type { MessageId } from "../generated/MessageId";
 import type { NotifyRule } from "../generated/NotifyRule";
@@ -1786,6 +1787,31 @@ export async function pinMessage(api: AuthedApi, message: Message, pinned: boole
     ...stream,
     messages: mergeMessage(stream.messages, changed),
   });
+}
+
+/**
+ * Ask a room a question (#474): the host or a co-host. The poll arrives as a
+ * frame like anything said, so nothing is put in place here.
+ */
+export async function askPoll(api: AuthedApi, roomId: RoomId, request: CreatePollRequest): Promise<void> {
+  await api.createPoll(roomId, request);
+}
+
+/** Vote in a poll, change a vote, or take it back with none (#474): the poll as it is now, here at once. */
+export async function votePoll(api: AuthedApi, message: Message, choices: number[]): Promise<void> {
+  putChanged(api, await api.vote(message.id, { choices }));
+}
+
+/** Close a poll you asked (#474): the poll as it ended, here at once; its line arrives as a frame. */
+export async function closePoll(api: AuthedApi, message: Message): Promise<void> {
+  putChanged(api, await api.closePoll(message.id));
+}
+
+/** A message the server just answered with, in place of the copy held, as a pin's is. */
+function putChanged(api: AuthedApi, changed: Message): void {
+  const stream = stateOf(api.baseUrl).streams[changed.room_id];
+  if (linkFor(api) === null || !stream) return;
+  putStream(api.baseUrl, changed.room_id, { ...stream, messages: mergeMessage(stream.messages, changed) });
 }
 
 /**

@@ -507,6 +507,83 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub voice_join: Option<bool>,
+    /// The poll this message asks (#474), left out on every other message.
+    /// Its body is the question and the choices as words, for an app that
+    /// doesn't know the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub poll: Option<Poll>,
+    /// On the line written when a poll closes (#474): which poll, and how it
+    /// came out. Its body says the same in words. Like a message-of-the-day
+    /// line it never makes a room look new, never notifies, and can't be
+    /// edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub poll_closed: Option<PollClosed>,
+}
+
+/// A poll (SPEC §4.18, #474): a question the host or a co-host asks a room,
+/// carried by the message that asks it (`Message::poll`).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Poll {
+    pub question: String,
+    /// In the order they were written. A vote names choices by their place
+    /// here, which never changes: a poll can't be edited.
+    pub choices: Vec<PollChoice>,
+    /// People may pick more than one.
+    pub multi: bool,
+    /// When it closes on its own, if nobody closes it sooner.
+    #[ts(type = "number")]
+    pub closes_at: i64,
+    /// Null while it's open.
+    #[ts(type = "number | null")]
+    pub closed_at: Option<i64>,
+    /// Who closed it, which can only be who asked. Null while it's open, and
+    /// when it closed on its own.
+    pub closed_by: Option<UserId>,
+}
+
+/// One of a poll's choices, and who picked it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PollChoice {
+    pub text: String,
+    /// Who picked it, in the order they did. Votes aren't secret. There is
+    /// no count: a client that needs one counts these (AGENTS rule 3).
+    pub voter_ids: Vec<UserId>,
+}
+
+/// The line a room gets when one of its polls closes (#474), so somebody
+/// two weeks on sees how it came out without scrolling back to it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PollClosed {
+    /// The poll's message, to jump to.
+    pub poll_id: MessageId,
+    pub question: String,
+    /// The choice, or the choices tied, with the most votes. Empty when
+    /// nobody voted.
+    pub winners: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CreatePollRequest {
+    pub question: String,
+    /// Two to ten, each said once.
+    pub choices: Vec<String>,
+    pub multi: bool,
+    /// How long until it closes on its own: one of `POLL_DAYS`.
+    pub closes_in_days: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct VoteRequest {
+    /// The places of the choices picked, replacing any vote before. Empty
+    /// takes the vote back; at most one unless the poll is pick-any.
+    pub choices: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

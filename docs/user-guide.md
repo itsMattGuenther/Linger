@@ -478,6 +478,29 @@ words, then Enter. `/motd` on its own clears it. Setting it puts a line in the
 room saying so, which can't be edited. It's also beside the topic in
 **Settings → Hosting → Rooms**. It can be up to 300 characters.
 
+**Polls.** The host or a co-host can ask a room a question, like *"Which faction
+are we rolling?"*, and everybody votes with a click. Type `/poll` in the room's
+box, with the question after it if you like, and press Enter. A panel opens for
+the question and two to ten choices. Switch on **People can pick more than one**
+if they can, pick how long it runs (a day up to four weeks; a week to start
+with), and press **Post poll**.
+
+The poll sits in the room like a message. Click a choice to vote; click another
+to change your mind, or yours again to take it back, any time until it closes.
+Everybody can see where the votes are as they come in, and who picked what: each
+voter is a small dot in their color, with their name when you point at it, and a
+shaded bar behind each choice shows its share. Past sixteen voters, the people
+icon at the end lists everybody.
+
+Every poll closes on its own when its time is up. Whoever asked can close it
+sooner with **Close poll**; nobody else can. When it closes, a small grey line at
+the bottom of the room says how it came out (*"Poll closed: “Which faction…?”
+Horde won."*), and **See results** takes you up to it. A poll can't be edited.
+None of this notifies anybody: a new poll makes the room bold, like anything said
+there, and that's all.
+
+Only the host and co-hosts have `/` commands. Anybody else sees who can.
+
 ## Sharing files
 
 Three ways, all the same thing: the **+** in the message box, drag a file onto

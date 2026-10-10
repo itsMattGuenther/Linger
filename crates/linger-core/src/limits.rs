@@ -46,6 +46,20 @@ pub const VOICE_JOIN_LINE_AFTER_MS: u64 = 10_000;
 /// can't fill a room with lines.
 pub const VOICE_JOIN_LINE_EVERY_MS: i64 = 10 * 60 * 1000;
 
+/// A poll's question, chars after trim (PROTOCOL §4, #474): as long as a
+/// message of the day, since it is read whole at the top of the card.
+pub const MAX_POLL_QUESTION_CHARS: usize = 300;
+/// One of a poll's choices, chars after trim: a row's worth.
+pub const MAX_POLL_CHOICE_CHARS: usize = 80;
+/// A poll has at least two choices, or there is nothing to choose.
+pub const MIN_POLL_CHOICES: usize = 2;
+/// And at most ten, so the card stays a card.
+pub const MAX_POLL_CHOICES: usize = 10;
+/// How long a poll may run before it closes on its own, in days: a day, three,
+/// a week (the app's default), two weeks or four (Matt, 2026-10-10). Every
+/// poll closes.
+pub const POLL_DAYS: [u32; 5] = [1, 3, 7, 14, 28];
+
 /// Link cards and the media grid (SPEC §4.4/§5.6, PROTOCOL §6).
 ///
 /// A message with a dozen URLs in it is a link dump, and the stream renders one
@@ -189,6 +203,9 @@ pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
 /// offer wants an answer; a limit tight enough to be interesting would break
 /// an ordinary evening.
 pub const RATE_VOICE_SIGNAL: (u32, u64) = (300, 10);
+/// Votes per person (#474): plenty for changing your mind, too few to make a
+/// room's every app redraw a poll many times a second.
+pub const RATE_POLL_VOTE: (u32, u64) = (20, 10);
 /// Read-marker updates are debounced client-side to once per 5s per room.
 pub const READ_MARKER_DEBOUNCE_MS: u64 = 5_000;
 
