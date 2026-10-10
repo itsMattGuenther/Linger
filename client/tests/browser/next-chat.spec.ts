@@ -947,3 +947,39 @@ test.describe("a file to download", () => {
     await expect(card(page).getByRole("alert")).toBeVisible();
   });
 });
+
+// An app, not a page (#483): the conversation is words to select, with who
+// said them; the interface around it isn't. Select-all with the log focused
+// is the widest selection a person can make.
+test.describe("what can be selected", () => {
+  test.beforeEach(async ({ page }) => open(page));
+
+  const selected = (page: Page) => page.evaluate(() => String(getSelection()));
+
+  test("select-all takes the messages and who wrote them, and none of the interface around them", async ({ page }) => {
+    const name = (await log(page).locator(".nx-msg-who").last().innerText()).trim();
+    const title = (await page.locator(".nx-pane-title").first().innerText()).trim();
+    await log(page).focus();
+    await page.keyboard.press("ControlOrMeta+a");
+    const words = await selected(page);
+    expect(words).toContain("drop into voice");
+    expect(words).toContain(name);
+    expect(words).not.toContain(title);
+    expect(words).not.toContain("›");
+  });
+
+  test("a drag across the header selects nothing", async ({ page }) => {
+    const head = (await page.locator(".nx-pane-head").first().boundingBox())!;
+    await page.mouse.move(head.x + 4, head.y + head.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(head.x + head.width - 4, head.y + head.height / 2, { steps: 8 });
+    await page.mouse.up();
+    expect((await selected(page)).trim()).toBe("");
+  });
+
+  test("what you type is still yours to select", async ({ page }) => {
+    await box(page).fill("a draft to select");
+    await page.keyboard.press("ControlOrMeta+a");
+    expect(await box(page).evaluate((node) => (node instanceof HTMLTextAreaElement ? [node.selectionStart, node.selectionEnd] : null))).toEqual([0, 17]);
+  });
+});

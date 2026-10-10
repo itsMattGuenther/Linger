@@ -23,6 +23,17 @@
   padding: 0 var(--space-1) 0 var(--space-2);
   border-radius: var(--radius-sm);
   transition: background var(--duration-slow) var(--ease-out);
+  /* The conversation is words to select (#483), with who said them and
+     when, so a few messages copy as they read. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The name opens their card, and is still part of the words, as in most
+   chat apps; a copy carries it. */
+.nx-msg-person {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .nx-msg[data-head="yes"] {
@@ -281,7 +292,7 @@ button.nx-quote:hover {
 
 /* On the phone a message is held for its actions (its sheet has Copy text),
    so holding it doesn't start selecting its words. */
-:root[data-shell="phone"] .nx-msg {
+:root[data-shell="phone"] :is(.nx-msg, .nx-msg-person) {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;

@@ -56,6 +56,15 @@ Then open <http://localhost:1431/tests/fixtures/kit.html>.
 8. **Check it where it runs.** The desktop app draws with WebKitGTK on Linux,
    not Chromium. A piece is not done until it has been seen there (see the end
    of this page).
+9. **An app, not a page.** As in most desktop apps, the interface isn't text
+   you can select: names in the list, labels, tabs, titles, buttons (#483).
+   `base.css` turns selecting off for everything, and opts back in what
+   somebody would copy somewhere else: the conversation (its words, and who
+   wrote them and when), a person's card (their status and fields), the
+   message of the day,
+   anything typed, an error (`role="alert"`), and a link meant for copying. A
+   new part stays unselectable unless it is one of those. On the phone a
+   message stays unselectable too, since holding it opens its actions.
 
 ## Tokens
 

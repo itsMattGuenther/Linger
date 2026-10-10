@@ -11,6 +11,12 @@
 }
 
 /* The pin sits on the first line of words, and the arrow lines up with it. */
+/* The message itself is words to select, as a message is (#483). */
+.nx-motd-words {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .nx-motd > .k-icon {
   margin-top: var(--space-2-5);
   color: var(--icon-muted);

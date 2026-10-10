@@ -58,6 +58,14 @@ test("shows whole under the room's header, beside the topic, with who set it", a
   expect(note && log && note.y + note.height <= log.y + 1).toBe(true);
 });
 
+// Its words can be selected and copied, as a message's can (#483).
+test("its words can be selected", async ({ page }) => {
+  await open(page, "&motd");
+  await openGeneral(page);
+  await strip(page).getByText(ELIS).click({ clickCount: 3 });
+  expect(await page.evaluate(() => String(getSelection()))).toContain(ELIS);
+});
+
 test("folds to one line, and stays folded after the app is closed and opened again", async ({ page }) => {
   await open(page, "&motd");
   await openGeneral(page);
