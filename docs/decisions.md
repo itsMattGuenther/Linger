@@ -860,6 +860,22 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
   a pause is bit-for-bit what it would have been with silence sent, and concealing or
   resetting before it only made it worse), and silence detection doesn't cut off the
   start of words. Lateness was what was left.
+  **That was wrong, and the real cause was ours** (#470, 2026-10-10). Matt: it was
+  everybody, at the start of every sentence, on wired fiber too, and never on Discord.
+  The head start was added wherever the last frame was quiet, and the first syllable of
+  nearly every sentence is quiet (below `level::THRESHOLD`, about −36 dBFS). The output
+  device takes its chunks on its own clock (PipeWire 512 samples, against 960 a frame), so
+  every so often it had taken a little more than a frame's worth when the next frame came;
+  that frame found the queue just under the head start and was given silence first. A
+  millisecond or several of nothing, cut into the rising voice, frame after frame until it
+  was loud: the crackle, on a perfect connection. Measured with real speech through the
+  live encoder and the real queue and output callback: 13 to 51 cuts across six sentences
+  before, depending on the device's chunk, and none after. Silence is now added only where
+  there is silence already: before somebody's first frame, after a pause by their own
+  clock, after nothing to play for longer than any frame is late, or once the queue has
+  run dry, and then it is topped up behind the gap, so it can't run dry frame after frame.
+  Never because a frame sounded quiet. The learned head start, the fades and the gap log
+  from the first attempt stay: they answer real lateness, which still happens.
 - **60 a room**, and the answer to the server's offer may be 128 KB: it grows a few
   hundred bytes for every other person, and at 50 a stand-in's was 42 KB, past the old
   16 KB, which would have shut the last people into a raid out.
