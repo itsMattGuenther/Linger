@@ -58,6 +58,9 @@
   font-style: italic;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+  /* Their own words, to select and copy (#483). */
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .nx-person-status[data-away="yes"] {

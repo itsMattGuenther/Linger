@@ -107,6 +107,9 @@ test("a send the server refuses says why and keeps the words", async ({ page }) 
   await page.keyboard.press("Enter");
   await expect(page.getByText("The server is busy. Try again in a moment.")).toBeVisible();
   await expect(box(page)).toHaveValue("is this thing on");
+  // The words can be selected, to paste into a report (#483).
+  await page.getByRole("alert").filter({ hasText: "The server is busy" }).click({ clickCount: 3 });
+  expect(await page.evaluate(() => String(getSelection()))).toContain("The server is busy");
 });
 
 test("a name in a conversation opens that person's card beside it; Escape gives the name the keyboard back", async ({ page }) => {
@@ -763,4 +766,17 @@ test("says so when the list window doesn't answer, and asks again when told to",
   await page.evaluate(() => window.owner?.wake());
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
+});
+
+// A name opens its person's card, and is still part of the conversation's
+// words, so copying a few messages says who wrote them (#483).
+test("select-all in a conversation carries who wrote each message, though a name is also a button", async ({ page }) => {
+  await open(page);
+  const row = page.locator(".nx-msg[data-head='yes']", { has: page.locator(".nx-msg-person", { hasText: "Eli" }) }).last();
+  await still(row);
+  const first = (await row.locator(".nx-text").innerText()).trim().slice(0, 20);
+  await page.getByRole("log").focus();
+  await page.keyboard.press("ControlOrMeta+a");
+  const selected = await page.evaluate(() => String(getSelection()));
+  expect(selected).toMatch(new RegExp(`Eli\\s+${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 });

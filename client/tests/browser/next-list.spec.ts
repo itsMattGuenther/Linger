@@ -1396,3 +1396,32 @@ test.describe("one line per person (#197)", () => {
     expect(new Set(heights)).toEqual(new Set([48]));
   });
 });
+
+// An app, not a page (#483): the list isn't words to select; what somebody
+// wrote on their card is.
+test.describe("what can be selected", () => {
+  const selected = (page: Page) => page.evaluate(() => String(getSelection()));
+
+  test("select-all and a drag down the list select nothing", async ({ page }) => {
+    await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+    await page.keyboard.press("ControlOrMeta+a");
+    expect((await selected(page)).trim()).toBe("");
+    await page.evaluate(() => getSelection()?.removeAllRanges());
+    const people = (await page.getByRole("list", { name: "People here" }).boundingBox())!;
+    await page.mouse.move(people.x + 2, people.y - 12);
+    await page.mouse.down();
+    await page.mouse.move(people.x + people.width - 8, people.y + people.height - 4, { steps: 8 });
+    await page.mouse.up();
+    expect((await selected(page)).trim()).toBe("");
+  });
+
+  test("what somebody wrote on their card can be selected: their status and their fields", async ({ page }) => {
+    await openCard(page, "Away", "Sam");
+    await page.getByRole("dialog", { name: "Sam" }).getByText("back after work").click({ clickCount: 3 });
+    expect(await selected(page)).toContain("back after work");
+    await page.goto("/tests/fixtures/next-list.html?fields");
+    await openCard(page, "People here", "Jules");
+    await page.getByRole("dialog", { name: "Jules" }).locator("dd").first().click({ clickCount: 3 });
+    expect(await selected(page)).toContain("Khruangbin");
+  });
+});

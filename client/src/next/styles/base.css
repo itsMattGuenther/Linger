@@ -25,6 +25,32 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* An app, not a page (#483): as in most desktop apps, the interface isn't
+   text you can select. What is opts back in: anything you type, an error you
+   might paste into a report, and, in their own styles, the conversation,
+   what somebody wrote on their card, the message of the day and a link meant
+   for copying.
+   A button is never words, wherever it sits. A text box opts back in for
+   WebKit on a phone, which won't otherwise put a caret in one inside an
+   unselectable page. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+[role="alert"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 button,
 input,
 select,
