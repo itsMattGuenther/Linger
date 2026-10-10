@@ -34,6 +34,10 @@
   height: var(--control-md);
   color: var(--text-accent);
   font: var(--text-body) / var(--line-body) var(--font-label);
+  /* A mark, not words: a selection dragged down from the messages stops
+     short of it, and a copy never carries it (#478). */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .nx-composer-input {
