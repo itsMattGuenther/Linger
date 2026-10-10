@@ -50,7 +50,6 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
-use crate::voice::level;
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -417,10 +416,40 @@ struct Lane {
     /// Your volume for them. Applied on the way in, so the callback only
     /// ever sums.
     gain: f32,
-    /// Whether the last frame they sent was quiet: a pause, where silence
-    /// can be added without anybody hearing it (`CUSHION_MS`, #462). True
-    /// before their first.
-    quiet: bool,
+    /// Nothing of theirs has played yet, or the device just changed: their
+    /// next frame starts a sentence (`CUSHION_MS`, #462).
+    fresh: bool,
+    /// How many samples the output callback wanted from this lane and found
+    /// nothing, since their last frame arrived. Counted by `mix`.
+    starved: usize,
+    /// Whether their app sent nothing for a stretch before the next frame,
+    /// by its own clock (`Sink::resume`): a gap before it is a pause, not a
+    /// frame arriving late.
+    skipped: bool,
+    /// The last sample this lane played. While the lane is empty `mix` eases
+    /// it to zero, so running dry in the middle of a word fades over a
+    /// millisecond or two instead of stopping dead: a click (#462).
+    tail: i32,
+    /// What was queued ahead of the first frame since their last pause, in
+    /// samples: where each frame after it would find the queue if it came
+    /// exactly on time.
+    ahead: usize,
+    /// How late their frames have come lately, in milliseconds, against the
+    /// first of their sentence (#462): the latest one at once, then easing
+    /// down while frames come on time. Their next sentence starts this far
+    /// behind, and `SPARE_MS` more. Kept across pauses, since the queue
+    /// that used to remember it now empties in every one.
+    late_ms: f32,
+}
+
+/// A frame that arrived after its lane had run dry in the middle of a
+/// sentence: what was heard was a gap.
+#[derive(Debug, PartialEq)]
+struct Hole {
+    /// How long there was nothing to play.
+    ms: u32,
+    /// What their next sentence starts with now.
+    head_start_ms: u32,
 }
 
 impl Lane {
@@ -429,29 +458,81 @@ impl Lane {
             queue: VecDeque::new(),
             resampler: (rate != SAMPLE_RATE).then(|| Linear::new(SAMPLE_RATE, rate)),
             gain: 1.0,
-            quiet: true,
+            fresh: true,
+            starved: 0,
+            skipped: false,
+            tail: 0,
+            ahead: 0,
+            late_ms: 0.0,
         }
+    }
+
+    /// How far behind a sentence of theirs starts: as late as their frames
+    /// have come, and a little more, within `CUSHION_MS..=MOST_CUSHION_MS`.
+    fn head_start_ms(&self) -> u32 {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let late = self.late_ms.ceil() as u32;
+        late.saturating_add(SPARE_MS)
+            .clamp(CUSHION_MS, MOST_CUSHION_MS)
     }
 
     /// Queue one decoded frame for the output callback, at `rate`.
     ///
-    /// In a pause it first tops the queue up to `CUSHION_MS` of silence, so
-    /// the next word starts with a little held back (#462). Apps from 0.4.9
-    /// send nothing while their person is quiet (#197), so without this
-    /// every sentence would start from an empty queue, and the first packet
-    /// to arrive a few milliseconds late would leave a hole in its first
-    /// word: a crackle. Whether it's a pause is judged by the sound, not by
-    /// timing: silence after a quiet frame can't be heard, silence inside a
-    /// word can, so in the middle of a word nothing is added.
-    fn feed(&mut self, samples: &[i16], rate: u32) {
+    /// A sentence starts a little behind (#462): its first frame tops the
+    /// queue up with silence, so a frame arriving late doesn't leave a hole
+    /// in the first word. Apps from 0.4.9 send nothing while their person is
+    /// quiet (#197), so every sentence starts from an empty queue. How far
+    /// behind is learned from how late this person's frames have come
+    /// (`late_ms`), since a fixed amount is right for one connection and too
+    /// little for the next.
+    ///
+    /// **Silence is only added where there is silence already** (#470):
+    /// before their first frame, after a pause their app reported by its own
+    /// clock (`skipped`), after nothing to play for longer than any frame is
+    /// late (`PAUSE_MS`), or once the queue has run dry. Never because the
+    /// last frame sounded quiet: the first syllable of nearly every sentence
+    /// is quiet, and silence cut into the middle of it, a few milliseconds at
+    /// a time, was the crackle at the start of every sentence, for everyone,
+    /// on any connection.
+    ///
+    /// A frame arriving after the lane ran dry in the middle of a sentence
+    /// is answered with the [`Hole`], so it can be told. The gap has been
+    /// heard already, and the voice faded out into it, so the queue is topped
+    /// up behind it: one gap, then the voice fading back in, rather than a
+    /// queue that runs dry again frame after frame.
+    fn feed(&mut self, samples: &[i16], rate: u32) -> Option<Hole> {
         let per_ms = (rate / 1000) as usize;
-        let cushion = per_ms * CUSHION_MS as usize;
-        if self.quiet && self.queue.len() < cushion {
-            self.queue.resize(cushion, 0);
+        let waited = std::mem::take(&mut self.starved);
+        let skipped = std::mem::take(&mut self.skipped);
+        let fresh = std::mem::take(&mut self.fresh);
+        let mut hole = None;
+        if fresh || (skipped && waited > 0) || waited >= per_ms * PAUSE_MS as usize {
+            self.top_up(per_ms);
+        } else if skipped {
+            // A pause shorter than what was still queued: their voice runs
+            // straight on, so nothing is added, and there's nothing to learn
+            // from a gap that isn't lateness. Frames after it are on time
+            // against where this one lands.
+            self.ahead = self.queue.len();
+        } else {
+            // Below zero: nothing was left, for that long.
+            #[allow(clippy::cast_possible_wrap)]
+            let left = self.queue.len() as i64 - waited as i64;
+            #[allow(clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+            let late = (self.ahead as i64 - left) as f32 / per_ms as f32;
+            self.late_ms = if late > self.late_ms {
+                late
+            } else {
+                (self.late_ms - EASE_MS_PER_FRAME).max(0.0)
+            };
+            if waited > 0 {
+                hole = Some(Hole {
+                    ms: u32::try_from(waited / per_ms).unwrap_or(u32::MAX),
+                    head_start_ms: self.head_start_ms(),
+                });
+                self.top_up(per_ms);
+            }
         }
-        // Judged before your volume for them: somebody you've turned down
-        // isn't in a pause all the time.
-        self.quiet = level::rms(samples) < level::THRESHOLD;
         let scaled;
         let samples = if (self.gain - 1.0).abs() < f32::EPSILON {
             samples
@@ -459,6 +540,7 @@ impl Lane {
             scaled = scale(samples, self.gain);
             &scaled
         };
+        let start = self.queue.len();
         match self.resampler.as_mut() {
             Some(resampler) => {
                 let mut out = Vec::with_capacity(samples.len());
@@ -467,17 +549,46 @@ impl Lane {
             }
             None => self.queue.extend(samples),
         }
+        if hole.is_some() {
+            // From where the fade out had got to, so neither edge is a step.
+            let fade = per_ms * FADE_MS as usize;
+            let from = self.tail as f32;
+            for (i, sample) in self.queue.range_mut(start..).take(fade).enumerate() {
+                #[allow(clippy::cast_precision_loss)]
+                let new = i as f32 / fade as f32;
+                #[allow(clippy::cast_possible_truncation)]
+                let eased = (from * (1.0 - new) + f32::from(*sample) * new) as i16;
+                *sample = eased;
+            }
+        }
         let cap = per_ms * MAX_QUEUED_MS as usize;
         while self.queue.len() > cap {
             self.queue.pop_front();
         }
+        hole
+    }
+
+    /// Silence up to this person's head start, where a sentence starts or
+    /// after a gap already heard; never in the middle of their voice.
+    fn top_up(&mut self, per_ms: usize) {
+        let cushion = per_ms * self.head_start_ms() as usize;
+        if self.queue.len() < cushion {
+            self.queue.resize(cushion, 0);
+        }
+        self.ahead = self.queue.len();
     }
 
     /// The device changed: what was queued was for the old one, at the old
-    /// rate. Your volume for this person is not about the device, so it stays.
+    /// rate. Your volume for this person is not about the device, so it
+    /// stays, and nor is how late their frames come. What comes next starts
+    /// as a sentence does: there's nothing left for it to follow on from.
     fn retune(&mut self, rate: u32) {
         self.queue.clear();
         self.resampler = (rate != SAMPLE_RATE).then(|| Linear::new(SAMPLE_RATE, rate));
+        self.fresh = true;
+        self.starved = 0;
+        self.skipped = false;
+        self.tail = 0;
     }
 }
 
@@ -658,34 +769,77 @@ fn open_output(
 }
 
 /// How far behind playback is allowed to fall before old audio is thrown
-/// away: 200 ms. Past that, a queue is not absorbing jitter, it is adding
-/// delay to every word from here on.
-const MAX_QUEUED_MS: u32 = 200;
+/// away: 250 ms. Past that, a queue is not absorbing jitter, it is adding
+/// delay to every word from here on. Room for a burst of frames on top of
+/// the most a sentence starts behind (`MOST_CUSHION_MS`), so frames that
+/// arrive together aren't cut; a pause empties the queue again anyway.
+const MAX_QUEUED_MS: u32 = 250;
 
-/// How much of somebody's voice is held back when they start talking after
-/// a pause (#462): enough for a packet arriving late on home internet or
+/// The least of somebody's voice held back when they start talking after a
+/// pause (#462): enough for a packet arriving late on home internet or
 /// Wi-Fi, or an output device that asks for its next chunk early, without
 /// leaving a hole in the first word. Before 0.4.9 the queue kept whatever
-/// slack it built up over a call, since silence was sent too; 60 ms is less
-/// than that usually came to, and is added only once per sentence.
+/// slack it built up over a call, since silence was sent too. A person
+/// whose frames come later than this gets more (`Lane::late_ms`).
 const CUSHION_MS: u32 = 60;
+
+/// The most a sentence starts behind, however late somebody's frames have
+/// come: past this, a voice is late enough to talk over (#462).
+const MOST_CUSHION_MS: u32 = 150;
+
+/// How much more than their latest late frame a sentence starts behind: a
+/// frame later still than any yet, and the output device taking its next
+/// chunk early (#462).
+const SPARE_MS: u32 = 20;
+
+/// How fast what was learned about late frames is let go while frames come
+/// on time: 2 ms for every second of their voice, so a frame 100 ms late is
+/// forgotten after about a minute of their talking, and a connection that's
+/// late every few seconds never is (#462).
+const EASE_MS_PER_FRAME: f32 = 0.04;
+
+/// How long a lane can have nothing to play before it counts as a pause
+/// rather than a late frame (#462): longer than a sentence ever starts
+/// behind, and a frame later than that is lost to the listener anyway.
+const PAUSE_MS: u32 = 250;
+
+/// How long a voice fades back in over, after its lane ran dry in the
+/// middle of a word (#462).
+const FADE_MS: u32 = 3;
 
 #[async_trait]
 impl Sink for Speaker {
     async fn play(&self, peer: &str, samples: &[i16]) {
         let rate = self.rate.load(Ordering::Relaxed);
-        let mut lanes = lock(&self.lanes);
-        if self.deafened.load(Ordering::Relaxed) {
-            return;
+        let hole = {
+            let mut lanes = lock(&self.lanes);
+            if self.deafened.load(Ordering::Relaxed) {
+                return;
+            }
+            lanes
+                .entry(peer.to_string())
+                .or_insert_with(|| Lane::new(rate))
+                .feed(samples, rate)
+        };
+        // Said once the output callback can have the lanes again. What a
+        // real call's gaps were is what tells whether the head start is
+        // enough (#462); it goes nowhere but this app's own output.
+        if let Some(hole) = hole {
+            eprintln!(
+                "voice: {peer}: {} ms with nothing to play mid-sentence; next sentence starts {} ms behind",
+                hole.ms, hole.head_start_ms
+            );
         }
-        lanes
-            .entry(peer.to_string())
-            .or_insert_with(|| Lane::new(rate))
-            .feed(samples, rate);
     }
 
     async fn forget(&self, peer: &str) {
         lock(&self.lanes).remove(peer);
+    }
+
+    async fn resume(&self, peer: &str) {
+        if let Some(lane) = lock(&self.lanes).get_mut(peer) {
+            lane.skipped = true;
+        }
     }
 
     async fn set_deafened(&self, deafened: bool) {
@@ -737,7 +891,9 @@ fn scale(samples: &[i16], gain: f32) -> Vec<i16> {
 
 /// The output callback: one sample from every lane and from Linger's own
 /// sounds, summed, into every channel of the device. A lane with nothing
-/// queued contributes silence, which is what a pause between words is.
+/// queued contributes silence, which is what a pause between words is, once
+/// its last sample has eased to zero: a lane that runs dry mid-word fades
+/// out rather than clicks (#462), and says how long it waited (`starved`).
 /// Deafened, the voices are silent and the sounds still play (#250).
 fn mix<T: Copy>(
     lanes: &Mutex<HashMap<String, Lane>>,
@@ -755,8 +911,14 @@ fn mix<T: Copy>(
         if voices {
             for lane in lanes.values_mut() {
                 if let Some(sample) = lane.queue.pop_front() {
-                    acc += i32::from(sample);
+                    lane.tail = i32::from(sample);
+                } else {
+                    lane.starved = lane.starved.saturating_add(1);
+                    // About a millisecond and a half to fall by two thirds,
+                    // and always a step nearer zero.
+                    lane.tail = lane.tail * 63 / 64;
                 }
+                acc += lane.tail;
             }
         }
         #[allow(clippy::cast_possible_truncation)]
@@ -1581,13 +1743,12 @@ mod tests {
                 peer.to_string(),
                 Lane {
                     queue: VecDeque::from(vec![level, -level, 100]),
-                    resampler: None,
-                    gain: 1.0,
-                    quiet: false,
+                    fresh: false,
+                    ..Lane::new(SAMPLE_RATE)
                 },
             );
         }
-        let mut out = [0i16; 8];
+        let mut out = [0i16; 2 * 960];
         mix(
             &lanes,
             &Mutex::default(),
@@ -1603,9 +1764,10 @@ mod tests {
         assert_eq!(out[3], i16::MIN);
         assert_eq!(out[4], 200);
         assert_eq!(out[5], 200);
-        // Both lanes ran dry: silence, not a stale sample.
-        assert_eq!(out[6], 0);
-        assert_eq!(out[7], 0);
+        // Both lanes ran dry: their last sample eases away (#462), and is
+        // silence well before the frame is out, not a stale sample.
+        assert!(out[6] > 0 && out[6] < 200, "{}", out[6]);
+        assert_eq!(out[out.len() - 2..], [0, 0]);
     }
 
     /// Play `ms` of what the lanes hold, as the output callback would.
@@ -1664,8 +1826,68 @@ mod tests {
         );
     }
 
+    /// A sentence rises from quiet into its first loud syllable, its frames
+    /// arriving one after another while the device takes its own chunks,
+    /// which never line up with them (PipeWire's are 512 samples, a frame is
+    /// 960). Nothing may be put between those frames (#470): until then, a
+    /// frame that followed a quiet one found the queue a little under its
+    /// head start whenever the device had taken more than a frame's worth,
+    /// and was given silence first, a few milliseconds at a time, cut into
+    /// the rising voice. That was the crackle at the start of every
+    /// sentence, for everybody, on any connection.
+    #[test]
+    fn a_sentence_rising_from_quiet_is_never_cut_with_silence() {
+        let lanes = Mutex::new(HashMap::from([("a".to_string(), Lane::new(SAMPLE_RATE))]));
+        // Never zero inside a frame, so any zero heard after the first sample
+        // of the sentence is silence that was added. The first four are below
+        // the level the old rule called quiet.
+        let frames: Vec<Vec<i16>> = (0..12i16)
+            .map(|n| {
+                let level = if n < 4 { 200 + 60 * n } else { 4000 };
+                (0..FRAME_SAMPLES)
+                    .map(|i| if i % 2 == 0 { level } else { -level })
+                    .collect()
+            })
+            .collect();
+        let chunk = 512;
+        let mut heard = Vec::new();
+        let mut next = 0;
+        let mut pull = chunk / 4;
+        while pull < 16 * FRAME_SAMPLES {
+            while next < frames.len() && next * FRAME_SAMPLES <= pull {
+                let _ = lock(&lanes)
+                    .get_mut("a")
+                    .expect("lane")
+                    .feed(&frames[next], SAMPLE_RATE);
+                next += 1;
+            }
+            let mut out = vec![0i16; chunk];
+            mix(
+                &lanes,
+                &Mutex::default(),
+                &AtomicBool::new(false),
+                1,
+                &mut out,
+                |s| s,
+            );
+            heard.extend(out);
+            pull += chunk;
+        }
+        let start = heard
+            .iter()
+            .position(|&s| s != 0)
+            .expect("the sentence played");
+        let sent = frames.concat();
+        assert_eq!(
+            heard[start..start + sent.len()],
+            sent[..],
+            "silence was cut into the sentence"
+        );
+    }
+
     /// In the middle of a word nothing is added: silence there would be
-    /// heard. A late packet mid-word is what it was before 0.4.9.
+    /// heard. A packet late mid-word is a gap, faded, and teaches the next
+    /// sentence to start further behind.
     #[test]
     fn nothing_is_added_in_the_middle_of_a_word() {
         let mut lane = Lane::new(SAMPLE_RATE);
@@ -1675,11 +1897,11 @@ mod tests {
         assert_eq!(lane.queue.len(), FRAME_SAMPLES);
     }
 
-    /// A pause from an app that still sends its silence, or the quiet frames
-    /// an app eases out with, keep the cushion topped up and never grow it:
-    /// a voice is never further behind than the cushion and a frame.
+    /// A voice that keeps coming, silence from an app that still sends it
+    /// included, keeps the head start it started with and never grows it: a
+    /// voice is never further behind than the cushion and a frame.
     #[test]
-    fn quiet_frames_keep_the_cushion_and_never_grow_it() {
+    fn a_voice_that_keeps_coming_keeps_its_head_start_and_never_grows_it() {
         let mut lane = Lane::new(SAMPLE_RATE);
         let cushion = (SAMPLE_RATE / 1000 * CUSHION_MS) as usize;
         for _ in 0..50 {
@@ -1689,15 +1911,161 @@ mod tests {
         }
     }
 
+    /// One sentence of words from "friend", the nth due n × 20 ms after the
+    /// first and arriving `late[n]` ms after that, played out a millisecond
+    /// at a time. A frame can't overtake the one before it, so the ones
+    /// behind a late one come with it, as they do when Wi-Fi stalls. Then
+    /// the pause after it. Answers the holes told.
+    fn sentence(
+        lanes: &Mutex<HashMap<String, Lane>>,
+        late: &[usize],
+        heard: &mut Vec<i16>,
+    ) -> Vec<Hole> {
+        let mut holes = Vec::new();
+        let mut now = 0;
+        let mut at = 0;
+        for (n, late) in late.iter().enumerate() {
+            at = (n * 20 + late).max(at);
+            while now < at {
+                listen(lanes, 1, heard);
+                now += 1;
+            }
+            holes.extend(
+                lock(lanes)
+                    .get_mut("friend")
+                    .unwrap()
+                    .feed(&word(), SAMPLE_RATE),
+            );
+        }
+        listen(lanes, 1000, heard);
+        holes
+    }
+
+    /// Whether the sentence just heard played without a gap: every sample
+    /// from its first to its last is the word.
+    fn unbroken(heard: &[i16]) -> bool {
+        let first = heard.iter().position(|s| *s == 4000).unwrap();
+        let last = heard.iter().rposition(|s| *s == 4000).unwrap();
+        heard[first..=last].iter().all(|s| *s == 4000)
+    }
+
+    /// Somebody whose frames come 100 ms late now and then (#462): more
+    /// than the least head start covers, so the first sentence it happens
+    /// in has a gap. Their next sentence starts far enough behind for it,
+    /// though their app sent nothing in the pause between.
+    #[test]
+    fn a_late_frame_teaches_their_next_sentence_to_start_further_behind() {
+        let lanes = Mutex::new(HashMap::from([(
+            "friend".to_string(),
+            Lane::new(SAMPLE_RATE),
+        )]));
+        let stall = [0, 0, 100, 100, 100, 0, 0, 0, 0, 0];
+        let mut heard = Vec::new();
+        let holes = sentence(&lanes, &stall, &mut heard);
+        assert_eq!(
+            holes,
+            [Hole {
+                ms: 40,
+                head_start_ms: 120
+            }]
+        );
+        assert!(!unbroken(&heard));
+        let mut heard = Vec::new();
+        assert_eq!(sentence(&lanes, &stall, &mut heard), []);
+        assert!(unbroken(&heard), "the second sentence had a gap too");
+    }
+
+    /// What was learned is let go while their frames come on time, back
+    /// to the least head start and never under it; and however late they
+    /// come, a sentence starts no more than `MOST_CUSHION_MS` behind.
+    #[test]
+    fn the_head_start_eases_back_and_has_a_ceiling() {
+        let lanes = Mutex::new(HashMap::from([(
+            "friend".to_string(),
+            Lane::new(SAMPLE_RATE),
+        )]));
+        let mut heard = Vec::new();
+        sentence(&lanes, &[0, 0, 200, 0], &mut heard);
+        assert_eq!(lock(&lanes)["friend"].head_start_ms(), MOST_CUSHION_MS);
+        // Two minutes of talking, every frame on time.
+        sentence(&lanes, &[0; 6000], &mut heard);
+        assert_eq!(lock(&lanes)["friend"].head_start_ms(), CUSHION_MS);
+    }
+
+    /// Somebody talking over a loud room never sends a quiet frame, so
+    /// their pause can't be told by the sound. Their app's own clock says
+    /// it skipped frames (`Sink::resume`), and when their lane had run dry
+    /// their next frame starts behind like any sentence and teaches nothing.
+    /// With their voice still playing it carries straight on.
+    #[test]
+    fn a_pause_over_a_loud_room_is_a_pause_by_their_own_clock() {
+        let mut lane = Lane::new(SAMPLE_RATE);
+        lane.feed(&word(), SAMPLE_RATE);
+        lane.queue.clear();
+        // Played out, then 120 ms with nothing: well short of `PAUSE_MS`.
+        lane.starved = 120 * (SAMPLE_RATE / 1000) as usize;
+        lane.skipped = true;
+        let cushion = (SAMPLE_RATE / 1000 * CUSHION_MS) as usize;
+        assert_eq!(lane.feed(&word(), SAMPLE_RATE), None);
+        assert_eq!(lane.queue.len(), cushion + FRAME_SAMPLES);
+        assert!(lane.late_ms < 1.0, "a pause was taken for lateness");
+        // A pause shorter than what was still queued: their voice runs on.
+        lane.skipped = true;
+        assert_eq!(lane.feed(&word(), SAMPLE_RATE), None);
+        assert_eq!(lane.queue.len(), cushion + 2 * FRAME_SAMPLES);
+    }
+
+    /// From an app that doesn't say (`Sink::resume`), a lane that has had
+    /// nothing for longer than any frame is late is a pause too.
+    #[test]
+    fn a_long_wait_after_a_loud_frame_is_a_pause() {
+        let lanes = Mutex::new(HashMap::from([(
+            "friend".to_string(),
+            Lane::new(SAMPLE_RATE),
+        )]));
+        let mut heard = Vec::new();
+        lock(&lanes)
+            .get_mut("friend")
+            .unwrap()
+            .feed(&word(), SAMPLE_RATE);
+        listen(&lanes, 80 + PAUSE_MS as usize, &mut heard);
+        let mut lanes = lock(&lanes);
+        let lane = lanes.get_mut("friend").unwrap();
+        assert_eq!(lane.feed(&word(), SAMPLE_RATE), None);
+        let cushion = (SAMPLE_RATE / 1000 * CUSHION_MS) as usize;
+        assert_eq!(lane.queue.len(), cushion + FRAME_SAMPLES);
+    }
+
+    /// A gap in the middle of a word fades out and back in over a
+    /// millisecond or two (#462). Stopping dead and starting again at full
+    /// level is two clicks, and a few of those close together are what a
+    /// garbled first word sounded like.
+    #[test]
+    fn a_gap_mid_word_fades_rather_than_clicks() {
+        let lanes = Mutex::new(HashMap::from([(
+            "friend".to_string(),
+            Lane::new(SAMPLE_RATE),
+        )]));
+        let mut heard = Vec::new();
+        assert_eq!(sentence(&lanes, &[0, 70, 70], &mut heard).len(), 1);
+        let first = heard.iter().position(|s| *s != 0).unwrap();
+        let steepest = heard[first..]
+            .windows(2)
+            .map(|w| (i32::from(w[1]) - i32::from(w[0])).abs())
+            .max()
+            .unwrap();
+        assert!(steepest < 200, "a step of {steepest} in a word of 4000");
+    }
+
     #[test]
     fn deafen_discards_queued_voice_without_changing_personal_volume() {
         let lanes = Mutex::new(HashMap::from([(
             "friend".to_string(),
             Lane {
                 queue: VecDeque::from(vec![4000; 20]),
-                resampler: None,
                 gain: 0.4,
-                quiet: false,
+                fresh: false,
+                ..Lane::new(SAMPLE_RATE)
             },
         )]));
         let gate = AtomicBool::new(false);
@@ -1712,7 +2080,8 @@ mod tests {
         assert_eq!(lock(&lanes)["friend"].gain, 0.4);
         lock(&lanes).get_mut("friend").unwrap().queue.push_back(800);
         mix(&lanes, &Mutex::default(), &gate, 1, &mut out, |s| s);
-        assert_eq!(out, [800, 0, 0, 0]);
+        assert_eq!(out[0], 800);
+        assert!(out[1..].iter().all(|s| *s < 800), "{out:?}");
     }
 
     #[tokio::test]
@@ -1756,7 +2125,11 @@ mod tests {
             |s| s,
         );
         assert_eq!(out, [0; 4]);
+        // After a deafen their voice starts again as a sentence does,
+        // behind by the least head start (#462), and at their volume.
         speaker.play("friend", &[4000; 4]).await;
+        let behind = (SAMPLE_RATE / 1000 * CUSHION_MS) as usize;
+        let mut out = vec![99i16; behind + 4];
         mix(
             &speaker.lanes,
             &speaker.cues,
@@ -1765,7 +2138,8 @@ mod tests {
             &mut out,
             |s| s,
         );
-        assert_eq!(out, [2000; 4]);
+        assert!(out[..behind].iter().all(|s| *s == 0));
+        assert_eq!(out[behind..], [2000; 4]);
     }
 
     fn quiet_speaker(rate: u32) -> Speaker {
@@ -1792,7 +2166,7 @@ mod tests {
         lock(&speaker.lanes).insert(
             "friend".to_string(),
             Lane {
-                quiet: false,
+                fresh: false,
                 ..Lane::new(SAMPLE_RATE)
             },
         );
@@ -1808,7 +2182,9 @@ mod tests {
             &mut out,
             |s| s,
         );
-        assert_eq!(out, [1011, 1022, 1030, 1000, 0]);
+        // Then their voice has run out, and eases away rather than stopping
+        // dead (#462): 1000 × 63/64.
+        assert_eq!(out, [1011, 1022, 1030, 1000, 984]);
 
         speaker.set_deafened(true).await;
         speaker.play("friend", &[1000; 4]).await;

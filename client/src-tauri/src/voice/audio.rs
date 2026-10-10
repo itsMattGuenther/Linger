@@ -97,6 +97,13 @@ pub trait Sink: Send + Sync + 'static {
     /// no state per peer can ignore this.
     async fn forget(&self, _peer: &str) {}
 
+    /// The peer's next frame comes after a stretch they sent nothing for, by
+    /// their own clock: a pause, since apps send nothing while their person
+    /// is quiet (#197). Told so a sink that holds voices back can tell a
+    /// pause from a frame arriving late (#462). A sink that keeps no queue
+    /// can ignore it.
+    async fn resume(&self, _peer: &str) {}
+
     /// How loud one peer plays *for you*, 1.0 being as sent. Local and only
     /// ever yours: SPEC §4.14 says nobody can turn anybody else down, and a
     /// gain that lives in your own sink cannot be anything but your own.

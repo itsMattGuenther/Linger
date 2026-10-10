@@ -709,8 +709,14 @@ server a host already runs (one UDP port more), so there is nothing new to insta
 it is what lets a 40-person raid talk in one room. **Silence isn't sent** (2026-10-04):
 an app sends only while its person is talking, as Discord's do, so in a room of fifty
 the people not talking cost the server nothing; muted and push-to-talk are silence too.
-A voice that starts again after a pause starts 60 ms behind, so a packet arriving late
-can't put a hole in its first word (#462).
+A voice that starts again after a pause starts a little behind, so a packet arriving late
+can't put a hole in its first word (#462, #470): 60 ms, or as late as that person's packets have
+been coming, up to 150 ms, remembered from one sentence to the next. A packet later still
+leaves a gap that fades out and back in rather than clicking. **Silence is only ever put
+where there is silence already** (#470): before a sentence, or behind a gap already heard,
+never between the frames of a voice still coming however quiet they are. Silence cut into
+the quiet first syllable of every sentence was the crackle everybody heard when somebody
+started talking, on any connection.
 **A room of up to twenty sounds better** (#431): everybody in it sends at 128 kbit/s, and
 from twenty-one at 96 kbit/s, which keeps a raid's busiest moments within what a small
 server can send; a room steps back up once it is down to sixteen, so people drifting in

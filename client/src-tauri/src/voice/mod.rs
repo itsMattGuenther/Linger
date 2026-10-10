@@ -743,6 +743,8 @@ fn opus_capability() -> RTCRtpCodecCapability {
 /// a missing frame is concealed, so a lost packet is a smear rather than a
 /// click and the far end's clock keeps its place; a packet whose place has
 /// already been played is dropped rather than played out of order (#462).
+/// A pause is told to the sink, so it can tell one from a packet arriving
+/// late.
 /// The level gate runs on what was decoded, so "they are talking" is judged
 /// on the same samples that reach the speaker.
 async fn receive_forwarded<W: Watcher>(
@@ -800,7 +802,10 @@ async fn receive_forwarded<W: Watcher>(
                     }
                 }
             }
-            Arrival::Next | Arrival::Pause => {}
+            // A gap the speaker shouldn't take for this frame being late
+            // (#462).
+            Arrival::Pause => sink.resume(who).await,
+            Arrival::Next => {}
         }
         expected = Some(stamp.wrapping_add(FRAME_TICKS));
         if packet.payload.is_empty() {
