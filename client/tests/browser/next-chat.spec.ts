@@ -513,6 +513,25 @@ test.describe("the message box", () => {
     await box(page).fill("one line again");
     await expect.poll(async () => (await shape()).height).toBe(one.height);
   });
+
+  // #478: on Windows (WebView2, Chromium) the box's hint could be selected
+  // like words. Selecting the whole window is the sure way to show it.
+  test("selecting the whole window leaves the box and its hint as they were, and skips the prompt", async ({ page }) => {
+    await expect(box(page)).toHaveAttribute("placeholder", /^Say something/);
+    await log(page).focus();
+    const before = await box(page).screenshot();
+    await page.keyboard.press("ControlOrMeta+a");
+    expect(await page.evaluate(() => String(getSelection()))).toContain("drop into voice");
+    expect((await box(page).screenshot()).equals(before)).toBe(true);
+    expect(await page.evaluate(() => String(getSelection()))).not.toContain("›");
+  });
+
+  test("your own selection in the box still shows", async ({ page }) => {
+    await box(page).fill("a draft to select");
+    const before = await box(page).screenshot({ caret: "hide" });
+    await page.keyboard.press("ControlOrMeta+a");
+    expect((await box(page).screenshot({ caret: "hide" })).equals(before)).toBe(false);
+  });
 });
 
 test.describe("the row menu", () => {

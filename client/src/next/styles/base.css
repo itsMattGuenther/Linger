@@ -103,6 +103,20 @@ svg {
   outline: none;
 }
 
+/* A text box's hint is never words you can select (#478). Chromium (WebView2
+   on Windows) paints it selected when a selection runs across the box, as
+   select-all on the window does, and copying would carry none of it. A
+   selection passing through a box you aren't typing in paints nothing there
+   either, for the same reason; your own selection, inside the box, shows. */
+::placeholder {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:is(input, textarea):not(:focus)::selection {
+  background: transparent;
+}
+
 /* Reduced motion: every duration token collapses and --loop is 1
    (tokens.css), which is what stops movement: a catch-all rule here loses to
    each part's own, more specific one. Scrolling jumps instead of gliding. */
