@@ -96,7 +96,12 @@ the media runtime. The AppImage plays shared videos with the libav GStreamer
 plugin on a trimmed FFmpeg (#358): install `gstreamer1.0-libav` and `nasm`, run
 `scripts/appimage-ffmpeg.sh /tmp/ffmpeg`, and build with
 `LD_LIBRARY_PATH=/tmp/ffmpeg/lib`, or the AppImage takes Ubuntu's full FFmpeg
-and grows by about 45 MB (`scripts/appimage-ffmpeg-check.sh` catches it). See
+and grows by about 45 MB (`scripts/appimage-ffmpeg-check.sh` catches it). Run
+`scripts/appimage-linuxdeploy.sh` too, and build with
+`LINUXDEPLOY_EXCLUDED_LIBRARIES='libwayland-*'`: Tauri 2.11's own linuxdeploy
+copies Ubuntu 22.04's libwayland into the AppImage, and on a newer Mesa (an AMD
+or Intel GPU on Arch or Omarchy) the window then stays empty (#479;
+`scripts/appimage-wayland-check.sh` catches it). See
 [packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
