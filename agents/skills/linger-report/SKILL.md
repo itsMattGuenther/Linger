@@ -231,7 +231,10 @@ they ask for. Then:
 
 - **Only if `gh auth status` succeeds**, file it:
   `gh issue create --repo itsMattGuenther/Linger --title "..." --body-file <file> --label bug`
-  (`enhancement` for an idea). Give the user the link.
+  (`enhancement` for an idea). Give the user the link. GitHub drops the label,
+  without a word, when the user can't triage the repository, which is nearly
+  everybody; the marker on the body's first line (`reporting.md`) is how the
+  repository labels it instead, so keep it.
 - **If `gh` is missing or not logged in, don't install it or log in for them.**
   Hand them the finished title and body, and the link
   <https://github.com/itsMattGuenther/Linger/issues/new/choose>.
@@ -259,7 +262,8 @@ in plain words:
 
 ## Ideas, not bugs
 
-A feature idea is welcome as an issue labelled `enhancement`. First check it
+A feature idea is welcome as an issue labelled `enhancement`, with
+`<!-- linger-report: idea -->` as the body's first line. First check it
 against what Linger has chosen **not** to be: [the "never" list in the
 README](https://github.com/itsMattGuenther/Linger#what-it-does) and
 [SPEC §2](https://github.com/itsMattGuenther/Linger/blob/main/SPEC.md#2-design-thesis).

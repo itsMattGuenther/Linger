@@ -13,7 +13,13 @@ What goes wrong, where, in plain words. Not a guess at the cause.
 
 ## Body
 
+The first line is a marker GitHub doesn't show. Keep it, as written: it is
+how the repository labels the issue when GitHub drops your `--label` (step 6).
+For an idea, it reads `<!-- linger-report: idea -->`.
+
 ```markdown
+<!-- linger-report: bug -->
+
 ## What happened
 
 <One or two sentences, in the user's words. What they saw, not why.>
