@@ -1,0 +1,38 @@
+name: issue labels
+
+# GitHub drops the labels on a new issue filed through the API by anybody
+# without write access, silently: a friend's agent running
+# `gh issue create --label bug` from the linger-report skill files an issue
+# with none (#479). This labels a new issue that arrived bare, from the
+# skill's marker or the shape of its body (scripts/issue-label.mjs). The
+# issue forms label their own, so this leaves any issue with a label alone.
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  label:
+    if: toJSON(github.event.issue.labels) == '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: label it from its body
+        # The body is anybody's text: it reaches the script through the
+        # environment, never written into the command.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          label=$(node scripts/issue-label.mjs)
+          if [ -z "$label" ]; then
+            echo "No label from the body; leaving #$NUMBER for a person."
+            exit 0
+          fi
+          gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$label"
+          echo "Labelled #$NUMBER $label."

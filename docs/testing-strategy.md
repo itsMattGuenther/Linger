@@ -66,6 +66,7 @@ AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
+`scripts/issue-label.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, and `scripts/tidy-branches-test.sh`).
 
