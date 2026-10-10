@@ -65,8 +65,9 @@ Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
-`scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`, and
-`python3 scripts/linux-audio-check.test.py`).
+`scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
+`python3 scripts/linux-audio-check.test.py`,
+`scripts/android-signing-test.sh`, and `scripts/tidy-branches-test.sh`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped

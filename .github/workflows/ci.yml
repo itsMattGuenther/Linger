@@ -367,6 +367,10 @@ jobs:
       - name: the release's Android check reads every apksigner's signer line
         # 0.4.8 and 0.4.9 refused rightly signed APKs over one line's wording.
         run: bash scripts/android-signing-test.sh
+      - name: tidying branches deletes only what's in main
+        # A squash merge leaves no trace in a branch's own commits, so the
+        # script asks GitHub; a wrong answer would delete unmerged work.
+        run: bash scripts/tidy-branches-test.sh
       - name: the Linux packages ask for the media plugins shared videos need
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).

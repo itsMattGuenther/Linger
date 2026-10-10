@@ -106,6 +106,10 @@ pass.
 - One logical change per commit. Docs updated in the same commit as the behavior change.
 - Branches are `feat/t-xxx-short-slug` (or `docs/…`, `fix/…`). Pushing the branch
   is how a task is claimed — see `TASKS.md` §"How to run a task".
+- GitHub deletes a pull request's branch when it merges. Your local copy stays
+  until `scripts/tidy-branches.sh` deletes it, with its worktree, once GitHub
+  says it merged at that commit. Anything that isn't in main stays and is
+  listed with why. Run it after a merge; `--dry-run` shows what would go.
 
 **Pull requests and issues**
 - Before starting an issue, check its linked pull requests so an existing proposed
