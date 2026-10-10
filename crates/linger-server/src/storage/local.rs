@@ -346,6 +346,9 @@ mod tests {
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
+            voice_line_after: std::time::Duration::from_millis(
+                linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+            ),
         }))
         .unwrap()
     }

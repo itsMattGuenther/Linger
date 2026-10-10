@@ -31,6 +31,7 @@ fn row_to_message(row: &SqliteRow) -> Result<Message, ApiError> {
         created_at: row.get("created_at"),
         // Only ever sent as `true`: every other message leaves it out.
         motd: row.get::<bool, _>("motd").then_some(true),
+        voice_join: row.get::<bool, _>("voice_join").then_some(true),
     })
 }
 

@@ -587,6 +587,38 @@ describe("voice in the store", () => {
     expect(played.at(-1)).toBe("peer-join");
   });
 
+  it("somebody joining and leaving over and over sounds once a minute each, not every time (#473)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-10-10T20:00:00Z"));
+    try {
+      await seated(HOME);
+      const alone = voiceState("r-garage", [["s-me", "u-matt"]]);
+      const back = (session: string) => voiceState("r-garage", [["s-me", "u-matt"], [session, "u-flapper"]]);
+      arrive(HOME, alone);
+      expect(played).toEqual(["voice-join"]);
+      arrive(HOME, back("s-f1"));
+      arrive(HOME, alone);
+      expect(played).toEqual(["voice-join", "peer-join", "peer-leave"]);
+      // In and out again inside the minute, on a new session each time: quiet.
+      for (const session of ["s-f2", "s-f3", "s-f4"]) {
+        arrive(HOME, back(session));
+        arrive(HOME, alone);
+      }
+      expect(played).toEqual(["voice-join", "peer-join", "peer-leave"]);
+      // Somebody else arriving meanwhile is news, and sounds.
+      arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-dex", "u-dex"]]));
+      expect(played.at(-1)).toBe("peer-join");
+      arrive(HOME, alone);
+      // A minute on, the same person arriving sounds again.
+      vi.setSystemTime(Date.parse("2026-10-10T20:01:01Z"));
+      played.length = 0;
+      arrive(HOME, back("s-f5"));
+      expect(played).toEqual(["peer-join"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("push-to-talk is silent; deliberate controls chime only after success", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready());

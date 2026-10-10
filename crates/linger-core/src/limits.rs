@@ -36,6 +36,16 @@ pub const MAX_MESSAGE_CHARS: usize = 8_000;
 /// whole under the room's header, so it is a few sentences, not a page.
 pub const MAX_MOTD_CHARS: usize = 300;
 
+/// How long somebody stays in a room's voice before the room gets a line
+/// saying they joined (SPEC §4.14, #473). A misclick on Join, or a join that
+/// ends at once, leaves nothing behind.
+pub const VOICE_JOIN_LINE_AFTER_MS: u64 = 10_000;
+
+/// At most one join line per person per room this often (#473), however many
+/// times they join in between: somebody joining and leaving over and over
+/// can't fill a room with lines.
+pub const VOICE_JOIN_LINE_EVERY_MS: i64 = 10 * 60 * 1000;
+
 /// Link cards and the media grid (SPEC §4.4/§5.6, PROTOCOL §6).
 ///
 /// A message with a dozen URLs in it is a link dump, and the stream renders one

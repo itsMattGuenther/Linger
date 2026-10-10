@@ -287,11 +287,14 @@ CREATE TABLE messages (
   edited_at       INTEGER,
   deleted_at      INTEGER,
   created_at      INTEGER NOT NULL,
-  motd            INTEGER NOT NULL DEFAULT 0   -- 1: the line saying a message of the
+  motd            INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying a message of the
                                                -- day was set; never last_message_id
+  voice_join      INTEGER NOT NULL DEFAULT 0   -- 1: the line saying somebody joined
+                                               -- voice (#473); never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;
+CREATE INDEX idx_messages_voice_join ON messages(room_id, author_id, created_at) WHERE voice_join = 1;
 
 CREATE TABLE attachments (
   id              BLOB PRIMARY KEY,

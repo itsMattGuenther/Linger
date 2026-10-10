@@ -561,6 +561,14 @@ press **Join** (or **Start talking** when nobody is) to turn your microphone
 on in that room. Already talking in another room? **Move voice here** (or
 **Talk here instead**) takes you there.
 
+Once you've been in for ten seconds, the room's chat gets a small grey line,
+*"Jules joined voice"*, so people reading it know the talk has moved to voice.
+It never rings or notifies anybody, and it doesn't make the room bold. People
+joining one after another with nothing said between share a line. Leaving and
+joining again within ten minutes adds no second line, and people already in
+voice hear someone's join or leave chime at most once a minute, so nobody can
+flood a room by popping in and out. A DM's voice gets the same line.
+
 While you're in, the **voice bar** at the bottom of your list shows the room,
 who's in it (whoever is speaking lights up), and your controls, as symbols
 (hover one for its name): a microphone, headphones, and an arrow leaving a

@@ -86,7 +86,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. Voice
   goes through the host's server, which passes it on so up to 60 can talk at
   once, and a relay the host can run lets in friends whose network blocks it.
-  Voice rooms are never recorded.
+  Joining leaves a small grey line in the chat, so people reading it know the
+  talk moved to voice; it never rings anybody. Voice rooms are never recorded.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's

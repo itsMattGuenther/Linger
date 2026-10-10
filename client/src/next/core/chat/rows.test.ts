@@ -97,3 +97,44 @@ describe("the chat window's rows", () => {
     expect(lastEditable(messages, "matt", true)?.id).toBe("m000001");
   });
 });
+
+describe("somebody joining voice (#473)", () => {
+  const join = (n: number, author: string, at: number) => message(n, author, at, { body: "joined voice", voice_join: true });
+  const drawn = (rows: ReturnType<typeof chatRows>) =>
+    rows.map((row) => (row.kind === "joins" ? `joins:${row.messages.map((one) => one.author_id).join(",")}` : row.kind === "message" ? [row.message.id, row.head] : row.kind));
+
+  it("is a quiet line of its own, and whoever speaks next is named again", () => {
+    const rows = chatRows([message(1, "eli", T0), join(2, "jules", T0 + MIN), message(3, "jules", T0 + 2 * MIN), message(4, "jules", T0 + 3 * MIN)], [], {
+      atStart: false,
+      leftOff: null,
+    });
+    // Jules speaking straight after their own join line still says who's talking.
+    expect(drawn(rows)).toEqual([["m000001", true], "joins:jules", ["m000003", true], ["m000004", false]]);
+  });
+
+  it("shares a line with the joins before it when nothing was said between", () => {
+    const rows = chatRows([join(1, "dave", T0), join(2, "callie", T0 + MIN), join(3, "sam", T0 + 2 * MIN)], [], { atStart: false, leftOff: null });
+    expect(drawn(rows)).toEqual(["joins:dave,callie,sam"]);
+    // Every join in it is found at that one row, for jumping to any of them.
+    const index = rowIndex(rows);
+    expect([index.get("m000001"), index.get("m000002"), index.get("m000003")]).toEqual([0, 0, 0]);
+  });
+
+  it("starts a new line after something is said, or after the group break", () => {
+    const said = chatRows([join(1, "dave", T0), message(2, "eli", T0 + MIN), join(3, "callie", T0 + 2 * MIN)], [], { atStart: false, leftOff: null });
+    expect(drawn(said)).toEqual(["joins:dave", ["m000002", true], "joins:callie"]);
+    const later = chatRows([join(1, "dave", T0), join(2, "callie", T0 + 11 * MIN)], [], { atStart: false, leftOff: null });
+    expect(drawn(later)).toEqual(["joins:dave", "joins:callie"]);
+  });
+
+  it("puts \"you left off here\" between two joins rather than inside a line", () => {
+    const rows = chatRows([join(1, "dave", T0), join(2, "callie", T0 + MIN)], [], { atStart: false, leftOff: "m000001" });
+    expect(drawn(rows)).toEqual(["joins:dave", "left-off", "joins:callie"]);
+  });
+
+  it("leaves out a join line that was taken back, and isn't Up's to edit", () => {
+    const rows = chatRows([join(1, "dave", T0), { ...join(2, "callie", T0 + MIN), deleted_at: T0 + 2 * MIN }], [], { atStart: false, leftOff: null });
+    expect(drawn(rows)).toEqual(["joins:dave"]);
+    expect(lastEditable([message(1, "matt", T0), join(2, "matt", T0 + MIN)], "matt", true)?.id).toBe("m000001");
+  });
+});

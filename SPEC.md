@@ -200,6 +200,17 @@ A room is a place, not a filing cabinet.
   both, and People names the one you're talking in. An away you chose still shows.
   This is drawn from the server's voice lists, so no presence frame changes and it
   works for people on older apps; a DM's voice isn't a room anybody is shown in.
+- **Somebody joining voice puts a quiet line in the room** (#473, Matt 2026-10-10):
+  "Jules joined voice", so people reading the chat see the talk has moved to voice.
+  The whole line is grey, the name too: the quietest of three that were drawn. It is
+  written once somebody has stayed ten seconds, so a misclick on Join leaves nothing,
+  and at most once per person per room every ten minutes however often they join, so
+  joining and leaving over and over can't fill a room. Joins with nothing said between
+  them share one line; past four people the first three are named and everybody else is
+  a dot in their own color, and past sixteen dots the people mark lists everybody, never
+  "and 31 more". There is no line for leaving: the voice strip says who's in voice now.
+  It calls nobody: no sound, no notification, and the room doesn't turn bold. A DM's
+  voice gets the same line, just as quiet, and it doesn't light the DM.
 
 **Entrance sounds.** Each user picks a personal sound that plays for others already
 in a room when they arrive. This is the cheapest piece of emotional design
@@ -292,7 +303,9 @@ category switches work the same at any setting, and it never touches other
 people's voice.
 
 - Voice cues: your join, leave or move, and other sessions arriving/leaving
-  the voice session you are already in. No cue for browsing a text room, no
+  the voice session you are already in. Each other person's arriving, and their
+  leaving, sound at most once a minute apiece (#473), so somebody joining and
+  leaving over and over can't ring the room. No cue for browsing a text room, no
   ringing someone who has not joined voice, and no sound on push-to-talk edges.
 - DM/room-message cues: new messages from others, not messages currently being
   read in the focused app, edits, history loads, replay or duplicates. One
@@ -685,7 +698,8 @@ leave running is what this already is.
 
 **No ringing and no calling.** Joining voice never rings somebody who has not
 joined. People already in that voice session may hear a quiet join/leave cue,
-controlled by their notification sound settings (§4.2). Muting or unmuting
+controlled by their notification sound settings (§4.2). Staying puts one quiet grey
+line in the room or DM, "Jules joined voice" (§4.1, #473), which rings nobody. Muting or unmuting
 someone else's microphone never makes a sound on your computer.
 
 **Through the host's server, up to 60** (#197). Each person sends their voice once, to
