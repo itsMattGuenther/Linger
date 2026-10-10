@@ -672,6 +672,14 @@ fn message_markdown(
             who
         );
     }
+    // The line written when a poll closed (#474): its body already says it.
+    if message.poll_closed.is_some() {
+        return format!("**{}** — {}\n\n", clock(message.created_at), message.body);
+    }
+    // A poll (#474): the question, then each choice and who picked it.
+    if let Some(poll) = &message.poll {
+        return poll_markdown(message, poll, &who, users);
+    }
     let edited = if message.edited_at.is_some() {
         " *(edited)*"
     } else {
@@ -734,6 +742,47 @@ fn message_markdown(
         out.push_str(&format!("\n`{}`\n", summary.join("  ")));
     }
 
+    out.push('\n');
+    out
+}
+
+/// A poll in the archive (#474): who asked and when, the question, each
+/// choice with who picked it, and how it ended if it has.
+fn poll_markdown(
+    message: &Message,
+    poll: &linger_core::wire::Poll,
+    who: &str,
+    users: &HashMap<UserId, User>,
+) -> String {
+    let name = |id: &UserId| {
+        users.get(id).map_or_else(
+            || "somebody who is gone".to_string(),
+            |u| u.display_name.clone(),
+        )
+    };
+    let mut out = format!(
+        "**{}** — {who} asked a poll\n\n**{}**\n\n",
+        clock(message.created_at),
+        poll.question
+    );
+    for choice in &poll.choices {
+        let picked: Vec<String> = choice.voter_ids.iter().map(name).collect();
+        if picked.is_empty() {
+            out.push_str(&format!("- {}\n", choice.text));
+        } else {
+            out.push_str(&format!("- {} — {}\n", choice.text, picked.join(", ")));
+        }
+    }
+    if let Some(at) = poll.closed_at {
+        let (y, m, d) = civil_date(at);
+        match poll.closed_by {
+            Some(by) => out.push_str(&format!(
+                "\n*Closed by {} on {y:04}-{m:02}-{d:02}.*\n",
+                name(&by)
+            )),
+            None => out.push_str(&format!("\n*Closed on its own on {y:04}-{m:02}-{d:02}.*\n")),
+        }
+    }
     out.push('\n');
     out
 }
@@ -1005,9 +1054,58 @@ mod tests {
             created_at: 20 * 3_600_000 + 50 * 60_000,
             motd: None,
             voice_join: Some(true),
+            poll: None,
+            poll_closed: None,
         };
         let written = message_markdown(&line, &HashMap::new(), &HashMap::new(), &HashMap::new());
         assert_eq!(written, "**20:50** — somebody who is gone joined voice\n\n");
+    }
+
+    /// A poll reads as its question and who picked what, not the words an
+    /// old app would show (#474).
+    #[test]
+    fn a_poll_is_its_question_and_who_picked_what() {
+        let voter = UserId::new();
+        let asked = Message {
+            id: MessageId::new(),
+            room_id: RoomId::new(),
+            author_id: UserId::new(),
+            body: "**Poll:** Horde or Alliance?\n\n- Horde\n- Alliance".to_string(),
+            reply_to: None,
+            attachments: Vec::new(),
+            reactions: Vec::new(),
+            pinned_at: None,
+            edited_at: None,
+            deleted_at: None,
+            created_at: 20 * 3_600_000,
+            motd: None,
+            voice_join: None,
+            poll: Some(linger_core::wire::Poll {
+                question: "Horde or Alliance?".to_string(),
+                choices: vec![
+                    linger_core::wire::PollChoice {
+                        text: "Horde".to_string(),
+                        voter_ids: vec![voter],
+                    },
+                    linger_core::wire::PollChoice {
+                        text: "Alliance".to_string(),
+                        voter_ids: Vec::new(),
+                    },
+                ],
+                multi: false,
+                closes_at: 0,
+                closed_at: Some(0),
+                closed_by: None,
+            }),
+            poll_closed: None,
+        };
+        let written = message_markdown(&asked, &HashMap::new(), &HashMap::new(), &HashMap::new());
+        assert_eq!(
+            written,
+            "**20:00** — somebody who is gone asked a poll\n\n**Horde or Alliance?**\n\n\
+             - Horde — somebody who is gone\n- Alliance\n\n\
+             *Closed on its own on 1970-01-01.*\n\n"
+        );
     }
 
     /// Uploaded filenames are somebody else's text, and this is the guard that

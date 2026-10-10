@@ -148,6 +148,9 @@ export function considerFrame(
   // #473). In a DM, somebody joining its voice would otherwise ring like a
   // message, which is exactly the ringing SPEC §4.14 rules out.
   if (isQuietLine(message)) return;
+  // Nor does a new poll (#474): it makes the room bold, as anything said there
+  // does, and that's all. A poll that chimed would be a way to ring everybody.
+  if (message.poll != null) return;
   // Somebody you blocked never makes a sound or a banner (PROTOCOL §5).
   if (snapshot.blocked.includes(message.author_id)) return;
   // You are looking right at it. `isLooking` is the same clock the

@@ -17,8 +17,8 @@ async function open(page: Page, query: string) {
   await expect(page.getByRole("log")).not.toHaveAttribute("aria-busy", "true");
 }
 
-const lines = (page: Page) => page.locator(".nx-join");
-const line = (page: Page, words: string | RegExp) => page.locator(".nx-join", { hasText: words });
+const lines = (page: Page) => page.locator("[data-join]");
+const line = (page: Page, words: string | RegExp) => page.locator("[data-join]", { hasText: words });
 
 /** A token's color, as the engine paints it. */
 async function token(page: Page, name: string): Promise<string> {
@@ -42,7 +42,7 @@ test("a join is one quiet grey line, its name grey too, and whoever speaks next 
   await expect(jules).toBeVisible();
   // All grey: the words and the name in the dimmest text there is.
   const muted = await token(page, "--text-muted");
-  expect(await color(jules.locator(".nx-join-words"))).toBe(muted);
+  expect(await color(jules.locator(".nx-quiet-words"))).toBe(muted);
   expect(await color(jules.locator("[data-kit='Name']"))).toBe(await token(page, "--text-offline"));
   // Its time shows without hovering, as a group's first line's does.
   await expect(jules.locator("time")).toBeVisible();
@@ -55,7 +55,7 @@ test("a join is one quiet grey line, its name grey too, and whoever speaks next 
 
 test("its words start where a name starts, on one line", async ({ page }) => {
   await open(page, "?joins");
-  const words = await line(page, "Jules joined voice").locator(".nx-join-words").boundingBox();
+  const words = await line(page, "Jules joined voice").locator(".nx-quiet-words").boundingBox();
   const name = await page.locator(".nx-msg", { hasText: "here! these speakers" }).locator(".nx-msg-who").boundingBox();
   expect(words && name && Math.abs(words.x - name.x)).toBeLessThanOrEqual(1);
   expect(words?.height).toBeLessThanOrEqual(24);
@@ -64,7 +64,7 @@ test("its words start where a name starts, on one line", async ({ page }) => {
 test("joins with nothing said between them share a line", async ({ page }) => {
   await open(page, "?joins");
   await expect(lines(page)).toHaveCount(2);
-  await expect(lines(page).nth(1).locator(".nx-join-words")).toHaveText("Dave and Callie joined voice");
+  await expect(lines(page).nth(1).locator(".nx-quiet-words")).toHaveText("Dave and Callie joined voice");
 });
 
 test("a DM gets the same line", async ({ page }) => {
@@ -81,7 +81,7 @@ test("on raid night: three names, sixteen dots, and the people mark lists everyb
   await expect(crowd.locator(".nx-join-dot").first()).toHaveAttribute("title", "Bramble");
   // Still one line, never "and 24 more".
   await expect(crowd).not.toContainText(/\d+ (more|others)/);
-  const words = await crowd.locator(".nx-join-words").boundingBox();
+  const words = await crowd.locator(".nx-quiet-words").boundingBox();
   expect(words?.height).toBeLessThanOrEqual(24);
 
   const mark = crowd.getByRole("button", { name: "Everyone who joined voice" });

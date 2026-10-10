@@ -60,6 +60,14 @@ it("a line nobody typed makes no sound, banner or taskbar flash, in a room or a 
   expect(asked).toEqual([]);
 });
 
+it("a new poll and a poll closing make no sound or banner (#474)", async () => {
+  considerFrame(server, { op: "message.create", s: 1, d: { ...message, room_id: "room", body: "**Poll:** @me which?", poll: { question: "Which faction?", choices: [{ text: "Horde", voter_ids: [] }, { text: "Alliance", voter_ids: [] }], multi: false, closes_at: 9e12, closed_at: null, closed_by: null } } }, snapshot);
+  considerFrame(server, { op: "message.create", s: 2, d: { ...message, room_id: "room", body: "Poll closed", poll_closed: { poll_id: "m1", question: "which?", winners: [] } } }, snapshot);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(played).toEqual([]);
+  expect(banners).toEqual([]);
+});
+
 it("somebody you blocked never makes a sound or a banner, mention or not (PROTOCOL §5)", async () => {
   const blocked = { ...snapshot, blocked: ["friend"] };
   considerFrame(server, { op: "message.create", s: 1, d: message }, blocked);

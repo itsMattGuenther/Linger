@@ -1,0 +1,67 @@
+/*
+ * A quiet line in the conversation: somebody joining voice (#473), a poll
+ * closing (#474). On the message grid, its words where a name starts and its
+ * time in the time column, always shown; all grey. A group's space above it,
+ * as any line that starts a group has, and nothing that moves on hover.
+ * Tokens only.
+ */
+.nx-quiet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content var(--control-sm);
+  grid-template-areas: "body time actions";
+  column-gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-1) var(--space-0-5) var(--space-2);
+}
+
+.nx-quiet-words {
+  grid-area: body;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-body);
+}
+
+/* Faint, as an idle voice glyph beside a room is. */
+.nx-quiet-glyph {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-faint);
+}
+
+/* One line, ending in "…" where it runs out. Cut only across, so nothing
+   above or below is clipped. */
+.nx-quiet-text {
+  min-width: 0;
+  overflow-x: clip;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A way to go somewhere from the line ("See results"): words, underlined,
+   one step brighter than the line. */
+.nx-quiet-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: var(--space-0-5);
+  cursor: pointer;
+}
+
+.nx-quiet-link:hover {
+  color: var(--text-primary);
+}
+
+.nx-quiet-link:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}

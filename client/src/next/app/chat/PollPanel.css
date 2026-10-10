@@ -1,0 +1,97 @@
+/* Asking a poll (#474): a panel over the box, as a voice message's is.
+   Layout only; the fields, switch, list and buttons are kit pieces. Tokens only. */
+.nx-poll-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  margin-block-end: var(--space-2);
+  padding: var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-raised);
+}
+
+.nx-poll-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.nx-poll-panel-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: var(--text-label) / var(--line-meta) var(--font-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nx-poll-panel-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.nx-poll-panel-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nx-poll-panel-choice > :first-child {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.nx-poll-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.nx-poll-panel-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nx-poll-panel-words {
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-poll-panel-length {
+  display: inline-flex;
+  inline-size: var(--poll-length-w);
+}
+
+.nx-poll-panel-length > * {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.nx-poll-panel-actions {
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Why Post poll isn't ready, or what went wrong: before the buttons, taking
+   what room is left. */
+.nx-poll-panel-why {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+.nx-poll-panel-why[data-problem="yes"] {
+  color: var(--text-danger);
+}

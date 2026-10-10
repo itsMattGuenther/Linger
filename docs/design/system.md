@@ -122,7 +122,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--poll-w` 420 (a poll's card, #474) · `--poll-length-w` 112 (how long a poll runs, as it's asked) · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -785,7 +785,37 @@ replaces an unread count.
   it, drawn on the page's body since the rows are placed by a transform). One
   line, ending in "…" where it runs out; never a number. It starts a group of
   its own, so whoever speaks next is named. No actions, no hover. Somebody you
-  blocked isn't in it.
+  blocked isn't in it. Its layout is `QuietLine.css`, which the poll's closed
+  line shares.
+- **A poll** (#474, `app/chat/PollCard.tsx`), in a message's words column, at
+  most `--poll-w` wide, on the sunken surface behind a `--hairline-strong` edge.
+  "Poll" in the label face and "pick one", "pick any" or "closed" in meta; the
+  question in `--text-primary` at 600; then a 32px row per choice with a
+  `--hairline` edge: its share of the voters as a `--surface-hover` fill behind
+  everything (never the lamp), the kit's checkbox box (round for pick-one, the
+  lamp when yours is picked), its words ending in "…", and at its end the voters
+  as small markers on top of the fill, each with its person's name as its
+  tooltip. Past sixteen markers, the `people` mark (a small plain `IconButton`)
+  opens everybody who picked it (`PeopleCard`). The box and words are the button
+  (`radio` or `checkbox`, in a `radiogroup` or `group` named by the question); a
+  picked row's edge is `--edge-hover`. Under the rows, meta: "Closes on
+  Thursday." (`closesWhen`), and Close poll (`quiet`, `sm`) for whoever asked
+  only. Closed: no boxes, the winner at 600 in `--text-primary`, "Closed by Eli at
+  10:51 PM." or "Closed on its own on Friday.". Never a number.
+- **Asking a poll** (`app/chat/PollPanel.tsx`): a panel over the box, as a voice
+  message's is, on `--surface-raised`. "New poll in #general" in the label face
+  and a close; the question (`TextField`); "Choices" with a field each and a
+  Remove beside it, unavailable at two; Add a choice (`quiet`, `sm`), unavailable
+  at ten; a row with the `Switch` and "People can pick more than one", and
+  "Closes after" with a `Select` (`--poll-length-w`); then why it isn't ready
+  yet, in meta, before Cancel and Post poll (`primary`). Enter in a choice moves
+  to the next or adds one; Escape puts the panel away.
+- **The line a closing poll leaves** (`app/chat/PollClosedLine.tsx`): the quiet
+  line, with the `check` glyph: "Poll closed: “PvP or PvE server?” PvE won." and
+  See results, words underlined in `--text-secondary`, which jumps to the poll and
+  marks it for a moment as a quote does.
+- **`/poll`** shows the same line over the box as `/motd`, from `/p` on: what it
+  does, or who can.
 - **Typing line**, 24px, always there, so the box never jumps.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
   then add-a-file, emoji and send (32px each). It grows with its text to
@@ -905,6 +935,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
 | Presence marks (#301): idle is the dot at half strength with no 💤, away the moon at half strength, offline the dot's outline in their color at both sizes, painted hollow at 6px and 8px at 100% and 200%; in the list an idle dot sits where any dot does, with or without a status line; an away name is grey with its message warm, and your own card stays lit | `kit.spec.ts` › idle and away are their mark at half strength; an offline dot is painted hollow; `next-list.spec.ts` › somebody idle; somebody away |
+| Polls (#474): the card's question, rows, a fill for each share and the voters' dots with names, never a number; voting picks, moves and takes back a vote, whoever asked included; sixteen dots then the people mark listing everybody, on one row; only whoever asked has Close poll; closed, no boxes and the winner bold; the closed line, grey, with See results going to the poll; `/poll` says what it does, opens the panel with the question, Enter moves down the choices, and Post poll sends question, choices, pick-any and length; Escape puts it away; anybody else is told who can and keeps their words; a poll bolds a room but never sounds or notifies, and its closed line does neither; closes-when wording | `next-poll.spec.ts`, `core/chat/poll.test.ts`, `core/chat/rows.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `lib/time.test.ts`, `crates/linger-server/tests/polls.rs` |
 | Somebody joining voice (#473): one grey line, the name grey too, its words where a name starts and its time showing; whoever speaks next is named; joins with nothing said between share a line; three names, sixteen markers with names, and the people mark listing everybody, on one line with no number; the same in a DM; never new, never a sound or a banner, in a room or a DM; a person's arriving and leaving chimes once a minute apiece | `next-voice-join.spec.ts`, `core/chat/rows.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `lib/gateway.voice.test.ts`, `crates/linger-server/tests/voice_join_line.rs` |
 | A room's message of the day (#464): whole under the header beside the topic, with who set it; folded to one line that stays folded after a restart and opens for a new one; `/motd` sets it for the host or a co-host, with a line over the box from `/m`, and anybody else's box says who can and keeps the words; `/motd` alone clears it; its line in the room, with no Edit; it never makes a room look new or notifies; the same on the phone; set beside the topic in Settings, sent only when changed | `next-motd.spec.ts`, `next-settings.spec.ts`, `core/chat/motd.test.ts`, `core/chat/rows.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `crates/linger-server/tests/motd.rs` |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |

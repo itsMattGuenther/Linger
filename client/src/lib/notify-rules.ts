@@ -37,8 +37,9 @@ export function notifyReason(
   if (message.deleted_at !== null) return null;
   // A new message of the day calls nobody, even when it names somebody: a
   // note everybody sees is fine, a note that rings everybody is `@everyone`
-  // (#464). Nor does somebody joining voice (#473).
-  if (isQuietLine(message)) return null;
+  // (#464). Nor does somebody joining voice (#473), or a poll: asking the room
+  // something is for whoever comes in, not a reason to call anybody (#474).
+  if (isQuietLine(message) || message.poll != null) return null;
 
   if (mentionHandles(message.body).includes(me.username)) return "mention";
 

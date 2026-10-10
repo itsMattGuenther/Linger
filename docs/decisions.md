@@ -1124,3 +1124,27 @@ should see it, as subtle faded text. Mockups showed the line three ways
 - **Stored, not drawn from the live voice lists.** Drawing it from `voice.state` needed no
   server change, but anybody who wasn't watching would never see it, and it would be
   gone after a restart.
+
+## Decided — polls, asked with /poll
+
+**Matt, 2026-10-10 (#474).** A friend running a WoW comeback wants the room's answer to
+questions like which faction and which kind of server, and more will come. Two rounds of
+mockups (https://claude.ai/artifact/9mKcjUTn472rd26WesGBnW, private).
+
+- **Every `/` command is the host's or a co-host's**, `/poll` included. Not a new level: a
+  co-host already has the host's powers in the app (SPEC §4.16).
+- **Dots, not numbers**, over a neutral fill for each choice's share ("option 1"). Past
+  sixteen dots a people mark lists everybody. Set aside: numbers (exact, but a count in the
+  UI, which AGENTS rule 3's wording would need an exception for), a thin bar under each row,
+  and "the dots are the bar" with no fill and every dot drawn, which I recommended and Matt
+  didn't pick.
+- **Everybody votes, whoever asked included, and can change or take back a vote until it
+  closes.** Results show before you vote; votes aren't secret.
+- **Only whoever asked can close it**, not the host or a co-host, who can still delete it.
+- **Every poll closes on its own**: a day, three, a week (the default), two weeks or four,
+  picked as it's asked. The server closes it on time even with nobody online.
+- **Closing leaves a quiet line at the bottom of the room** with how it came out and See
+  results, because after a fortnight the poll is a long way up (Matt's idea). It never
+  makes a room look new.
+- **It calls nobody.** A new poll makes the room bold like anything said, with no
+  notification or sound; votes and the closed line make nothing bold.

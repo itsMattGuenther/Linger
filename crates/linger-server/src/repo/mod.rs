@@ -8,6 +8,7 @@ pub mod emoji;
 pub mod links;
 pub mod media;
 pub mod messages;
+pub mod polls;
 pub mod rooms;
 pub mod search;
 pub mod users;

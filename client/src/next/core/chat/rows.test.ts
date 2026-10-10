@@ -98,6 +98,26 @@ describe("the chat window's rows", () => {
   });
 });
 
+describe("polls (#474)", () => {
+  const poll = { question: "Which faction?", choices: [{ text: "Horde", voter_ids: [] }, { text: "Alliance", voter_ids: [] }], multi: false, closes_at: 9e12, closed_at: null, closed_by: null };
+  const heads = (rows: ReturnType<typeof chatRows>) => rows.flatMap((row) => (row.kind === "message" ? [[row.message.id, row.head]] : [row.kind]));
+
+  it("a poll always says who asked, and what's said after it starts a group", () => {
+    const rows = chatRows([message(1, "matt", T0), message(2, "matt", T0 + MIN, { poll }), message(3, "matt", T0 + 2 * MIN)], [], { atStart: false, leftOff: null });
+    expect(heads(rows)).toEqual([["m000001", true], ["m000002", true], ["m000003", true]]);
+  });
+
+  it("a poll's closed line is a line of its own, and so is what follows", () => {
+    const closed = { poll_id: "m000001", question: "Which faction?", winners: ["Horde"] };
+    const rows = chatRows([message(1, "eli", T0), message(2, "eli", T0 + MIN, { poll_closed: closed }), message(3, "eli", T0 + 2 * MIN)], [], {
+      atStart: false,
+      leftOff: null,
+    });
+    expect(heads(rows)).toEqual([["m000001", true], ["m000002", true], ["m000003", true]]);
+    expect(lastEditable([message(1, "matt", T0), message(2, "matt", T0 + MIN, { poll_closed: closed })], "matt", true)?.id).toBe("m000001");
+  });
+});
+
 describe("somebody joining voice (#473)", () => {
   const join = (n: number, author: string, at: number) => message(n, author, at, { body: "joined voice", voice_join: true });
   const drawn = (rows: ReturnType<typeof chatRows>) =>
