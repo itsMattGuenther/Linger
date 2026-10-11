@@ -932,6 +932,29 @@ built on the rows' own grid so nothing new lines up by eye:
   `away` button (#392), as with one server.
 - **One server** draws the list exactly as before, with no section header.
 
+## When something can't be drawn
+
+A part that throws while it's drawn says so in its place, and the rest of
+the window carries on (#509, `app/Boundary.tsx`). Before, one throw blanked
+the whole list window.
+
+- **A pane:** a conversation, Media, Search, or a section of Settings. Its
+  place says "This conversation couldn't be shown." (or "Media…",
+  "This section…"), a muted line under it, and a small Try again: laid out
+  as a window with nothing to show is, centered in the pane, and in Settings
+  on the header's edge, where a section's first block would start. No alarm
+  color and never the lamp: nothing new happened. The tabs, the list and the
+  title bar go on working, and showing another conversation draws again.
+- **A window:** the last place it's caught, at the root of every window
+  (`main.tsx`). Its title bar, so it can still be moved and closed, a line
+  saying so, and Reload.
+- **A time a date can't hold** draws as no time rather than throwing
+  (`validTime` in `lib/time.ts`): a message, a line or a search hit without
+  its time, a message of the day without "at 10:52 PM", a divider not drawn.
+
+What broke goes to this computer's console, where React writes every error
+it catches, and nowhere else (AGENTS.md hard rule 4).
+
 ## What the tests enforce
 
 | Rule | Test |
@@ -991,6 +1014,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | No `!important` | `discipline.test.ts` › never uses !important |
 | `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
+| A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
 | Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The

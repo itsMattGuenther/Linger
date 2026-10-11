@@ -9,7 +9,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { EMOJI_NAME_RULE, emojiNameFrom, emojiNameOk, MAX_CUSTOM_EMOJI } from "../../../lib/emoji/names";
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
-import { fullTime } from "../../../lib/time";
+import { fullTime, isoTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_MOTD_CHARS } from "../../core/chat/motd";
 import {
@@ -799,7 +799,7 @@ function ReportsBlock({ reports, remove, meId, members }: { reports: HostReports
                   <span className="nx-set-report-who">
                     From {nameOf(report.reporter_id)}, about {report.message ? `a message by ${who} in ${reports.placeOf(report.message.room_id)}` : who}
                   </span>
-                  <time className="nx-set-mono" dateTime={new Date(report.created_at).toISOString()}>
+                  <time className="nx-set-mono" dateTime={isoTime(report.created_at)}>
                     {fullTime(report.created_at)}
                   </time>
                 </span>

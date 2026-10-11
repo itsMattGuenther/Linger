@@ -13,7 +13,7 @@
 import { memo, useRef, useState } from "react";
 import type { Message } from "../../../generated/Message";
 import type { User } from "../../../generated/User";
-import { clockTime, fullTime } from "../../../lib/time";
+import { clockTime, fullTime, isoTime } from "../../../lib/time";
 import { IconButton, Marker, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { PeopleCard } from "./PeopleCard";
@@ -86,7 +86,7 @@ export const JoinLine = memo(function JoinLine({ messages, people }: { messages:
           joined voice
         </span>
       </p>
-      <time className="nx-msg-time" dateTime={new Date(first.created_at).toISOString()} title={fullTime(first.created_at)}>
+      <time className="nx-msg-time" dateTime={isoTime(first.created_at)} title={fullTime(first.created_at)}>
         {clockTime(first.created_at)}
       </time>
       {everyone ? (

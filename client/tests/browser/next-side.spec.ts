@@ -586,3 +586,87 @@ test("a list dragged wide is squeezed, not lost, when the window gets narrower",
   await expect(line(page)).toHaveAttribute("aria-valuenow", "540");
 });
 
+
+// Something from a server that can't be drawn (#509). One throw while
+// drawing used to take the whole list window down with it: every server's
+// connection, voice, and the conversations beside the list.
+
+/** Past the furthest time a date can hold (8.64e15 ms either side of 1970). */
+const NO_DATE = 9e15;
+
+/** A line in #general from Eli, as the server sends it. */
+function said(id: string, extra: Record<string, unknown> = {}) {
+  return { id, room_id: "r-general", author_id: "u-eli", body: "", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: Date.now(), ...extra };
+}
+
+/** A gateway frame from The Good Company. */
+async function send(page: Page, op: string, d: unknown) {
+  await page.evaluate(([server, op_, d_]) => window.core?.frame(server, { op: op_, d: d_ } as never), [HOME, op, d] as const);
+}
+
+test("a message, a voice line, a poll's line and a message of the day from a time no date can hold draw with no time, and the window stays up (#509)", async ({ page }) => {
+  await open(page);
+  await grown(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+
+  await send(page, "message.create", said("m900200", { body: "Sent from the far future.", created_at: NO_DATE }));
+  await send(page, "message.create", said("m900201", { author_id: "u-jules", body: "joined voice", voice_join: true, created_at: NO_DATE }));
+  await send(page, "message.create", said("m900202", { body: "Poll closed", created_at: NO_DATE, poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: ["Tacos"] } }));
+  const motd = { text: "Raid night Friday at 8.", set_by: "u-eli", set_at: NO_DATE };
+  await send(page, "room.update", { id: "r-general", slug: "general", name: "general", topic: "Good company. No hurry.", kind: "room", member_ids: null, position: 0, archived_at: null, last_message_id: "m000016", motd });
+
+  // The list and the conversation are both still there, everything drawn.
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await expect(room(page, "weekend-plans")).toBeVisible();
+  const log = page.getByRole("log");
+  await expect(log).toContainText("Sent from the far future.");
+  await expect(log).toContainText("joined voice");
+  await expect(log).toContainText("Poll closed: “Pizza or tacos?” Tacos won.");
+  await expect(page.getByRole("note", { name: "Message of the day" })).toContainText("Raid night Friday at 8.");
+  await expect(page.getByText("couldn't be shown")).toHaveCount(0);
+
+  // Each says nothing about when, rather than something wrong.
+  await expect(log.locator("[data-message='m900200'] .nx-msg-time")).toHaveText("");
+  await expect(log.locator("[data-message='m900200'] .nx-msg-time")).not.toHaveAttribute("datetime");
+  await expect(log.locator(".nx-quiet[data-join] .nx-msg-time")).toHaveText("");
+  await expect(log.locator(".nx-quiet[data-poll-closed] .nx-msg-time")).toHaveText("");
+  await expect(page.locator(".nx-motd-by")).toHaveText("Message of the day, set by Eli");
+});
+
+test("a conversation that can't be drawn says so in its place; the list, the tabs and the other conversations carry on, and Try again draws it once it can (#509)", async ({ page }) => {
+  await open(page);
+  await grown(page);
+  await room(page, "listening-room").click();
+  await expect(page.getByRole("log")).toContainText("Nobody talk to me.");
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+
+  // A poll's closing line with no winners at all: never what Linger's server
+  // sends, but what a server running other code, or a damaged database,
+  // might. Drawing it throws, as any drawing bug would.
+  const broken = said("m900300", { body: "Poll closed", poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: null } });
+  await send(page, "message.create", broken);
+
+  const general = page.getByRole("tabpanel", { name: "#general" });
+  await expect(general.getByText("This conversation couldn't be shown.")).toBeVisible();
+  await expect(general.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByRole("log")).toHaveCount(0);
+
+  // The list, the tabs and the other conversation are still there, and work.
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await expect(room(page, "weekend-plans")).toBeVisible();
+  await page.getByRole("tab", { name: "#listening-room" }).click();
+  await expect(page.getByRole("log")).toContainText("Nobody talk to me.");
+  await expect(page.getByText("This conversation couldn't be shown.")).toHaveCount(0);
+
+  // Back on #general it still can't be drawn, so it still says so.
+  await page.getByRole("tab", { name: "#general" }).click();
+  await expect(general.getByText("This conversation couldn't be shown.")).toBeVisible();
+
+  // Mended, Try again draws it.
+  await send(page, "message.update", { ...broken, poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: ["Tacos"] } });
+  await general.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("log")).toContainText("Poll closed: “Pizza or tacos?” Tacos won.");
+  await expect(page.getByText("This conversation couldn't be shown.")).toHaveCount(0);
+});

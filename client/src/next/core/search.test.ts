@@ -135,6 +135,12 @@ describe("a hit", () => {
     expect(hitLine(hit({ snippet: [] }), names, null, NOW).label).toBe(`Eli in #general, ${full}: no words`);
   });
 
+  it("says nothing about when for a time that can't be drawn, rather than throwing (#509)", () => {
+    const line = hitLine(hit({ created_at: 9e15 }), names, null, NOW);
+    expect(line.when).toBe("");
+    expect(line.label).toBe("Eli in #general: the one with the rain sounds");
+  });
+
   it("says when, short: the day and time this year, the day and year before", () => {
     const thisYear = hitWhen(AT, NOW);
     expect(thisYear).toContain("25");
