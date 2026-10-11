@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { CreatePollRequest } from "../../../generated/CreatePollRequest";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
@@ -54,7 +54,7 @@ import { pressVoiceControl } from "../../core/voiceControl";
 import { markerOf, type TabItem } from "../../kit";
 import { PersonCard } from "../list/PersonCard";
 import { useHideReactions } from "../useHideReactions";
-import { hostOf, useServerInfos } from "../useServerInfos";
+import { hostOf, type ServerTagInfo, useServerInfos } from "../useServerInfos";
 import type { ChatPane } from "./ChatView";
 import type { ReactionKit } from "./Reactions";
 import { useFileDrafts } from "./useFileDrafts";
@@ -207,19 +207,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   // the message is gone.
   const [goTo, setGoTo] = useState<{ tab: string; id: MessageId } | null>(null);
   const onWentTo = useCallback(() => setGoTo(null), []);
-  const goToMessage = useCallback(
-    (tab: TabKey, id: MessageId) => {
-      const api = apis.get(tab.server);
-      if (!api) return;
-      const held = serverState(tab.server).streams[tab.roomId];
-      if (held?.messages.some((one) => one.id === id)) {
-        setGoTo({ tab: keyOf(tab), id });
-        return;
-      }
-      void openAround(api, tab.roomId, id).then(() => setGoTo({ tab: keyOf(tab), id }));
-    },
-    [apis],
-  );
+  const goToMessage = useMemo(() => goingTo(apis, setGoTo), [apis]);
   // Opened on a message: asked for before the conversation's first visit
   // below, so the room is opened once, at the message, rather than at its
   // newest page and then again around the message (#266).
@@ -237,31 +225,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   // on its tab in the server's color, and its name in the header (MULTI-6).
   const infos = useServerInfos(apis);
   const several = apis.size > 1;
-  const serverTag = useCallback(
-    (server: string) => ({ name: infos[server]?.name ?? hostOf(server), color: infos[server]?.accent ?? "slate" }),
-    [infos],
-  );
-
-  const tabItem = useCallback(
-    (tab: TabKey, showing: boolean): TabItem | null => {
-      const state = servers[tab.server];
-      const model = state ? tabModel(tab, state, showing, talkingNow(state)) : null;
-      if (!model) return null;
-      return {
-        id: model.id,
-        title: model.title,
-        label: several ? `${model.label}, ${serverTag(tab.server).name}` : model.label,
-        stripe: several ? serverTag(tab.server).color : undefined,
-        lead: model.lead === null ? undefined : model.lead.kind === "room" ? { kind: "room" } : { kind: "person", person: markerOf(model.lead.user, model.lead.state) },
-        fresh: model.fresh,
-        lit: model.lit,
-        voice: model.voice ?? undefined,
-        speaking: model.speaking,
-        closable: true,
-      };
-    },
-    [servers, several, serverTag],
-  );
+  const serverTag = useMemo(() => taggerOf(infos), [infos]);
+  const tabItem = useMemo(() => tabItemsOf(servers, several, serverTag), [servers, several, serverTag]);
 
   // ------------------------------------------------------------------
   // The showing conversation.
@@ -291,66 +256,12 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   );
   const previews = useLinkPreviews(active?.server ?? "");
 
-  const onNearStart = useCallback(() => {
-    if (api && roomId !== null) void loadOlder(api, roomId);
-  }, [api, roomId]);
-  const onNearEnd = useCallback(() => {
-    if (api && roomId !== null) void loadNewer(api, roomId);
-  }, [api, roomId]);
-  const onLetGo = useCallback(
-    (first: MessageId, last: MessageId) => {
-      if (api && roomId !== null) trimHistory(api.baseUrl, roomId, first, last);
-    },
-    [api, roomId],
-  );
-  const onBackToNewest = useCallback(() => {
-    if (api && roomId !== null) void leaveWindow(api, roomId);
-  }, [api, roomId]);
-  const mediaUrl = useCallback((path: string) => (api ? absoluteUrl(api.baseUrl, path) : path), [api]);
-
-  const save = useCallback(
-    async (message: Message, body: string) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await editMessage(api, message, body).catch(rethrowInWords("Couldn't save the edit."));
-    },
-    [api],
-  );
-  const remove = useCallback(
-    async (message: Message) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await deleteMessage(api, message).catch(rethrowInWords("Couldn't delete it."));
-    },
-    [api],
-  );
-  const pin = useCallback(
-    async (message: Message, pinned: boolean) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await pinMessage(api, message, pinned).catch(rethrowInWords(pinned ? "Couldn't pin it." : "Couldn't take the pin off."));
-    },
-    [api],
-  );
-  // A poll's votes and its close (#474): only whoever asked is offered Close.
-  const vote = useCallback(
-    async (message: Message, choices: number[]) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await votePoll(api, message, choices).catch(rethrowInWords("Couldn't vote. Try again."));
-    },
-    [api],
-  );
-  const closeAsked = useCallback(
-    async (message: Message) => {
-      if (!api) throw new Error("This conversation isn't connected.");
-      await closePoll(api, message).catch(rethrowInWords("Couldn't close the poll. Try again."));
-    },
-    [api],
-  );
-  const download = useCallback((file: Attachment) => openExternalChecked(mediaUrl(file.url)), [mediaUrl]);
-  const wantCards = useCallback(
-    (urls: readonly string[]) => {
-      if (api) wantPreviews(api, [...urls]);
-    },
-    [api],
-  );
+  // What the conversation, its box and its messages do: made by functions
+  // out here, so each holds only the sign-in and the room it's for (#534).
+  const inRoom = useMemo(() => roomCalls(api, roomId), [api, roomId]);
+  const onServer = useMemo(() => serverCalls(api, setKnocks), [api]);
+  const { onNearStart, onNearEnd, onLetGo, onBackToNewest, setMotd, startPoll, onTyping } = inRoom;
+  const { mediaUrl, save, remove, pin, vote, closeAsked, download, wantCards, knock, leaveGroup } = onServer;
   // The name that opened it gets the keyboard back when it closes.
   const cardOpener = useRef<HTMLElement | null>(null);
   const activeNow = useRef(active);
@@ -369,18 +280,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const host = state ? hostName(state) : null;
   // It reaches co-hosts too, when there are any (#424).
   const cohosts = state ? reportsReachCohosts(state) : false;
-  const report = useMemo(
-    () =>
-      api && host !== null
-        ? {
-            host,
-            cohosts,
-            send: (message: Message, note: string | null) =>
-              said(sendReport(api, note === null ? { message_id: message.id } : { message_id: message.id, note }), "Couldn't send the report."),
-          }
-        : undefined,
-    [api, host, cohosts],
-  );
+  const report = useMemo(() => reportTo(api, host, cohosts), [api, host, cohosts]);
   // Reactions (#485): none in a room the host turned them off in, and none
   // for somebody who hid them on this computer. A DM is never off.
   const hideReactions = useHideReactions();
@@ -388,19 +288,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const reactionsOff = state?.reactions !== true || (room?.kind === "room" && room.reactions_off === true);
   const custom = state?.emoji ?? NO_EMOJI;
   const serverName = active ? serverTag(active.server).name : "";
-  const react = useMemo<ReactionKit | undefined>(
-    () =>
-      api && !hideReactions && !reactionsOff
-        ? {
-            toggle: (message: Message, key: string, on: boolean) =>
-              reactTo(api, message, key, on).catch(rethrowInWords(on ? "Couldn't add your reaction. Try again." : "Couldn't take your reaction back. Try again.")),
-            custom,
-            byId: new Map(custom.map((one) => [one.id, one])),
-            serverName,
-          }
-        : undefined,
-    [api, hideReactions, reactionsOff, custom, serverName],
-  );
+  const react = useMemo(() => (hideReactions || reactionsOff ? undefined : reactionsWith(api, custom, serverName)), [api, hideReactions, reactionsOff, custom, serverName]);
   const actions = useMemo(
     () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report, vote, closePoll: closeAsked, react }),
     [save, remove, pin, download, wantCards, openPerson, report, vote, closeAsked, react],
@@ -410,25 +298,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   // co-host; anybody else's box says who can. A DM has none.
   const isRoom = room?.kind === "room";
   const mayHost = state ? hostsHere(state.me) : false;
-  const setMotd = useCallback(
-    async (text: string) => {
-      if (!api || roomId === null) throw new Error("This conversation isn't connected.");
-      await api
-        .updateRoom(roomId, { name: null, topic: null, position: null, motd: text })
-        .then(() => undefined)
-        .catch(rethrowInWords("Couldn't set the message of the day."));
-    },
-    [api, roomId],
-  );
   const motdBox = useMemo(() => (isRoom ? { allowed: mayHost, set: setMotd } : undefined), [isRoom, mayHost, setMotd]);
   // `/poll` (#474): the host or a co-host asks the room; a DM has none.
-  const startPoll = useCallback(
-    async (request: CreatePollRequest) => {
-      if (!api || roomId === null) throw new Error("This conversation isn't connected.");
-      await askPoll(api, roomId, request).catch(rethrowInWords("Couldn't post the poll."));
-    },
-    [api, roomId],
-  );
   const pollBox = useMemo(() => (isRoom ? { allowed: mayHost, start: startPoll } : undefined), [isRoom, mayHost, startPoll]);
   // Its fold is kept on this device, so it's still folded after a restart;
   // bumped to draw a fold just made.
@@ -439,19 +310,9 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     () => paneId !== null && motdSetAt !== null && motdFolded(draftStore(), paneId, motdSetAt),
     [paneId, motdSetAt, foldings],
   );
-  const onFoldMotd = useCallback(
-    (fold: boolean) => {
-      if (paneId === null || motdSetAt === null) return;
-      foldMotd(draftStore(), paneId, motdSetAt, fold);
-      setFoldings((count) => count + 1);
-    },
-    [paneId, motdSetAt],
-  );
+  const onFoldMotd = useMemo(() => motdFolder(paneId, motdSetAt, setFoldings), [paneId, motdSetAt]);
 
   const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
-  const onTyping = useCallback(() => {
-    if (api && roomId !== null) startedTyping(api, roomId);
-  }, [api, roomId]);
   const voiceMessage = useVoiceMessages(paneId, apis, find);
   const composer = useMemo(
     // On the phone the cursor goes in the box when it's tapped: putting it there
@@ -460,53 +321,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox, pollBox],
   );
 
-  const knock = useCallback(
-    (user: User) => {
-      if (!api) return;
-      // Each step replaces the last, and a step's timer clears only itself,
-      // so an old timer never ends a newer knock early.
-      const step = (now: HeaderKnockNow, forMs?: number) => {
-        setKnocks((held) => new Map(held).set(user.id, now));
-        if (forMs === undefined) return;
-        window.setTimeout(
-          () =>
-            setKnocks((held) => {
-              if (held.get(user.id) !== now) return held;
-              const next = new Map(held);
-              next.delete(user.id);
-              return next;
-            }),
-          forMs,
-        );
-      };
-      step({ phase: "knocking" });
-      // "Knocked" only once the server has taken it: a refused knock (three
-      // an hour, SPEC §4.9) never says it, and says why instead (#288).
-      void knockOn(api, user.id).then((result) =>
-        result.ok ? step({ phase: "knocked" }, KNOCKED_MS) : step({ phase: "idle", problem: result.problem }, REFUSED_MS),
-      );
-    },
-    [api],
-  );
-
-  // Leaving a group from its header (#565). The server tells every window
-  // it's gone, and this tab or window goes with it.
-  const leaveGroup = useCallback(
-    (roomId: RoomId): Promise<string | null> =>
-      api ? said(api.leaveDm(roomId), "Couldn't leave the group.") : Promise.resolve("You're not signed in to that server any more."),
-    [api],
-  );
-
-  const onJoin = useCallback(() => {
-    if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
-  }, [active, intend]);
-  // A system default that wouldn't open is fixed by picking a device by name (#273).
-  const onPickDevice = useCallback(() => void intend({ kind: "settings", section: "sound" }).catch(() => undefined), [intend]);
-  // Your voice controls in the room you're in voice in (#216): the list
-  // window owns the seat and makes the change.
-  const onMute = useCallback((muted: boolean) => voiceControl({ control: "mute", on: muted }), [voiceControl]);
-  const onDeafen = useCallback((deafened: boolean) => voiceControl({ control: "deafen", on: deafened }), [voiceControl]);
-  const onLeave = useCallback(() => voiceControl({ control: "leave" }), [voiceControl]);
+  const { onJoin, onPickDevice, onMute, onDeafen, onLeave } = useMemo(() => voiceCalls(active, intend, voiceControl), [active, intend, voiceControl]);
 
   const pane = ((): ChatPane | null => {
     if (!active || !state || !room || paneId === null) return null;
@@ -643,6 +458,205 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     ) : null;
 
   return { pane, card: cardView, servers, several, serverTag, tabItem, goToMessage, askFocus, seedDraft, draftOf };
+}
+
+// The pane's functions are made by the functions below, never inside the
+// hook (#534). A function made inside a component keeps everything that
+// drawing could see alive for as long as it's kept: a kept callback made
+// when the room changed held that drawing, whose own kept callbacks held
+// older ones, and switching rooms left a chain of them behind, about 6 KB a
+// switch, for as long as the window was open. Made out here, each holds
+// only what it's handed.
+
+/** Go to a message in a conversation once it's in reach (CONV-17). */
+function goingTo(apis: ReadonlyMap<string, AuthedApi>, setGoTo: (to: { tab: string; id: MessageId }) => void): (tab: TabKey, id: MessageId) => void {
+  return (tab, id) => {
+    const api = apis.get(tab.server);
+    if (!api) return;
+    const held = serverState(tab.server).streams[tab.roomId];
+    if (held?.messages.some((one) => one.id === id)) {
+      setGoTo({ tab: keyOf(tab), id });
+      return;
+    }
+    void openAround(api, tab.roomId, id).then(() => setGoTo({ tab: keyOf(tab), id }));
+  };
+}
+
+/** A server's name and color, as its tab and header show them (MULTI-6). */
+function taggerOf(infos: Readonly<Record<string, ServerTagInfo>>): (server: string) => { name: string; color: string } {
+  return (server) => ({ name: infos[server]?.name ?? hostOf(server), color: infos[server]?.accent ?? "slate" });
+}
+
+/** A conversation's tab, as the tab row draws it, or null for one that isn't there (yet). */
+function tabItemsOf(
+  servers: Readonly<Record<string, GatewayState>>,
+  several: boolean,
+  serverTag: (server: string) => { name: string; color: string },
+): (tab: TabKey, showing: boolean) => TabItem | null {
+  return (tab, showing) => {
+    const state = servers[tab.server];
+    const model = state ? tabModel(tab, state, showing, talkingNow(state)) : null;
+    if (!model) return null;
+    return {
+      id: model.id,
+      title: model.title,
+      label: several ? `${model.label}, ${serverTag(tab.server).name}` : model.label,
+      stripe: several ? serverTag(tab.server).color : undefined,
+      lead: model.lead === null ? undefined : model.lead.kind === "room" ? { kind: "room" } : { kind: "person", person: markerOf(model.lead.user, model.lead.state) },
+      fresh: model.fresh,
+      lit: model.lit,
+      voice: model.voice ?? undefined,
+      speaking: model.speaking,
+      closable: true,
+    };
+  };
+}
+
+/** What the showing conversation does with its room: its history, its message of the day, a poll, typing. */
+function roomCalls(api: AuthedApi | null, roomId: RoomId | null) {
+  const connected = (): { api: AuthedApi; roomId: RoomId } => {
+    if (!api || roomId === null) throw new Error("This conversation isn't connected.");
+    return { api, roomId };
+  };
+  return {
+    onNearStart: () => {
+      if (api && roomId !== null) void loadOlder(api, roomId);
+    },
+    onNearEnd: () => {
+      if (api && roomId !== null) void loadNewer(api, roomId);
+    },
+    onLetGo: (first: MessageId, last: MessageId) => {
+      if (api && roomId !== null) trimHistory(api.baseUrl, roomId, first, last);
+    },
+    onBackToNewest: () => {
+      if (api && roomId !== null) void leaveWindow(api, roomId);
+    },
+    // A room's message of the day (#464): `/motd` sets it, for the host or a co-host.
+    setMotd: async (text: string) => {
+      const here = connected();
+      await here.api
+        .updateRoom(here.roomId, { name: null, topic: null, position: null, motd: text })
+        .then(() => undefined)
+        .catch(rethrowInWords("Couldn't set the message of the day."));
+    },
+    // `/poll` (#474): the host or a co-host asks the room.
+    startPoll: async (request: CreatePollRequest) => {
+      const here = connected();
+      await askPoll(here.api, here.roomId, request).catch(rethrowInWords("Couldn't post the poll."));
+    },
+    onTyping: () => {
+      if (api && roomId !== null) startedTyping(api, roomId);
+    },
+  };
+}
+
+/** What the showing conversation's server does with a message, a knock from a DM's header, or leaving a group. */
+function serverCalls(api: AuthedApi | null, setKnocks: Dispatch<SetStateAction<ReadonlyMap<string, HeaderKnockNow>>>) {
+  const connected = (): AuthedApi => {
+    if (!api) throw new Error("This conversation isn't connected.");
+    return api;
+  };
+  const mediaUrl = (path: string) => (api ? absoluteUrl(api.baseUrl, path) : path);
+  return {
+    mediaUrl,
+    save: async (message: Message, body: string) => {
+      await editMessage(connected(), message, body).catch(rethrowInWords("Couldn't save the edit."));
+    },
+    remove: async (message: Message) => {
+      await deleteMessage(connected(), message).catch(rethrowInWords("Couldn't delete it."));
+    },
+    pin: async (message: Message, pinned: boolean) => {
+      await pinMessage(connected(), message, pinned).catch(rethrowInWords(pinned ? "Couldn't pin it." : "Couldn't take the pin off."));
+    },
+    // A poll's votes and its close (#474): only whoever asked is offered Close.
+    vote: async (message: Message, choices: number[]) => {
+      await votePoll(connected(), message, choices).catch(rethrowInWords("Couldn't vote. Try again."));
+    },
+    closeAsked: async (message: Message) => {
+      await closePoll(connected(), message).catch(rethrowInWords("Couldn't close the poll. Try again."));
+    },
+    download: (file: Attachment) => openExternalChecked(mediaUrl(file.url)),
+    wantCards: (urls: readonly string[]) => {
+      if (api) wantPreviews(api, [...urls]);
+    },
+    knock: (user: User) => {
+      if (!api) return;
+      // Each step replaces the last, and a step's timer clears only itself,
+      // so an old timer never ends a newer knock early.
+      const step = (now: HeaderKnockNow, forMs?: number) => {
+        setKnocks((held) => new Map(held).set(user.id, now));
+        if (forMs === undefined) return;
+        window.setTimeout(
+          () =>
+            setKnocks((held) => {
+              if (held.get(user.id) !== now) return held;
+              const next = new Map(held);
+              next.delete(user.id);
+              return next;
+            }),
+          forMs,
+        );
+      };
+      step({ phase: "knocking" });
+      // "Knocked" only once the server has taken it: a refused knock (three
+      // an hour, SPEC §4.9) never says it, and says why instead (#288).
+      void knockOn(api, user.id).then((result) =>
+        result.ok ? step({ phase: "knocked" }, KNOCKED_MS) : step({ phase: "idle", problem: result.problem }, REFUSED_MS),
+      );
+    },
+    // Leaving a group from its header (#565). The server tells every window
+    // it's gone, and this tab or window goes with it.
+    leaveGroup: (roomId: RoomId): Promise<string | null> =>
+      api ? said(api.leaveDm(roomId), "Couldn't leave the group.") : Promise.resolve("You're not signed in to that server any more."),
+  };
+}
+
+/** Report to the host (T-1605): nobody to send one to when you're the host. It reaches co-hosts too, when there are any (#424). */
+function reportTo(api: AuthedApi | null, host: string | null, cohosts: boolean) {
+  if (!api || host === null) return undefined;
+  return {
+    host,
+    cohosts,
+    send: (message: Message, note: string | null) =>
+      said(sendReport(api, note === null ? { message_id: message.id } : { message_id: message.id, note }), "Couldn't send the report."),
+  };
+}
+
+/** Reactions (#485), on a server that takes them. */
+function reactionsWith(api: AuthedApi | null, custom: readonly CustomEmoji[], serverName: string): ReactionKit | undefined {
+  if (!api) return undefined;
+  return {
+    toggle: (message: Message, key: string, on: boolean) =>
+      reactTo(api, message, key, on).catch(rethrowInWords(on ? "Couldn't add your reaction. Try again." : "Couldn't take your reaction back. Try again.")),
+    custom,
+    byId: new Map(custom.map((one) => [one.id, one])),
+    serverName,
+  };
+}
+
+/** A room's message of the day folded or opened (#464), kept on this device so it's still so after a restart. */
+function motdFolder(paneId: string | null, motdSetAt: number | null, setFoldings: Dispatch<SetStateAction<number>>): (fold: boolean) => void {
+  return (fold) => {
+    if (paneId === null || motdSetAt === null) return;
+    foldMotd(draftStore(), paneId, motdSetAt, fold);
+    setFoldings((count) => count + 1);
+  };
+}
+
+/** The voice line's Join, and your controls once you're in. */
+function voiceCalls(active: TabKey | null, intend: PaneHost["intend"], voiceControl: (press: VoiceControlQuestion) => void) {
+  return {
+    onJoin: () => {
+      if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
+    },
+    // A system default that wouldn't open is fixed by picking a device by name (#273).
+    onPickDevice: () => void intend({ kind: "settings", section: "sound" }).catch(() => undefined),
+    // Your voice controls in the room you're in voice in (#216): the list
+    // window owns the seat and makes the change.
+    onMute: (muted: boolean) => voiceControl({ control: "mute", on: muted }),
+    onDeafen: (deafened: boolean) => voiceControl({ control: "deafen", on: deafened }),
+    onLeave: () => voiceControl({ control: "leave" }),
+  };
 }
 
 /** A window of its own asks the list window, and plays the sound it answers with (#241). */

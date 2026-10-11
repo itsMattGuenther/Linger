@@ -320,7 +320,10 @@ are kept on this computer; Settings saves a change and announces it
 (`next:appearance`), and every window applies it (`core/appearance.ts`).
 Interface size zooms the page and grows the window by the same ratio, because
 the new client's sizes are fixed pixels and a larger base font would grow
-nothing.
+nothing. A window's smallest size grows by the same ratio (#512), so the
+page is never narrower than the layout was made for: at 150%, the list's
+smallest window was 200 of the page's pixels, and the message box over it 8.
+It never asks for more than nine tenths of the screen.
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).

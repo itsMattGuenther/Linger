@@ -80,6 +80,7 @@ import { readPasted, type SignInActions, signInActions } from "../../core/signin
 import { Button, Spinner, Splitter } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
+import type { AwayNudge } from "./AwayNudge";
 import { ListView } from "./ListView";
 import "./ListWindow.css";
 import type { ServerListing } from "./ServerSection";
@@ -342,23 +343,7 @@ function Servers({
   const alreadyOn = useRef<(baseUrl: string) => string | null>(() => null);
   alreadyOn.current = (baseUrl) =>
     signedIn.some((session) => session.baseUrl === baseUrl) ? `You're already signed in to ${infos[baseUrl]?.name ?? hostOf(baseUrl)}.` : null;
-  const addingActions = useMemo((): SignInActions => {
-    const actions = signInActions(
-      (baseUrl) => new PublicApi(baseUrl),
-      async (baseUrl, auth) => {
-        await accounts.reauthenticate(baseUrl, auth);
-        setAdding(false);
-      },
-    );
-    return {
-      ...actions,
-      check: async (pasted) => {
-        const read = readPasted(pasted);
-        const problem = "link" in read ? alreadyOn.current(read.link.baseUrl) : null;
-        return problem === null ? actions.check(pasted) : { problem };
-      },
-    };
-  }, [accounts]);
+  const addingActions = useMemo(() => addingWith(accounts, setAdding, alreadyOn), [accounts]);
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
   // Conversations beside the list (#337): the tabs, kept here so they
   // outlast folding, and whether the window is unfolded to show them.
@@ -889,54 +874,10 @@ function Servers({
   // One server: your status and away from the top card, as before.
   const only = ordered.length === 1 ? ordered[0] : undefined;
   const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
-  const you = useMemo<YouActions | undefined>(() => {
-    if (!only || onlyMe === null) return undefined;
-    const { api, baseUrl } = only;
-    return {
-      awayChoices: awayChoices(loadRecentAway()),
-      saveLine: (line) => said(saveStatus(api, withLine(onlyMe.status, line))),
-      goAway: async (message) => {
-        const problem = await said(saveStatus(api, withAway(onlyMe.status, message)));
-        if (problem === null) {
-          setAway(baseUrl, message);
-          saveRecentAway(rememberAway(loadRecentAway(), message));
-        }
-        return problem;
-      },
-      comeBack: async () => {
-        const problem = await said(saveStatus(api, withAway(onlyMe.status, null)));
-        if (problem === null) setAway(baseUrl, null);
-        return problem;
-      },
-    };
-  }, [only, onlyMe]);
+  const you = useMemo(() => (only && onlyMe !== null ? youOn(only, onlyMe) : undefined), [only, onlyMe]);
 
   // Several servers: away on the ones you tick, each answering for itself.
-  const everywhere = useMemo<AwayEverywhere | undefined>(() => {
-    if (!several) return undefined;
-    const each = async (servers: string[], message: string | null): Promise<Record<string, string | null>> => {
-      const answers = await Promise.all(
-        servers.map(async (server): Promise<[string, string | null]> => {
-          const session = signedIn.find((one) => one.baseUrl === server);
-          const me = states[server]?.me;
-          if (!session || !me) return [server, "You're not signed in there any more."];
-          const problem = await said(saveStatus(session.api, withAway(me.status, message)));
-          if (problem === null) setAway(server, message);
-          return [server, problem];
-        }),
-      );
-      return Object.fromEntries(answers);
-    };
-    return {
-      awayChoices: awayChoices(loadRecentAway()),
-      goAway: async (message, servers) => {
-        const answers = await each(servers, message);
-        if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
-        return answers;
-      },
-      comeBack: (servers) => each(servers, null),
-    };
-  }, [several, signedIn, states]);
+  const everywhere = useMemo(() => (several ? awayEverywhere(signedIn) : undefined), [several, signedIn]);
 
   // Back at the computer while still away (#392): the top card says so once,
   // with I'm back right there. Away is something you choose (SPEC §4.6), so
@@ -947,7 +888,7 @@ function Servers({
   useEffect(() => {
     if (!awayAnywhere) setBackWhileAway(false);
   }, [awayAnywhere]);
-  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? { onDismiss: () => setBackWhileAway(false) } : undefined), [backWhileAway, awayAnywhere]);
+  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? nudgeWith(setBackWhileAway) : undefined), [backWhileAway, awayAnywhere]);
 
   // The foot's standing lines (decision 1): a server that isn't connected
   // after a few seconds, a keyring that can't keep sign-ins, a new version.
@@ -1334,6 +1275,81 @@ function listingOf(
     showing: showingHere,
     saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
   };
+}
+
+// What the list hands its parts, made out here so each holds only what it's
+// handed: one made inside the list window, and kept, keeps that whole
+// drawing of the window alive with it (#534).
+
+/** Adding a server: the sign-in, checked first against the servers you're already on. */
+function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, alreadyOn: { current: (baseUrl: string) => string | null }): SignInActions {
+  const actions = signInActions(
+    (baseUrl) => new PublicApi(baseUrl),
+    async (baseUrl, auth) => {
+      await accounts.reauthenticate(baseUrl, auth);
+      setAdding(false);
+    },
+  );
+  return {
+    ...actions,
+    check: async (pasted) => {
+      const read = readPasted(pasted);
+      const problem = "link" in read ? alreadyOn.current(read.link.baseUrl) : null;
+      return problem === null ? actions.check(pasted) : { problem };
+    },
+  };
+}
+
+/** One server: your status and away from the top card. */
+function youOn({ api, baseUrl }: ServerSession, me: User): YouActions {
+  return {
+    awayChoices: awayChoices(loadRecentAway()),
+    saveLine: (line) => said(saveStatus(api, withLine(me.status, line))),
+    goAway: async (message) => {
+      const problem = await said(saveStatus(api, withAway(me.status, message)));
+      if (problem === null) {
+        setAway(baseUrl, message);
+        saveRecentAway(rememberAway(loadRecentAway(), message));
+      }
+      return problem;
+    },
+    comeBack: async () => {
+      const problem = await said(saveStatus(api, withAway(me.status, null)));
+      if (problem === null) setAway(baseUrl, null);
+      return problem;
+    },
+  };
+}
+
+/** Several servers: away on the ones you tick, each answering for itself, from what it holds when you do. */
+function awayEverywhere(signedIn: readonly ServerSession[]): AwayEverywhere {
+  const each = async (servers: string[], message: string | null): Promise<Record<string, string | null>> => {
+    const answers = await Promise.all(
+      servers.map(async (server): Promise<[string, string | null]> => {
+        const session = signedIn.find((one) => one.baseUrl === server);
+        const me = serverState(server).me;
+        if (!session || !me) return [server, "You're not signed in there any more."];
+        const problem = await said(saveStatus(session.api, withAway(me.status, message)));
+        if (problem === null) setAway(server, message);
+        return [server, problem];
+      }),
+    );
+    return Object.fromEntries(answers);
+  };
+  return {
+    awayChoices: awayChoices(loadRecentAway()),
+    goAway: async (message, servers) => {
+      const answers = await each(servers, message);
+      if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
+      return answers;
+    },
+    comeBack: (servers) => each(servers, null),
+  };
+}
+
+/** Back at the computer while still away (#392): waving the line off. */
+function nudgeWith(setBackWhileAway: (back: boolean) => void): AwayNudge {
+  return { onDismiss: () => setBackWhileAway(false) };
 }
 
 // The list's buttons into Settings, Media and Search: the same functions

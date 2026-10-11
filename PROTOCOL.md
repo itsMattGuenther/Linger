@@ -1464,9 +1464,9 @@ alone (#496).
 | op | payload | notes |
 |---|---|---|
 | `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). `away_message` is held to `PATCH /me`'s rule, 240 characters; told at most `RATE_PRESENCE` times (below) |
-| `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
+| `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room. Told at most `RATE_ROOM_FOCUS` times (below) |
 | `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room; ignored in an archived room, which takes no messages |
-| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
+| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306). At most `RATE_VOICE_SEAT` with `voice.leave` (below) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
 | `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
@@ -1488,6 +1488,24 @@ typing where no message can go (#497).
   turn comes, the server tells whatever is newest then, once, however many changes came
   in between. The server has the newest from the start, so a `ready` in between already
   carries it. An app sends a handful an hour, and never sees the limit.
+
+**`room.focus`, `voice.join` and `voice.leave`** each make the server tell many people
+something, so a burst from one app is cut short the same way (#527): a few, then the
+newest, never dropped.
+
+- **Moves are told at most `RATE_ROOM_FOCUS` times per person**: ten, then one a second.
+  Each can be a `room.leave`, a `room.enter`, two `room.occupancy` and a
+  `presence.update` to everybody. The move itself happens when the frame arrives, so a
+  `ready` has it at once and a `presence.update` after it lands in order. Only the
+  telling waits: at the person's turn, everybody is told where they are by then, once.
+  A room they passed through on the way hears nothing and plays no entrance sound.
+- **Joins and leaves are taken at most `RATE_VOICE_SEAT` times per session**: ten, then
+  one a second, mute and deafen changes included. Each seat taken or left makes the
+  forwarding server offer everybody in that voice room a fresh connection. Past the limit
+  the newest request waits for the session's turn and is taken then, so a burst ends
+  where its last frame said, with one round of offers. A session that left or moved while
+  it waited, and ends up back in the seat it had, still gets a fresh `voice.offer`: its
+  app closed the old connection.
 
 ### Server → client
 

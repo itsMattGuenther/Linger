@@ -265,6 +265,7 @@
   --linkcard-w: 360px;
   --audio-volume-w: 64px; /* a shared audio file's volume slider, beside its mute (#247) */
   --composer-max: 200px; /* the message box grows to this, then scrolls */
+  --composer-min-w: 96px; /* the narrowest the typing area gets; past it, the box's buttons go under it (#512) */
   --composer-thumb: 40px; /* a picture's preview above the message box, before it's sent (#397) */
   --poll-w: 420px; /* a poll's card: room for a choice's words and sixteen voters' dots on one row (#474) */
   --poll-length-w: 112px; /* the "Closes after" choice when asking a poll: its longest, "2 weeks", and the caret (#474) */
