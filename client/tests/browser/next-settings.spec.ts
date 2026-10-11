@@ -363,7 +363,6 @@ test.describe("this app", () => {
   test("where the talk key reaches past Linger, a mouse side button can be it; where it doesn't, only keys can (#500)", async ({ page }) => {
     await open(page, "?section=sound&reach=anywhere");
     await expect(panel(page)).toContainText("Works with a game or any other app in front");
-    await expect(panel(page)).toContainText("A game run as administrator hides its keys from Linger");
     await page.getByRole("button", { name: "Change" }).click();
     await expect(page.getByRole("button", { name: "Press a key or button…" })).toBeVisible();
     // A left click never picks; the back side button does, and goes nowhere.
@@ -392,13 +391,21 @@ test.describe("this app", () => {
     await expect(panel(page)).toContainText("a Mac has no code for this key, so Linger can't hear it with another app in front.");
   });
 
-  test("on a Mac the talk key reaches past Linger too, without Windows' administrator caveat (#587)", async ({ browser }) => {
-    const mac = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko)" });
-    const page = await mac.newPage();
-    await open(page, "?section=sound&reach=anywhere");
-    await expect(panel(page)).toContainText("Works with a game or any other app in front");
-    await expect(panel(page)).not.toContainText("administrator");
-    await mac.close();
+  test("on Windows and on a Mac the talk key reaches past Linger; only Windows hides an administrator's keys (#500, #587)", async ({ browser }) => {
+    const on = async (userAgent: string) => {
+      const context = await browser.newContext({ userAgent });
+      const page = await context.newPage();
+      await open(page, "?section=sound&reach=anywhere");
+      const words = await panel(page).innerText();
+      await context.close();
+      return words;
+    };
+    const windows = await on("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0");
+    expect(windows).toContain("Works with a game or any other app in front");
+    expect(windows).toContain("A game run as administrator hides its keys from Linger");
+    const mac = await on("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko)");
+    expect(mac).toContain("Works with a game or any other app in front");
+    expect(mac).not.toContain("administrator");
   });
 
   test("on Hyprland, Settings gives the line that hands the talk key to Linger, ready to copy; KDE and GNOME ask themselves (#500)", async ({ page }) => {

@@ -241,11 +241,11 @@ function TalkReach({ reach }: { reach: TalkKeyReach }) {
   const [copied, setCopied] = useState<"yes" | "no" | null>(null);
   if (reach.kind === "anywhere") {
     // Windows hides an administrator's keys; a Mac has no such thing (#587).
-    const onMac = desktopOf(navigator.userAgent) === "mac";
+    const onWindows = desktopOf(navigator.userAgent) === "windows";
     return (
       <Note>
         Works with a game or any other app in front: Linger listens for this one key, only while you're in voice, and the game still gets it.
-        {onMac ? null : " A game run as administrator hides its keys from Linger, as it does from Discord."}
+        {onWindows ? " A game run as administrator hides its keys from Linger, as it does from Discord." : null}
       </Note>
     );
   }
