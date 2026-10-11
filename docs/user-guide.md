@@ -384,7 +384,8 @@ Click the **gear** at the top of the list, or press **Ctrl+,** in any window.
 Settings opens in its own window:
 
 - **Profile**: your display name, your status, and how your name looks
-- **Appearance**: interface size, plain names, and one line per person (below)
+- **Appearance**: interface size, plain names, reactions, and one line per
+  person (below)
 - **Windows**: tabs or a window per conversation, and what closing the list does
 - **Sound & Voice**: how loud Linger's sounds are, notification chimes and
   quiet hours; microphone, speakers, push to talk
@@ -463,8 +464,37 @@ picker under the server's name and in the colon list, and they go into a
 message as `:name:`, which everyone on that server sees as the picture. A
 message of just a few emoji is drawn big.
 
-There are no reactions on messages, for now. They are out as a trial: to answer
-something, reply to it, emoji and all.
+**Reactions.** To answer a message without writing anything, react to it with
+an emoji. Each emoji left on a message is a small **pill** under its words,
+with how many people left it (👍 3). Yours are blue with an outline; other
+people's are grey. Click a pill to add yours to it, and click one of yours to
+take it back. Point at a pill to see who left it: *"Jules and Dave reacted"*.
+For one of the server's own emoji, it says the emoji's name too.
+
+Any emoji works, the server's own included, from the same picker as the
+message box. On a computer, point at a message (or Tab to it) and click the
+smiley with a plus, just left of its **⋯**. A message that already has
+reactions has the same smiley at the end of them. On the phone, hold the
+message: above **Reply** is a row of six emoji, the ones you've used most
+recently (❤️ 😂 👍 🔥 😮 😢 until you've used six of your own). Tap one, or tap
+the smiley with a plus at the end of the row for every emoji. On the phone the
+smiley with a plus also stays at the end of a message's reactions. Picking one
+you've already left on that message takes yours back, the same as clicking its
+pill.
+
+A message holds **six different reactions** at most, so it never turns into a
+wall of stickers. At six, you're offered only those six, and the picker says
+why. Anybody can still add theirs to one of them.
+
+**Reactions never notify anybody.** No banner, no sound, and nothing in the
+list turns bold or lights up, whether the message is from today or from last
+month. People see them when they look at the message.
+
+Rather not see them? Turn off **Show reactions** in **Settings → Appearance**.
+You then see no pills, and no smileys for leaving one, anywhere. It's for you
+only, kept on this computer or phone, and everyone else still sees theirs.
+The host or a co-host can also turn reactions off in a room; a DM always has
+them. On a server that hasn't been updated for reactions, there are none.
 
 **A room's message of the day.** A room can have a note about what's happening
 now, like *"Raid night Friday at 8"*, apart from its topic, which says what the
@@ -863,6 +893,8 @@ Also in settings:
 - **Use plain names and message fonts**: turns off other people's name styling
   and message fonts, for you only. Nobody is told. Use it if a room is too loud
   to read.
+- **Show reactions**: turned off, you see no reactions on messages and no
+  buttons for leaving one. Nobody is told, and everyone else still sees theirs.
 - **One line per person**: every person in your list takes one line instead of
   two, so more fit. Point at somebody to read their status. Off unless you turn
   it on; the phone always keeps two lines.
@@ -922,7 +954,7 @@ Messages you are already reading, your own messages, reconnect replay and
 push-to-talk presses do not chime. These switches do not silence voice chat;
 use **deafen** for that. Muting chimes keeps visual notifications visible.
 
-There are **no unread badges and no counters** anywhere in Linger. That is
+There are **no unread badges and no unread counts** anywhere in Linger. That is
 deliberate. Nothing is keeping score of what you have not read, so nothing can
 make you feel behind. A room with something new just has a bolder name. Opening
 it lands on a **you left off here** line; caught-up rooms open at the bottom.
