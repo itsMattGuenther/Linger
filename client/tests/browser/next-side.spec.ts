@@ -77,6 +77,27 @@ test("a room clicked in the list opens beside it, in the same window, with the c
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
+/** Where the fake shell was told to move the window. */
+async function moves(page: Page): Promise<string[]> {
+  return (await did(page)).filter((line) => line.startsWith("position "));
+}
+
+// Where the screen ends is the page's own view of it, never the shell's
+// monitor: on Linux that reads GTK off its thread and can end the app (#628).
+for (const [where, query, x] of [
+  ["its screen", "?one&x=1700", 800],
+  ["a second screen, right of the first", "?one&second&x=3500", 2720],
+] as const) {
+  test(`a window near the right edge of ${where} grows leftwards, measured without asking for the monitor`, async ({ page }) => {
+    await open(page, query);
+    await room(page, "general").click();
+    await expect(page.getByRole("tab", { name: "#general", selected: true })).toBeVisible();
+    await expect.poll(() => sizes(page)).toEqual(["size 1120x820"]);
+    expect(await moves(page)).toEqual([`position ${x},40`]);
+    expect(await did(page)).not.toContain("current_monitor");
+  });
+}
+
 /**
  * When the page's clock starts. The idle tests install Playwright's clock
  * before the page loads, so they decide which seconds pass (#511).
