@@ -34,7 +34,7 @@
 //! it is a script that renders.
 
 use std::collections::HashSet;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -189,9 +189,14 @@ pub fn domain_of(url: &str) -> String {
 ///
 /// Everything else is refused: loopback, private ranges, link-local (which is
 /// where cloud metadata services live), carrier-grade NAT, multicast,
-/// broadcast, and the unspecified address. IPv6 gets the same treatment,
-/// including v4-mapped addresses — `::ffff:127.0.0.1` is loopback wearing a
-/// different hat.
+/// broadcast, reserved blocks and the unspecified address.
+///
+/// IPv6 gets the same treatment however the address is written. Several IPv6
+/// forms carry an IPv4 address, and a network that routes the prefix delivers
+/// the connection to that IPv4 address: `::ffff:127.0.0.1` is loopback wearing
+/// a different hat, and on an IPv6-only VPS behind NAT64, `64:ff9b::a9fe:a9fe`
+/// is the cloud metadata service. Those forms are judged by the IPv4 address
+/// inside (`embedded_ipv4`); the ones that can't be read reliably are refused.
 #[must_use]
 pub fn is_public(ip: IpAddr) -> bool {
     match ip {
@@ -202,17 +207,20 @@ pub fn is_public(ip: IpAddr) -> bool {
                 || v4.is_broadcast()
                 || v4.is_multicast()
                 || v4.is_documentation()
-                || v4.is_unspecified()
             {
                 return false;
             }
-            let [a, b, ..] = v4.octets();
+            let [a, b, c, _] = v4.octets();
+            // 0/8 ("this network", the unspecified address included),
             // 100.64/10 (carrier-grade NAT), 192.0.0/24 (IETF protocol
             // assignments), 198.18/15 (benchmarking), and 240/4 (reserved).
+            if a == 0 {
+                return false;
+            }
             if a == 100 && (64..128).contains(&b) {
                 return false;
             }
-            if a == 192 && b == 0 {
+            if a == 192 && b == 0 && c == 0 {
                 return false;
             }
             if a == 198 && (b == 18 || b == 19) {
@@ -224,22 +232,43 @@ pub fn is_public(ip: IpAddr) -> bool {
             true
         }
         IpAddr::V6(v6) => {
-            if let Some(v4) = v6.to_ipv4_mapped() {
+            if v6.is_loopback() || v6.is_unspecified() {
+                return false;
+            }
+            if let Some(v4) = embedded_ipv4(v6) {
                 return is_public(IpAddr::V4(v4));
             }
-            if v6.is_loopback() || v6.is_multicast() || v6.is_unspecified() {
+            let [first, second, ..] = v6.segments();
+            // Only 2000::/3 is handed out as global unicast. Everything
+            // outside it is local or reserved: fc00::/7 unique-local,
+            // fe80::/10 link-local, fec0::/10 site-local, ff00::/8 multicast,
+            // the rest of ::/8, and 64:ff9b:1::/48, local-use NAT64, whose
+            // IPv4 address sits wherever the network chose to put it.
+            if first & 0xe000 != 0x2000 {
                 return false;
             }
-            let first = v6.segments()[0];
-            // fc00::/7 unique-local, fe80::/10 link-local, 2001:db8::/32 docs.
-            if first & 0xfe00 == 0xfc00 || first & 0xffc0 == 0xfe80 {
-                return false;
-            }
-            if v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8 {
+            // 2001::/32 is Teredo, which tunnels to an IPv4 address it
+            // carries scrambled; 2001:db8::/32 is documentation.
+            if first == 0x2001 && (second == 0 || second == 0x0db8) {
                 return false;
             }
             true
         }
+    }
+}
+
+/// The IPv4 address an IPv6 address stands for, in the forms where its place
+/// is fixed: v4-mapped `::ffff:a.b.c.d`, the old v4-compatible `::a.b.c.d`,
+/// the well-known NAT64 prefix `64:ff9b::/96` (last 32 bits), and 6to4
+/// `2002::/16` (the 32 bits after the prefix).
+fn embedded_ipv4(v6: Ipv6Addr) -> Option<Ipv4Addr> {
+    let join = |hi: u16, lo: u16| Ipv4Addr::from((u32::from(hi) << 16) | u32::from(lo));
+    match v6.segments() {
+        [0, 0, 0, 0, 0, 0xffff | 0, hi, lo] | [0x64, 0xff9b, 0, 0, 0, 0, hi, lo] => {
+            Some(join(hi, lo))
+        }
+        [0x2002, hi, lo, ..] => Some(join(hi, lo)),
+        _ => None,
     }
 }
 
@@ -790,6 +819,103 @@ mod tests {
             assert!(!is_public(ip), "{refused} must be refused");
         }
         for allowed in ["1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"] {
+            let ip: IpAddr = allowed.parse().unwrap();
+            assert!(is_public(ip), "{allowed} should be reachable");
+        }
+    }
+
+    /// The IPv4 rules hold however the address is written (#490). Each IPv6
+    /// form below carries an IPv4 address, and a network that routes the
+    /// prefix (an IPv6-only VPS behind NAT64, say) delivers the connection to
+    /// that IPv4 address.
+    #[test]
+    fn an_ipv4_address_inside_an_ipv6_one_is_judged_as_ipv4() {
+        fn wrapped(v4: Ipv4Addr) -> Vec<(&'static str, Ipv6Addr)> {
+            let [a, b, c, d] = v4.octets();
+            let hi = u16::from_be_bytes([a, b]);
+            let lo = u16::from_be_bytes([c, d]);
+            vec![
+                ("v4-mapped", Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, hi, lo)),
+                ("v4-compatible", Ipv6Addr::new(0, 0, 0, 0, 0, 0, hi, lo)),
+                (
+                    "v4-translated",
+                    Ipv6Addr::new(0, 0, 0, 0, 0xffff, 0, hi, lo),
+                ),
+                ("NAT64", Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, hi, lo)),
+                (
+                    "local NAT64 /96",
+                    Ipv6Addr::new(0x64, 0xff9b, 1, 0, 0, 0, hi, lo),
+                ),
+                // RFC 6052's /48 layout: the address straddles a reserved byte.
+                (
+                    "local NAT64 /48",
+                    Ipv6Addr::new(0x64, 0xff9b, 1, hi, u16::from(c), u16::from(d) << 8, 0, 0),
+                ),
+                ("6to4", Ipv6Addr::new(0x2002, hi, lo, 0, 0, 0, 0, 1)),
+                // Teredo: the relay's IPv4 address in plain sight, the
+                // client's flipped bit for bit in the last 32 bits.
+                (
+                    "Teredo server",
+                    Ipv6Addr::new(0x2001, 0, hi, lo, 0, 0, 0, 0),
+                ),
+                (
+                    "Teredo client",
+                    Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, !hi, !lo),
+                ),
+            ]
+        }
+
+        for v4 in [
+            Ipv4Addr::new(127, 0, 0, 1),
+            Ipv4Addr::new(10, 0, 0, 1),
+            Ipv4Addr::new(169, 254, 169, 254), // the cloud metadata service
+        ] {
+            assert!(!is_public(IpAddr::V4(v4)), "{v4} must be refused");
+            for (form, v6) in wrapped(v4) {
+                assert!(
+                    !is_public(IpAddr::V6(v6)),
+                    "{v6} ({form} {v4}) must be refused"
+                );
+            }
+        }
+
+        // Site-local, withdrawn in 2004, never meant the public internet.
+        for refused in ["fec0::1", "feff::1"] {
+            let ip: IpAddr = refused.parse().unwrap();
+            assert!(!is_public(ip), "{refused} must be refused");
+        }
+
+        // The forms whose meaning is fixed let a public IPv4 address through:
+        // the check reads the address inside rather than refusing the form.
+        let public = Ipv4Addr::new(1, 1, 1, 1);
+        for (form, v6) in wrapped(public) {
+            let expected = matches!(form, "v4-mapped" | "v4-compatible" | "NAT64" | "6to4");
+            assert_eq!(
+                is_public(IpAddr::V6(v6)),
+                expected,
+                "{v6} ({form} {public})"
+            );
+        }
+    }
+
+    /// The reserved IPv4 blocks are as wide as the registry says: all of
+    /// 0.0.0.0/8, and 192.0.0.0/24 rather than the /16 around it, where
+    /// ordinary sites live.
+    #[test]
+    fn the_reserved_ipv4_blocks_have_the_right_edges() {
+        for refused in [
+            "0.1.2.3",         // 0.0.0.0/8, "this network"
+            "192.0.0.8",       // 192.0.0.0/24, IETF protocol assignments
+            "192.0.2.1",       // documentation
+            "198.19.255.254",  // benchmarking
+            "100.127.255.254", // carrier-grade NAT
+            "224.0.0.1",       // multicast
+            "240.0.0.1",       // reserved
+        ] {
+            let ip: IpAddr = refused.parse().unwrap();
+            assert!(!is_public(ip), "{refused} must be refused");
+        }
+        for allowed in ["192.0.78.9", "198.20.0.1", "100.128.0.1", "1.0.0.1"] {
             let ip: IpAddr = allowed.parse().unwrap();
             assert!(is_public(ip), "{allowed} should be reachable");
         }
