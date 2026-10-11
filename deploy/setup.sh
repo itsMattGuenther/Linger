@@ -73,6 +73,12 @@ if [[ -f data/linger.db ]]; then
   fail "this folder already runs a Linger server ($here/data/linger.db is here), so there's
 nothing to set up. ./update.sh updates it."
 fi
+# A server keeps its data folder to itself (#506), so from an account that
+# isn't root the database can't be seen, only a folder that won't open.
+if [[ -d data && ! -x data ]]; then
+  fail "this folder already runs a Linger server ($here/data is its data folder), so there's
+nothing to set up. ./update.sh updates it."
+fi
 
 # --- 1. The files -------------------------------------------------------------
 
@@ -218,7 +224,8 @@ docker compose pull
 # voice address, and can't write a data folder Docker made for root.
 version="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$IMAGE" 2>/dev/null || true)"
 older() { [[ "$(printf '%s\n%s\n' "$1" 0.4.9 | sort -V | head -1)" != 0.4.9 ]]; }
-mkdir -p data
+# Private from the start (#506), even under a server too old to make it so.
+mkdir -p -m 700 data
 if [[ -z "$version" ]] || older "$version"; then
   docker compose run --rm --no-deps --user root --entrypoint chown linger linger:linger /data
   if [[ -n "$public" ]] && ! grep -q '^LINGER_VOICE_ADDRESS=' .env; then

@@ -10,13 +10,23 @@
 # too, so nothing in the folder is ever written as root. Started as anybody
 # else (a compose `user:` line), it runs the server as that user and leaves
 # the folder alone.
+#
+# The folder is the server's alone (#506). It holds every DM, password hash
+# and file, and on a machine with more than one account the others must not
+# be able to read it. Started as root, the folder is made 0700, which also
+# shuts away what an older server made 0644. Either way the server runs with
+# umask 077, so what it makes from now on is 0600, and its folders 0700.
+# Nothing on the host needs in: Caddy only talks to the server, and update.sh
+# copies the database out through a one-off container of this image.
 set -eu
 
 data="${LINGER_DATA_DIR:-/data}"
+umask 077
 
 if [ "$(id -u)" = 0 ]; then
   if [ -d "$data" ]; then
     find "$data" -maxdepth 1 ! -user linger -exec chown linger:linger {} +
+    chmod 700 "$data"
   fi
   exec setpriv --reuid=linger --regid=linger --init-groups -- linger-server "$@"
 fi

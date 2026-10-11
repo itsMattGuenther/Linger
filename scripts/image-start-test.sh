@@ -2,8 +2,9 @@
 # The server image starts as it ships (#440). Into a data folder owned by
 # root, as Docker makes one, it has to come up and answer, run the server as
 # `linger` and never as root, leave nothing in the folder that isn't the
-# server's, and take voice's address from LINGER_DOMAIN. CI's image job runs
-# it on the image it just built; locally, give it any image:
+# server's, keep the folder and what it writes there to itself (#506), and
+# take voice's address from LINGER_DOMAIN. CI's image job runs it on the
+# image it just built; locally, give it any image:
 #
 #   docker build -f deploy/Dockerfile -t linger:test . && scripts/image-start-test.sh linger:test
 set -euo pipefail
@@ -46,7 +47,13 @@ uid="$(docker top "$name" -o pid,uid,comm | awk '$3 == "linger-server" { print $
   fail "the server runs as ${uid:-nobody}, not as linger"
 docker exec "$name" sh -c '[ -z "$(find /data ! -user linger)" ]' ||
   fail "something in the data folder isn't the server's"
+# Other accounts on the machine can't open the folder (0700), and nothing the
+# server made in it is theirs to read either (#506): no group or other bits.
+open="$(docker exec "$name" find /data -perm /077 -printf '%m %p\n')" ||
+  fail "couldn't look through the data folder"
+[[ -z "$open" ]] || fail "other accounts can open or read these:
+$open"
 log | grep -qF "voice forwarding is on: clients send voice to this address address=203.0.113.7:3479" ||
   fail "voice didn't take its address from LINGER_DOMAIN"
 
-echo "image-start-test: it starts as linger in a folder made for root, and voice goes where its domain points"
+echo "image-start-test: it starts as linger in a folder made for root, keeps it private, and voice goes where its domain points"

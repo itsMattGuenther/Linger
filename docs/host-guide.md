@@ -130,8 +130,12 @@ for file in compose.yaml Caddyfile update.sh .env.example; do
 done
 chmod +x update.sh
 cp .env.example .env
+chmod 600 .env
 nano .env
 ```
+
+`chmod 600` makes `.env` readable by you alone: it will hold the relay's
+secret, and any cloud storage keys. The setup script does the same.
 
 In `.env`, put your main name after `LINGER_DOMAIN=`, without `https://`. On a
 50 GiB disk, also remove the `#` before `LINGER_POOL_BYTES=10GB`: the default
@@ -380,10 +384,11 @@ step 4 to check it. Otherwise, run these steps **on the server**, inside the
    the secret after `LINGER_TURN_SECRET=`, and remove the `#` before
    `COMPOSE_PROFILES=voice`, which tells Docker to start the relay with
    everything else. Save with **Ctrl+O**, Enter, then **Ctrl+X**. Keep the
-   secret private. Compose gives it to Linger and coturn alike. (No `.env`
-   yet, on a server set up before 0.4.9? Download `.env.example` from the
-   [server files](#by-hand-instead-of-the-script), `cp .env.example .env`, and
-   fill in just those two lines.)
+   secret private: `chmod 600 .env` makes the file readable by you alone.
+   Compose gives it to Linger and coturn alike. (No `.env` yet, on a server
+   set up before 0.4.9? Download `.env.example` from the
+   [server files](#by-hand-instead-of-the-script), `cp .env.example .env`,
+   `chmod 600 .env`, and fill in just those two lines.)
 2. Allow inbound port **3478**, both TCP and UDP, and UDP ports **49160 to
    49200** in the provider's firewall and any firewall on the server. Keep
    TCP **80 and 443** open too. If the machine is behind a home router rather
@@ -423,22 +428,38 @@ The whole server is the `data` folder next to your `compose.yaml`. It holds
 `linger.db` (every message) and `objects/` (every uploaded file). Keep a copy
 of `.env` somewhere safe too: it holds your settings and the relay's secret.
 
-Copy it while the server is stopped, so you never catch the database mid-write:
+Only the server and root can open the `data` folder, so nobody else with an
+account on this machine can read it. So the copy is made by a throwaway
+Linger container, which can open it; any account that runs `docker` can do
+this, no `sudo` needed. Copy it while the server is stopped, so you never
+catch the database mid-write:
 
 ```bash
 docker compose stop linger
-tar czf linger-backup-$(date +%F).tar.gz data
+(umask 077 && docker compose run --rm --no-deps -T --user root --entrypoint tar linger czf - -C /data . >linger-backup-$(date +%F).tar.gz)
 docker compose start linger
 ```
 
-That is a few seconds of downtime. Put it in a scheduled job and keep the copies
+`umask 077` makes the copy readable by you alone, like the folder. That is a
+few seconds of downtime. Put it in a scheduled job and keep the copies
 somewhere that is not this machine.
 
 `update.sh` also saves the database into `backups/` whenever it updates the
-server. That copy is for going back after an update: it has the messages but
-not the uploaded files, and it's on the same machine. It doesn't replace this.
+server, readable by you alone. That copy is for going back after an update: it
+has the messages but not the uploaded files, and it's on the same machine. It
+doesn't replace this.
 
-To restore: stop everything, put the `data` folder back, start again.
+To restore, unpack a copy into the `data` folder the same way, with the server
+stopped (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
+
+```bash
+docker compose stop linger
+docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'rm -f /data/linger.db-wal /data/linger.db-shm && tar xzf - -C /data' <linger-backup-2026-10-10.tar.gz
+docker compose start linger
+```
+
+It clears the database's two journal files first: left over from another
+copy, they would be applied to this one.
 
 (If you moved files to a cloud bucket, `data/objects/` is empty and the bucket
 is the other half of your backup.)
@@ -534,9 +555,10 @@ newer files can simply replace the old ones:
    `cp Caddyfile Caddyfile.old`.
 2. Download the new `compose.yaml`, `Caddyfile` and `.env.example` (the
    commands are in [By hand](#by-hand-instead-of-the-script)).
-3. No `.env` yet? `cp .env.example .env`. Then copy each setting from the
-   `environment:` part of `compose.yaml.old` into `.env`, as `NAME=value`:
-   `LINGER_DOMAIN` always, and any others you changed. A relay's
+3. No `.env` yet? `cp .env.example .env`, then `chmod 600 .env`. Then copy
+   each setting from the `environment:` part of `compose.yaml.old` into
+   `.env`, as `NAME=value`: `LINGER_DOMAIN` always, and any others you
+   changed. A relay's
    `LINGER_TURN_SECRET` is in `.env` already. If the old file's coturn
    `command:` had an `--external-ip`, that address goes in
    `LINGER_RELAY_EXTERNAL_IP`.
