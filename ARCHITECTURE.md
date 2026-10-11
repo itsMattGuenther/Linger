@@ -194,7 +194,9 @@ use UUIDv4 (destroys index locality).
 
 ## 5. Schema
 
-SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`.
+SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`. The server runs `PRAGMA
+optimize` on the writer at startup and after each file sweep, so the query planner has
+current measurements of every table to choose indexes by (`db::optimize`, #518).
 
 ```sql
 CREATE TABLE users (

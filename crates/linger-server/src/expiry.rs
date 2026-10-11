@@ -73,13 +73,19 @@ pub struct Swept {
 ///
 /// It runs a pass at startup and then on the interval, which matters for a
 /// server that is only up for an hour a day: waiting six hours to do the first
-/// pass would mean never doing one.
+/// pass would mean never doing one. Each pass ends with [`crate::db::optimize`].
 pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
         loop {
             ticker.tick().await;
             drain(&state).await;
+            // The sweep is the server's one regular chore and it has just
+            // changed the files table, so the planner's statistics are kept
+            // up to date alongside it (#518).
+            if let Err(err) = crate::db::optimize(&state.db.write).await {
+                tracing::warn!(error = %err, "could not update the query planner's statistics");
+            }
         }
     })
 }
