@@ -11,6 +11,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
+// Loaded once here, while the file is collected, so the store's modules are
+// compiled before the test starts. The test then takes fresh copies of them
+// (vi.resetModules), which costs about 2 ms each. Compiling them inside the
+// test was most of its time, and under load it ran past its 5 s (#528).
+import "../../lib/gateway";
+import "./mirror";
+import "./share";
 
 type Handler = (event: { payload: unknown }) => void;
 const ownerCore = new Map<string, Handler>();
