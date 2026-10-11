@@ -150,6 +150,7 @@ check "the old image is removed" called "docker image rm sha256:old"
 check "no relay flag where there's no relay" never "--profile voice pull"
 check "no voice warning when voice is set" lacks "carries no voice"
 check "nothing about the domain's address when one is set" lacks "Voice goes to the address"
+check "no relay, no word about the relay's compose.yaml" lacks "#501"
 
 # --- Already the newest ---------------------------------------------------------
 
@@ -171,6 +172,46 @@ check "a relay update exits 0" test "$code" -eq 0
 check "it says the relay is updated" has "The voice relay is set up here"
 check "the relay is pulled" called "docker compose --profile voice pull"
 check "the relay is started" called "docker compose --profile voice up -d"
+check "an older compose.yaml's relay gets a warning (#501)" has "not just to voice (#501)"
+check "with its settings inside, it points at the host guide" has "host-guide.md#updating-the-server"
+
+# --- The relay only carries voice (#501) ----------------------------------------
+
+# The compose.yaml every host downloads: the relay refuses every address but
+# the voice address, relays no TCP, holds a person to a few ports at a few
+# Mbit/s, and leaves out the option coturn dropped.
+shipped="$repo/deploy/compose.yaml"
+# shellcheck disable=SC2016 # $$allowed is the text in compose.yaml, not a variable here
+for flag in --no-tcp-relay --denied-peer-ip=0.0.0.0-255.255.255.255 \
+  --denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff '$$allowed' \
+  --user-quota= --max-bps=; do
+  check "the shipped relay runs with $flag" grep -qF -- "$flag" "$shipped"
+done
+check "the voice address reaches the relay" grep -qE '^ +LINGER_VOICE_ADDRESS: \$\{LINGER_VOICE_ADDRESS:-\}$' "$shipped"
+check "the shipped relay has no --no-cli" bash -c "! grep -qF -- --no-cli '$shipped'"
+
+setup relaynew
+touch "$FAKE/relay"
+cp "$repo/deploy/compose.yaml" "$dir/compose.yaml"
+run
+check "the shipped compose.yaml's relay gets no warning" lacks "#501"
+
+setup relayold
+touch "$FAKE/relay"
+grep -v -- '--denied-peer-ip' "$repo/deploy/compose.yaml" >"$dir/compose.yaml"
+run
+check "a relay without the peer rule updates" test "$code" -eq 0
+check "it warns about the relay" has "not just to voice (#501)"
+check "it says how to get the new compose.yaml" \
+  has "curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml"
+
+setup relaypinned
+touch "$FAKE/relay"
+grep -v -- '--denied-peer-ip' "$repo/deploy/compose.yaml" >"$dir/compose.yaml"
+config "$VOICE" ghcr.io/itsmattguenther/linger:0.4.3 >"$FAKE/config"
+echo sha256:old >"$FAKE/remote_image"
+run
+check "a pinned version is kept in the advice" has "to stay on ghcr.io/itsmattguenther/linger:0.4.3, change it back first"
 
 # --- The new server never answers -----------------------------------------------
 

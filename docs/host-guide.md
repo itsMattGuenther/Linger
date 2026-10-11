@@ -307,7 +307,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps everything forever. Starred files never expire. | `365` |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
-| `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
+| `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. The relay carries voice there and nowhere else. See [Voice](#voice). | the address your name points at |
 | `LINGER_TURN_SECRET` | Shared key for Linger and the relay; you must also start the relay below. | unset — no relay |
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
 
@@ -372,6 +372,19 @@ any home router. Some networks block it: some offices, some public wifi. The
 container in `compose.yaml`. It is yours, on your machine; what passes through
 it is scrambled sound it cannot listen to.
 
+**It only carries voice to your server.** A relay passes on whatever it's
+asked to, and it sits on your machine's network, so an open one would let any
+member reach things only your machine should: your home network's router page
+or printer, your cloud provider's private settings service, or the internet
+looking like your machine. `compose.yaml` stops that (#501). The relay refuses
+every address except your server's voice address, the same one the server
+uses: `LINGER_VOICE_ADDRESS` if you set it, or else the address your name
+points at, looked up when the relay starts. It also caps each member at ten
+relay ports and each port at 3 Mbit/s, which is three times what the busiest
+call needs. If it has no address to go on (`LINGER_VOICE_ADDRESS=off`, or a
+name that doesn't point at a public address), it carries nothing at all and
+says so in `docker compose --profile voice logs coturn`.
+
 Said yes to the relay in the setup script? It's set up and running: skip to
 step 4 to check it. Otherwise, run these steps **on the server**, inside the
 `linger` folder containing `compose.yaml`.
@@ -409,7 +422,10 @@ step 4 to check it. Otherwise, run these steps **on the server**, inside the
 
    If coturn is missing or not staying Up, use [the relay checks below](#voice-cannot-connect).
    Then check `docker compose logs --tail=30 linger`: the latest startup
-   should no longer warn that `LINGER_TURN_SECRET` is missing.
+   should no longer warn that `LINGER_TURN_SECRET` is missing. And check
+   `docker compose --profile voice logs coturn | head -n 5`: it should say
+   `the relay carries voice to` your server's public address `and nowhere
+   else`.
 
 Finally, have two people on different networks leave and rejoin voice and
 check that each can hear the other. **Up only proves the relay process is
@@ -523,7 +539,11 @@ on its old version.
 script, or by hand from 0.4.9, keeps every setting in `.env`, so a newer copy
 of either file can replace the old one as it is:
 `curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml`
-(and the same for `Caddyfile`), then `./update.sh`.
+(and the same for `Caddyfile`), then `./update.sh`. `update.sh` never replaces
+them itself, since `compose.yaml` can hold a version you chose, but it says
+when you run the relay with a `compose.yaml` from before the relay was kept
+to voice (#501): get the new one then. If you had changed its `image:` line
+to stay on a version, change the new file's line the same way.
 
 **Moving an older server's settings into `.env`.** A server set up before
 0.4.9 has its settings written into `compose.yaml` and its name into the
@@ -602,6 +622,13 @@ For people on a network that blocks voice, the relay has to be running. Run
   UDP 49160–49200 in both firewalls (and router forwarding at home). After
   changing `.env`, run `docker compose --profile voice up -d` to apply the
   same secret to both containers; restarting only coturn is not enough.
+- **coturn's log says `the relay carries nothing`:** it couldn't work out
+  your server's voice address, usually because your name didn't point at a
+  public address when it started (`docker compose logs linger` will say the
+  same about voice). Fix where the name points and run
+  `docker compose --profile voice restart coturn`, or put your server's public
+  IP after `LINGER_VOICE_ADDRESS=` in `.env` and run
+  `docker compose --profile voice up -d`.
 
 Do not share your `.env` or setup token when asking for help.
 

@@ -211,6 +211,10 @@ pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
 /// offer wants an answer; a limit tight enough to be interesting would break
 /// an ordinary evening.
 pub const RATE_VOICE_SIGNAL: (u32, u64) = (300, 10);
+/// Relay passwords per person (`GET /voice/ice`, #501). The app asks once
+/// for each join, so twenty a minute is somebody hopping rooms as fast as
+/// they can click, and a loop gets no further.
+pub const RATE_VOICE_ICE: (u32, u64) = (20, 60);
 /// Votes per person (#474): plenty for changing your mind, too few to make a
 /// room's every app redraw a poll many times a second.
 pub const RATE_POLL_VOTE: (u32, u64) = (20, 10);

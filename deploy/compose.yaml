@@ -32,7 +32,8 @@
 # offices, some public wifi). It is optional, and the server says so at
 # startup when it's missing. .env turns it on: a secret in LINGER_TURN_SECRET
 # and COMPOSE_PROFILES=voice. Open port 3478 (TCP and UDP) and UDP
-# 49160–49200 for it too.
+# 49160–49200 for it too. It carries voice to this server's voice address and
+# nowhere else (#501).
 
 services:
   linger:
@@ -77,6 +78,10 @@ services:
     environment:
       LINGER_TURN_SECRET: ${LINGER_TURN_SECRET:-}
       LINGER_RELAY_EXTERNAL_IP: ${LINGER_RELAY_EXTERNAL_IP:-}
+      # Where voice goes, read the way the server reads it, so the relay can
+      # carry voice there and nowhere else (#501).
+      LINGER_VOICE_ADDRESS: ${LINGER_VOICE_ADDRESS:-}
+      LINGER_DOMAIN: ${LINGER_DOMAIN:-}
     # The secret is checked here, when the relay starts, and not by compose
     # when the file is read — a `${VAR:?}` in this file would refuse a plain
     # `docker compose up -d` for a host who never asked for a relay. An empty
@@ -88,6 +93,88 @@ services:
           echo "coturn: LINGER_TURN_SECRET is empty. Put a long random secret in .env (openssl rand -hex 32), or take COMPOSE_PROFILES=voice out of it for no relay." >&2
           exit 1
         fi
+
+        # Where the relay may send anything (#501): this server's voice
+        # address, and nowhere else. A relay that carried a member's packets
+        # anywhere would reach whatever this machine can (the home network it
+        # sits on, a cloud's metadata service, the internet as this machine),
+        # and voice only ever needs the one address. That's
+        # LINGER_VOICE_ADDRESS without its port or, with it unset, the public
+        # addresses LINGER_DOMAIN points at, looked up once, now, as the
+        # server does. dig asks DNS, like the server; getent, the fallback,
+        # reads this machine's /etc/hosts first. Voice off, a name with no
+        # public address, or no answer, and the relay carries nothing.
+        address() { # an IP address, by its look
+          case "$$1" in
+            *:*) case "$$1" in *[!0-9a-fA-F:.]*) return 1 ;; esac ;;
+            *[!0-9.]* | .* | *. | *..*) return 1 ;;
+            *.*.*.*) ;;
+            *) return 1 ;;
+          esac
+        }
+        public() { # and none of the ones config.rs's is_public turns down
+          address "$$1" || return 1
+          case "$$1" in
+            :: | ::1 | [fF][cCdD][0-9a-fA-F][0-9a-fA-F]:* | [fF][eE][89abAB][0-9a-fA-F]:* | \
+            [fF][fF][0-9a-fA-F][0-9a-fA-F]:* | 0.* | 10.* | 127.* | 169.254.* | 192.168.* | \
+            172.1[6-9].* | 172.2[0-9].* | 172.3[01].* | 100.6[4-9].* | 100.[7-9][0-9].* | \
+            100.1[01][0-9].* | 100.12[0-7].* | 22[4-9].* | 2[3-5][0-9].*) return 1 ;;
+          esac
+        }
+        to=""
+        off=""
+        allowed=""
+        allow() {
+          case "$$to " in *" $$1 "*) return ;; esac
+          to="$$to $$1"
+          allowed="$$allowed --allowed-peer-ip=$$1"
+        }
+        # Spaces around it count for nothing, as with the server.
+        voice="$$(printf '%s' "$$LINGER_VOICE_ADDRESS" | tr -d '[:space:]')"
+        case "$$voice" in
+          "")
+            found=""
+            if [ -z "$$LINGER_DOMAIN" ]; then
+              :
+            elif command -v dig >/dev/null 2>&1; then
+              found="$$(dig +short +time=2 +tries=2 "$$LINGER_DOMAIN" A "$$LINGER_DOMAIN" AAAA)"
+            else
+              found="$$(getent ahosts "$$LINGER_DOMAIN" | awk '{ print $$1 }')"
+            fi
+            for ip in $$found; do
+              if public "$$ip"; then allow "$$ip"; fi
+            done ;;
+          [oO][fF][fF]) off=yes ;;
+          *)
+            ip="$$voice"
+            case "$$ip" in
+              \[*) ip="$${ip#\[}"; ip="$${ip%%\]*}" ;;
+              *.*:*) ip="$${ip%:*}" ;;
+            esac
+            if address "$$ip"; then allow "$$ip"; fi ;;
+        esac
+        if [ -n "$$to" ]; then
+          echo "coturn: the relay carries voice to$$to and nowhere else."
+        elif [ -n "$$off" ]; then
+          echo "coturn: voice is off here (LINGER_VOICE_ADDRESS is off), so the relay carries nothing."
+        else
+          echo "coturn: no voice address to carry voice to (LINGER_VOICE_ADDRESS is \"$$LINGER_VOICE_ADDRESS\", LINGER_DOMAIN is \"$$LINGER_DOMAIN\"), so the relay carries nothing. Set LINGER_VOICE_ADDRESS in .env to this server's public IP address, then run: docker compose up -d" >&2
+        fi
+
+        # Every peer is refused (both lines), then the voice address let
+        # through: coturn checks the allowed list first. UDP only, so a
+        # member can't open TCP connections through it either.
+        #
+        # --user-quota: relay ports one password may hold at once. The server
+        # hands a member the same password all hour (turn.rs), so that's ten
+        # for a person out of the 41 below: the app takes one per call, and
+        # ten leaves room for a second device and for reconnects while an old
+        # port waits out its ten minutes.
+        #
+        # --max-bps: bytes a second one relay port carries each way. The most
+        # a call ever brings in is six voices (LOUDEST) at 128 kbit/s
+        # (SMALL_ROOM_BITS), both in crates/linger-sfu: under 1 Mbit/s with
+        # packet headers. 375000 is 3 Mbit/s, so voice never meets it.
         exec turnserver \
           --listening-port=3478 \
           --realm=${LINGER_DOMAIN} \
@@ -96,9 +183,14 @@ services:
           --min-port=49160 \
           --max-port=49200 \
           --fingerprint \
-          --no-cli \
           --no-tls \
+          --no-tcp-relay \
           --no-multicast-peers \
+          --denied-peer-ip=0.0.0.0-255.255.255.255 \
+          --denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+          $$allowed \
+          --user-quota=10 \
+          --max-bps=375000 \
           --log-file=stdout \
           $${LINGER_RELAY_EXTERNAL_IP:+--external-ip=$$LINGER_RELAY_EXTERNAL_IP}
         # Behind a home router rather than on a machine with a public address,

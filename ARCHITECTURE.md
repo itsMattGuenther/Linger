@@ -524,7 +524,8 @@ E2EE launders a false promise, which is worse than an honest limitation.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, message send 10/10s/user, upload slot 20/hour/user,
-   invite creation 10/day/user, knock 3/hour/target, search 30/min/user.
+   invite creation 10/day/user, knock 3/hour/target, search 30/min/user, relay
+   passwords 20/min/user.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
@@ -646,6 +647,19 @@ The fetch is host-side for a privacy reason before a caching one: if each client
 its own preview, every site anybody linked would collect the IP of every person who
 scrolled past the message, and a remote favicon would do it without a click. The host's
 IP does it once for everybody, and the icon reaches the client as a small `data:` URI.
+
+**The voice relay is the other forwarding machine** (#501). coturn runs on the host's
+own network and sends whatever a member with a relay password asks it to, so left to its
+defaults it would reach the home network, a cloud's metadata service, the Docker networks
+and the internet as the host. Voice only ever needs the server's voice address, so
+`deploy/compose.yaml` refuses every peer address (`--denied-peer-ip`, IPv4 and IPv6) and
+lets through only that one (`--allowed-peer-ip`, which coturn checks first): the IP in
+`LINGER_VOICE_ADDRESS`, or with it unset the public addresses `LINGER_DOMAIN` points at,
+looked up when the relay starts, as the server does. No address, or `off`, and it relays
+nothing. It relays UDP only (`--no-tcp-relay`), holds one password to ten relay ports
+(`--user-quota`) and one port to 3 Mbit/s (`--max-bps`). The server gives a member the
+same password all hour (`turn.rs`), so the quota counts a person, and hands out at most
+20 a minute per member.
 
 ---
 
@@ -837,7 +851,11 @@ needs no secret and runs no relay. Its one secret lives in `.env`, never in the 
 with `linger` so the server can sign the short-lived relay passwords it hands
 members (`PROTOCOL.md` §7, `GET /voice/ice`). It runs on the host's own network
 because a relay's job is being reachable at its real address on a range of UDP
-ports, and container NAT would get in the way of exactly that.
+ports, and container NAT would get in the way of exactly that. Being on the host's
+network is also why it relays to the server's voice address and nowhere else (§7, #501).
+A relayed client sends to that address like everybody else, the public one in the
+offer, and the host hands it to the `linger` container through the published UDP port,
+so the relay never needs Docker's own addresses.
 
 Caddy is bundled specifically so TLS certificates are automatic. A self-hoster should
 never have to think about certbot. Its Caddyfile has two blocks and the deployment needs
