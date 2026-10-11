@@ -5,9 +5,12 @@
  * The server is still the authority (PROTOCOL §2, §5). These copies exist so
  * the form can refuse a no-op, or say what's wrong with a name as it's typed,
  * before the round trip. The name rules use the server's own sentences.
+ * Whether a name looks like somebody else's is the server's alone to say
+ * (#574): it holds everybody's names, and Unicode's list of look-alike letters.
  */
 import type { ChangePasswordRequest } from "../generated/ChangePasswordRequest";
 import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
+import { ApiError } from "./api";
 
 /**
  * `linger-core::limits::MAX_DISPLAY_NAME_CHARS`. ts-rs exports types, not
@@ -103,6 +106,18 @@ export function passwordRequest(
   next: string,
 ): ChangePasswordRequest {
   return { current_password: current, new_password: next };
+}
+
+/**
+ * How sending a display name went: null once it's in, the problem in words,
+ * or the server saying somebody here already goes by a name that looks like
+ * it (#574). That one goes on the name field, since it's the name to change.
+ */
+export type NameSaid = null | string | { onName: string };
+
+/** The server's sentence when the name looks like somebody else's here (#574), or null for anything else. */
+export function lookAlikeIn(caught: unknown): string | null {
+  return caught instanceof ApiError && caught.code === "DISPLAY_NAME_TAKEN" ? caught.message : null;
 }
 
 /** Empty, unchanged, or refused by the name rules: not worth sending. */

@@ -333,7 +333,7 @@ fn is_accent(c: char) -> bool {
 /// notehead (U+1D159). Unicode calls them letters or symbols, so nothing above
 /// catches them, and a name made only of them looks empty. Mixed in with
 /// letters they read as a space, and are allowed.
-const BLANK_LETTERS: [char; 6] = [
+pub(crate) const BLANK_LETTERS: [char; 6] = [
     '\u{115F}',
     '\u{1160}',
     '\u{3164}',

@@ -835,6 +835,13 @@ Linger turns a name down, and says why, when it has:
 - characters that turn text around to run right to left
 - more than two accent marks piled on one letter
 
+It also turns down a name that looks like somebody else's here: their display
+name or their username, in other capitals, with different spaces, or spelled
+with look-alike letters from another alphabet. It says so under the name, at
+sign-up and in Settings, so you can pick something a little different.
+Changing the capitals of your own name is fine. This is so nobody can pass
+themselves off as the host, or as you.
+
 A name you saved before these rules stays as it is until you change it.
 
 ## Making your name yours

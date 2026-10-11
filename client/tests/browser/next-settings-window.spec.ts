@@ -51,6 +51,27 @@ test("your name saves straight to the server, with the borrowed sign-in", async 
   expect(await did(page)).toContain("PATCH /me as token-1");
 });
 
+test("a name that looks like somebody's here is said on the name field, and Save waits for a new one (#574)", async ({ page }) => {
+  await open(page);
+  const name = page.getByRole("textbox", { name: "Display name" });
+  const save = page.getByRole("button", { name: "Save name" });
+  await name.fill("eli");
+  await save.click();
+
+  const sentence = "Someone here already goes by a name that looks like that. Try something a little different.";
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(sentence);
+  // Said once, on the field, and not again beside the button.
+  await expect(page.getByRole("tabpanel").getByText(sentence)).toHaveCount(1);
+  await expect(said(page).first()).not.toContainText(sentence);
+  await expect(save).toBeDisabled();
+
+  await name.fill("Matthew");
+  await expect(name).not.toHaveAttribute("aria-invalid", "true");
+  await save.click();
+  await expect(said(page).first()).toHaveText("Saved");
+});
+
 test("going away from Settings tells the list window, which keeps your presence", async ({ page }) => {
   await open(page);
   await page.getByRole("textbox", { name: "Away message" }).fill("walking the dog");

@@ -52,6 +52,15 @@ tracing-subscriber = { workspace = true }
 # zero-width joiner is part of an emoji. No dependencies of its own, no_std,
 # and the version already in Cargo.lock (sqlx's other drivers name it).
 unicode-properties = "0.1"
+# Unicode's list of look-alike letters (UTS #39 confusables), for refusing a
+# display name that looks like somebody else's (#574): `skeleton` swaps each
+# letter for the one it is easily taken for, Cyrillic а for Latin a, rn for m.
+# MIT/Apache-2.0, no_std, from the same unicode-rs project as the crate above.
+# It brings two more of theirs: unicode-script, and unicode-normalization,
+# which this crate also uses directly for NFKC (full-width and other styled
+# letters made plain).
+unicode-normalization = "0.1"
+unicode-security = "0.1"
 uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

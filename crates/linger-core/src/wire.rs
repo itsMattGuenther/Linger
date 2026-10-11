@@ -38,6 +38,11 @@ pub enum ErrorCode {
     UnsupportedMedia,
     Conflict,
     Internal,
+    /// A display name that looks the same as another member's display name or
+    /// username (#574). Its own code, rather than `Conflict`, so the app can
+    /// say so on the name field. An app from before it reads an unknown code
+    /// as `Internal` and still shows the sentence.
+    DisplayNameTaken,
 }
 
 /// Body of every non-2xx response: `{ "error": { code, message, retry_after_ms } }`.

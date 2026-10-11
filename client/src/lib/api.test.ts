@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ErrorCode } from "../generated/ErrorCode";
 import type { ErrorEnvelope } from "../generated/ErrorEnvelope";
 import type { RefreshResponse } from "../generated/RefreshResponse";
-import { ApiError, AuthedApi, BorrowedTokens, type Lent, TransportError } from "./api";
+import { ApiError, AuthedApi, BorrowedTokens, type Lent, PublicApi, TransportError } from "./api";
 
 const BASE_URL = "https://linger.example";
 const FRESH: RefreshResponse = {
@@ -278,5 +278,23 @@ describe("a borrowed sign-in (the Buddy list client's other windows)", () => {
   it("has no refresh token to spend", () => {
     const { api } = borrower();
     expect(() => api.refreshToken).toThrow("a borrowed sign-in has no refresh token");
+  });
+});
+
+describe("a refusal", () => {
+  const JOIN = { invite_code: "ABCD", username: "callie", display_name: "Matt", password: "12345678" };
+  const LOOKS_TAKEN = "Someone here already goes by a name that looks like that. Try something a little different.";
+
+  it("carries a name that looks like somebody's here as its own code (#574)", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValueOnce(refusal(409, "DISPLAY_NAME_TAKEN")));
+    await expect(new PublicApi(BASE_URL).register(JOIN)).rejects.toMatchObject({ status: 409, code: "DISPLAY_NAME_TAKEN" });
+  });
+
+  it("keeps the server's words under a code this app has never heard of, as an older app does with #574's", async () => {
+    const newer = { error: { code: "SOMETHING_NEWER", message: LOOKS_TAKEN, retry_after_ms: null } };
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(newer, { status: 409 })));
+    const caught: unknown = await new PublicApi(BASE_URL).register(JOIN).catch((error: unknown) => error);
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught).toMatchObject({ status: 409, code: "INTERNAL", message: LOOKS_TAKEN });
   });
 });

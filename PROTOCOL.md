@@ -23,7 +23,12 @@ human-readable and safe to display. Never leak internals in `message`.
 
 Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`,
 `VALIDATION_FAILED`, `INVITE_INVALID`, `INVITE_EXPIRED`, `QUOTA_EXCEEDED`,
-`FILE_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `CONFLICT`, `INTERNAL`.
+`FILE_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `CONFLICT`, `INTERNAL`,
+`DISPLAY_NAME_TAKEN` (§2, #574).
+
+Codes are additive: a newer server may send one an older client has never heard of.
+The client reads an unknown code as `INTERNAL` and shows `message` as it is, which is
+why every `message` is a whole sentence for a person.
 
 ---
 
@@ -94,6 +99,30 @@ The limits are `MAX_ACCENT_MARKS_PER_LETTER` and `MAX_MARKS_PER_LETTER` in
 `linger-core::limits`. They apply when a name is set or changed: a name saved before
 them is left as it is, and a `PATCH /me` whose `display_name` is the saved name
 unchanged is not held to them.
+
+A display name that passes those must also not look like anybody else's (#574). The
+server refuses it with `409 DISPLAY_NAME_TAKEN` "Someone here already goes by a name
+that looks like that. Try something a little different." when it looks the same as
+the display name or the username of any other active member. Removed members don't
+count, and nor does the person's own name, so saving it again or changing only its
+capitals is fine.
+
+"Looks the same" (`linger-server::names`): each name is put in NFKC, every
+Default_Ignorable_Code_Point is dropped, every run of whitespace or blank letters
+(rule 5) becomes one space, and none is left at the ends. That gives `n`. Its three
+shapes are `skeleton(n)`, `skeleton(lower(n))` and `skeleton(lower(skeleton(n)))`,
+where `skeleton` is UTS #39's confusables skeleton. Two names look the same when any
+shape of one is a shape of the other. The three cover `Ilya` beside `llya` (a
+capital I is taken for an l), `Matt` beside `matt`, and a Cyrillic `Маtt` beside
+`matt`.
+
+The check runs in the transaction that saves the name, so two people can't both get
+look-alikes at once. `POST /auth/register` checks it after the invite, so somebody
+without a good invite learns nothing about who is here, and a refusal leaves the
+invite's use and the username unspent. `POST /setup` makes the first account, so
+there is nobody to look like. Like the rules above, it applies when a name is set or
+changed: two names saved before it that look alike both stay.
+
 `password`: minimum 8 characters. Do not impose composition rules, do not expire
 passwords, and do not ask for a hint. The floor was 12 until 2026-08-21; it came
 down because the client remembers the password in the OS keyring, so the length

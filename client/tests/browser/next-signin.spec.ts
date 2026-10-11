@@ -110,6 +110,36 @@ test("an invite leads to joining, named for its server, and Join waits for eight
   expect(sent).toEqual([`signin ${JSON.stringify({ invite_code: "ABCD-1234", username: "jules", display_name: "Jules R.", password: "12345678" })}`]);
 });
 
+test("joining with a name that looks like somebody's already there says so on the name, and waits for a new one (#574)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/invite/ABCD-1234`);
+  const form = page.getByRole("form", { name: "Join" });
+  const name = form.getByRole("textbox", { name: "Display name" });
+  const join = form.getByRole("button", { name: "Join" });
+  await form.getByRole("textbox", { name: "Username" }).fill("callie");
+  await name.fill("MATT");
+  await form.getByLabel("Password").fill("12345678");
+  await join.click();
+
+  const sentence = "Someone here already goes by a name that looks like that. Try something a little different.";
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(sentence);
+  // On the name, and only there: not again under the form.
+  await expect(form.getByRole("alert")).toHaveCount(0);
+  await expect(form.getByText(sentence)).toHaveCount(1);
+  // Still joining, with everything as typed, and nothing to send until the name changes.
+  await expect(form.getByRole("textbox", { name: "Username" })).toHaveValue("callie");
+  await expect(join).toBeDisabled();
+
+  await name.fill("Callie");
+  await expect(name).not.toHaveAttribute("aria-invalid", "true");
+  await expect(join).toBeEnabled();
+  await join.click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  const sent = (await did(page)).filter((line) => line.startsWith("signin "));
+  expect(sent.map((line) => (JSON.parse(line.slice("signin ".length)) as { display_name: string }).display_name)).toEqual(["MATT", "Callie"]);
+});
+
 test("an invite opened by somebody who already has an account here leads to signing in instead, and makes nobody new", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/ABCD-1234`);

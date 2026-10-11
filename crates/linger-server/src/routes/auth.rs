@@ -93,6 +93,10 @@ async fn register(
         });
     }
 
+    // After the invite, so somebody without one learns nothing about who is
+    // here. Inside the transaction, so a refusal hands the use back (#574).
+    repo::users::refuse_look_alike(&mut tx, req.display_name.trim(), None).await?;
+
     let inserted = sqlx::query(
         "INSERT INTO users (id, username, display_name, password_hash, is_host, created_at)
          VALUES (?, ?, ?, ?, 0, ?)",

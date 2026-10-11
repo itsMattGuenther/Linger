@@ -114,6 +114,7 @@ const ERROR_CODES = {
   UNSUPPORTED_MEDIA: "UNSUPPORTED_MEDIA",
   CONFLICT: "CONFLICT",
   INTERNAL: "INTERNAL",
+  DISPLAY_NAME_TAKEN: "DISPLAY_NAME_TAKEN",
 } as const satisfies Record<ErrorCode, ErrorCode>;
 
 function toErrorCode(value: unknown): ErrorCode | null {

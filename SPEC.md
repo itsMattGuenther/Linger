@@ -397,6 +397,16 @@ Each user controls the rendering of their own display name:
    fewest active people on that server wear (never slate, which reads as "not chosen"),
    so a big server doesn't start as a room of identical gray names. It is only a start:
    anyone changes it in Profile.
+7. **Nobody takes a name that looks like someone else's** (#574). With no avatars, the
+   name is who somebody is (§5.1), so a look-alike is a way to pretend to be them, in a
+   DM most of all. The server refuses a display name that looks the same as another
+   member's display name or username: the same letters in other capitals, letters from
+   another alphabet that look like ours (a Cyrillic `а`), full-width letters, `rn` for
+   `m`, or only different spaces or invisible characters. Unicode's own list of
+   look-alike letters decides (PROTOCOL §2). Your own name never counts against you,
+   and removed members' names don't count. The sentence goes on the name field, at
+   sign-up and in Settings. Names already saved stay as they are; the rule applies when
+   a name is set or changed.
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
 hot-pink-Comic-Sans-on-black was funny for a week and unreadable forever. Users get:

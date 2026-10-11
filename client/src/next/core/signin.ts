@@ -9,7 +9,7 @@ import type { AuthResponse } from "../../generated/AuthResponse";
 import type { LoginRequest } from "../../generated/LoginRequest";
 import type { RegisterRequest } from "../../generated/RegisterRequest";
 import type { SetupRequest } from "../../generated/SetupRequest";
-import { displayNameProblem, MIN_PASSWORD_CHARS } from "../../lib/account";
+import { displayNameProblem, lookAlikeIn, MIN_PASSWORD_CHARS, type NameSaid } from "../../lib/account";
 import { type PastedLink, parsePastedLink } from "../../lib/link";
 
 /** Where the flow is. */
@@ -42,7 +42,7 @@ export function setupReady(serverName: string, username: string, displayName: st
   return serverName.trim() !== "" && registerReady(username, displayName, password);
 }
 
-export { displayNameProblem, MIN_PASSWORD_CHARS };
+export { displayNameProblem, MIN_PASSWORD_CHARS, type NameSaid };
 
 /** The server calls that decide which form comes after the paste box. */
 export interface Door {
@@ -93,12 +93,16 @@ export interface Entrance extends Door {
   setup(request: SetupRequest): Promise<AuthResponse>;
 }
 
-/** What the sign-in screen asks for; each answers with the problem in words, or null once signed in. */
+/**
+ * What the sign-in screen asks for; each answers with the problem in words, or
+ * null once signed in. Joining can also answer that the display name looks
+ * like somebody's already here (#574), which the form says on that field.
+ */
 export interface SignInActions {
   /** Read what was pasted and ask the server which form comes next. */
   check: (pasted: string) => Promise<{ step: SignInStep } | { problem: string }>;
   login: (baseUrl: string, username: string, password: string) => Promise<string | null>;
-  register: (baseUrl: string, code: string, username: string, displayName: string, password: string) => Promise<string | null>;
+  register: (baseUrl: string, code: string, username: string, displayName: string, password: string) => Promise<NameSaid>;
   setup: (baseUrl: string, token: string, serverName: string, username: string, displayName: string, password: string) => Promise<string | null>;
 }
 
@@ -108,24 +112,32 @@ export interface SignInActions {
  * sessions); anything that fails comes back as a sentence.
  */
 export function signInActions(entranceAt: (baseUrl: string) => Entrance, signedIn: (baseUrl: string, auth: AuthResponse) => Promise<void>): SignInActions {
-  const enter = async (baseUrl: string, attempt: (entrance: Entrance) => Promise<AuthResponse>): Promise<string | null> => {
+  const enter = async <Said>(baseUrl: string, attempt: (entrance: Entrance) => Promise<AuthResponse>, said: (caught: unknown) => Said): Promise<Said | null> => {
     try {
       await signedIn(baseUrl, await attempt(entranceAt(baseUrl)));
       return null;
     } catch (caught) {
-      return problemIn(caught);
+      return said(caught);
     }
+  };
+  const nameSaid = (caught: unknown): NameSaid => {
+    const onName = lookAlikeIn(caught);
+    return onName === null ? problemIn(caught) : { onName };
   };
   return {
     check: (pasted) => stepFor(pasted, entranceAt),
-    login: (baseUrl, username, password) => enter(baseUrl, (entrance) => entrance.login({ username: usernameOf(username), password })),
+    login: (baseUrl, username, password) => enter(baseUrl, (entrance) => entrance.login({ username: usernameOf(username), password }), problemIn),
     register: (baseUrl, code, username, displayName, password) =>
-      enter(baseUrl, (entrance) =>
-        entrance.register({ invite_code: code, username: usernameOf(username), display_name: displayName.trim(), password }),
+      enter(
+        baseUrl,
+        (entrance) => entrance.register({ invite_code: code, username: usernameOf(username), display_name: displayName.trim(), password }),
+        nameSaid,
       ),
     setup: (baseUrl, token, serverName, username, displayName, password) =>
-      enter(baseUrl, (entrance) =>
-        entrance.setup({ token, server_name: serverName.trim(), username: usernameOf(username), display_name: displayName.trim(), password }),
+      enter(
+        baseUrl,
+        (entrance) => entrance.setup({ token, server_name: serverName.trim(), username: usernameOf(username), display_name: displayName.trim(), password }),
+        problemIn,
       ),
   };
 }

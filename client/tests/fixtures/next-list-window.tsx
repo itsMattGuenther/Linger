@@ -17,7 +17,8 @@
  * to; `?revoked` has The Good Company refuse its saved sign-in (with `?one`,
  * that leaves nothing signed in). The sign-in routes take any username;
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
- * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
+ * spent, joining as "Matt" in any capitals is refused as a look-alike (#574),
+ * and `nowhere.example` doesn't answer. `?hold` keeps the health
  * check waiting until `window.core.release()`.
  * Tokens rotate as a server's do: each refresh spends the one presented and
  * hands out the next, and one presented twice is refused and written down
@@ -483,6 +484,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if ((path === "/auth/login" || path === "/auth/register" || path === "/setup") && method === "POST") {
     note(`signin ${JSON.stringify(body)}`);
     if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
+    // Joining as somebody already here, in other capitals: the server's look-alike refusal (#574).
+    if (path === "/auth/register" && typeof body.display_name === "string" && body.display_name.toLowerCase() === state.me.display_name.toLowerCase()) {
+      return refuse(409, "DISPLAY_NAME_TAKEN", "Someone here already goes by a name that looks like that. Try something a little different.");
+    }
     return signedIn();
   }
   if (path === "/read") return json(state.read);

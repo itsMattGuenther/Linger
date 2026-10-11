@@ -233,12 +233,14 @@ async fn patch_me(
 ) -> Result<Json<User>, ApiError> {
     // Validate everything before writing anything — a PATCH is all-or-nothing.
     //
-    // The name rules apply when a name is set or changed (#296). A name saved
-    // before them stays, and sending it back as it is changes nothing, so it
-    // is not held to them.
+    // The name rules apply when a name is set or changed (#296, #574). A name
+    // saved before them stays, and sending it back as it is changes nothing,
+    // so it is not held to them.
+    let mut name_changed = false;
     if let Some(name) = &req.display_name {
         let held = repo::users::expect(&state.db.read, auth.id).await?;
-        if name.trim() != held.display_name {
+        name_changed = name.trim() != held.display_name;
+        if name_changed {
             validate::display_name(name)?;
         }
     }
@@ -262,6 +264,11 @@ async fn patch_me(
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
 
     if let Some(name) = &req.display_name {
+        // Here, on the one writer, rather than with the checks above: nobody
+        // can take a look-alike name between this and the save.
+        if name_changed {
+            repo::users::refuse_look_alike(&mut tx, name.trim(), Some(auth.id)).await?;
+        }
         sqlx::query("UPDATE users SET display_name = ? WHERE id = ?")
             .bind(name.trim())
             .bind(auth.id.to_vec())

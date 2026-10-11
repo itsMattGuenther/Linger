@@ -6,7 +6,7 @@ import type { Invite } from "../../../generated/Invite";
 import type { Room } from "../../../generated/Room";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
-import { displayNameRequest } from "../../../lib/account";
+import { displayNameRequest, lookAlikeIn, type NameSaid } from "../../../lib/account";
 import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../lib/api";
 import { emojiPicture } from "../../../lib/emoji/picture";
 import { uploadFile } from "../../../lib/upload";
@@ -165,6 +165,17 @@ async function said(work: Promise<unknown>, fallback: string): Promise<string | 
     return null;
   } catch (error: unknown) {
     return inWords(error, fallback);
+  }
+}
+
+/** A name's save, as `said`, except that a name looking like somebody's here (#574) is said on the name field. */
+async function nameSaid(work: Promise<unknown>, fallback: string): Promise<NameSaid> {
+  try {
+    await work;
+    return null;
+  } catch (error: unknown) {
+    const onName = lookAlikeIn(error);
+    return onName === null ? inWords(error, fallback) : { onName };
   }
 }
 
@@ -434,7 +445,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         me,
         plainNames: plain,
         actions: {
-          saveName: (name) => said(saveDisplayName(api, displayNameRequest(name)), "Couldn't save your name."),
+          saveName: (name) => nameSaid(saveDisplayName(api, displayNameRequest(name)), "Couldn't save your name."),
           saveStatus: async (status) => {
             const problem = await said(saveStatus(api, status), "Couldn't save your status.");
             // Going away or coming back is presence too, which the list window keeps.
