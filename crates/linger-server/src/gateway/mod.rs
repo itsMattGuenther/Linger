@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use linger_core::gateway::{
     ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState, VoiceTrack,
 };
@@ -34,6 +34,10 @@ pub struct Gateway {
     bus: broadcast::Sender<Arc<Fanout>>,
     sessions: DashMap<String, SessionHandle>,
     presence: DashMap<UserId, PresenceEntry>,
+    /// People whose newest `presence.update` is held back by `RATE_PRESENCE`
+    /// until their turn (#497). One waiting task each, however many changes
+    /// pile up behind it: the turn tells whatever is newest by then.
+    presence_held: DashSet<UserId>,
     conn_count: DashMap<UserId, u32>,
     /// Who is in each DM (SPEC §4.13). Public rooms are not in here — their
     /// members are everybody, and a room absent from this map is treated as
@@ -213,6 +217,7 @@ impl Gateway {
             bus,
             sessions: DashMap::new(),
             presence: DashMap::new(),
+            presence_held: DashSet::new(),
             conn_count: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
@@ -638,8 +643,8 @@ impl Gateway {
             .collect()
     }
 
-    /// Apply a client `presence.update`. Room membership only changes via
-    /// `room.focus`, so it is carried over from the existing entry.
+    /// Set somebody's presence state and away message. Room membership only
+    /// changes via `room.focus`, so it is carried over from the existing entry.
     fn apply_presence(
         &self,
         user_id: UserId,
@@ -656,6 +661,45 @@ impl Gateway {
         };
         self.presence.insert(user_id, entry.clone());
         entry
+    }
+
+    /// Apply a client `presence.update`, answering whether it changed
+    /// anything. Saying the same thing again tells nobody anything new, so
+    /// nobody is told it (#497).
+    fn update_presence(
+        &self,
+        user_id: UserId,
+        state: PresenceState,
+        away_message: Option<String>,
+    ) -> bool {
+        let same = self
+            .presence
+            .get(&user_id)
+            .is_some_and(|held| held.state == state && held.away_message == away_message);
+        if !same {
+            self.apply_presence(user_id, state, away_message);
+        }
+        !same
+    }
+
+    /// Tell everybody somebody's presence as it is now.
+    ///
+    /// A change held back by `RATE_PRESENCE` is told this way when its turn
+    /// comes, as the newest of everything that arrived meanwhile (#497). When
+    /// they have gone offline in between there is nothing to tell:
+    /// `connection_closed` already said so.
+    ///
+    /// **Published while the entry is still held.** Copying it and letting go
+    /// first leaves a gap in which their last connection can close (or a
+    /// `room.focus` tell something newer), and this older copy would then go
+    /// out after it: somebody who just left looking online again. Holding the
+    /// read guard makes that remove or insert wait until this is on the bus.
+    /// It can't deadlock: `publish` only works out the room and sends, and
+    /// nothing on that path reads `presence`.
+    fn tell_presence(&self, user_id: UserId) {
+        if let Some(entry) = self.presence.get(&user_id) {
+            self.publish(ServerEvent::PresenceUpdate(entry.value().clone()));
+        }
     }
 
     /// Apply a `room.focus` (or a `None` = left the room) and emit the resulting

@@ -10,7 +10,8 @@ use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
 use linger_core::gateway::{ClientFrame, ReadyData, ServerEvent, ServerFrame};
 use linger_core::limits::{
-    HEARTBEAT_INTERVAL_MS, MAX_VOICE_PAYLOAD_BYTES, RATE_TYPING_PER_ROOM, RATE_VOICE_SIGNAL,
+    HEARTBEAT_INTERVAL_MS, MAX_VOICE_PAYLOAD_BYTES, RATE_PRESENCE, RATE_TYPING_PER_ROOM,
+    RATE_VOICE_SIGNAL,
 };
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
@@ -19,6 +20,7 @@ use super::{spawn_session, Ctl, SessionHandle, VoiceJoined};
 use crate::db::now_ms;
 use crate::repo;
 use crate::state::AppState;
+use crate::validate;
 
 /// How long the client has to send identify/resume after hello.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -299,10 +301,23 @@ async fn handle_client_frame(
             state: presence_state,
             away_message,
         } => {
-            let entry = state
+            // Held to the rule `PATCH /me` holds an away message to (#497):
+            // this copy goes to everybody connected, and into every `ready`
+            // until it changes. Ignored rather than refused, like any client
+            // frame that doesn't fit, and ignored whole: the state it came
+            // with doesn't change either, so nobody is told half of it.
+            if away_message
+                .as_deref()
+                .is_some_and(|message| validate::away_message(message).is_err())
+            {
+                return;
+            }
+            if state
                 .gateway
-                .apply_presence(user_id, presence_state, away_message);
-            state.gateway.publish(ServerEvent::PresenceUpdate(entry));
+                .update_presence(user_id, presence_state, away_message)
+            {
+                tell_presence(state, user_id);
+            }
         }
         ClientFrame::RoomFocus { room_id } => {
             // Standing in a DM you are not in would put you in its occupancy
@@ -336,12 +351,12 @@ async fn handle_client_frame(
         }
         ClientFrame::TypingStart { room_id } => {
             // Same check, same reason: without it somebody outside a DM can
-            // make the people inside it see a typing line.
-            if repo::rooms::visible_to(&state.db.read, room_id, user_id)
-                .await
-                .is_err()
-            {
-                return;
+            // make the people inside it see a typing line. And the rule a
+            // message keeps (#497): an archived room takes no new ones, so
+            // nobody is shown typing one there.
+            match repo::rooms::visible_to(&state.db.read, room_id, user_id).await {
+                Ok(room) if room.archived_at.is_none() => {}
+                _ => return,
             }
             let key = format!("typing:{user_id}:{room_id}");
             if state.limiter.check(&key, RATE_TYPING_PER_ROOM).is_ok() {
@@ -419,4 +434,44 @@ async fn handle_client_frame(
         // Handshake ops after the handshake: ignore.
         ClientFrame::Identify { .. } | ClientFrame::Resume { .. } => {}
     }
+}
+
+/// Tell everybody a person's presence changed, at most `RATE_PRESENCE` times
+/// (#497). Each `presence.update` goes to everybody connected, so without
+/// this one app in a loop is every app on the server redrawing in one.
+///
+/// Past the limit a change is held back, not dropped. Presence is state, and
+/// dropping the last change of a burst would leave everybody looking at the
+/// one before it until the next. When the person's turn comes, whatever is
+/// newest is told, once, however many changes arrived meanwhile. It is in
+/// memory from the start, so somebody connecting in between gets it in their
+/// `ready`.
+fn tell_presence(state: &AppState, user_id: UserId) {
+    // A turn is already coming, and it will tell this change too.
+    if state.gateway.presence_held.contains(&user_id) {
+        return;
+    }
+    let key = format!("presence:{user_id}");
+    let Err(mut wait_ms) = state.limiter.check(&key, RATE_PRESENCE) else {
+        state.gateway.tell_presence(user_id);
+        return;
+    };
+    // Two of their apps can both get here; the one that holds it waits.
+    if !state.gateway.presence_held.insert(user_id) {
+        return;
+    }
+    let state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+            match state.limiter.check(&key, RATE_PRESENCE) {
+                Ok(()) => break,
+                Err(more) => wait_ms = more,
+            }
+        }
+        // Let go first, then read: a change that lands after this is told by
+        // its own turn, and one that landed before is in what's read.
+        state.gateway.presence_held.remove(&user_id);
+        state.gateway.tell_presence(user_id);
+    });
 }
