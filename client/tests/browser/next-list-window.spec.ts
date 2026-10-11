@@ -21,6 +21,25 @@ async function open(page: Page, query = "") {
 }
 
 /**
+ * The unreachable server comes back the moment Try now is pressed. Bringing
+ * it back first and then pressing left a gap: the app tries again by itself
+ * 5 s after a failure (RETRY_AFTER_MS), and on a busy machine that try could
+ * land in the gap, bring the server in, and take Try now away before it was
+ * pressed. The click then waited out the test's whole time (#528).
+ */
+async function upOnTryNow(page: Page) {
+  await page.evaluate(() =>
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (event.target instanceof Element && event.target.closest("button")?.textContent?.trim() === "Try now") window.core?.up();
+      },
+      { capture: true },
+    ),
+  );
+}
+
+/**
  * Every connection the page opened has had its `ready`. In development React
  * starts the list twice, so each server is connected twice, and a `ready`
  * clears what the rooms had loaded. The page's fake gives both the same
@@ -74,7 +93,7 @@ test("a server that can't be reached holds up none of the others, keeps its sign
   await expect(notes).toContainText("Can't reach ashen-lanterns.example. Still trying.");
   expect(await did(page)).not.toContain(`forget ${GUILD}`);
   // Back up, and Try now brings it in: no restart, no password.
-  await page.evaluate(() => window.core?.up());
+  await upOnTryNow(page);
   await notes.getByRole("button", { name: "Try now" }).click();
   await expect(section(page, "Ashen Lanterns")).toBeVisible();
   await expect(page.locator(".nx-srv-name")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
@@ -102,7 +121,7 @@ test("nothing reached yet is a wait, not the sign-in screen, and it opens when t
   await expect(wait).toContainText("Can't reach good-company.example yet.", { timeout: 8_000 });
   await expect(wait).toContainText("Your sign-in is kept, and Linger keeps trying.");
   await expect(page.getByRole("textbox", { name: "Server or link" })).toHaveCount(0);
-  await page.evaluate(() => window.core?.up());
+  await upOnTryNow(page);
   await wait.getByRole("button", { name: "Try now" }).click();
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   expect(await did(page)).not.toContain(`forget ${HOME}`);
