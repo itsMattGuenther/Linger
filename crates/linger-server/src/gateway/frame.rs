@@ -90,6 +90,7 @@ mod tests {
             }),
             entrance_sound: Some("door".into()),
             last_seen_at: None,
+            time_zone: Some("America/Chicago".into()),
         }
     }
 

@@ -8,6 +8,7 @@ import type { CardSafety } from "../../core/safety";
 import { BlockForm, ReportForm } from "../chat/ReportBlock";
 import { markerFor } from "../markers";
 import { PersonFields } from "../PersonFields";
+import { useTheirTime } from "../useTheirTime";
 import "./PersonCard.css";
 import { centredOnList } from "./listSpan";
 
@@ -129,6 +130,9 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
 
   const status = user.status;
   const away = state === "away";
+  // Their clock, when they chose to show it (#604): a fact about where they
+  // are, never a reason a knock can't go.
+  const clock = useTheirTime(user);
   const words = away ? (status?.away_message ?? null) : (status?.line ?? null);
 
   const back = () => setView("card");
@@ -233,6 +237,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
             {/* A co-host, said quietly in the same faint line (#424): a word, never a badge. */}
             {user.is_cohost === true ? <span className="nx-person-cohost">· co-host</span> : null}
           </span>
+          {clock ? <span className="nx-person-clock">{clock}</span> : null}
         </div>
         {words ? (
           <p className="nx-person-status" data-away={away ? "yes" : undefined}>

@@ -23,11 +23,13 @@ import {
   setVoiceVolume,
   takeOutOfVoice,
   canTakeOut,
+  saveTimeZone,
   useGateway,
   useServers,
 } from "../../../lib/gateway";
 import { TALK_KEY_EVENT, watchTalkKey } from "../../../lib/ipc";
 import { loadVoicePrefs } from "../../../lib/voice";
+import { deviceTimeZone, zoneToMove } from "../../../lib/localTime";
 import { isTalkButton, isTalkKey, talkKeyName } from "../../core/talkKey";
 import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
@@ -483,6 +485,19 @@ function Servers({
   // The same map until the sign-ins change, so what's handed it isn't drawn again for nothing (#533).
   const apis = useMemo(() => new Map(signedIn.map((session) => [session.baseUrl, session.api])), [signedIn]);
   apisRef.current = apis;
+  // "Show my local time" follows this computer's clock (#604, SPEC §4.6):
+  // on a server where it's on and the zone the server holds isn't this
+  // computer's (travel, or another computer last), it's moved here.
+  const movedZone = useRef(new Map<string, string>());
+  useEffect(() => {
+    const here = deviceTimeZone();
+    for (const [server, api] of apis) {
+      const zone = zoneToMove(states[server]?.me?.time_zone, here, movedZone.current.get(server));
+      if (zone === null) continue;
+      movedZone.current.set(server, zone);
+      void saveTimeZone(api, zone).catch(() => undefined);
+    }
+  }, [apis, states]);
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
   useEffect(() => {

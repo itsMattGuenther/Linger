@@ -14,4 +14,11 @@ is_cohost: boolean, style: Style, status: UserStatus | null,
 /**
  * Bundled sound key, or object key for a custom upload.
  */
-entrance_sound: string | null, last_seen_at: number | null, };
+entrance_sound: string | null, last_seen_at: number | null, 
+/**
+ * Where their clock is, as a time-zone name like `America/Chicago`, when
+ * they turned on "Show my local time" (#604, SPEC §4.6). Their card says
+ * what time it is for them. Left out when it's off, and by a server from
+ * before it; an app from before it ignores it.
+ */
+time_zone?: string, };

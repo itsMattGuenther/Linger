@@ -216,6 +216,13 @@ pub struct User {
     pub entrance_sound: Option<String>,
     #[ts(type = "number | null")]
     pub last_seen_at: Option<i64>,
+    /// Where their clock is, as a time-zone name like `America/Chicago`, when
+    /// they turned on "Show my local time" (#604, SPEC §4.6). Their card says
+    /// what time it is for them. Left out when it's off, and by a server from
+    /// before it; an app from before it ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub time_zone: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +304,12 @@ pub struct UpdateMeRequest {
     pub style: Option<Style>,
     pub status: Option<UserStatus>,
     pub entrance_sound: Option<String>,
+    /// "Show my local time" (#604): a time-zone name turns it on or moves
+    /// it, `""` turns it off. Absent or null leaves it as it is, so an app
+    /// from before it never turns it off by saving something else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub time_zone: Option<String>,
 }
 
 /// Unauthenticated invite preview (`GET /auth/invite/:code`).
