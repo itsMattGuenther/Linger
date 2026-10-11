@@ -271,6 +271,14 @@ empty or oversize bodies are `VALIDATION_FAILED` — **except** that a message
 carrying at least one attachment may have an empty body. Handing somebody a
 photo without typing a caption over it is the ordinary way to share a photo.
 
+A body with nothing visible in it counts as empty (#512), by the rule a display
+name is held to (§2, rule 5): only whitespace, format characters (category Cf, e.g.
+U+200B, U+2060, U+FEFF), control characters, marks, and blank letters (U+115F,
+U+1160, U+3164, U+FFA0, U+2800, U+1D159). Sent or edited, it gets the answer a
+blank one gets, `VALIDATION_FAILED` "Say something."; it used to be taken and drew
+as an empty row. Beside visible text those characters are kept as written. A
+caption is not held to this: a message with an attachment has something to show.
+
 `attachment_ids` are finished uploads (§6). Each must belong to the author, be
 in the `complete` state, and not already be on another message; at most
 `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE` per message. Reusing

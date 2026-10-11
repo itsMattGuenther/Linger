@@ -15,6 +15,7 @@ import {
   inlineBox,
   itemLabel,
   MAX_INLINE_HEIGHT,
+  MIN_INLINE_WIDTH,
   renderAs,
   storageDetail,
   storageLine,
@@ -76,6 +77,15 @@ describe("inlineBox", () => {
   it("caps the height and keeps the shape", () => {
     const box = inlineBox(1000, 2000);
     expect(box).toEqual({ width: 200, height: MAX_INLINE_HEIGHT });
+  });
+
+  // #512: shrinking a very tall picture to the cap left a phone's scrolling
+  // screenshot a 54 px strip and a 1×10000 one nothing at all to click.
+  it("keeps a very tall picture wide enough to see and click", () => {
+    expect(inlineBox(1080, 8000)).toEqual({ width: MIN_INLINE_WIDTH, height: MAX_INLINE_HEIGHT });
+    expect(inlineBox(1, 10000)).toEqual({ width: MIN_INLINE_WIDTH, height: MAX_INLINE_HEIGHT });
+    // A tall one already wider than that keeps its own shape.
+    expect(inlineBox(1080, 2340)).toEqual({ width: 185, height: MAX_INLINE_HEIGHT });
   });
 
   it("has nothing to say about an image whose size the server never learned", () => {

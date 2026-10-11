@@ -95,6 +95,14 @@ export function durationText(ms: number): string {
 }
 
 /**
+ * The narrowest a picture shrunk to the height cap is drawn (#512): wide
+ * enough to see what it is and to hit with a pointer. A phone's screenshot,
+ * the common tall picture, is about 185 at the cap, so only the very tall
+ * ones are widened.
+ */
+export const MIN_INLINE_WIDTH = 120;
+
+/**
  * How big to draw an image: its own shape, never taller than the cap, and never
  * wider than the column it is in (CSS handles that half with `max-width`).
  *
@@ -102,6 +110,14 @@ export function durationText(ms: number): string {
  * jumping as pictures load — the row is the right height before the bytes
  * arrive, which matters more here than anywhere because the list is virtualized
  * and a row that changes height after measurement moves everything under it.
+ *
+ * A picture shrunk to the cap is never narrower than `MIN_INLINE_WIDTH`
+ * (#512): a phone's scrolling screenshot would be a sliver, and a 1×10000 one
+ * nothing to click at all. That box is wider than the picture's own shape, so
+ * the picture fills it from its top (`object-fit: cover` in Attachments.css)
+ * and the viewer shows all of it. Only a picture past the cap is widened: at
+ * that width its own shape is taller still, so once it loads the height stays
+ * the cap's (CSS `max-height`) and the row doesn't move.
  */
 export function inlineBox(
   width: number | null,
@@ -110,7 +126,7 @@ export function inlineBox(
 ): { width: number; height: number } | null {
   if (width === null || height === null || width <= 0 || height <= 0) return null;
   if (height <= cap) return { width, height };
-  return { width: Math.round((width * cap) / height), height: cap };
+  return { width: Math.max(MIN_INLINE_WIDTH, Math.round((width * cap) / height)), height: cap };
 }
 
 /** The filters the grid offers, in the order they are drawn. */

@@ -701,9 +701,12 @@ keep their focus ring. This is the one place words are cut without "…": the
 fade and Show all say there's more.
 
 **What else a message holds.** Pictures are sized from their stored width and
-height before they load (at most 320 by 400), so a row is measured once. A
-message that is nothing but one link shows only its link card. Files that
-aren't pictures, video or sound are a card with a Download button.
+height before they load (at most 320 by 400), so a row is measured once. One
+so tall it would be under 120 wide at 400 tall (`MIN_INLINE_WIDTH`, #512) is
+drawn 120 wide and filled from its top, so a phone's scrolling screenshot is
+not a sliver; the viewer shows all of it. A message that is nothing but one
+link shows only its link card. Files that aren't pictures, video or sound are
+a card with a Download button.
 
 **Reactions** (#485, SPEC §4.8, `app/chat/Reactions.tsx`). A pill per emoji
 just under what a message shows: `--control-sm` tall, `--radius-pill`, the

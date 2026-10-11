@@ -478,7 +478,8 @@ reported as definitely undelivered.
 
 **Restrained embeds.** A link renders as a one-line inline card: favicon, title, domain.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
-height, click to expand.
+height, click to expand. One so tall that it would be under 120px wide there (a
+phone's scrolling screenshot) is drawn 120px wide, showing its top (#512).
 
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface

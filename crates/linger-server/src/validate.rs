@@ -377,10 +377,15 @@ pub fn password(s: &str) -> Result<(), ApiError> {
     }
 }
 
-/// Trimmed message body, 1..=8000 chars (PROTOCOL §4).
+/// Trimmed message body, 1..=8000 chars (PROTOCOL §4), with something in it
+/// a person can see.
+///
+/// Trimming only takes spaces off. A body of blank letters or zero-width
+/// characters (#512) survives it and draws as an empty row, so it is refused
+/// the way a blank one is, by the rule a name is held to (`is_seen`).
 pub fn message_body(s: &str) -> Result<String, ApiError> {
     let trimmed = caption(s)?;
-    if trimmed.is_empty() {
+    if !trimmed.chars().any(is_seen) {
         return Err(ApiError::validation("Say something."));
     }
     Ok(trimmed)
