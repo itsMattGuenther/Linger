@@ -48,7 +48,7 @@ async fn register(
     parts: Parts,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts);
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
     if let Err(retry) = state
         .limiter
         .check(&format!("register:{ip}"), RATE_REGISTER_PER_IP)
@@ -188,7 +188,7 @@ async fn login(
     parts: Parts,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts);
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
     if let Err(retry) = state
         .limiter
         .check(&format!("login:{ip}"), RATE_LOGIN_PER_IP)

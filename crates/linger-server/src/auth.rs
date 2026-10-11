@@ -35,6 +35,7 @@ use sqlx::SqlitePool;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+use crate::config::TrustedProxies;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -589,13 +590,13 @@ impl FromRequestParts<AppState> for HostOrCohost {
 
 /// The address the per-address limits (sign-in, sign-up) are kept against.
 ///
-/// The connection's own peer, unless that peer is a proxy we can believe: one
-/// on this machine or on a private network, which is how the shipped Caddy
-/// container reaches the server over Docker's network. Only then is
-/// `X-Forwarded-For` read, and only its **last** entry, the one the nearest
-/// proxy wrote. Every entry before it is whatever the client sent. This used
-/// to take the first, so each request could claim a new address and walk past
-/// the limits, from anywhere (#495).
+/// The connection's own peer, unless that peer is a proxy we can believe
+/// (`LINGER_TRUSTED_PROXIES`, by default one on this machine or on a private
+/// network, which is how the shipped Caddy container reaches the server over
+/// Docker's network). Only then is `X-Forwarded-For` read, and only its
+/// **last** entry, the one the nearest proxy wrote. Every entry before it is
+/// whatever the client sent. This used to take the first, so each request
+/// could claim a new address and walk past the limits, from anywhere (#495).
 ///
 /// Caddy replaces the header for a client it doesn't trust, so behind it the
 /// last entry is the person's own address. A proxy that appends instead
@@ -603,8 +604,13 @@ impl FromRequestParts<AppState> for HostOrCohost {
 /// is still the right one. A header with nothing usable at the end counts as
 /// the proxy itself: everybody behind it then shares one allowance, which is
 /// the safe way to be wrong.
+///
+/// The same is true of a proxy the server doesn't trust, which is why the
+/// first header from one is logged, once per process: a host behind a proxy
+/// on an unusual address sees why everybody shares an allowance, and what to
+/// set.
 #[must_use]
-pub fn client_ip(parts: &Parts) -> String {
+pub fn client_ip(parts: &Parts, trusted: &TrustedProxies) -> String {
     let Some(peer) = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
@@ -612,21 +618,27 @@ pub fn client_ip(parts: &Parts) -> String {
     else {
         return "unknown".to_string();
     };
-    if !is_trusted_proxy(peer) {
+    if !trusted.trusts(peer) {
+        if parts.headers.contains_key("x-forwarded-for") {
+            UNTRUSTED_FORWARD.call_once(|| {
+                tracing::warn!(
+                    "A request from {peer} said who it was passing on for (X-Forwarded-For), \
+                     but {peer} isn't a proxy this server trusts, so it counts as {peer} for \
+                     the limits on signing in and signing up. If a proxy of yours connects \
+                     from there, add it to LINGER_TRUSTED_PROXIES (docs/host-guide.md); \
+                     until then everybody behind it shares one allowance. If not, it was \
+                     somebody claiming to be somebody else, and it changed nothing. Said \
+                     once per start."
+                );
+            });
+        }
         return peer.to_string();
     }
     last_forwarded(&parts.headers).unwrap_or(peer).to_string()
 }
 
-/// Loopback, or a private network (IPv4 private ranges, IPv6 unique local).
-/// Not CGNAT or link-local: those are where people arrive from on Tailscale
-/// and on a LAN with no router, not where a proxy sits.
-fn is_trusted_proxy(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
-        IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
-    }
-}
+/// [`client_ip`] has said once that an untrusted peer sent `X-Forwarded-For`.
+static UNTRUSTED_FORWARD: std::sync::Once = std::sync::Once::new();
 
 /// The last `X-Forwarded-For` entry, if it is an address. Several header
 /// lines read as one list, in order.
@@ -660,22 +672,22 @@ mod tests {
     fn a_public_peer_is_its_own_address_whatever_it_claims() {
         // Somebody reaching the server directly writes whatever they like.
         let parts = request_from("203.0.113.7:51000", &["198.51.100.1"]);
-        assert_eq!(client_ip(&parts), "203.0.113.7");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "203.0.113.7");
         let parts = request_from("[2001:db8::7]:51000", &["198.51.100.1"]);
-        assert_eq!(client_ip(&parts), "2001:db8::7");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "2001:db8::7");
     }
 
     #[test]
     fn behind_a_proxy_the_last_entry_counts_not_the_first() {
         // The client wrote the first entry; the proxy appended the last.
         let parts = request_from("172.18.0.3:40000", &["10.9.8.7, 203.0.113.7"]);
-        assert_eq!(client_ip(&parts), "203.0.113.7");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "203.0.113.7");
         // The same thing split over two header lines.
         let parts = request_from("172.18.0.3:40000", &["10.9.8.7", "203.0.113.7"]);
-        assert_eq!(client_ip(&parts), "203.0.113.7");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "203.0.113.7");
         // Caddy's own: one entry, the person's address.
         let parts = request_from("172.18.0.3:40000", &["203.0.113.7"]);
-        assert_eq!(client_ip(&parts), "203.0.113.7");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "203.0.113.7");
     }
 
     #[test]
@@ -690,11 +702,19 @@ mod tests {
             "[::ffff:172.18.0.3]:1",
         ] {
             let parts = request_from(proxy, &["203.0.113.7"]);
-            assert_eq!(client_ip(&parts), "203.0.113.7", "{proxy} is a proxy");
+            assert_eq!(
+                client_ip(&parts, &TrustedProxies::default()),
+                "203.0.113.7",
+                "{proxy} is a proxy"
+            );
         }
         for stranger in ["100.64.0.2:1", "169.254.1.2:1", "[fe80::2]:1", "8.8.8.8:1"] {
             let parts = request_from(stranger, &["203.0.113.7"]);
-            assert_ne!(client_ip(&parts), "203.0.113.7", "{stranger} is not");
+            assert_ne!(
+                client_ip(&parts, &TrustedProxies::default()),
+                "203.0.113.7",
+                "{stranger} is not"
+            );
         }
     }
 
@@ -702,10 +722,33 @@ mod tests {
     fn a_proxy_with_nothing_usable_in_the_header_is_its_own_address() {
         for line in ["", "not an address", "203.0.113.7, ", "203.0.113.7:443"] {
             let parts = request_from("172.18.0.3:40000", &[line]);
-            assert_eq!(client_ip(&parts), "172.18.0.3", "{line:?}");
+            assert_eq!(
+                client_ip(&parts, &TrustedProxies::default()),
+                "172.18.0.3",
+                "{line:?}"
+            );
         }
         let parts = request_from("[::ffff:172.18.0.3]:40000", &[]);
-        assert_eq!(client_ip(&parts), "172.18.0.3");
+        assert_eq!(client_ip(&parts, &TrustedProxies::default()), "172.18.0.3");
+    }
+
+    #[test]
+    fn a_proxy_the_host_names_is_believed_and_a_stranger_still_is_not() {
+        // Caddy on a VPS, reaching this machine over Tailscale: not a private
+        // address, so only believed once the host names it.
+        let tailscale: TrustedProxies = "private,100.64.0.0/10".parse().unwrap();
+        let parts = request_from("100.101.102.103:40000", &["10.9.8.7, 203.0.113.7"]);
+        assert_eq!(
+            client_ip(&parts, &TrustedProxies::default()),
+            "100.101.102.103"
+        );
+        assert_eq!(client_ip(&parts, &tailscale), "203.0.113.7");
+
+        // Naming one proxy makes nobody else one.
+        let parts = request_from("198.51.100.4:51000", &["203.0.113.7"]);
+        assert_eq!(client_ip(&parts, &tailscale), "198.51.100.4");
+        let parts = request_from("[2001:db8::4]:51000", &["203.0.113.7"]);
+        assert_eq!(client_ip(&parts, &tailscale), "2001:db8::4");
     }
 
     /// Work that stays running until the test lets it finish, and says when

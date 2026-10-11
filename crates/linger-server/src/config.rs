@@ -102,6 +102,9 @@ pub struct Config {
     /// environment variable; there is nothing for a host to tune. Tests
     /// shorten it rather than wait.
     pub voice_line_after: Duration,
+    /// `LINGER_TRUSTED_PROXIES`: whose `X-Forwarded-For` the per-address
+    /// limits believe (#495). Default: loopback and private networks.
+    pub trusted_proxies: TrustedProxies,
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -226,6 +229,12 @@ pub enum ConfigError {
     TurnUrl(String),
     #[error("LINGER_TURN_URLS is set but LINGER_TURN_SECRET is not; a relay needs both")]
     TurnSecretMissing,
+    #[error(
+        "LINGER_TRUSTED_PROXIES has {0:?} in it. Each entry is an IP address, a range like \
+         100.64.0.0/10, or `private` for loopback and private networks (the default), \
+         separated by commas."
+    )]
+    TrustedProxies(String),
 }
 
 impl Config {
@@ -281,6 +290,7 @@ impl Config {
             voice_forwarding,
             voice_from_domain,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            trusted_proxies: trusted_proxies(std::env::var("LINGER_TRUSTED_PROXIES").ok())?,
         })
     }
 
@@ -482,6 +492,109 @@ fn file_expiry_days(configured: Option<String>) -> Result<Option<u32>, ConfigErr
         Ok(0) => Ok(None),
         Ok(days) => Ok(Some(days)),
         Err(_) => Err(ConfigError::FileExpiryDays(text.to_string())),
+    }
+}
+
+/// `LINGER_TRUSTED_PROXIES`: the connections whose `X-Forwarded-For` the
+/// server believes, for the per-address limits on sign-in and sign-up
+/// (`auth::client_ip`, #495).
+///
+/// The default is loopback and private networks, the word `private`: that is
+/// how the shipped Caddy container reaches the server, over Docker's network.
+/// A proxy anywhere else, such as Caddy on another machine reaching this one
+/// over Tailscale (100.64.0.0/10), has to be listed, or everybody behind it
+/// counts as the proxy and shares one allowance. Setting the variable replaces
+/// the default, so `private,100.64.0.0/10` keeps it and adds Tailscale.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrustedProxies(Vec<ProxyRange>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProxyRange {
+    /// IPv4 loopback and private ranges, IPv6 loopback and unique local. Not
+    /// CGNAT or link-local: those are where people arrive from on Tailscale
+    /// and on a LAN with no router, so trusting them is the host's choice.
+    Private,
+    /// One address, or a range: the first `prefix` bits of `network`.
+    Net { network: IpAddr, prefix: u8 },
+}
+
+impl Default for TrustedProxies {
+    fn default() -> Self {
+        Self(vec![ProxyRange::Private])
+    }
+}
+
+impl TrustedProxies {
+    /// Whether a connection from `ip` is a proxy whose `X-Forwarded-For` is
+    /// believed. An IPv4 address arriving as IPv6 (`::ffff:a.b.c.d`) counts
+    /// as the IPv4 one.
+    #[must_use]
+    pub fn trusts(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        self.0.iter().any(|range| match *range {
+            ProxyRange::Private => match ip {
+                IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+                IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
+            },
+            ProxyRange::Net { network, prefix } => match (network, ip) {
+                (IpAddr::V4(net), IpAddr::V4(ip)) => {
+                    let mask = u32::MAX.checked_shl(32 - u32::from(prefix)).unwrap_or(0);
+                    u32::from(net) & mask == u32::from(ip) & mask
+                }
+                (IpAddr::V6(net), IpAddr::V6(ip)) => {
+                    let mask = u128::MAX.checked_shl(128 - u32::from(prefix)).unwrap_or(0);
+                    u128::from(net) & mask == u128::from(ip) & mask
+                }
+                _ => false,
+            },
+        })
+    }
+}
+
+/// Read `LINGER_TRUSTED_PROXIES`. Unset is [`TrustedProxies::default`].
+fn trusted_proxies(configured: Option<String>) -> Result<TrustedProxies, ConfigError> {
+    configured.map_or_else(|| Ok(TrustedProxies::default()), |raw| raw.parse())
+}
+
+/// Comma-separated addresses, ranges like `100.64.0.0/10`, and `private`.
+/// Nothing at all (a line left blank in `.env`) is the default.
+impl std::str::FromStr for TrustedProxies {
+    type Err = ConfigError;
+
+    fn from_str(raw: &str) -> Result<Self, ConfigError> {
+        let mut ranges = Vec::new();
+        for entry in raw
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let refused = || ConfigError::TrustedProxies(entry.to_string());
+            if entry.eq_ignore_ascii_case("private") {
+                ranges.push(ProxyRange::Private);
+                continue;
+            }
+            let (address, prefix) = match entry.split_once('/') {
+                Some((address, prefix)) => (address, Some(prefix)),
+                None => (entry, None),
+            };
+            let network: IpAddr = address.trim().parse().map_err(|_| refused())?;
+            let network = network.to_canonical();
+            let widest = if network.is_ipv4() { 32 } else { 128 };
+            let prefix = match prefix {
+                None => widest,
+                Some(prefix) => prefix
+                    .trim()
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|prefix| *prefix <= widest)
+                    .ok_or_else(refused)?,
+            };
+            ranges.push(ProxyRange::Net { network, prefix });
+        }
+        if ranges.is_empty() {
+            return Ok(Self::default());
+        }
+        Ok(Self(ranges))
     }
 }
 
@@ -804,6 +917,7 @@ mod tests {
             voice_forwarding: None,
             voice_from_domain: None,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            trusted_proxies: TrustedProxies::default(),
         }
     }
 
@@ -1051,5 +1165,78 @@ mod tests {
             file_expiry_days(Some("a year".to_string())),
             Err(ConfigError::FileExpiryDays(_))
         ));
+    }
+
+    fn trusts(proxies: &TrustedProxies, ip: &str) -> bool {
+        proxies.trusts(ip.parse().unwrap())
+    }
+
+    #[test]
+    fn trusted_proxies_unset_or_blank_are_loopback_and_private_networks() {
+        for unset in [None, Some(String::new()), Some(" , ".to_string())] {
+            let proxies = trusted_proxies(unset).unwrap();
+            assert_eq!(proxies, TrustedProxies::default());
+            for proxy in [
+                "127.0.0.1",
+                "10.1.2.3",
+                "172.18.0.3",
+                "192.168.1.2",
+                "::1",
+                "fd00::2",
+            ] {
+                assert!(trusts(&proxies, proxy), "{proxy}");
+            }
+            for stranger in [
+                "100.64.1.2",
+                "169.254.1.2",
+                "fe80::2",
+                "203.0.113.7",
+                "2001:db8::7",
+            ] {
+                assert!(!trusts(&proxies, stranger), "{stranger}");
+            }
+        }
+    }
+
+    #[test]
+    fn trusted_proxies_take_addresses_ranges_and_the_word_private() {
+        // Caddy on a VPS reaching this machine over Tailscale, and Docker's
+        // network as before.
+        let proxies = trusted_proxies(Some("private, 100.64.0.0/10".into())).unwrap();
+        assert!(trusts(&proxies, "100.64.1.2"));
+        assert!(trusts(&proxies, "100.127.255.254"));
+        assert!(trusts(&proxies, "::ffff:100.64.1.2"));
+        assert!(trusts(&proxies, "172.18.0.3"));
+        assert!(!trusts(&proxies, "100.128.0.1"));
+        assert!(!trusts(&proxies, "203.0.113.7"));
+
+        // Setting it replaces the default: no `private`, no private networks.
+        let proxies = trusted_proxies(Some("100.64.0.0/10".into())).unwrap();
+        assert!(trusts(&proxies, "100.64.1.2"));
+        assert!(!trusts(&proxies, "172.18.0.3"));
+
+        // One address is just that address; IPv6 ranges work the same way.
+        let proxies = trusted_proxies(Some("203.0.113.7,2001:db8:1::/48".into())).unwrap();
+        assert!(trusts(&proxies, "203.0.113.7"));
+        assert!(!trusts(&proxies, "203.0.113.8"));
+        assert!(trusts(&proxies, "2001:db8:1:2::9"));
+        assert!(!trusts(&proxies, "2001:db8:2::9"));
+        assert!(!trusts(&proxies, "::ffff:203.0.113.8"));
+    }
+
+    #[test]
+    fn a_trusted_proxy_that_is_not_an_address_or_a_range_is_refused() {
+        for bad in [
+            "proxy.example.com",
+            "100.64.0.0/33",
+            "fd00::/129",
+            "10.0.0.0/eight",
+            "private,10.0.0.0/",
+            "100.64.0.0/10 nope",
+        ] {
+            let refused = trusted_proxies(Some(bad.into())).unwrap_err();
+            assert!(matches!(refused, ConfigError::TrustedProxies(_)), "{bad}");
+            assert!(refused.to_string().contains("LINGER_TRUSTED_PROXIES"));
+        }
     }
 }

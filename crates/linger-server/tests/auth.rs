@@ -346,6 +346,27 @@ async fn a_made_up_first_forwarded_entry_does_not_dodge_the_sign_in_limit() {
     assert_eq!(code_of(resp).await, ErrorCode::RateLimited);
 }
 
+/// `LINGER_TRUSTED_PROXIES` reaches the limits: told to trust only a range
+/// the test's own connections aren't in, the server stops believing their
+/// `X-Forwarded-For`, and every attempt counts against 127.0.0.1.
+#[tokio::test]
+async fn a_server_told_whom_to_trust_believes_nobody_else() {
+    let server = common::spawn_tuned(|config| {
+        config.trusted_proxies = "203.0.113.0/24".parse().unwrap();
+    })
+    .await;
+    let _host = common::bootstrap_host(&server).await;
+
+    let (allowed, _) = RATE_LOGIN_PER_IP;
+    for n in 0..allowed {
+        let resp = sign_in_from(&server, &format!("198.51.100.{n}"), "wrong wrong wrong").await;
+        assert_eq!(resp.status(), 401);
+    }
+    let resp = sign_in_from(&server, "198.51.100.99", "correct horse battery").await;
+    assert_eq!(resp.status(), 429);
+    assert_eq!(code_of(resp).await, ErrorCode::RateLimited);
+}
+
 /// Every hash and check takes a turn, and while every turn is taken a
 /// sign-in or sign-up waits, then is told the server is busy. It hashes
 /// nothing meanwhile, and a sign-up turned away keeps its invite.

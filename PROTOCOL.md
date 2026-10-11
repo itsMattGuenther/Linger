@@ -113,9 +113,9 @@ revocation from `INTERNAL`. This applies both at startup and during normal use.
 Sign-in and sign-up are limited per address (#495): `POST /auth/login` 5 a minute
 (`RATE_LOGIN_PER_IP`), `POST /auth/register` 60 an hour, all at once if need be
 (`RATE_REGISTER_PER_IP`). Past either, the answer is `RATE_LIMITED` with
-`retry_after_ms`. The address is the connection's own; from a proxy on the same
-machine or a private network, it is the last `X-Forwarded-For` entry, never an
-earlier one. Checking a password is slow on purpose and the server does only a few
+`retry_after_ms`. The address is the connection's own; from a proxy the server
+trusts (`LINGER_TRUSTED_PROXIES`, by default the same machine or a private network),
+it is the last `X-Forwarded-For` entry, never an earlier one. Checking a password is slow on purpose and the server does only a few
 at once, so a sign-in, sign-up, first-run setup or password change that can't get a
 turn within 5 seconds is also `RATE_LIMITED`, saying the server is busy.
 `POST /auth/register` checks the invite before it touches the password: a bad

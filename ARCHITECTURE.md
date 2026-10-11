@@ -531,9 +531,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
 5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP (all sixty at once, then one a
    minute), message send 10/10s/user, upload slot 20/hour/user, invite creation
    10/day/user, knock 3/hour/target, search 30/min/user. The IP is the connection's
-   own. `X-Forwarded-For` is believed only from a peer on loopback or a private network
-   (the Caddy container, over Docker's network), and then only its last entry, the one
-   that proxy wrote; earlier entries are whatever the client sent (`auth::client_ip`).
+   own. `X-Forwarded-For` is believed only from a peer `LINGER_TRUSTED_PROXIES` lists,
+   by default loopback and private networks (the Caddy container, over Docker's
+   network), and then only its last entry, the one that proxy wrote; earlier entries
+   are whatever the client sent (`auth::client_ip`). The first header from any other
+   peer is logged once per start, so a host behind a proxy elsewhere sees what to set.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
