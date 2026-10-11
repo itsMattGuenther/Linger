@@ -234,3 +234,9 @@
   height: 100%;
   background: var(--accent);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-composer-reply-words {
+  unicode-bidi: isolate;
+}

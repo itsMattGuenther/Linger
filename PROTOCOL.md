@@ -114,8 +114,8 @@ Taken out rather than refused, because nobody can see them: a refusal would ask
 somebody to delete a character they can't find, and they mostly arrive by pasting (a
 song title, a file from somebody's disk). Letters in Arabic or Hebrew carry their own
 direction, so nothing anybody can read is lost. A message's `body` keeps them: somebody
-writing a paragraph in Hebrew or Arabic may want them, and a client draws each message
-as a paragraph of its own. Text stored before this keeps them, so a client draws all of
+writing a paragraph in Hebrew or Arabic may want them, and a client keeps each message's
+words to themselves. Text stored before this keeps them, so a client draws all of
 the above isolated from the words around it, and a file's name without them
 (`docs/design/system.md`, principle 10).
 

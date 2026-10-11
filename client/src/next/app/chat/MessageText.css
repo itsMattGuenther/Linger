@@ -110,6 +110,7 @@
 
 /* Words somebody wrote keep their direction to themselves (#488): one that
    turns text around can't reach past them. */
-.nx-mention {
+.nx-mention,
+.nx-text-words {
   unicode-bidi: isolate;
 }

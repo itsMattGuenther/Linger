@@ -439,6 +439,21 @@ test.describe("the keyboard", () => {
     // Straight back to the box, to carry on.
     await expect(box(page)).toBeFocused();
   });
+
+  // #488: a message's words keep a character that turns text around (people
+  // write in Hebrew and Arabic), so the words are kept to themselves and
+  // can't turn the "edited" after them into "detide".
+  test("words ending in a character that turns text around leave “edited” the right way round", async ({ page }) => {
+    await box(page).click();
+    await page.keyboard.press("ArrowUp");
+    const edit = page.getByRole("textbox", { name: /Edit/ });
+    await edit.fill("Count me in.\u{202E}");
+    await page.keyboard.press("Enter");
+    const row = message(page, /^Matt\s*Count me in\./);
+    await expect(row.locator(".nx-msg-edited")).toBeVisible();
+    expect(await drawn(row.locator(".nx-msg-edited"))).toBe("edited");
+    expect(await drawn(row.locator(".nx-text"))).toBe("Count me in.edited");
+  });
 });
 
 test.describe("emoji", () => {
@@ -960,28 +975,8 @@ test.describe("a file to download", () => {
   test("a name with a character that turns text around shows what the file really is", async ({ page }) => {
     await open(page, "?file&turned");
     const name = page.locator(".nx-att-card .nx-att-name", { hasText: "invoice" });
-    const drawn = await name.evaluate((span) => {
-      const range = document.createRange();
-      const letters: { letter: string; left: number }[] = [];
-      for (const node of span.childNodes) {
-        if (!(node instanceof Text)) continue;
-        for (let at = 0; at < node.length; at += 1) {
-          range.setStart(node, at);
-          range.setEnd(node, at + 1);
-          const box = range.getBoundingClientRect();
-          if (box.width > 0) letters.push({ letter: node.data[at] ?? "", left: box.left });
-        }
-      }
-      return {
-        shown: letters
-          .sort((a, b) => a.left - b.left)
-          .map(({ letter }) => letter)
-          .join(""),
-        isolated: getComputedStyle(span).unicodeBidi,
-      };
-    });
-    expect(drawn.shown).toBe("invoicefdp.exe");
-    expect(drawn.isolated).toBe("isolate");
+    expect(await drawn(name)).toBe("invoicefdp.exe");
+    expect(await name.evaluate((span) => getComputedStyle(span).unicodeBidi)).toBe("isolate");
     await expect(page.locator(".nx-att-card", { hasText: "invoice" }).getByRole("button", { name: "Download" })).toBeVisible();
   });
 
@@ -1193,3 +1188,28 @@ test.describe("reactions refused or off", () => {
     await expect(row.getByRole("button", { name: /^React to/ })).toHaveCount(0);
   });
 });
+
+/**
+ * The letters in an element as they're drawn: line by line, left to right,
+ * leaving out what draws nothing. A character that turns text around (#488)
+ * changes this and not the element's text.
+ */
+async function drawn(locator: Locator): Promise<string> {
+  return locator.evaluate((element) => {
+    const range = document.createRange();
+    const letters: { letter: string; line: number; left: number }[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node instanceof Text; node = walker.nextNode()) {
+      for (let at = 0; at < node.length; at += 1) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const box = range.getBoundingClientRect();
+        if (box.width > 0) letters.push({ letter: node.data[at] ?? "", line: Math.round(box.top + box.height / 2), left: box.left });
+      }
+    }
+    return letters
+      .sort((a, b) => a.line - b.line || a.left - b.left)
+      .map(({ letter }) => letter)
+      .join("");
+  });
+}

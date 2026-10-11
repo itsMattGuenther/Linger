@@ -321,3 +321,9 @@ button.nx-quote:hover {
 .nx-msg[data-motd="yes"] .nx-text {
   color: var(--text-secondary);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-quote-words {
+  unicode-bidi: isolate;
+}

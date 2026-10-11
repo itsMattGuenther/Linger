@@ -74,16 +74,21 @@ Then open <http://localhost:1431/tests/fixtures/kit.html>.
     note and second line, a tab's and a title bar's title, a chip's text,
     a file's name, a status and its fields, a room's name and topic, a
     poll's question and choices, a mention, a link card's title, a server's
-    name. A new part that draws such words does the same. A message, and
-    the message of the day, are paragraphs of their own, and direction
-    never crosses a paragraph's edge. A file's name is also shown without
-    those characters at all (`fileNameToShow` in `lib/media.ts`):
+    name, the message of the day, and the words a reply quotes. A new part
+    that draws such words does the same. A message keeps every character
+    it was written with, since people writing Hebrew or Arabic may want
+    them, so its words are isolated wherever something follows them on
+    their line: "edited" and the pin after its last words
+    (`.nx-text-words`), which a message ending in U+202E turned into
+    "detide". Each of its other paragraphs is a block of its own, and
+    direction never crosses a block's edge. A file's name is also shown
+    without those characters at all (`fileNameToShow` in `lib/media.ts`):
     isolating it keeps the words around it right, but only taking them out
     stops `invoice` + U+202E + `fdp.exe` reading as "invoiceexe.pdf". The
-    server refuses them in a display name and takes them out of the rest of
-    these on the way in (PROTOCOL §2). This is for words saved before that,
-    a link card's title (a web page's own words), and a server that
-    doesn't.
+    server refuses them in a display name and takes them out of the other
+    short text on the way in (PROTOCOL §2). Isolating is for what's left:
+    words saved before that, a message's words, a link card's title (a web
+    page's own words), and a server that doesn't.
 
 ## Tokens
 
@@ -974,7 +979,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
-| A name with a character that turns text around in it leaves the words after it the right way round, read letter by letter as drawn, and a row's title, note, second line and name are isolated; a file named `invoice` + U+202E + `fdp.exe` shows "invoicefdp.exe" on its card, isolated, and in Media and Search (#488) | `kit.spec.ts` › a name that turns text around; `next-chat.spec.ts` › a name with a character that turns text around; `lib/media.test.ts`, `core/search.test.ts` |
+| A name with a character that turns text around in it leaves the words after it the right way round, read letter by letter as drawn, and a row's title, note, second line and name are isolated; a file named `invoice` + U+202E + `fdp.exe` shows "invoicefdp.exe" on its card, isolated, and in Media and Search; a message ending in U+202E leaves its "edited" the right way round (#488) | `kit.spec.ts` › a name that turns text around; `next-chat.spec.ts` › a name with a character that turns text around, words ending in a character that turns text around; `lib/media.test.ts`, `core/search.test.ts` |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
