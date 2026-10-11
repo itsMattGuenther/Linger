@@ -1216,3 +1216,62 @@ mockups (https://claude.ai/artifact/9mKcjUTn472rd26WesGBnW, private).
   makes a room look new.
 - **It calls nobody.** A new poll makes the room bold like anything said, with no
   notification or sound; votes and the closed line make nothing bold.
+
+## Decided — the talk key works with another app in front
+
+**Matt, 2026-10-10 and 2026-10-11 (#500).** Push-to-talk heard its key only while
+a Linger window had focus, so in a game, where it matters most, holding the key
+did nothing. "This is the exact same behavior all of these tools have used going
+way back in the day. Discord functions this way, same with Ventrilo, Teamspeak,
+etc." Build it so it works whatever app is in front, Linger minimized or only in
+the tray.
+
+- **One key, only while it's needed.** Linger watches for the talk key and
+  nothing else, and only while you're in voice with push-to-talk on; leaving
+  voice, turning push-to-talk off or quitting stops it, and a key held at that
+  moment counts as let go. Nothing is recorded or stored, nothing about keys
+  leaves the computer, and nothing asks which app is in front (hard rule 2). It
+  only watches: the app in front still gets the key.
+- **Windows: one key's state, 50 times a second.** A thread that exists only
+  while watching asks `GetAsyncKeyState` about the chosen key (or mouse button)
+  every 20 ms, the rate the voice sender already runs at in a call, and reports
+  only changes. Set aside: a low-level keyboard hook (`WH_KEYBOARD_LL`), which is
+  shown every key typed anywhere; `RegisterHotKey` (what the global-shortcut
+  wrapper crates use), which takes the key away from the game and can't take a
+  bare Right Ctrl; and raw input for the whole keyboard. A game run as
+  administrator hides its keys from Linger, as it does from Discord.
+- **Linux: the desktop's global shortcuts.** Linger asks the `GlobalShortcuts`
+  portal for one shortcut, `push-to-talk`, and the desktop says when it goes
+  down and up; the person gives it a key in their desktop (KDE and GNOME ask;
+  Hyprland takes a bind line, which Settings shows). Linger never sees a key.
+  The portal names an app by its desktop file, so a program not started by one
+  says which it is first (the portal's registry), which works for an installed
+  copy: the Arch package is `linger`, the AppImage `com.linger.desktop`, the
+  .deb and .rpm `Linger`. A development build has none, and stays window-only.
+  X11 gets the portal where the desktop offers it and window-only otherwise: no
+  X11 library that would show Linger every key. Tried on Omarchy (Hyprland
+  0.56, 2026-10-11): the shortcut registers as `linger:push-to-talk` and a
+  press from Hyprland reaches the list window.
+- **macOS: window-only for now (#587).** Asking about one key the Windows way
+  may need macOS's Input Monitoring permission, and nobody building Linger has
+  a Mac to find out.
+- **The window in front still counts, once.** A Linger window hears the key as
+  before. The list window counts who holds it (`core/talkHold.ts`): a press
+  heard by a window and the watcher opens the microphone once; whoever hears
+  it come up first closes it, since there is only one key; and a window losing
+  focus lets go of only its own press, so switching to the game with the key
+  held keeps talking where the watcher reaches.
+- **The list window keeps the rules.** The shell tells the list window the key
+  went down or up (`next:talkkey`), the way the tray menu's Mute does, and the
+  list does what a key press in it does (mute and deafen still win, deafen
+  needs a fresh press). Set aside: the shell opening the microphone itself,
+  which would give the microphone two owners, and a moment where they disagreed
+  would leave it open.
+- **The privacy guard is narrowed, not dropped** (`privacy.test.ts`, PRIV-2).
+  `windows-sys` is allowed with the one keyboard-input feature and no other, and
+  `ashpd` with `global_shortcuts` and no other portal. `windows`, `x11rb`, `xcb`,
+  `x11` and the hotkey and input-hook crates are still refused, the check for
+  code asking what's open stays, and a new check refuses anything that sees the
+  whole keyboard (hooks, raw input, `GetKeyboardState`, `XQueryKeymap`,
+  `/dev/input`, event taps) and allows `GetAsyncKeyState` in one place, asked
+  about the talk key's code.

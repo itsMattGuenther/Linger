@@ -22,6 +22,7 @@ const OWNER_ONLY: &[&str] = &[
     "voice_push_to_talk",
     "voice_volume",
     "voice_choose_devices",
+    "voice_talk_key",
     "show_notification",
     "next_open_conversation",
     "next_open_settings",

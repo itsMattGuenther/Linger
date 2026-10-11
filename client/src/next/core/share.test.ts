@@ -10,8 +10,9 @@ import type { Message } from "../../generated/Message";
 import type { Room } from "../../generated/Room";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
-import { ask } from "./bus";
+import { ask, OWNER } from "./bus";
 import { CLOSED, NOTIFY, type Outcome, PASSWORD, type VoiceControlQuestion } from "./share";
+import { ANYWHERE } from "./talkHold";
 import { pressVoiceControl } from "./voiceControl";
 
 // What the Rust core's `app.emit` reaches in the owner: the store's own
@@ -954,6 +955,138 @@ describe("a viewer window sharing the owner's connection", () => {
     await new Promise((settle) => setTimeout(settle, 20));
     expect(invoked.slice(said)).toEqual([]);
     expect(owner.gateway.serverState(HOME).myVoice).toMatchObject({ talkHeld: false, muted: false });
+    follower.stop();
+  });
+
+  /** In voice in #general with push-to-talk on, sharing as the list window does: the key's three hearers ready. */
+  async function talkingWithPushToTalk() {
+    const saved = new Map([["linger.voice.pushToTalk", "true"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { hub, owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    const gate = () => invoked.filter((call) => call.cmd === "voice_push_to_talk").map((call) => call.args.closed);
+    await vi.waitFor(() => expect(gate()).toEqual([true]));
+    const talkHeld = () => owner.gateway.serverState(HOME).myVoice?.talkHeld;
+    const settled = () => new Promise((settle) => setTimeout(settle, 20));
+    return { hub, owner, sharing, follower, gate, talkHeld, settled };
+  }
+
+  it("a press heard both in a window and with any app in front opens the microphone once, and either hearing it come up closes it (#500)", async () => {
+    const { sharing, follower, gate, talkHeld, settled } = await talkingWithPushToTalk();
+
+    // Linger in front: the chat window and the shell's watcher both hear it.
+    await follower.intend({ kind: "voice.talk", down: true });
+    sharing.talk(ANYWHERE, "down");
+    sharing.talk(OWNER, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    await settled();
+    expect(gate()).toEqual([true, false]);
+    // The watcher hears it come up a moment before the window does: closed once.
+    sharing.talk(ANYWHERE, "up");
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+    await follower.intend({ kind: "voice.talk", down: false });
+    await settled();
+    expect(gate()).toEqual([true, false, true]);
+    // And the other way round.
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(gate()).toEqual([true, false, true, false]));
+    await follower.intend({ kind: "voice.talk", down: true });
+    await follower.intend({ kind: "voice.talk", down: false });
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+    sharing.talk(ANYWHERE, "up");
+    await settled();
+    expect(gate()).toEqual([true, false, true, false, true]);
+    follower.stop();
+  });
+
+  it("switching to a game with the key held keeps talking while the shell hears it, and its letting go closes the microphone (#500)", async () => {
+    const { hub, owner, sharing, follower, gate, talkHeld, settled } = await talkingWithPushToTalk();
+
+    // Held in the list window, heard anywhere too; then Alt+Tab to the game.
+    sharing.talk(OWNER, "down");
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    sharing.talk(OWNER, "away");
+    await follower.intend({ kind: "voice.talk", down: false, away: true });
+    hub.broadcast(owner.share.CLOSED, "chat");
+    await settled();
+    expect(talkHeld()).toBe(true);
+    expect(gate()).toEqual([true, false]);
+    // Let go in the game.
+    sharing.talk(ANYWHERE, "up");
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+    expect(gate()).toEqual([true, false, true]);
+
+    // Without the watcher (a Mac, or no desktop shortcut), leaving the window lets go, as before.
+    sharing.talk(OWNER, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    sharing.talk(OWNER, "away");
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+    follower.stop();
+  });
+
+  it("the shell's watcher stopping with the key down closes the microphone, and so does leaving voice; the next call starts closed (#500)", async () => {
+    const { owner, sharing, follower, gate, talkHeld, settled } = await talkingWithPushToTalk();
+
+    // The watcher stops or fails while the key is down: it says the key came up.
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    sharing.talk(ANYWHERE, "up");
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+
+    // Held in a window as you leave voice: the window never hears it come up.
+    sharing.talk(OWNER, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    await owner.gateway.leaveVoice(HOME, false);
+    expect(owner.gateway.serverState(HOME).myVoice).toBeNull();
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.pushToTalk).toBe(true));
+    // Nothing from before counts: the watcher starting and stopping again
+    // opens nothing, and the next real press opens it.
+    sharing.talk(ANYWHERE, "away");
+    await settled();
+    expect(talkHeld()).toBe(false);
+    expect(gate().at(-1)).toBe(true);
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    follower.stop();
+  });
+
+  it("muted or deafened, the key heard anywhere opens nothing, and after undeafening it needs a fresh press, as in a window (#500)", async () => {
+    const { owner, sharing, follower, gate, talkHeld, settled } = await talkingWithPushToTalk();
+    const reported = () => invoked.filter((call) => call.cmd === "voice_controls").map((call) => call.args.controls);
+
+    // Muted: the key's gate may open, but the mute keeps the microphone shut.
+    await owner.gateway.setVoiceMuted(HOME, true, false);
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
+    expect(owner.gateway.serverState(HOME).myVoice?.muted).toBe(true);
+    expect(reported().at(-1)).toEqual({ muted: true, deafened: false });
+    sharing.talk(ANYWHERE, "up");
+    await vi.waitFor(() => expect(talkHeld()).toBe(false));
+    await owner.gateway.setVoiceMuted(HOME, false, false);
+
+    // Deafened: the press does nothing at all.
+    await owner.gateway.setVoiceDeafened(HOME, true, false);
+    const shut = gate().length;
+    sharing.talk(ANYWHERE, "down");
+    sharing.talk(OWNER, "down");
+    await settled();
+    expect(talkHeld()).toBe(false);
+    expect(gate().length).toBe(shut);
+    // Undeafened with the key still down: still closed until it's pressed again.
+    await owner.gateway.setVoiceDeafened(HOME, false, false);
+    await follower.intend({ kind: "voice.talk", down: true });
+    await settled();
+    expect(talkHeld()).toBe(false);
+    sharing.talk(ANYWHERE, "up");
+    sharing.talk(ANYWHERE, "down");
+    await vi.waitFor(() => expect(talkHeld()).toBe(true));
     follower.stop();
   });
 

@@ -285,6 +285,8 @@ mockIPC((cmd, args) => {
     // push-to-talk's gate isn't (#232).
     case "voice_controls":
     case "voice_push_to_talk":
+    // The shell watching for the talk key with any app in front, or stopping (#500).
+    case "voice_talk_key":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:
@@ -303,6 +305,8 @@ declare global {
       ask: (event: string, question: Record<string, unknown>) => void;
       /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
       tray: (action: string) => void;
+      /** The desktop shell heard the talk key go "down" or "up" with any app in front (#500). */
+      talkKey: (edge: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
       banner: (target: unknown) => void;
       /** The desktop shell hid the list into the tray, its close button pressed (#400). */
@@ -340,6 +344,7 @@ window.core = {
   status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
+  talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   hidden: () => deliver("next:hidden", null),
   release: () => release(),

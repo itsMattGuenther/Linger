@@ -360,6 +360,59 @@ test.describe("this app", () => {
     await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
   });
 
+  test("where the talk key reaches past Linger, a mouse side button can be it; where it doesn't, only keys can (#500)", async ({ page }) => {
+    await open(page, "?section=sound&reach=anywhere");
+    await expect(panel(page)).toContainText("Works with a game or any other app in front");
+    await expect(panel(page)).toContainText("A game run as administrator hides its keys from Linger");
+    await page.getByRole("button", { name: "Change" }).click();
+    await expect(page.getByRole("button", { name: "Press a key or button…" })).toBeVisible();
+    // A left click never picks; the back side button does, and goes nowhere.
+    await page.evaluate(() => window.dispatchEvent(new MouseEvent("mousedown", { button: 0, cancelable: true })));
+    await expect(page.locator("kbd")).toHaveText("Right Ctrl");
+    const kept = await page.evaluate(() => {
+      const down = new MouseEvent("mousedown", { button: 3, cancelable: true });
+      window.dispatchEvent(down);
+      return down.defaultPrevented;
+    });
+    expect(kept).toBe(true);
+    await expect(page.locator("kbd")).toHaveText("Mouse 4");
+    await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
+
+    // A Linger that only hears it in its own window takes keys only.
+    await open(page, "?section=sound&reach=installed");
+    await expect(panel(page)).toContainText("Works while a Linger window is in front: this copy of Linger isn't installed");
+    await page.getByRole("button", { name: "Change" }).click();
+    await expect(page.getByRole("button", { name: "Press a key…" })).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new MouseEvent("mousedown", { button: 4, cancelable: true })));
+    await page.keyboard.press("v");
+    await expect(page.getByText("That key types something. Pick Ctrl, Alt, Shift or a function key.")).toBeVisible();
+    await expect(page.locator("kbd")).toHaveText("Right Ctrl");
+    await page.keyboard.press("Escape");
+    await open(page, "?section=sound&reach=mac");
+    await expect(panel(page)).toContainText("On a Mac, Linger can't hear it with another app in front yet.");
+  });
+
+  test("on Hyprland, Settings gives the line that hands the talk key to Linger, ready to copy; KDE and GNOME ask themselves (#500)", async ({ page }) => {
+    await open(page, "?section=sound&reach=hyprland");
+    await expect(panel(page)).toContainText("add this line to your Hyprland config (on Omarchy, ~/.config/hypr/bindings.lua)");
+    const line = page.locator(".nx-set-bind-line");
+    await expect(line).toHaveText('hl.bind("Control_R", hl.dsp.global("linger:push-to-talk"), { non_consuming = true, ignore_mods = true })');
+    // It can be selected and copied, unlike the rest of Settings.
+    expect(await line.evaluate((element) => getComputedStyle(element).userSelect)).toBe("text");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => undefined);
+    await page.getByRole("button", { name: "Copy", exact: true }).click();
+    // Copied, or, where the browser keeps the clipboard shut, said so.
+    await expect(page.getByRole("button", { name: "Copied", exact: true }).or(page.getByText("Couldn't reach the clipboard. Select the line and copy it yourself."))).toBeVisible();
+
+    await open(page, "?section=sound&reach=hyprland-conf");
+    await expect(page.locator(".nx-set-bind-line")).toHaveText("bindni = , mouse:275, global, com.linger.desktop:push-to-talk");
+    await expect(panel(page)).toContainText("add this line to hyprland.conf");
+
+    await open(page, "?section=sound&reach=desktop");
+    await expect(panel(page)).toContainText("KDE and GNOME ask the first time you join voice with push to talk on");
+    await expect(page.locator(".nx-set-bind-line")).toHaveCount(0);
+  });
+
   // Voice through the server is the only way now (#306): there is nothing to switch.
   test("Sound & Voice has no switch for the old way", async ({ page }) => {
     await open(page, "?section=sound");

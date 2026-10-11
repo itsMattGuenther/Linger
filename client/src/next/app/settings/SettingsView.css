@@ -611,6 +611,28 @@
   font-family: var(--font-mono);
 }
 
+/* A config line to copy (#500): Hyprland's bind for the talk key. It wraps
+   rather than scrolls, and can be selected, as typed text can. */
+.nx-set-bind {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 62ch;
+}
+
+.nx-set-bind-line {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font: 400 var(--text-meta) / var(--leading-body) var(--font-mono);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .nx-set-tag {
   color: var(--text-accent);
   font: 400 var(--text-label) / 1 var(--font-label);

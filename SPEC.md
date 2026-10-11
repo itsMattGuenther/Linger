@@ -804,6 +804,35 @@ Turning push-to-talk on or off, or picking its key, applies to the call you're
 in at once (#231): off opens the microphone unless you muted yourself, and on
 closes it until the key is held.
 
+**The key works with another app in front** (Matt, 2026-10-10, #500). A game is
+where push-to-talk matters most, so while you're in voice with push-to-talk on,
+holding the key opens the microphone whatever app is in front, with Linger
+minimized or only in the tray, as Discord, TeamSpeak and Ventrilo do, and letting
+go closes it. Linger watches for **that one key and nothing else**, and only
+while you're in voice with push-to-talk on: it never sees another key, records
+and stores nothing, sends nothing about keys anywhere, never asks which app is
+in front, and never keeps the key from that app.
+
+- **Windows:** Linger asks Windows whether that one key is down, 50 times a
+  second. The key can be a mouse's middle or side button too. A game run as
+  administrator hides its keys from apps that aren't, Linger included, as it
+  does from Discord.
+- **Linux:** the desktop's global shortcuts carry it (the `GlobalShortcuts`
+  portal). Linger asks for one shortcut, `push-to-talk`; the person gives it a
+  key in their desktop (KDE and GNOME ask; Hyprland takes a bind line, which
+  Settings shows, with `ignore_mods` so letting go of a modifier key is
+  heard); and the desktop says when it goes down and up, so Linger never sees
+  a key at all. The desktop names apps by their desktop file, so it works for
+  an installed Linger (a package or the AppImage), not a development build.
+- **Elsewhere** (macOS for now, #587; a desktop without the portal, which is
+  most X11 desktops; a development build): the key works while a Linger window
+  is in front, as it always has, and switching away lets go of it.
+
+Settings → Talk key says which applies. A Linger window in front hears the key
+too, and a press heard twice counts once. Whatever watches the key, its
+stopping or failing with the key down closes the microphone, and a key held as
+you join or leave voice opens nothing until it's pressed again.
+
 The room can see each session's self-reported `muted` or `deafened` state,
 filtered by the same membership rule as voice itself; push-to-talk's closed
 microphone is not part of it. That state is not proof someone

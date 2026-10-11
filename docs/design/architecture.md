@@ -214,10 +214,15 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `window`, `room`, `closing`: for presence, this window's focus, the person
   moving in it, the conversation it shows, and that it is going;
 - `voice.join` (which also moves voice), and `voice.talk` for push-to-talk
-  pressed in that window. The owner remembers which windows hold the key
-  down, and closes the microphone if one of them goes without letting go
-  (Ctrl+W, with Ctrl as the key). Mute, Deafen and Leave are questions
-  instead (below), so the window pressed can play their sound;
+  pressed in that window, or (`away`) the window losing focus. The owner
+  counts who holds the key down (`core/talkHold.ts`): the windows, and the
+  desktop shell, which hears the key with any app in front while you're in
+  voice with push-to-talk on (`next:talkkey`, `src-tauri/src/talk_key`, #500).
+  A press heard twice opens the microphone once, whoever hears the key come up
+  closes it, and a window that loses focus or goes without letting go
+  (Ctrl+W, with Ctrl as the key) lets go of only its own press. Mute, Deafen
+  and Leave are questions instead (below), so the window pressed can play
+  their sound;
 - `voice.pushtotalk`: Settings turned push-to-talk on or off, or picked its
   key. Joining only reads the choice, so this applies it to the call you're
   in at once (#231), and tells the list window's voice bar which key to name;

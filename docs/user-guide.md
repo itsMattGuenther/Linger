@@ -636,16 +636,64 @@ With the list tucked away in the tray, the tray icon's menu has **Mute** and
 
 **Push to talk** is in **Settings → Sound & Voice**. With it on, your
 microphone is open only while you hold the **talk key**: **Right Ctrl** unless
-you pick another under **Talk key** (press **Change**, then the key). The
+you pick another under **Talk key** (press **Change**, then the key). Where
+the key works with another app in front (below), it can be a mouse button
+too: the middle one, or a side button (**Mouse 4** and **Mouse 5**). The
 voice bar says which key to hold. Not holding it isn't muting, so nobody sees
 a crossed-out microphone beside your name; they hear you, and see you light
 up, while you hold it. **Mute** is still there, and the key doesn't undo it.
 The shortcuts use the left Ctrl, so they never open your microphone.
-Switching away from Linger releases a held key; press it again to speak.
 Turning it on or off, or picking a new key, works straight away, even in the
 middle of a call: turned off, your microphone opens, unless you'd muted
 yourself. It's off by default, because a room you leave running is the point,
 and a key you have to hold is the opposite of that.
+
+**The talk key works with a game or another app in front**, with Linger
+minimized or tucked away in the tray too. Linger listens for that one key,
+and only while you're in voice with push to talk on. It sees no other key,
+records nothing, and sends nothing about your keys anywhere. The app in front
+still gets the key too. Under **Talk key**, Settings says how it works on
+your computer:
+
+- **Windows:** it just works. One exception: a game run as administrator
+  hides its keys from apps that aren't, Linger included (Discord has the same
+  limit). Run the game normally, or run both as administrator.
+- **Linux** (Omarchy, Hyprland, KDE, GNOME): your desktop hands Linger the
+  key, so Linger never sees your keys at all. KDE and GNOME ask which key to
+  use the first time you join voice with push to talk on. On Hyprland, add
+  one line to your config (below). This needs Linger installed, from a package
+  or the AppImage; a copy you built yourself works only with a Linger window
+  in front. On X11, most desktops don't offer this, and it works with a
+  Linger window in front.
+- **macOS:** only while a Linger window is in front, for now.
+
+Where it can't reach, the key works while a Linger window is in front, and
+switching away from Linger lets go of it; press it again to speak.
+
+**On Hyprland** (Omarchy included), the line names Linger's shortcut. From
+the Arch package that's `linger:push-to-talk`; Settings shows the exact line
+for your copy (the AppImage's is `com.linger.desktop:push-to-talk`). With
+Linger in voice and push to talk on, `hyprctl globalshortcuts` lists it. On
+Hyprland 0.56 and later, whose config is Lua (on Omarchy, add it to
+`~/.config/hypr/bindings.lua`):
+
+```lua
+hl.bind("Control_R", hl.dsp.global("linger:push-to-talk"), { non_consuming = true, ignore_mods = true })
+```
+
+On older Hyprland, in `hyprland.conf`:
+
+```
+bindni = , Control_R, global, linger:push-to-talk
+```
+
+`Control_R` is Right Ctrl. Settings shows the line with the key you picked;
+by hand, the names are `Control_L`, `Alt_R`, `Alt_L`, `Shift_R`, `Shift_L`,
+`F1` to `F24`, `Pause`, `Scroll_Lock`, `Insert` and `Menu`, and for a mouse,
+`mouse:274` (the middle button), `mouse:275` (back) and `mouse:276` (forward). `non_consuming` (the `n`) lets the app in
+front have the key too. `ignore_mods` (the `i`) lets it work while you hold
+Shift or another key, and it's what makes letting go of a Ctrl, Alt or Shift
+key close the microphone.
 
 Which microphone and speakers to use is also in **Settings → Sound & Voice**.
 Linger's own sounds (chimes, knocks, the voice and mute sounds) come out of the

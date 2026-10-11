@@ -74,6 +74,12 @@ webkit2gtk-sys = "2.0"
 # it; named here so the message box can read an image off the clipboard,
 # which WebKitGTK never shows the page (#276, `clipboard.rs`).
 gtk = "0.18"
+# The talk key with another app in front (#500, `talk_key/portal.rs`): the
+# desktop's global shortcuts (the `GlobalShortcuts` portal). Over the zbus 5
+# the notifications already use, and through its async-io side as they do, so
+# zbus is built no differently. `global_shortcuts` and nothing else: no other
+# portal, and `privacy.test.ts` refuses any other feature.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
@@ -100,6 +106,11 @@ keyring = { version = "3", features = ["windows-native"] }
 # (`autostart.rs`). Already in the tree for Windows builds (embed-resource
 # uses it at build time), over the same windows-sys the rest links.
 winreg = "0.55"
+# The talk key with another app in front (#500, `talk_key/mod.rs`): Windows
+# says whether one key is down (`GetAsyncKeyState`). Already in the tree for
+# Windows builds. This feature and nothing else: `privacy.test.ts` refuses any
+# other, so the shell can't ask what window is in front or hook the keyboard.
+windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
 
 # Everything the desktop app has and the phone app doesn't (SPEC §4.15):
 # notifications, remembered windows, one copy at a time, voice and its

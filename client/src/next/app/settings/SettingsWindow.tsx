@@ -15,7 +15,7 @@ import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
 import { hostsHere, inviteUrl, moveRoom } from "../../../lib/host";
-import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
+import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
 import {
@@ -297,6 +297,20 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     };
   }, []);
 
+  // How far the talk key reaches here (#500), with the chosen key named for
+  // Hyprland's bind line: asked again when another key is picked.
+  const [talkReach, setTalkReach] = useState<TalkKeyReach | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true;
+    void talkKeyReach(voice.pushToTalkKey)
+      .then((reach) => alive && setTalkReach(reach))
+      .catch(() => alive && setTalkReach(null));
+    return () => {
+      alive = false;
+    };
+  }, [voice.pushToTalkKey]);
+
   // The server's own details, for its name and the host's settings.
   const [info, setInfo] = useState<ServerInfo | null>(null);
   useEffect(() => {
@@ -525,6 +539,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           }
         },
         devices,
+        talkReach,
         now,
       }}
       notifications={{

@@ -18,22 +18,23 @@ import {
   loadReadMarkers,
   setVoiceDeafened,
   setVoiceMuted,
-  setVoiceTalking,
   setVoiceVolume,
   takeOutOfVoice,
   canTakeOut,
   useGateway,
   useServers,
 } from "../../../lib/gateway";
+import { TALK_KEY_EVENT, watchTalkKey } from "../../../lib/ipc";
 import { loadVoicePrefs } from "../../../lib/voice";
-import { isTalkKey, talkKeyName } from "../../core/talkKey";
+import { isTalkButton, isTalkKey, talkKeyName } from "../../core/talkKey";
+import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
-import { PROTOCOL, tauriBus } from "../../core/bus";
+import { OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { isSearchKey, isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
@@ -664,28 +665,76 @@ function Servers({
     else void setVoiceDeafened(server, press.on).catch(() => undefined);
   }, []);
 
-  // Push-to-talk while the list has focus; a chat window reports its own
-  // key presses (core/share.ts, "voice.talk").
+  // Push-to-talk while the list has focus. A chat window reports its own
+  // key presses (core/share.ts, "voice.talk"), and the desktop shell the key
+  // heard with any app in front (below, #500); sharing counts a press heard
+  // more than once once (core/talkHold.ts).
   useEffect(() => {
     if (!pushToTalk || voiceServer === null) return;
+    const talk = (edge: TalkEdge) => sharing?.talk(OWNER, edge);
+    // The chosen key (decision 6), read as it's pressed: Settings may have
+    // just changed it, in another window.
+    const key = () => loadVoicePrefs().pushToTalkKey;
     const down = (event: KeyboardEvent) => {
-      // The chosen key (decision 6), read as it's pressed: Settings may have
-      // just changed it, in another window.
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) void setVoiceTalking(voiceServer, true).catch(() => undefined);
+      if (isTalkKey(event, key()) && !event.repeat) talk("down");
     };
-    const release = () => void setVoiceTalking(voiceServer, false).catch(() => undefined);
     const up = (event: KeyboardEvent) => {
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) release();
+      if (isTalkKey(event, key())) talk("up");
     };
+    // A mouse button as the talk key does only that here: no paste, no going back.
+    const press = (event: MouseEvent) => {
+      if (!isTalkButton(event, key())) return;
+      event.preventDefault();
+      talk("down");
+    };
+    const lift = (event: MouseEvent) => {
+      if (!isTalkButton(event, key())) return;
+      event.preventDefault();
+      talk("up");
+    };
+    // Losing focus lets go of this window's press only: with another app in
+    // front, the shell may still hear the key held.
+    const away = () => talk("away");
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    window.addEventListener("blur", release);
+    window.addEventListener("mousedown", press);
+    window.addEventListener("mouseup", lift);
+    window.addEventListener("blur", away);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", release);
+      window.removeEventListener("mousedown", press);
+      window.removeEventListener("mouseup", lift);
+      window.removeEventListener("blur", away);
+      away();
     };
   }, [voiceServer, pushToTalk]);
+
+  // The talk key with any app in front, a game say (#500, SPEC §4.14): the
+  // shell watches for the one key only while you're in voice with
+  // push-to-talk on, and stops when either ends or this window goes.
+  useEffect(() => {
+    void watchTalkKey(pushToTalk && voiceServer !== null ? talkKey : null).catch(() => undefined);
+  }, [pushToTalk, voiceServer, talkKey]);
+  useEffect(() => () => void watchTalkKey(null).catch(() => undefined), []);
+  // What it hears comes here, as the tray menu's Mute does.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: (() => void) | null = null;
+    let gone = false;
+    void tauriBus()
+      .listen<unknown>(TALK_KEY_EVENT, (edge) => {
+        if (edge === "down" || edge === "up") sharing?.talk(ANYWHERE, edge);
+      })
+      .then((unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   // The tray menu's Mute and Leave (decision 5): the only ones in reach while
   // the list is hidden in the tray. The shell greys them out out of voice.

@@ -694,19 +694,42 @@ test("with push-to-talk on, holding the talk key in this window talks through th
   await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk")).toHaveLength(4);
 });
 
-test("with push-to-talk on, the window losing focus lets go of the talk key, so the microphone never sticks open", async ({ page }) => {
+test("with push-to-talk on, the window losing focus lets go of its own press of the talk key, so the microphone never sticks open", async ({ page }) => {
   await open(page, "room=r-general&ptt");
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });
   const talks = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk");
   await page.keyboard.down("ControlRight");
   await expect.poll(talks).toEqual([{ kind: "voice.talk", down: true }]);
   // Alt+Tab away with the key still down: this window never hears it come up.
+  // It lets go of its press only: the shell may still hear the key held (#500).
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect.poll(talks).toEqual([
+    { kind: "voice.talk", down: true },
+    { kind: "voice.talk", down: false, away: true },
+  ]);
+  await page.keyboard.up("ControlRight");
+});
+
+test("with push-to-talk on a mouse side button, pressing it in this window talks, and takes the window nowhere (#500)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalkKey", "MouseBack"));
+  await open(page, "room=r-general&ptt");
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "room", server: SERVER, roomId: "r-general" });
+  const talks = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.talk");
+  const press = (type: string, button: number) =>
+    page.evaluate(({ type, button }) => {
+      const event = new MouseEvent(type, { button, cancelable: true, bubbles: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, { type, button });
+  // A left click is a click, and the other side button isn't the key.
+  expect(await press("mousedown", 0)).toBe(false);
+  expect(await press("mousedown", 4)).toBe(false);
+  expect(await press("mousedown", 3)).toBe(true);
+  expect(await press("mouseup", 3)).toBe(true);
   await expect.poll(talks).toEqual([
     { kind: "voice.talk", down: true },
     { kind: "voice.talk", down: false },
   ]);
-  await page.keyboard.up("ControlRight");
 });
 
 test("push-to-talk turned on or off mid-call starts or stops this window listening for the key, without rejoining (#231)", async ({ page }) => {

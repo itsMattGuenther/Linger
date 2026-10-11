@@ -40,6 +40,7 @@ import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
 import { prefsFrom, type ServerPrefs } from "./serverPrefs";
 import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
+import { heard, held, NOBODY, type TalkEdge, type TalkFrom, type TalkHolders } from "./talkHold";
 
 /**
  * What the conversations beside the list report as, to presence and the
@@ -173,8 +174,12 @@ export type Intent =
    * (VOICE_CONTROL), so the window pressed can play their sound.
    */
   | { kind: "voice.join"; server: string; roomId: RoomId }
-  /** The push-to-talk key went down or up in this window. */
-  | { kind: "voice.talk"; down: boolean }
+  /**
+   * The push-to-talk key went down or up in this window, or (`away`) the
+   * window lost focus and stopped hearing it: that lets go of only this
+   * window's press, not one heard with another app in front (core/talkHold.ts).
+   */
+  | { kind: "voice.talk"; down: boolean; away?: boolean }
   /**
    * Settings turned push-to-talk on or off, or picked its key (`KeyboardEvent.code`):
    * it applies to the call you're in at once (#231), and the voice bar names the key.
@@ -276,6 +281,12 @@ export interface Sharing {
    * room you're in.
    */
   signInsChanged(): void;
+  /**
+   * The push-to-talk key, heard by the list window itself (`OWNER`) or by
+   * the desktop shell with any app in front (`ANYWHERE`, #500): counted with
+   * every other window's, so one press opens the microphone once.
+   */
+  talk(from: TalkFrom, edge: TalkEdge): void;
 }
 
 /**
@@ -361,17 +372,23 @@ export async function shareAsOwner(
     looked = key;
     setViewing(now);
   };
-  // The windows holding the push-to-talk key down right now. A window that
+  // Who is holding the push-to-talk key down right now: windows, and the
+  // shell's watcher with any app in front (core/talkHold.ts, #500). Only a
+  // change in whether anybody holds it reaches voice, so a press heard by a
+  // window and the watcher both opens the microphone once. A window that
   // closes with it held (Ctrl+W, with Ctrl being the key) never says it let
-  // go, so its going closes the microphone.
-  const holdingTalk = new Set<string>();
-  const letGoOfTalk = () => {
+  // go, so its going lets go of its press.
+  let talkHolders: TalkHolders = NOBODY;
+  const talk = (from: TalkFrom, edge: TalkEdge) => {
     const server = voiceServer(sessions().keys());
-    if (server !== null) void setVoiceTalking(server, false).catch(() => undefined);
+    const listening = server !== null && serverState(server).myVoice?.pushToTalk === true;
+    const before = held(talkHolders);
+    talkHolders = listening ? heard(talkHolders, from, edge) : NOBODY;
+    if (server !== null && held(talkHolders) !== before) void setVoiceTalking(server, held(talkHolders)).catch(() => undefined);
   };
 
   const gone = (label: string) => {
-    if (holdingTalk.delete(label)) letGoOfTalk();
+    talk(label, "away");
     forgetWindow(label);
     showing = close(showing, label);
     place();
@@ -469,7 +486,7 @@ export async function shareAsOwner(
         if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
         list?.talkKey?.(intent.key);
         // Whoever held the key before doesn't hold it for the new setting.
-        holdingTalk.clear();
+        talkHolders = NOBODY;
         const server = voiceServer(sessions().keys());
         if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
         return;
@@ -493,17 +510,12 @@ export async function shareAsOwner(
         void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
         return;
       }
-      case "voice.talk": {
-        const server = voiceServer(sessions().keys());
-        if (server === null) return;
+      case "voice.talk":
         // Push-to-talk only means something when it is on: the key opens
         // the microphone while held and closes it on release, without
         // muting you (#232). The store ignores it otherwise.
-        if (intent.down === true) holdingTalk.add(intent.from);
-        else holdingTalk.delete(intent.from);
-        void setVoiceTalking(server, intent.down === true).catch(() => undefined);
+        talk(intent.from, intent.down === true ? "down" : intent.away === true ? "away" : "up");
         return;
-      }
     }
   };
 
@@ -589,6 +601,10 @@ export async function shareAsOwner(
   // other window is told the new value whenever one changes.
   const sent = new Map<string, string>();
   const stopWatching = onStateChange(() => {
+    // Out of voice, or push-to-talk off, nobody holds the key: a press that
+    // was never let go (the key held as you left) can't open the next call.
+    const server = voiceServer(sessions().keys());
+    if (server === null || serverState(server).myVoice?.pushToTalk !== true) talkHolders = NOBODY;
     for (const server of sessions().keys()) {
       const shared = sharedLocalOf(server);
       const key = JSON.stringify(shared);
@@ -609,5 +625,6 @@ export async function shareAsOwner(
     localNotify: notify,
     localPassword: password,
     signInsChanged: place,
+    talk,
   };
 }
