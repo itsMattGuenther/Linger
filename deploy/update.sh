@@ -13,7 +13,9 @@
 #      database into backups/, keeping the last five (uploaded files are not
 #      copied: they can be many GB, and no update changes them);
 #   3. starts everything again, the voice relay too if it was set up;
-#   4. waits for the server to answer, and prints the version before and after.
+#   4. waits for the server to answer, and prints the version before and after;
+#   5. says so when the relay's compose.yaml is one that lets it reach more
+#      than voice (#501). It never changes compose.yaml or .env itself.
 #
 # If the new server doesn't come back, it prints the commands that put the
 # backup and the previous version back. Nothing updates on its own: this runs
@@ -237,4 +239,34 @@ else
 fi
 if [[ -n "$backup" ]]; then
   say "The database from before is in $backup."
+fi
+
+# A relay run by a compose.yaml from before #501 carries a member's packets to
+# any address this machine can reach. This script never replaces compose.yaml
+# (it can hold a pinned version, or an older server's settings), so it says how.
+# The file to get is the one from the release this server now runs, never
+# main's, which can be ahead of every release (#507); for a server following
+# `latest`, that's the newest release. The rule first ships in the release
+# after 0.4.10, so a server older than that has no such file to get yet.
+newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
+if ((${#profiles[@]})) && ! grep -q -- '--denied-peer-ip' compose.yaml; then
+  say
+  say "Warning: the voice relay this compose.yaml runs will carry a member's traffic to other"
+  say "machines this server can reach, not just to voice (#501). A newer compose.yaml keeps it"
+  say "to voice."
+  if ! grep -q '^ *env_file: .env' compose.yaml; then
+    say "This one has your settings written into it, so they move to .env first. The host guide"
+    say "says how: https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server"
+  elif [[ "$after" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && newer "$after" 0.4.10; then
+    say "Get Linger $after's, the version this server now runs, then run this again:"
+    say "  curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/v$after/deploy/compose.yaml"
+    say "  ./update.sh"
+    case "$image" in
+      "$IMAGE_REPO" | "$IMAGE_REPO:latest") ;;
+      *) say "The new file's image line says $IMAGE_REPO:latest; to stay on $image, change it back first." ;;
+    esac
+  else
+    say "It comes with the releases after 0.4.10, and this server runs ${after:-an older one}. Once it"
+    say "runs one of those, ./update.sh says how to get it."
+  fi
 fi

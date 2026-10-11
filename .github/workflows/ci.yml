@@ -57,7 +57,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: shipped relay starts and refuses an empty secret
+      - name: shipped relay starts, carries voice only to the voice address, refuses an empty secret
         run: bash scripts/coturn-test.sh
       - name: update and setup scripts pass shellcheck
         run: shellcheck deploy/update.sh deploy/setup.sh deploy/entrypoint.sh scripts/update-test.sh scripts/update-docker-test.sh scripts/setup-test.sh scripts/coturn-test.sh scripts/image-start-test.sh

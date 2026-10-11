@@ -135,8 +135,10 @@ pub struct TurnConfig {
     pub secret: String,
     /// The `turn:` / `stun:` URIs a client is told to use.
     pub urls: Vec<String>,
-    /// How long a handed-out password stays valid. It is checked when the
-    /// relay is allocated and on every refresh, so it has to outlast the
+    /// How long a handed-out password stays valid, at least (`crate::turn`
+    /// rounds it up to the hour). coturn checks it whenever an app opens a
+    /// relay port with it, and the app asks for one when it joins voice,
+    /// not when its connection restarts mid-call, so it has to outlast the
     /// longest call anybody will have.
     pub ttl_secs: u64,
 }
@@ -158,8 +160,13 @@ impl std::fmt::Debug for TurnConfig {
 /// port. `openssl rand -hex 32` is 64.
 pub const MIN_TURN_SECRET_LEN: usize = 16;
 
-/// A day: longer than any call, short enough that a leaked password is not a
-/// standing key to the host's bandwidth.
+/// A day: longer than any call. A few hours would cut a member removed from
+/// the server off sooner, but would also leave a relayed call that drops
+/// after those hours unable to come back, because a restarted connection
+/// opens its relay port with the password from the join (`restart_forward`
+/// in the desktop app's voice engine). And all a password can still do is
+/// send to this server's own voice port through a few relay ports
+/// (deploy/compose.yaml, #501).
 pub const DEFAULT_TURN_TTL_SECS: u64 = 24 * 60 * 60;
 
 /// Where to point a client on first run — see [`Config::setup_origin`].

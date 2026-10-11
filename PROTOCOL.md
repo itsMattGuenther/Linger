@@ -1010,15 +1010,20 @@ ICE configuration before joining voice: the host's STUN and TURN addresses, with
 password made for the asking member on the spot. The password is coturn's
 time-limited scheme — `username` is `<unix expiry>:<user id>` and `credential` is
 `base64(HMAC-SHA1(shared secret, username))` — so the server stores nothing and
-the relay looks nothing up; both hold the secret and both compute. `ttl_secs` is
-how long the password lasts (a day by default); a client asks again on every
-join, so it only has to outlast one call. Audio never touches this server, and
-what the relay carries is the encrypted stream it cannot read.
+the relay looks nothing up; both hold the secret and both compute. The expiry is
+a day from now (`ttl_secs` at least), rounded up to the hour, so a member asking
+again within the hour gets the same username and password: the relay's
+per-person limit on relay ports counts a person, not a request (#501).
+`ttl_secs` is how long the password has left. A client asks again on every join,
+so it only has to outlast one call. The relay carries the encrypted stream, which
+it cannot read, to this server's voice address and nowhere else (#501).
 
 A host with no relay answers `{ servers: [], ttl_secs: 0 }`. That is not an
 error: voice then works between machines on one network and nowhere else, and
 the client joins anyway. The endpoint needs a signed-in member and answers the
-same for all of them; there is no host-only view of it.
+same for all of them; there is no host-only view of it. It allows 20 asks a
+minute per member and answers `RATE_LIMITED` past that (#501); a client that
+gets no answer joins without the relay, as it would on a server with none.
 
 **Export** (SPEC §4.11, T-801). `state` is `queued | running | complete |
 failed`; `progress` is `0.0`–`1.0`; `url` appears once `state` is `complete`
