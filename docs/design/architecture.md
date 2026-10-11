@@ -544,6 +544,15 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   shows the running copy's list (`tauri-plugin-single-instance`). Hiding it
   tells the list (`next:hidden`), which the first time ever on that computer
   shows a notification saying where Linger went (#400).
+- **A `linger://` link** ("Open in Linger" on an invite page, #607) reaches
+  the shell however it comes: a second launch on Windows and Linux (handed
+  over by the single-instance plugin), the running app on macOS and Android,
+  or the launch it started. `src-tauri/src/deep_link.rs` reads it strictly,
+  keeps only the newest as the link a person would paste, brings the list
+  forward and says `next:link`; the list window takes it with `link_offered`
+  (`core/offeredLink.ts`) and puts it in a paste box: the sign-in when
+  nothing is signed in, otherwise the sign-in for another server. It waits
+  while the sign-ins are restored. Nothing is contacted until Continue.
 
 ## When something can't be drawn
 

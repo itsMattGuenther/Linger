@@ -51,6 +51,20 @@ fn inside<'a>(html: &'a str, tag: &str) -> &'a str {
     &html[start..end]
 }
 
+/// How the page writes a server into a `linger://` link: everything but
+/// letters, digits and `-._~` percent-encoded.
+fn encoded(text: &str) -> String {
+    text.bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect()
+}
+
 fn hash(text: &str) -> String {
     format!(
         "'sha256-{}'",
@@ -96,6 +110,18 @@ async fn an_invite_link_opens_a_page_with_the_steps_and_the_link() {
     assert!(
         html.contains("Already have an account here?"),
         "an invite makes a new account; the page says so"
+    );
+    // "Open in Linger" (#607): the same invite as a `linger://` link, the
+    // server spelled out because this one is reached over plain http.
+    let open = format!(
+        "href=\"linger://invite?server={}&amp;code={}\"",
+        encoded(&server.base),
+        invite.code
+    );
+    assert!(html.contains(&open), "{open}: {html}");
+    assert!(
+        html.contains("Nothing happened? Paste the link instead."),
+        "a button that opens nothing says what to do: {html}"
     );
 
     // The same page for the query form the app also accepts.
@@ -151,6 +177,7 @@ async fn a_used_expired_or_made_up_invite_says_so_and_names_no_server() {
     assert!(html.contains("This invite doesn\u{2019}t work"), "{html}");
     assert!(!html.contains("The Good Company"), "{html}");
     assert!(!html.contains("id=\"link\""), "no link to paste: {html}");
+    assert!(!html.contains("linger://"), "nothing to open: {html}");
 
     let expired = make_invite(
         &server,
@@ -231,6 +258,13 @@ async fn a_named_server_links_to_its_own_name() {
         "{html}"
     );
     assert!(html.contains("<code>linger.example</code>"), "{html}");
+    assert!(
+        html.contains(&format!(
+            "href=\"linger://invite?server=linger.example&amp;code={}\"",
+            invite.code
+        )),
+        "an https server is named by its host alone: {html}"
+    );
 
     // The media host serves files and nothing else (ARCHITECTURE §7).
     let resp = reqwest::Client::new()
@@ -254,6 +288,13 @@ async fn the_setup_link_opens_a_page_that_says_not_to_share_it() {
     assert!(html.contains("Don\u{2019}t share this link."), "{html}");
     assert!(
         html.contains(&format!(">{}/setup?token={token}</code>", server.base)),
+        "{html}"
+    );
+    assert!(
+        html.contains(&format!(
+            "href=\"linger://setup?server={}&amp;token={token}\"",
+            encoded(&server.base)
+        )),
         "{html}"
     );
 

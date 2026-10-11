@@ -111,6 +111,27 @@ The link it shows starts with `https://` + `LINGER_DOMAIN`, or, on a server with
 one, the address the browser used. It isn't a directory and isn't sign-up: the code
 is still the only way in.
 
+Under the link, for somebody who already has the app, the page offers **Open in
+Linger** (#607): the same link as a `linger://` one, with "Nothing happened? Paste
+the link instead." under it, since a computer without Linger does nothing with it.
+It carries the server and the code or token, and nothing else:
+
+```
+linger://invite?server=linger.example&code=CODE
+linger://setup?server=linger.example&token=TOKEN
+```
+
+`server` is the host (and port) of an `https://` server, or the whole origin of one
+reached over plain `http://` (`http%3A%2F%2F127.0.0.1%3A8420`); everything in it but
+letters, digits and `-._~` is percent-encoded. The desktop installers, the Linux
+menu entries and the phone app's intent filter register the scheme. The app reads
+the link strictly (`client/src-tauri/src/deep_link.rs`): exactly one shape, those
+two parameters once each, a host the paste box would accept, a code of letters and
+digits, a hex token, or it's dropped. It turns it into the `https://` link above and
+puts that in the **Server or link** box, with the paste box's own rules after that
+(an invite still makes a new account). Nothing is contacted until the person presses
+Continue, so a page can't make the app reach any server by itself.
+
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console
 https://linger.example/invite/CODE     an invite (?code=CODE is also accepted)

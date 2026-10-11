@@ -188,6 +188,30 @@ code {
   overflow-wrap: anywhere;
 }
 
+/* "Open in Linger" (#607): for somebody who already has the app. Quiet,
+   beside the link it opens, since a button that does nothing on a computer
+   without Linger mustn't look like the way in. */
+.open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.steps p.open { margin: 14px 0 4px; }
+.open-app {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+.open-app:hover { border-color: var(--edge-hover); background: var(--surface-sunken); }
+
 @media (max-width: 520px) {
   body { padding: 16px; }
   main { padding: 24px 20px; }
@@ -197,5 +221,6 @@ code {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .downloads a, .copy button { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+  .downloads a, .copy button, .open-app { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
 }
+

@@ -162,7 +162,11 @@ For a **new member**:
    Opened in a browser, it shows a page with the server's name, where to get
    Linger, and a **Copy** button for the link.
 2. Paste the **whole invite link** into **Server or link** and press **Continue**.
-   Do not remove the invite code or anything after `?`.
+   Do not remove the invite code or anything after `?`. If Linger is already
+   installed, **Open in Linger** on that page does the pasting for you: Linger
+   comes forward with the link in the box, and you press **Continue**. If
+   nothing happens (your browser may ask first, or your Linger is older than
+   that button), copy and paste it instead.
 3. Choose a username, display name, and password of at least eight characters,
    then join the server. These are new credentials for this server, not your
    Windows, Linux or GitHub password.
