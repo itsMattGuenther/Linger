@@ -862,6 +862,11 @@ by type, person and date. Every item links back to the moment it was posted,
 and the line above the grid says how long the server keeps files and how full
 it is.
 
+Most servers keep files until they need the room: nothing goes while there's
+space, and when the server runs short, the oldest files nobody starred go
+first. **Leaving soon** shows what would go next, so you can star anything you
+want to keep. It shows nothing while there's plenty of room.
+
 The star does two jobs: it sorts things to the top, and it stops a file from
 expiring automatically. Choose **Star** to keep a file; Linger confirms when
 the server accepts it. Images keep their full shape in the collection. Click

@@ -266,7 +266,7 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             voice?, health? }
+                             file_expiry_when_full?, voice?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -323,13 +323,18 @@ The line is never a room's `last_message_id`, so it never makes a room look new,
 client neither notifies nor marks a mention for it. A room with no message of the day,
 and every server from before this, leaves `motd` out.
 
-**The three storage figures** are read-only and every member sees them; the status bar
+**The storage figures** are read-only and every member sees them; the status bar
 draws the first two (SPEC §5.6). `storage_used_bytes` counts stored objects *and*
 uploads still in flight, because a slot already handed out is not space anybody else can
 have. `storage_limit_bytes` is the pool ceiling. `file_expiry_days` is how long a file
-stands before the server sweeps it, or `null` on a server that keeps files for good;
-starred files, files on pinned messages and the server's emoji pictures (§5, "Custom
-emoji") never expire whatever it says (SPEC §4.10).
+stands before the server sweeps it, or `null` when no age rule takes files.
+`file_expiry_when_full` (#583, optional, always sent by a server that has it) is `true`
+when old files go only once the server needs the room: past 90% of
+`storage_limit_bytes`, the oldest go first until it is under 80%. `file_expiry_days` is
+then `null`, which a client from before reads as "kept for good", the nearest thing it
+knows. Both `null` and `false` is a server that keeps files for good. Starred files,
+files on pinned messages and the server's emoji pictures (§5, "Custom emoji") never
+expire whatever these say (SPEC §4.10).
 
 They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
@@ -341,7 +346,8 @@ disk_nearly_full, file_space_nearly_full }`: whether the server makes its nightl
 of the database (`LINGER_BACKUPS`), when the newest copy that checked out was made
 (`null` before the first), whether it has run three days without one (always `false`
 with backups off), whether less than a tenth of the disk under its data folder is free,
-and whether uploads take 90% or more of `storage_limit_bytes`. The app says each of the
+and whether uploads take 90% or more of `storage_limit_bytes` (under `when-full`, only
+when nothing is left that could go: every file starred, pinned or not yet sent). The app says each of the
 last three in words at the foot of the host's list while it is true, and never as a
 figure. Nothing in it is a count of anything, and nothing leaves the machine.
 
@@ -1135,7 +1141,7 @@ image's: either way, draw `url`. A copy is not counted in the pool, is not in an
 
 ```
 GET /media?kind=image|video|audio|file|link|pin
-          &author=<user_id>&since=<ms>&until=<ms>
+          &author=<user_id>&since=<ms>&until=<ms>&leaving=true
           &before=<cursor>&limit=<1..100>               → MediaItem[]
 PUT    /media/:attachment_id/star                        → 204
 DELETE /media/:attachment_id/star                        → 204
@@ -1147,6 +1153,14 @@ before it starts is `VALIDATION_FAILED` rather than an empty answer.
 
 **Order.** Starred first, then newest first. Only an upload can be starred, so
 everything starred comes ahead of every link and pin.
+
+**`leaving=true`** is "Leaving soon" (#583): only the uploads that would go next, in the
+same order and with the same paging. Never a starred file or one on a pinned message,
+and never a link or a pin. Under `when-full` (§3), nothing until the file space is past
+80% of `storage_limit_bytes`, then the oldest files that add up to a tenth of it; under
+an age rule, the files within 30 days of their date; with expiry off, nothing. A server
+from before #583 ignores the parameter and answers with everything, so a client asks
+only a server that sends `file_expiry_when_full`.
 
 **Paging** is keyset, not offset: pass the last item's `cursor` back as
 `before`. A cursor is opaque — do not parse it, build one, or compare two. All

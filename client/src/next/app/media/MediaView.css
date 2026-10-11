@@ -23,6 +23,15 @@
   padding: var(--space-3) var(--space-4) var(--space-1);
 }
 
+/* The kinds, then "Leaving soon" (#583) after a little more room, since it
+   narrows by something else. */
+.nx-media-kindrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
 .nx-media-kinds {
   display: flex;
   flex-wrap: wrap;

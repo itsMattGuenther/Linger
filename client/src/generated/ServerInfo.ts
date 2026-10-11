@@ -14,11 +14,21 @@ storage_used_bytes: number,
  */
 storage_limit_bytes: number, 
 /**
- * How many days a file stands before the server sweeps it, or `null` when
- * this host turned expiry off. Starred and pinned files never expire, so
- * this is the answer for everything else (SPEC §4.10).
+ * How many days a file stands before the server sweeps it, or `null`
+ * when no age rule takes files: expiry off, or `when-full` (below).
+ * Starred and pinned files never expire, so this is the answer for
+ * everything else (SPEC §4.10).
  */
 file_expiry_days: number | null, 
+/**
+ * `true` when old files go only once the server needs the room
+ * (`LINGER_FILE_EXPIRY_DAYS=when-full`, the default, #583): nothing goes
+ * while there is room, and past 90% of `storage_limit_bytes` the oldest
+ * nobody starred or pinned go first. `file_expiry_days` is then `null`,
+ * which an app from before reads as "kept for good", the nearest thing it
+ * knows. Always sent; a server from before leaves it out.
+ */
+file_expiry_when_full?: boolean, 
 /**
  * Whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
  * and voice goes through the server (#197). Without it nobody can join

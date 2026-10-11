@@ -7,7 +7,21 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { UserId } from "../../../generated/UserId";
 import { renderAs, storageDetail, storageLine } from "../../../lib/media";
 import { TYPING_PAUSE_MS } from "../../../lib/search";
-import { isFiltered, keepLine, KINDS, MEDIA_PAGE, mediaAsk, mediaEmpty, mediaOrder, NO_FILTERS, starLine, tileLine, type MediaFilters, type TileLine } from "../../core/media";
+import {
+  isFiltered,
+  keepLine,
+  KINDS,
+  leavingLine,
+  MEDIA_PAGE,
+  mediaAsk,
+  mediaEmpty,
+  mediaOrder,
+  NO_FILTERS,
+  starLine,
+  tileLine,
+  type MediaFilters,
+  type TileLine,
+} from "../../core/media";
 import { merge, type Stream } from "../../core/pages";
 import { EVERY_SERVER, inScope, startScope, type ViewServer } from "../../core/scope";
 import { directory, personChoices } from "../../core/search";
@@ -19,6 +33,12 @@ import "./MediaView.css";
 export interface MediaServer extends ViewServer {
   /** How many days it keeps a file, or null for good; left out while it hasn't said. */
   expiryDays?: number | null;
+  /**
+   * Old files go only when it needs the room (#583). Left out while it
+   * hasn't said, and by a server from before, which can't say what's
+   * leaving soon either.
+   */
+  whenFull?: boolean;
   /** How much its files take up, of how much it allows (SRV-7); left out while it hasn't said. */
   storage?: { used: number; limit: number };
 }
@@ -30,6 +50,8 @@ export interface MediaAsk {
   /** The first and last moments of the range, in ms, inclusive; null for open-ended. */
   since: number | null;
   until: number | null;
+  /** Only what would go next (#583). */
+  leaving: boolean;
   /** The last item's cursor, for the page after it; null for the first. */
   before: string | null;
   limit: number;
@@ -55,6 +77,15 @@ export interface MediaViewProps {
 }
 
 const OFFLINE = "Couldn't reach the server.";
+
+/**
+ * Whether a server can say what's leaving soon (#583): one new enough to
+ * say how it keeps files, and that lets old ones go at all.
+ */
+function saysLeaving(place: MediaServer | undefined): boolean {
+  if (place?.whenFull === undefined) return false;
+  return place.whenFull || (place.expiryDays !== null && place.expiryDays !== undefined);
+}
 const NOBODY = directory({ me: null, users: [], rooms: [] });
 
 /** An item's key, across servers. The links in one message share a cursor, so a link's address is part of it. */
@@ -122,6 +153,9 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
       const answers = await Promise.all(
         targets.map(async (server) => {
           const before = fresh ? null : (held?.get(server)?.items.at(-1)?.cursor ?? null);
+          // A server that can't say what's leaving soon would answer with
+          // everything instead, or has nothing that ever leaves (#583).
+          if (asked.leaving && !saysLeaving(placeOf(server))) return { server, got: [] };
           try {
             return { server, got: await asker.current(server, { ...asked, before, limit: MEDIA_PAGE }) };
           } catch {
@@ -151,7 +185,7 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
         setActive(0);
       }
     },
-    [filters],
+    [filters, placeOf],
   );
 
   // A changed filter or server is a different collection, not a longer one.
@@ -212,13 +246,16 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
   };
 
   const filtered = isFiltered(filters);
-  const empty = mediaEmpty(filtered);
+  const empty = mediaEmpty(filtered, filters.leaving);
+  // "Leaving soon" is offered where a server can say (#583).
+  const offerLeaving = covered.some((place) => saysLeaving(place));
+  const keeping = filters.leaving ? leavingLine(one ? one.whenFull : undefined) : keepLine(one ? one.expiryDays : undefined, one?.whenFull === true);
   const problemWords = problems.map(({ server, words }) => (server !== null && several ? `${placeOf(server)?.name ?? server}: ${words}` : words)).join(" ");
   const status = problemWords
     ? { words: problemWords, problem: true }
     : loading
       ? { words: "Loading media…", problem: false }
-      : (said ?? { words: keepLine(one ? one.expiryDays : undefined), problem: false });
+      : (said ?? { words: keeping, problem: false });
 
   const tiles = () => [...(grid.current?.querySelectorAll<HTMLButtonElement>(".nx-tile-open") ?? [])];
   const onGridKey = (event: KeyboardEvent<HTMLUListElement>) => {
@@ -248,12 +285,19 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
             setFilter({ author: null });
           }}
         />
-        <div className="nx-media-kinds" role="group" aria-label="Kind">
-          {KINDS.map((kind) => (
-            <Button key={kind.label} size="sm" variant="quiet" pressed={filters.kind === kind.key} onClick={() => setFilter({ kind: kind.key })}>
-              {kind.label}
+        <div className="nx-media-kindrow">
+          <div className="nx-media-kinds" role="group" aria-label="Kind">
+            {KINDS.map((kind) => (
+              <Button key={kind.label} size="sm" variant="quiet" pressed={filters.kind === kind.key} onClick={() => setFilter({ kind: kind.key })}>
+                {kind.label}
+              </Button>
+            ))}
+          </div>
+          {offerLeaving || filters.leaving ? (
+            <Button size="sm" variant="quiet" pressed={filters.leaving} onClick={() => setFilter({ leaving: !filters.leaving })}>
+              Leaving soon
             </Button>
-          ))}
+          ) : null}
         </div>
         <div className="nx-media-narrow">
           <div className="nx-media-who">
@@ -274,7 +318,7 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
         {/* How full the server is, for whoever is about to share something
             (SRV-7): the figure, and on hover what happens to old files. */}
         {one?.storage && !filtered ? (
-          <span className="nx-media-storage" title={storageDetail(one.storage.used, one.storage.limit, one.expiryDays ?? null)}>
+          <span className="nx-media-storage" title={storageDetail(one.storage.used, one.storage.limit, one.expiryDays ?? null, one.whenFull === true)}>
             {storageLine(one.storage.used, one.storage.limit)}
           </span>
         ) : null}

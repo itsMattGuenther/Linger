@@ -360,6 +360,10 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
+- **Leaving soon** (#583) shows what would go next, in date order: under `when-full`
+  (§4.10), once the file space is past 80%, the oldest that one pass would take; under
+  an age rule, what is within a month of its date. One quiet sentence and the grid: no
+  notification, no count, no lit row. Anybody who cares stars what matters.
 - Opened from the foot of the list, not a search result: a tab beside the list, like a
   conversation, or a window of its own when everything opens in its own (#337).
 
@@ -613,7 +617,13 @@ carry sender feedback to a different person.
   week (sooner if the host's window is shorter, and even with expiry off). Removing
   a member deletes their uploads in progress and the files they never sent; what
   they sent stays.
-- Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- **Files stay until the server needs the room** (#583). By default nothing goes while
+  the pool has room. Past 90% of it, the oldest files that aren't starred and aren't on
+  a pinned message go first, until it is back under 80%. An upload that wouldn't fit
+  makes its room the same way before anybody is told the server is full. A host can
+  choose an age instead (a number of days, the rule before #583) or `off` (nothing
+  goes, and a full pool refuses uploads). A year-old photo on a half-empty server is
+  never deleted for its age alone.
 - Deleting a message deletes its files with it, at once and starred or not: nothing
   serves, shows, lists or exports them after (#502)
 - Resumable uploads

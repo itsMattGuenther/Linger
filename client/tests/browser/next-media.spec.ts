@@ -142,6 +142,30 @@ test.describe("filters", () => {
     await expect(page.getByLabel("From", { exact: true })).toHaveValue("");
   });
 
+  test("Leaving soon shows what would go next, in one quiet sentence, where the server can say (#583)", async ({ page }) => {
+    // A server that doesn't say how it keeps files the new way isn't asked.
+    await open(page);
+    await loaded(page, 7);
+    await expect(page.getByRole("button", { name: "Leaving soon" })).toHaveCount(0);
+
+    await open(page, "?whenfull");
+    await loaded(page, 7);
+    await expect(line(page)).toHaveText("Files stay until the server needs the room. Starred ones stay for good.");
+    await expect(page.locator(".nx-media-storage")).toHaveAttribute("title", /only when the server needs the room/);
+    const leaving = page.getByRole("button", { name: "Leaving soon" });
+    await leaving.click();
+    await expect(leaving).toHaveAttribute("aria-pressed", "true");
+    await loaded(page, 2);
+    expect((await asks(page)).at(-1)).toBe("media kind= author= since= until= before= leaving");
+    await expect(line(page)).toHaveText("These go first when the server needs room. A star keeps one.");
+    // Nothing starred is ever leaving.
+    await expect(page.locator(".nx-tile[data-starred='yes']")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await loaded(page, 7);
+    await expect(leaving).toHaveAttribute("aria-pressed", "false");
+  });
+
   test("a date typed a digit at a time asks once, after a pause", async ({ page, browserName }) => {
     // Chromium (and so WebView2) fills a date field digit by digit; the
     // WebKit that CI runs leaves it empty. Whether WebKitGTK takes typed
@@ -437,7 +461,7 @@ for (const width of [340, 780]) {
     test.use({ viewport: { width, height: 720 } });
 
     test("every control 24, 32 or 40px, tiles one size, nothing cut off or past the edge", async ({ page }) => {
-      for (const query of ["", "?long", "?servers", "?servers&start=guild", "?empty", "?fail", "?many"]) {
+      for (const query of ["", "?long", "?servers", "?servers&start=guild", "?empty", "?fail", "?many", "?whenfull"]) {
         await open(page, `${query}${query ? "&" : "?"}w=${width}`);
         await expect(page.locator(".nx-tile, .nx-media-empty, .nx-media-line[data-problem]").first()).toBeVisible();
         expect(await misSized(page), query).toEqual([]);
