@@ -97,10 +97,6 @@ pub async fn by_id(
 }
 
 /// Hang each message's finished attachments off it, oldest first.
-///
-/// A deleted message carries none. Its files are deleted with it (#502), and
-/// one the store couldn't delete right then waits for the sweeper; until it
-/// goes, history must not hand out its name and address.
 pub async fn hydrate(
     db: &SqlitePool,
     config: &Config,
@@ -111,11 +107,9 @@ pub async fn hydrate(
     }
     let placeholders = vec!["?"; messages.len()].join(",");
     let sql = format!(
-        "SELECT a.* FROM attachments a
-         JOIN messages m ON m.id = a.message_id
-         WHERE a.state = 'complete' AND m.deleted_at IS NULL
-           AND a.message_id IN ({placeholders})
-         ORDER BY a.id"
+        "SELECT * FROM attachments
+         WHERE state = 'complete' AND message_id IN ({placeholders})
+         ORDER BY id"
     );
     let mut query = sqlx::query(&sql);
     for message in messages.iter() {
@@ -134,7 +128,16 @@ pub async fn hydrate(
             .push(row_to_attachment(row, config)?);
     }
     for message in messages.iter_mut() {
-        message.attachments = grouped.remove(&message.id).unwrap_or_default();
+        let attachments = grouped.remove(&message.id).unwrap_or_default();
+        // A deleted message carries none (#502). The delete takes its files,
+        // and one the store couldn't delete right then waits for the
+        // sweeper; until it goes, history must not hand out its name and
+        // address.
+        message.attachments = if message.deleted_at.is_none() {
+            attachments
+        } else {
+            Vec::new()
+        };
     }
     Ok(())
 }

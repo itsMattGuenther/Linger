@@ -13,10 +13,16 @@
 
 mod common;
 
-use common::{bootstrap_host, join_member, spawn_server, TestServer};
-use linger_core::wire::{Attachment, MediaItem, Message, Room, ServerInfo, UploadSlot};
+use std::sync::Arc;
+use std::time::Duration;
+
+use common::{bootstrap_host, join_member, spawn_server, spawn_with_store, TestServer};
+use linger_core::wire::{
+    Attachment, CompletedPart, MediaItem, Message, Room, ServerInfo, UploadSlot,
+};
+use linger_core::{AttachmentId, UploadId};
 use linger_server::expiry;
-use linger_server::storage::ServeAs;
+use linger_server::storage::{ObjectBody, ObjectStore, ServeAs, Staged};
 use serde_json::{json, Value};
 
 fn client() -> reqwest::Client {
@@ -441,4 +447,89 @@ async fn a_file_a_delete_left_behind_is_out_of_reach_until_the_sweeper_takes_it(
         assert!(!stored(&server, &url).await, "{url} outlived the sweep");
     }
     assert_eq!(storage_used(&server, &host.access_token).await, 0);
+}
+
+/// A store that does all a real one does except delete: asked to, it never
+/// answers, like a bucket that has stopped responding without hanging up.
+struct NeverDeletes(Arc<dyn ObjectStore>);
+
+#[async_trait::async_trait]
+impl ObjectStore for NeverDeletes {
+    fn slot(
+        &self,
+        upload_id: UploadId,
+        attachment_id: AttachmentId,
+        size_bytes: u64,
+    ) -> anyhow::Result<UploadSlot> {
+        self.0.slot(upload_id, attachment_id, size_bytes)
+    }
+
+    async fn assemble(
+        &self,
+        upload_id: UploadId,
+        parts: Option<&[CompletedPart]>,
+        expected_parts: u32,
+    ) -> anyhow::Result<Staged> {
+        self.0.assemble(upload_id, parts, expected_parts).await
+    }
+
+    async fn put_object(
+        &self,
+        key: &str,
+        from: &std::path::Path,
+        serve: &ServeAs,
+    ) -> anyhow::Result<()> {
+        self.0.put_object(key, from, serve).await
+    }
+
+    async fn put_bytes(&self, key: &str, bytes: &[u8], serve: &ServeAs) -> anyhow::Result<()> {
+        self.0.put_bytes(key, bytes, serve).await
+    }
+
+    async fn read_object(&self, key: &str, serve: &ServeAs) -> anyhow::Result<Option<ObjectBody>> {
+        self.0.read_object(key, serve).await
+    }
+
+    async fn delete_object(&self, _key: &str) -> anyhow::Result<()> {
+        std::future::pending().await
+    }
+
+    async fn discard(&self, upload_id: UploadId) -> anyhow::Result<()> {
+        self.0.discard(upload_id).await
+    }
+}
+
+/// A store that stops answering must not hold up the delete. The app gives up
+/// on an answer at 30 seconds, and a delete that waited longer than that for
+/// the bucket would look like it failed while the message was already gone.
+/// The file is out of reach all the same, and left for the sweeper.
+#[tokio::test]
+async fn a_store_that_never_answers_does_not_hold_up_the_delete() {
+    let server = spawn_with_store(|store| Arc::new(NeverDeletes(store))).await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "porch").await;
+    let file = upload(
+        &server,
+        &host.access_token,
+        "stuck.txt",
+        "text/plain",
+        b"the bucket is down".to_vec(),
+    )
+    .await;
+    let message = say(&server, &host.access_token, &room, "oops", &[&file]).await;
+
+    tokio::time::timeout(
+        Duration::from_secs(20),
+        delete(&server, &host.access_token, &message),
+    )
+    .await
+    .expect("the delete waited on the store and never answered");
+
+    assert_eq!(status_of(&server, &file.url).await, 404);
+    assert!(
+        stored(&server, &file.url).await,
+        "the bytes wait for the sweeper"
+    );
+    let messages = history(&server, &host.access_token, &room).await;
+    assert!(messages.iter().all(|m| m.attachments.is_empty()));
 }

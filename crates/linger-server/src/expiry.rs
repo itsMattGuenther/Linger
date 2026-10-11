@@ -151,17 +151,45 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     .bind(SWEEP_BATCH)
     .fetch_all(&state.db.read)
     .await?;
-    take(state, rows).await
+
+    let mut swept = Swept::default();
+    for (id, object_key, poster_key, display_key, size_bytes) in rows {
+        let Ok(id) = AttachmentId::from_slice(&id) else {
+            continue;
+        };
+        if !take(
+            state,
+            id,
+            &object_key,
+            poster_key.as_deref(),
+            display_key.as_deref(),
+        )
+        .await?
+        {
+            continue;
+        }
+        swept.files += 1;
+        #[allow(clippy::cast_sign_loss)]
+        {
+            swept.bytes += size_bytes.max(0) as u64;
+        }
+    }
+    Ok(swept)
 }
 
+// ---------------------------------------------------------------------------
+// Taking a file. Everything a pass does belongs in `sweep` above; these two
+// are the per-file step, shared with the message delete.
+// ---------------------------------------------------------------------------
+
 /// Take the files a message carried, now: what deleting the message means
-/// for them (#502).
+/// for them (#502). How many went.
 ///
 /// Called by the delete straight after the tombstone, so a deleted message's
 /// photo is gone when the delete answers rather than at the next pass, up to
 /// six hours later. A file the store refuses stays for that pass, which is
 /// the retry, and is unreachable meanwhile (rule 2 in the module doc).
-pub async fn take_from_message(state: &AppState, message_id: MessageId) -> Result<Swept, ApiError> {
+pub async fn take_from_message(state: &AppState, message_id: MessageId) -> Result<u64, ApiError> {
     let rows: Vec<Expired> = sqlx::query_as(
         "SELECT id, object_key, poster_key, display_key, size_bytes
            FROM attachments
@@ -170,39 +198,52 @@ pub async fn take_from_message(state: &AppState, message_id: MessageId) -> Resul
     .bind(message_id.to_vec())
     .fetch_all(&state.db.read)
     .await?;
-    take(state, rows).await
-}
-
-/// Delete each file, bytes first and row second (see the module doc): the
-/// original, its poster frame and its display copy (#382), then the row.
-async fn take(state: &AppState, rows: Vec<Expired>) -> Result<Swept, ApiError> {
-    let mut swept = Swept::default();
-    for (id, object_key, poster_key, display_key, size_bytes) in rows {
+    let mut taken = 0;
+    for (id, object_key, poster_key, display_key, _) in rows {
         let Ok(id) = AttachmentId::from_slice(&id) else {
             continue;
         };
-        // A backend that cannot delete right now must not lose the row that
-        // remembers what to delete, so a failure here leaves both in place for
-        // the next pass.
-        if let Err(err) = state.storage.delete_object(&object_key).await {
-            tracing::warn!(error = %err, key = object_key, "could not delete a file's object; the next sweep tries again");
-            continue;
-        }
-        if let Some(key) = &poster_key {
-            let _ = state.storage.delete_object(key).await;
-        }
-        if let Some(key) = display_key.as_ref().filter(|key| **key != object_key) {
-            let _ = state.storage.delete_object(key).await;
-        }
-        sqlx::query("DELETE FROM attachments WHERE id = ?")
-            .bind(id.to_vec())
-            .execute(&state.db.write)
-            .await?;
-        swept.files += 1;
-        #[allow(clippy::cast_sign_loss)]
+        if take(
+            state,
+            id,
+            &object_key,
+            poster_key.as_deref(),
+            display_key.as_deref(),
+        )
+        .await?
         {
-            swept.bytes += size_bytes.max(0) as u64;
+            taken += 1;
         }
     }
-    Ok(swept)
+    Ok(taken)
+}
+
+/// Delete one file, bytes first and row second (see the module doc): the
+/// original, its poster frame and its display copy (#382), then the row.
+/// `false` when the store refused the original, which leaves both for the
+/// next pass.
+async fn take(
+    state: &AppState,
+    id: AttachmentId,
+    object_key: &str,
+    poster_key: Option<&str>,
+    display_key: Option<&str>,
+) -> Result<bool, ApiError> {
+    // A backend that cannot delete right now must not lose the row that
+    // remembers what to delete.
+    if let Err(err) = state.storage.delete_object(object_key).await {
+        tracing::warn!(error = %err, key = object_key, "could not delete a file's object; the next sweep tries again");
+        return Ok(false);
+    }
+    if let Some(key) = poster_key {
+        let _ = state.storage.delete_object(key).await;
+    }
+    if let Some(key) = display_key.filter(|key| *key != object_key) {
+        let _ = state.storage.delete_object(key).await;
+    }
+    sqlx::query("DELETE FROM attachments WHERE id = ?")
+        .bind(id.to_vec())
+        .execute(&state.db.write)
+        .await?;
+    Ok(true)
 }
