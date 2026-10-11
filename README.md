@@ -171,9 +171,9 @@ curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/s
 bash setup.sh   # asks for your name, checks it, starts the server, prints a setup link
 ```
 
-The script fetches the server's files, writes your settings into `.env` (the
-one file you'd ever edit), opens the firewall ports and prints a one-time setup
-link. Paste that link into the app. It makes your account, makes you the host
+The script fetches the newest release's server files, writes your settings
+into `.env` (the one file you'd ever edit), opens the firewall ports and prints
+a one-time setup link. Paste that link into the app. It makes your account, makes you the host
 and names the server. Voice needs UDP 3479 open, and nothing else. To update later, run `./update.sh` in the same folder: it
 backs up the database, updates and restarts, and prints the version it's on.
 

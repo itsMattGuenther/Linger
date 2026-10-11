@@ -222,7 +222,8 @@ function Fixture() {
           start: () => {
             note("export");
             setArchive({ kind: "working", progress: 0 });
-            window.setTimeout(() => setArchive(FAIL ? { kind: "waiting", retryAfterMs: 50 * 60_000 } : { kind: "ready", url: `${SERVER}/exports/archive.zip` }), 200);
+            // Kept a week, from the moment it's ready (#504). The line is read against the real clock.
+            window.setTimeout(() => setArchive(FAIL ? { kind: "waiting", retryAfterMs: 50 * 60_000 } : { kind: "ready", url: `${SERVER}/exports/archive.zip`, expiresAt: Date.now() + 7 * 24 * HOUR }), 200);
           },
           download: (url) => note(`download:${url}`),
         },

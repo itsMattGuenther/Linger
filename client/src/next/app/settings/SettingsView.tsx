@@ -21,6 +21,7 @@ import { type ProfileProps, ProfileSection } from "./ProfileSection";
 import { type ServersProps, ServersSection } from "./ServersSection";
 import { type SoundProps, SoundSection } from "./SoundSection";
 import { hasWindowsChoices, type WindowsProps, WindowsSection } from "./WindowsSection";
+import { PaneBoundary } from "../Boundary";
 import { useBackButton } from "../useBackButton";
 import "./SettingsView.css";
 
@@ -148,9 +149,12 @@ export function SettingsView(props: SettingsViewProps) {
               </h2>
               <p className="nx-set-intro">{sectionLead(section, scope)}</p>
             </header>
-            {/* Keyed by section, so each opens with fresh drafts. */}
+            {/* Keyed by section, so each opens with fresh drafts, and one
+                that can't be drawn leaves the others to be chosen (#509). */}
             <div className="nx-set-sections" key={section}>
-              <Section section={section} {...props} />
+              <PaneBoundary what="This section couldn't be shown.">
+                <Section section={section} {...props} />
+              </PaneBoundary>
             </div>
           </section>
         </div>

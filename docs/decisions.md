@@ -1022,7 +1022,11 @@ purpose nobody could guess: every one a place a first-time host went wrong.
 - **The deploy files on `main` still work with the image that's out.** The host
   guide downloads them from `main`, so they can't wait for a release:
   `setup.sh` writes the voice address and runs the old `chown` itself on a
-  server image from before 0.4.9.
+  server image from before 0.4.9. *Since #507 (2026-10-10)* `setup.sh`, and
+  the host guide's steps by hand, fetch `compose.yaml`, the Caddyfile,
+  `update.sh` and `.env.example` from the newest release instead, so they
+  never run ahead of the image. The rule still holds for `setup.sh` itself, which comes from
+  `main` and has to work with the newest release's files.
 
 ## Decided — every emoji, Discord's shortcodes, and a server's own emoji
 

@@ -10,6 +10,12 @@
  * missing it sends those parts again and asks once more. That refusal is the
  * ordinary shape of a dropped connection and leaves the slot alive; every other
  * refusal is final and is thrown at the caller (PROTOCOL §6).
+ *
+ * An upload that is stopped (its `signal` aborts) or fails gives its slot back
+ * on the way out (#503). Nothing here ever resumes one later, and a slot holds
+ * its file's size against the pool everybody shares, and against what one
+ * person may have going up at once, until the server hears it's not wanted or
+ * an hour passes with nothing sent.
  */
 import type { Attachment } from "../generated/Attachment";
 import type { CompletedPart } from "../generated/CompletedPart";
@@ -56,19 +62,36 @@ export interface UploadOptions {
 
 /**
  * Slot, bytes, complete. Resolves with the finished attachment, which is what
- * a message then carries.
+ * a message then carries. Rejects if `options.signal` aborts, even after the
+ * server has the file, so a file taken out of the box as it finished is
+ * thrown away rather than kept for a message nobody will send.
  */
 export async function uploadFile(
   api: AuthedApi,
   file: File,
   options: UploadOptions = {},
 ): Promise<Attachment> {
+  options.signal?.throwIfAborted();
   const slot = await api.createUpload({
     filename: file.name,
     size_bytes: file.size,
     mime: mimeOf(file),
   });
 
+  try {
+    options.signal?.throwIfAborted();
+    const attachment = await send(api, slot, file, options);
+    options.signal?.throwIfAborted();
+    return attachment;
+  } catch (error) {
+    // Best effort: when the network is what failed, this fails too, and the
+    // server gives the slot back itself after an hour of silence.
+    void api.cancelUpload(String(slot.upload_id)).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function send(api: AuthedApi, slot: UploadSlot, file: File, options: UploadOptions): Promise<Attachment> {
   const ranges = partRanges(file.size, Number(slot.part_size_bytes));
   const done = new Map<number, string | null>();
 

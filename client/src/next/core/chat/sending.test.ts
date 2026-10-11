@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterFailure, canSend, dropUnsent, keepUnsent, type Submission } from "./sending";
+import { afterFailure, canSend, dropUnsent, keepUnsent, saysNothing, type Submission } from "./sending";
 
 const one: Submission = { key: 1, conversation: "general", body: "hello", replyTo: null, fileKeys: [] };
 const box = { conversation: "general", draft: "", fileCount: 0, replying: false };
@@ -30,5 +30,18 @@ describe("what a failed send does (SPEC §4.7, L-16)", () => {
     expect(canSend("   ", 0, false)).toEqual({ ok: false, blocked: null });
     expect(canSend("", 1, false)).toEqual({ ok: true });
     expect(canSend("hi", 0, true)).toEqual({ ok: false, blocked: "The file is still uploading. Your draft is kept here." });
+  });
+
+  // #512: letters that draw nothing are as empty as spaces, as the server
+  // holds them (validate::message_body); beside words they are kept.
+  it("treats a draft of letters nobody can see as empty", () => {
+    for (const unseen of ["\u2800", "\u3164", "\u200B", "\u115F\u1160\uFFA0\u{1D159}", "\uFEFF\u2060", " \u2800\n\u200B \u3164 "]) {
+      expect(saysNothing(unseen), JSON.stringify(unseen)).toBe(true);
+      expect(canSend(unseen, 0, false)).toEqual({ ok: false, blocked: null });
+    }
+    expect(saysNothing("")).toBe(true);
+    expect(saysNothing("hi\u200B \u2800")).toBe(false);
+    expect(saysNothing("\u{1F44B}")).toBe(false);
+    expect(canSend("\u2800", 1, false)).toEqual({ ok: true });
   });
 });
