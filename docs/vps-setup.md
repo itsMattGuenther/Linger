@@ -73,9 +73,14 @@ outbound allowances for TCP, UDP and ICMP.
 | SSH access | TCP | `22` | Your public IP, or the dynamic-IP option below |
 | Website and certificates | TCP | `80` | All IPv4 |
 | App connection | TCP | `443` | All IPv4 |
-| Voice relay, if using voice | TCP | `3478` | All IPv4 |
-| Voice relay, if using voice | UDP | `3478` | All IPv4 |
-| Voice audio, if using voice | UDP | `49160-49200` | All IPv4 |
+| Voice | UDP | `3479` | All IPv4 |
+| Voice relay, only if you run it | TCP | `3478` | All IPv4 |
+| Voice relay, only if you run it | UDP | `3478` | All IPv4 |
+| Voice relay's audio, only if you run it | UDP | `49160-49200` | All IPv4 |
+
+Without UDP `3479`, text chat works and nobody in voice hears anybody. The
+relay is optional, for friends on networks that block it
+([host guide: the voice relay](host-guide.md#the-voice-relay)).
 
 If you enable IPv6, add the corresponding IPv6 sources too. Do not open
 Linger's internal port `8420` or Docker's control ports.
