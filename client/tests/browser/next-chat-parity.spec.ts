@@ -906,7 +906,9 @@ test.describe("files in the conversation", () => {
     const id = await post(page, "the lake", "u-eli", { attachments: [attachment("pic-gone", "lake.jpg", "image/jpeg", { width: 320, height: 180 })] });
     const card = row(page, id).locator(".nx-att-card[data-picture='failed']");
     await expect(card).toBeVisible();
-    await expect(card.getByRole("alert")).toHaveText("Couldn't load this picture.");
+    await expect(card.locator(".nx-att-failed-note")).toHaveText("Couldn't load this picture.");
+    // Not announced: with the server out of reach, every picture in view would interrupt at once.
+    await expect(card.getByRole("alert")).toHaveCount(0);
     await expect(card).toContainText("lake.jpg");
     await expect(row(page, id).locator("img")).toHaveCount(0);
 

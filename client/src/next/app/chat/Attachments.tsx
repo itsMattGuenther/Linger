@@ -116,9 +116,9 @@ function Picture({
         >
           Load again
         </Button>
-        <p className="nx-att-failed-note" role="alert">
-          Couldn't load this picture.
-        </p>
+        {/* Not announced: with the server out of reach, every picture in
+            view would interrupt at once. It's read with the card. */}
+        <p className="nx-att-failed-note">Couldn't load this picture.</p>
       </div>
     );
   }
