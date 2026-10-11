@@ -2,9 +2,9 @@
 //! against the production router with a temp SQLite file. No mocks.
 #![allow(dead_code)] // each test binary uses a different subset of helpers
 
-use linger_core::limits::{DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES};
+use linger_core::limits::DEFAULT_POOL_BYTES;
 use linger_core::wire::{AuthResponse, Invite};
-use linger_server::config::{Config, S3Config, Storage};
+use linger_server::config::{Config, FileExpiry, S3Config, Storage};
 use linger_server::{db, AppState};
 
 pub struct TestServer {
@@ -63,7 +63,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         storage: Storage::Local,
         s3: None,
         pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+        file_expiry: FileExpiry::WhenFull,
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
@@ -89,7 +89,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         storage: Storage::Local,
         s3: None,
         pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+        file_expiry: FileExpiry::WhenFull,
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
@@ -140,7 +140,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         storage: Storage::S3,
         s3: Some(s3),
         pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+        file_expiry: FileExpiry::WhenFull,
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,

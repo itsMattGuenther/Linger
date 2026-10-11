@@ -7,6 +7,11 @@ export interface ServerTagInfo {
   accent: string | null;
   /** How many days it keeps a file, or null for good (the media view says so). */
   fileExpiryDays?: number | null;
+  /**
+   * Old files go only when it needs the room (#583); left out by a server
+   * from before, which also can't say what's leaving soon.
+   */
+  whenFull?: boolean;
   /** How much its files take up, and how much it allows, in bytes. */
   storage?: { used: number; limit: number };
   /** Whether it carries voice; left out by a server from before it said (#306). */
@@ -33,6 +38,7 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
             name: info.name,
             accent: info.accent_key ?? null,
             fileExpiryDays: info.file_expiry_days,
+            ...(info.file_expiry_when_full === undefined ? {} : { whenFull: info.file_expiry_when_full }),
             storage: { used: info.storage_used_bytes, limit: info.storage_limit_bytes },
             voice: info.voice,
           } })),

@@ -407,3 +407,41 @@ describe("shortcodes (#359)", () => {
     expect(plainText("great :fire: night")).toBe("great :fire: night");
   });
 });
+
+describe("hostile messages parse about as fast as ordinary ones (#512)", () => {
+  /** The fastest of five parses, in ms: one slow moment on a busy machine doesn't count. */
+  const fastest = (source: string) => {
+    let best = Number.POSITIVE_INFINITY;
+    for (let round = 0; round < 5; round += 1) {
+      const start = performance.now();
+      parseMarkdown(source);
+      best = Math.min(best, performance.now() - start);
+    }
+    return best;
+  };
+
+  it("doesn't look to the end of the message from every opener", () => {
+    // Each `[` looked to the end for its `]`, each `[](` for its `)`, each
+    // `*a` for its closing `*`: 8,000 `[` took about 124 ms, every time the
+    // row was drawn. The rough scale of an ordinary message of the same
+    // length is the yardstick, so a busy machine slows both alike.
+    const ordinary = fastest("the quick brown fox jumps over the lazy dog, again. ".repeat(160).slice(0, 8000));
+    for (const hostile of ["[".repeat(8000), "[".repeat(7999) + "]", "[](".repeat(2666), "*a ".repeat(2666), "_a ".repeat(2666), "**a ".repeat(2000)]) {
+      expect(fastest(hostile), hostile.slice(0, 6)).toBeLessThan(Math.max(20 * ordinary, 10));
+    }
+  });
+
+  it("still pairs brackets and stars as before", () => {
+    const links = (source: string) =>
+      (parseMarkdown(source)[0] as { children: Inline[] }).children.flatMap((node) => (node.kind === "link" ? [[node.text, node.href]] : []));
+    expect(links("[a [b] c](https://x.example)")).toEqual([["a [b] c", "https://x.example/"]]);
+    expect(links("[[a](https://x.example)")).toEqual([["a", "https://x.example/"]]);
+    expect(links("[a \\] b](https://x.example)")).toEqual([["a \\] b", "https://x.example/"]]);
+    // An unclosed `(` makes no link of its own; the bare address in it still is one.
+    expect(links("[a](https://x.example/(1)) [b](https://y.example")).toEqual([
+      ["a", "https://x.example/(1)"],
+      ["https://y.example", "https://y.example/"],
+    ]);
+    expect(plainText("*a* and **b** and _c_ not snake_case")).toBe("a and b and c not snake_case");
+  });
+});

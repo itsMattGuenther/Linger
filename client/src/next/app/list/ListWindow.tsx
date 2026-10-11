@@ -7,6 +7,8 @@ import {
   disconnect,
   dismissKnock,
   type GatewayState,
+  KNOCK_TTL_MS,
+  MAX_KNOCK_CARDS,
   leaveVoice,
   loadBlocks,
   loadNotifyRules,
@@ -997,10 +999,14 @@ function Servers({
   }, [states, ordered, quiet, several, infos]);
   const arrivalGone = useCallback((id: string) => setArrivals((held) => held.filter((card) => card.id !== id)), []);
 
-  // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
+  // Knocks on your door (SPEC §4.9), from every server, even a quiet one's:
+  // the newest few, however many servers they came from (#512). One left
+  // out has had its eight seconds by the time the others go, so it never
+  // comes back.
   const knocksHeld = useRef<KnockCard[]>([]);
   const knocks = useMemo((): KnockCard[] => {
-    const now = ordered.flatMap((session): KnockCard[] => {
+    const now = ordered
+      .flatMap((session): KnockCard[] => {
         const state = states[session.baseUrl];
         if (!state) return [];
         return state.knocks.map((one) => ({
@@ -1010,7 +1016,10 @@ function Servers({
           from: state.users.find((user) => user.id === one.from) ?? null,
           serverName: several ? (infos[session.baseUrl]?.name ?? hostOf(session.baseUrl)) : null,
         }));
-      });
+      })
+      .filter((card) => Date.now() - card.at < KNOCK_TTL_MS)
+      .sort((a, b) => a.at - b.at)
+      .slice(-MAX_KNOCK_CARDS);
     // The same cards as last time, nothing new: the same list, so they aren't drawn again (#533).
     const held = knocksHeld.current;
     const same =

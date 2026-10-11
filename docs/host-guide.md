@@ -346,7 +346,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | Setting | What it does | Default |
 |---|---|---|
 | `LINGER_POOL_BYTES` | Total storage the server will use. Write `250GB`, `500MB`, or a plain number. | `50GB` |
-| `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps every sent file forever. Starred files never expire. | `365` |
+| `LINGER_FILE_EXPIRY_DAYS` | When old files are deleted. `when-full` keeps them until the server needs the room: past 90% of `LINGER_POOL_BYTES`, the oldest go first until it's under 80%. A number of days deletes each file that long after it was shared, however much room there is. `off` keeps every sent file forever, and uploads are refused once it's full. Starred files, and files on pinned messages, never go. | `when-full` |
 | `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
@@ -358,6 +358,15 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_TRUSTED_PROXIES` | Which proxies the server believes about who's connecting, for the limits on signing in and signing up. Only needed for a proxy that isn't on this machine or a private network, such as Caddy on another machine reaching this one over Tailscale: `private,100.64.0.0/10`. Comma-separated addresses and ranges; `private` is this machine and private networks, and leaving it out stops trusting them. See [Other problems](#other-problems). | `private` |
 
 One file can be up to 500 MB.
+
+**How full it gets.** With `when-full`, the default, the file space is meant
+to fill up: nothing is deleted while there's room, so files take up to 90% of
+`LINGER_POOL_BYTES` before the oldest start going. Set `LINGER_POOL_BYTES` to
+what you're happy to give files, not the whole disk; the setup script picks a
+size that fits yours. On a cloud bucket it's the same: the bucket has no limit
+of its own, so `LINGER_POOL_BYTES` is the one Linger fills to, and you pay for
+what's in the bucket. In the app, Media's **Leaving soon** shows people what
+would go next, so they can star what they want kept.
 
 Nobody can fill the storage by themselves. One person can have 1 GB of files
 uploading at once; past that, they're told to let those finish first. An upload

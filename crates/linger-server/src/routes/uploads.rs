@@ -31,12 +31,13 @@ use linger_core::wire::{
 use linger_core::{AttachmentId, UploadId};
 
 use crate::auth::AuthedUser;
+use crate::config::FileExpiry;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
 use crate::storage::{display_key, object_key, poster_key, OversizedPart, ServeAs};
 use crate::unsent::{self, MAX_GOING_UP_BYTES};
-use crate::{repo, validate};
+use crate::{expiry, repo, validate};
 
 const MB: u64 = 1024 * 1024;
 
@@ -85,6 +86,26 @@ async fn create(
     // Reservations that have gone quiet go first, so one that stopped a
     // minute ago is not what refuses this one.
     unsent::release_idle(&state, now_ms()).await?;
+
+    // Under `when-full`, an upload that wouldn't fit makes the room it needs
+    // first, from the oldest files nobody starred or pinned, rather than being
+    // told the server is full while a year of them sits there (#583). Past
+    // 90% the rest of the way down to 80% goes in the background.
+    if state.config.file_expiry == FileExpiry::WhenFull {
+        let used = repo::attachments::pool_used(&state.db.read).await?;
+        let after = used.saturating_add(req.size_bytes);
+        if after > state.config.pool_bytes {
+            expiry::make_room_for(&state, req.size_bytes).await?;
+        }
+        if after >= expiry::when_full_marks(state.config.pool_bytes).0 {
+            let state = state.clone();
+            tokio::spawn(async move {
+                if let Err(err) = expiry::keep_room(&state).await {
+                    tracing::warn!(error = ?err, "could not make room in the file space");
+                }
+            });
+        }
+    }
 
     // Counted and reserved in one transaction on the one writer, so twenty
     // requests sent at once are checked one after another rather than all

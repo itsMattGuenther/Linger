@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 
 use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_WAIT};
 use crate::backup::Backups;
@@ -41,6 +41,9 @@ pub struct AppState {
     /// read from `data/backups/` at startup, kept up to date by the task
     /// that makes them.
     pub backups: Arc<Backups>,
+    /// One pass at a time taking the oldest files to make room
+    /// (`expiry::keep_room`, #583), so two never pick the same ones.
+    pub making_room: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -106,6 +109,7 @@ impl AppState {
             exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
             passwords,
             backups,
+            making_room: Arc::new(Mutex::new(())),
         })
     }
 }
