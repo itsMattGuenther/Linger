@@ -244,7 +244,8 @@ controls are in Settings, under **Hosting**:
 - **Invites**: make a link, and see or **Revoke** the ones still open.
 - **People**: remove someone (it asks first; they lose access, and their
   messages stay), and let them back in. Removals are reversible; that is the
-  point.
+  point. What they were still uploading, and files they uploaded but never
+  sent, are deleted when they're removed, and don't come back with them.
 - **Server**: its name and color. The name is what everybody's list shows and
   what an invite link tells a stranger; the color is the server's stripe in
   everybody's list.
@@ -304,7 +305,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | Setting | What it does | Default |
 |---|---|---|
 | `LINGER_POOL_BYTES` | Total storage the server will use. Write `250GB`, `500MB`, or a plain number. | `50GB` |
-| `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps everything forever. Starred files never expire. | `365` |
+| `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps every sent file forever. Starred files never expire. | `365` |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
 | `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
@@ -312,6 +313,12 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
 
 One file can be up to 500 MB.
+
+Nobody can fill the storage by themselves. One person can have 1 GB of files
+uploading at once; past that, they're told to let those finish first. An upload
+that stops, because the app closed or the connection went, gives its space back
+after an hour. A file somebody uploads and never sends is deleted after a week,
+even with `LINGER_FILE_EXPIRY_DAYS=off`.
 
 **Using a cloud bucket instead of the machine's disk.** Set `LINGER_STORAGE=s3`
 and fill in the five `LINGER_S3_*` lines already written in `.env` as

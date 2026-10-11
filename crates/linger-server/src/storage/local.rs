@@ -326,6 +326,32 @@ impl ObjectStore for LocalStore {
         let _ = tokio::fs::remove_dir_all(self.upload_dir(upload_id)).await;
         Ok(())
     }
+
+    /// The newest modification time in the upload's directory. A part still
+    /// streaming in is an `.incoming` file whose time moves with every write,
+    /// so a slow part keeps its upload alive while it arrives.
+    async fn last_received(&self, upload_id: UploadId) -> anyhow::Result<Option<i64>> {
+        let mut entries = match tokio::fs::read_dir(self.upload_dir(upload_id)).await {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let mut newest: Option<i64> = None;
+        while let Some(entry) = entries.next_entry().await? {
+            // A file that went between the listing and this look was a part
+            // being renamed into place as it finished: it arrived just now.
+            let at = match entry.metadata().await.and_then(|meta| meta.modified()) {
+                Ok(modified) => modified
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |since| {
+                        i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+                    }),
+                Err(_) => now_ms(),
+            };
+            newest = newest.max(Some(at));
+        }
+        Ok(newest)
+    }
 }
 
 #[cfg(test)]

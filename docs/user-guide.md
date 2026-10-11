@@ -548,6 +548,9 @@ private, especially for DM files.
   There is no setting for this and no way to turn it off.
 - Files may be deleted after a while — a year, unless whoever runs the server
   chose differently. **Starring a file keeps it forever.**
+- You can have up to 1 GB of files uploading at once, so nobody fills the
+  server's storage by themselves. A file you add to the box and never send is
+  deleted after a week.
 
 ### Voice messages
 

@@ -479,7 +479,10 @@ removed member sitting in the room:
 
 Removal also revokes every refresh family the user owns and every invite they created,
 in the same transaction as the column. Their messages are untouched; removing a person
-is not deleting what they wrote.
+is not deleting what they wrote. What they had on its way into a message is deleted
+(#503): their uploads still going up and the finished uploads they never posted, which
+nobody else could see, delete or send, and which held the pool. Files on their messages
+stay, and so does the picture of an emoji they added, which is the server's.
 
 `restore` is not an undo. It clears the column and nothing else: the revoked invites stay
 revoked and the revoked sign-ins stay revoked, so the person signs in again with their
@@ -746,10 +749,15 @@ DELETE /uploads/:id                                         → 204
 Client PUTs bytes **directly to the returned URL**, never through the app server.
 Files over 8 MB use multipart with per-part URLs, which is what makes uploads resumable.
 
-Server rejects at slot creation: `size_bytes > 500 MB` (`FILE_TOO_LARGE`), server pool
+Server rejects at slot creation: `size_bytes > 500 MB` (`FILE_TOO_LARGE`), more than
+1 GB of the caller's own uploads still going up (`QUOTA_EXCEEDED`, #503), server pool
 over quota (`QUOTA_EXCEEDED`), or a mime not on the allowlist in `linger-core::media`
-(`UNSUPPORTED_MEDIA`). Server re-validates real size and sniffs actual MIME at complete —
-never trust the declared values. A file whose bytes disagree with its declared type is
+(`UNSUPPORTED_MEDIA`). The two `QUOTA_EXCEEDED` refusals differ only in `message`: the
+first says it is the caller's uploads, not the server's storage, and clears as they
+finish or are thrown away. A slot reserves its declared size from the moment it is
+handed out, so a client that gives up on an upload should `DELETE` it. Server
+re-validates real size and sniffs actual MIME at complete — never trust the declared
+values. A file whose bytes disagree with its declared type is
 `UNSUPPORTED_MEDIA`; a file that is not the size it said it would be is
 `VALIDATION_FAILED`.
 
@@ -770,11 +778,17 @@ again. Any other refusal at complete is final — the parts are discarded and th
 cannot be retried, because resending the same bytes under the same declaration cannot
 make them acceptable.
 
+**A slot that hears nothing for an hour is released** (#503): when no part has arrived
+for an hour, or none has since the slot was handed out an hour ago, its parts and its
+row go. After that a part PUT or `complete` is `NOT_FOUND`, and the client starts again
+with a new slot.
+
 `DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
 `CONFLICT` once the attachment is on a message; delete the message instead. It is
 `CONFLICT` for a picture that is one of the server's emoji too (§5, "Custom emoji"):
-remove the emoji, which takes its picture with it. An unposted upload ages out after the
-file expiry window like any file, except an emoji's picture, which never does.
+remove the emoji, which takes its picture with it. A finished upload that is never posted
+is deleted after a week, or after the file expiry window if that is shorter, and even
+with expiry off (#503); an emoji's picture never is.
 
 **Serving.** `Attachment.url` (and `poster_url` and `display_url`) point at the object store, on the media
 origin — a host of its own, `cdn.<LINGER_DOMAIN>` by default, which serves `/objects/...`

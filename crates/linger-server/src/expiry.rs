@@ -17,10 +17,12 @@
 //!    than in a year. A star does not save one of these: a star means "do not
 //!    let this age out", and somebody deleting the message is not age.
 //! 3. **Finished uploads that never became a message** — somebody picked a file
-//!    and then closed the composer. `routes::uploads` sweeps *unfinished* ones
-//!    after 48 hours; a finished orphan has nothing to wait for either, but it
-//!    is given the full expiry window in case a client is holding the id while
-//!    a person types.
+//!    and then closed the composer. They get a week (`unsent::UNPOSTED_DAYS`,
+//!    #503), or the host's window if that is shorter, in case a client is
+//!    holding the id while a person is called away; not the year a shared file
+//!    gets, and not forever when expiry is off. Uploads that never *finished*
+//!    are `unsent`'s, released after an hour of silence on a timer of their
+//!    own, which runs from here.
 //!
 //! A status used to carry a picture, and the sweeper skipped any file one
 //! pointed at. Statuses have no pictures now (#269), so a file uploaded for one
@@ -43,6 +45,7 @@ use linger_core::AttachmentId;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
+use crate::unsent;
 
 /// How often the sweeper wakes. The interval is not the point — expiry is
 /// measured in days, and a file taken six hours late is taken on time.
@@ -73,13 +76,19 @@ pub struct Swept {
 ///
 /// It runs a pass at startup and then on the interval, which matters for a
 /// server that is only up for an hour a day: waiting six hours to do the first
-/// pass would mean never doing one.
+/// pass would mean never doing one. Upload reservations that have gone quiet
+/// are given back on a shorter clock of their own (`unsent`, #503): their
+/// window is an hour, not days.
 pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
+        let mut reservations = tokio::time::interval(unsent::SWEEP_INTERVAL);
+        reservations.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            ticker.tick().await;
-            drain(&state).await;
+            tokio::select! {
+                _ = ticker.tick() => drain(&state).await,
+                _ = reservations.tick() => unsent::release_idle_logged(&state).await,
+            }
         }
     })
 }
@@ -118,15 +127,18 @@ async fn drain(state: &AppState) {
 /// One pass. Public so an integration test can drive it against real uploads
 /// without waiting six hours or backdating the clock.
 pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
+    let now = now_ms();
     let cutoff = state
         .config
         .file_expiry_days
-        .map(|days| now_ms() - i64::from(days) * 24 * 60 * 60 * 1000);
+        .map(|days| now - i64::from(days) * 24 * 60 * 60 * 1000);
+    let unposted = unsent::unposted_cutoff(&state.config, now);
 
     // Three reasons in one query so paging and counting stay one thing. The
-    // `?` for the cutoff is bound twice and is NULL when expiry is off, which
-    // makes both age comparisons false and leaves only the deleted-message
-    // rule — that one is not about age and is not the host's to turn off.
+    // first `?` is the file window, NULL when expiry is off, which makes its
+    // comparison false. The second is the unposted window (#503), never NULL:
+    // like the deleted-message rule, it is not about age and is not the
+    // host's to turn off.
     let rows: Vec<Expired> = sqlx::query_as(
         "SELECT a.id, a.object_key, a.poster_key, a.display_key, a.size_bytes
            FROM attachments a
@@ -143,7 +155,7 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
           LIMIT ?",
     )
     .bind(cutoff)
-    .bind(cutoff)
+    .bind(unposted)
     .bind(SWEEP_BATCH)
     .fetch_all(&state.db.read)
     .await?;

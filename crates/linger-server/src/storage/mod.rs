@@ -168,6 +168,15 @@ pub trait ObjectStore: Send + Sync {
 
     /// Drop everything belonging to an upload that will never complete.
     async fn discard(&self, upload_id: UploadId) -> anyhow::Result<()>;
+
+    /// When the newest byte of this upload arrived, in Unix ms, or `None` if
+    /// nothing has.
+    ///
+    /// A reservation that has heard nothing for an hour is given back to the
+    /// pool (`crate::unsent`, #503), and this is the only way the server can
+    /// hear: on S3 the bytes never pass through it, and on disk they pass
+    /// through a route that writes nothing down.
+    async fn last_received(&self, upload_id: UploadId) -> anyhow::Result<Option<i64>>;
 }
 
 /// How many parts an upload of this size is cut into, and how big each is.

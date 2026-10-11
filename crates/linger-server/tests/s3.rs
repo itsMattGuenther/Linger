@@ -527,6 +527,62 @@ async fn cancelling_an_upload_takes_the_object_out_of_the_bucket() {
     assert!(!bucket_has(&key).await, "the bytes went with the upload");
 }
 
+/// A reservation that has heard nothing for an hour goes, and one whose
+/// parts are still landing in the bucket stays (#503). On this backend the
+/// bytes never pass through the server, so it asks the bucket when the newest
+/// part arrived.
+#[tokio::test]
+async fn a_quiet_reservation_goes_and_a_live_one_stays_on_the_bucket() {
+    let server = s3_server!("a_quiet_reservation_goes_and_a_live_one_stays_on_the_bucket");
+    let host = bootstrap_host(&server).await;
+    let now = linger_server::db::now_ms();
+    let hour = 60 * 60 * 1000;
+
+    let silent = slot(
+        &server,
+        &host.access_token,
+        "silent.bin",
+        4096,
+        "application/octet-stream",
+    )
+    .await;
+    let live = slot(
+        &server,
+        &host.access_token,
+        "live.bin",
+        (PART * 2 + 100) as u64,
+        "application/octet-stream",
+    )
+    .await;
+    let parts = live.parts.clone().expect("a 16 MB upload is cut up");
+    let (status, _) = put_part(&parts[0].url, filler(PART)).await;
+    assert_eq!(status, 200);
+    let key = format!("uploads/{}/00001", live.upload_id);
+    assert!(bucket_has(&key).await);
+    sqlx::query("UPDATE attachments SET created_at = created_at - ?")
+        .bind(2 * hour)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+
+    let released = linger_server::unsent::release_idle(&server.state, now + hour / 2)
+        .await
+        .unwrap();
+    assert_eq!(released.uploads, 1, "only the silent one");
+    assert_eq!(
+        finish(&server, &host.access_token, &silent, None)
+            .await
+            .status(),
+        404
+    );
+
+    let released = linger_server::unsent::release_idle(&server.state, now + hour + 60_000)
+        .await
+        .unwrap();
+    assert_eq!(released.uploads, 1, "an hour after its last part");
+    assert!(!bucket_has(&key).await, "its parts went with it");
+}
+
 #[tokio::test]
 async fn the_upload_listener_is_not_there_when_storage_is_the_bucket() {
     let server = s3_server!("the_upload_listener_is_not_there_when_storage_is_the_bucket");

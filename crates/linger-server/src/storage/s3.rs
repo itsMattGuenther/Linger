@@ -143,6 +143,41 @@ impl S3Store {
         check(resp, "storing an object").await?;
         Ok(())
     }
+
+    /// Every part stored so far under an upload's prefix.
+    async fn parts(
+        &self,
+        upload_id: UploadId,
+    ) -> anyhow::Result<Vec<rusty_s3::actions::list_objects_v2::ListObjectsContent>> {
+        let prefix = format!("uploads/{upload_id}/");
+        let mut parts = Vec::new();
+        let mut continuation: Option<String> = None;
+        loop {
+            let mut action = self.bucket.list_objects_v2(Some(&self.credentials));
+            action.with_prefix(prefix.clone());
+            if let Some(token) = &continuation {
+                action.with_continuation_token(token.clone());
+            }
+            let resp = self.http.get(action.sign(INTERNAL_TTL)).send().await?;
+            let body = check(resp, "listing an upload's parts")
+                .await?
+                .text()
+                .await?;
+            let listed = rusty_s3::actions::ListObjectsV2::parse_response(&body)?;
+            parts.extend(listed.contents);
+            continuation = listed.next_continuation_token;
+            if continuation.is_none() {
+                return Ok(parts);
+            }
+        }
+    }
+}
+
+/// A listing's `LastModified`, `2026-10-10T21:04:05.000Z`, in Unix ms.
+fn last_modified_ms(text: &str) -> Option<i64> {
+    text.parse::<jiff::Timestamp>()
+        .ok()
+        .map(jiff::Timestamp::as_millisecond)
 }
 
 /// Turn a non-2xx S3 response into an error that says what the bucket said.
@@ -303,29 +338,25 @@ impl ObjectStore for S3Store {
         // Listed rather than counted down from the part plan: `discard` is also
         // what the stale-upload sweep calls, and by then the declared size is
         // gone. Whatever is under the prefix goes.
-        let prefix = format!("uploads/{upload_id}/");
-        let mut continuation: Option<String> = None;
-        loop {
-            let mut action = self.bucket.list_objects_v2(Some(&self.credentials));
-            action.with_prefix(prefix.clone());
-            if let Some(token) = &continuation {
-                action.with_continuation_token(token.clone());
-            }
-            let resp = self.http.get(action.sign(INTERNAL_TTL)).send().await?;
-            let body = check(resp, "listing an upload's parts")
-                .await?
-                .text()
-                .await?;
-            let listed = rusty_s3::actions::ListObjectsV2::parse_response(&body)?;
-            for object in &listed.contents {
-                self.delete_object(&object.key).await?;
-            }
-            continuation = listed.next_continuation_token;
-            if continuation.is_none() {
-                break;
-            }
+        for part in self.parts(upload_id).await? {
+            self.delete_object(&part.key).await?;
         }
         Ok(())
+    }
+
+    /// The newest part's `LastModified`. S3 writes it when a part's PUT
+    /// finishes, so an 8 MB part counts once it has all arrived; at any speed
+    /// an upload could finish at, that is well inside the hour.
+    async fn last_received(&self, upload_id: UploadId) -> anyhow::Result<Option<i64>> {
+        let mut newest: Option<i64> = None;
+        for part in self.parts(upload_id).await? {
+            // A time this cannot read counts as now: keeping a reservation a
+            // little longer is the safe mistake, and the day-long signatures
+            // end it either way (`unsent::CEILING_MS`).
+            let at = last_modified_ms(&part.last_modified).unwrap_or_else(crate::db::now_ms);
+            newest = newest.max(Some(at));
+        }
+        Ok(newest)
     }
 }
 
@@ -416,5 +447,17 @@ mod tests {
         };
         assert!(url.contains("response-content-type=application%2Foctet-stream"));
         assert!(url.contains("response-content-disposition=attachment"));
+    }
+
+    /// The form AWS, R2 and MinIO all list a part's time in (#503). A time
+    /// read wrong would keep every reservation or release a live one.
+    #[test]
+    fn a_listed_parts_time_is_read_to_the_millisecond() {
+        assert_eq!(
+            last_modified_ms("2026-10-10T21:04:05.123Z"),
+            Some(1_791_666_245_123)
+        );
+        assert_eq!(last_modified_ms("1970-01-01T00:00:00.000Z"), Some(0));
+        assert_eq!(last_modified_ms("yesterday"), None);
     }
 }
