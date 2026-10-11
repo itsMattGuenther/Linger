@@ -148,6 +148,11 @@ async fn complete(
             .map(Json)
             .ok_or_else(ApiError::internal);
     }
+    // Given up on, by the client or after an hour of silence (#503). The row
+    // is only kept so late parts can be found and discarded (`unsent`).
+    if record.state == "released" {
+        return Err(ApiError::not_found("No such upload."));
+    }
     if record.state != "pending" {
         return Err(ApiError::conflict("That upload already failed."));
     }
@@ -287,6 +292,11 @@ async fn finish(
 
 /// `DELETE /uploads/:id` — give up on an upload, or throw away a finished one
 /// that was never posted. A file already on a message is a message's problem.
+///
+/// An upload that never finished is released rather than forgotten (#503):
+/// its space comes back now, and its row stays until every link it handed out
+/// has expired, so a part that still reaches a bucket is found and discarded
+/// (`unsent::release_slot`).
 async fn cancel(
     State(state): State<AppState>,
     auth: AuthedUser,
@@ -308,6 +318,11 @@ async fn cancel(
         return Err(ApiError::conflict(
             "That picture is one of the server's emoji. Remove the emoji instead.",
         ));
+    }
+
+    if record.state != "complete" {
+        unsent::release_slot(&state, attachment_id).await?;
+        return Ok(StatusCode::NO_CONTENT);
     }
 
     let _ = state.storage.discard(upload_id).await;

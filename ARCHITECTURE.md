@@ -314,7 +314,7 @@ CREATE TABLE attachments (
   poster_key      TEXT,                        -- video poster frame
   display_key     TEXT,                        -- an image as drawn small: its copy, or itself (#382)
   starred_at      INTEGER,                     -- starred => never expires
-  state           TEXT NOT NULL,               -- pending | complete | failed
+  state           TEXT NOT NULL,               -- pending | complete | failed | released (§8)
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
@@ -731,15 +731,27 @@ whole pool. So they keep rules of their own:
   one transaction on the single writer, so twenty requests at once are checked one
   after another.
 - **An hour of silence releases a slot.** A pending upload whose newest part (or, with
-  none, whose slot) is over an hour old is discarded, bytes and row. On disk that is
-  the newest file time in its part directory, where a part still streaming in is a file
-  whose time moves with every write; on S3 it is the newest part's `LastModified`. A
-  slot two days old goes whatever storage says: its signed URLs lasted a day. This runs
-  on every `POST /uploads`, before the cap is counted, and every fifteen minutes on a
-  clock of its own in the sweeper's task (`expiry::spawn`, below).
+  none, whose slot) is over an hour old is released. On disk that is the newest file
+  time in its part directory, where a part still streaming in is a file whose time
+  moves with every write; on S3 it is the newest part's `LastModified`. This runs on
+  every `POST /uploads`, before the cap is counted, and every fifteen minutes on a clock
+  of its own in the sweeper's task (`expiry::spawn`, below).
 - **A week for a finished upload nobody posts**, the sweeper's third rule below.
-- **A removed member's go with them**: their pending slots and unposted files, but not
-  an emoji's picture, which is the server's.
+- **A removed member's go with them**: their pending slots are released and their
+  unposted files deleted, but not an emoji's picture, which is the server's.
+
+**Released is not forgotten.** Releasing a slot (after an hour of silence, on
+`DELETE /uploads/:id`, or on removing its member) gives its space back at once and
+discards the parts that arrived, but keeps the row, as state `released`, until the slot
+is two days old. On S3 the client PUTs straight at the bucket with links signed for a
+day, and the bucket takes a part from anybody holding one whatever the server has
+decided since: a laptop that wakes after an hour, or somebody doing it on purpose, can
+still land bytes. Forgetting the row at once would leave those in the bucket forever,
+counted nowhere. At two days every link has expired, so the parts are discarded once
+more and only then does the row go; a failed upload's row goes the same way. A
+`released` row counts against nothing (the pool and the cap count `pending` and
+`complete` only), the local part listener refuses it, and `complete` on it is
+`NOT_FOUND`.
 
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and

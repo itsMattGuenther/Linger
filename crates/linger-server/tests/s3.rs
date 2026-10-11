@@ -15,7 +15,7 @@
 mod common;
 
 use common::{bootstrap_host, spawn_s3_server, TestServer};
-use linger_core::wire::{Attachment, CompletedPart, UploadSlot};
+use linger_core::wire::{Attachment, CompletedPart, ServerInfo, UploadSlot};
 use reqwest::StatusCode;
 
 /// Start a server on the test bucket, or say why not and stop.
@@ -223,6 +223,20 @@ fn key_of(url: &str) -> String {
         .expect("a served URL is under /objects/")
         .1
         .to_string()
+}
+
+/// The storage figure everybody sees: stored files plus reservations.
+async fn used(server: &TestServer, token: &str) -> u64 {
+    let info: ServerInfo = client()
+        .get(server.url("/server"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    info.storage_used_bytes
 }
 
 async fn error_code(resp: reqwest::Response) -> String {
@@ -581,6 +595,79 @@ async fn a_quiet_reservation_goes_and_a_live_one_stays_on_the_bucket() {
         .unwrap();
     assert_eq!(released.uploads, 1, "an hour after its last part");
     assert!(!bucket_has(&key).await, "its parts went with it");
+}
+
+/// A bucket takes a part from anybody holding a link, and a link lasts a
+/// day, whatever the server has decided about the slot since. So a slot
+/// that is given back, after an hour of silence or by the app giving up,
+/// stops counting at once but is not forgotten: a part that lands afterwards,
+/// from a laptop that woke up or from somebody doing it on purpose, is
+/// deleted by the pass two days on, once every link is dead (#503).
+#[tokio::test]
+async fn a_part_that_lands_after_its_slot_is_given_back_is_still_cleared() {
+    let server = s3_server!("a_part_that_lands_after_its_slot_is_given_back_is_still_cleared");
+    let host = bootstrap_host(&server).await;
+    let now = linger_server::db::now_ms();
+
+    let quiet = slot(
+        &server,
+        &host.access_token,
+        "quiet.bin",
+        4096,
+        "application/octet-stream",
+    )
+    .await;
+    let dropped = slot(
+        &server,
+        &host.access_token,
+        "dropped.bin",
+        4096,
+        "application/octet-stream",
+    )
+    .await;
+    sqlx::query("UPDATE attachments SET created_at = created_at - ? WHERE id = ?")
+        .bind(2 * 60 * 60 * 1000_i64)
+        .bind(quiet.upload_id.to_vec())
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let released = linger_server::unsent::release_idle(&server.state, now)
+        .await
+        .unwrap();
+    assert_eq!(released.uploads, 1, "the quiet one, an hour after nothing");
+    let gone = client()
+        .delete(server.url(&format!("/uploads/{}", dropped.upload_id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(gone.status(), 204);
+    assert_eq!(used(&server, &host.access_token).await, 0, "neither counts");
+
+    // The links still work at the bucket.
+    for given_back in [&quiet, &dropped] {
+        let (status, _) = put_part(&given_back.url, filler(4096)).await;
+        assert_eq!(status, 200);
+        let key = format!("uploads/{}/00001", given_back.upload_id);
+        assert!(bucket_has(&key).await);
+        assert_eq!(
+            finish(&server, &host.access_token, given_back, None)
+                .await
+                .status(),
+            404
+        );
+    }
+    assert_eq!(used(&server, &host.access_token).await, 0);
+
+    // Two days on, every link has expired, and what landed goes.
+    let later = linger_server::db::now_ms() + linger_server::unsent::CEILING_MS;
+    linger_server::unsent::release_idle(&server.state, later)
+        .await
+        .unwrap();
+    for given_back in [&quiet, &dropped] {
+        let key = format!("uploads/{}/00001", given_back.upload_id);
+        assert!(!bucket_has(&key).await, "{key} is still in the bucket");
+    }
 }
 
 #[tokio::test]

@@ -779,11 +779,14 @@ cannot be retried, because resending the same bytes under the same declaration c
 make them acceptable.
 
 **A slot that hears nothing for an hour is released** (#503): when no part has arrived
-for an hour, or none has since the slot was handed out an hour ago, its parts and its
-row go. After that a part PUT or `complete` is `NOT_FOUND`, and the client starts again
-with a new slot.
+for an hour, or none has since the slot was handed out an hour ago, its space is given
+back and its parts are discarded. After that `complete` is `NOT_FOUND`, and so is a part
+PUT to the server's own listener; the client starts again with a new slot. A bucket may
+still take a part from a link it signed, but nothing will ever use it, and the server
+deletes it once the slot's links have expired.
 
-`DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
+`DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes; one
+that never finished is released, as above, and `complete` on it is `NOT_FOUND`. It is
 `CONFLICT` once the attachment is on a message; delete the message instead. It is
 `CONFLICT` for a picture that is one of the server's emoji too (§5, "Custom emoji"):
 remove the emoji, which takes its picture with it. A finished upload that is never posted

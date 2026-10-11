@@ -1210,6 +1210,52 @@ async fn the_sweeper_gives_back_quiet_reservations_and_keeps_slow_ones() {
     assert_eq!(pool_used(&server, &host.access_token).await, 0);
     let (status, _) = put_part(&server, &slow.parts.as_ref().unwrap()[1].url, filler(10)).await;
     assert_eq!(status, 404, "a released slot takes no more parts");
+    assert_eq!(
+        finish(&server, &host.access_token, &slow, None)
+            .await
+            .status(),
+        404
+    );
+
+    // Released is not forgotten: the rows stay, counting for nothing, until
+    // every link they handed out has expired (a bucket would still take a
+    // part, tests/s3.rs), and then they go.
+    assert_eq!(
+        attachment_state(&server, silent.upload_id.to_vec())
+            .await
+            .as_deref(),
+        Some("released")
+    );
+    assert_eq!(
+        attachment_state(&server, slow.upload_id.to_vec())
+            .await
+            .as_deref(),
+        Some("released")
+    );
+    let released = unsent::release_idle(&server.state, now + unsent::CEILING_MS)
+        .await
+        .unwrap();
+    assert_eq!(
+        released,
+        unsent::Released::default(),
+        "their space came back already"
+    );
+    assert_eq!(
+        attachment_state(&server, silent.upload_id.to_vec()).await,
+        None
+    );
+    assert_eq!(
+        attachment_state(&server, slow.upload_id.to_vec()).await,
+        None
+    );
+}
+
+async fn attachment_state(server: &TestServer, id: Vec<u8>) -> Option<String> {
+    sqlx::query_scalar("SELECT state FROM attachments WHERE id = ?")
+        .bind(id)
+        .fetch_optional(&server.state.db.read)
+        .await
+        .unwrap()
 }
 
 /// A file somebody finished uploading and never posted gets a week, not the

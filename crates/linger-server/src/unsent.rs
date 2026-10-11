@@ -13,11 +13,25 @@
 //!    going up at once. Past it, `POST /uploads` answers `QUOTA_EXCEEDED` in
 //!    words about *their* uploads rather than the server's storage.
 //! 2. **An hour of silence gives a reservation back.** A slot that has
-//!    received nothing for [`IDLE_MS`] is released, bytes and row: a failed
-//!    upload, a closed laptop, or somebody who never meant to send. This runs
-//!    on the sweeper's timer (`expiry::spawn`) and again on the way into
-//!    every new upload, so a slot that has just gone quiet never stands
-//!    between somebody and their file.
+//!    received nothing for [`IDLE_MS`] is released: a failed upload, a closed
+//!    laptop, or somebody who never meant to send. This runs on the sweeper's
+//!    timer (`expiry::spawn`) and again on the way into every new upload, so
+//!    a slot that has just gone quiet never stands between somebody and
+//!    their file.
+//!
+//! **Releasing a slot is not forgetting it.** Its space comes back at once
+//! and the parts that arrived are discarded, but the row stays, marked
+//! `released`, until the slot is [`CEILING_MS`] old. On S3 the app PUTs
+//! straight at the bucket with links signed for a day, and the bucket takes a
+//! part from anybody holding one whatever this server has decided: a laptop
+//! that wakes after an hour, or somebody doing it on purpose, can still land
+//! bytes. Forgetting the row at once would leave those in the bucket forever,
+//! counted nowhere. At the ceiling every link has expired, so the parts are
+//! discarded once more and only then does the row go. `released` counts
+//! against nothing (`pool_used` and [`going_up`] count `pending` only), the
+//! server's own part listener refuses it, and `complete` answers that there
+//! is no such upload. A slot given up with `DELETE /uploads/:id` and a removed
+//! member's slots are released the same way ([`release_slot`]).
 //! 3. **A week for a finished file nobody posts** ([`UNPOSTED_DAYS`]), rather
 //!    than the year a shared file gets. The sweeper takes them (`expiry`,
 //!    rule 3) with [`unposted_cutoff`].
@@ -51,11 +65,12 @@ pub const MAX_GOING_UP_BYTES: u64 = 1024 * 1024 * 1024;
 /// could ever finish on, so an hour of nothing is an upload that has stopped.
 pub const IDLE_MS: i64 = 60 * 60 * 1000;
 
-/// Anything that never completed goes once it is this old, whatever storage
-/// says. Its signed URLs lasted a day, so nothing more can arrive. A failed
-/// upload's row, which holds no bytes and is not counted, is kept until then
-/// so a retried complete hears that it failed rather than that there is no
-/// such upload.
+/// Anything that never completed is forgotten once it is this old: its parts
+/// are discarded one last time and its row goes, whatever storage says. Its
+/// signed URLs lasted a day, so nothing more can arrive after this. A failed
+/// or released slot holds no space and keeps its row until then, so a late
+/// part that reached a bucket is still found, and a retried complete hears
+/// that the upload failed rather than that there is no such upload.
 pub const CEILING_MS: i64 = 48 * 60 * 60 * 1000;
 
 /// How long a finished upload nobody has posted is kept: a week. Long enough
@@ -116,13 +131,16 @@ pub fn unposted_cutoff(config: &Config, now: i64) -> i64 {
     now - i64::from(days) * DAY_MS
 }
 
-/// Give back every reservation that has gone quiet (rule 2).
+/// Give back every reservation that has gone quiet (rule 2), and forget
+/// every slot whose links have all expired.
 ///
-/// `now` is a parameter so a test can stand an hour in the future rather than
-/// wait one. A slot younger than [`IDLE_MS`] is not looked at; an older one
-/// asks storage when it last heard anything, and only a slot that has heard
-/// nothing for the whole window goes. Storage that cannot answer keeps the
-/// slot for the next pass: keeping it a little longer is the safe mistake.
+/// `now` is a parameter so a test can stand an hour, or two days, in the
+/// future rather than wait. A slot younger than [`IDLE_MS`] is not looked at.
+/// A pending one older than that asks storage when it last heard anything,
+/// and only a slot that has heard nothing for the whole window is released.
+/// Storage that cannot answer keeps the slot for the next pass: keeping it a
+/// little longer is the safe mistake. Anything past [`CEILING_MS`] that never
+/// completed, pending, failed or released, is discarded and forgotten.
 pub async fn release_idle(state: &AppState, now: i64) -> Result<Released, ApiError> {
     let rows: Vec<(Vec<u8>, String, i64, i64)> = sqlx::query_as(
         "SELECT id, state, size_bytes, created_at FROM attachments
@@ -139,34 +157,52 @@ pub async fn release_idle(state: &AppState, now: i64) -> Result<Released, ApiErr
         };
         let upload = UploadId(id.0);
         let pending = upload_state == "pending";
-        let quiet = if created_at < now - CEILING_MS {
-            true
-        } else if !pending {
-            false
-        } else {
-            match state.storage.last_received(upload).await {
-                Ok(heard) => heard.is_none_or(|at| at < now - IDLE_MS),
-                Err(err) => {
-                    tracing::warn!(error = %err, upload = %upload, "could not ask storage about an upload");
-                    false
-                }
+        if created_at < now - CEILING_MS {
+            // Every link it handed out has expired, so what is in storage
+            // now is the last of it.
+            let _ = state.storage.discard(upload).await;
+            // `complete` may have finished it since the read: a file
+            // somebody has just finished sending is not a dead slot.
+            let gone = sqlx::query("DELETE FROM attachments WHERE id = ? AND state != 'complete'")
+                .bind(id.to_vec())
+                .execute(&state.db.write)
+                .await?;
+            if pending && gone.rows_affected() > 0 {
+                released.add(size_bytes);
             }
-        };
-        if !quiet {
             continue;
         }
-        let _ = state.storage.discard(upload).await;
-        // `complete` may have finished it since the read: a file somebody
-        // has just finished sending is not a quiet reservation.
-        let gone = sqlx::query("DELETE FROM attachments WHERE id = ? AND state != 'complete'")
-            .bind(id.to_vec())
-            .execute(&state.db.write)
-            .await?;
-        if pending && gone.rows_affected() > 0 {
+        if !pending {
+            continue;
+        }
+        let quiet = match state.storage.last_received(upload).await {
+            Ok(heard) => heard.is_none_or(|at| at < now - IDLE_MS),
+            Err(err) => {
+                tracing::warn!(error = %err, upload = %upload, "could not ask storage about an upload");
+                false
+            }
+        };
+        if quiet && release_slot(state, id).await? {
             released.add(size_bytes);
         }
     }
     Ok(released)
+}
+
+/// Release one slot: its space back at once, the parts that arrived
+/// discarded, the row kept as `released` until [`CEILING_MS`] (see the
+/// module doc for why the row stays). Returns whether it was pending, and so
+/// whether any space came back. A slot `complete` has just finished is left
+/// alone: that is a file, not a reservation.
+pub async fn release_slot(state: &AppState, id: AttachmentId) -> Result<bool, ApiError> {
+    // The row first, so the server's own listener refuses a part from here on.
+    let changed =
+        sqlx::query("UPDATE attachments SET state = 'released' WHERE id = ? AND state = 'pending'")
+            .bind(id.to_vec())
+            .execute(&state.db.write)
+            .await?;
+    let _ = state.storage.discard(UploadId(id.0)).await;
+    Ok(changed.rows_affected() > 0)
 }
 
 /// The sweeper's call to [`release_idle`]: logged, never fatal, because the
@@ -187,8 +223,9 @@ pub async fn release_idle_logged(state: &AppState) {
 type Held = (Vec<u8>, String, String, Option<String>, Option<String>, i64);
 
 /// Drop everything a member had on its way into a message (rule 4): their
-/// reservations and the finished files they never posted, bytes first and
-/// row second (the order `expiry` explains).
+/// reservations, released as [`release_slot`] does, and the finished files
+/// they never posted, bytes first and row second (the order `expiry`
+/// explains).
 ///
 /// Called when the member is removed. Whatever they posted stays, as their
 /// messages do (SPEC principle 3), and so does any emoji whose picture they
@@ -199,6 +236,7 @@ pub async fn release_for(state: &AppState, user: UserId) -> Result<Released, Api
         "SELECT id, state, object_key, poster_key, display_key, size_bytes
            FROM attachments
           WHERE uploader_id = ? AND message_id IS NULL
+            AND state IN ('pending', 'complete')
             AND id NOT IN (SELECT attachment_id FROM custom_emoji)",
     )
     .bind(user.to_vec())
@@ -210,24 +248,27 @@ pub async fn release_for(state: &AppState, user: UserId) -> Result<Released, Api
         let Ok(id) = AttachmentId::from_slice(&id) else {
             continue;
         };
-        let _ = state.storage.discard(UploadId(id.0)).await;
-        if upload_state == "complete" {
-            if let Err(err) = state.storage.delete_object(&object_key).await {
-                tracing::warn!(error = %err, key = object_key, "could not delete a removed member's file; the sweeper tries again");
-                continue;
+        if upload_state == "pending" {
+            if release_slot(state, id).await? {
+                released.add(size_bytes);
             }
-            if let Some(key) = &poster_key {
-                let _ = state.storage.delete_object(key).await;
-            }
-            if let Some(key) = display_key.as_ref().filter(|key| **key != object_key) {
-                let _ = state.storage.delete_object(key).await;
-            }
+            continue;
+        }
+        if let Err(err) = state.storage.delete_object(&object_key).await {
+            tracing::warn!(error = %err, key = object_key, "could not delete a removed member's file; the sweeper tries again");
+            continue;
+        }
+        if let Some(key) = &poster_key {
+            let _ = state.storage.delete_object(key).await;
+        }
+        if let Some(key) = display_key.as_ref().filter(|key| **key != object_key) {
+            let _ = state.storage.delete_object(key).await;
         }
         let gone = sqlx::query("DELETE FROM attachments WHERE id = ? AND message_id IS NULL")
             .bind(id.to_vec())
             .execute(&state.db.write)
             .await?;
-        if upload_state != "failed" && gone.rows_affected() > 0 {
+        if gone.rows_affected() > 0 {
             released.add(size_bytes);
         }
     }
