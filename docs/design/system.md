@@ -157,7 +157,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
 | Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
-| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--poll-w` 420 (a poll's card, #474) · `--poll-length-w` 112 (how long a poll runs, as it's asked) · `--emoji-grid` 8 columns |
+| Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-min-w` 96 (the narrowest typing area, #512) · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--poll-w` 420 (a poll's card, #474) · `--poll-length-w` 112 (how long a poll runs, as it's asked) · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
 | Radii | `--radius-xs` 4 · `-sm` 6 · `-md` 8 · `-lg` 10 · `-xl` 12 · `-pill` 999 |
@@ -306,6 +306,10 @@ gradient at 92°, and shimmer or glow.
   lists, 28px for display, 16px for meta), so no face can change a row's
   height.
 - **Long names** end in "…".
+- **Emoji keep their colors.** A gradient or a shimmer is painted through the
+  letters' shapes, and an emoji painted that way was a flat block of the
+  paint. Each emoji is drawn apart from the letters, in its own colors
+  (`nameRuns` in `lib/names.ts`, #512).
 - **Its box is its letters.** A name is exactly as wide as its letters
   wherever it sits, never stretched by a column or a grid cell. Its gradient
   and its shimmer's band are laid across that box, so a stretched box spread
@@ -382,7 +386,9 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
   - `title` on the first line. Words end in "…" here; a `Name` ends in its
     own "…", and nothing cuts its glow at its box (#287);
   - `trailing` marks right after it (a voice glyph beside a name);
-  - `note`, a faint end-of-line note ("in #general");
+  - `note`, a faint end-of-line note ("in #general"). It keeps its words
+    ahead of the title, up to half the row: the title gives way first, so a
+    name in wide letters can't squeeze the place to one letter (#512);
   - `end` marks at the end ("who's in a room");
   - `detail`, the second line, set `away` for the warm away color.
   - `lead` is the column before the title: a person's marker, a room's `#`,
@@ -457,7 +463,8 @@ A browser-like row of 32px tabs on the title bar's bottom edge.
   press that travels under 4px is still a click. The tabs beside the list add
   the keyboard way, Ctrl+Shift+PageUp and PageDown (`core/keys.ts`).
 - **Overflow:** more tabs than fit scroll sideways, the showing tab stays in
-  view, and the edge with more beyond it fades.
+  view, and the edge with more beyond it fades. When the strip gets narrower,
+  the showing tab is scrolled back into it (#512).
 - **In a title bar:** the row's empty space, and the strip above the tabs,
   move the window; a press on a tab never does.
 
@@ -924,7 +931,9 @@ replaces an unread count.
   does, or who can.
 - **Typing line**, 24px, always there, so the box never jumps.
 - **The box**, 40px for one line: a `›` prompt by the first line, the text,
-  then add-a-file, emoji and send (32px each). It grows with its text to
+  then add-a-file, emoji and send (32px each). The typing area is never
+  narrower than `--composer-min-w` (96px): in a window too narrow for both,
+  the buttons go under it together, at the end (#512). It grows with its text to
   `--composer-max`, measuring a hidden copy so typing never lays out the
   conversation (L-12). An `@` at the start of a word opens an `OptionList` of
   people to mention above it (#267, `app/chat/useMentions.tsx`). Files on

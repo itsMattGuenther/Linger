@@ -204,6 +204,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
     list first, and narrower than both the conversation takes the window
     (`core/side.ts`). A
     conversation in its own window stays at least 360×360.
+    **Changed (2026-10-11, #512):** those smallest sizes are at 100%; each
+    grows with the interface size, so at 150% the list's smallest window is
+    450 wide (`core/appearance.ts`).
 20. **Notification clicks.** What does clicking a desktop banner do: focus
     the list, or open the conversation in a tab? *(NOTE-7)*
     **Decided (2026-09-26):** a banner opens its conversation, at the message.

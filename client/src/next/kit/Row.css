@@ -141,9 +141,13 @@
   gap: var(--space-1);
 }
 
+/* The place keeps its words ahead of the name, up to half the row: a name
+   in wide letters (﷽, Ｗ) shrank alongside it and left "in #room" one letter
+   wide (#512). The name gives way first, and cuts with its own "…". */
 .k-row-note {
-  flex: 0 1 auto;
+  flex: none;
   min-width: 0;
+  max-width: 50%;
   margin-left: auto;
   padding-left: var(--space-1);
   color: var(--text-muted);

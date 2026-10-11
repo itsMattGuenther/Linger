@@ -42,6 +42,23 @@ function sounds(asked: string[]): string[] {
 const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 
+test("the message box keeps room to type in a window narrower than it was made for, its buttons going under it (#512)", async ({ page }) => {
+  // At 150% interface size, a list window at its smallest was 200 of the page's pixels wide, and the box 8 px.
+  await page.setViewportSize({ width: 200, height: 500 });
+  await open(page);
+  const input = await page.getByRole("combobox", { name: "Message in #general" }).boundingBox();
+  const send = await page.getByRole("button", { name: "Send" }).boundingBox();
+  if (!input || !send) throw new Error("message box not drawn");
+  expect(input.width).toBeGreaterThanOrEqual(96);
+  // The buttons went under the typing area, together, and all still fit.
+  expect(send.y).toBeGreaterThanOrEqual(input.y + input.height - 1);
+  expect(send.x + send.width).toBeLessThanOrEqual(200);
+  for (const name of ["Add a file", "Emoji"]) {
+    const button = await page.getByRole("button", { name, exact: true }).boundingBox();
+    expect(button?.y).toBe(send.y);
+  }
+});
+
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
