@@ -689,6 +689,10 @@ said, but only while it's true (decision 1, `core/notes.ts`,
 - a server still not connected five seconds on: "Can't reach Pinecone. Still
   trying.", with the reason on hover, and a `Spinner` for its mark;
 - a keyring that can't keep sign-ins, with the key icon;
+- a server you host needing you (#582): its disk nearly full, its file space
+  nearly used up, or three days without a backup, with the house icon and a
+  small quiet "Hosting…" that opens Settings → Hosting → Server. The host's
+  alone: the server tells nobody else;
 - a new version, with the download icon and a small quiet "Update…" that opens
   Settings → Account & App.
 

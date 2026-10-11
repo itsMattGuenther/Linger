@@ -1328,3 +1328,24 @@ microphone). It was never started as a milestone.
   list loses the line, and §4.14 no longer calls ambient voice a small step.
 - **Its notes**, what was planned and where it stood on the day, are in
   `docs/tasks/m13.md`.
+
+## Decided — the server backs itself up every night
+
+**Matt asked for it to be tracked on 2026-10-11, and for it to be built the same
+day (#582).** ARCHITECTURE §9 used to say "Do not build a backup feature": a host
+would set up their own from the guide. Most never did. So the server now does the
+one part it can do alone, and no more.
+
+- **A copy of the database, once a day, without stopping.** `VACUUM INTO` through a
+  read-only connection of its own, so nobody's typing waits on it. Checked with
+  `PRAGMA integrity_check`; 7 daily and 4 weekly copies in `data/backups/`.
+  `LINGER_BACKUPS=off` for a host with a plan of their own.
+- **Not the files, and not off the machine.** Uploads never change once they're up,
+  so `rsync` or `rclone` copies them better than the server would, and the host guide
+  says plainly that copies on the same disk don't survive it dying. A copy to an S3
+  bucket was set aside for an issue of its own. No restore button.
+- **The host alone is told.** A quiet line at the foot of the host's list while the
+  disk is nearly full (a tenth left), the file space is 90% used, or three days
+  have gone without a good copy; Settings → Hosting → Server says when the last one
+  was. Not co-hosts: the machine is whoever runs it (SPEC §4.16).
+

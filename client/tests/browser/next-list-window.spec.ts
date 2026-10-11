@@ -970,6 +970,20 @@ test("a new version gets one quiet line, and Update… opens Settings where it's
   );
 });
 
+test("a server you host says when its disk is nearly full or it hasn't been backed up, and Hosting… opens its Settings (#582)", async ({ page }) => {
+  await open(page, "?one&hostissues");
+  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
+  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+});
+
+test("a server somebody else hosts says nothing about its machine (#582)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one&hostissues&guest");
+  await page.clock.runFor(10_000);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
 test("a computer that can't keep sign-ins keeps saying so under the list, once signed in", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list-window.html?one&signedout&nokeyring");
   await page.getByRole("textbox", { name: "Server or link" }).fill("good-company.example");

@@ -5,9 +5,11 @@ use std::collections::HashMap;
 use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
-use linger_core::wire::{ColorKey, ServerInfo, UpdateServerRequest};
+use linger_core::wire::{ColorKey, ServerHealth, ServerInfo, UpdateServerRequest};
+use linger_core::UserId;
 
-use crate::auth::{AuthedUser, HostOrCohost};
+use crate::auth::{AuthedUser, HostOrCohost, Standing};
+use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
 use crate::{repo, validate};
@@ -23,12 +25,14 @@ async fn read_config(state: &AppState) -> Result<HashMap<String, String>, ApiErr
     Ok(rows.into_iter().collect())
 }
 
-async fn build_info(state: &AppState) -> Result<ServerInfo, ApiError> {
+async fn build_info(state: &AppState, viewer: UserId) -> Result<ServerInfo, ApiError> {
     let config = read_config(state).await?;
     let (member_count,): (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM users WHERE deactivated_at IS NULL")
             .fetch_one(&state.db.read)
             .await?;
+    let used = repo::attachments::pool_used(&state.db.read).await?;
+    let health = health(state, viewer, used).await?;
     Ok(ServerInfo {
         name: config.get("name").cloned().unwrap_or_default(),
         accent_key: config.get("accent_key").cloned().map(ColorKey),
@@ -43,23 +47,52 @@ async fn build_info(state: &AppState) -> Result<ServerInfo, ApiError> {
         // anybody about to share one has. The two knobs behind it are the
         // host's and they are environment variables (docs/decisions.md), so
         // there is nothing here to edit — only a figure to read.
-        storage_used_bytes: repo::attachments::pool_used(&state.db.read).await?,
+        storage_used_bytes: used,
         storage_limit_bytes: state.config.pool_bytes,
         file_expiry_days: state.config.file_expiry_days,
         voice: Some(state.gateway.forwards_voice()),
+        health,
     })
+}
+
+/// What only the host hears about the machine (#582). Not a co-host: the
+/// machine is whoever runs it (SPEC §4.16), and a co-host can't fix a full
+/// disk or a failing backup from inside the app any more than the host can.
+async fn health(
+    state: &AppState,
+    viewer: UserId,
+    used: u64,
+) -> Result<Option<ServerHealth>, ApiError> {
+    if crate::auth::standing(&state.db.read, viewer).await? != Some(Standing::Host) {
+        return Ok(None);
+    }
+    let disk = crate::disk::room(state.config.data_dir.clone()).await;
+    let backups = state.config.backups;
+    Ok(Some(ServerHealth {
+        backups,
+        last_backup_at: state.backups.last(),
+        backup_overdue: backups && state.backups.overdue(now_ms()),
+        disk_nearly_full: disk.is_some_and(crate::disk::Room::nearly_full),
+        file_space_nearly_full: nearly_used_up(used, state.config.pool_bytes),
+    }))
+}
+
+/// Uploads at 90% or more of the pool (#582).
+#[allow(clippy::cast_precision_loss)]
+fn nearly_used_up(used: u64, limit: u64) -> bool {
+    limit > 0 && used as f64 >= limit as f64 * 0.9
 }
 
 async fn info(
     State(state): State<AppState>,
-    _auth: AuthedUser,
+    auth: AuthedUser,
 ) -> Result<Json<ServerInfo>, ApiError> {
-    build_info(&state).await.map(Json)
+    build_info(&state, auth.id).await.map(Json)
 }
 
 async fn update(
     State(state): State<AppState>,
-    _host: HostOrCohost,
+    host: HostOrCohost,
     Json(req): Json<UpdateServerRequest>,
 ) -> Result<Json<ServerInfo>, ApiError> {
     let name = req.name.as_deref().map(validate::server_name).transpose()?;
@@ -91,5 +124,5 @@ async fn update(
     }
     tx.commit().await.map_err(ApiError::from)?;
 
-    build_info(&state).await.map(Json)
+    build_info(&state, host.id).await.map(Json)
 }

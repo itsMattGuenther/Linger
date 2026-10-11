@@ -242,7 +242,7 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             voice? }
+                             voice?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -310,6 +310,16 @@ emoji") never expire whatever it says (SPEC §4.10).
 They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
 inside the app — see `docs/decisions.md`.
+
+**`health`** is for the host alone (#582): not a co-host, not a member, and a server
+from before it leaves it out. `{ backups, last_backup_at, backup_overdue,
+disk_nearly_full, file_space_nearly_full }`: whether the server makes its nightly copy
+of the database (`LINGER_BACKUPS`), when the newest copy that checked out was made
+(`null` before the first), whether it has run three days without one (always `false`
+with backups off), whether less than a tenth of the disk under its data folder is free,
+and whether uploads take 90% or more of `storage_limit_bytes`. The app says each of the
+last three in words at the foot of the host's list while it is true, and never as a
+figure. Nothing in it is a count of anything, and nothing leaves the machine.
 
 **`voice`** says whether this server carries voice: it has a voice address, set or worked
 out from its domain (§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so

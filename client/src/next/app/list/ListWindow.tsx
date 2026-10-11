@@ -974,6 +974,11 @@ function Servers({
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
     thisDevice(onPhone()),
+    // Only the host's own servers say how their machine is (#582).
+    ordered.flatMap((session) => {
+      const info = infos[session.baseUrl];
+      return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health }] : [];
+    }),
   );
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
@@ -1095,7 +1100,7 @@ function Servers({
               onSearch={() => shell.tool("search")}
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
-              notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
+              notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} onHost={() => shell.settings("server")} />}
               onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
               onClose={unfolded ? undefined : closeList}
             />

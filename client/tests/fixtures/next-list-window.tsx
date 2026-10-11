@@ -732,6 +732,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       storage_used_bytes: 1_200_000_000,
       storage_limit_bytes: 50_000_000_000,
       file_expiry_days: 90,
+      // `?hostissues`: the server you host has a nearly full disk and no
+      // backup for four days (#582). Said to the host alone, as a server does.
+      ...(query.has("hostissues") && server === SERVER && state.me?.is_host
+        ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
+        : {}),
     });
   }
   if (path === "/me" && method === "GET") return json(state.me);

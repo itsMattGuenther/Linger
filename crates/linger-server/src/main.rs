@@ -222,6 +222,9 @@ async fn serve() -> anyhow::Result<()> {
     // Display copies for images uploaded before the server made them (#382):
     // once, at startup, newest first, until every image has one.
     let _copies = display::spawn(state.clone());
+    // A copy of the database once a day into data/backups/, checked, a week
+    // of them and a month of weeklies (#582); nothing with LINGER_BACKUPS=off.
+    let _backups = linger_server::backup::spawn(state.clone());
 
     let app = linger_server::app(state);
     let listener = tokio::net::TcpListener::bind(bind).await?;
