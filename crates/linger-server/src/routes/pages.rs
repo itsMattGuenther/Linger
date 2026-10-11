@@ -14,6 +14,7 @@
 //! preview (`GET /auth/invite/:code`) already tells anybody holding the code,
 //! and nothing more.
 
+use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use axum::extract::{Path, Query, State};
@@ -155,7 +156,9 @@ async fn invite_page(
             server_name,
             expires_at,
         } => {
-            let link = format!("{}/invite/{code}", link_origin(state, headers));
+            let origin = link_origin(state, headers);
+            let link = format!("{origin}/invite/{code}");
+            let open = app_link("invite", &origin, "code", &code);
             let mut lede = String::from(
                 "Linger is a small, private place for a group of friends. \
                  This link is your way in.",
@@ -176,6 +179,7 @@ async fn invite_page(
                     escape(&lede),
                     steps(
                         &link,
+                        &open,
                         "Pick a username, the name people will see, and a password. \
                          They\u{2019}re new, just for this server.",
                     )
@@ -210,7 +214,9 @@ fn setup_page(state: &AppState, headers: &HeaderMap, token: &str) -> Response {
              newest one in the server\u{2019}s log.",
         )
     } else {
-        let link = format!("{}/setup?token={token}", link_origin(state, headers));
+        let origin = link_origin(state, headers);
+        let link = format!("{origin}/setup?token={token}");
+        let open = app_link("setup", &origin, "token", token);
         Page {
             status: StatusCode::OK,
             title: "Set up your Linger server".into(),
@@ -221,6 +227,7 @@ fn setup_page(state: &AppState, headers: &HeaderMap, token: &str) -> Response {
                  server. Send friends an invite from the app instead.</p>{}",
                 steps(
                     &link,
+                    &open,
                     "Name the server, then pick your username, the name people will \
                      see, and a password. You\u{2019}re the host.",
                 )
@@ -286,9 +293,40 @@ fn runs_out_in(ms: i64) -> String {
     }
 }
 
-/// The three steps: get the app, paste the link, finish in the app.
-fn steps(link: &str, last: &str) -> String {
+/// "Open in Linger" (#607): the same link as a `linger://` one, which an
+/// installed Linger registers itself for. It carries the server and the code
+/// or token and nothing else; the app reads it as if it had been pasted, and
+/// asks nothing until the person presses Continue (`client/src-tauri/src/
+/// deep_link.rs`). An `https://` server is named by its host alone; one
+/// reached over plain `http://` (on the host's own computer) keeps its scheme.
+fn app_link(kind: &str, origin: &str, key: &str, secret: &str) -> String {
+    let server = origin.strip_prefix("https://").unwrap_or(origin);
+    format!(
+        "linger://{kind}?server={}&{key}={}",
+        query_value(server),
+        query_value(secret)
+    )
+}
+
+/// Percent-encodes everything but the characters a query value never needs
+/// encoded (RFC 3986's unreserved set).
+fn query_value(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            out.push(char::from(byte));
+        } else {
+            let _ = write!(out, "%{byte:02X}");
+        }
+    }
+    out
+}
+
+/// The three steps: get the app, paste the link (or open it in Linger), finish
+/// in the app.
+fn steps(link: &str, open: &str, last: &str) -> String {
     let link = escape(link);
+    let open = escape(open);
     let last = escape(last);
     format!(
         "<ol class=\"steps\">\
@@ -308,7 +346,10 @@ fn steps(link: &str, last: &str) -> String {
              <div class=\"copy\">\
                <code id=\"link\" class=\"link\">{link}</code>\
                <button id=\"copy\" type=\"button\" hidden>Copy</button>\
-             </div></li>\
+             </div>\
+             <p class=\"open\"><span>Already have Linger?</span> \
+               <a class=\"open-app\" href=\"{open}\">Open in Linger</a></p>\
+             <p class=\"muted\">Nothing happened? Paste the link instead.</p></li>\
            <li><h2>Make your account</h2><p>{last}</p></li>\
          </ol>"
     )
@@ -462,6 +503,26 @@ mod tests {
             runs_out_in(7 * 24 * HOUR - 1),
             "It runs out in about 7 days."
         );
+    }
+
+    #[test]
+    fn open_in_linger_carries_the_server_and_the_code_and_nothing_else() {
+        assert_eq!(
+            app_link("invite", "https://linger.example", "code", "abcd2345"),
+            "linger://invite?server=linger.example&code=abcd2345"
+        );
+        assert_eq!(
+            app_link("invite", "https://linger.example:8443", "code", "abcd"),
+            "linger://invite?server=linger.example%3A8443&code=abcd"
+        );
+        // Plain http only reaches a server on the host's own computer, and
+        // the app keeps it only there (`client/src/lib/link.ts`).
+        assert_eq!(
+            app_link("setup", "http://127.0.0.1:8420", "token", "0a1b"),
+            "linger://setup?server=http%3A%2F%2F127.0.0.1%3A8420&token=0a1b"
+        );
+        assert_eq!(query_value("[::1]:8420"), "%5B%3A%3A1%5D%3A8420");
+        assert_eq!(query_value("a&b=c#d"), "a%26b%3Dc%23d");
     }
 
     #[test]

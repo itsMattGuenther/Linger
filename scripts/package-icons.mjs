@@ -105,7 +105,10 @@ function checkLinux(root) {
   if (!existsSync(desktop)) desktop = join(root, "usr/share/applications/linger-client.desktop");
   const entry = desktopEntry(desktop);
   check(entry.get("Name") === "Linger", "Launcher product name must be capitalized");
-  check(entry.get("Exec") === "linger-client", "Launcher does not start the packaged binary");
+  // `%u` hands the program the `linger://` link a click opened it with, and
+  // MimeType is what makes it the app for those links (#607, "Open in Linger").
+  check(entry.get("Exec") === "linger-client %u", "Launcher does not start the packaged binary with the link it was opened for");
+  check((entry.get("MimeType") ?? "").split(";").includes("x-scheme-handler/linger"), "Launcher does not open linger:// links");
   check(entry.get("Icon") === "linger-client", "Launcher icon identity changed");
   check(entry.get("StartupWMClass") === "linger-client", "X11 launcher identity changed");
   for (const [size, name] of [[32, "32x32.png"], [128, "128x128.png"], [256, "128x128@2x.png"]]) {
@@ -116,7 +119,7 @@ function checkLinux(root) {
   }
   const program = join(root, "usr/bin/linger-client");
   check(existsSync(program) && statSync(program).isFile(), "Packaged program missing");
-  console.log("PASS Linux package: launcher identity and all three installed porch icons");
+  console.log("PASS Linux package: launcher identity, linger:// links, and all three installed porch icons");
 }
 
 const { values } = parseArgs({

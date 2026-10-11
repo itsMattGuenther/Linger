@@ -76,6 +76,13 @@ rand = "0.9"
 # talked into launching a local file or a program.
 tauri-plugin-opener = "2.5.4"
 
+# "Open in Linger" on an invite page (#607): the computer hands Linger a
+# `linger://` link. The plugin is what each platform's registration answers
+# to (the installers, the .desktop files and Android's intent filter declare
+# the scheme from `plugins.deep-link` in tauri.conf.json); `deep_link.rs`
+# reads the link, strictly, and the page never sees the plugin's own commands.
+tauri-plugin-deep-link = "2"
+
 # OS keyring for the refresh token (ARCHITECTURE §7.3). Features are picked per
 # platform on purpose:
 #
@@ -159,7 +166,9 @@ tauri-plugin-window-state = "2"
 # Launching Linger while it's already running (its list hidden in the tray,
 # say) brings that one forward instead of starting a second copy, which would
 # fight the first over the sign-ins in the keyring.
-tauri-plugin-single-instance = "2"
+# With `deep-link`, a second launch carrying a `linger://` link (Windows and
+# Linux start a new process for it) hands the link to the running one (#607).
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 # Already used by that plugin. Direct access requests silent desktop banners,
 # so the one app sound player owns mute/quiet-hours on every desktop platform.
 notify-rust = "4"

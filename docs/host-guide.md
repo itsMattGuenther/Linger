@@ -203,7 +203,9 @@ Then **Hosting → Invites → New Invite**. You choose how many people the invi
 is good for and when it expires; the link is copied for you the moment it is
 made. Send it however you normally talk to your friends. A friend who taps it
 before they have Linger gets a page from your server with the server's name,
-where to download the app, and the link to paste into it.
+where to download the app, and the link to paste into it. A friend who already
+has Linger can press **Open in Linger** there instead, and the app opens with
+the link in its box. Nothing about this needs setting up on the server.
 
 **Hosting → Server** shows which version your server runs, and says when a
 newer one is out, with a link to [updating the server](#updating-the-server).

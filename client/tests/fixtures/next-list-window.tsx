@@ -52,6 +52,11 @@
  * Leaving a group DM (#565) is written down as `leave <id>` and answered with
  * the `dm.remove` the server sends; `?leavefails` has it refused.
  *
+ * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
+ * with, handed over the first time the window asks (`link_offered`), and
+ * `window.core.link(link)` is one handed over while it runs. Each ask is
+ * written down as `link_offered`.
+ *
  * The message of the day (#464): `?motd` has Eli's set in #general, just
  * after the evening. Changing a room is written down as `room <id> <body>`,
  * refused unless you host or co-host, and answered with the frames the
@@ -199,6 +204,8 @@ const deliver = (event: string, payload: unknown) => {
 const seq: Record<string, number> = {};
 
 (window as unknown as { isTauri: boolean }).isTauri = true;
+/** The `linger://` link the shell is holding for the window (#607), as it would hand it over. */
+let opened: string | null = query.get("opened");
 mockWindows("main");
 mockIPC((cmd, args) => {
   const a = (args ?? {}) as Record<string, unknown>;
@@ -258,6 +265,12 @@ mockIPC((cmd, args) => {
       // The engine opens the devices and starts sending, as the Rust core says.
       window.setTimeout(() => deliver("voice:audio", { server: String(a.baseUrl), state: "sending" }), 20);
       return null;
+    case "link_offered": {
+      note("link_offered");
+      const link = opened;
+      opened = null;
+      return link;
+    }
     case "app_version":
       return "0.3.6";
     case "update_check":
@@ -343,6 +356,8 @@ declare global {
       banner: (target: unknown) => void;
       /** The desktop shell hid the list into the tray, its close button pressed (#400). */
       hidden: () => void;
+      /** The desktop shell was handed a `linger://` link, read as the link a person would paste (#607). */
+      link: (link: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
       /** With `?down`, the server that was down answers from now on. */
@@ -379,6 +394,10 @@ window.core = {
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   hidden: () => deliver("next:hidden", null),
+  link: (link) => {
+    opened = link;
+    deliver("next:link", null);
+  },
   release: () => release(),
   up: () => {
     down = null;

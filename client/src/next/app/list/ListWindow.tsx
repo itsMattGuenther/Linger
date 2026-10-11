@@ -82,6 +82,7 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
+import { numbering, type Offered, watchOfferedLinks } from "../../core/offeredLink";
 import { Button, Spinner, Splitter } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
@@ -113,6 +114,30 @@ export function ListWindow() {
   // somewhere now than wait (T-907).
   const [signInAnyway, setSignInAnyway] = useState(false);
   const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
+
+  // "Open in Linger" on an invite page (#607): the link the shell was handed
+  // goes in a paste box, here when nothing is signed in, and in the sign-in
+  // for another server when something is. It waits while the sign-ins are
+  // still being restored, for the link that started Linger.
+  const [arrived, setArrived] = useState<Offered | null>(null);
+  const [prefill, setPrefill] = useState<Offered | null>(null);
+  const [offer, setOffer] = useState<Offered | null>(null);
+  useEffect(() => (isTauri() ? watchOfferedLinks(tauriBus(), takeOfferedLink, numbering(setArrived)) : undefined), []);
+  const restoring = sessions.state.status === "restoring";
+  const anySignedIn = sessions.state.status === "ready" && sessions.state.servers.length > 0;
+  useEffect(() => {
+    if (arrived === null || restoring) return;
+    if (anySignedIn) setOffer(arrived);
+    else {
+      setPrefill(arrived);
+      setSignInAnyway(true);
+    }
+    setArrived(null);
+  }, [arrived, restoring, anySignedIn]);
+  // Once signed in, a link already used doesn't come back after signing out.
+  useEffect(() => {
+    if (anySignedIn) setPrefill(null);
+  }, [anySignedIn]);
 
   // Every window hears when a server is signed out of, however it happened
   // (Settings, a sign-in that ran out, all of them at once), so none goes on
@@ -156,10 +181,12 @@ export function ListWindow() {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
       <SignInView
+        key={prefill?.n ?? 0}
         actions={signIn}
         notice={sessions.notice}
         keyringNotice={sessions.keyringNotice}
         onClose={isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined}
+        offered={prefill?.link}
       />
     );
   }
@@ -175,6 +202,8 @@ export function ListWindow() {
       onRetry={sessions.retry}
       accounts={accounts}
       keyringNotice={sessions.keyringNotice}
+      offer={offer}
+      offerTaken={setOffer}
     />
   );
 }
@@ -283,12 +312,17 @@ function Servers({
   onRetry,
   accounts,
   keyringNotice,
+  offer,
+  offerTaken,
 }: {
   signedIn: ServerSession[];
   waiting: readonly WaitingServer[];
   onRetry: (server: string) => void;
   accounts: Accounts;
   keyringNotice: string | null;
+  /** A link an invite page sent (#607), for the sign-in for another server. */
+  offer: Offered | null;
+  offerTaken: (none: null) => void;
 }) {
   const states = useServers();
   const now = useNow();
@@ -406,6 +440,19 @@ function Servers({
       setTabs(NO_TABS);
     },
   };
+
+  // A link from an invite page (#607) opens the sign-in for another server,
+  // with the link in its box. Taken once; going back to the list drops it.
+  const [addingFrom, setAddingFrom] = useState<Offered | null>(null);
+  useEffect(() => {
+    if (offer === null) return;
+    setAddingFrom(offer);
+    listNow.current.addServer();
+    offerTaken(null);
+  }, [offer, offerTaken]);
+  useEffect(() => {
+    if (!adding) setAddingFrom(null);
+  }, [adding]);
 
   // The push-to-talk key the voice bar says to hold. Settings tells this
   // window the moment it's picked (the `voice.pushtotalk` intent, #231).
@@ -1069,8 +1116,10 @@ function Servers({
         <div className="nx-app-list">
           {adding ? (
             <SignInView
+              key={addingFrom?.n ?? 0}
               actions={addingActions}
               keyringNotice={keyringNotice}
+              offered={addingFrom?.link}
               adding
               below={voice ? <VoiceDock {...voice} /> : undefined}
               onCancel={() => setAdding(false)}
@@ -1305,6 +1354,11 @@ function listingOf(
 // What the list hands its parts, made out here so each holds only what it's
 // handed: one made inside the list window, and kept, keeps that whole
 // drawing of the window alive with it (#534).
+
+/** The link the shell is holding for the paste box, once (#607, src-tauri/src/deep_link.rs). */
+function takeOfferedLink(): Promise<string | null> {
+  return invoke<string | null>("link_offered");
+}
 
 /** Adding a server: the sign-in, checked first against the servers you're already on. */
 function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, alreadyOn: { current: (baseUrl: string) => string | null }): SignInActions {

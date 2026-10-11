@@ -331,6 +331,31 @@ test.describe("adding a server", () => {
     expect((await did(page)).filter((line) => line.includes("connect ")).length).toBe(before);
   });
 
+  test("a link an invite page sends while Linger runs opens the sign-in for it, the link in the box, asking nothing yet (#607)", async ({ page }) => {
+    await open(page, "?one");
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("ready ")).length).toBeGreaterThan(0);
+    const link = "https://ashen-lanterns.example/invite/LANTERN7";
+    await page.evaluate((sent) => window.core?.link(sent), link);
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    const box = page.getByRole("textbox", { name: "Server or link" });
+    await expect(box).toHaveValue(link);
+    expect((await did(page)).filter((line) => line.startsWith("GET https://ashen-lanterns.example"))).toEqual([]);
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("form", { name: "Join" }).getByText("You're joining Ashen Lanterns.", { exact: false })).toBeVisible();
+    // Back to the list: the link is used up, and adding a server from
+    // Settings later starts with an empty box.
+    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByRole("button", { name: "Back to the list" }).click();
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    await expect(box).toHaveValue("");
+    // The same link opened again is offered again.
+    await page.getByRole("button", { name: "Back to the list" }).click();
+    await page.evaluate((sent) => window.core?.link(sent), link);
+    await expect(box).toHaveValue(link);
+  });
+
   test("signing in to another server adds it to the list, below the ones you have", async ({ page }) => {
     await open(page, "?one");
     const before = (await did(page)).filter((line) => line === `disconnect ${HOME}`).length;

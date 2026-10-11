@@ -29,6 +29,17 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["linger"]
+      },
+      "mobile": [
+        {
+          "scheme": ["linger"],
+          "appLink": false
+        }
+      ]
+    },
     "updater": {
       "endpoints": [
         "https://github.com/itsMattGuenther/Linger/releases/latest/download/latest.json"
@@ -48,6 +59,7 @@
         "bundleMediaFramework": true
       },
       "deb": {
+        "desktopTemplate": "linux/linger.desktop.hbs",
         "depends": [
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
@@ -56,6 +68,7 @@
         "recommends": ["libayatana-appindicator3-1", "gstreamer1.0-libav"]
       },
       "rpm": {
+        "desktopTemplate": "linux/linger.desktop.hbs",
         "depends": [
           "/usr/lib64/gstreamer-1.0/libgstapp.so",
           "/usr/lib64/gstreamer-1.0/libgstaudioconvert.so",
