@@ -106,13 +106,29 @@ fn build(app: &App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Bring the list back: shown, restored and focused.
+/// Bring the list back: shown, restored and focused, and its page told it's
+/// seen again (#594).
 pub fn show_list(app: &AppHandle) {
     if let Some(list) = app.get_webview_window("main") {
         let _ = list.show();
         let _ = list.unminimize();
         let _ = list.set_focus();
+        crate::window::page_seen(app, "main", true);
     }
+}
+
+/// The list bringing itself back for a conversation opened from elsewhere (a
+/// banner, while it was in the tray): what the tray's Show Linger does. It
+/// goes through the shell rather than the page showing its own window, so
+/// the page is told it's seen again (#594) even when Windows won't hand the
+/// window the focus. Only the list window may ask.
+#[tauri::command]
+pub fn next_show_list(window: WebviewWindow) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("only the list window brings itself back".into());
+    }
+    show_list(window.app_handle());
+    Ok(())
 }
 
 /// The list window's setting: whether closing it keeps Linger in the tray.

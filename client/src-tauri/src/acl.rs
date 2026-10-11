@@ -29,6 +29,7 @@ const OWNER_ONLY: &[&str] = &[
     "next_open_tool",
     "next_close_to_tray",
     "next_tray_voice",
+    "next_show_list",
     "next_request_attention",
 ];
 

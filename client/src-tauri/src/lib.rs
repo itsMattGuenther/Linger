@@ -361,6 +361,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             window::next_open_tool,
             tray::next_close_to_tray,
             tray::next_tray_voice,
+            tray::next_show_list,
             window::next_request_attention,
             autostart::autostart_state,
             autostart::autostart_set,

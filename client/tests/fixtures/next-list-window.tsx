@@ -253,6 +253,10 @@ mockIPC((cmd, args) => {
     case "plugin:window|minimize":
       note("minimize");
       return null;
+    // The page showing its own window (#594 has the shell do it instead).
+    case "plugin:window|show":
+      note("show");
+      return null;
     // The list window's own size and place (#337): unfolding grows it, folding shrinks it.
     case "plugin:window|is_maximized":
       return query.has("maximized");
@@ -287,6 +291,8 @@ mockIPC((cmd, args) => {
     case "next_open_tool":
     case "next_close_to_tray":
     case "next_tray_voice":
+    // The list brought back from the tray by the shell, not by itself (#594).
+    case "next_show_list":
     // A desktop banner (lib/notify.ts), with where it leads.
     case "show_notification":
     case "voice_volume":

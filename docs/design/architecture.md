@@ -526,6 +526,39 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   tells the list (`next:hidden`), which the first time ever on that computer
   shows a notification saying where Linger went (#400).
 
+## A page nobody can see
+
+On Windows a window's page is drawn by WebView2, which sits in the window as a
+child window and is never told when its window is minimized or hidden. Left
+alone it draws every animation at full speed for nobody, and
+`document.visibilityState` stays `"visible"`. So the shell tells it (#594,
+`window.rs` `page_seen`): a window minimized, or the list hidden in the tray,
+sets the WebView's `IsVisible` false; restored, focused, or brought back from
+the tray sets it true again. Bringing the list back always goes through the
+shell (the tray's Show Linger, a second launch, and a banner clicked while it
+was hidden, via `next_show_list`), because the page showing its own window
+would leave its page hidden. Linux's and macOS's engines hear it from the
+desktop themselves, so the shell does nothing there.
+
+Hidden, Chromium stops drawing and runs the page's timers at most about once a
+second, and after five minutes a chain of timers may wake only once a
+minute. What that means for the list window, timer by timer:
+
+- **Not on a page timer at all:** the gateway connections, voice and its
+  talk key, and sounds, which all run in the shell; and every event from it,
+  which reaches the page as it happens. A message, a mention, a DM or a knock
+  arrives at once.
+- **A second or so late:** desktop banners, which wait 1.2 s to batch
+  (`lib/notify.ts`); the knock and arrival cards' expiry.
+- **Up to a minute late, after five minutes hidden:** idle and away
+  (`lib/watchPresence.ts`, minutes apart anyway), retrying a sign-in after a
+  failure (`lib/session.ts`, 5 s to a minute apart), and the hourly server
+  details.
+- **Caught up on showing:** the typing line and anything else drawn against
+  the clock is drawn again as the page is shown, and a timer that came due
+  while hidden fires then. A minimized window isn't "looking" either way:
+  `lib/looking.ts` and `core/report.ts` ask for focus as well as visibility.
+
 ## When something can't be drawn
 
 A throw while React draws takes the whole page down unless something

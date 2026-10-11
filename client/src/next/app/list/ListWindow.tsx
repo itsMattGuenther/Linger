@@ -1314,16 +1314,12 @@ function stored(key: string): string | null {
  * Bring the list window forward for a conversation opened from elsewhere (a
  * banner, a window of its own): out of the tray, unminimized, focused. Not
  * when it has the focus already: some desktops move the pointer to a window
- * an app focuses (dont-fight-the-os, #226).
+ * an app focuses (dont-fight-the-os, #226). The shell does it, as the tray's
+ * Show Linger does, so the page is told it's seen again (#594).
  */
 function bringForward(): void {
   if (!isTauri() || document.hasFocus()) return;
-  const current = getCurrentWindow();
-  void current
-    .show()
-    .then(() => current.unminimize())
-    .then(() => current.setFocus())
-    .catch(() => undefined);
+  void invoke("next_show_list").catch(() => undefined);
 }
 
 /**

@@ -36,6 +36,7 @@
     "allow-next-open-tool",
     "allow-next-close-to-tray",
     "allow-next-tray-voice",
+    "allow-next-show-list",
     "allow-next-request-attention",
     "allow-autostart-state",
     "allow-autostart-set",
