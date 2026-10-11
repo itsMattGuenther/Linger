@@ -74,7 +74,16 @@ Consequences:
    WebView can't choose an output (WebKitGTK has no `setSinkId`; WebView2's
    device names don't match CPAL's), and its audio could start late in a
    window that isn't in front (#241). Web Audio playback in the WebView is
-   the fallback, and what plays outside the app. For it, Linux AppImages must
+   the fallback, and what plays outside the app. A window's one
+   `AudioContext` is open only around its sounds (#531): a running context
+   holds an output stream open and plays silence into it, 2–5% of a core per
+   window. In the app it is made for a sound the shell couldn't play (the
+   webview needs no click: wry allows autoplay); outside the app, on the
+   window's first click or key, as browsers require. It is closed 10 s after
+   the last sound (the shell speaker's `KEEP_OPEN`), and the next sound makes
+   a new one. Closed rather than suspended, because the packaged WebKitGTK
+   plays nothing after a suspended context is resumed.
+   For the fallback, Linux AppImages must
    bundle GStreamer and its playback plugins; DEB/RPM packages must require
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise that fallback's real WebView

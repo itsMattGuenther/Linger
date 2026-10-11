@@ -15,7 +15,7 @@ import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
-import { type DeviceSound, followDeviceSound, unlockAudio } from "../lib/sound";
+import { type DeviceSound, followDeviceSound, unlockAudioOnGesture } from "../lib/sound";
 import { App } from "./app/App";
 
 // Plain names and interface size, the same in every window
@@ -49,12 +49,11 @@ if (onPhone()) {
 // window, not what WebKitGTK decides when the window comes back (#375).
 followInputMode(document.documentElement, window);
 
-// WebKitGTK leaves an AudioContext suspended until a gesture, and live chimes
-// arrive from the gateway rather than from a click. The first pointer or key
-// in the window opens the device.
-const armAudio = (): void => unlockAudio();
-window.addEventListener("pointerdown", armAudio);
-window.addEventListener("keydown", armAudio);
+// Outside the app a browser won't play a page's audio before a click, and
+// live chimes arrive from the gateway rather than from one, so the first
+// pointer or key in the window lets them (lib/sound.ts). The app's webview
+// needs no click, so there it only stops listening (#531).
+unlockAudioOnGesture(window);
 
 // A file dropped anywhere but a drop zone is refused, not opened in place of
 // the window (lib/drops.ts).
