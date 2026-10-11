@@ -623,8 +623,11 @@ when the server refuses.
 10. **Overlays:** they open by last real input: a pointer focuses the panel, a
     keyboard focuses the close button. One shared primitive.
 11. **Performance:** no layout on keystrokes. Memoized rows and cached
-    formatters. Budgets for typing, scrolling, memory and window-open time,
-    measured in real WebKitGTK.
+    formatters, and an event draws only what it changed (#533). A function
+    a component keeps from one drawing to the next is made outside the
+    component, so it holds only what it's handed and not the whole drawing
+    it was made in (#534). Budgets for typing, scrolling, memory and
+    window-open time, measured in real WebKitGTK.
 12. **`graphics_started`:** the page calls it after its first frames, every
     launch.
 13. **Sending:** optimistic, never blocks Enter. Every request has a deadline
