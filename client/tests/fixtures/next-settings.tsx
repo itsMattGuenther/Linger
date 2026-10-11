@@ -234,6 +234,8 @@ function Fixture() {
         serverName: SERVER_NAME,
         version: "0.3.6",
         changePassword: (current, next) => saving(`password:${current.length}:${next.length}`, "That isn't your current password."),
+        // `?signinlink`: somebody made you a sign-in link (#581).
+        signInLink: query.has("signinlink") ? "Matt made you a sign-in link yesterday. It was used yesterday to set a new password." : null,
         archive: {
           phase: archive,
           start: () => {
@@ -433,6 +435,17 @@ function Fixture() {
                     if (back) setMembers((held) => [...held, back]);
                   }
                   return problem;
+                },
+                // A sign-in link for somebody who forgot their password (#581).
+                makeSignInLink: async (id) => {
+                  const problem = await saving(`sign-in-link:${id}`);
+                  if (problem !== null) return { problem };
+                  const code = "k7q2xw3mfz9ab4cd5ef6gh7ij2";
+                  return { link: `${SERVER}/sign-in/${code}`, code, expiresAt: Date.now() + 24 * HOUR, copied: true };
+                },
+                copyLink: async (link) => {
+                  note(`copy:${link}`);
+                  return true;
                 },
               },
               server: {

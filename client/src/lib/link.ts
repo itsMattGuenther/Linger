@@ -10,12 +10,16 @@
  *   https://linger.example/setup?token=…   the one-time first-run link the
  *                                          server prints to its console
  *   https://linger.example/invite/CODE     an invite (also accepts ?code=CODE)
+ *   https://linger.example/sign-in/CODE    a sign-in link the host made for
+ *                                          somebody who forgot their password
+ *                                          (#581; also ?code=CODE)
  *   linger.example                         just a server, for signing in
  */
 
 export type PastedLink =
   | { kind: "setup"; baseUrl: string; token: string }
   | { kind: "invite"; baseUrl: string; code: string }
+  | { kind: "signin"; baseUrl: string; code: string }
   | { kind: "server"; baseUrl: string };
 
 /**
@@ -67,6 +71,11 @@ export function parsePastedLink(raw: string): PastedLink | null {
   if (segments[0] === "invite") {
     const code = url.searchParams.get("code") ?? segments[1] ?? "";
     if (code) return { kind: "invite", baseUrl, code };
+  }
+
+  if (segments[0] === "sign-in") {
+    const code = url.searchParams.get("code") ?? segments[1] ?? "";
+    if (code) return { kind: "signin", baseUrl, code };
   }
 
   return { kind: "server", baseUrl };

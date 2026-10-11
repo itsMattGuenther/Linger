@@ -35,6 +35,7 @@ mod rooms;
 mod search;
 mod server;
 mod setup;
+mod sign_in_links;
 mod uploads;
 mod users;
 mod voice;
@@ -101,6 +102,7 @@ pub fn router(state: AppState) -> Router {
         .merge(auth::router())
         .merge(users::router())
         .merge(invites::router())
+        .merge(sign_in_links::router())
         .merge(server::router())
         .merge(rooms::router())
         .merge(dms::router())

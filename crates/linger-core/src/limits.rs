@@ -150,6 +150,14 @@ pub const MAX_MARKS_PER_LETTER: usize = 4;
 /// fresh install rather than security anybody gets.
 pub const MIN_PASSWORD_CHARS: usize = 8;
 pub const INVITE_CODE_CHARS: usize = 12;
+/// A sign-in link's code (#581): 26 characters of the invite alphabet, 130
+/// random bits. Longer than an invite's, because a sign-in link sets the
+/// password of an account that already exists.
+pub const SIGN_IN_LINK_CHARS: usize = 26;
+/// How long a sign-in link works (#581): a day, enough to get it to somebody
+/// over another app and for them to use it, and short enough that one lying
+/// in a chat history is soon useless.
+pub const SIGN_IN_LINK_TTL_HOURS: i64 = 24;
 
 /// A client's answer to the forwarding server's offer (SPEC §4.14, PROTOCOL
 /// §8). The answer carries a few hundred bytes for every other person in the
@@ -225,6 +233,8 @@ pub const DEFAULT_SIGNUPS_PER_HOUR: u32 = 60;
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);
+/// Sign-in links one host or co-host may make in an hour (#581).
+pub const RATE_SIGN_IN_LINK_CREATE: (u32, u64) = (10, 3_600);
 pub const RATE_KNOCK_PER_TARGET: (u32, u64) = (3, 3_600);
 /// Reports one person may send in an hour (PROTOCOL §5, "Report and block"):
 /// plenty for a real problem, and not a way to bury the host.

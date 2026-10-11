@@ -25,6 +25,12 @@ export interface AccountProps {
    * since a change ends every other sign-in; resolves to the problem in words, or null.
    */
   changePassword: (current: string, next: string) => Promise<string | null>;
+  /**
+   * The last sign-in link somebody made you (#581), in words: who, when, and
+   * whether it was used. Shown under your password, so one you didn't ask
+   * for doesn't go unnoticed. Left out when there's none.
+   */
+  signInLink?: string | null;
   /** Taking everything with you (EXP-1, EXP-2): how it stands, and the two things to do. */
   archive: { phase: ExportPhase; start: () => void; download: (url: string) => void };
   /** Updates (UPD-1 to UPD-4, UPD-6). */
@@ -64,11 +70,24 @@ export interface AccountProps {
 }
 
 /** Account & App: your password, your archive, updates and this computer. */
-export function AccountSection({ serverName, version, changePassword, archive, updates, startAtSignIn, blocked, signOut, severalServers, addServer, phone = false }: AccountProps) {
+export function AccountSection({
+  serverName,
+  version,
+  changePassword,
+  signInLink,
+  archive,
+  updates,
+  startAtSignIn,
+  blocked,
+  signOut,
+  severalServers,
+  addServer,
+  phone = false,
+}: AccountProps) {
   const device = thisDevice(phone);
   return (
     <>
-      <Password serverName={serverName} changePassword={changePassword} />
+      <Password serverName={serverName} changePassword={changePassword} signInLink={signInLink ?? null} />
       {blocked && blocked.people.length > 0 ? <Blocked serverName={serverName} {...blocked} /> : null}
       <Block
         heading={HEADINGS.archive}
@@ -167,7 +186,7 @@ export function AccountSection({ serverName, version, changePassword, archive, u
 /** The switch's words, as the issue asked for them: plain, for somebody who has never heard of autostart. */
 const START_AT_SIGN_IN = "Start Linger when I sign in to the computer";
 
-function Password({ serverName, changePassword }: { serverName: string; changePassword: AccountProps["changePassword"] }) {
+function Password({ serverName, changePassword, signInLink }: { serverName: string; changePassword: AccountProps["changePassword"]; signInLink: string | null }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const save = useSave();
@@ -209,6 +228,7 @@ function Password({ serverName, changePassword }: { serverName: string; changePa
           Change password
         </Button>
       </Actions>
+      {signInLink ? <Note>{signInLink}</Note> : null}
     </Block>
   );
 }

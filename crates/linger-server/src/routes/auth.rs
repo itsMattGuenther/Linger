@@ -218,7 +218,7 @@ impl Sometimes {
 /// What somebody is told when their network has had its sign-in tries for
 /// the minute: the brake on guessing passwords (ARCHITECTURE §7), not
 /// something a host can raise, so it doesn't say anybody can.
-fn sign_ins_paused(retry_after_ms: u64) -> ApiError {
+pub(super) fn sign_ins_paused(retry_after_ms: u64) -> ApiError {
     ApiError::rate_limited_with(
         retry_after_ms,
         format!(

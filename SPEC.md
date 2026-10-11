@@ -1003,11 +1003,12 @@ somebody out of voice or remove somebody who shouldn't be there.
 - **Only the host turns it on or off**, from the person's card: "Make Dex a co-host",
   and "Dex stops being a co-host". Never on the host, never on yourself.
 - **A co-host can do everything the host does in the app:** rooms, the server's name
-  and color, invites, reports, removing and restoring members, deleting messages and
-  taking somebody out of voice. They see the same Hosting sections in Settings.
+  and color, invites, reports, removing and restoring members, making a sign-in link
+  for somebody who forgot their password (#581), deleting messages and taking somebody
+  out of voice. They see the same Hosting sections in Settings.
 - **Except two things:** a co-host can't make or clear co-hosts, and can't act on the
-  host (remove them, take them out of voice, delete their messages or revoke their
-  invites).
+  host (remove them, take them out of voice, delete their messages, revoke their
+  invites or make them a sign-in link; nobody can make the host one).
 - **Reports go to the host and every co-host.**
 - **The server machine stays with whoever runs it.** Updating it, and the version it
   runs, are not the app's, so a co-host doesn't see the version line.

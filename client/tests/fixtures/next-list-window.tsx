@@ -501,7 +501,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (invite) return json({ valid: invite[1] !== "DEAD", server_name: names[server]?.name ?? null, expires_at: null });
   const setup = /^\/setup\/(.+)$/.exec(path);
   if (setup && method === "GET") return json({ valid: setup[1] !== "used" });
-  if ((path === "/auth/login" || path === "/auth/register" || path === "/setup") && method === "POST") {
+  // A sign-in link the host made (#581): `used` is one that's been used.
+  const signInLink = /^\/auth\/sign-in-link\/(.+)$/.exec(path);
+  if (signInLink) {
+    const valid = signInLink[1] !== "used";
+    return json({ valid, server_name: valid ? (names[server]?.name ?? null) : null, username: valid ? "matt" : null, made_by: valid ? "Callie" : null, expires_at: valid ? Date.now() + 86_400_000 : null });
+  }
+  if ((path === "/auth/login" || path === "/auth/register" || path === "/setup" || path === "/auth/sign-in-link") && method === "POST") {
     note(`signin ${JSON.stringify(body)}`);
     if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
     // The server's limits (#538), in the words it sends.

@@ -728,17 +728,31 @@ Repeat the [relay check](#the-voice-relay) after updating.
 
 ## Somebody forgot their password
 
-The server has one maintenance command. Stop it first — the database allows one
-writer at a time.
+In the app: **Settings → Hosting → People**, then **Sign-in link** on their row. It
+asks first, then copies a link like `https://linger.example.com/sign-in/…`. Send it to
+them the way you'd send an invite. They paste it into **Server or link**, choose a new
+password, and they're in. A co-host can do this too.
+
+- It works **once**, and for **one day**. Making another cancels the last.
+- Using it **signs them out everywhere else**, the same as changing their password.
+- Their **Settings → Account & App** says you made them one, and when it was used, so
+  a link they didn't ask for doesn't go unnoticed.
+- Whoever holds the link can sign in as them. Send it only to them, and only over
+  something you trust is them.
+- Removing somebody cancels any link made for them, or by them.
+
+Nobody can make one for **the host**. If that's you and you're locked out, the server
+has one maintenance command. Stop it first — the database allows one writer at a time.
 
 ```bash
 docker compose stop linger
-docker compose run --rm linger reset-password their-username
+docker compose run --rm linger reset-password your-username
 docker compose start linger
 ```
 
-It prints a new password. Send it to them; they can change it in the app under
-*settings → password*.
+It prints a new password. Sign in with it, then change it in the app under
+**Settings → Account & App → Password**. The same command works for anybody, if the
+app isn't an option.
 
 ---
 

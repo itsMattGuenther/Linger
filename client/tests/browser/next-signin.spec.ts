@@ -159,6 +159,32 @@ test("an invite opened by somebody who already has an account here leads to sign
   expect(sent).toEqual([`signin ${JSON.stringify({ username: "matt", password: "porch light" })}`]);
 });
 
+test("a sign-in link the host made leads to a new password for its account, then the list (#581)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/sign-in/abcd2345`);
+  const form = page.getByRole("form", { name: "Choose a new password" });
+  await expect(form).toBeVisible();
+  await expect(form.getByText("The Good Company")).toBeVisible();
+  await expect(form.getByText("Callie made this link so @matt can choose a new password.", { exact: false })).toBeVisible();
+  const save = form.getByRole("button", { name: "Save and sign in" });
+  await expect(form.getByLabel("New password")).toBeFocused();
+  await form.getByLabel("New password").fill("1234567");
+  await expect(save).toBeDisabled();
+  await form.getByLabel("New password").fill("porch light");
+  await save.click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  const sent = (await did(page)).filter((line) => line.startsWith("signin "));
+  expect(sent).toEqual([`signin ${JSON.stringify({ code: "abcd2345", new_password: "porch light" })}`]);
+});
+
+test("a used sign-in link says so, and signing in says where to get one (#581)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/sign-in/used`);
+  await expect(page.getByText("That sign-in link doesn't work any more. It works once, for a day. Ask the host for a new one.")).toBeVisible();
+  await paste(page, "good-company.example");
+  await expect(page.getByRole("form", { name: "Sign in" }).getByText("Forgot your password? Ask the host for a sign-in link")).toBeVisible();
+});
+
 test("a spent invite or setup link says so, and the box keeps what was pasted", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/DEAD`);

@@ -70,7 +70,14 @@ POST /auth/refresh      { refresh_token }
 POST /auth/logout       { refresh_token }              → 204
 
 GET  /auth/invite/:code → { valid, server_name, expires_at }  # unauthenticated preview
+
+GET  /auth/sign-in-link/:code
+                     →  { valid, server_name, username, made_by, expires_at }  # unauthenticated
+POST /auth/sign-in-link { code, new_password }
+                     →  { access_token, refresh_token, expires_in, user }
 ```
+
+The two sign-in link endpoints are §5's "Sign-in links" (#581).
 
 A new account (from `POST /auth/register` or `POST /setup`) starts with a
 name style whose fill is the hued palette color the fewest active people on
@@ -98,7 +105,11 @@ account. A used-up, revoked or made-up code says the invite doesn't work, an exp
 one that it has run out, and neither names the server (`404`), as
 `GET /auth/invite/:code` doesn't. `GET /setup?token=` (and `/setup/:token`) is the
 same page with a warning not to share the link; a wrong token, or a server already
-set up, says so (`404`). Only an invite-shaped code (lowercase base32) or a hex token
+set up, says so (`404`). `GET /sign-in/:code` (and `/sign-in?code=`) is the same page
+for a sign-in link: whose account it is, who made it, how long it has left, and a
+warning not to share it, with "choose a new password" as the last step. A used link
+says it has been used, and any other dead one that it doesn't work (`404`), neither
+naming anybody. Opening the page doesn't use the link. Only an invite-shaped code (lowercase base32) or a hex token
 is ever looked up or written into the page.
 
 The page is inert: its one style sheet and one script (the Copy button) are fixed,
@@ -114,8 +125,12 @@ is still the only way in.
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console
 https://linger.example/invite/CODE     an invite (?code=CODE is also accepted)
+https://linger.example/sign-in/CODE    a sign-in link (§5, #581; ?code=CODE too)
 linger.example                         no path: sign in to an existing account
 ```
+
+An app from before sign-in links reads one as a bare address and goes to signing in,
+which is harmless: the link is still unused.
 
 `username`: `[a-z0-9_]{2,24}`, unique, immutable after creation.
 `display_name`: 1–32 chars after trimming, mutable, stored trimmed. Any script,
@@ -642,6 +657,8 @@ POST /users/:id/remove    → 204                     # host or co-host
 POST /users/:id/restore   → 204                     # host or co-host
 PUT    /users/:id/cohost  → User                    # the host only: make a co-host
 DELETE /users/:id/cohost  → User                    # the host only: not a co-host
+POST /users/:id/sign-in-link → { code, user_id, expires_at }  # host or co-host, 10/hour
+GET  /me/sign-in-links    → SignInLinkMade[]        # the links made for you, newest first
 
 GET    /me/blocks           → UserId[]                         # who you've blocked
 PUT    /me/blocks/:user_id  → 204
@@ -680,6 +697,43 @@ new password. The server closes that connection too, on purpose. The only thing 
 could pick it out is the access token it identified with, which is usually older than
 the one the change was made with, and a thief holding that same token would be spared
 along with it.
+
+### Sign-in links (#581)
+
+The way back in for a member who forgot their password, without the host stopping the
+server to run `reset-password`. `POST /users/:id/sign-in-link` (host or co-host) answers
+a `SignInLink`: a 26-character code of the invite alphabet, the account it is for, and
+when it stops working, 24 hours on (`SIGN_IN_LINK_TTL_HOURS`). The app turns it into
+`https://<server>/sign-in/<code>` (§2.2) and the host sends it however they send
+invites. The code is in that answer and nowhere else: the server keeps only its sha256.
+
+- **Never for the host** (`FORBIDDEN`), whoever asks, the host included: a locked-out
+  host uses `reset-password` on the machine, which is the proof of owning it. Nor for
+  yourself (`FORBIDDEN`: change your password instead), nor for somebody who isn't a
+  member now (`NOT_FOUND`). A member asking is `FORBIDDEN`. Ten an hour per maker
+  (`RATE_SIGN_IN_LINK_CREATE`).
+- **One works at a time.** Making a link cancels any unused one for the same person.
+- **Once.** `POST /auth/sign-in-link { code, new_password }` checks the link before the
+  password is hashed, then, in one transaction, marks the link used, sets the password
+  and ends every sign-in the account had (§2), and closes its gateway sessions, exactly
+  as a password change does. The answer is a fresh sign-in, the same shape as
+  `POST /auth/login`'s. It shares `POST /auth/login`'s per-address allowance. A used link
+  is `FORBIDDEN` "That sign-in link has been used. If that wasn't you, ask the host for
+  a new one."; any other dead one (run out, cancelled, made up, for somebody since
+  removed) `FORBIDDEN` "That sign-in link doesn't work any more. Ask the host for a new
+  one." A password under the minimum is `VALIDATION_FAILED` and leaves the link unused.
+- `GET /auth/sign-in-link/:code` needs no sign-in, like an invite's preview, so the app
+  can say whose account it is before asking for a password: `{ valid, server_name,
+  username, made_by, expires_at }`, where `made_by` is the maker's display name. A link
+  that doesn't work is `{ valid: false }` with everything else `null`.
+- **The person is told.** `GET /me/sign-in-links` lists the last five links made for
+  you, newest first: `{ made_by, made_at, expires_at, used_at, cancelled_at }`, never
+  the code. Settings shows the newest under your password, so a link you didn't ask for
+  doesn't go unnoticed.
+- **Removal** cancels every unused link made for the person, and every one they made.
+
+A server from before #581 answers `NOT_FOUND` to all four. The app then says the server
+needs updating when a host asks for a link, and shows nothing under your password.
 
 ### Co-host (SPEC §4.16, #424)
 

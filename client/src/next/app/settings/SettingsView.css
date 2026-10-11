@@ -619,7 +619,23 @@
   font-family: var(--font-mono);
 }
 
-/* A config line to copy (#500): Hyprland's bind for the talk key. It wraps
+/* A sign-in link the host just made for somebody (#581), under their row and
+   starting where their name does. */
+.nx-set-signin-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: calc(var(--marker-slot) + var(--space-2));
+}
+
+/* A link is one long word: it fills each line rather than leaving a hyphen
+   on a line of its own. */
+.nx-set-signin-link .nx-set-bind-line {
+  word-break: break-all;
+}
+
+/* A config line to copy (#500): Hyprland's bind for the talk key, and a
+   sign-in link just made (#581). It wraps
    rather than scrolls, and can be selected, as typed text can. */
 .nx-set-bind {
   display: flex;

@@ -45,11 +45,15 @@ import type { SearchHit } from "../generated/SearchHit";
 import type { ServerInfo } from "../generated/ServerInfo";
 import type { SetupPreview } from "../generated/SetupPreview";
 import type { SetupRequest } from "../generated/SetupRequest";
+import type { SignInLink } from "../generated/SignInLink";
+import type { SignInLinkMade } from "../generated/SignInLinkMade";
+import type { SignInLinkPreview } from "../generated/SignInLinkPreview";
 import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
 import type { UploadSlot } from "../generated/UploadSlot";
 import type { UpdateRoomRequest } from "../generated/UpdateRoomRequest";
 import type { UpdateServerRequest } from "../generated/UpdateServerRequest";
 import type { VoteRequest } from "../generated/VoteRequest";
+import type { UseSignInLinkRequest } from "../generated/UseSignInLinkRequest";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
 
@@ -327,6 +331,16 @@ export class PublicApi {
 
   setupPreview(token: string): Promise<SetupPreview> {
     return requestJson(this.baseUrl, "GET", `/setup/${encodeURIComponent(token)}`);
+  }
+
+  /** Whose account a sign-in link is for, and who made it (#581). */
+  signInLinkPreview(code: string): Promise<SignInLinkPreview> {
+    return requestJson(this.baseUrl, "GET", `/auth/sign-in-link/${encodeURIComponent(code)}`);
+  }
+
+  /** Set a new password with a sign-in link, and sign in. Every other sign-in the account had ends. */
+  redeemSignInLink(request: UseSignInLinkRequest): Promise<AuthResponse> {
+    return requestJson(this.baseUrl, "POST", "/auth/sign-in-link", { body: request });
   }
 
   setup(request: SetupRequest): Promise<AuthResponse> {
@@ -810,6 +824,18 @@ export class AuthedApi {
         accessToken,
       }),
     );
+  }
+
+  /** The host or a co-host makes a one-time sign-in link for somebody who
+   *  forgot their password (#581). A new one cancels the last. */
+  makeSignInLink(id: UserId): Promise<SignInLink> {
+    const path = `/users/${encodeURIComponent(id)}/sign-in-link`;
+    return this.#withAuth((accessToken) => requestJson<SignInLink>(this.baseUrl, "POST", path, { accessToken }));
+  }
+
+  /** The sign-in links made for you, newest first: never their codes. */
+  mySignInLinks(signal?: AbortSignal): Promise<SignInLinkMade[]> {
+    return this.get<SignInLinkMade[]>("/me/sign-in-links", signal);
   }
 
   /** The host makes somebody a co-host, or they stop being one (#424): the

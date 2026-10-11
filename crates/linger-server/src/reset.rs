@@ -1,9 +1,11 @@
 //! `reset-password`: the way back into a server whose host is locked out (T-414).
 //!
-//! There is no reset email and no reset link, on purpose. A Linger server holds
-//! no addresses to send one to, and the first-run setup token only exists while
-//! the server has no users at all — so once the host has forgotten their
-//! password there is nothing left that can prove who they are except the machine
+//! There is no reset email, on purpose: a Linger server holds no addresses to
+//! send one to. A member who forgot their password gets a sign-in link from the
+//! host or a co-host (#581, `routes::sign_in_links`), but nobody can vouch for
+//! the host that way, and the first-run setup token only exists while the
+//! server has no users at all — so once the host has forgotten their password
+//! there is nothing left that can prove who they are except the machine
 //! itself. Being able to run a command against the database *is* the proof of
 //! ownership, which is the position ARCHITECTURE §9 already takes on first-run
 //! setup: no token, no login, no credentials in environment variables.

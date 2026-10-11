@@ -8,6 +8,8 @@ describe("reading what was pasted into the sign-in box", () => {
     expect(parsePastedLink("http://[::1]:8080")).toEqual({ kind: "server", baseUrl: "http://[::1]:8080" });
     expect(parsePastedLink("https://linger.example/invite/AB-12")).toEqual({ kind: "invite", baseUrl: "https://linger.example", code: "AB-12" });
     expect(parsePastedLink("https://linger.example/invite?code=AB-12")).toEqual({ kind: "invite", baseUrl: "https://linger.example", code: "AB-12" });
+    expect(parsePastedLink("https://linger.example/sign-in/abcd2345")).toEqual({ kind: "signin", baseUrl: "https://linger.example", code: "abcd2345" });
+    expect(parsePastedLink("https://linger.example/sign-in?code=abcd2345")).toEqual({ kind: "signin", baseUrl: "https://linger.example", code: "abcd2345" });
     expect(parsePastedLink("https://linger.example/setup?token=t0k")).toEqual({ kind: "setup", baseUrl: "https://linger.example", token: "t0k" });
     expect(parsePastedLink("linger_box.lan:8080")).toEqual({ kind: "server", baseUrl: "https://linger_box.lan:8080" });
     // An international name, as the parser spells it.

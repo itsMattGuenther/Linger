@@ -309,6 +309,60 @@ pub struct InvitePreview {
     pub expires_at: Option<i64>,
 }
 
+/// A sign-in link a host or co-host made for somebody who forgot their
+/// password (`POST /users/:id/sign-in-link`, #581). The code is shown this
+/// once: the server keeps only its hash.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SignInLink {
+    pub code: String,
+    pub user_id: UserId,
+    #[ts(type = "number")]
+    pub expires_at: i64,
+}
+
+/// Unauthenticated preview of a sign-in link (`GET /auth/sign-in-link/:code`).
+/// Everything but `valid` is `None` when it doesn't work.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SignInLinkPreview {
+    pub valid: bool,
+    pub server_name: Option<String>,
+    /// The account the link sets a new password for.
+    pub username: Option<String>,
+    /// Who made it, by display name.
+    pub made_by: Option<String>,
+    #[ts(type = "number | null")]
+    pub expires_at: Option<i64>,
+}
+
+/// `POST /auth/sign-in-link`: use a sign-in link to set a new password.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UseSignInLinkRequest {
+    pub code: String,
+    pub new_password: String,
+}
+
+/// A sign-in link somebody made for you (`GET /me/sign-in-links`), so one you
+/// didn't ask for doesn't go unnoticed. Never the code.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SignInLinkMade {
+    pub made_by: UserId,
+    #[ts(type = "number")]
+    pub made_at: i64,
+    #[ts(type = "number")]
+    pub expires_at: i64,
+    /// When it was used to set a new password.
+    #[ts(type = "number | null")]
+    pub used_at: Option<i64>,
+    /// When it stopped working before then: a newer link, or the person
+    /// being removed.
+    #[ts(type = "number | null")]
+    pub cancelled_at: Option<i64>,
+}
+
 // ---------------------------------------------------------------------------
 // The server and its rooms (PROTOCOL §3)
 // ---------------------------------------------------------------------------

@@ -9,7 +9,9 @@
 import type { Invite } from "../generated/Invite";
 import type { Room } from "../generated/Room";
 import type { RoomId } from "../generated/RoomId";
+import type { SignInLinkMade } from "../generated/SignInLinkMade";
 import type { User } from "../generated/User";
+import { closesWhen, setWhen } from "./time";
 
 /**
  * Whether this person has the host's powers here: the host, or a co-host the
@@ -46,6 +48,42 @@ const DAY_MS = 24 * HOUR_MS;
  */
 export function inviteUrl(baseUrl: string, code: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/invite/${encodeURIComponent(code)}`;
+}
+
+/** The link to send somebody who forgot their password (#581). */
+export function signInUrl(baseUrl: string, code: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/sign-in/${encodeURIComponent(code)}`;
+}
+
+/**
+ * Why a sign-in link couldn't be made, in words (#581). A server from before
+ * them answers its "no such thing" for the whole path, which would read as if
+ * the person were missing; it means the server needs updating.
+ */
+export function signInLinkProblem(status: number | null, message: string | null): string {
+  if (status === 404 && message !== "No such member.") return "This server needs updating before it can make sign-in links.";
+  return message ?? "Couldn't make a sign-in link.";
+}
+
+/**
+ * What the host who made a sign-in link is told about it (#581): how long it
+ * works, and that a newer one cancels it.
+ */
+export function signInLinkMadeWords(name: string, expiresAt: number, copied: boolean, now: number): string {
+  const sent = copied ? `Copied. Send it to ${name} yourself.` : `Copy it and send it to ${name} yourself.`;
+  return `${sent} It works once, and runs out ${closesWhen(expiresAt, now)}. Making another cancels this one.`;
+}
+
+/**
+ * The line in your own Settings about a sign-in link somebody made you
+ * (#581), so one you didn't ask for doesn't go unnoticed: who, when, and
+ * whether it was used.
+ */
+export function signInLinkWords(made: SignInLinkMade, maker: string, now: number): string {
+  const line = `${maker} made you a sign-in link ${setWhen(made.made_at, now)}.`;
+  if (made.used_at !== null) return `${line} It was used ${setWhen(made.used_at, now)} to set a new password.`;
+  if (made.cancelled_at === null && made.expires_at > now) return `${line} It hasn't been used, and runs out ${closesWhen(made.expires_at, now)}.`;
+  return `${line} It wasn't used.`;
 }
 
 /** Live, or the reason it is not. */

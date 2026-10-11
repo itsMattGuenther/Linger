@@ -1,6 +1,16 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
-import { displayNameProblem, loginReady, MIN_PASSWORD_CHARS, type NameSaid, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
+import {
+  displayNameProblem,
+  loginReady,
+  MIN_PASSWORD_CHARS,
+  type NameSaid,
+  newPasswordReady,
+  registerReady,
+  type SignInActions,
+  type SignInStep,
+  setupReady,
+} from "../../core/signin";
 import { minimizer } from "../../core/windowControls";
 import { Button, TextField, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
@@ -49,6 +59,7 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
           <Register step={step} register={actions.register} onBack={back} onSignIn={() => setStep({ kind: "login", baseUrl: step.baseUrl, serverName: step.serverName })} />
         ) : null}
         {step.kind === "setup" ? <Setup step={step} setup={actions.setup} onBack={back} /> : null}
+        {step.kind === "newPassword" ? <NewPassword step={step} newPassword={actions.newPassword} onBack={back} /> : null}
         {keyringNotice ? (
           <p className="nx-signin-keyring" role="status">
             {keyringNotice} You'll have to sign in again next time.
@@ -165,6 +176,7 @@ function Login({ step, login, onBack }: { step: Extract<SignInStep, { kind: "log
       <Button variant="primary" type="submit" busy={busy} disabled={!ready} fill>
         Sign in
       </Button>
+      <p className="nx-signin-help">Forgot your password? Ask the host for a sign-in link, and paste it where the address went.</p>
     </form>
   );
 }
@@ -260,6 +272,49 @@ function Setup({ step, setup, onBack }: { step: Extract<SignInStep, { kind: "set
       <Problem words={problem} />
       <Button variant="primary" type="submit" busy={busy} disabled={!ready} fill>
         Set up this server
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * A sign-in link the host made (#581): choose a new password for the account
+ * it names, and you're in. Every other sign-in the account had ends.
+ */
+function NewPassword({
+  step,
+  newPassword,
+  onBack,
+}: {
+  step: Extract<SignInStep, { kind: "newPassword" }>;
+  newPassword: SignInActions["newPassword"];
+  onBack: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const { busy, problem, send } = useSend();
+  const ready = newPasswordReady(password) && !busy;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (ready) void send(() => newPassword(step.baseUrl, step.code, password));
+  };
+  return (
+    <form className="nx-signin-form" onSubmit={submit} aria-label="Choose a new password">
+      <Where baseUrl={step.baseUrl} serverName={step.serverName} onBack={onBack} />
+      <p className="nx-signin-lead">
+        {step.madeBy ?? "The host"} made this link so @{step.username} can choose a new password. Anywhere else you're signed in as @{step.username} will be signed
+        out.
+      </p>
+      <TextField
+        label="New password"
+        type="password"
+        value={password}
+        onChange={setPassword}
+        hint={`At least ${MIN_PASSWORD_CHARS} characters. No rules about symbols.`}
+        autoFocus
+      />
+      <Problem words={problem} />
+      <Button variant="primary" type="submit" busy={busy} disabled={!ready} fill>
+        Save and sign in
       </Button>
     </form>
   );

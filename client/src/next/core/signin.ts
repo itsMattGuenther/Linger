@@ -9,6 +9,7 @@ import type { AuthResponse } from "../../generated/AuthResponse";
 import type { LoginRequest } from "../../generated/LoginRequest";
 import type { RegisterRequest } from "../../generated/RegisterRequest";
 import type { SetupRequest } from "../../generated/SetupRequest";
+import type { UseSignInLinkRequest } from "../../generated/UseSignInLinkRequest";
 import { displayNameProblem, lookAlikeIn, MIN_PASSWORD_CHARS, type NameSaid } from "../../lib/account";
 import { type PastedLink, parsePastedLink } from "../../lib/link";
 
@@ -17,7 +18,9 @@ export type SignInStep =
   | { kind: "paste" }
   | { kind: "login"; baseUrl: string; serverName: string | null }
   | { kind: "register"; baseUrl: string; code: string; serverName: string | null }
-  | { kind: "setup"; baseUrl: string; token: string };
+  | { kind: "setup"; baseUrl: string; token: string }
+  /** A sign-in link the host made (#581): choose a new password for `username`. */
+  | { kind: "newPassword"; baseUrl: string; code: string; serverName: string | null; username: string; madeBy: string | null };
 
 /** What was pasted, read, or why it can't be. */
 export function readPasted(raw: string): { link: PastedLink } | { problem: string } {
@@ -42,12 +45,17 @@ export function setupReady(serverName: string, username: string, displayName: st
   return serverName.trim() !== "" && registerReady(username, displayName, password);
 }
 
+export function newPasswordReady(password: string): boolean {
+  return password.length >= MIN_PASSWORD_CHARS;
+}
+
 export { displayNameProblem, MIN_PASSWORD_CHARS, type NameSaid };
 
 /** The server calls that decide which form comes after the paste box. */
 export interface Door {
   setupPreview(token: string): Promise<{ valid: boolean }>;
   invitePreview(code: string): Promise<{ valid: boolean; server_name: string | null }>;
+  signInLinkPreview(code: string): Promise<{ valid: boolean; server_name: string | null; username: string | null; made_by: string | null }>;
   health(): Promise<void>;
 }
 
@@ -74,6 +82,21 @@ export async function stepFor(pasted: string, doorAt: (baseUrl: string) => Door)
         ? { step: { kind: "register", baseUrl: link.baseUrl, code: link.code, serverName: preview.server_name } }
         : { problem: "That invite isn't good anymore. Ask for a new one." };
     }
+    if (link.kind === "signin") {
+      const preview = await door.signInLinkPreview(link.code);
+      return preview.valid && preview.username !== null
+        ? {
+            step: {
+              kind: "newPassword",
+              baseUrl: link.baseUrl,
+              code: link.code,
+              serverName: preview.server_name,
+              username: preview.username,
+              madeBy: preview.made_by,
+            },
+          }
+        : { problem: "That sign-in link doesn't work any more. It works once, for a day. Ask the host for a new one." };
+    }
     await door.health();
     return { step: { kind: "login", baseUrl: link.baseUrl, serverName: null } };
   } catch (caught) {
@@ -91,6 +114,7 @@ export interface Entrance extends Door {
   login(request: LoginRequest): Promise<AuthResponse>;
   register(request: RegisterRequest): Promise<AuthResponse>;
   setup(request: SetupRequest): Promise<AuthResponse>;
+  redeemSignInLink(request: UseSignInLinkRequest): Promise<AuthResponse>;
 }
 
 /**
@@ -104,6 +128,8 @@ export interface SignInActions {
   login: (baseUrl: string, username: string, password: string) => Promise<string | null>;
   register: (baseUrl: string, code: string, username: string, displayName: string, password: string) => Promise<NameSaid>;
   setup: (baseUrl: string, token: string, serverName: string, username: string, displayName: string, password: string) => Promise<string | null>;
+  /** A sign-in link (#581): set a new password and sign in. */
+  newPassword: (baseUrl: string, code: string, password: string) => Promise<string | null>;
 }
 
 /**
@@ -139,5 +165,6 @@ export function signInActions(entranceAt: (baseUrl: string) => Entrance, signedI
         (entrance) => entrance.setup({ token, server_name: serverName.trim(), username: usernameOf(username), display_name: displayName.trim(), password }),
         problemIn,
       ),
+    newPassword: (baseUrl, code, password) => enter(baseUrl, (entrance) => entrance.redeemSignInLink({ code, new_password: password }), problemIn),
   };
 }

@@ -1122,12 +1122,14 @@ bootstrap credentials.
 `sqlite3 linger.db ".backup"` and a cron one-liner in the README. Do not build a backup
 feature.
 
-**Locked out:** no reset email, no reset link — the setup token only exists while the
-server has no users, so the only remaining proof of ownership is access to the box.
-`linger-server reset-password <username>` sets a new password and revokes that user's
-refresh families. The password is generated and printed, or read from stdin; never
-taken from argv, which leaks into shell history and `ps`. Stop the server first — one
-SQLite file has one writer.
+**Locked out:** no reset email. A member who forgot their password gets a sign-in link
+from the host or a co-host (#581, PROTOCOL §5): one use, one day, and it ends every
+other sign-in. Nobody can make one for the host. The setup token only exists while the
+server has no users, so the only proof of ownership left for a locked-out host is access
+to the box: `linger-server reset-password <username>` sets a new password and revokes
+that user's refresh families. The password is generated and printed, or read from
+stdin; never taken from argv, which leaks into shell history and `ps`. Stop the server
+first — one SQLite file has one writer.
 
 ---
 

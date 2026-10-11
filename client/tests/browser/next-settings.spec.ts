@@ -659,6 +659,27 @@ test.describe("hosting", () => {
     await expect(members.filter({ hasText: "Rory" })).toHaveCount(1);
   });
 
+  test("a sign-in link asks first, then shows the link, copied, and how long it works (#581)", async ({ page }) => {
+    await open(page, "?section=people");
+    const members = page.getByRole("list", { name: "Members" }).locator(":scope > li");
+    // Never on your own row or the host's.
+    await expect(members.first().getByRole("button", { name: "Sign-in link" })).toHaveCount(0);
+    const callie = members.filter({ hasText: "Callie" });
+    await callie.getByRole("button", { name: "Sign-in link" }).click();
+    await expect(page.getByRole("group", { name: /^Make a sign-in link for Callie\?/ })).toBeVisible();
+    await page.getByRole("button", { name: "Make and copy" }).click();
+    const made = callie.locator("[data-sign-in-link]");
+    await expect(made).toContainText("k7q2xw3mfz9ab4cd5ef6gh7ij2");
+    await expect(made).toContainText(/Copied\. Send it to Callie yourself\. It works once, and runs out tomorrow at .+\. Making another cancels this one\./);
+    await expect(made.getByRole("button", { name: "Copied" })).toBeVisible();
+    expect(await did(page)).toContain(`sign-in-link:${await callie.getAttribute("data-person")}`);
+  });
+
+  test("your account says when somebody made you a sign-in link (#581)", async ({ page }) => {
+    await open(page, "?section=account&signinlink");
+    await expect(page.getByRole("region", { name: "Password" })).toContainText("Matt made you a sign-in link yesterday. It was used yesterday to set a new password.");
+  });
+
   test("the server's name and accent save together; no accent is a choice too", async ({ page }) => {
     await open(page, "?section=server");
     const save = page.getByRole("button", { name: "Save", exact: true });

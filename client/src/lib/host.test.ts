@@ -10,7 +10,20 @@ import { describe, expect, it } from "vitest";
 import type { Invite } from "../generated/Invite";
 import type { Room } from "../generated/Room";
 import { parsePastedLink } from "./link";
-import { deadWords, expiryWords, hostsHere, inviteState, inviteUrl, mayActOn, moveRoom, useWords } from "./host";
+import {
+  deadWords,
+  expiryWords,
+  hostsHere,
+  inviteState,
+  inviteUrl,
+  mayActOn,
+  moveRoom,
+  signInLinkMadeWords,
+  signInLinkProblem,
+  signInLinkWords,
+  signInUrl,
+  useWords,
+} from "./host";
 
 const NOW = 1_700_000_000_000;
 const HOUR = 3_600_000;
@@ -167,5 +180,37 @@ describe("the host's powers (#424)", () => {
     expect(mayActOn(member, member)).toBe(false);
     // Somebody this app doesn't know is the server's to judge.
     expect(mayActOn(cohost, undefined)).toBe(true);
+  });
+});
+
+describe("sign-in links (#581)", () => {
+  // Local noon on a fixed day, so "today" and "tomorrow" don't depend on when the test runs.
+  const now = new Date(2026, 9, 10, 12, 0).getTime();
+  const hour = 3_600_000;
+
+  it("builds a link the paste box understands", () => {
+    expect(parsePastedLink(signInUrl("https://linger.example/", "abcd2345"))).toEqual({ kind: "signin", baseUrl: "https://linger.example", code: "abcd2345" });
+  });
+
+  it("says a server from before sign-in links needs updating, and passes every other refusal on", () => {
+    expect(signInLinkProblem(404, "No such thing on this server.")).toBe("This server needs updating before it can make sign-in links.");
+    expect(signInLinkProblem(404, "No such member.")).toBe("No such member.");
+    expect(signInLinkProblem(403, "Nobody can make a sign-in link for the host.")).toBe("Nobody can make a sign-in link for the host.");
+    expect(signInLinkProblem(null, null)).toBe("Couldn't make a sign-in link.");
+  });
+
+  it("tells the host how long it works and that another cancels it", () => {
+    const words = signInLinkMadeWords("Sam", now + 24 * hour, true, now);
+    expect(words).toMatch(/^Copied\. Send it to Sam yourself\. It works once, and runs out tomorrow at .+\. Making another cancels this one\.$/);
+    expect(signInLinkMadeWords("Sam", now + 24 * hour, false, now)).toMatch(/^Copy it and send it to Sam yourself\./);
+  });
+
+  it("tells the person who made it, when, and whether it was used", () => {
+    const made = { made_by: "u-matt", made_at: now - 25 * hour, expires_at: now - hour, used_at: null, cancelled_at: null };
+    expect(signInLinkWords(made, "Matt", now)).toBe("Matt made you a sign-in link yesterday. It wasn't used.");
+    expect(signInLinkWords({ ...made, used_at: now - 24 * hour }, "Matt", now)).toBe("Matt made you a sign-in link yesterday. It was used yesterday to set a new password.");
+    const open = { ...made, made_at: now - hour, expires_at: now + 23 * hour };
+    expect(signInLinkWords(open, "Matt", now)).toMatch(/^Matt made you a sign-in link at .+\. It hasn't been used, and runs out tomorrow at .+\.$/);
+    expect(signInLinkWords({ ...open, cancelled_at: now }, "Matt", now)).toMatch(/It wasn't used\.$/);
   });
 });

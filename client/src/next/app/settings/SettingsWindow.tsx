@@ -3,6 +3,7 @@ import { copyText } from "../../core/copy";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Invite } from "../../../generated/Invite";
+import type { SignInLinkMade } from "../../../generated/SignInLinkMade";
 import type { Room } from "../../../generated/Room";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
@@ -14,7 +15,7 @@ import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
-import { hostsHere, inviteUrl, moveRoom } from "../../../lib/host";
+import { hostsHere, inviteUrl, moveRoom, signInLinkProblem, signInLinkWords, signInUrl } from "../../../lib/host";
 import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
@@ -406,6 +407,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   }, [api, hosting]);
   useEffect(readHostLists, [readHostLists]);
 
+  // The last sign-in link somebody made you (#581), for a line under your
+  // password. A server from before them has no such list: nothing shows.
+  const [madeForMe, setMadeForMe] = useState<SignInLinkMade | null>(null);
+  useEffect(() => {
+    if (!api) return;
+    const abort = new AbortController();
+    api.mySignInLinks(abort.signal).then(
+      (made) => setMadeForMe(made[0] ?? null),
+      () => setMadeForMe(null),
+    );
+    return () => abort.abort();
+  }, [api]);
+
   // Which release the server runs, and the newest there is, so a host hears
   // when theirs is behind (#314). The server says on /health, which needs no
   // sign-in and every server answers; nobody but the host is asked or told.
@@ -588,6 +602,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         changePassword: (current, next) => {
           return askOwner(holder.password({ server, current, next }), "Couldn't reach the list window.");
         },
+        signInLink: madeForMe
+          ? signInLinkWords(madeForMe, state?.users.find((user) => user.id === madeForMe.made_by)?.display_name ?? "The host", now)
+          : null,
         archive: {
           phase: archive,
           start: () => {
@@ -732,6 +749,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   if (problem === null) readHostLists();
                   return problem;
                 },
+                // A way back in for somebody who forgot their password (#581).
+                makeSignInLink: async (userId) => {
+                  try {
+                    const made = await api.makeSignInLink(userId);
+                    const link = signInUrl(server, made.code);
+                    return { link, code: made.code, expiresAt: made.expires_at, copied: await copyText(link) };
+                  } catch (error: unknown) {
+                    if (error instanceof ApiError) return { problem: signInLinkProblem(error.status, error.message) };
+                    return { problem: inWords(error, "Couldn't make a sign-in link.") };
+                  }
+                },
+                copyLink: (link) => copyText(link),
+                now,
                 // What was reported to the host (T-1605).
                 reports: state.reports
                   ? {

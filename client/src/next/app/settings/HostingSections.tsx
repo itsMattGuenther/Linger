@@ -8,7 +8,7 @@ import type { Room } from "../../../generated/Room";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { EMOJI_NAME_RULE, emojiNameFrom, emojiNameOk, MAX_CUSTOM_EMOJI } from "../../../lib/emoji/names";
-import { deadWords, expiryWords, useWords } from "../../../lib/host";
+import { deadWords, expiryWords, signInLinkMadeWords, useWords } from "../../../lib/host";
 import { fullTime, isoTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_MOTD_CHARS } from "../../core/chat/motd";
@@ -662,6 +662,15 @@ export interface HostPeopleProps {
   remove: (userId: string) => Promise<string | null>;
   restore: (userId: string) => Promise<string | null>;
   /**
+   * Make a one-time sign-in link for somebody who forgot their password
+   * (#581). The wiring puts it on the clipboard and says whether that worked.
+   * Left out, the row doesn't offer it.
+   */
+  makeSignInLink?: (userId: string) => Promise<{ link: string; code: string; expiresAt: number; copied: boolean } | { problem: string }>;
+  /** Put a link on the clipboard. False when the clipboard refused. */
+  copyLink?: (link: string) => Promise<boolean>;
+  now?: number;
+  /**
    * The open reports, newest first (T-1605), and what the host can do about
    * one. Left out, or none open: nothing shows.
    */
@@ -681,8 +690,12 @@ export interface HostReports {
   close: (reportId: string) => Promise<string | null>;
 }
 
-export function PeopleSection({ members, meId, presenceOf, removed, remove, restore, reports }: HostPeopleProps) {
+export function PeopleSection({ members, meId, presenceOf, removed, remove, restore, reports, makeSignInLink, copyLink, now = Date.now() }: HostPeopleProps) {
   const [asking, setAsking] = useState<string | null>(null);
+  // A sign-in link being asked about, and the ones made while this is open:
+  // the code is only ever shown once, here (#581).
+  const [linking, setLinking] = useState<string | null>(null);
+  const [links, setLinks] = useState<Record<string, MadeLink>>({});
   const save = useSave();
   const busy = save.phase.kind === "saving";
   const list = useRef<HTMLUListElement | null>(null);
@@ -709,15 +722,54 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
                     <span className="nx-set-tag">{person.is_host ? "You, the host" : "You, a co-host"}</span>
                   ) : person.is_host ? (
                     <span className="nx-set-tag">The host</span>
-                  ) : asking === person.id ? null : (
-                    <span data-do="remove">
-                      <Button size="sm" disabled={busy} onClick={() => setAsking(person.id)}>
-                        Remove from the server
-                      </Button>
-                    </span>
+                  ) : asking === person.id || linking === person.id ? null : (
+                    <>
+                      {makeSignInLink ? (
+                        <span data-do="sign-in-link">
+                          <Button size="sm" variant="quiet" disabled={busy} onClick={() => setLinking(person.id)}>
+                            Sign-in link
+                          </Button>
+                        </span>
+                      ) : null}
+                      <span data-do="remove">
+                        <Button size="sm" disabled={busy} onClick={() => setAsking(person.id)}>
+                          Remove from the server
+                        </Button>
+                      </span>
+                    </>
                   )}
                 </span>
               </div>
+              {linking === person.id && makeSignInLink ? (
+                <Question
+                  words={`Make a sign-in link for ${person.display_name}? Whoever opens it can choose a new password for @${person.username} and sign in, once, within a day. ${person.display_name} is signed out everywhere else when it's used, and their Settings will say you made it.`}
+                  yes="Make and copy"
+                  no="Not now"
+                  busy={busy}
+                  onYes={() => {
+                    const pending = makeSignInLink(person.id);
+                    void save.run(pending.then((made) => ("problem" in made ? made.problem : null))).then(async (ok) => {
+                      if (!ok) return;
+                      const made = await pending;
+                      if ("link" in made) setLinks((held) => ({ ...held, [person.id]: made }));
+                      setLinking(null);
+                    });
+                  }}
+                  onNo={() => {
+                    setLinking(null);
+                    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-person="${CSS.escape(person.id)}"] [data-do="sign-in-link"] button`)?.focus());
+                  }}
+                />
+              ) : null}
+              {linking === person.id ? null : (
+                <MadeSignInLink
+                  person={person}
+                  made={links[person.id]}
+                  copyLink={copyLink}
+                  now={now}
+                  onCopied={(made, copied) => setLinks((all) => ({ ...all, [person.id]: { ...made, copied } }))}
+                />
+              )}
               {asking === person.id ? (
                 <Question
                   words={`Remove ${person.display_name} from this server? They lose their sign-in and any invite links they made. What they wrote stays, and you can let them back in below.`}
@@ -766,6 +818,42 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
         </Note>
       </Block>
     </>
+  );
+}
+
+type MadeLink = { link: string; code: string; expiresAt: number; copied: boolean };
+
+/**
+ * A sign-in link just made for somebody (#581), under their row: the link,
+ * Copy, and how long it works. The code is only ever shown here, once; the
+ * server keeps only its hash.
+ */
+function MadeSignInLink({
+  person,
+  made,
+  copyLink,
+  now,
+  onCopied,
+}: {
+  person: User;
+  made: MadeLink | undefined;
+  copyLink: ((link: string) => Promise<boolean>) | undefined;
+  now: number;
+  onCopied: (made: MadeLink, copied: boolean) => void;
+}) {
+  if (!made) return null;
+  return (
+    <div className="nx-set-signin-link" data-sign-in-link={person.id}>
+      <div className="nx-set-bind">
+        <code className="nx-set-bind-line">{made.link}</code>
+        {copyLink ? (
+          <Button size="sm" icon={made.copied ? "check" : undefined} onClick={() => void copyLink(made.link).then((copied) => onCopied(made, copied))}>
+            {made.copied ? "Copied" : "Copy"}
+          </Button>
+        ) : null}
+      </div>
+      <p className="nx-set-item-meta">{signInLinkMadeWords(person.display_name, made.expiresAt, made.copied, now)}</p>
+    </div>
   );
 }
 

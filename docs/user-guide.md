@@ -1199,8 +1199,12 @@ computer. With several servers, **Settings → Servers** signs out of one, and
 
 To change your password, use **Settings → Account & App → Password**. Changing it signs
 you out of that server everywhere else at once, including any computer you forgot to sign
-out of; the one you change it on stays signed in. If you have forgotten it, ask whoever
-runs the server — they can set you a new one.
+out of; the one you change it on stays signed in.
+
+**Forgot your password?** Ask whoever runs the server for a **sign-in link**. Paste it
+into **Server or link**, choose a new password, and you're in. It works once, within a
+day, and signs you out everywhere else. **Settings → Account & App** says who made you
+one and whether it was used; if you didn't ask for one, tell the host.
 
 ---
 

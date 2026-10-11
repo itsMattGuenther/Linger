@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { AuthResponse } from "../../generated/AuthResponse";
 import type { User } from "../../generated/User";
 import { ApiError } from "../../lib/api";
-import { type Door, type Entrance, loginReady, problemIn, readPasted, registerReady, setupReady, signInActions, stepFor, usernameOf } from "./signin";
+import {
+  type Door,
+  type Entrance,
+  loginReady,
+  newPasswordReady,
+  problemIn,
+  readPasted,
+  registerReady,
+  setupReady,
+  signInActions,
+  stepFor,
+  usernameOf,
+} from "./signin";
 
 const matt: User = {
   id: "u-matt",
@@ -17,7 +29,7 @@ const matt: User = {
 };
 
 /** A server at an address that answers the way it's told to, writing down what it was asked. */
-function doorThat(answers: { setup?: boolean; invite?: boolean; name?: string | null; down?: string }) {
+function doorThat(answers: { setup?: boolean; invite?: boolean; signIn?: boolean; name?: string | null; down?: string }) {
   const asked: string[] = [];
   const doorAt = (baseUrl: string): Door => ({
     setupPreview: async (token) => {
@@ -29,6 +41,12 @@ function doorThat(answers: { setup?: boolean; invite?: boolean; name?: string | 
       asked.push(`${baseUrl} invite ${code}`);
       if (answers.down) throw new Error(answers.down);
       return { valid: answers.invite ?? true, server_name: answers.name ?? null };
+    },
+    signInLinkPreview: async (code) => {
+      asked.push(`${baseUrl} sign-in ${code}`);
+      if (answers.down) throw new Error(answers.down);
+      const valid = answers.signIn ?? true;
+      return { valid, server_name: valid ? (answers.name ?? null) : null, username: valid ? "sam" : null, made_by: valid ? "Matt" : null };
     },
     health: async () => {
       asked.push(`${baseUrl} health`);
@@ -61,6 +79,20 @@ describe("signing in", () => {
     expect(registerReady("matt", "Matt", "12345678")).toBe(true);
     expect(setupReady(" ", "matt", "Matt", "12345678")).toBe(false);
     expect(setupReady("The Good Company", "matt", "Matt", "12345678")).toBe(true);
+    expect(newPasswordReady("1234567")).toBe(false);
+    expect(newPasswordReady("12345678")).toBe(true);
+  });
+
+  it("a working sign-in link leads to choosing a new password for its account; a dead one says so (#581)", async () => {
+    expect(readPasted("https://home.example/sign-in/abcd2345")).toEqual({ link: { kind: "signin", baseUrl: "https://home.example", code: "abcd2345" } });
+    const ok = doorThat({ name: "The Good Company" });
+    expect(await stepFor("https://home.example/sign-in/abcd2345", ok.doorAt)).toEqual({
+      step: { kind: "newPassword", baseUrl: "https://home.example", code: "abcd2345", serverName: "The Good Company", username: "sam", madeBy: "Matt" },
+    });
+    expect(ok.asked).toEqual(["https://home.example sign-in abcd2345"]);
+    expect(await stepFor("https://home.example/sign-in/abcd2345", doorThat({ signIn: false }).doorAt)).toEqual({
+      problem: "That sign-in link doesn't work any more. It works once, for a day. Ask the host for a new one.",
+    });
   });
 
   it("a working setup link leads to setting the server up; a used one says so", async () => {
@@ -118,6 +150,10 @@ describe("signing in", () => {
         sent.push(["setup", request]);
         return auth;
       },
+      redeemSignInLink: async (request) => {
+        sent.push(["sign-in link", request]);
+        return auth;
+      },
     };
     const actions = signInActions(
       () => entrance,
@@ -130,17 +166,19 @@ describe("signing in", () => {
     expect(await actions.login("https://home.example", "  Matt ", " pass word ")).toBeNull();
     expect(await actions.register("https://home.example", "ABCD", "Jules ", " Jules R. ", "12345678")).toBeNull();
     expect(await actions.setup("https://home.example", "t0k", " The Good Company ", "MATT", "Matt", "12345678")).toBeNull();
+    expect(await actions.newPassword("https://home.example", "abcd2345", " new pass ")).toBeNull();
     expect(sent).toEqual([
       // A password is sent exactly as typed, spaces and all.
       ["login", { username: "matt", password: " pass word " }],
       ["register", { invite_code: "ABCD", username: "jules", display_name: "Jules R.", password: "12345678" }],
       ["setup", { token: "t0k", server_name: "The Good Company", username: "matt", display_name: "Matt", password: "12345678" }],
+      ["sign-in link", { code: "abcd2345", new_password: " new pass " }],
     ]);
-    expect(kept).toEqual(["https://home.example", "https://home.example", "https://home.example"]);
+    expect(kept).toEqual(["https://home.example", "https://home.example", "https://home.example", "https://home.example"]);
 
     refuse = "That username and password don't match.";
     expect(await actions.login("https://home.example", "matt", "nope")).toBe("That username and password don't match.");
-    expect(kept).toHaveLength(3);
+    expect(kept).toHaveLength(4);
   });
 
   it("joining with a name that looks like somebody's already there says so on the name, and nothing else does (#574)", async () => {
@@ -153,6 +191,7 @@ describe("signing in", () => {
         login: async () => Promise.reject(refusal),
         register: async () => Promise.reject(refusal),
         setup: async () => Promise.reject(refusal),
+        redeemSignInLink: async () => Promise.reject(refusal),
       }),
       async (baseUrl) => {
         kept.push(baseUrl);
@@ -170,7 +209,13 @@ describe("signing in", () => {
   it("a sign-in the computer can't keep says why", async () => {
     const auth: AuthResponse = { access_token: "a", refresh_token: "r", expires_in: 900, user: matt };
     const actions = signInActions(
-      () => ({ ...doorThat({}).doorAt("https://home.example"), login: async () => auth, register: async () => auth, setup: async () => auth }),
+      () => ({
+        ...doorThat({}).doorAt("https://home.example"),
+        login: async () => auth,
+        register: async () => auth,
+        setup: async () => auth,
+        redeemSignInLink: async () => auth,
+      }),
       async () => {
         throw new Error("The keyring is locked.");
       },
