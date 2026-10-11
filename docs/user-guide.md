@@ -180,6 +180,12 @@ entered only the server address. Go back and paste an invite link. There is
 no public sign-up. If the invite has expired or run out of uses, ask the host
 for a new one.
 
+**Told to try again in a few minutes?** When lots of people join from one
+network at once (a school, an office, a LAN party), the server takes the rest a
+little at a time, and the app says how long to wait. If your whole group is
+joining together, the host can raise that limit. "The server is busy" means it
+is letting other people in right now: try again in a moment.
+
 The app remembers you. On most computers your sign-in is kept in the system's
 password store — the same place your browser keeps passwords — so you do not
 type it again. If your computer has no password store, the app says so and asks
@@ -582,6 +588,10 @@ private, especially for DM files.
   There is no setting for this and no way to turn it off.
 - Files may be deleted after a while — a year, unless whoever runs the server
   chose differently. **Starring a file keeps it forever.**
+- You can have up to 1 GB of files uploading at once, so nobody fills the
+  server's storage by themselves. A file you add to the box and never send is
+  deleted after a week. Taking a file out of the box while it's still going up
+  stops it.
 
 ### Voice messages
 
@@ -753,6 +763,15 @@ except only the people in it can see it, anywhere: not in media, not in search,
 not in anybody else's export. There's no way to add someone later; a different
 set of people is a different conversation.
 
+**Leaving a group.** Done with a group conversation? Hover its row under
+**Rooms**, or look at the top right of the conversation, and press **⋯**, then
+**Leave this group…**. It says what happens before it does anything. The group
+goes from your list on every device you use, and nobody can add you back,
+though anybody in it can start a new one with you. The others see a small grey
+line saying you left, and keep what you said. If you're the last one in it, it's
+deleted for good, so export first if you want a copy. A conversation with one
+person isn't left this way: it's their row in your list.
+
 **Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Their row in your list gives a little shake. That
@@ -868,6 +887,13 @@ Linger turns a name down, and says why, when it has:
   of blank-looking letters
 - characters that turn text around to run right to left
 - more than two accent marks piled on one letter
+
+It also turns down a name that looks like somebody else's here: their display
+name or their username, in other capitals, with different spaces, or spelled
+with look-alike letters from another alphabet. It says so under the name, at
+sign-up and in Settings, so you can pick something a little different.
+Changing the capitals of your own name is fine. This is so nobody can pass
+themselves off as the host, or as you.
 
 A name you saved before these rules stays as it is until you change it.
 
@@ -1024,6 +1050,9 @@ server to still exist**, which is the entire point.
 everything**, wait (it takes a moment on a busy server), then download it. The file opens in your
 normal browser's downloads, like anything else you download.
 
+The server keeps your archive for a week, then deletes it. The app says when the
+link stops working, so download it before then. If you miss it, export again.
+
 You can ask for one an hour. If you ask again too soon the app tells you when
 you can come back.
 
@@ -1112,8 +1141,10 @@ works as it is, and Settings shows no note.
 computer. With several servers, **Settings → Servers** signs out of one, and
 **Sign out of everything** out of all of them. Your account and everything in it stays exactly where it is.
 
-To change your password, use **Settings → Account & App → Password**. If you have forgotten it,
-ask whoever runs the server — they can set you a new one.
+To change your password, use **Settings → Account & App → Password**. Changing it signs
+you out of that server everywhere else at once, including any computer you forgot to sign
+out of; the one you change it on stays signed in. If you have forgotten it, ask whoever
+runs the server — they can set you a new one.
 
 ---
 

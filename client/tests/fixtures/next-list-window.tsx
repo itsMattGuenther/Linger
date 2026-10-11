@@ -17,7 +17,11 @@
  * to; `?revoked` has The Good Company refuse its saved sign-in (with `?one`,
  * that leaves nothing signed in). The sign-in routes take any username;
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
- * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
+ * spent, joining as "Matt" in any capitals is refused as a look-alike (#574),
+ * and `nowhere.example` doesn't answer. The usernames `crowd`,
+ * `guesser` and `busy` meet the server's limits (#538): a network out of
+ * sign-ups for now, one out of sign-in tries, and a server busy checking
+ * passwords. `?hold` keeps the health
  * check waiting until `window.core.release()`.
  * Tokens rotate as a server's do: each refresh spends the one presented and
  * hands out the next, and one presented twice is refused and written down
@@ -45,6 +49,9 @@
  * (#423) is written down as `takeout <room> <user>`, and refused unless
  * you're the host.
  *
+ * Leaving a group DM (#565) is written down as `leave <id>` and answered with
+ * the `dm.remove` the server sends; `?leavefails` has it refused.
+ *
  * The message of the day (#464): `?motd` has Eli's set in #general, just
  * after the evening. Changing a room is written down as `room <id> <body>`,
  * refused unless you host or co-host, and answered with the frames the
@@ -55,8 +62,9 @@
  * positions moved meanwhile;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
- * window would. What the window asked for is in `body[data-did]`, and every
- * sound it played as `sound:<cue>` (`next/audio.ts`).
+ * window would. What the window asked for is in `body[data-did]`, every
+ * sound it played as `sound:<cue>` (`next/audio.ts`), and how many times
+ * React has drawn it in `window.commits` (`next/commits.tsx`).
  */
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
@@ -66,6 +74,7 @@ import { apply, type GatewayState, type GatewayStatus, serverState } from "../..
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
+import { Counted } from "./next/commits";
 import type { Message } from "../../src/generated/Message";
 import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
@@ -437,6 +446,12 @@ function page(room: string, params: URLSearchParams): Message[] {
   return upTo.slice(-limit);
 }
 
+/** What a server says for each of its limits on the way in (#538). */
+const SIGNUPS_PAUSED =
+  "Lots of people have joined from your network in the last hour, so this server is pausing new sign-ups from it. Try again in about 10 minutes. If your group is joining together, the host can raise this limit.";
+const SIGN_INS_PAUSED = "Too many sign-in tries from your network in the last minute. Try again in 12 seconds.";
+const SERVER_BUSY = "The server is busy letting other people in. Try again in a moment.";
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -453,7 +468,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   note(`${method} ${server}${path}`);
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
   await new Promise((settle) => window.setTimeout(settle, 10));
-  const refuse = (status: number, code: string, message: string) => json({ error: { code, message, retry_after_ms: null } }, status);
+  const refuse = (status: number, code: string, message: string, retryAfterMs: number | null = null) =>
+    json({ error: { code, message, retry_after_ms: retryAfterMs } }, status);
   const signedIn = () => {
     minted += 1;
     issued[server] = `refresh-${minted}-${server}`;
@@ -483,6 +499,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if ((path === "/auth/login" || path === "/auth/register" || path === "/setup") && method === "POST") {
     note(`signin ${JSON.stringify(body)}`);
     if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
+    // The server's limits (#538), in the words it sends.
+    if (body.username === "crowd") return refuse(429, "RATE_LIMITED", SIGNUPS_PAUSED, 599_990);
+    if (body.username === "guesser") return refuse(429, "RATE_LIMITED", SIGN_INS_PAUSED, 11_250);
+    if (body.username === "busy") return refuse(429, "RATE_LIMITED", SERVER_BUSY, 5_000);
+    // Joining as somebody already here, in other capitals: the server's look-alike refusal (#574).
+    if (path === "/auth/register" && typeof body.display_name === "string" && body.display_name.toLowerCase() === state.me?.display_name.toLowerCase()) {
+      return refuse(409, "DISPLAY_NAME_TAKEN", "Someone here already goes by a name that looks like that. Try something a little different.");
+    }
     return signedIn();
   }
   if (path === "/read") return json(state.read);
@@ -552,6 +576,23 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       window.core?.frame(SERVER, { op: "message.create", d: line } as Omit<ServerFrame, "s">);
     }, 10);
     return json(room);
+  }
+  // Leaving a group DM (#565): written down as `leave <id>`, refused for a
+  // one-to-one DM as the server refuses it, and answered with the frame the
+  // server sends every one of your sessions. `?leavefails` has the server
+  // not answer.
+  const leaveOf = server === SERVER ? /^\/dms\/([^/]+)\/leave$/.exec(path) : null;
+  if (leaveOf && method === "POST") {
+    const id = decodeURIComponent(leaveOf[1] ?? "");
+    note(`leave ${id}`);
+    if (query.has("leavefails")) return refuse(503, "INTERNAL", "The server couldn't do that just now. Try again in a moment.");
+    const found = state.dms.find((dm) => dm.id === id);
+    if (!found) return refuse(404, "NOT_FOUND", "No such room on this server.");
+    if (found.someone_left !== true && (found.member_ids?.length ?? 0) <= 2) {
+      return refuse(422, "VALIDATION_FAILED", "A DM with one person can't be left. It's their row in your list.");
+    }
+    window.setTimeout(() => window.core?.frame(SERVER, { op: "dm.remove", d: { room_id: id } } as Omit<ServerFrame, "s">), 10);
+    return new Response(null, { status: 204 });
   }
   if (path === "/links/preview") return json([]);
   // Media and Search beside the list (#337), from the same finds as their own windows' page.
@@ -700,6 +741,8 @@ const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
-    <ListWindow />
+    <Counted>
+      <ListWindow />
+    </Counted>
   </StrictMode>,
 );

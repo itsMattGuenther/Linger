@@ -4,6 +4,7 @@
  * a room's own box, with the question after it if they like, and Enter opens
  * the panel to finish asking.
  */
+import type { CreatePollRequest } from "../../../generated/CreatePollRequest";
 import type { Poll } from "../../../generated/Poll";
 
 /** `linger-core::limits`, mirrored to refuse what the server would before it's sent. */
@@ -25,6 +26,26 @@ export type PollLength = (typeof POLL_LENGTHS)[number]["value"];
 export const DEFAULT_POLL_LENGTH: PollLength = "7";
 
 const COMMAND = "/poll";
+
+/** A poll as it's asked, less its one-time key. */
+export type PollAsk = Omit<CreatePollRequest, "nonce">;
+
+/**
+ * The one-time key for an ask (#524). Post poll pressed again after it
+ * failed, with the panel as it was, is the same ask retried, so it keeps the
+ * key the first press had: a poll that was asked, whose answer was lost on
+ * the way back, isn't asked twice. Changed in any way, it's a new ask.
+ * `before` is the last press in this panel, if there was one.
+ */
+export function pollNonce(before: { ask: PollAsk; nonce: string } | null, ask: PollAsk, fresh: () => string): string {
+  const same =
+    before !== null &&
+    before.ask.question === ask.question &&
+    before.ask.multi === ask.multi &&
+    before.ask.closes_in_days === ask.closes_in_days &&
+    JSON.stringify(before.ask.choices) === JSON.stringify(ask.choices);
+  return same ? before.nonce : fresh();
+}
 
 /**
  * The box read as `/poll`: the question typed after it (`""` when there's

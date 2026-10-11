@@ -313,7 +313,7 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M10 search                                                        ← V2, built
   → M11 DMs                                                          ← V2, built
   → M12 voice                                                        ← V2, built
-  → M13 ambient voice                                                ← V2, planned
+  → M13 ambient voice                                   ← V2, part built by later voice work
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
   → mobile (T-16xx), text first, no push                 ← started 2026-10-02
   → backburner: entrance sounds (T-901…T-903)
@@ -324,9 +324,12 @@ and M15 (the Buddy list client)**. M10's notes are in `docs/tasks/m10.md`, and
 its second half changed how the client holds history, so read it before
 touching message loading. **All nine release checks closed on 2026-09-25**
 from real use of the published app; the steps are kept in
-`docs/tasks/release-checks.md` for re-running when their area changes. M13 is
-planned and not started, and larger groups and the voice rework (a forwarding
-server) are #197. **Mobile is started** (Matt, 2026-10-02): a phone app for
+`docs/tasks/release-checks.md` for re-running when their area changes. M13
+was never started as a milestone, but later voice work built part of it:
+silence isn't sent, being in a room's voice is being in the room, and joining
+leaves a quiet line. What's left (no join step, the safety controls, a working
+day's CPU measured) is in `TASKS.md` M13. Larger groups and the voice rework (a
+forwarding server) are #197. **Mobile is started** (Matt, 2026-10-02): a phone app for
 iPhone and Android from the same Tauri 2 crate, text first, with no push and no
 notifications. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
 §Mobile. Close a milestone's checks before starting the next.

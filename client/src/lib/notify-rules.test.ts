@@ -73,6 +73,12 @@ describe("what is worth interrupting somebody for", () => {
     expect(notifyReason(joined, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
   });
 
+  it("says nothing about somebody leaving a group, even somebody you asked to hear from (#565)", () => {
+    const left = { ...message("left"), left: true };
+    expect(notifyReason(left, me, [])).toBeNull();
+    expect(notifyReason(left, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
+  });
+
   it("says nothing about a poll or a poll closing, whoever they name (#474)", () => {
     const asked = { ...message("**Poll:** @matt which faction?"), poll: { question: "Which faction?", choices: [{ text: "Horde", voter_ids: [] }, { text: "Alliance", voter_ids: [] }], multi: false, closes_at: 9e12, closed_at: null, closed_by: null } };
     expect(notifyReason(asked, me, [])).toBeNull();

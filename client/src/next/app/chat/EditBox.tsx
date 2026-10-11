@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAutoGrow } from "../../../lib/autoGrow";
 import type { Message } from "../../../generated/Message";
+import { saysNothing } from "../../core/chat/sending";
 import "./EditBox.css";
 
 /** The server's cap on a message (`linger-core::limits::MAX_MESSAGE_CHARS`). */
@@ -40,7 +41,7 @@ export function EditBox({ message, onSave, onDone }: { message: Message; onSave:
       onDone();
       return;
     }
-    if (body.length === 0) {
+    if (saysNothing(body)) {
       setProblem("An empty message is a delete, and that is a different button.");
       return;
     }

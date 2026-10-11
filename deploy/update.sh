@@ -13,7 +13,9 @@
 #      database into backups/, keeping the last five (uploaded files are not
 #      copied: they can be many GB, and no update changes them);
 #   3. starts everything again, the voice relay too if it was set up;
-#   4. waits for the server to answer, and prints the version before and after.
+#   4. waits for the server to answer, and prints the version before and after;
+#   5. says so when the relay's compose.yaml is one that lets it reach more
+#      than voice (#501). It never changes compose.yaml or .env itself.
 #
 # If the new server doesn't come back, it prints the commands that put the
 # backup and the previous version back. Nothing updates on its own: this runs
@@ -90,9 +92,13 @@ elif [[ -z "$voice" ]]; then
   say "carries no voice. To turn voice on, see https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice"
 fi
 
-[[ -f data/linger.db ]] ||
+# The server keeps its data folder to itself (#506), so from an account that
+# isn't root it won't open, and a folder that won't open is a server's. Nothing
+# here reads inside it: the backup below comes out through a container.
+if [[ ! -d data ]] || [[ -x data && ! -f data/linger.db ]]; then
   fail "can't find data/linger.db here. This script expects the data folder next to compose.yaml,
 as the standard compose.yaml sets it up."
+fi
 
 # The relay is behind the `voice` profile, and a command without the profile
 # leaves it on its old version. It's set up here if its container exists,
@@ -149,22 +155,30 @@ if [[ -n "$old_image_id" && "$old_image_id" == "$new_image_id" ]]; then
   say "The server is already the newest version${before:+ ($before)}. Nothing to back up."
 else
   step "Backing up the database (the server is down for a few seconds)"
+  # A backup is the whole database, so it's as private as the data folder
+  # (#506): the folder 0700 and each copy 0600. The chmod also shuts away
+  # copies an older update.sh left readable by everybody.
+  umask 077
   mkdir -p backups
+  chmod 700 backups
   backup="backups/linger-${before:-unknown}-$(date +%Y-%m-%d-%H%M%S).tar.gz"
   compose stop linger
   # Stopped cleanly, SQLite has folded its journal back into linger.db. The
   # -wal and -shm files are copied too whenever they're there, since
   # linger.db without its -wal can be missing the newest messages.
-  files=(linger.db)
-  for extra in linger.db-wal linger.db-shm; do
-    if [[ -e "data/$extra" ]]; then files+=("$extra"); fi
-  done
-  if ! tar czf "$backup" -C data "${files[@]}"; then
+  #
+  # The copy comes out through a one-off container of the server's image, so
+  # the account running this needs Docker and nothing more: the data folder
+  # opens only for the server and root (#506). Root inside the container only
+  # reads, whoever owns the files, and the archive arrives here on stdout.
+  # shellcheck disable=SC2016 # the $(ls …) is for the container's shell
+  if ! compose run --rm --no-deps -T --user root --entrypoint sh linger -c \
+    'cd /data && exec tar czf - linger.db $(ls linger.db-wal linger.db-shm 2>/dev/null)' >"$backup"; then
     rm -f "$backup"
     # The old server's container is still there, on its old image.
     compose start linger >/dev/null 2>&1 || true
     fail "couldn't copy the database into backups/, so nothing was updated and the server is
-running its old version again. If you type sudo before docker commands, run: sudo $0"
+running its old version again."
   fi
   say "Saved $backup"
   # Keep the newest few. Their names start with the version, so go by age.
@@ -212,8 +226,7 @@ To go back to $before with the backup you just made, run:
 
   cd $here
   docker compose stop linger
-  rm -f data/linger.db-wal data/linger.db-shm
-  tar xzf $backup -C data
+  docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'cd /data && rm -f linger.db-wal linger.db-shm && tar xzf -' <$backup
   $pin
   docker compose ${profiles[*]:+${profiles[*]} }up -d
 
@@ -237,4 +250,35 @@ else
 fi
 if [[ -n "$backup" ]]; then
   say "The database from before is in $backup."
+fi
+
+# A relay run by a compose.yaml from before #501 carries a member's packets to
+# any address this machine can reach. This script never replaces compose.yaml
+# (it can hold a pinned version, or an older server's settings), so it says how.
+# The file to get is the one from the release this server now runs, never
+# main's, which can be ahead of every release (#507); for a server following
+# `latest`, that's the newest release. The rule first ships in the release
+# after 0.4.10, so a server older than that has no such file to get yet.
+newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
+if ((${#profiles[@]})) && ! grep -q -- '--denied-peer-ip' compose.yaml; then
+  say
+  say "Warning: the voice relay this compose.yaml runs will carry a member's traffic to other"
+  say "machines this server can reach, not just to voice (#501). A newer compose.yaml keeps it"
+  say "to voice. Its relay uses more ports: before you get it, open UDP 49160 to 49359 in your"
+  say "provider's firewall and on this server (it was 49160 to 49200), and forward them at home."
+  if ! grep -q '^ *env_file: .env' compose.yaml; then
+    say "This one has your settings written into it, so they move to .env first. The host guide"
+    say "says how: https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server"
+  elif [[ "$after" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && newer "$after" 0.4.10; then
+    say "Get Linger $after's, the version this server now runs, then run this again:"
+    say "  curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/v$after/deploy/compose.yaml"
+    say "  ./update.sh"
+    case "$image" in
+      "$IMAGE_REPO" | "$IMAGE_REPO:latest") ;;
+      *) say "The new file's image line says $IMAGE_REPO:latest; to stay on $image, change it back first." ;;
+    esac
+  else
+    say "It comes with the releases after 0.4.10, and this server runs ${after:-an older one}. Once it"
+    say "runs one of those, ./update.sh says how to get it."
+  fi
 fi

@@ -9,6 +9,12 @@ import type { MessageId } from "../../../generated/MessageId";
 export interface Submission {
   /** Unique in this composer, so a retry can't be fired twice. */
   key: number;
+  /**
+   * The send's one-time key (PROTOCOL §4, #524), the same on every retry of
+   * it. A post the server saved, whose answer was lost on the way back, is
+   * then answered with that message instead of posted a second time.
+   */
+  nonce: string;
   /** The conversation (tab) it was typed in. */
   conversation: string;
   body: string;
@@ -48,11 +54,52 @@ export function dropUnsent(unsent: readonly Submission[], key: number): Submissi
 }
 
 /**
+ * A character that draws something by itself, as the server judges it
+ * (`validate::is_seen`): not a space, a control or format character such as a
+ * zero-width space, a mark with no letter under it, or one of the letters that
+ * are blank on purpose (the Hangul fillers, the empty braille cell, the
+ * musical null notehead). An unassigned code point counts as seen: it is most
+ * likely an emoji newer than this engine's tables.
+ */
+const SEEN = /[^\s\p{Cc}\p{Cf}\p{Z}\p{M}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}\u{1D159}]/u;
+
+/**
+ * Whether a draft is as empty as one of spaces (#512). A message of only
+ * blank letters would draw as an empty row, and the server refuses it with
+ * the answer a blank one gets.
+ */
+export function saysNothing(draft: string): boolean {
+  return !SEEN.test(draft);
+}
+
+/**
+ * The one-time key for what Enter sends now (#524). A failed send that went
+ * back into the box (`afterFailure` "restore") and is sent again as it was is
+ * the same send, retried, so it keeps its key; changed in any way, it's a new
+ * message and gets a new one. `restored` is that failed send, if the box
+ * holds one.
+ */
+export function nonceFor(
+  next: Omit<Submission, "key" | "nonce">,
+  restored: Submission | null,
+  fresh: () => string,
+): string {
+  if (restored === null) return fresh();
+  const files = (keys: readonly string[]) => JSON.stringify([...keys].sort());
+  const same =
+    restored.conversation === next.conversation &&
+    restored.body === next.body &&
+    restored.replyTo === next.replyTo &&
+    files(restored.fileKeys) === files(next.fileKeys);
+  return same ? restored.nonce : fresh();
+}
+
+/**
  * What Enter does with the box: send when there is something to send and no
  * file is still uploading. `blocked` says why not, in words, when it can't.
  */
 export function canSend(draft: string, readyFiles: number, uploading: boolean): { ok: true } | { ok: false; blocked: string | null } {
-  if (draft.trim().length === 0 && readyFiles === 0) return { ok: false, blocked: null };
+  if (saysNothing(draft) && readyFiles === 0) return { ok: false, blocked: null };
   if (uploading) return { ok: false, blocked: "The file is still uploading. Your draft is kept here." };
   return { ok: true };
 }

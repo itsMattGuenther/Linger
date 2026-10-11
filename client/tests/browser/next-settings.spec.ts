@@ -389,6 +389,8 @@ test.describe("this app", () => {
     await change.click();
     await expect(said(page.getByRole("region", { name: "Password" }))).toHaveText("Password changed");
     await page.getByRole("button", { name: "Export everything" }).click();
+    // The server keeps an archive a week, and the line says until when (#504).
+    await expect(panel(page)).toContainText(/Your archive is ready\. The link stops working on \w+/);
     await page.getByRole("button", { name: "Download it" }).click();
     await page.getByRole("button", { name: "What's new" }).click();
     await page.getByRole("button", { name: "Sign out" }).click();

@@ -47,4 +47,14 @@ poll?: Poll,
  * line it never makes a room look new, never notifies, and can't be
  * edited.
  */
-poll_closed?: PollClosed, };
+poll_closed?: PollClosed, 
+/**
+ * `true` on the line the server writes when somebody leaves a group DM
+ * (#565): its author is who left, its body "left". Left out on every
+ * other message, so an app that doesn't know the field shows it as that
+ * person saying "left".
+ *
+ * Like the line saying somebody joined voice it never makes a DM look
+ * new, never notifies, and can't be edited or reacted to.
+ */
+left?: boolean, };

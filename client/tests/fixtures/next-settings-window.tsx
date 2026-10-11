@@ -23,6 +23,8 @@
  * message of Jules's in #general, for People. Unblocking, deleting the message
  * and closing the report are written down, and the list window passes on
  * what changed, as the real one does.
+ * A display name that is somebody else's here in other capitals is refused
+ * the way the server refuses a look-alike (#574).
  * What the window asked for is written to `body[data-did]`, `|`-separated.
  */
 import { StrictMode } from "react";
@@ -114,7 +116,12 @@ const desktop = fakeDesktop({
       return json(info);
     }
     if (path === "/me" && method === "PATCH") {
-      return json({ ...me, display_name: typeof body.display_name === "string" ? body.display_name : me.display_name });
+      const asked = typeof body.display_name === "string" ? body.display_name : null;
+      if (asked !== null && night.users.some((user) => user.id !== me.id && user.display_name.toLowerCase() === asked.toLowerCase())) {
+        const message = "Someone here already goes by a name that looks like that. Try something a little different.";
+        return json({ error: { code: "DISPLAY_NAME_TAKEN", message, retry_after_ms: null } }, 409);
+      }
+      return json({ ...me, display_name: asked ?? me.display_name });
     }
     if (path === "/invites" && method === "GET") return json(invites);
     if (path === "/users/removed") return json([]);

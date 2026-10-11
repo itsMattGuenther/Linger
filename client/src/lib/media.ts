@@ -7,6 +7,7 @@
  */
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
+import { withoutDirectionControls } from "./direction";
 
 /** An image renders at true aspect ratio, capped at this height (SPEC §5.6). */
 export const MAX_INLINE_HEIGHT = 400;
@@ -95,6 +96,14 @@ export function durationText(ms: number): string {
 }
 
 /**
+ * The narrowest a picture shrunk to the height cap is drawn (#512): wide
+ * enough to see what it is and to hit with a pointer. A phone's screenshot,
+ * the common tall picture, is about 185 at the cap, so only the very tall
+ * ones are widened.
+ */
+export const MIN_INLINE_WIDTH = 120;
+
+/**
  * How big to draw an image: its own shape, never taller than the cap, and never
  * wider than the column it is in (CSS handles that half with `max-width`).
  *
@@ -102,6 +111,14 @@ export function durationText(ms: number): string {
  * jumping as pictures load — the row is the right height before the bytes
  * arrive, which matters more here than anywhere because the list is virtualized
  * and a row that changes height after measurement moves everything under it.
+ *
+ * A picture shrunk to the cap is never narrower than `MIN_INLINE_WIDTH`
+ * (#512): a phone's scrolling screenshot would be a sliver, and a 1×10000 one
+ * nothing to click at all. That box is wider than the picture's own shape, so
+ * the picture fills it from its top (`object-fit: cover` in Attachments.css)
+ * and the viewer shows all of it. Only a picture past the cap is widened: at
+ * that width its own shape is taller still, so once it loads the height stays
+ * the cap's (CSS `max-height`) and the row doesn't move.
  */
 export function inlineBox(
   width: number | null,
@@ -110,7 +127,7 @@ export function inlineBox(
 ): { width: number; height: number } | null {
   if (width === null || height === null || width <= 0 || height <= 0) return null;
   if (height <= cap) return { width, height };
-  return { width: Math.round((width * cap) / height), height: cap };
+  return { width: Math.max(MIN_INLINE_WIDTH, Math.round((width * cap) / height)), height: cap };
 }
 
 /** The filters the grid offers, in the order they are drawn. */
@@ -149,9 +166,20 @@ function parseDay(value: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
+/**
+ * A file's name as the app shows it: without the characters that change the
+ * direction of text (#488). The server takes them out of every name it stores
+ * now, but a name saved before that, or one from a server that doesn't, may
+ * still hold one, and one is enough to make a program read as a document:
+ * `invoice` + U+202E + `fdp.exe` shows as "invoiceexe.pdf".
+ */
+export function fileNameToShow(name: string): string {
+  return withoutDirectionControls(name);
+}
+
 /** What a tile says under it when the item has no other words of its own. */
 export function itemLabel(item: MediaItem): string {
-  if (item.attachment) return item.attachment.filename;
+  if (item.attachment) return fileNameToShow(item.attachment.filename);
   if (item.link) return item.link.title ?? item.link.domain;
   return item.excerpt ?? "a pinned message";
 }

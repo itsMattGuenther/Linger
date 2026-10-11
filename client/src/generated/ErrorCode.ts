@@ -4,4 +4,4 @@
  * Stable machine-readable error identifiers the client switches on.
  * Additive within v1: new codes may be appended, never removed or renamed.
  */
-export type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "RATE_LIMITED" | "VALIDATION_FAILED" | "INVITE_INVALID" | "INVITE_EXPIRED" | "QUOTA_EXCEEDED" | "FILE_TOO_LARGE" | "UNSUPPORTED_MEDIA" | "CONFLICT" | "INTERNAL";
+export type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "RATE_LIMITED" | "VALIDATION_FAILED" | "INVITE_INVALID" | "INVITE_EXPIRED" | "QUOTA_EXCEEDED" | "FILE_TOO_LARGE" | "UNSUPPORTED_MEDIA" | "CONFLICT" | "INTERNAL" | "DISPLAY_NAME_TAKEN";

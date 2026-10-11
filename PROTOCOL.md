@@ -21,9 +21,19 @@ Every non-2xx response:
 `code` is a stable SCREAMING_SNAKE identifier the client switches on. `message` is
 human-readable and safe to display. Never leak internals in `message`.
 
+`retry_after_ms` is set when waiting is the answer, which is every `RATE_LIMITED`:
+how long until the same request would be taken. A response that sets it also
+carries HTTP's own `Retry-After` header, the same wait in whole seconds rounded up,
+for tools other than the app. The app reads `retry_after_ms`.
+
 Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`,
 `VALIDATION_FAILED`, `INVITE_INVALID`, `INVITE_EXPIRED`, `QUOTA_EXCEEDED`,
-`FILE_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `CONFLICT`, `INTERNAL`.
+`FILE_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `CONFLICT`, `INTERNAL`,
+`DISPLAY_NAME_TAKEN` (§2, #574).
+
+Codes are additive: a newer server may send one an older client has never heard of.
+The client reads an unknown code as `INTERNAL` and shows `message` as it is, which is
+why every `message` is a whole sentence for a person.
 
 ---
 
@@ -32,6 +42,20 @@ Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`,
 Access token: JWT, EdDSA, 15 min TTL, sent as `Authorization: Bearer <jwt>`.
 Refresh token: opaque, 30 days, **rotating**. Reuse of a consumed refresh token revokes
 the entire token family and forces re-login.
+
+Some things end every sign-in an account has at once: a password change (§5), a reset
+from the command line, and removal (§5). Each revokes every refresh family the account
+has, and refuses every access token minted before it, at once rather than when it
+expires: on REST (`UNAUTHENTICATED`) and at the gateway's `identify` and `resume`
+(`invalid_session { reason: "unauthenticated" }`). A password change and removal also
+close the account's open gateway sessions (§8). A reset from the command line runs
+while the server is stopped (`docs/host-guide.md`), which has closed them already. Each
+access token carries the account's `token_generation`
+(the `gen` claim), and ending every sign-in adds one to it, so a token whose number is
+smaller is refused (#496). It is a count rather than a time on purpose: token times are
+whole seconds, and a time could not tell a token minted just before a password change
+from the fresh one minted just after it. Tokens from before #496 carry no `gen` and
+count as 0. Clients treat the token as opaque and never read it.
 
 ```
 POST /auth/register     { invite_code, username, display_name, password }
@@ -94,6 +118,59 @@ The limits are `MAX_ACCENT_MARKS_PER_LETTER` and `MAX_MARKS_PER_LETTER` in
 `linger-core::limits`. They apply when a name is set or changed: a name saved before
 them is left as it is, and a `PATCH /me` whose `display_name` is the saved name
 unchanged is not held to them.
+
+A display name that passes those must also not look like anybody else's (#574). The
+server refuses it with `409 DISPLAY_NAME_TAKEN` "Someone here already goes by a name
+that looks like that. Try something a little different." when it looks the same as
+the display name or the username of any other active member. Removed members don't
+count, and nor does the person's own name, so saving it again or changing only its
+capitals is fine.
+
+"Looks the same" (`linger-server::names`): each name is put in NFKC, every
+Default_Ignorable_Code_Point is dropped, every run of whitespace or blank letters
+(rule 5) becomes one space, and none is left at the ends. That gives `n`. Its three
+shapes are `skeleton(n)`, `skeleton(lower(n))` and `skeleton(lower(skeleton(n)))`,
+where `skeleton` is UTS #39's confusables skeleton. Two names look the same when any
+shape of one is a shape of the other. The three cover `Ilya` beside `llya` (a
+capital I is taken for an l), `Matt` beside `matt`, and a Cyrillic `Маtt` beside
+`matt`.
+
+The check runs in the transaction that saves the name, so two people can't both get
+look-alikes at once. `POST /auth/register` checks it after the invite, so somebody
+without a good invite learns nothing about who is here, and a refusal leaves the
+invite's use and the username unspent. `POST /setup` makes the first account, so
+there is nobody to look like. Like the rules above, it applies when a name is set or
+changed: two names saved before it that look alike both stay.
+
+**Direction controls in other short text** (#488). The direction controls in rule 2
+come in two kinds. The embeddings, overrides and isolates (U+202A–U+202E,
+U+2066–U+2069) turn the text after them around: a file named `invoice` + U+202E +
+`fdp.exe` reads "invoiceexe.pdf", and one left open turns the app's own words beside
+it around too. The three marks (U+200E, U+200F, U+061C) only move the punctuation and
+numbers beside them, and people writing Hebrew or Arabic use them on purpose: "בחוץ!"
+draws its "!" at the start of the line without U+200F after it. A display name
+refuses all of them. Everywhere else the app draws short text beside its own words,
+the server **takes them out** on the way in, before trimming and counting, and stores
+the rest:
+
+- an upload's `filename` (§6) loses all of them, the marks too, and so does the name
+  in a file's `Content-Disposition`, for a name stored before this. A file's name is
+  what the trick is aimed at, and nobody needs a mark in one;
+- every text in a status: `line`, `away_message`, `reading`, `listening`, `working_on`
+  and each field's `label` and `value` (§5), and the `away_message` of a
+  `presence.update` (§8);
+- a room's `name`, `topic` and `motd`, and the server's `name`, at setup too (§3, §2.1);
+- a poll's `question` and `choices` (§4).
+
+All but the file name lose only the embeddings, overrides and isolates, and keep the
+marks. Taken out rather than refused, because nobody can see them: a refusal would ask
+somebody to delete a character they can't find, and they mostly arrive by pasting (a
+song title, a file from somebody's disk). A message's `body` keeps everything:
+somebody writing a paragraph in Hebrew or Arabic may want any of them, and a client
+keeps each message's words to themselves. Text stored before this keeps them, so a
+client draws all of the above isolated from the words around it, and a file's name
+without them (`docs/design/system.md`, principle 10).
+
 `password`: minimum 8 characters. Do not impose composition rules, do not expire
 passwords, and do not ask for a hint. The floor was 12 until 2026-08-21; it came
 down because the client remembers the password in the OS keyring, so the length
@@ -104,11 +181,43 @@ Refresh-token reuse (presenting an already-rotated token) revokes the token's wh
 family — every token descended from the same login — and forces re-login on that
 device chain. Logout likewise revokes the presented token's family.
 
+The server keeps a rotated token only until its own 30 days are up, then deletes it
+(#520). Reuse is caught for those 30 days. A token presented after them is refused
+as expired, the same `UNAUTHENTICATED`, and no longer revokes its family.
+
 When renewal fails, a client ends its saved sign-in only if refresh is rejected with
 `UNAUTHENTICATED` or `FORBIDDEN`. A temporary server error, rate limit, or transport
 failure leaves the saved token in place and reports the failure to the caller. A
 later request can try again; clients must not loop on refresh or infer token
 revocation from `INTERNAL`. This applies both at startup and during normal use.
+
+Sign-in and sign-up are limited per address (#495): `POST /auth/login` 5 a minute
+(`RATE_LOGIN_PER_IP`), `POST /auth/register` 60 an hour by default, all at once if
+need be. The host sets the sign-up figure with `LINGER_SIGNUPS_PER_HOUR`, or turns
+it off; the sign-in figure is the brake on guessing passwords and isn't a setting.
+Past either, the answer is `RATE_LIMITED` with `retry_after_ms`. The address is the
+connection's own; from a proxy the server trusts (`LINGER_TRUSTED_PROXIES`, by
+default the same machine or a private network), it is the last `X-Forwarded-For`
+entry, never an earlier one. Checking a password is slow on purpose and the server
+does only a few at once (`LINGER_PASSWORD_CHECKS_AT_ONCE`, default 4), so a sign-in,
+sign-up, first-run setup or password change that can't get a turn within 5 seconds
+is also `RATE_LIMITED`. `POST /auth/register` checks the invite before it touches
+the password: a bad invite is refused straight away, and a sign-up refused for any
+reason has not used up its invite.
+
+The three share a code, and each has its own `message`, which says what is
+happening and, with the wait from `retry_after_ms` in words, when to try again
+(#538). The app shows `message` as it comes, so an app from before a new sentence
+shows it too:
+
+- sign-ups from the address used up: *"Lots of people have joined from your network
+  in the last hour, so this server is pausing new sign-ups from it. Try again in
+  about 10 minutes. If your group is joining together, the host can raise this
+  limit."*
+- sign-in tries from the address used up: *"Too many sign-in tries from your network
+  in the last minute. Try again in 12 seconds."*
+- no turn to check a password: *"The server is busy letting other people in. Try
+  again in a moment."*
 
 ### 2.1 First-run setup
 
@@ -143,6 +252,7 @@ POST /rooms/:id/archive  (host or co-host)                                → Ro
 
 GET  /dms                → Room[]                       # the DMs you are in
 POST /dms                { user_ids }                   → Room
+POST /dms/:id/leave                                     → 204   # a group DM you're in (§3.1)
 ```
 
 ```ts
@@ -155,6 +265,7 @@ type Room = {
   last_message_id: string | null;   // client compares to read marker; never a motd line
   motd?: { text: string; set_by: string; set_at: number };   // left out when none
   reactions_off?: true;             // the host turned reactions off here (§4); left out when on
+  someone_left?: true;              // a DM somebody has left (§3.1, #565); left out otherwise
 }
 ```
 
@@ -172,7 +283,8 @@ client draws `member_ids` and ignores both. The `dm-` slug prefix is reserved an
 `POST /rooms` refuses it.
 
 **A room's message of the day** (`motd`, SPEC §4.1, #464) is what's happening now; the
-topic is what the room is about. `PATCH /rooms/:id { motd }` sets it, trimmed, up to
+topic is what the room is about. `PATCH /rooms/:id { motd }` sets it, trimmed and
+without the direction controls that turn text around (§2), up to
 `linger-core::limits::MAX_MOTD_CHARS` (300) characters, longer is `VALIDATION_FAILED`;
 `""` clears it, and leaving `motd` out leaves it alone. Setting it also writes a line in
 the room, in the same transaction: a `Message` from whoever set it, with the words as
@@ -209,6 +321,7 @@ reads as "maybe" (#306).
 ```
 GET  /dms                → Room[]
 POST /dms   { user_ids } → Room
+POST /dms/:id/leave      → 204
 ```
 
 `POST /dms` is **create-or-find**: the same set of people always gives the same DM, so
@@ -217,12 +330,50 @@ asking twice is not how you end up with two conversations with the same three pe
 not name themselves; naming yourself, or the same person twice, is
 `VALIDATION_FAILED`, and so is an empty list, because a DM with only you in it is not a
 conversation. Two to eight people in total. An id that is not a member of this server
-is `NOT_FOUND`.
+is `NOT_FOUND`. A DM somebody has left is never found this way (below).
 
-**Membership is fixed at creation.** There is no endpoint to add or remove somebody:
-a different set of people is a different DM. Adding one later would mean deciding what
-they can read of what was already said, and that decision is a permission system in its
-first disguise (AGENTS rule 10).
+**Membership is fixed at creation.** There is no endpoint to add somebody: a different
+set of people is a different DM. Adding one later would mean deciding what they can read
+of what was already said, and that decision is a permission system in its first
+disguise (AGENTS rule 10). The one change is leaving, which only goes one way.
+
+**Leaving a group DM** (SPEC §4.13, #565). `POST /dms/:id/leave` takes the caller out of
+a group DM they are in, and answers `204`. A group is a DM made for three or more
+people, or one somebody has already left, so a group that shrinks to two stays a group.
+
+| Refusal | When |
+|---|---|
+| `404 NOT_FOUND` "No such room on this server." | a DM the caller isn't in (as for any room they can't see), or a room, which nobody leaves |
+| `422 VALIDATION_FAILED` "A DM with one person can't be left. It's their row in your list." | a one-to-one DM |
+
+One transaction does all of it:
+
+- **The caller stops being a member**, so everything that asks whose (`GET /dms`,
+  `ready`, messages, search, Media, the export, typing, voice, `room.focus`) stops
+  answering them about it, exactly as for a DM they were never in.
+- **The DM stops matching its people.** `POST /dms` with the same set makes a new DM,
+  so nobody is pulled back into one they left, and the DM carries `someone_left: true`
+  from now on, so an app can tell it apart from a DM it would find by its people.
+- **The caller's read position and notification rules for it go.**
+- **The people still in it get a line**, a `Message` from whoever left with the body
+  "left" and `left: true` (§4). Like the line saying somebody joined voice it is never a
+  room's `last_message_id`, search passes over it, it can't be edited or reacted to, and
+  an app neither notifies nor sounds for it. An app from before the field shows it as
+  them saying "left".
+
+Frames, in this order. If the caller was in the DM's voice, each of their seats there
+gets `voice.removed` and the people still in it the `voice.state` without them (§8).
+Then **every session of the caller gets `dm.remove { room_id }`**, and nothing about
+the DM after it. Then the people still in it get `room.update`, with the new
+`member_ids`, and the line's `message.create`. An app from before `dm.remove` ignores
+it, as any unknown frame (§9): it keeps showing the DM until it next signs in afresh,
+and everything it asks about it is `NOT_FOUND`.
+
+**The last person to leave deletes the conversation.** Nobody is left who could read it,
+and nobody can be added. Every message in it is deleted as `DELETE /messages/:id`
+deletes one (a tombstone, its body emptied), its reactions and link cards go, its files
+are swept straight away rather than at the sweeper's next pass (§6), and no line is
+written.
 
 Everything else about a DM is a room. `GET /rooms/:id/messages`, `POST` to it,
 reactions, uploads, typing and presence all work unchanged and are addressed by the
@@ -237,7 +388,7 @@ that distinguishes "a DM you are not in" from "no such room".
 ```
 GET  /rooms/:id/messages?before=<id>&after=<id>&limit=<1..100>   → Message[]
 GET  /rooms/:id/messages?around=<id>&limit=<1..100>              → Message[]
-POST /rooms/:id/messages   { body, reply_to?, attachment_ids? }  → Message
+POST /rooms/:id/messages   { body, reply_to?, attachment_ids?, nonce? }  → Message
 PATCH  /messages/:id       { body }                              → Message
 DELETE /messages/:id                                             → 204
 POST   /messages/:id/pin                                         → Message
@@ -271,11 +422,46 @@ empty or oversize bodies are `VALIDATION_FAILED` — **except** that a message
 carrying at least one attachment may have an empty body. Handing somebody a
 photo without typing a caption over it is the ordinary way to share a photo.
 
+A body with nothing visible in it counts as empty (#512), by the rule a display
+name is held to (§2, rule 5): only whitespace, format characters (category Cf, e.g.
+U+200B, U+2060, U+FEFF), control characters, marks, and blank letters (U+115F,
+U+1160, U+3164, U+FFA0, U+2800, U+1D159). Sent or edited, it gets the answer a
+blank one gets, `VALIDATION_FAILED` "Say something."; it used to be taken and drew
+as an empty row. Beside visible text those characters are kept as written. A
+caption is not held to this: a message with an attachment has something to show.
+
 `attachment_ids` are finished uploads (§6). Each must belong to the author, be
 in the `complete` state, and not already be on another message; at most
 `linger-core::limits::MAX_ATTACHMENTS_PER_MESSAGE` per message. Reusing
 somebody else's attachment id is `FORBIDDEN`, and reusing one that is already
 posted is `CONFLICT`.
+
+A post is all or nothing: the message, the links it holds, its files and the
+sender's read marker are saved in one transaction (#524). A post that fails
+left nothing behind, so sending it again doesn't post it twice, and its files
+are still free to send.
+
+`nonce` is what makes sending again safe when the post did land and only its
+answer was lost on the way back (#524). Asking a poll takes one the same way (below). It is a one-time key the client makes
+up for each send (the app uses a UUID) and sends again, unchanged, with every
+retry of that send: 1–64 letters, digits, `-` or `_`
+(`linger-core::limits::MAX_NONCE_CHARS`), or `VALIDATION_FAILED`. When the same
+person already posted with the same key in the last week
+(`linger-core::limits::NONCE_KEPT_MS`), the answer is that message as it is
+now, edited or deleted since or not, with a success status, and nothing else
+happens: no second message, no second `message.create`, the read marker isn't
+moved, and the files named in the retry aren't looked at (they're on that
+message already). A deleted message's key stays spent, so a retry answers
+with its tombstone and can't bring it back. The key is checked before whether
+the room is archived, since it was posted while it wasn't. The same key from
+two people is two messages. The same person's key used in another room is
+`CONFLICT`: one send lands in one room.
+
+Keys are remembered for a week, not for the message's life: a retry only comes
+from a client still holding the unsent message. Each post that carries a key
+clears out the keys older than that. A post without `nonce` is always a new
+message, which is what a client from before the field gets; a server from
+before it ignores the field, so a new client there is as it always was.
 
 `reply_to` must reference a message in the same room. Pin/unpin is any member;
 there is no pin hierarchy.
@@ -295,6 +481,7 @@ type Message = {
   voice_join?: true;                           // the line saying somebody joined voice (§8, #473)
   poll?: Poll;                                 // the poll this message asks (#474), below
   poll_closed?: PollClosed;                    // on the line a closing poll leaves (#474), below
+  left?: true;                                 // the line saying its author left a group DM (§3.1, #565)
 }
 ```
 
@@ -309,7 +496,7 @@ your own twice is one, and taking back one you never left is `204` too.
 |---|---|
 | `422 VALIDATION_FAILED` "A reaction is one emoji." | the key is words, two emoji, a lone skin tone or joiner (the twelve names reactions had before #485 included) |
 | `404 NOT_FOUND` "That emoji isn't on this server." | `emoji:<id>` names no emoji this server has, or writes the id another way |
-| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice |
+| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice or left a group DM |
 | `403 FORBIDDEN` "Reactions are off in this room." | the host turned them off (§3); taking one back is still allowed |
 | `409 CONFLICT` "This message has six different reactions, the most it can hold. Add yours to one of them." | it has `MAX_REACTIONS_PER_MESSAGE` (6) different emoji already, and this isn't one of them |
 
@@ -328,13 +515,15 @@ before the field shows the line as an ordinary message from whoever set it. Nor 
 line saying somebody joined voice (`voice_join`, §8): nobody typed it. Its body is
 "joined voice" and its author whoever joined, so an app from before the field shows it
 as them saying so; it is never a room's `last_message_id`, search passes over it, and a
-client neither notifies nor sounds for it.
+client neither notifies nor sounds for it. The line saying somebody left a group DM
+(`left`, §3.1) is the same in every way, with the body "left"; whoever left can't reach
+it to edit it anyway.
 
 **Polls** (SPEC §4.18, #474). A question the host or a co-host asks a room, which everybody
 in it answers with a click.
 
 ```
-POST /rooms/:id/polls      (host or co-host) { question, choices, multi, closes_in_days } → Message
+POST /rooms/:id/polls      (host or co-host) { question, choices, multi, closes_in_days, nonce? } → Message
 PUT  /messages/:id/vote    { choices: number[] }                                       → Message
 POST /messages/:id/close   (whoever asked)                                             → Message
 ```
@@ -352,7 +541,8 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
 ```
 
 - **Asking** is the host or a co-host (`FORBIDDEN` for anybody else), in a room, never a DM
-  (`NOT_FOUND`), and not an archived one. The question is trimmed, 1 to
+  (`NOT_FOUND`), and not an archived one. Question and choices lose the direction
+  controls that turn text around (§2). The question is trimmed, 1 to
   `MAX_POLL_QUESTION_CHARS` (300); `MIN_POLL_CHOICES` to `MAX_POLL_CHOICES` (2 to 10)
   choices, each trimmed, 1 to `MAX_POLL_CHOICE_CHARS` (80), none the same as another
   ignoring case; `closes_in_days` is one of `POLL_DAYS` (1, 3, 7, 14, 28). Anything else is
@@ -360,6 +550,9 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
   is a room's `last_message_id` like anything said. Its body is the question and the choices
   as a Markdown list, so an app from before polls shows them as words, and search finds them.
   A client neither notifies nor sounds for one, whoever it names. It can't be edited.
+  `nonce` is the ask's one-time key, exactly as a message's (above, #524): the same rules,
+  the same week, kept in the same place, so asked again with its key, a poll that was
+  asked is answered with that poll and nothing is asked twice.
 - **Voting** is anybody who can see the room, whoever asked included: the choices' places,
   replacing any vote before, `[]` taking it back; more than one only when `multi`; at most
   `RATE_POLL_VOTE` (20 in 10 s). A poll that is closed, or whose `closes_at` has passed, takes
@@ -377,6 +570,9 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
 permitted by the author, the host or
 a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
+The files a deleted message carried are not kept (#502): the delete removes them, a
+tombstone's `attachments` is always empty, and their URLs answer `404` from the moment
+the delete does.
 
 **Read markers**
 
@@ -410,7 +606,8 @@ GET   /users              → User[]              # all members of this server
 GET   /users/:id          → User
 GET   /me                 → User
 PATCH /me                 { display_name?, style?, status?, entrance_sound? } → User
-PATCH /me/password        { current_password, new_password }                 → 204
+PATCH /me/password        { current_password, new_password }
+                       →  { access_token, refresh_token, expires_in, user }
 
 GET  /me/notify-rules     → NotifyRule[]
 PUT  /me/notify-rules     { target_user_id, room_id | null }   → 204
@@ -430,6 +627,35 @@ POST   /reports             { message_id } | { user_id }, note? → 201 Report  
 GET    /reports             → Report[]                          # host or co-host, open ones
 DELETE /reports/:id         → 204                               # host or co-host: dealt with
 ```
+
+### Changing your password
+
+`PATCH /me/password` checks `current_password` (`FORBIDDEN` when it doesn't match) and
+ends every sign-in the account has, the one that asked included (§2): every refresh
+family, every access token, and every open gateway session, which gets
+`invalid_session { reason: "unauthenticated" }` and is closed. The usual reason to
+change a password is that somebody else might have it, and anything that outlived the
+change would be theirs to keep.
+
+The device that asked carries on. The answer is a fresh sign-in, the same shape as
+`POST /auth/login`'s, in a new refresh family: the client swaps it in for the tokens it
+held and reconnects the gateway with it. A token refused while the answer is on its way
+is expected, and a client waits for the answer rather than spend its old refresh token,
+which is revoked and would sign it out.
+
+A server from before #496 answered 204 with no body, revoked only the refresh tokens,
+and closed nothing. A client that gets 204 signs in again with the new password.
+
+An app from before #496 (0.4.10 and earlier) ignores the body and signs in again with
+the new password, which leaves the fresh family unused until it expires. It doesn't
+wait, though. Its own connection is closed like every other, and its reconnect asks
+for a token, by the second ask at the latest renewing with the refresh token the change
+just revoked. That is refused, and the app signs itself out. Whichever lands last, that or its own sign-in,
+decides whether it stays signed in, so the person may have to sign in again with the
+new password. The server closes that connection too, on purpose. The only thing that
+could pick it out is the access token it identified with, which is usually older than
+the one the change was made with, and a thief holding that same token would be spared
+along with it.
 
 ### Co-host (SPEC §4.16, #424)
 
@@ -477,14 +703,19 @@ removed member sitting in the room:
 - **`GET /users`** and the roster query filter deactivated accounts, so they leave the
   roster on their own.
 
-Removal also revokes every refresh family the user owns and every invite they created,
-in the same transaction as the column. Their messages are untouched; removing a person
-is not deleting what they wrote.
+Removal also ends every sign-in the user has (§2: every refresh family, and every access
+token minted before it) and revokes every invite they created, in the same transaction
+as the column. Their messages are untouched; removing a person is not deleting what they
+wrote. What they had on its way into a message is deleted (#503): their uploads still
+going up and the finished uploads they never posted, which nobody else could see, delete
+or send, and which held the pool. Files on their messages stay, and so does the picture
+of an emoji they added, which is the server's.
 
 `restore` is not an undo. It clears the column and nothing else: the revoked invites stay
-revoked and the revoked sign-ins stay revoked, so the person signs in again with their
-password. `GET /users/removed` is how the host finds somebody to restore — a removed
-member is absent from every other surface by design.
+revoked and the revoked sign-ins stay revoked, an access token from before the removal
+included, so the person signs in again with their password. `GET /users/removed` is
+how the host finds somebody to restore — a removed member is absent from every other
+surface by design.
 
 Both endpoints announce themselves on the gateway: `remove` fans out `user.remove`, and
 `restore` fans out `user.update`, which is "here is this person, whether or not you had
@@ -528,7 +759,7 @@ type UserStatus = {
   fields: StatusField[] | null;       // <= 3, in order; absent from servers before #270
   image_id: string | null;            // always null; accepted and ignored (#269)
   image_url: string | null;           // always null; server-owned
-  away_message: string | null;        // supersedes `line` when set
+  away_message: string | null;        // <= 240 chars; supersedes `line` when set
   away_since: number | null;
 }
 
@@ -564,7 +795,8 @@ any label typed; the server doesn't keep a list. It checks every field: at
 most three (`VALIDATION_FAILED` for a fourth), each label 1–24 characters and
 each value 1–80, counted after trimming, neither holding a control character
 (a tab, a line break), and no label twice, ignoring case. It stores them
-trimmed. An empty value is refused rather than dropped: an app leaves out a
+trimmed, and without the direction controls that turn text around (§2),
+which every text in a status loses. An empty value is refused rather than dropped: an app leaves out a
 field nobody filled in. A web address in a value is the app's to draw as a
 link; on the wire a value is plain text.
 
@@ -746,12 +978,19 @@ DELETE /uploads/:id                                         → 204
 Client PUTs bytes **directly to the returned URL**, never through the app server.
 Files over 8 MB use multipart with per-part URLs, which is what makes uploads resumable.
 
-Server rejects at slot creation: `size_bytes > 500 MB` (`FILE_TOO_LARGE`), server pool
+Server rejects at slot creation: `size_bytes > 500 MB` (`FILE_TOO_LARGE`), more than
+1 GB of the caller's own uploads still going up (`QUOTA_EXCEEDED`, #503), server pool
 over quota (`QUOTA_EXCEEDED`), or a mime not on the allowlist in `linger-core::media`
-(`UNSUPPORTED_MEDIA`). Server re-validates real size and sniffs actual MIME at complete —
-never trust the declared values. A file whose bytes disagree with its declared type is
+(`UNSUPPORTED_MEDIA`). The two `QUOTA_EXCEEDED` refusals differ only in `message`: the
+first says it is the caller's uploads, not the server's storage, and clears as they
+finish or are thrown away. A slot reserves its declared size from the moment it is
+handed out, so a client that gives up on an upload should `DELETE` it. Server
+re-validates real size and sniffs actual MIME at complete — never trust the declared
+values. A file whose bytes disagree with its declared type is
 `UNSUPPORTED_MEDIA`; a file that is not the size it said it would be is
-`VALIDATION_FAILED`.
+`VALIDATION_FAILED`. An image that can't be decoded, or that would take more memory to
+re-encode than the server allows (ARCHITECTURE §8), is `UNSUPPORTED_MEDIA` with "That
+image can't be read."
 
 `upload_id` and `attachment_id` are the same identifier. An upload is an attachment that
 has not arrived yet, and there is nothing to remember about one that the attachment does
@@ -764,17 +1003,37 @@ a client that resumes recomputes exactly the plan it was given. Each successful 
 answers with an `ETag` (which CORS exposes), and those etags may be handed back at
 complete; the server checks them against what actually landed.
 
+Each part is exactly its planned length: `part_size_bytes` for every part but the last,
+and what is left over for the last (the whole file, for a one-part upload). Send each
+part as one body of that length; a browser sets `Content-Length` from it. A longer part
+is refused when it is PUT, on both backends. On S3 a shorter one is too, because the
+length is signed into the URL and the bucket answers any other with `403`. A part
+longer than planned that reaches the store anyway makes complete fail with
+`VALIDATION_FAILED`, and that refusal is final.
+
 **Resuming.** Re-PUTting a part replaces it. Completing with parts missing is
 `VALIDATION_FAILED` and **leaves the slot alive**: send the missing parts and complete
-again. Any other refusal at complete is final — the parts are discarded and the slot
-cannot be retried, because resending the same bytes under the same declaration cannot
-make them acceptable.
+again. So does `RATE_LIMITED` ("The server is busy with other pictures…", with
+`retry_after_ms`), which an image gets when the server has been working on two others
+for longer than it can wait (ARCHITECTURE §8): complete again after `retry_after_ms`. Any
+other refusal at complete is final — the parts are discarded and the slot cannot be
+retried, because resending the same bytes under the same declaration cannot make them
+acceptable.
 
-`DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
+**A slot that hears nothing for an hour is released** (#503): when no part has arrived
+for an hour, or none has since the slot was handed out an hour ago, its space is given
+back and its parts are discarded. After that `complete` is `NOT_FOUND`, and so is a part
+PUT to the server's own listener; the client starts again with a new slot. A bucket may
+still take a part from a link it signed, but nothing will ever use it, and the server
+deletes it once the slot's links have expired.
+
+`DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes; one
+that never finished is released, as above, and `complete` on it is `NOT_FOUND`. It is
 `CONFLICT` once the attachment is on a message; delete the message instead. It is
 `CONFLICT` for a picture that is one of the server's emoji too (§5, "Custom emoji"):
-remove the emoji, which takes its picture with it. An unposted upload ages out after the
-file expiry window like any file, except an emoji's picture, which never does.
+remove the emoji, which takes its picture with it. A finished upload that is never posted
+is deleted after a week, or after the file expiry window if that is shorter, and even
+with expiry off (#503); an emoji's picture never is.
 
 **Serving.** `Attachment.url` (and `poster_url` and `display_url`) point at the object store, on the media
 origin — a host of its own, `cdn.<LINGER_DOMAIN>` by default, which serves `/objects/...`
@@ -786,7 +1045,10 @@ and audio types on the `linger-core::media` inline list are served with their ow
 type; everything else is served as `application/octet-stream` with
 `Content-Disposition: attachment`, and every response carries
 `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`
-(ARCHITECTURE §7).
+(ARCHITECTURE §7). A file on a deleted message is `404`, like one that never existed. A
+file the server sends itself goes out with `Cache-Control: private, max-age=31536000,
+immutable`: the client's own cache may keep it, a shared cache may not, because a file can
+still be deleted (ARCHITECTURE §8).
 
 **Ranges.** A file stored on the server's own disk can be fetched a piece at a time,
 which is how a video player seeks and how a browser resumes a download. One byte range
@@ -818,6 +1080,10 @@ type Attachment = {
 `mime`, `filename` and `size_bytes` on a finished attachment describe what the server
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
+A photo is turned the way its EXIF Orientation says before that, so `width` and `height`
+are as it is seen, and a client draws the stored picture as it is (#569).
+The stored `filename` has no folders in it, and no control characters, double quotes,
+backslashes or direction controls (§2).
 
 **Display copies (#382).** An image's `display_url` is the picture to draw where it is
 shown small: in a conversation and on a media tile. An engine that decodes the full
@@ -933,12 +1199,13 @@ is no relevance ordering and no parameter to ask for one.
 of it and looks for all of them; a run inside double quotes is one phrase, those
 words in that order. Nothing else is syntax: `AND`, `OR`, `NEAR`, `*`, `(` and
 `^` are characters to tokenize like any other, so no input is a parse error and
-none of it can be made to mean something the person typing did not intend.
+none of it can be made to mean something the person typing did not intend. A
+control character (NUL, escape, a C1 code) splits words the way a space does.
 Matching is on whole words with simple English endings folded together, so
 `photo` finds `photos`.
 
-A `q` that holds no searchable characters — empty, blank, or only punctuation —
-is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
+A `q` that holds no searchable characters — empty, blank, or only punctuation
+or control characters — is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
 are ignored rather than refused, and a `q` over 200 characters is
 `VALIDATION_FAILED`. `room_id` or `author_id` naming something that is not here
 is `NOT_FOUND`, because "no results" and "no such room" send a reader looking in
@@ -985,7 +1252,7 @@ POST   /invites          { expires_in_hours?, max_uses? }   → Invite
 DELETE /invites/:code                                       → 204
 
 POST /export             → { job_id }                        # any member, 1/hour
-GET  /export/:job_id     → { job_id, state, progress, url? } # the asker's own only
+GET  /export/:job_id     → { job_id, state, progress, url?, expires_at? } # the asker's own only
 POST /knock              { target_user_id }                 → 204   # 3/hour per target
 GET  /voice/ice          → { servers: IceServer[], ttl_secs } # the voice relay, for you
 DELETE /rooms/:id/voice/:user_id → 204   # host or co-host: take them out of that room's voice (#423)
@@ -1010,15 +1277,20 @@ ICE configuration before joining voice: the host's STUN and TURN addresses, with
 password made for the asking member on the spot. The password is coturn's
 time-limited scheme — `username` is `<unix expiry>:<user id>` and `credential` is
 `base64(HMAC-SHA1(shared secret, username))` — so the server stores nothing and
-the relay looks nothing up; both hold the secret and both compute. `ttl_secs` is
-how long the password lasts (a day by default); a client asks again on every
-join, so it only has to outlast one call. Audio never touches this server, and
-what the relay carries is the encrypted stream it cannot read.
+the relay looks nothing up; both hold the secret and both compute. The expiry is
+a day from now (`ttl_secs` at least), rounded up to the hour, so a member asking
+again within the hour gets the same username and password: the relay's
+per-person limit on relay ports counts a person, not a request (#501).
+`ttl_secs` is how long the password has left. A client asks again on every join,
+so it only has to outlast one call. The relay carries the encrypted stream, which
+it cannot read, to this server's voice address and nowhere else (#501).
 
 A host with no relay answers `{ servers: [], ttl_secs: 0 }`. That is not an
 error: voice then works between machines on one network and nowhere else, and
 the client joins anyway. The endpoint needs a signed-in member and answers the
-same for all of them; there is no host-only view of it.
+same for all of them; there is no host-only view of it. It allows 20 asks a
+minute per member and answers `RATE_LIMITED` past that (#501); a client that
+gets no answer joins without the relay, as it would on a server with none.
 
 **Export** (SPEC §4.11, T-801). `state` is `queued | running | complete |
 failed`; `progress` is `0.0`–`1.0`; `url` appears once `state` is `complete`
@@ -1039,6 +1311,21 @@ there is no host approval anywhere in this flow and there must never be one.
 For the same reason, one archive builds at a time across the whole server: a
 job waits in `queued` (progress `0.0`) until the one ahead of it finishes, so a
 client must not treat a long `queued` as a failure.
+
+**An archive lasts a week** (#504). `expires_at` (unix ms) comes with `url`:
+when the server deletes the archive, a week after it finished. After that the
+`url` is a `404`, and so is asking about the job. Removing a member deletes
+their archive and job at once. A server from before archives expired leaves
+`expires_at` out, and a client must not invent one. A job cut off by a server
+restart is `failed` from the next start, and the member can ask again.
+
+`POST /export` is refused with `QUOTA_EXCEEDED` (HTTP 507) when the server's
+disk can't hold the archive, with a `message` that says so in words; nothing is
+started, the member's current archive is kept, and the refusal doesn't count as
+their export for the hour, so they can ask again once there's room. A job that passed that check
+and waited in `queued` is checked again when its turn comes, and is `failed` if
+the room has gone. Like a rate-limit refusal, this is not permission: it keeps a
+full disk from stopping the server.
 
 **Knock** (SPEC §4.9, T-1101). One member nudges one member. The target has to
 be a member of this server — a stranger and somebody the host removed are both
@@ -1069,6 +1356,14 @@ type Frame = { op: string; d: unknown; s?: number }
 ```
 
 `s` is a monotonically increasing sequence number, present on server→client frames only.
+
+A client→server frame is one WebSocket text message of at most `MAX_CLIENT_FRAME_BYTES`
+(256 KiB) of JSON, twice `MAX_VOICE_PAYLOAD_BYTES`: the biggest frame a client sends is
+`voice.answer`, and JSON writes the line breaks in its `sdp` longer than they are. A
+bigger message ends the connection at once, before `identify` as after, and nothing in
+it is read: the server stops at the header that gives its size, or, for a message sent
+in pieces, at the piece that takes it past the cap (#517). Server→client frames have no
+such cap.
 
 ### Handshake
 
@@ -1115,17 +1410,50 @@ S→C  { "op": "invalid_session", "d": { "reason": "expired" } }   # → re-iden
 The server holds a 500-frame ring buffer per session for 120 seconds after disconnect.
 Beyond that, the client must re-identify and refetch.
 
+### `invalid_session`
+
+The server's way of saying a session is over. It is a control frame (no `s`), and the
+socket ends after it. The reasons:
+
+| reason | when | the client |
+|---|---|---|
+| `unauthenticated` | `identify` or `resume` with a token that is not good: a bad signature, expired, or from before something ended every sign-in the account had (§2). Also sent to an open session when that happens: the account was removed or its password changed. | Gets a fresh access token and identifies. If renewal is refused, the sign-in is over. |
+| `unknown user` | `identify` for an account that is removed (§5). | Nothing works until the host restores the account. |
+| `expired` | `resume` of a session the server no longer holds: the 120 seconds passed, or the server restarted. | Identifies afresh. |
+
+A `resume` with a token from before a password change is refused with
+`unauthenticated` even when the session it names is live, and the session is left
+alone (#496).
+
 ### Client → server
 
 | op | payload | notes |
 |---|---|---|
-| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). |
+| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). `away_message` is held to `PATCH /me`'s rule, 240 characters; told at most `RATE_PRESENCE` times (below) |
 | `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
-| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room |
+| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room; ignored in an archived room, which takes no messages |
 | `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
 | `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
+
+The gateway has no way to answer a client frame, so a frame that breaks a rule is
+**ignored, whole**, and nothing it says is told to anybody. The rules are the ones REST
+keeps for the same thing: a room the sender can't see, an away message over its cap,
+typing where no message can go (#497).
+
+**`presence.update`** goes to everybody connected, and the state it sets is in every
+`ready` until it changes, so the server keeps two rules for it (#497):
+
+- **The away message is held to the rule `PATCH /me` holds it to**: at most 240
+  characters (`MAX_STATUS_LINE_CHARS`). A frame with a longer one is ignored whole: its
+  `state` doesn't change either, and nobody is told anything.
+- **A burst is told as a few, then the newest.** One that changes nothing is told to
+  nobody. Changes are told at most `RATE_PRESENCE` times per person: five, and then one
+  every two seconds. Past that, a change is held back, not dropped: when the person's
+  turn comes, the server tells whatever is newest then, once, however many changes came
+  in between. The server has the newest from the start, so a `ready` in between already
+  carries it. An app sends a handful an hour, and never sees the limit.
 
 ### Server → client
 
@@ -1142,6 +1470,7 @@ Beyond that, the client must re-identify and refetch.
 | `user.update` | `User` — the current state of this person, **whether or not the client already had them**. A display name, style or status change, and equally somebody who was not on the roster a moment ago: the client's fold appends when the id is unknown |
 | `user.remove` | `{ user_id }` — this person is off the server. The mirror of `user.update`, and it names an id rather than carrying a `User` because there is no state left to describe: `User` has no `deactivated_at` field and is not going to grow one to carry a tombstone |
 | `room.create` / `room.update` | `Room` — a DM's `room.create` reaches its members and nobody else, which is how the other members find out it exists |
+| `dm.remove` | `{ room_id }` — **sent to the sessions of the person who left that group DM and nobody else's** (§3.1, #565): it's gone from their list. Nothing about the DM reaches them after it |
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
@@ -1149,7 +1478,7 @@ Beyond that, the client must re-identify and refetch.
 | `emoji.update` | `{ emoji: CustomEmoji[] }` — the server's emoji changed (one added, renamed or removed, §5): the whole set every time, to everybody |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }], bitrate? }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves. `bitrate` is what to send the microphone at, in bits a second (#431) |
-| `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
+| `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), or its person left that group DM (§3.1), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
 
 ```ts
 type PresenceEntry = {
@@ -1335,6 +1664,10 @@ told the thing.
   sessions of the person who blocked or unblocked, the second to the host's and
   every co-host's.
   Neither names a room.
+- `dm.remove` is addressed to the sessions of whoever left that group DM (§3.1). It
+  names a room, but a room they are no longer in, so a membership check would drop it;
+  it is published to them by address instead, after they are out of the DM's audience,
+  so the frames about it from then on (the line, the new `member_ids`) never reach them.
 
 ---
 

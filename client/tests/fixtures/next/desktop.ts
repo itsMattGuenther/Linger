@@ -347,6 +347,17 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
         held ? 200 : 201,
       );
     }
+    // Leaving a group DM (#565): the server takes you out, and tells every
+    // window you have that it's gone, as `dm.remove`.
+    const leaveOf = /^\/dms\/([^/]+)\/leave$/.exec(path);
+    if (leaveOf && method === "POST") {
+      const id = decodeURIComponent(leaveOf[1] ?? "");
+      window.setTimeout(() => {
+        seq += 1;
+        deliver("gateway:frame", { server: SERVER, frame: { op: "dm.remove", d: { room_id: id }, s: seq } });
+      }, 20);
+      return new Response(null, { status: 204 });
+    }
     if (path === "/knock") {
       // `limit`: the fourth knock inside an hour, refused as the server does,
       // with 19 minutes 10 seconds to go.
