@@ -751,7 +751,9 @@ over quota (`QUOTA_EXCEEDED`), or a mime not on the allowlist in `linger-core::m
 (`UNSUPPORTED_MEDIA`). Server re-validates real size and sniffs actual MIME at complete —
 never trust the declared values. A file whose bytes disagree with its declared type is
 `UNSUPPORTED_MEDIA`; a file that is not the size it said it would be is
-`VALIDATION_FAILED`.
+`VALIDATION_FAILED`. An image that can't be decoded, or that would take more memory to
+re-encode than the server allows (ARCHITECTURE §8), is `UNSUPPORTED_MEDIA` with "That
+image can't be read."
 
 `upload_id` and `attachment_id` are the same identifier. An upload is an attachment that
 has not arrived yet, and there is nothing to remember about one that the attachment does

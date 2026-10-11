@@ -22,6 +22,9 @@ base64 = { workspace = true }
 blurhash = "0.2"
 dashmap = { workspace = true }
 futures-util = { workspace = true }
+# The GIF reader `image` decodes with, named directly to count a GIF's frames
+# without decoding them, before deciding to (#487). Already built for `image`.
+gif = "0.14"
 hex = { workspace = true }
 # Uploaded images are decoded and re-encoded, which is what strips EXIF and
 # neutralises polyglots in one step (SPEC §4.10, ARCHITECTURE §7).
@@ -56,6 +59,9 @@ uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+# Writes the one-bit PNG the image budget test decodes (#487), which `image`
+# can read but not write. Already built for `image`.
+png = "0.18"
 # The raid-sized voice load test (examples/voice_load.rs) stands in for the
 # app's WebRTC with the same library the server forwards with.
 str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }

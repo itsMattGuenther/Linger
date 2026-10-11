@@ -714,6 +714,31 @@ dropped connection: the slot stays pending and the client sends what is missing.
 else — wrong size, a file that is not the type it claimed, an image that will not decode
 — is final, and the parts go.
 
+**An image is decoded inside a fixed budget** (#487). Re-encoding is where a small file
+can cost a great deal: a GIF of a few hundred bytes can claim a 65535 × 65535 canvas, 17
+GB as pixels, and a failed allocation stops the whole server. So the server reads an
+image's header first, works out what decoding it will take, and refuses it as unreadable
+(`UNSUPPORTED_MEDIA`, "That image can't be read.") when that passes 512 MB, before any
+of the memory is asked for. Neither side of a picture or a GIF's canvas may pass 16 384
+px either.
+
+- **A still picture** counts the decoded picture, the decoder's own working memory, the
+  one full-size copy re-encoding makes (none when it already decodes as RGB for a JPEG,
+  or RGBA for anything else), and the working memory of resizing it for its display copy.
+  A thumbnail for the blurhash is taken from the picture as decoded, not from a copy.
+- **A GIF** comes out of its decoder one whole canvas per frame, however small each
+  frame was in the file. Its frames are counted first, without decoding them, and
+  frames × canvas as RGBA may not pass the same 512 MB. Each frame is then encoded as
+  soon as it is decoded, so only one is held at a time; the ceiling also bounds the time
+  and disk a GIF costs.
+
+The clean file is written to disk as it is encoded, not built up in memory first. And
+only two images are worked on at once, uploads, video posters and the display-copy pass
+together (`media::image_job`), so pictures cost the server 1 GB at most, inside the 2 GB
+droplet `docs/vps-setup.md` starts from. A `complete` that arrives while two are under
+way waits its turn. One whose request is dropped keeps its place until its work ends,
+because the memory is still in use until then.
+
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
 simply has no poster. The published image installs them. The file they read is an

@@ -20,7 +20,7 @@ use std::time::Duration;
 use linger_core::AttachmentId;
 
 use crate::error::ApiError;
-use crate::media::{display_copy_of, MAX_IMAGE_BYTES};
+use crate::media::{display_copy_of, image_job, MAX_IMAGE_BYTES};
 use crate::state::AppState;
 use crate::storage::{display_key, ObjectBody, ServeAs};
 
@@ -110,9 +110,7 @@ async fn copy(
         return Ok(object_key.to_string());
     }
     let owned_mime = mime.to_string();
-    let made = tokio::task::spawn_blocking(move || display_copy_of(&bytes, &owned_mime))
-        .await
-        .map_err(|_| ApiError::internal())?;
+    let made = image_job(move || display_copy_of(&bytes, &owned_mime)).await?;
     match made {
         Ok(Some(copy)) => {
             let key = display_key(id, mime);
