@@ -30,6 +30,8 @@
 //! halfway through a message's links and the next page's cursor would step over
 //! the rest of them.
 
+use std::fmt::Write as _;
+
 use linger_core::limits::{MAX_LINKS_PER_MESSAGE, MAX_MEDIA_EXCERPT_CHARS};
 use linger_core::media;
 use linger_core::wire::{LinkPreview, MediaItem, MediaKind};
@@ -219,7 +221,7 @@ pub(crate) fn attachment_sql(query: &Query, past_starred: bool) -> String {
     if let Some(kind) = query.kind {
         let mimes = mime_list(kind);
         let placeholders = vec!["?"; mimes.len()].join(",");
-        sql.push_str(&format!(" AND a.mime IN ({placeholders})"));
+        let _ = write!(sql, " AND a.mime IN ({placeholders})");
     }
     if query.since.is_some() {
         sql.push_str(" AND a.created_at >= ?");
@@ -230,13 +232,14 @@ pub(crate) fn attachment_sql(query: &Query, past_starred: bool) -> String {
     if query.before.is_some() {
         let compare = cursor_sql("a");
         if past_starred {
-            sql.push_str(&format!(" AND a.starred_at IS NULL AND {compare}"));
+            let _ = write!(sql, " AND a.starred_at IS NULL AND {compare}");
         } else {
             // Still among the starred: step through the rest of them, and
             // everything unstarred is still ahead.
-            sql.push_str(&format!(
+            let _ = write!(
+                sql,
                 " AND ((a.starred_at IS NOT NULL AND {compare}) OR a.starred_at IS NULL)"
-            ));
+            );
         }
     }
     sql.push_str(" ORDER BY (a.starred_at IS NOT NULL) DESC, a.created_at DESC, a.id DESC LIMIT ?");
@@ -336,7 +339,7 @@ pub(crate) fn link_sql(query: &Query) -> String {
         filters.push_str(" AND m.created_at <= ?");
     }
     if query.before.is_some() {
-        filters.push_str(&format!(" AND {}", cursor_sql("m")));
+        let _ = write!(filters, " AND {}", cursor_sql("m"));
     }
 
     format!(
@@ -469,7 +472,7 @@ async fn pin_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiErr
         sql.push_str(" AND m.created_at <= ?");
     }
     if query.before.is_some() {
-        sql.push_str(&format!(" AND {}", cursor_sql("m")));
+        let _ = write!(sql, " AND {}", cursor_sql("m"));
     }
     sql.push_str(" ORDER BY m.created_at DESC, m.id DESC LIMIT ?");
 

@@ -17,7 +17,12 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// How long a check that something *didn't* arrive listens for it.
 const SETTLE: Duration = Duration::from_millis(300);
+
+/// How long to wait for a frame the server owes. Long enough for the busiest
+/// machine; a test that gets what it waits for never waits this long.
+const DEADLINE: Duration = Duration::from_secs(10);
 
 async fn send_json(ws: &mut Ws, value: Value) {
     ws.send(WsMessage::Text(value.to_string().into()))
@@ -36,6 +41,39 @@ async fn drain(ws: &mut Ws, window: Duration) -> Vec<Value> {
             _ => return frames,
         }
     }
+}
+
+/// Frames until `wanted` holds for what has arrived, then whatever follows
+/// within [`SETTLE`], so a check that something didn't come still sees the
+/// frames sent alongside. It waits for the frame itself rather than for a
+/// quiet 300 ms: on a busy machine the forwarding server can take longer than
+/// that to build an offer, and the test saw nothing at all (#559). Past
+/// [`DEADLINE`] it gives up and returns what it has, for the assertion that
+/// follows to say what's missing.
+async fn until(ws: &mut Ws, wanted: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+    let deadline = tokio::time::Instant::now() + DEADLINE;
+    let mut frames = Vec::new();
+    while !wanted(&frames) {
+        match tokio::time::timeout_at(deadline, ws.next()).await {
+            Ok(Some(Ok(WsMessage::Text(text)))) => {
+                frames.push(serde_json::from_str(text.as_str()).expect("valid frame json"));
+            }
+            Ok(Some(Ok(_))) => {}
+            _ => return frames,
+        }
+    }
+    frames.extend(drain(ws, SETTLE).await);
+    frames
+}
+
+/// Some voice offer has arrived.
+fn offered(frames: &[Value]) -> bool {
+    !offers(frames).is_empty()
+}
+
+/// The room's voice has been announced, with `session` in it.
+fn seated(frames: &[Value], session: &str) -> bool {
+    forwarded_in(frames, session).is_some()
 }
 
 async fn connect(server: &common::TestServer, token: &str) -> (Ws, String) {
@@ -125,7 +163,7 @@ async fn a_client_that_can_forward_is_offered_the_server_and_each_offer_names_th
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    let frames = drain(&mut a, SETTLE).await;
+    let frames = until(&mut a, |f| offered(f) && seated(f, &a_id)).await;
     let first = offers(&frames);
     assert_eq!(first.len(), 1, "one offer, for the microphone: {frames:?}");
     assert!(
@@ -146,8 +184,8 @@ async fn a_client_that_can_forward_is_offered_the_server_and_each_offer_names_th
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    let to_b = drain(&mut b, SETTLE).await;
-    let to_a = drain(&mut a, SETTLE).await;
+    let to_b = until(&mut b, offered).await;
+    let to_a = until(&mut a, |f| seated(f, &b_id)).await;
     let b_offer = offers(&to_b);
     assert_eq!(b_offer.len(), 1);
     assert_eq!(
@@ -173,13 +211,13 @@ async fn somebody_leaving_is_taken_out_of_the_next_offer() {
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    drain(&mut b, SETTLE).await;
+    until(&mut b, offered).await;
     send_json(
         &mut a,
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    let frames = drain(&mut a, SETTLE).await;
+    let frames = until(&mut a, offered).await;
     assert_eq!(track_sessions(offers(&frames)[0]), vec![b_id.clone()]);
 
     // An answer the server can't use is dropped; the socket survives it.
@@ -187,7 +225,7 @@ async fn somebody_leaving_is_taken_out_of_the_next_offer() {
     send_json(&mut b, json!({"op":"voice.leave"})).await;
     drain(&mut a, SETTLE).await;
     send_json(&mut a, json!({"op":"heartbeat","d":{"s":0}})).await;
-    let after = drain(&mut a, SETTLE).await;
+    let after = until(&mut a, |f| f.iter().any(|f| f["op"] == "heartbeat_ack")).await;
     assert!(
         after.iter().any(|f| f["op"] == "heartbeat_ack"),
         "the socket is still up: {after:?}"
@@ -208,7 +246,7 @@ async fn an_app_that_cant_forward_gets_no_seat_and_the_room_carries_on() {
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    let frames = drain(&mut new, SETTLE).await;
+    let frames = until(&mut new, |f| offered(f) && seated(f, &new_id)).await;
     assert_eq!(offers(&frames).len(), 1);
     assert_eq!(forwarded_in(&frames, &new_id), Some(json!(true)));
 
@@ -245,14 +283,14 @@ async fn a_join_that_asks_for_the_old_way_is_forwarded_anyway() {
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    drain(&mut a, SETTLE).await;
+    until(&mut a, |f| offered(f) && seated(f, &a_id)).await;
     send_json(
         &mut b,
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":false}}),
     )
     .await;
-    let to_b = drain(&mut b, SETTLE).await;
-    let to_a = drain(&mut a, SETTLE).await;
+    let to_b = until(&mut b, |f| offered(f) && seated(f, &b_id)).await;
+    let to_a = until(&mut a, |f| seated(f, &b_id)).await;
     assert_eq!(offers(&to_b).len(), 1, "no offer: {to_b:?}");
     for frames in [&to_a, &to_b] {
         assert_eq!(forwarded_in(frames, &a_id), Some(json!(true)), "{frames:?}");
@@ -313,18 +351,20 @@ async fn voice_in_info(server: &common::TestServer, token: &str) -> Value {
 #[tokio::test]
 async fn a_restart_brings_a_fresh_offer_and_the_room_sees_nothing() {
     let (server, host, callie, room) = forwarding_server(true).await;
-    let (mut a, _) = connect(&server, &host).await;
+    let (mut a, a_id) = connect(&server, &host).await;
     let (mut b, _) = connect(&server, &callie).await;
     send_json(
         &mut a,
         json!({"op":"voice.join","d":{"room_id":room,"forwarding":true}}),
     )
     .await;
-    assert_eq!(offers(&drain(&mut a, SETTLE).await).len(), 1);
-    drain(&mut b, SETTLE).await;
+    assert_eq!(offers(&until(&mut a, offered).await).len(), 1);
+    // The room hears a joined, before the restart, so that isn't mistaken
+    // for the restart being announced.
+    until(&mut b, |f| seated(f, &a_id)).await;
 
     send_json(&mut a, json!({"op":"voice.restart"})).await;
-    let to_a = drain(&mut a, SETTLE).await;
+    let to_a = until(&mut a, offered).await;
     let to_b = drain(&mut b, SETTLE).await;
     assert_eq!(
         offers(&to_a).len(),
