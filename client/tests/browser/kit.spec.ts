@@ -313,9 +313,14 @@ test("the focus ring shows once on everything the keyboard reaches", async ({ pa
   const seen = new Set<string>();
   const missing: string[] = [];
   const doubled: string[] = [];
-  for (let i = 0; i < 400; i += 1) {
-    await page.keyboard.press("Tab");
-    const result = await page.evaluate(() => {
+  // A field's and a select's focus edge is a box shadow that fades in
+  // (`--duration-fast`, 1 ms with reduced motion), from the browser's next
+  // frame. On a starved machine the first look can come before that frame,
+  // so a ring that looks missing or doubled is looked at again two frames on,
+  // which is what anybody would see (#528).
+  const look = (settle: boolean) =>
+    page.evaluate(async (settle) => {
+      if (settle) await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
       const el = document.activeElement;
       if (!el || el === document.body) return null;
       const path = (() => {
@@ -342,7 +347,11 @@ test("the focus ring shows once on everything the keyboard reaches", async ({ pa
       const field = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? (el.labels?.[0]?.textContent?.trim() ?? el.placeholder) : null;
       const what = el.getAttribute("aria-label") || field || el.textContent?.trim().slice(0, 30) || el.tagName;
       return { path, visible, twice, what };
-    });
+    }, settle);
+  for (let i = 0; i < 400; i += 1) {
+    await page.keyboard.press("Tab");
+    let result = await look(false);
+    if (result && (!result.visible || result.twice)) result = await look(true);
     if (!result) continue;
     if (seen.has(result.path)) break;
     seen.add(result.path);
@@ -350,8 +359,8 @@ test("the focus ring shows once on everything the keyboard reaches", async ({ pa
     if (result.twice) doubled.push(result.what);
   }
   expect(seen.size).toBeGreaterThan(40);
-  expect(missing).toEqual([]);
-  expect(doubled).toEqual([]);
+  expect(missing, "reached with no focus ring").toEqual([]);
+  expect(doubled, "reached with two focus rings").toEqual([]);
 });
 
 test("tabs move with the arrow keys, Home and End, and close with Delete", async ({ page }) => {

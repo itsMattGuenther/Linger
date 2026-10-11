@@ -18,7 +18,13 @@
 #   scripts/webkit.sh                                      every WebKit test
 #   scripts/webkit.sh tests/browser/next-media.spec.ts     one file
 #   scripts/webkit.sh -g "knock" --repeat-each=10          by name, repeated
+#   LINGER_WEBKIT_CPUS=0,1 scripts/webkit.sh …              WebKit on two CPUs
 # Needs Docker. The image, about 3.5 GB, downloads on first use.
+#
+# LINGER_WEBKIT_CPUS pins the browser to those CPUs (docker --cpuset-cpus), to
+# squeeze a test that fails at random on a busy machine. `taskset` on this
+# script reaches the tests and the page server, not the browser in the
+# container (docs/testing-strategy.md, "A test that fails at random").
 set -euo pipefail
 cd "$(dirname "$0")/../client"
 
@@ -51,6 +57,7 @@ if ! docker image inspect "$image" >/dev/null 2>&1; then
   docker pull -q "$image" >/dev/null
 fi
 docker run -d --rm --init --name "$name" --user pwuser --workdir /home/pwuser \
+  ${LINGER_WEBKIT_CPUS:+--cpuset-cpus "$LINGER_WEBKIT_CPUS"} \
   --network host -v "$core:/opt/playwright-core:ro" "$image" \
   node /opt/playwright-core/cli.js run-server --port "$port" --host 127.0.0.1 >/dev/null
 trap 'docker stop "$name" >/dev/null 2>&1 || true' EXIT
