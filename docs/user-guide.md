@@ -426,7 +426,10 @@ A little formatting works, the kind you already type:
 - a list
 ```
 
-Paste a link and it becomes a link.
+Paste a link and it becomes a link. Point at any link to see where it goes. If a
+link's words look like one web address and it goes somewhere else, the real site
+shows beside the words in grey, like **www.paypal.com** (evil.example), so you can
+tell without pointing at it.
 
 To mention somebody, type `@` and start their name or their username. A list
 of people opens by the box: **Up** and **Down** move through it, **Enter** or

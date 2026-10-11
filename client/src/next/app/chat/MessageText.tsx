@@ -1,6 +1,7 @@
 import { type MouseEvent, type ReactNode, memo, useMemo } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { type Block, type Inline, parseMarkdown } from "../../../lib/markdown";
+import { disguisedHost } from "../../../lib/linkHost";
+import { type Block, type Inline, flattenInline, parseMarkdown } from "../../../lib/markdown";
 import "./MessageText.css";
 import { useEmojiIndex } from "./useEmojiIndex";
 
@@ -222,13 +223,16 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
           <Inlines nodes={node.children} ctx={ctx} />
         </del>
       );
-    case "link":
+    case "link": {
       // `href` makes it read as a link to the browser and a screen reader,
       // and `title` is always the real destination, since a link's text is
       // whatever the sender wrote. The click is taken and handed on, and
       // goes no further: the parser never puts a link inside a link (#508),
       // but if one ever got here, one click must still open one address.
-      return (
+      // Words that name another site get the real one beside them (#580),
+      // outside the link, so it reads without pointing at it.
+      const real = disguisedHost(flattenInline(node.children), node.href);
+      const link = (
         <a
           className="nx-text-link"
           href={node.href}
@@ -243,5 +247,15 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
           <Inlines nodes={node.children} ctx={ctx} />
         </a>
       );
+      if (real === null) return link;
+      return (
+        <>
+          {link}
+          <span className="nx-text-link-real" title={`This link goes to ${real}`}>
+            {" "}({real})
+          </span>
+        </>
+      );
+    }
   }
 }
