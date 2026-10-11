@@ -132,11 +132,24 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
     setOverflow(before && after ? "both" : before ? "start" : after ? "end" : "none");
   }, []);
 
+  // The strip narrowing (the window, or the list beside it) can leave the
+  // tab you're on scrolled out past an edge (#512): each change of size
+  // brings it back into the strip, moving only the strip, never the page.
+  const showing = useRef(activeId);
+  showing.current = activeId;
   useLayoutEffect(() => {
     const node = strip.current;
     if (!node) return;
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => {
+      const tab = node.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(showing.current)}"]`);
+      if (tab) {
+        const box = tab.getBoundingClientRect();
+        const from = box.left - node.getBoundingClientRect().left + node.scrollLeft;
+        node.scrollLeft = scrollToShow(node.scrollLeft, node.clientWidth, from, box.width);
+      }
+      measure();
+    });
     observer.observe(node);
     return () => observer.disconnect();
   }, [measure, tabs.length]);
@@ -245,4 +258,15 @@ export function TabStrip({ label, tabs, activeId, onSelect, onClose, onMove, pan
       })}
     </div>
   );
+}
+
+/**
+ * Where a strip scrolled to `left`, `width` wide, scrolls so a tab from
+ * `from` to `from + size` is in it: as little as it takes, and not at all
+ * when it's already in. A tab wider than the strip shows its start.
+ */
+function scrollToShow(left: number, width: number, from: number, size: number): number {
+  if (from < left || size >= width) return from;
+  if (from + size > left + width) return from + size - width;
+  return left;
 }

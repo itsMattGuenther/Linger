@@ -8,7 +8,7 @@ import type { User } from "../../../generated/User";
 import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
-import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
+import { type ChatRow, chatRows, rowIndex, sameRow } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
@@ -35,6 +35,9 @@ const ESTIMATE_PX = 24;
 const JUMP_STILL_FRAMES = 5;
 const JUMP_MIN_FRAMES = 20;
 const JUMP_MAX_FRAMES = 90;
+/** Following a new message down: the same, without the floor, and shorter (#625). */
+const FOLLOW_STILL_FRAMES = 3;
+const FOLLOW_MAX_FRAMES = 30;
 /** How long a message you jumped to stays marked. */
 const FLASH_MS = 1600;
 
@@ -183,24 +186,66 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     return () => cancelAnimationFrame(frame);
   }, [id, rows.length, land.ready, land.at, atEnd, virtualizer, props.goTo]);
 
-  // Follow a new last message down, only when the bottom is where you are.
+  // Follow a new last message down, only when the bottom is where you were.
   // Keyed on the last row, so history loading above never triggers it.
+  //
+  // Judged by the row that was last until now, not by the distance to the new
+  // bottom: that distance includes the new rows' own height, measured as they
+  // mount. The virtualizer follows by itself only from within a pixel of the
+  // end. From anywhere else in the margin (a scroll a few pixels short, or the
+  // frame where something above changed size, a link card landing), a message
+  // taller than the margin was left below the fold and never marked read (#625).
   const lastKey = rows[rows.length - 1]?.key;
+  const lastKeyBefore = useRef(lastKey);
+  const seenNow = useRef<() => void>(() => {});
   useEffect(() => {
+    const before = lastKeyBefore.current;
+    lastKeyBefore.current = lastKey;
     const element = scroller.current;
     if (!element || rows.length === 0 || !landing.current.done || !atEnd || jumping.current) return;
-    if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
+    // The row that was last, if it's still drawn. A sent message replaced by
+    // the server's copy isn't, and the distance to the bottom judges instead.
+    const wasLast = before === undefined ? null : element.querySelector(`[data-key="${CSS.escape(before)}"]`);
+    const below = wasLast
+      ? wasLast.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom
+      : element.scrollHeight - element.scrollTop - element.clientHeight;
+    if (below > BOTTOM_MARGIN_PX) return;
+    // Aim at the end every frame until it holds still: rows are measured, and
+    // anything above settles, a frame or two after they're drawn. Somebody
+    // reaching for the conversation meanwhile takes it back at once.
     let frames = 0;
+    let stable = 0;
+    let total = -1;
     let frame = 0;
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      element.removeEventListener("wheel", stop);
+      element.removeEventListener("touchstart", stop);
+      element.removeEventListener("pointerdown", stop);
+      element.removeEventListener("keydown", stop);
+    };
     const step = () => {
       virtualizer.scrollToIndex(rowsNow.current.length - 1, { align: "end" });
-      const drawn = virtualizer.getVirtualItems();
+      const size = virtualizer.getTotalSize();
+      const there = element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
+      stable = there && size === total ? stable + 1 : 0;
+      total = size;
       frames += 1;
-      if (drawn[drawn.length - 1]?.index === rowsNow.current.length - 1 || frames >= 30) return;
+      if (stable >= FOLLOW_STILL_FRAMES || frames >= FOLLOW_MAX_FRAMES) {
+        stop();
+        // Arriving needn't scroll (the virtualizer may already have), so say
+        // the newest is in view here rather than wait for a scroll event.
+        seenNow.current();
+        return;
+      }
       frame = requestAnimationFrame(step);
     };
+    element.addEventListener("wheel", stop, { passive: true });
+    element.addEventListener("touchstart", stop, { passive: true });
+    element.addEventListener("pointerdown", stop, { passive: true });
+    element.addEventListener("keydown", stop);
     frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    return stop;
     // Deliberately keyed on the last row only: a re-render, or history
     // arriving above, must never pull the view down.
   }, [lastKey]);
@@ -244,6 +289,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
     onSeenNewest(newest.id);
   }, [messages, atEnd, onSeenNewest]);
+  seenNow.current = noteSeen;
   useEffect(() => {
     noteSeen();
     window.addEventListener("focus", noteSeen);
@@ -381,20 +427,21 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                   key={item.key}
                   className="nx-conv-row"
                   data-index={item.index}
+                  data-key={item.key}
                   ref={virtualizer.measureElement}
                   style={{ transform: `translateY(${item.start}px)` }}
                 >
                   <RowView
                     row={row}
                     people={people}
-                    byId={byId}
+                    quoted={row.kind === "message" && row.message.reply_to !== null ? byId.get(row.message.reply_to) : undefined}
                     me={me}
                     blocked={props.blocked}
-                    shown={shown}
+                    shown={row.kind === "message" && shown.has(row.message.id)}
                     onShow={show}
                     now={now}
-                    editing={props.editing}
-                    flash={flash}
+                    editing={row.kind === "message" && props.editing === row.message.id}
+                    flash={row.kind === "message" && flash === row.message.id}
                     previews={props.previews}
                     mentions={mentions}
                     emoji={emojiByName}
@@ -418,10 +465,39 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   );
 });
 
-function RowView({
+interface RowViewProps {
+  row: ChatRow;
+  people: ReadonlyMap<string, User>;
+  /** The message a reply quotes, when it's held. */
+  quoted: Message | undefined;
+  me: User | null;
+  blocked: ReadonlySet<string> | undefined;
+  /** A message from somebody blocked that was opened anyway. */
+  shown: boolean;
+  onShow: (id: MessageId) => void;
+  now: number;
+  /** This row's message is being edited in place. */
+  editing: boolean;
+  /** This row's message was just jumped to, and is marked. */
+  flash: boolean;
+  previews: Readonly<Record<string, LinkPreview>>;
+  mentions: MentionLookup;
+  emoji: CustomEmojiByName;
+  mediaUrl: (path: string) => string;
+  actions: MessageActions;
+}
+
+function sameRowView(a: RowViewProps, b: RowViewProps): boolean {
+  for (const key of Object.keys(a) as (keyof RowViewProps)[]) {
+    if (key === "row" ? !sameRow(a.row, b.row) : a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+const RowView = memo(function RowView({
   row,
   people,
-  byId,
+  quoted,
   me,
   blocked,
   shown,
@@ -434,24 +510,7 @@ function RowView({
   emoji,
   mediaUrl,
   actions,
-}: {
-  row: ChatRow;
-  people: ReadonlyMap<string, User>;
-  byId: ReadonlyMap<MessageId, Message>;
-  me: User | null;
-  blocked: ReadonlySet<string> | undefined;
-  /** Messages from somebody blocked that were opened anyway. */
-  shown: ReadonlySet<MessageId>;
-  onShow: (id: MessageId) => void;
-  now: number;
-  editing: MessageId | null;
-  flash: MessageId | null;
-  previews: Readonly<Record<string, LinkPreview>>;
-  mentions: MentionLookup;
-  emoji: CustomEmojiByName;
-  mediaUrl: (path: string) => string;
-  actions: MessageActions;
-}) {
+}: RowViewProps) {
   switch (row.kind) {
     case "divider": {
       // A session that starts at a time that can't be drawn has no words to
@@ -486,10 +545,9 @@ function RowView({
       // Somebody leaving a group DM (#565): a quiet line saying who. Shown
       // even for somebody you blocked: it's who can still read what you say.
       if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} />;
-      if (blocked?.has(message.author_id) && message.deleted_at === null && !shown.has(message.id)) {
+      if (blocked?.has(message.author_id) && message.deleted_at === null && !shown) {
         return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
       }
-      const quoted = message.reply_to === null ? undefined : byId.get(message.reply_to);
       return (
         <MessageRow
           message={message}
@@ -501,8 +559,8 @@ function RowView({
           me={me}
           canDelete={me !== null && (message.author_id === me.id || mayActOn(me, people.get(message.author_id)))}
           now={now}
-          editing={editing === message.id}
-          flashing={flash === message.id}
+          editing={editing}
+          flashing={flash}
           previews={previews}
           mentions={mentions}
           emoji={emoji}
@@ -513,7 +571,7 @@ function RowView({
       );
     }
   }
-}
+}, sameRowView);
 
 /**
  * A message from somebody you blocked (PROTOCOL §5, SPEC §4.15): one grey

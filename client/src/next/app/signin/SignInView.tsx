@@ -20,6 +20,11 @@ export interface SignInViewProps {
   below?: ReactNode;
   /** Where the desktop draws no close button, Linger draws its own. */
   onClose?: () => void;
+  /**
+   * A link an invite page's "Open in Linger" sent (#607, core/offeredLink.ts):
+   * it starts in the paste box, and nothing happens until Continue.
+   */
+  offered?: string;
 }
 
 /**
@@ -28,7 +33,7 @@ export interface SignInViewProps {
  * another server, with a way back to the list. Where it lives is decision 16;
  * the list window is the default until that's decided.
  */
-export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, adding = false, below }: SignInViewProps) {
+export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, adding = false, below, offered }: SignInViewProps) {
   const [step, setStep] = useState<SignInStep>({ kind: "paste" });
   const back = () => setStep({ kind: "paste" });
 
@@ -43,7 +48,7 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
             {notice}
           </p>
         ) : null}
-        {step.kind === "paste" ? <Paste check={actions.check} onStep={setStep} onCancel={onCancel} adding={adding} /> : null}
+        {step.kind === "paste" ? <Paste check={actions.check} onStep={setStep} onCancel={onCancel} adding={adding} offered={offered} /> : null}
         {step.kind === "login" ? <Login step={step} login={actions.login} onBack={back} /> : null}
         {step.kind === "register" ? (
           <Register step={step} register={actions.register} onBack={back} onSignIn={() => setStep({ kind: "login", baseUrl: step.baseUrl, serverName: step.serverName })} />
@@ -88,13 +93,15 @@ function Paste({
   onStep,
   onCancel,
   adding,
+  offered,
 }: {
   check: SignInActions["check"];
   onStep: (step: SignInStep) => void;
   onCancel?: () => void;
   adding: boolean;
+  offered?: string;
 }) {
-  const [pasted, setPasted] = useState("");
+  const [pasted, setPasted] = useState(offered ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const submit = async (event: FormEvent) => {
@@ -118,7 +125,7 @@ function Paste({
         value={pasted}
         onChange={setPasted}
         placeholder="linger.example"
-        hint="An invite to join, or an address to sign in."
+        hint={offered !== undefined && pasted === offered ? "From the link you opened. Check the address, then Continue." : "An invite to join, or an address to sign in."}
         error={problem ?? undefined}
         autoFocus
       />

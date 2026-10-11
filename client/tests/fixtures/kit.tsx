@@ -126,6 +126,11 @@ const dave = person("Dave", "jetbrains-mono", solid("cyan"), { line: "side two. 
 const callie = person("Callie", "newsreader", blend("violet", "orchid"), { italic: true, weight: 700 });
 const sam = person("Sam", "silkscreen", solid("rose"), { away: "back after work" });
 const longName = person("Bartholomew-Maximilian the Considerably Long", "inter", solid("sky"));
+/** Emoji in a painted name keep their own colors (#512). */
+const moon = person("Juno 🌙✨🇧🇷", "inter", blend("violet", "sky"), { weight: 700 });
+const sparkle = person("Rae 🔥", "inter", solid("teal"), { effect: "shimmer" });
+/** Thirty-two letters each wider than a word (#512). */
+const wideName = person("\u{FDFD}".repeat(16) + "Ｗ".repeat(16), "inter", blend("amber", "rose"));
 /** A name saved before #296, ending in U+202E, which turns the text after it around (#488). */
 const turned = person("Ezra\u{202E}", "inter", solid("lime"));
 
@@ -517,6 +522,10 @@ function Gallery() {
             <div className="g-row g-narrow">
               <Name person={longName} />
             </div>
+            <div className="g-row" data-testid="emoji-names">
+              <Name person={moon} />
+              <Name person={sparkle} />
+            </div>
             <div className="g-row">
               {/* Offline (#274): the same people, their faces kept, none of their colors or effects. */}
               <Name person={jules} dim />
@@ -663,6 +672,7 @@ function Gallery() {
                 <Row key={user.id} lead={{ kind: "person", person: { color, state } }} lines="one" title={<Name person={user} dim={state === "idle" || state === "away" || state === "offline"} />} />
               ))}
               <Row lead={{ kind: "person", person: { color: "sky", state: "here" } }} lines="one" title={<Name person={longName} />} note="in #general" />
+              <Row lead={{ kind: "person", person: { color: "amber", state: "here" } }} lines="one" title={<Name person={wideName} />} note="in #the-den" />
             </RowList>
           </div>
         </div>

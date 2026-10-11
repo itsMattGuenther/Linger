@@ -1,9 +1,11 @@
 /**
  * The standing lines at the foot of the list (decision 1): the jobs today's
  * status bar did, said only while they're true. A connection in trouble, a
- * computer that can't keep a sign-in, and a new version waiting. When all is
- * well there are none, and the list has no bar at all.
+ * computer that can't keep a sign-in, the host's server needing them (#582),
+ * and a new version waiting. When all is well there are none, and the list
+ * has no bar at all.
  */
+import type { ServerHealth } from "../../generated/ServerHealth";
 import type { GatewayStatus } from "../../lib/gateway";
 import type { UpdateCheck } from "../../lib/updates";
 
@@ -31,6 +33,12 @@ export type ListNote =
   | { kind: "waiting"; server: string; words: string; detail: string | null; trying: boolean }
   /** The keyring refused: sign-ins last until Linger quits. */
   | { kind: "keyring"; words: string; detail: string }
+  /**
+   * The host's server needs them (#582): its disk nearly full, its file
+   * space nearly used up, no backup for days, or none reaching the host's
+   * bucket for days (#614). The host's alone; the server tells nobody else.
+   */
+  | { kind: "host"; server: string; what: HostTrouble; words: string; detail: string }
   /** A new version, ready to install from Settings. */
   | { kind: "update"; version: string; words: string };
 
@@ -58,6 +66,74 @@ export function connectionNote(connection: Connection, now: number): ListNote | 
   }
 }
 
+/** What a host line is about. */
+export type HostTrouble = "disk" | "files" | "backup" | "bucket";
+
+/** A server you host, and what it says about its machine (`GET /server`'s `health`). */
+export interface Hosted {
+  server: string;
+  name: string;
+  health: ServerHealth;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A hosted server's lines, only while each is true (#582). Words, never a
+ * figure from the disk: "nearly full" is what the host needs to hear, and the
+ * Settings it opens says the rest.
+ */
+export function hostNotes({ server, name, health }: Hosted, now: number): ListNote[] {
+  const notes: ListNote[] = [];
+  if (health.disk_nearly_full) {
+    notes.push({
+      kind: "host",
+      server,
+      what: "disk",
+      words: `The disk ${name} runs on is nearly full.`,
+      detail: "Less than a tenth of it is free. A full disk stops the server for everybody.",
+    });
+  }
+  if (health.file_space_nearly_full) {
+    notes.push({
+      kind: "host",
+      server,
+      what: "files",
+      words: `${name} is nearly out of room for files.`,
+      detail: "Files take nearly all the room it allows them (LINGER_POOL_BYTES).",
+    });
+  }
+  if (health.backups && health.backup_overdue) {
+    const last = health.last_backup_at;
+    const days = last === null ? 0 : Math.floor((now - last) / DAY_MS);
+    notes.push({
+      kind: "host",
+      server,
+      what: "backup",
+      words: last === null || days < 1 ? `${name} hasn't been backed up yet.` : `${name} hasn't been backed up for ${days} ${days === 1 ? "day" : "days"}.`,
+      detail: "The server copies its database into data/backups every night. Its log says why it couldn't.",
+    });
+  }
+  // The bucket (#614) only once the copy itself is fine: with no copy there
+  // is nothing to send, and the line above already says so.
+  const bucket = health.bucket;
+  if (health.backups && !health.backup_overdue && bucket?.overdue) {
+    const last = bucket.last_sent_at;
+    const days = last === null ? 0 : Math.floor((now - last) / DAY_MS);
+    notes.push({
+      kind: "host",
+      server,
+      what: "bucket",
+      words:
+        last === null || days < 1
+          ? `${name}'s backups haven't reached its bucket yet.`
+          : `${name}'s backups haven't reached its bucket for ${days} ${days === 1 ? "day" : "days"}.`,
+      detail: `The server sends each night's copy to the bucket ${bucket.name} as well. Its log says why it couldn't.`,
+    });
+  }
+  return notes;
+}
+
 /** A saved server not reached yet, by its address: it hasn't said its name this launch. */
 export interface Waiting {
   server: string;
@@ -75,8 +151,9 @@ export function waitingNote({ server, name, why }: Waiting): ListNote {
 
 /**
  * Everything the foot says, most pressing first: connections and servers not
- * reached yet, then the keyring, then an update. `device` is what the
- * keyring's note calls this device (`core/phone.ts`, `thisDevice`).
+ * reached yet, then the keyring, then the servers you host, then an update.
+ * `device` is what the keyring's note calls this device (`core/phone.ts`,
+ * `thisDevice`).
  */
 export function listNotes(
   connections: readonly Connection[],
@@ -85,6 +162,7 @@ export function listNotes(
   now: number,
   waiting: readonly Waiting[] = [],
   device = "this computer",
+  hosted: readonly Hosted[] = [],
 ): ListNote[] {
   const notes: ListNote[] = [];
   for (const connection of connections) {
@@ -93,6 +171,7 @@ export function listNotes(
   }
   for (const one of waiting) notes.push(waitingNote(one));
   if (keyring !== null) notes.push({ kind: "keyring", words: `Sign-ins aren't remembered on ${device}.`, detail: keyring });
+  for (const one of hosted) notes.push(...hostNotes(one, now));
   if (update?.kind === "ready") notes.push({ kind: "update", version: update.version, words: `Linger ${update.version} is ready.` });
   return notes;
 }

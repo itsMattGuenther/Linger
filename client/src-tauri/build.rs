@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "sound_play",
     "show_notification",
     "app_version",
+    "link_offered",
     "update_check",
     "newest_version",
     "update_install",

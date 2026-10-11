@@ -421,9 +421,28 @@ fn write_menu_entry(
         file.sync_all()?;
     }
     fs::rename(&tmp, &dest)?;
+    refresh_link_handlers(&applications);
     Ok(())
 }
 
+/// The entry says it opens `linger://` links (#607, "Open in Linger" on an
+/// invite page). Browsers find which app opens a kind of link through the
+/// folder's index (`mimeinfo.cache`), which `update-desktop-database` writes.
+/// Best effort: where it isn't installed, GLib-based desktops read the entry
+/// itself, and pasting the link always works.
+fn refresh_link_handlers(applications: &Path) {
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(applications)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+/// The AppImage's own menu entry. `%u` hands Linger the `linger://` link a
+/// click opened it with, and `MimeType` says it opens them (#607); the .deb,
+/// .rpm and Arch entries say the same (`linux/linger.desktop.hbs`,
+/// `packaging/arch/linger.desktop`).
 fn desktop_entry(exec: &str, icon: bool) -> String {
     let icon_line = if icon {
         format!("Icon={MENU_ID}\n")
@@ -436,10 +455,11 @@ fn desktop_entry(exec: &str, icon: bool) -> String {
 Type=Application
 Name=Linger
 Comment=A small place for friends to hang out
-Exec={exec}
+Exec={exec} %u
 {icon_line}Terminal=false
 Categories=Network;InstantMessaging;
 StartupWMClass={WM_CLASS}
+MimeType=x-scheme-handler/linger;
 "
     )
 }
@@ -500,7 +520,8 @@ mod tests {
         assert!(body.contains("Terminal=false\n"));
         assert!(body.contains("StartupWMClass=linger-client\n"));
         assert!(body.contains("Icon=com.linger.desktop\n"));
-        assert!(body.contains("Exec=/home/me/Linger.AppImage\n"));
+        assert!(body.contains("Exec=/home/me/Linger.AppImage %u\n"));
+        assert!(body.contains("MimeType=x-scheme-handler/linger;\n"));
         assert!(!body.contains("Terminal=true"));
     }
 
@@ -765,7 +786,10 @@ mod tests {
             fs::read_to_string(root.join("data/applications/com.linger.desktop.desktop")).unwrap();
         assert!(entry.contains("Name=Linger\n"));
         assert!(entry.contains("Terminal=false\n"));
-        assert!(entry.contains(&format!("Exec={}\n", appimage.to_str().expect("utf8 path"))));
+        assert!(entry.contains(&format!(
+            "Exec={} %u\n",
+            appimage.to_str().expect("utf8 path")
+        )));
         assert!(entry.contains("Icon=com.linger.desktop\n"));
         assert_eq!(
             fs::read(root.join("data/icons/hicolor/256x256/apps/com.linger.desktop.png")).unwrap(),
@@ -793,7 +817,9 @@ mod tests {
         let entry =
             fs::read_to_string(root.join("data/applications/com.linger.desktop.desktop")).unwrap();
         let path = appimage.to_str().expect("utf8 path");
-        assert!(entry.contains(&format!("Exec=env LINGER_LINUX_BACKEND=wayland {path}\n")));
+        assert!(entry.contains(&format!(
+            "Exec=env LINGER_LINUX_BACKEND=wayland {path} %u\n"
+        )));
         assert!(!entry.contains(GBM));
         fs::remove_dir_all(&root).unwrap();
     }

@@ -351,7 +351,7 @@ async fn guarded_get(url: &Url, accept: &str, max_bytes: u64) -> Option<(Url, St
         while let Ok(Some(chunk)) = response.chunk().await {
             body.extend_from_slice(&chunk);
             if body.len() as u64 >= max_bytes {
-                body.truncate(max_bytes as usize);
+                body.truncate(usize::try_from(max_bytes).unwrap_or(usize::MAX));
                 break;
             }
         }

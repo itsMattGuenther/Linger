@@ -111,7 +111,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   somebody, so they can look after rooms, reports and people. It isn't a
   role system; there is nothing else to set.
 - **Full export.** Anyone can export public rooms and their own DMs, with
-  files, without asking the host.
+  files, without asking the host. It opens in any web browser with a
+  double-click.
 - **Linux and Windows** (Tauri 2, not Electron). macOS builds from source.
 
 **What it will never have:** XP, streaks or engagement metrics. Federation,

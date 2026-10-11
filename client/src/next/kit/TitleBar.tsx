@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 import "./TitleBar.css";
 
@@ -33,7 +33,7 @@ export interface TitleBarProps {
  * on anything inside it, so a bar marked that way is dead wherever its
  * content covers it: the tab row covered all of the chat window's (#225).
  */
-export function TitleBar({ leading, children, actions, focused = true, onMinimize, onClose, closeLabel = "Close window" }: TitleBarProps) {
+export const TitleBar = memo(function TitleBar({ leading, children, actions, focused = true, onMinimize, onClose, closeLabel = "Close window" }: TitleBarProps) {
   return (
     <header className="k-titlebar" data-kit="TitleBar" data-focused={focused ? "yes" : "no"} data-tauri-drag-region="deep">
       {leading ? <span className="k-titlebar-lead">{leading}</span> : null}
@@ -45,4 +45,4 @@ export function TitleBar({ leading, children, actions, focused = true, onMinimiz
       {onClose ? <IconButton icon="close" label={closeLabel} tone="danger" onClick={onClose} /> : null}
     </header>
   );
-}
+});

@@ -29,6 +29,7 @@ import {
   type SharedLocal,
   setNotifyRule,
   sharedLocalOf,
+  SHARED_FIELDS,
   snapshotOf,
 } from "../../lib/gateway";
 import { voiceChooseDevices } from "../../lib/ipc";
@@ -296,6 +297,11 @@ export interface Sharing {
   talk(from: TalkFrom, edge: TalkEdge): void;
 }
 
+/** One field of the shared state into a message about it. */
+function copyField<K extends keyof SharedLocal>(into: Partial<SharedLocal>, from: SharedLocal, key: K): void {
+  into[key] = from[key];
+}
+
 /**
  * Where your voice seat is, if anywhere: at most one server has one. Voice
  * controls act on that server.
@@ -308,7 +314,8 @@ function voiceServer(servers: Iterable<string>): string | null {
 export interface SharedMessage {
   v: number;
   server: string;
-  shared: SharedLocal;
+  /** The fields that changed since the last message for this server; the rest are as they were. */
+  shared: Partial<SharedLocal>;
 }
 
 /**
@@ -610,18 +617,35 @@ export async function shareAsOwner(
   ]);
 
   // The fields that change without a frame are the owner's to keep; every
-  // other window is told the new value whenever one changes.
-  const sent = new Map<string, string>();
+  // other window is told each one that changes, and only those (#533).
+  // Somebody starting or stopping talking sends your voice seat, not every
+  // read position with it, and every window keeps the rest as it was. A
+  // field is written out to compare only when it's a new object, so a change
+  // anywhere else on any server costs nothing here.
+  const sent = new Map<string, { fields: SharedLocal; words: Map<keyof SharedLocal, string | undefined> }>();
   const stopWatching = onStateChange(() => {
     // Out of voice, or push-to-talk off, nobody holds the key: a press that
     // was never let go (the key held as you left) can't open the next call.
     const server = voiceServer(sessions().keys());
     if (server === null || serverState(server).myVoice?.pushToTalk !== true) talkHolders = NOBODY;
-    for (const server of sessions().keys()) {
-      const shared = sharedLocalOf(server);
-      const key = JSON.stringify(shared);
-      if (sent.get(server) === key) continue;
-      sent.set(server, key);
+    const signedIn = sessions();
+    for (const server of sent.keys()) if (!signedIn.has(server)) sent.delete(server);
+    for (const server of signedIn.keys()) {
+      const fields = sharedLocalOf(server);
+      const last = sent.get(server);
+      const words = last?.words ?? new Map<keyof SharedLocal, string | undefined>();
+      const shared: Partial<SharedLocal> = {};
+      let changed = false;
+      for (const key of SHARED_FIELDS) {
+        if (last !== undefined && last.fields[key] === fields[key]) continue;
+        const said = JSON.stringify(fields[key]);
+        if (last !== undefined && words.get(key) === said) continue;
+        words.set(key, said);
+        copyField(shared, fields, key);
+        changed = true;
+      }
+      sent.set(server, { fields, words });
+      if (!changed) continue;
       const message: SharedMessage = { v: PROTOCOL, server, shared };
       void bus.broadcast(SHARED, message);
     }

@@ -7,9 +7,15 @@
   padding: 0 var(--space-2-5) var(--space-2-5);
 }
 
-/* One line: 40px, the tallest control. It grows with its text, then scrolls. */
+/* One line: 40px, the tallest control. It grows with its text, then scrolls.
+   In a window too narrow for the typing area and its buttons side by side,
+   the buttons go under it, at the end, rather than squeezing it to nothing
+   (#512). The window's smallest size grows with the interface size so this
+   is rare, but a tiling desktop can make a window any size. */
 .nx-composer-box {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: flex-end;
   gap: var(--space-1);
   min-height: var(--control-lg);
@@ -42,7 +48,7 @@
 
 .nx-composer-input {
   flex: 1;
-  min-width: 0;
+  min-width: var(--composer-min-w);
   min-height: var(--control-md);
   max-height: var(--composer-max);
   padding: calc((var(--control-md) - var(--line-body)) / 2) var(--space-1);
@@ -52,6 +58,14 @@
   line-height: var(--line-body);
   resize: none;
   overflow-y: auto;
+}
+
+/* The buttons go together: under the typing area, when they go (#512). */
+.nx-composer-tools {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: var(--space-1);
 }
 
 /* The box shows focus with its edge; a ring inside it would double it. */

@@ -123,7 +123,7 @@ async fn create(
             return already_posted(&state, room_id, saved).await.map(Json);
         }
     }
-    if room.archived_at.is_some() {
+    if room.archived {
         return Err(ApiError::validation("That room is archived."));
     }
     let attachment_ids = req.attachment_ids.clone().unwrap_or_default();

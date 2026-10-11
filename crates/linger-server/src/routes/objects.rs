@@ -8,9 +8,14 @@
 //!   whichever backend a server runs (T-502).
 //! - `GET /objects/*key` — serving a stored object back.
 //!
-//! **Why serving is not authenticated.** An object key contains a UUIDv7 with
-//! 74 random bits, so the URL is the secret — the same arrangement every chat
-//! app uses, and the only one that lets an `<img>` tag work at all.
+//! **Why serving is not authenticated.** An object key contains a UUIDv7, so
+//! the URL is the secret — the same arrangement every chat app uses, and the
+//! only one that lets an `<img>` tag work at all. After its 48 bits of time,
+//! the `uuid` crate (1.24) writes a 42-bit counter it starts from 41 random
+//! bits each new millisecond, then 32 random bits. So an id from a fresh
+//! millisecond has about 73 bits nobody can predict, and one minted in the
+//! same millisecond as an id somebody already has still has 32: four billion
+//! guesses, each a request over the network (#524).
 //!
 //! **That is also how a DM's files stay private** (SPEC §4.13, T-1303), and it
 //! is worth being explicit about because it is not the mechanism used anywhere
@@ -214,7 +219,8 @@ async fn get_object(
 /// Serve a finished export archive.
 ///
 /// Unauthenticated for the same reason an upload is: the key holds a UUIDv7
-/// with 74 random bits, so the URL is the secret. That matters more here than
+/// (see the module notes on how much of it is random), so the URL is the
+/// secret. That matters more here than
 /// it does for one photo — this is the whole server in a file — which is why
 /// asking for somebody else's *job* is a 404 (see [`crate::export::job`]) and
 /// why a new export deletes the previous archive rather than leaving old URLs

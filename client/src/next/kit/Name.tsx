@@ -1,5 +1,5 @@
 import type { User } from "../../generated/User";
-import { nameProps } from "../../lib/names";
+import { nameProps, nameRuns } from "../../lib/names";
 import "./Name.css";
 
 /**
@@ -31,12 +31,26 @@ export type NameSize = "meta" | "control" | "body" | "name" | "display" | "inlin
 export function Name({ person, size = "name", raw = false, dim = false }: { person: User; size?: NameSize; raw?: boolean; dim?: boolean }) {
   const props = nameProps(person, raw ? "k-name name-raw" : "k-name");
   const shimmer = props["data-name-effect"] === "shimmer" && !dim;
+  // Emoji drawn apart from the letters, so a gradient or a shimmer doesn't paint them flat (#512).
+  const runs = nameRuns(person.display_name);
+  const letters =
+    runs.length === 1 && !runs[0]?.emoji
+      ? person.display_name
+      : runs.map((run, index) =>
+          run.emoji ? (
+            <span key={index} className="k-name-emoji">
+              {run.text}
+            </span>
+          ) : (
+            run.text
+          ),
+        );
   return (
     <span {...props} data-kit="Name" data-size={size} data-dim={dim ? "yes" : undefined}>
       {/* A shimmering name's letters keep their direction to themselves, so a
           character in it that turns text around can't move the band's place
           after them (#488, #532). */}
-      {shimmer ? <span className="k-name-letters">{person.display_name}</span> : person.display_name}
+      {shimmer ? <span className="k-name-letters">{letters}</span> : letters}
       {shimmer ? <ShimmerBand key={person.display_name} letters={person.display_name} /> : null}
     </span>
   );

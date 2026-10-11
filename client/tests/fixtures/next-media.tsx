@@ -20,6 +20,9 @@
  * - `?lazy`: pictures come from `/__media/…`, which only answers when a spec
  *   serves it, to see the tiles keep their size before anything loads.
  * - `?long`: a name and a file name far too long for their places.
+ * - `?whenfull`: The Good Company keeps files until it needs the room
+ *   (#583), so Media offers "Leaving soon"; without it, no server says how
+ *   it keeps files the new way and the filter isn't offered.
  *
  * What the pane asked for is written to `body[data-did]`, `|`-separated.
  */
@@ -51,7 +54,9 @@ function place(server: string, name: string, accent: string, state: ReturnType<t
   return { server, name, accent, me: state.me?.id ?? null, users, rooms: [...state.rooms, ...state.dms], expiryDays, storage: { used: server === SERVER ? 812 * 1024 ** 2 : 2.1 * GB, limit: 10 * GB } };
 }
 
-const home = place(SERVER, SERVER_NAME, "amber", evening(serverState(SERVER)), 365);
+const home: MediaServer = query.has("whenfull")
+  ? { ...place(SERVER, SERVER_NAME, "amber", evening(serverState(SERVER)), null), whenFull: true }
+  : place(SERVER, SERVER_NAME, "amber", evening(serverState(SERVER)), 365);
 const servers: MediaServer[] = query.has("servers")
   ? [home, place(GUILD, serverInfo[GUILD].name, serverInfo[GUILD].accent, guild(serverState(GUILD)), null), place(LISBON, serverInfo[LISBON].name, serverInfo[LISBON].accent, lisbon(serverState(LISBON)), 90)]
   : [home];
@@ -80,7 +85,7 @@ function Fixture() {
         servers={servers}
         startOn={startOn}
         media={async (server, ask) => {
-          note(`media ${server === SERVER ? "" : `${server} `}kind=${ask.kind ?? ""} author=${ask.author ?? ""} since=${ask.since ?? ""} until=${ask.until ?? ""} before=${ask.before ?? ""}`);
+          note(`media ${server === SERVER ? "" : `${server} `}kind=${ask.kind ?? ""} author=${ask.author ?? ""} since=${ask.since ?? ""} until=${ask.until ?? ""} before=${ask.before ?? ""}${ask.leaving ? " leaving" : ""}`);
           if (query.has("loading")) return new Promise(() => undefined);
           await new Promise((settle) => window.setTimeout(settle, 30));
           asked += 1;
