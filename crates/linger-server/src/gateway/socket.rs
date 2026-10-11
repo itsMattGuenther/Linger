@@ -7,16 +7,17 @@ use std::time::Duration;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::Response;
+use dashmap::mapref::entry::Entry;
 use futures_util::{SinkExt, StreamExt};
 use linger_core::gateway::{ClientFrame, ReadyData, ServerEvent, ServerFrame};
 use linger_core::limits::{
-    HEARTBEAT_INTERVAL_MS, MAX_VOICE_PAYLOAD_BYTES, RATE_PRESENCE, RATE_TYPING_PER_ROOM,
-    RATE_VOICE_SIGNAL,
+    HEARTBEAT_INTERVAL_MS, MAX_VOICE_PAYLOAD_BYTES, RATE_PRESENCE, RATE_ROOM_FOCUS,
+    RATE_TYPING_PER_ROOM, RATE_VOICE_SEAT, RATE_VOICE_SIGNAL,
 };
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{spawn_session, Ctl, SessionHandle, VoiceJoined};
+use super::{spawn_session, Ctl, HeldVoice, SessionHandle, VoiceJoined, WantedSeat};
 use crate::db::now_ms;
 use crate::state::AppState;
 use crate::{auth, repo, validate};
@@ -140,6 +141,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // goodbye and then resumes is resumed; it simply has to join voice again,
     // which is what it asked for by leaving.
     if said_goodbye {
+        // A join still waiting for its turn goes with it (#527).
+        state.gateway.voice_held.remove(&session_id);
         state.gateway.voice_part(&session_id);
     }
     // This socket's own session, by id (#451). Any session of the same person
@@ -391,16 +394,11 @@ async fn handle_client_frame(
                     return;
                 }
             }
-            let entrance_sound: Option<String> =
-                sqlx::query_scalar("SELECT sound_key FROM entrance_sounds WHERE user_id = ?")
-                    .bind(user_id.to_vec())
-                    .fetch_optional(&state.db.read)
-                    .await
-                    .ok()
-                    .flatten();
-            state
-                .gateway
-                .apply_room_focus(user_id, room_id, entrance_sound);
+            // Where they are changes now; telling everybody waits for their
+            // turn when they move faster than `RATE_ROOM_FOCUS` (#527).
+            if state.gateway.move_to(user_id, room_id) {
+                tell_focus(state, user_id).await;
+            }
         }
         ClientFrame::TypingStart { room_id } => {
             // Same check, same reason: without it somebody outside a DM can
@@ -441,23 +439,16 @@ async fn handle_client_frame(
             // Any `forwarding` at all is an app that takes voice through the
             // server (0.4.1 on); its value is left over from Settings' old
             // switch and no longer matters (#306).
-            let joined = state.gateway.voice_join(
+            change_voice(
+                state,
                 session_id,
                 user_id,
-                room_id,
-                controls,
-                forwarding.is_some(),
-            );
-            // A new seat: the room gets its quiet line if they stay (#473).
-            if let VoiceJoined::Seated(number) = joined {
-                crate::join_line::after_join(
-                    state.clone(),
-                    session_id.to_string(),
-                    user_id,
+                Some(WantedSeat {
                     room_id,
-                    number,
-                );
-            }
+                    controls,
+                    can_forward: forwarding.is_some(),
+                }),
+            );
         }
         ClientFrame::VoiceAnswer { sdp } => {
             if sdp.len() > MAX_VOICE_PAYLOAD_BYTES {
@@ -482,7 +473,7 @@ async fn handle_client_frame(
             }
             state.gateway.voice_restart(session_id);
         }
-        ClientFrame::VoiceLeave => state.gateway.voice_part(session_id),
+        ClientFrame::VoiceLeave => change_voice(state, session_id, user_id, None),
 
         // Handshake ops after the handshake: ignore.
         ClientFrame::Identify { .. } | ClientFrame::Resume { .. } => {}
@@ -527,4 +518,146 @@ fn tell_presence(state: &AppState, user_id: UserId) {
         state.gateway.presence_held.remove(&user_id);
         state.gateway.tell_presence(user_id);
     });
+}
+
+/// Tell everybody somebody moved, at most `RATE_ROOM_FOCUS` times (#527).
+/// Each move can send a `room.leave`, a `room.enter`, two `room.occupancy`
+/// and a `presence.update` to everybody connected, and reads the database.
+///
+/// The move itself has already happened (`Gateway::move_to`): this is only
+/// the telling, held back past the limit the way presence is (`tell_presence`,
+/// #497). When the person's turn comes, everybody is told where they are by
+/// then, once, however many moves came in between. A room they passed
+/// through on the way hears nothing, and plays nobody's entrance sound.
+async fn tell_focus(state: &AppState, user_id: UserId) {
+    // A turn is already coming, and it will tell this move too.
+    if state.gateway.focus_held.contains(&user_id) {
+        return;
+    }
+    let key = format!("focus:{user_id}");
+    let Err(mut wait_ms) = state.limiter.check(&key, RATE_ROOM_FOCUS) else {
+        tell_focus_now(state, user_id).await;
+        return;
+    };
+    // Two of their apps can both get here; the one that holds it waits.
+    if !state.gateway.focus_held.insert(user_id) {
+        return;
+    }
+    let state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+            match state.limiter.check(&key, RATE_ROOM_FOCUS) {
+                Ok(()) => break,
+                Err(more) => wait_ms = more,
+            }
+        }
+        // Let go first, then tell: a move that lands after this is told by
+        // its own turn, and one that landed before is where they are now.
+        state.gateway.focus_held.remove(&user_id);
+        tell_focus_now(&state, user_id).await;
+    });
+}
+
+/// Tell a move now, with the sound the room plays for whoever comes in.
+async fn tell_focus_now(state: &AppState, user_id: UserId) {
+    let entrance_sound: Option<String> =
+        sqlx::query_scalar("SELECT sound_key FROM entrance_sounds WHERE user_id = ?")
+            .bind(user_id.to_vec())
+            .fetch_optional(&state.db.read)
+            .await
+            .ok()
+            .flatten();
+    state.gateway.tell_focus(user_id, entrance_sound);
+}
+
+/// Take, change or leave a session's voice seat, at most `RATE_VOICE_SEAT`
+/// times (#527). Each seat taken or left makes the forwarding server offer
+/// everybody in that voice room a fresh connection, and changing mute or
+/// deafen tells the whole room.
+///
+/// Past the limit the newest request is held, not dropped, and taken once
+/// when the session's turn comes: a burst of joins and leaves ends where the
+/// last one said, with one round of offers. A seat is not taken early, since
+/// taking it is the cost; see `HeldVoice`.
+fn change_voice(state: &AppState, session_id: &str, user_id: UserId, wanted: Option<WantedSeat>) {
+    let key = format!("voice-seat:{session_id}");
+    let wait_ms = match state.gateway.voice_held.entry(session_id.to_string()) {
+        // A turn is already coming, and it takes this one instead.
+        Entry::Occupied(mut held) => {
+            held.get_mut().newest(wanted);
+            return;
+        }
+        Entry::Vacant(vacant) => match state.limiter.check(&key, RATE_VOICE_SEAT) {
+            Err(wait_ms) => {
+                let seated = state.gateway.seat_room(session_id);
+                vacant.insert(HeldVoice::new(seated, wanted));
+                wait_ms
+            }
+            Ok(()) => {
+                drop(vacant);
+                take_seat(state, session_id, user_id, wanted, false);
+                return;
+            }
+        },
+    };
+    let state = state.clone();
+    let session_id = session_id.to_string();
+    tokio::spawn(async move {
+        let mut wait_ms = wait_ms;
+        loop {
+            tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+            match state.limiter.check(&key, RATE_VOICE_SEAT) {
+                Ok(()) => break,
+                Err(more) => wait_ms = more,
+            }
+        }
+        // Held while the seat is taken, so the session can't end in between
+        // and leave a seat behind it: its end waits for this, then leaves.
+        let Some(_alive) = state.gateway.sessions.get(&session_id) else {
+            state.gateway.voice_held.remove(&session_id);
+            return;
+        };
+        // Taken out first: a request that lands after this goes through the
+        // limit again, and one that landed before is in what's taken.
+        let Some((_, held)) = state.gateway.voice_held.remove(&session_id) else {
+            // The app said goodbye, and its join went with it.
+            return;
+        };
+        take_seat(&state, &session_id, user_id, held.wanted, held.churned);
+    });
+}
+
+/// Do what a session asked of voice. `churned` says its app closed its
+/// connection and opened another while the request waited, so it gets a
+/// fresh offer even when its seat ends up where it was.
+fn take_seat(
+    state: &AppState,
+    session_id: &str,
+    user_id: UserId,
+    wanted: Option<WantedSeat>,
+    churned: bool,
+) {
+    let Some(seat) = wanted else {
+        state.gateway.voice_part(session_id);
+        return;
+    };
+    match state.gateway.voice_join(
+        session_id,
+        user_id,
+        seat.room_id,
+        seat.controls,
+        seat.can_forward,
+    ) {
+        // A new seat: the room gets its quiet line if they stay (#473).
+        VoiceJoined::Seated(number) => crate::join_line::after_join(
+            state.clone(),
+            session_id.to_string(),
+            user_id,
+            seat.room_id,
+            number,
+        ),
+        VoiceJoined::Again if churned => state.gateway.voice_restart(session_id),
+        VoiceJoined::Again | VoiceJoined::Refused => {}
+    }
 }
