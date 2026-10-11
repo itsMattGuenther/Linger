@@ -78,12 +78,16 @@ export function chatRows(
       afterLine = true;
       continue;
     }
+    // Somebody leaving a group DM (#565): a quiet line of its own, like a
+    // join's. One taken back by somebody in it just isn't there.
+    if (message.left === true && message.deleted_at !== null) continue;
     const reply = message.reply_to !== null && message.deleted_at === null;
     // A message-of-the-day line says who set it on its own line (#464), a
-    // poll always says who asked (#474), and a poll's closed line is a line
-    // of its own; what's said after any of them isn't part of it, so each
-    // starts a group of its own, and so does what follows.
-    const apart = message.motd === true || (message.poll != null && message.deleted_at === null) || message.poll_closed != null;
+    // poll always says who asked (#474), and a poll's closed line and a line
+    // saying somebody left (#565) are lines of their own; what's said after
+    // any of them isn't part of it, so each starts a group of its own, and so
+    // does what follows.
+    const apart = message.motd === true || (message.poll != null && message.deleted_at === null) || message.poll_closed != null || message.left === true;
     rows.push({
       kind: "message",
       key: row.key,

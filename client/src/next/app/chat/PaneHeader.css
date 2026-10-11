@@ -176,3 +176,11 @@
   margin-top: var(--space-1);
   max-width: 60ch;
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-pane-title,
+.nx-pane-sub,
+.nx-pane-note {
+  unicode-bidi: isolate;
+}

@@ -1,0 +1,7 @@
+/* A group DM's ⋯ button (#565), on its row or in its header: the button
+   alone, with nothing of its own around it. Tokens only. */
+.nx-leave-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}

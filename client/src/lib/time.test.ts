@@ -9,7 +9,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { ageOpacity, closesWhen, clockTime, fullTime, hitTime, sessionLabel, setWhen } from "./time";
+import { ageOpacity, closesWhen, clockTime, fullTime, hitTime, isoTime, sessionLabel, setWhen, validTime } from "./time";
 
 /** Local-time helper: `at(2026, 8, 15, 9, 14)` is 15 August 2026, 9:14am. */
 function at(year: number, month: number, day: number, hour: number, minute = 0): number {
@@ -101,18 +101,24 @@ describe("ageOpacity", () => {
 
 describe("formatting a time", () => {
   // Building a date formatter is the slow part of formatting a date, and
-  // every row formats its time on every render. They are built once, when the
-  // module loads, and never per call (#170). `Date#toLocale*String` with
+  // every row formats its time on every render. Each is built once, the first
+  // time it's used, and never per call (#170). `Date#toLocale*String` with
   // options builds one internally on every call, where a spy on the
   // constructor cannot see it, so those are watched too.
   it("reuses its formatters instead of building one per call", () => {
+    const at = Date.UTC(2026, 8, 24, 21, 5);
+    // The first use of each builds it; that is the one build allowed.
+    clockTime(at);
+    fullTime(at);
+    hitTime(at);
+    sessionLabel(at, at + 9 * 86_400_000);
+    sessionLabel(at, at + 400 * 86_400_000);
     const spies = [
       vi.spyOn(Intl, "DateTimeFormat"),
       vi.spyOn(Date.prototype, "toLocaleString"),
       vi.spyOn(Date.prototype, "toLocaleDateString"),
       vi.spyOn(Date.prototype, "toLocaleTimeString"),
     ];
-    const at = Date.UTC(2026, 8, 24, 21, 5);
     for (let i = 0; i < 50; i += 1) {
       clockTime(at + i);
       fullTime(at + i);
@@ -123,6 +129,41 @@ describe("formatting a time", () => {
     for (const spy of spies) {
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
+    }
+  });
+
+  // The first date formatter a page builds loads the engine's date and
+  // time-zone data, 12-55 ms in WebKitGTK, and the list window never formats
+  // a date. So loading this file builds none; each is built the first time
+  // something asks for it (#535).
+  it("builds no formatter until a time is formatted, then keeps it (#535)", async () => {
+    // A bare spy on this built-in hands `new` an object with no `format`, so
+    // this one builds the real thing.
+    const Real = Intl.DateTimeFormat;
+    const build = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (...args: ConstructorParameters<typeof Real>) {
+      return new Real(...args);
+    });
+    try {
+      vi.resetModules();
+      const time = await import("./time");
+      expect(build).not.toHaveBeenCalled();
+
+      // Built on first use, in the machine's own locale and zone, and saying
+      // exactly what a formatter built the old way says.
+      const at = Date.UTC(2026, 8, 24, 21, 5);
+      expect(time.clockTime(at)).toBe(new Real(undefined, { hour: "numeric", minute: "2-digit" }).format(at));
+      expect(time.fullTime(at)).toBe(new Real(undefined, { dateStyle: "full", timeStyle: "short" }).format(at));
+      expect(time.hitTime(at)).toBe(new Real(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at));
+      expect(build).toHaveBeenCalledTimes(3);
+      build.mockClear();
+
+      // And kept: the second use builds nothing.
+      time.clockTime(at + 1);
+      time.fullTime(at + 1);
+      time.hitTime(at + 1);
+      expect(build).not.toHaveBeenCalled();
+    } finally {
+      build.mockRestore();
     }
   });
 });
@@ -159,5 +200,40 @@ describe("closesWhen (#474)", () => {
     const withYear = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
     expect(closesWhen(at(2026, 10, 15, 22, 52), now)).toBe(`on ${monthDay(at(2026, 10, 15, 22, 52))}`);
     expect(closesWhen(at(2027, 1, 2, 12, 0), now)).toBe(`on ${withYear(at(2027, 1, 2, 12, 0))}`);
+  });
+});
+
+describe("a time no date can hold (#509)", () => {
+  // Every time drawn comes from a server. One past what a `Date` can hold
+  // (8.64e15 ms either side of 1970), or not a number at all, made the
+  // formatters throw, and the throw blanked the whole list window. Such a
+  // time draws as no time instead.
+  const now = at(2026, 10, 8, 22, 52);
+  const broken = [9e15, -9e15, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+  it("is told apart from one that can be drawn", () => {
+    for (const time of broken) expect(validTime(time)).toBe(false);
+    for (const time of [0, now, 8.64e15, -8.64e15]) expect(validTime(time)).toBe(true);
+  });
+
+  it("draws as no time in every formatter, rather than throwing", () => {
+    for (const time of broken) {
+      expect(clockTime(time)).toBe("");
+      expect(fullTime(time)).toBe("");
+      expect(hitTime(time)).toBe("");
+      expect(sessionLabel(time, now)).toBe("");
+      expect(setWhen(time, now)).toBe("");
+      expect(closesWhen(time, now)).toBe("");
+      expect(isoTime(time)).toBeUndefined();
+    }
+  });
+
+  it("still draws the furthest times a date can hold", () => {
+    expect(isoTime(0)).toBe("1970-01-01T00:00:00.000Z");
+    expect(isoTime(8.64e15)).toBe("+275760-09-13T00:00:00.000Z");
+    expect(clockTime(8.64e15)).not.toBe("");
+    // The small hours hang on the day before, which the very first moment a
+    // date can hold doesn't have: no label, rather than a throw.
+    expect(() => sessionLabel(-8.64e15, now)).not.toThrow();
   });
 });

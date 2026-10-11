@@ -741,6 +741,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 save: async (change) => {
                   try {
                     setInfo(await api.updateServer({ name: change.name, accent_key: change.accent as ServerInfo["accent_key"], icon_key: null }));
+                    // The list shows it now, not at its next hourly ask (#536).
+                    void intend({ kind: "serverinfo", server }).catch(() => undefined);
                     return null;
                   } catch (error: unknown) {
                     return inWords(error, "Couldn't save the server.");

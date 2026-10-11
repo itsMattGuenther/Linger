@@ -639,6 +639,41 @@ function stoppedTyping(current: GatewayState, roomId: RoomId, userId: UserId): G
   return { ...current, typing: { ...current.typing, [roomId]: next } };
 }
 
+/** A record without one key, or the same record when it never had it. */
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
+/**
+ * You left a group DM (#565), here or on another device: everything this
+ * copy holds about it goes, so nothing can draw it, light it or find it. The
+ * list's row, a tab beside it and a conversation's own window all go with it,
+ * since each asks the store whether its conversation still exists.
+ *
+ * Your seat in its voice isn't touched here: the server ended it first, with
+ * `voice.removed`, which is how the voice core is told to let go.
+ */
+function leftDm(current: GatewayState, roomId: RoomId): GatewayState {
+  if (!current.dms.some((dm) => dm.id === roomId)) return current;
+  return {
+    ...current,
+    dms: current.dms.filter((dm) => dm.id !== roomId),
+    streams: withoutKey(current.streams, roomId),
+    typing: withoutKey(current.typing, roomId),
+    newest: withoutKey(current.newest, roomId),
+    read: withoutKey(current.read, roomId),
+    leftOff: withoutKey(current.leftOff, roomId),
+    voice: withoutKey(current.voice, roomId),
+    // The server dropped your rules naming it; so does this copy.
+    notifyRules: current.notifyRules.some((rule) => rule.room_id === roomId) ? current.notifyRules.filter((rule) => rule.room_id !== roomId) : current.notifyRules,
+    voiceFailed: current.voiceFailed?.roomId === roomId ? null : current.voiceFailed,
+    voiceTakenOut: current.voiceTakenOut === roomId ? null : current.voiceTakenOut,
+  };
+}
+
 /**
  * Apply one server frame. Pure, and exported because every window of the
  * Buddy list client folds the same frames with it (docs/design/architecture.md).
@@ -770,6 +805,10 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         ? { ...current, dms: upsert(current.dms, room, same) }
         : { ...current, rooms: upsert(current.rooms, room, same) };
     }
+    case "dm.remove":
+      // You left this group DM (#565), from this window or anywhere else
+      // you're signed in. The server sends nothing more about it.
+      return leftDm(current, frame.d.room_id);
     case "room.occupancy":
       return {
         ...current,
@@ -2184,6 +2223,20 @@ export function typistsIn(current: GatewayState, roomId: RoomId, now: number): U
     .filter(([userId, at]) => now - at < TYPING_TTL_MS && userId !== current.me?.id)
     .sort(([, a], [, b]) => a - b)
     .map(([userId]) => userId);
+}
+
+/**
+ * When the next of a room's typists stops counting (`typistsIn`), or null
+ * when nobody is typing: the moment the "is typing" line next changes by
+ * itself. The line is drawn again then, rather than on a clock (#511).
+ */
+export function typingRunsOut(current: GatewayState, roomId: RoomId, now: number): number | null {
+  const room = current.typing[roomId];
+  if (!room) return null;
+  const ends = Object.entries(room)
+    .filter(([userId, at]) => now - at < TYPING_TTL_MS && userId !== current.me?.id)
+    .map(([, at]) => at + TYPING_TTL_MS);
+  return ends.length === 0 ? null : Math.min(...ends);
 }
 
 /**

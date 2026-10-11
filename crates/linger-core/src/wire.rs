@@ -438,6 +438,14 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reactions_off: Option<bool>,
+    /// `true` on a DM somebody has left (#565, PROTOCOL §3.1). It is a group
+    /// whatever its size now, and `POST /dms` never finds it by its people
+    /// again, so an app doesn't offer it as "the DM with these people" either.
+    /// Left out on every other room and DM, and by a server from before
+    /// leaving, which an app reads the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub someone_left: Option<bool>,
 }
 
 /// A room's message of the day (SPEC §4.1, #464): what's happening now, set by
@@ -536,6 +544,16 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub poll_closed: Option<PollClosed>,
+    /// `true` on the line the server writes when somebody leaves a group DM
+    /// (#565): its author is who left, its body "left". Left out on every
+    /// other message, so an app that doesn't know the field shows it as that
+    /// person saying "left".
+    ///
+    /// Like the line saying somebody joined voice it never makes a DM look
+    /// new, never notifies, and can't be edited or reacted to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub left: Option<bool>,
 }
 
 /// A poll (SPEC §4.18, #474): a question the host or a co-host asks a room,
@@ -1058,6 +1076,13 @@ pub struct ExportJob {
     /// 0.0–1.0.
     pub progress: f32,
     pub url: Option<String>,
+    /// When the server deletes the archive and `url` stops working (unix
+    /// ms). Set alongside `url`: an archive is something to download, not
+    /// something the server keeps (SPEC §4.11, #504). A server from before
+    /// archives expired leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub expires_at: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1103,7 +1128,8 @@ pub struct IceServer {
 #[ts(export)]
 pub struct IceServers {
     pub servers: Vec<IceServer>,
-    /// How long the TURN credentials in `servers` stay valid, in seconds.
+    /// How long the TURN credentials in `servers` stay valid from now, in
+    /// seconds: a day or a little more, since they hold for the hour (#501).
     /// Zero when there are none. A client asks again on every join, so this
     /// only has to cover one call.
     pub ttl_secs: u64,

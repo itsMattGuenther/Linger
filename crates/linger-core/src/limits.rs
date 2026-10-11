@@ -167,6 +167,16 @@ pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
 pub const RESUME_BUFFER_FRAMES: usize = 500;
 pub const RESUME_WINDOW_MS: u64 = 120_000;
 
+/// The biggest frame a client may send the gateway, in bytes of JSON (PROTOCOL
+/// §8, #517). The server takes in a frame whole before it can look inside, so
+/// without a cap of its own a socket that never identifies could make it hold
+/// the WebSocket library's default, 64 MB. The largest frame an app sends is
+/// `voice.answer`, whose `sdp` is capped at [`MAX_VOICE_PAYLOAD_BYTES`]; JSON
+/// adds a little to that (a line break is written as four characters, not
+/// two), so twice the cap is room to spare and still small. It is tied to that
+/// cap so the two can't drift apart. Frames the server sends aren't capped.
+pub const MAX_CLIENT_FRAME_BYTES: usize = MAX_VOICE_PAYLOAD_BYTES * 2;
+
 /// Rate limits (ARCHITECTURE §7). Format: (events, per_seconds).
 /// A server's own emoji (SPEC §4.8, #359): pictures the host or a co-host adds
 /// for everybody on it, written `:name:` in a message.
@@ -202,6 +212,16 @@ pub const MAX_REACTIONS_PER_MESSAGE: usize = 6;
 pub const CUSTOM_REACTION_PREFIX: &str = "emoji:";
 
 pub const RATE_LOGIN_PER_IP: (u32, u64) = (5, 60);
+/// Sign-ups from one address in an hour (#495), unless the host sets
+/// `LINGER_SIGNUPS_PER_HOUR`: sixty at once, then one a minute. A raid's
+/// worth of friends on one connection can join in one go, and so can
+/// `examples/voice_load.rs`, which signs up 49 from one machine. A script
+/// that keeps going is held to one a minute. The invite is checked before
+/// the password is hashed, so an attempt without a good invite costs one
+/// read; this bounds what somebody holding a good one can make the server do.
+/// A bigger group behind one address (a school, or a phone network that puts
+/// many people on one) is why a host can raise it.
+pub const DEFAULT_SIGNUPS_PER_HOUR: u32 = 60;
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);
@@ -217,11 +237,20 @@ pub const RATE_SEARCH: (u32, u64) = (30, 60);
 /// Link previews are cached server-side, so this only bounds the misses.
 pub const RATE_LINK_PREVIEW: (u32, u64) = (60, 60);
 pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
+/// Presence changes from `presence.update` told to everybody, per person
+/// (PROTOCOL §8, #497). Each one goes to everybody connected, so a burst is
+/// told as these few, then as the newest once the limit allows. An app sends
+/// a handful an hour: idle, back, away.
+pub const RATE_PRESENCE: (u32, u64) = (5, 10);
 /// Voice answers and restarts, per session (PROTOCOL §8). Loose, because a
 /// busy room re-offers everybody each time somebody comes or goes, and each
 /// offer wants an answer; a limit tight enough to be interesting would break
 /// an ordinary evening.
 pub const RATE_VOICE_SIGNAL: (u32, u64) = (300, 10);
+/// Relay passwords per person (`GET /voice/ice`, #501). The app asks once
+/// for each join, so twenty a minute is somebody hopping rooms as fast as
+/// they can click, and a loop gets no further.
+pub const RATE_VOICE_ICE: (u32, u64) = (20, 60);
 /// Votes per person (#474): plenty for changing your mind, too few to make a
 /// room's every app redraw a poll many times a second.
 pub const RATE_POLL_VOTE: (u32, u64) = (20, 10);

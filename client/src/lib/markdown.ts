@@ -253,7 +253,13 @@ interface Match {
   next: number;
 }
 
-function parseInline(source: string, depth: number): Inline[] {
+/**
+ * `inLink` is true inside a link's words, where no link may start: not a
+ * `[label](…)` and not a bare address (#508). A link inside a link opened both
+ * addresses on one click, and pointing at it showed the inner one, which is
+ * whatever the sender typed. CommonMark doesn't allow it either.
+ */
+function parseInline(source: string, depth: number, inLink = false): Inline[] {
   const nodes: Inline[] = [];
   let plain = "";
   const flush = (): void => {
@@ -290,7 +296,7 @@ function parseInline(source: string, depth: number): Inline[] {
       }
     }
 
-    if (ch === "[" && depth < MAX_INLINE_DEPTH) {
+    if (ch === "[" && !inLink && depth < MAX_INLINE_DEPTH) {
       const found = matchLink(source, at, depth);
       if (found) {
         flush();
@@ -301,7 +307,7 @@ function parseInline(source: string, depth: number): Inline[] {
     }
 
     if (depth < MAX_INLINE_DEPTH) {
-      const found = matchEmphasis(source, at, depth);
+      const found = matchEmphasis(source, at, depth, inLink);
       if (found) {
         flush();
         nodes.push(found.node);
@@ -310,7 +316,7 @@ function parseInline(source: string, depth: number): Inline[] {
       }
     }
 
-    if ((ch === "h" || ch === "H") && !isWordChar(source[at - 1])) {
+    if ((ch === "h" || ch === "H") && !inLink && !isWordChar(source[at - 1])) {
       const found = matchAutolink(source, at);
       if (found) {
         flush();
@@ -378,21 +384,33 @@ function matchBracket(source: string, at: number, open: string, close: string): 
   return -1;
 }
 
+/**
+ * A link's address followed by a CommonMark title: `https://x "title"`, with
+ * the title in double quotes, single quotes or parentheses. Group 1 is the
+ * address.
+ */
+const LINK_TITLE = /^(\S+)\s+(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\))$/s;
+
 function matchLink(source: string, at: number, depth: number): Match | null {
   const labelEnd = matchBracket(source, at, "[", "]");
   if (labelEnd < 0 || source[labelEnd + 1] !== "(") return null;
   const targetEnd = matchBracket(source, labelEnd + 1, "(", ")");
   if (targetEnd < 0) return null;
 
+  // A title is dropped, not shown: what pointing at a link says is always
+  // where it goes. Left on, it was read as part of the address, and
+  // `https://x "title"` became `https://x%20"title"/` (#508).
+  const target = source.slice(labelEnd + 2, targetEnd).trim();
   // A refused scheme is not an error and not a stripped tag: the whole thing
   // stays on screen as the characters that were typed, so the person reading
   // can see exactly what they were sent.
-  const href = safeHref(source.slice(labelEnd + 2, targetEnd));
+  const href = safeHref(LINK_TITLE.exec(target)?.[1] ?? target);
   if (href === null) return null;
 
+  // The words are words, formatting and all, but never another link (#508).
   const label = source.slice(at + 1, labelEnd);
   return {
-    node: { kind: "link", href, text: label, children: parseInline(label, depth + 1) },
+    node: { kind: "link", href, text: label, children: parseInline(label, depth + 1, true) },
     next: targetEnd + 1,
   };
 }
@@ -481,7 +499,7 @@ function countOf(text: string, ch: string): number {
   return total;
 }
 
-function matchEmphasis(source: string, at: number, depth: number): Match | null {
+function matchEmphasis(source: string, at: number, depth: number, inLink: boolean): Match | null {
   for (const { open, kind } of EMPHASIS) {
     if (!source.startsWith(open, at)) continue;
 
@@ -507,7 +525,7 @@ function matchEmphasis(source: string, at: number, depth: number): Match | null 
     if (close < 0) continue;
 
     return {
-      node: { kind, children: parseInline(source.slice(from, close), depth + 1) },
+      node: { kind, children: parseInline(source.slice(from, close), depth + 1, inLink) },
       next: close + open.length,
     };
   }
