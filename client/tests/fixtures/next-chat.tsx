@@ -551,7 +551,8 @@ function Fixture() {
       serverName: SERVER_NAME,
       me,
       speaking,
-      typing: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []),
+      // Typing until the page says otherwise, never running out.
+      typing: () => ({ people: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []), until: null }),
       // As the window lists them (core/chat/mentions.ts): a DM's people, or the room's first.
       mentionable: (room.kind === "dm"
         ? dmPeople(room)

@@ -77,6 +77,32 @@ test("a room clicked in the list opens beside it, in the same window, with the c
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
+/**
+ * How many times the window draws in three idle seconds, once it has stopped
+ * drawing for one (#511). Three is longer than the two-second clock it once
+ * kept for nothing (tests/fixtures/next/commits.tsx counts).
+ */
+async function drawsWhileIdle(page: Page): Promise<number> {
+  const commits = () => page.evaluate(() => window.commits ?? 0);
+  let last = await commits();
+  for (;;) {
+    await page.waitForTimeout(1_000);
+    const now = await commits();
+    if (now === last) break;
+    last = now;
+  }
+  await page.waitForTimeout(3_000);
+  return (await commits()) - last;
+}
+
+test("with a room beside the list and nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  expect(await drawsWhileIdle(page)).toBe(0);
+});
+
 test("while a room shows beside the list you're in it; folded away, you're around again", async ({ page }) => {
   await open(page);
   await room(page, "general").click();

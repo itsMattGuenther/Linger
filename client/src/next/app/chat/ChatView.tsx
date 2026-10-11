@@ -16,7 +16,7 @@ import { ImageViewer } from "./ImageViewer";
 import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
-import { Typing } from "./Typing";
+import { Typing, type TypingNow } from "./Typing";
 import { type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
@@ -84,8 +84,11 @@ export interface ChatPane {
   blocked?: ReadonlySet<string>;
   /** Who is talking right now. */
   speaking: ReadonlySet<string>;
-  /** Who is writing here right now, not counting you. */
-  typing: readonly User[];
+  /**
+   * Who is writing here at a moment, not counting you, and when that next
+   * changes by itself: the typing line asks again then (#511).
+   */
+  typing: (now: number) => TypingNow;
   /** Who an `@` in the box offers, in order (core/chat/mentions.ts). */
   mentionable: readonly MentionPerson[];
   stream: ChatStream;
@@ -275,7 +278,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             }
             actions={actions}
           />
-          <Typing people={pane.typing} />
+          <Typing typing={pane.typing} />
           <Composer
             conversation={pane.id}
             title={titleOf(pane.header)}

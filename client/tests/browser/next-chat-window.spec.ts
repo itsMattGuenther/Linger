@@ -100,6 +100,40 @@ test("typing is said through the list window's connection", async ({ page }) => 
   await expect.poll(() => did(page)).toContain('gateway:{"op":"typing.start","d":{"room_id":"r-general"}}');
 });
 
+/**
+ * How many times the window draws in three idle seconds, once it has stopped
+ * drawing for one (#511). Three is longer than the two-second clock it once
+ * kept for nothing (tests/fixtures/next/commits.tsx counts).
+ */
+async function drawsWhileIdle(page: Page): Promise<number> {
+  const commits = () => page.evaluate(() => window.commits ?? 0);
+  let last = await commits();
+  for (;;) {
+    await page.waitForTimeout(1_000);
+    const now = await commits();
+    if (now === last) break;
+    last = now;
+  }
+  await page.waitForTimeout(3_000);
+  return (await commits()) - last;
+}
+
+test("with nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await open(page);
+  await expect(log(page)).toContainText("Putting it on now.");
+  expect(await drawsWhileIdle(page)).toBe(0);
+});
+
+test("somebody's 'is typing' goes by itself once it runs out (#511)", async ({ page }) => {
+  await open(page);
+  await expect(log(page)).toContainText("Putting it on now.");
+  await page.evaluate(() => window.owner?.frame({ op: "typing", d: { room_id: "r-general", user_id: "u-eli" } }));
+  const line = page.locator(".nx-typing");
+  await expect(line).toHaveText(/Eli\s*is typing/);
+  // Nobody says they've stopped: it runs out six seconds after the last word that they're typing.
+  await expect(line).toHaveText("", { timeout: 10_000 });
+});
+
 test("a send the server refuses says why and keeps the words", async ({ page }) => {
   await open(page, "room=r-general&fail");
   await box(page).click();

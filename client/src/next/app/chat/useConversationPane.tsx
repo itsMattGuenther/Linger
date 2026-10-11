@@ -27,6 +27,7 @@ import {
   votePoll,
   serverState,
   startedTyping,
+  typingRunsOut,
   trimHistory,
   useServers,
   sendReport,
@@ -67,8 +68,6 @@ const KNOCKED_MS = 3_000;
  * same as the knock card a person gets.
  */
 const REFUSED_MS = 8_000;
-/** "Typing…" goes a few seconds after the last keystroke (`TYPING_TTL_MS`); checked this often. */
-const TYPING_CHECK_MS = 2_000;
 
 /** A knock from a DM's header, while there's something to show for it. */
 type HeaderKnockNow = { phase: "knocking" | "knocked"; problem?: undefined } | { phase: "idle"; problem: string };
@@ -147,8 +146,6 @@ export interface ConversationPane {
 export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped }: PaneHost): ConversationPane {
   const servers = useServers();
   const now = useNow();
-  // Its own clock, so the conversation isn't redrawn every two seconds.
-  const typingNow = useNow(TYPING_CHECK_MS);
   // Bumped when the cursor should go in the box.
   const [focusAsk, setFocusAsk] = useState(1);
   const askFocus = useCallback(() => setFocusAsk((ask) => ask + 1), []);
@@ -261,6 +258,9 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const messages = stream?.messages ?? NO_MESSAGES;
   const pending = useMemo(() => stream?.pending.map((one) => one.message) ?? NO_MESSAGES, [stream?.pending]);
   const people = useMemo(() => (state ? new Map(state.users.map((user) => [user.id, user])) : NO_PEOPLE), [state?.users]);
+  // The same set until the list changes, so the conversation and its rows,
+  // which are drawn again only for what changed, aren't drawn again for it (#511).
+  const blocked = useMemo(() => new Set(state?.blocked ?? []), [state?.blocked]);
   const talking = useMemo(() => (state ? talkingNow(state) : new Set<string>()), [state]);
   // Who an @ offers: only what it reads, so a message arriving doesn't
   // redraw the box.
@@ -537,9 +537,10 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
       customEmoji: state.emoji,
       serverName: serverTag(active.server).name,
       me: state.me,
-      blocked: new Set(state.blocked),
+      blocked,
       speaking: talking,
-      typing: typingIn(state, room.id, typingNow),
+      // The typing line asks again when somebody's "is typing" runs out (#511).
+      typing: (moment: number) => ({ people: typingIn(state, room.id, moment), until: typingRunsOut(state, room.id, moment) }),
       mentionable,
       stream: {
         messages,
