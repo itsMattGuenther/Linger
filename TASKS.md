@@ -120,11 +120,9 @@ a task fails its acceptance criteria twice.
 
 **M12 (voice) is built, and every release check closed on 2026-09-25.**
 **M15, the Buddy list client (#198), is the app from 0.4.0**; what's left of it
-is under [M15](#m15--the-buddy-list-client-198). M13 (ambient voice) was never
-started as a milestone, but voice work since 2026-10-04 built part of it: silence
-isn't sent, being in a room's voice is being in the room, and joining leaves a
-quiet line. What's left is under [M13](#m13--ambient-voice). Larger groups and
-the voice rework are #197. **Mobile is
+is under [M15](#m15--the-buddy-list-client-198). **M13 (ambient voice) is
+cut** (Matt, 2026-10-11, `docs/decisions.md`); it was never started. Larger
+groups and the voice rework are #197. **Mobile is
 started** (2026-10-02, text first): [its own section](#mobile--started-2026-10-02-text-first).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
@@ -148,6 +146,7 @@ environment variables) are in [`docs/decisions.md`](docs/decisions.md).
 | M9 — knock | tasks 2026-08-29 | `POST /knock` addressed to one person's sessions, a card that fades on its own, the sound player the entrance sounds will extend. **Its check passed in real use on 2026-09-25** (HC-6) | [m9.md](docs/tasks/m9.md) |
 | M10 — search | 2026-08-31 | An FTS5 index kept by triggers, `GET /search` with no query language to trip over, and a destination in the rail that lands you on a hit six months back — `around=` on the messages endpoint, and a room that knows when it is behind its own newest message | [m10.md](docs/tasks/m10.md) |
 | M11 — DMs and group DMs | 2026-08-31 | A DM is a room with members: create-or-find on a canonical member key, a gateway fan-out that filters every frame naming a room, and a membership condition folded into every query that lists messages, files or search results. **Its two-machine half passed in real use on 2026-09-25** (HC-7) | [m11.md](docs/tasks/m11.md) |
+| M13 — ambient voice | cut 2026-10-11, never started | Nothing of its own; what voice work built toward it stays as voice (`docs/decisions.md`) | [m13.md](docs/tasks/m13.md) |
 
 **Release evidence:
 [Release checks](#release-checks--desktop-and-real-world-evidence), at the
@@ -763,7 +762,7 @@ middle of it. Anything that lands before them must not break the frames they rel
 **Three of the five are built and archived** — knock on 2026-08-29
 ([`m9.md`](docs/tasks/m9.md)), search and DMs on 2026-08-31
 ([`m10.md`](docs/tasks/m10.md), [`m11.md`](docs/tasks/m11.md)). Everything
-in M12 is implemented but awaits its human checks. M13 remains unstarted. V1 is
+in M12 is implemented but awaits its human checks. M13 was cut on 2026-10-11 without being started. V1 is
 done except the things in *Human checks*, and those come first — a release
 nobody has installed is not a finished V1, and four of the nine checks now
 belong to V2 features that have only ever run on one computer.
@@ -783,7 +782,7 @@ coordinate with Matt before starting** — that is where audio, real networks an
 the V1 work that came off the critical path — and for small V1 changes that land
 after the milestones closed (`T-904`). V2 starts a new band at **`T-1xxx`, where
 the hundreds digit is the area** — `T-11xx` knock, `T-12xx` search, `T-13xx`
-DMs, `T-14xx` voice, `T-15xx` ambient voice — and `T-16xx` mobile, which has
+DMs, `T-14xx` voice, `T-15xx` ambient voice (retired with M13) — and `T-16xx` mobile, which has
 its own section rather than a milestone, and `T-17xx` themes, which is V3. It does not
 continue the milestone-matches-number rule, because `T-9xx` is already spoken
 for.
@@ -797,7 +796,7 @@ Build order, cheapest and safest first:
 ```
 M9 knock (built) → M10 search (built) → M11 DMs (built)
   → M12 voice (built; its four-network check is HC-9)
-  → M13 ambient voice (part built by later voice work; see M13)
+  → M13 ambient voice (cut 2026-10-11, never started)
 ```
 
 **Mobile is not in this sequence** (Matt, 2026-08-28). It was going to be M14
@@ -823,86 +822,11 @@ out loud.
   (a forwarding server, 0.4.1). The mesh it first built is gone (#306): voice
   goes only through the server. Its notes are in `m12.md`.
 
-### M13 — ambient voice
+### M13 — ambient voice: cut 2026-10-11
 
-*Milestone check: leave a room running for a working day; it costs almost no
-CPU and nobody had to "join" anything.*
-
-The differentiator, and it only makes sense on top of M12. "A room you leave
-running, not a call you join" — no ringing, no joining ceremony, no call that
-somebody has to end.
-
-**The privacy shape matters more than the code.** An always-on microphone is
-exactly the thing this product's whole pitch is against, so it needs the
-treatment activity sharing was to get before it was cut (SPEC §4.3,
-`docs/decisions.md`): **off by default, a persistent visible indicator whenever
-it is on, and one obvious way to kill it.**
-
-**Where it stands (2026-10-11).** Never started as a milestone, but the voice
-work for #197 and after built part of it. Each line checked against the code on
-main:
-
-- **No ringing, no call object, nothing anybody has to end.** True since M12
-  (SPEC §4.14): voice belongs to a room and lasts while anybody is in it.
-- **Silence isn't sent** (PR #430, merged 2026-10-05, in 0.4.9). The live-voice
-  encoder runs Opus DTX and its quiet frames stay on the computer
-  (`codec::Encoder::new`, `voice::pump` in `client/src-tauri/src/voice/`);
-  muted and push-to-talk are silence too. While nobody talks, a room left
-  running costs the network and the host's server nothing. Tests:
-  `silence_goes_unsent_and_talking_comes_back_at_once` and the tests beside it
-  in `voice/codec.rs`.
-- **Being in a room's voice is being in the room** (#420, PR #421, merged
-  2026-10-04, in 0.4.8). Talking in #general with a game in front, you show in
-  #general and never as idle (`shownState`, `voiceRoomsOf` in
-  `client/src/lib/roster.ts`).
-- **Joining leaves a quiet line** (#473, PR #475, merged 2026-10-10, not yet
-  released): "Jules joined voice", in grey, once somebody has stayed ten
-  seconds, at most once per person per room every ten minutes. It rings nobody
-  (`crates/linger-server/src/join_line.rs`).
-- **Voice keeps running with the list closed to the tray** (SPEC §3), and the
-  tray menu has Mute and Leave voice (`client/src-tauri/src/tray.rs`). With the
-  list showing, its voice bar has Mute, Deafen and Leave one click away.
-
-What isn't there:
-
-- **No join step.** Voice starts with a click on Join, every time. A seat lasts
-  through a dropped connection of up to two minutes (`RESUME_WINDOW_MS`,
-  PROTOCOL §8 "Voice"); after anything longer, a laptop asleep, the app
-  restarted or the server updated, you are out of voice and nothing puts you
-  back.
-- **The microphone is still read and encoded every 20 ms while you are
-  quiet**; only the sending stops. M12's notes left gating the encoder on voice
-  detection to M13, to save CPU (`docs/tasks/m12.md`, T-1404). Nobody has
-  measured what a working day in voice costs a client.
-- **An indicator with the list hidden.** The tray icon looks the same in voice
-  and out of it. Quiet hours cover notification sounds, not the microphone.
-
-- 🟡 **T-1501 · Ambient mode** — effort: **high**
-  Open mic with voice detection so silence costs nothing, no join step, idle
-  cost low enough to leave on all day.
-  **Part done (2026-10-11):** the microphone is open unless you turn
-  push-to-talk on (it is off by default), and silence isn't sent (#430), so
-  silence costs the network nothing. **Left:** no join step, and the
-  working-day number below. The task is smaller than it was, but the effort
-  stays high: what's left is how voice behaves across sleeps, restarts and
-  reconnects, which AGENTS.md says is where code that reads right often isn't,
-  and only real computers show it.
-  *Accept:* eight hours in a room, CPU and battery measured, and a number
-  written down in the landing note. T-910 measures idle CPU and four-person
-  voice as well, so one run can serve both. One cost of a window left open
-  all day is already known: #511, a conversation redrawing its window every
-  two seconds (PR #554, open on 2026-10-11).
-
-- 🟡 **T-1502 · The controls that make it safe** — effort: **medium**
-  Default off. A persistent indicator, visible without opening anything, any
-  time the mic is live. One-click kill from the roster. Quiet hours.
-  **Part done (2026-10-11), built for ordinary voice:** the one-click kill
-  (Mute and Leave on the list's voice bar, and in the tray menu with the list
-  hidden), and the voice bar itself is the indicator while the list shows.
-  **Left:** an indicator that shows with the list hidden, quiet hours for the
-  microphone, and default off, which comes with T-1501's mode.
-  *Accept:* somebody who did not set it up can tell at a glance whether their
-  microphone is on.
+Matt cut it before it started: "it's antiquated. It doesn't apply anymore"
+(`docs/decisions.md`). What voice work built toward it stays as ordinary voice.
+The section as it stood that day is in [`docs/tasks/m13.md`](docs/tasks/m13.md).
 
 ---
 

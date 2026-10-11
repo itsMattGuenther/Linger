@@ -1308,3 +1308,23 @@ the tray.
   whole keyboard (hooks, raw input, `GetKeyboardState`, `XQueryKeymap`,
   `/dev/input`, event taps) and allows `GetAsyncKeyState` in one place, asked
   about the talk key's code.
+
+## Decided — ambient voice (M13) is cut
+
+**Matt, 2026-10-11.** "To be honest, it's antiquated. It doesn't apply anymore.
+Just scrap it." M13 was the V2 milestone for "a room you leave running, not a
+call you join": an open microphone with voice detection, no join step, a
+working day's idle cost measured, and the controls an always-on microphone
+would need (off by default, an indicator, a one-click kill, quiet hours for the
+microphone). It was never started as a milestone.
+
+- **What stays.** Voice work since M12 built some of it for ordinary voice, and
+  that stays as voice: silence isn't sent (#430), being in a room's voice is
+  being in the room (#420), joining leaves a quiet line (#473), and voice keeps
+  running with the list in the tray, with Mute and Leave in the tray menu.
+- **What goes.** T-1501 (ambient mode: no join step, the working-day number) and
+  what was left of T-1502 (an indicator with the list hidden, quiet hours for
+  the microphone, off by default). The `T-15xx` band is retired. SPEC §6's V2
+  list loses the line, and §4.14 no longer calls ambient voice a small step.
+- **Its notes**, what was planned and where it stood on the day, are in
+  `docs/tasks/m13.md`.

@@ -757,9 +757,6 @@ voice channel to switch to, no call object, and nothing to be invited to — tho
 the same idea, which is that talking is an event with a beginning and an end. It is not,
 and §4.9's knock is the same argument in miniature.
 
-That is also why M13's ambient voice is a small step rather than a rewrite: a room you
-leave running is what this already is.
-
 **No ringing and no calling.** Joining voice never rings somebody who has not
 joined. People already in that voice session may hear a quiet join/leave cue,
 controlled by their notification sound settings (§4.2). Staying puts one quiet grey
@@ -1210,13 +1207,17 @@ says what replaced it: a status somebody typed.
 
 - Voice rooms (WebRTC through the host's server, #197; coturn for strict networks), push-to-talk, per-user gain (§4.14)
 - Voice messages: a clip you record, hear back and choose to send (§4.14, #401)
-- Ambient voice: a room you leave running, not a call you join
 - DMs and group DMs (§4.13)
 - Search (§4.12)
 - Knock (§4.9)
 - A phone app for iPhone and Android, text first, with no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 - Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
+
+**Ambient voice used to be on this list and is gone** (Matt, 2026-10-11 —
+`docs/decisions.md`). It was "a room you leave running, not a call you join",
+and it was never started. What voice work built toward it (silence isn't sent,
+being in a room's voice is being in the room) stays, as part of §4.14.
 
 ### V3 or never
 

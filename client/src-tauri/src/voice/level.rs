@@ -4,8 +4,9 @@
 //! somewhere with the samples in hand — which is here, in Rust, not in the
 //! WebView. This is the smallest honest version: a level, a threshold, and a
 //! little hangover so a breath between words does not flicker the mark off
-//! and on. It is not voice activity detection in the M13 sense (that has to
-//! gate the *encoder* so silence costs nothing); it is a light on a panel.
+//! and on. It is not voice activity detection and gates nothing (the
+//! encoder's DTX is what keeps silence off the network, #430); it is a light
+//! on a panel.
 //!
 //! Pure, and tested as such: a gate is fed a level and a moment and says
 //! whether anything changed. The engine turns "changed" into one event and
