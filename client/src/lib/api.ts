@@ -234,6 +234,26 @@ async function requestVoid(
   await withDeadline(options, (bounded) => send(baseUrl, method, path, bounded));
 }
 
+/**
+ * For an answer a newer server fills and an older one leaves empty (204): a
+ * password change answers with a fresh sign-in from #496 on, and with nothing
+ * before it.
+ */
+async function requestJsonOrNothing<T>(
+  baseUrl: string,
+  method: string,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T | null> {
+  return withDeadline(options, async (bounded) => {
+    const response = await send(baseUrl, method, path, bounded);
+    if (response.status === 204) return null;
+    // Typed as `requestJson` types it: `T` is a ts-rs type from the server.
+    const parsed: T = await response.json();
+    return parsed;
+  });
+}
+
 /** What the media grid is asking for (PROTOCOL §6). */
 export interface MediaQuery {
   kind?: MediaKind | null;
@@ -363,6 +383,13 @@ export interface TokenSource {
    * when the server says the sign-in is over.
    */
   renew(): Promise<void>;
+  /**
+   * Carry on with the tokens `change` comes back with: a password change
+   * ends every token this sign-in holds and hands back a new pair (#496).
+   * Resolves with whether there was one; an older server sends none. Only
+   * the owning source can, since only it holds a refresh token.
+   */
+  replace(change: () => Promise<Tokens | null>): Promise<boolean>;
   /** The refresh token, which only the owning source holds. */
   readonly refreshToken: string | null;
 }
@@ -380,6 +407,14 @@ class RotatingTokens implements TokenSource {
   readonly #baseUrl: string;
   #tokens: Tokens;
   #refreshing: Promise<void> | null = null;
+  /**
+   * A password change under way (#496), settling with whether it brought a
+   * new pair. The server ends this sign-in's tokens the moment it takes the
+   * change, before the answer is back, so a token refused meanwhile is
+   * expected: renewing then would spend a refresh token the server has just
+   * revoked, which signs this device out.
+   */
+  #changing: Promise<boolean> | null = null;
   readonly #handlers: SignInHandlers;
 
   constructor(baseUrl: string, tokens: Tokens, handlers: SignInHandlers) {
@@ -402,12 +437,40 @@ class RotatingTokens implements TokenSource {
 
   renew(): Promise<void> {
     if (this.#refreshing) return this.#refreshing;
+    // Wait for the change instead. Its pair is the renewal; without one (it
+    // failed, or the server is older) renew as usual.
+    const changing = this.#changing;
+    if (changing) return changing.then((changed) => (changed ? undefined : this.#rotate()));
+    return this.#rotate();
+  }
+
+  replace(change: () => Promise<Tokens | null>): Promise<boolean> {
+    const changed = (async () => {
+      const fresh = await change();
+      if (fresh === null) return false;
+      this.#tokens = fresh;
+      this.#handlers.onTokens(fresh);
+      return true;
+    })();
+    const settled = changed.catch(() => false);
+    this.#changing = settled;
+    void settled.then(() => {
+      if (this.#changing === settled) this.#changing = null;
+    });
+    return changed;
+  }
+
+  #rotate(): Promise<void> {
+    if (this.#refreshing) return this.#refreshing;
     const attempt = (async () => {
       const previous = this.#tokens.refreshToken;
       try {
         const fresh = await new PublicApi(this.#baseUrl).refresh({
           refresh_token: previous,
         });
+        // A password change landed while this was on its way (#496): its pair
+        // is newer, and the one this brought dies with the change.
+        if (this.#tokens.refreshToken !== previous) return;
         this.#tokens = {
           accessToken: fresh.access_token,
           refreshToken: fresh.refresh_token,
@@ -415,6 +478,11 @@ class RotatingTokens implements TokenSource {
         };
         this.#handlers.onTokens(this.#tokens);
       } catch (error) {
+        // Refused because a password change ended the token it spent: the
+        // sign-in goes on with the change's pair, once it's here.
+        const changing = this.#changing;
+        if (changing && (await changing)) return;
+        if (this.#tokens.refreshToken !== previous) return;
         // A refused refresh is the end of this sign-in: the token expired, or
         // it was already spent and the family got revoked. Either way the only
         // way back is signing in again. A temporary server error or rate limit
@@ -470,6 +538,10 @@ export class BorrowedTokens implements TokenSource {
   /** The owner renewed and sent the new token to every window. */
   lend(lent: Lent): void {
     this.#lent = lent;
+  }
+
+  replace(): Promise<boolean> {
+    return Promise.reject(new Error("only the window that owns a sign-in can replace its tokens"));
   }
 
   renew(): Promise<void> {
@@ -619,9 +691,27 @@ export class AuthedApi {
     return this.patch<User>("/me", request);
   }
 
-  changePassword(request: ChangePasswordRequest): Promise<void> {
+  /**
+   * Change the password (PROTOCOL §5). The server ends every sign-in the
+   * account has, this one too, and from #496 on answers with a fresh pair,
+   * which this sign-in carries on with. Resolves with whether it did: `false`
+   * is an older server, after which the old refresh token is dead and the
+   * caller signs in again with the new password.
+   */
+  changePassword(request: ChangePasswordRequest): Promise<boolean> {
     return this.#withAuth((accessToken) =>
-      requestVoid(this.baseUrl, "PATCH", "/me/password", { accessToken, body: request }),
+      this.#source.replace(async () => {
+        const answer = await requestJsonOrNothing<AuthResponse>(this.baseUrl, "PATCH", "/me/password", {
+          accessToken,
+          body: request,
+        });
+        if (answer === null) return null;
+        return {
+          accessToken: answer.access_token,
+          refreshToken: answer.refresh_token,
+          expiresAt: expiryOf(answer.expires_in),
+        };
+      }),
     );
   }
 

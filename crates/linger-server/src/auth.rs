@@ -7,6 +7,9 @@
 //! - Refresh tokens: opaque 256-bit, stored as sha256, rotating. Every login
 //!   starts a *family*; rotation keeps the family; presenting an
 //!   already-rotated token revokes the entire family (stolen-token detector).
+//! - Ending every sign-in an account has (#496): [`end_sign_ins`] revokes the
+//!   refresh families and moves the account's `token_generation` on, which
+//!   every access token minted before it carries less of ([`still_signed_in`]).
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -25,7 +28,7 @@ use rand::RngCore;
 use ring::signature::KeyPair;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
 use crate::db::now_ms;
@@ -77,6 +80,24 @@ struct Claims {
     sub: String,
     iat: u64,
     exp: u64,
+    /// The account's `token_generation` when this was minted (#496). Tokens
+    /// minted before the claim existed leave it out, and count as 0, which
+    /// is where every account started.
+    #[serde(rename = "gen", default)]
+    generation: i64,
+}
+
+/// What a valid access token says: whose it is, and which generation of their
+/// sign-ins it belongs to (#496).
+///
+/// A signature that checks out is only half of it. [`still_signed_in`] asks
+/// the other half, whether those sign-ins have been ended since, and every
+/// door that takes a token asks it: the bearer extractor, and the gateway's
+/// identify and resume.
+#[derive(Debug, Clone, Copy)]
+pub struct Bearer {
+    pub user_id: UserId,
+    generation: i64,
 }
 
 pub struct JwtKeys {
@@ -112,13 +133,17 @@ impl JwtKeys {
     }
 
     /// Mint an access token. Returns `(jwt, expires_in_seconds)`.
-    pub fn mint(&self, user_id: UserId) -> anyhow::Result<(String, u64)> {
+    ///
+    /// `generation` is the account's `token_generation` as it is now
+    /// ([`token_generation`]): the token stops working once that moves on.
+    pub fn mint(&self, user_id: UserId, generation: i64) -> anyhow::Result<(String, u64)> {
         #[allow(clippy::cast_sign_loss)]
         let now = (now_ms() / 1000) as u64;
         let claims = Claims {
             sub: user_id.to_string(),
             iat: now,
             exp: now + ACCESS_TOKEN_TTL_SECS,
+            generation,
         };
         let jwt = jsonwebtoken::encode(
             &Header::new(jsonwebtoken::Algorithm::EdDSA),
@@ -128,17 +153,53 @@ impl JwtKeys {
         Ok((jwt, ACCESS_TOKEN_TTL_SECS))
     }
 
-    /// Verify a token and return its subject. Any failure is `Unauthenticated`
-    /// — the client can't act on the distinction and attackers shouldn't get it.
-    pub fn verify(&self, token: &str) -> Result<UserId, ApiError> {
+    /// Verify a token's signature and expiry, and say what it carries. Any
+    /// failure is `Unauthenticated` — the client can't act on the distinction
+    /// and attackers shouldn't get it.
+    ///
+    /// Not enough on its own to let anybody in: see [`Bearer`].
+    pub fn verify(&self, token: &str) -> Result<Bearer, ApiError> {
         let validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         let data = jsonwebtoken::decode::<Claims>(token, &self.decoding, &validation)
             .map_err(|_| ApiError::unauthenticated())?;
-        data.claims
+        let user_id = data
+            .claims
             .sub
             .parse()
-            .map_err(|_| ApiError::unauthenticated())
+            .map_err(|_| ApiError::unauthenticated())?;
+        Ok(Bearer {
+            user_id,
+            generation: data.claims.generation,
+        })
     }
+}
+
+/// The account's `token_generation` now, for minting a token that belongs to
+/// it. Read after whatever ended the last generation has committed, so a token
+/// minted straight after a password change is a good one.
+pub async fn token_generation(db: &SqlitePool, user_id: UserId) -> Result<i64, ApiError> {
+    let generation: i64 = sqlx::query_scalar("SELECT token_generation FROM users WHERE id = ?")
+        .bind(user_id.to_vec())
+        .fetch_one(db)
+        .await?;
+    Ok(generation)
+}
+
+/// Whether a verified token's sign-in is still going: the account isn't
+/// removed (T-413), and nothing has ended every sign-in it has since the token
+/// was minted (#496). One primary-key read.
+///
+/// A count rather than a time is what makes this exact. Token times are in
+/// whole seconds, so a time could not tell a token minted just before a
+/// password change from the fresh one minted just after it, in the same second.
+pub async fn still_signed_in(db: &SqlitePool, bearer: Bearer) -> Result<bool, ApiError> {
+    let now: Option<i64> = sqlx::query_scalar(
+        "SELECT token_generation FROM users WHERE id = ? AND deactivated_at IS NULL",
+    )
+    .bind(bearer.user_id.to_vec())
+    .fetch_optional(db)
+    .await?;
+    Ok(now.is_some_and(|now| bearer.generation >= now))
 }
 
 // ---------------------------------------------------------------------------
@@ -177,8 +238,13 @@ pub async fn issue_refresh_family(db: &SqlitePool, user_id: UserId) -> anyhow::R
 }
 
 pub enum RefreshOutcome {
-    /// Rotation succeeded: old token dead, here's the new one.
-    Rotated { user_id: UserId, new_token: String },
+    /// Rotation succeeded: old token dead, here's the new one, and the
+    /// account's `token_generation` to mint its access token with.
+    Rotated {
+        user_id: UserId,
+        generation: i64,
+        new_token: String,
+    },
     /// Unknown, expired, or reused token. Reuse additionally revoked the family
     /// before this was returned; the caller responds identically either way.
     Rejected,
@@ -229,14 +295,19 @@ pub async fn rotate_refresh(db: &SqlitePool, token: &str) -> anyhow::Result<Refr
     // is normally already dead by the branch above. This is the belt: rotation
     // is the door that would otherwise keep handing out fresh 15-minute access
     // tokens for the whole 30-day refresh window (T-413).
-    let live: Option<(i64,)> =
-        sqlx::query_as("SELECT 1 FROM users WHERE id = ? AND deactivated_at IS NULL")
-            .bind(&user_bytes)
-            .fetch_optional(&mut *tx)
-            .await?;
-    if live.is_none() {
+    //
+    // Read in the same transaction as the rotation, so a password change can't
+    // land between them and leave this minting a token for the generation it
+    // just ended (#496).
+    let generation: Option<i64> = sqlx::query_scalar(
+        "SELECT token_generation FROM users WHERE id = ? AND deactivated_at IS NULL",
+    )
+    .bind(&user_bytes)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(generation) = generation else {
         return Ok(RefreshOutcome::Rejected);
-    }
+    };
 
     let new_token = new_opaque_token();
 
@@ -259,7 +330,11 @@ pub async fn rotate_refresh(db: &SqlitePool, token: &str) -> anyhow::Result<Refr
     .await?;
     tx.commit().await?;
 
-    Ok(RefreshOutcome::Rotated { user_id, new_token })
+    Ok(RefreshOutcome::Rotated {
+        user_id,
+        generation,
+        new_token,
+    })
 }
 
 /// Logout: revoke the presented token's whole family. Idempotent; unknown
@@ -277,15 +352,43 @@ pub async fn revoke_family(db: &SqlitePool, token: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Password change / deactivation: revoke everything the user holds.
-pub async fn revoke_all_for_user(db: &SqlitePool, user_id: UserId) -> anyhow::Result<()> {
+/// End every sign-in this account has (#496): revoke every refresh family, and
+/// move the account's `token_generation` on so that every access token already
+/// handed out is refused from now on ([`still_signed_in`]).
+///
+/// On the caller's transaction, so it lands with whatever made it necessary: a
+/// new password, or removal. Open gateway sessions are the caller's to close
+/// ([`crate::gateway::Gateway::close_sessions_for`]), after the commit. A
+/// session closed first could identify again with a token that still worked.
+pub async fn end_sign_ins(
+    conn: &mut SqliteConnection,
+    user_id: UserId,
+    now: i64,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
     )
-    .bind(now_ms())
+    .bind(now)
     .bind(user_id.to_vec())
-    .execute(db)
+    .execute(&mut *conn)
     .await?;
+    sqlx::query("UPDATE users SET token_generation = token_generation + 1 WHERE id = ?")
+        .bind(user_id.to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// [`end_sign_ins`] on its own, for the command line's password reset (T-414).
+///
+/// That runs in a process of its own, with no gateway to tell. The host guide
+/// has the server stopped while it does, which has closed every session
+/// already; one left running keeps a socket that is already open until it next
+/// has to show a token.
+pub async fn revoke_all_for_user(db: &SqlitePool, user_id: UserId) -> anyhow::Result<()> {
+    let mut tx = db.begin().await?;
+    end_sign_ins(&mut tx, user_id, now_ms()).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -295,7 +398,8 @@ pub async fn revoke_all_for_user(db: &SqlitePool, user_id: UserId) -> anyhow::Re
 
 /// Any authenticated member. `Authorization: Bearer <jwt>` only.
 ///
-/// **Removed members are refused here, not just at the next refresh** (T-413).
+/// **Removed members are refused here, not just at the next refresh** (T-413),
+/// and so is a token from before a password change (#496): [`still_signed_in`].
 /// That costs one primary-key read on the read pool per authenticated request,
 /// which is the same read the host extractors already pay for [`standing`]. The other
 /// answer — let the access token lapse on its own — buys that read back at the
@@ -318,16 +422,11 @@ impl FromRequestParts<AppState> for AuthedUser {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or_else(ApiError::unauthenticated)?;
-        let id = state.jwt.verify(token)?;
-        let live: Option<(i64,)> =
-            sqlx::query_as("SELECT 1 FROM users WHERE id = ? AND deactivated_at IS NULL")
-                .bind(id.to_vec())
-                .fetch_optional(&state.db.read)
-                .await?;
-        if live.is_none() {
+        let bearer = state.jwt.verify(token)?;
+        if !still_signed_in(&state.db.read, bearer).await? {
             return Err(ApiError::unauthenticated());
         }
-        Ok(Self { id })
+        Ok(Self { id: bearer.user_id })
     }
 }
 
@@ -472,4 +571,43 @@ pub fn client_ip(parts: &Parts) -> String {
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
         .map_or_else(|| "unknown".to_string(), |c| c.0.ip().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tokens minted before #496 carry no generation. They have to keep
+    /// working until something ends the account's sign-ins, or the update
+    /// itself would sign everybody out.
+    #[test]
+    fn a_token_from_before_generations_counts_as_the_first() {
+        #[derive(Serialize)]
+        struct Before {
+            sub: String,
+            iat: u64,
+            exp: u64,
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let keys = JwtKeys::load_or_generate(dir.path()).unwrap();
+        let user = UserId::new();
+        #[allow(clippy::cast_sign_loss)]
+        let now = (now_ms() / 1000) as u64;
+        let before = jsonwebtoken::encode(
+            &Header::new(jsonwebtoken::Algorithm::EdDSA),
+            &Before {
+                sub: user.to_string(),
+                iat: now,
+                exp: now + ACCESS_TOKEN_TTL_SECS,
+            },
+            &keys.encoding,
+        )
+        .unwrap();
+        let bearer = keys.verify(&before).unwrap();
+        assert_eq!(bearer.user_id, user);
+        assert_eq!(bearer.generation, 0);
+
+        let (minted, _) = keys.mint(user, 3).unwrap();
+        assert_eq!(keys.verify(&minted).unwrap().generation, 3);
+    }
 }

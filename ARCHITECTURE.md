@@ -206,7 +206,8 @@ CREATE TABLE users (
   is_cohost       INTEGER NOT NULL DEFAULT 0,  -- set by the host only (#424, 0010)
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
-  deactivated_at  INTEGER
+  deactivated_at  INTEGER,
+  token_generation INTEGER NOT NULL DEFAULT 0  -- +1 ends every sign-in (#496, 0016)
 );
 
 -- name and message styling; see SPEC §4.5
@@ -511,7 +512,13 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt.
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
-   hashed. Reuse of a rotated refresh token revokes the whole family.
+   hashed. Reuse of a rotated refresh token revokes the whole family. A password change
+   (and a reset, and removal) ends every sign-in the account has, at once: refresh
+   families are revoked, and every access token minted before it is refused, because
+   each carries the account's `token_generation` and ending sign-ins adds one to it
+   (#496, PROTOCOL §2). Open gateway sessions are closed. A count, not a time: token
+   times are whole seconds and could not order a token against a change in the same
+   second. The device that changed the password gets a fresh pair in the answer.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.

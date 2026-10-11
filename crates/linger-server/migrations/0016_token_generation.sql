@@ -1,0 +1,17 @@
+-- Ending every sign-in an account has (#496, PROTOCOL §5). A password change
+-- revoked the refresh tokens and nothing else: an access token already handed
+-- out kept working for the rest of its 15 minutes, and it could open a gateway
+-- session that then lasted forever.
+--
+-- Every access token carries the number this column held when it was minted
+-- (`auth::JwtKeys::mint`), and one carrying less than the number now is
+-- refused, by REST and by the gateway's identify and resume. Ending every
+-- sign-in adds one (`auth::end_sign_ins`): a password change, a reset from the
+-- command line, removal.
+--
+-- A count rather than a time, so a token minted in the same second as the
+-- change, either side of it, can't be judged wrong, and a clock that steps
+-- back can't bring a token back. Tokens from before this column carry no
+-- number and count as 0, which every account starts at, so nobody is signed
+-- out by the update.
+ALTER TABLE users ADD COLUMN token_generation INTEGER NOT NULL DEFAULT 0;

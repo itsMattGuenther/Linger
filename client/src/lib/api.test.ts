@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AuthResponse } from "../generated/AuthResponse";
 import type { ErrorCode } from "../generated/ErrorCode";
 import type { ErrorEnvelope } from "../generated/ErrorEnvelope";
 import type { RefreshResponse } from "../generated/RefreshResponse";
@@ -149,6 +150,133 @@ describe("sign-in renewal", () => {
     await expect(api.dms()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(onTokens).toHaveBeenCalledOnce();
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+});
+
+describe("a password change (#496)", () => {
+  const CHANGED: AuthResponse = {
+    access_token: "changed-access",
+    refresh_token: "changed-refresh",
+    expires_in: 900,
+    user: {
+      id: "u-matt",
+      username: "matt",
+      display_name: "Matt",
+      is_host: true,
+      is_cohost: false,
+      style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color: "azure" }, effect: "none", msg_font_key: null },
+      status: null,
+      entrance_sound: null,
+      last_seen_at: null,
+    },
+  };
+  const REQUEST = { current_password: "old-secret", new_password: "new-secret" };
+
+  /** A request that waits to be answered, and the way to answer it. */
+  function held() {
+    let answer: (response: Response) => void = () => {
+      throw new Error("the request has not started");
+    };
+    const response = new Promise<Response>((resolve) => { answer = resolve; });
+    return { response, answer: (value: Response) => answer(value) };
+  }
+
+  function urls(fetcher: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+    return fetcher.mock.calls.map(([input]) => String(input));
+  }
+
+  it("carries on with the pair the server hands back, and saves it", async () => {
+    const { api, fetcher, onTokens, onSignedOut } = client();
+    fetcher.mockResolvedValueOnce(Response.json(CHANGED)).mockResolvedValueOnce(Response.json([]));
+
+    await expect(api.changePassword(REQUEST)).resolves.toBe(true);
+    expect(api.refreshToken).toBe("changed-refresh");
+    expect(onTokens).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ accessToken: "changed-access", refreshToken: "changed-refresh" }),
+    );
+    await api.dms();
+    expect(fetcher).toHaveBeenLastCalledWith(
+      `${BASE_URL}/api/v1/dms`,
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer changed-access" }) }),
+    );
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it("waits for the new pair rather than spend the refresh token the change just ended", async () => {
+    const { api, fetcher, onSignedOut } = client();
+    const patch = held();
+    fetcher.mockReturnValueOnce(patch.response);
+
+    const changing = api.changePassword(REQUEST);
+    // The server has ended the old tokens, and the gateway asks for a new one
+    // before the answer is back.
+    const renewing = api.accessToken(true);
+    await Promise.resolve();
+    patch.answer(Response.json(CHANGED));
+
+    await expect(changing).resolves.toBe(true);
+    await expect(renewing).resolves.toMatchObject({ token: "changed-access" });
+    expect(urls(fetcher)).toEqual([`${BASE_URL}/api/v1/me/password`]);
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it("keeps the change's pair when a renewal already on its way is refused for it", async () => {
+    const { api, fetcher, onTokens, onSignedOut } = client();
+    const refresh = held();
+    const patch = held();
+    fetcher.mockReturnValueOnce(refresh.response).mockReturnValueOnce(patch.response);
+
+    const renewing = api.accessToken();
+    const changing = api.changePassword(REQUEST);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    // The server took the change first, so the old refresh token is refused.
+    refresh.answer(refusal(401, "UNAUTHENTICATED"));
+    await Promise.resolve();
+    patch.answer(Response.json(CHANGED));
+
+    await expect(changing).resolves.toBe(true);
+    await expect(renewing).resolves.toMatchObject({ token: "changed-access" });
+    expect(onSignedOut).not.toHaveBeenCalled();
+    expect(onTokens).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the change's pair when a renewal on its way comes back after it", async () => {
+    const { api, fetcher, onTokens } = client();
+    const refresh = held();
+    fetcher.mockReturnValueOnce(refresh.response).mockResolvedValueOnce(Response.json(CHANGED));
+
+    const renewing = api.accessToken();
+    await expect(api.changePassword(REQUEST)).resolves.toBe(true);
+    // Rotated just before the change, and dead with it.
+    refresh.answer(Response.json(FRESH));
+    await expect(renewing).resolves.toMatchObject({ token: "changed-access" });
+    expect(api.refreshToken).toBe("changed-refresh");
+    expect(onTokens).toHaveBeenCalledOnce();
+  });
+
+  it("from an older server, which answers with nothing, keeps the tokens it had", async () => {
+    const { api, fetcher, onTokens } = client();
+    fetcher.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(api.changePassword(REQUEST)).resolves.toBe(false);
+    expect(api.refreshToken).toBe("old-refresh");
+    expect(onTokens).not.toHaveBeenCalled();
+  });
+
+  it("that fails leaves a renewal that waited for it to renew as usual", async () => {
+    const { api, fetcher, onSignedOut } = client();
+    const patch = held();
+    fetcher.mockReturnValueOnce(patch.response).mockResolvedValueOnce(Response.json(FRESH));
+
+    const changing = api.changePassword(REQUEST);
+    const renewing = api.accessToken(true);
+    await Promise.resolve();
+    patch.answer(refusal(403, "FORBIDDEN"));
+
+    await expect(changing).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(renewing).resolves.toMatchObject({ token: "new-access" });
+    expect(urls(fetcher)).toEqual([`${BASE_URL}/api/v1/me/password`, `${BASE_URL}/api/v1/auth/refresh`]);
     expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

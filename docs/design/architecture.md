@@ -259,9 +259,12 @@ that server's share and replays what the snapshot lacks.
 
 Two things Settings needs an answer to go through the owner as questions
 (`ask`), not intents: turning a notification rule on or off (`next:notify`),
-and changing your password (`next:password`), which the owner follows by
-signing straight back in with the new password, since a change ends every
-other sign-in.
+and changing your password (`next:password`). A change ends every sign-in
+the account has, the owner's too, and the server answers with a fresh pair,
+which the owner's sign-in carries on with (#496). A renewal asked for while
+the answer is on its way waits for it rather than spend the refresh token the
+change just ended. From a server older than that, which answers with nothing,
+the owner signs straight back in with the new password.
 
 **A voice control's sound plays where it was pressed (#241).** Mute, Deafen
 and Leave on the voice line of a conversation in its own window are questions too

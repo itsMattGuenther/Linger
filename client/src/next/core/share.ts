@@ -517,16 +517,18 @@ export async function shareAsOwner(
       return { problem: inWords(error, "Couldn't reach the server.") };
     }
   };
-  // A password change ends every other sign-in for the account (the server
-  // can't tell who else had the old one), so the owner signs straight back
-  // in with the new password rather than leave every window to be signed
-  // out when its token runs out. The passwords are never kept or logged.
+  // A password change ends every sign-in the account has (the server can't
+  // tell who else had the old one), this one too. A server from #496 on hands
+  // this one a fresh pair, and it carries on with it. An older one sends
+  // nothing, so the owner signs straight back in with the new password rather
+  // than leave every window to be signed out when its token runs out. The
+  // passwords are never kept or logged.
   const password = async ({ server, current, next }: PasswordQuestion): Promise<Outcome> => {
     const api = sessions().get(server);
     const username = serverState(server).me?.username;
     if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
     try {
-      await api.changePassword(passwordRequest(current, next));
+      if (await api.changePassword(passwordRequest(current, next))) return { problem: null };
     } catch (error) {
       return { problem: inWords(error, "Couldn't change your password.") };
     }
