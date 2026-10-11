@@ -182,6 +182,15 @@ const described = query.has("longstatus")
       ),
     }
   : fielded;
+// `?clock`: Jules shows her local time, in Tokyo, and so do you, in
+// Chicago (#604).
+const clocked = query.has("clock")
+  ? (() => {
+      const zones: Record<string, string> = { [people.jules.id]: "Asia/Tokyo", [people.matt.id]: "America/Chicago" };
+      const zoned = (user: User): User => (zones[user.id] === undefined ? user : { ...user, time_zone: zones[user.id] });
+      return { ...described, me: described.me && zoned(described.me), users: described.users.map(zoned) };
+    })()
+  : described;
 const speaking = new Set([people.eli.id]);
 const voice = voiceModel(state, speaking);
 const opened: string[] = [];
@@ -207,7 +216,7 @@ interface Live {
 
 /** One server, as the list has always been. */
 function OneServer() {
-  const [held, setHeld] = useState<GatewayState>(described);
+  const [held, setHeld] = useState<GatewayState>(clocked);
   // `?raid`: who's talking changes when the spec says so.
   const [talkers, setTalkers] = useState<ReadonlySet<string>>(speaking);
   useEffect(() => {

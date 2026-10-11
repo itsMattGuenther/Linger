@@ -2701,6 +2701,17 @@ export async function saveDisplayName(api: AuthedApi, request: UpdateMeRequest):
 }
 
 /**
+ * "Show my local time" (#604, PROTOCOL §5): a zone name turns it on or moves
+ * it, "" turns it off. Folded in like the rest, so your own card and the
+ * switch change the moment the server says so.
+ */
+export async function saveTimeZone(api: AuthedApi, zone: string): Promise<User> {
+  const user = await api.updateMe({ display_name: null, style: null, status: null, entrance_sound: null, time_zone: zone });
+  foldUser(api, user);
+  return user;
+}
+
+/**
  * Save how your name is drawn (T-602). Same fold again, and it matters more
  * here than anywhere: the picker's preview and every name in the stream read
  * the same store, so folding the answer in is what makes your own name change

@@ -273,6 +273,10 @@ async fn patch_me(
             ));
         }
     }
+    // "Show my local time" (#604): a zone name, or "" to turn it off.
+    if let Some(zone) = req.time_zone.as_deref().filter(|zone| !zone.is_empty()) {
+        validate::time_zone(zone)?;
+    }
 
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
 
@@ -391,6 +395,14 @@ async fn patch_me(
             .execute(&mut *tx)
             .await?;
         }
+    }
+
+    if let Some(zone) = &req.time_zone {
+        sqlx::query("UPDATE users SET time_zone = ? WHERE id = ?")
+            .bind(Some(zone.as_str()).filter(|zone| !zone.is_empty()))
+            .bind(auth.id.to_vec())
+            .execute(&mut *tx)
+            .await?;
     }
 
     tx.commit().await.map_err(ApiError::from)?;

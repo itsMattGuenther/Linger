@@ -32,6 +32,9 @@ pub const MAX_STATUS_FIELD_CHARS: usize = 80;
 pub const MAX_STATUS_LABEL_CHARS: usize = 24;
 /// A status is a small card, not a bio: three fields at most (#270).
 pub const MAX_STATUS_FIELDS: usize = 3;
+/// A time-zone name a person shares on their card (#604), like
+/// `America/Chicago`. The longest real one is about 32 characters.
+pub const MAX_TIME_ZONE_CHARS: usize = 64;
 
 /// Message body cap, chars after trim (PROTOCOL §4).
 pub const MAX_MESSAGE_CHARS: usize = 8_000;

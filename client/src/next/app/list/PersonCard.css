@@ -51,6 +51,18 @@
   white-space: nowrap;
 }
 
+/* Their local time (#604), when they show it: the where line's quiet words,
+   on a line of its own so neither crowds the other. It wraps rather than
+   cutting off, since the end ("the next day") is part of what it says, and
+   in even lines, so a word is never left alone on the second. */
+.nx-person-clock {
+  min-width: 0;
+  font: var(--text-meta) / var(--line-meta) var(--font-mono);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
 .nx-person-status {
   margin: 0;
   font-size: var(--text-body);
