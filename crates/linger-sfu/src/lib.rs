@@ -36,6 +36,7 @@ pub mod floor;
 use std::collections::HashMap;
 use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
@@ -51,7 +52,8 @@ use floor::Floor;
 pub use floor::LOUDEST;
 
 /// The longest the loop waits on the socket before looking at its commands
-/// again, so a join or an answer never waits behind a quiet room.
+/// again, so a join or an answer never waits behind a quiet room. With
+/// nobody in voice it doesn't wait on the socket at all (#522).
 const TICK: Duration = Duration::from_millis(20);
 
 /// How many times an offer is drawn again for a repeated mid (`negotiate`).
@@ -142,9 +144,10 @@ impl Sfu {
         };
         let (commands, receiver) = mpsc::channel();
         let crypto = Arc::new(from_feature_flags());
+        let turns = Turns::default();
         let thread = thread::Builder::new()
             .name("linger-sfu".into())
-            .spawn(move || run(&socket, address, &receiver, &notify, &crypto))?;
+            .spawn(move || run(&socket, address, &receiver, &notify, &crypto, &turns))?;
         Ok(Self {
             commands,
             address,
@@ -530,12 +533,23 @@ fn bits_for(people: usize, before: u32) -> u32 {
     }
 }
 
+/// How often the loop has turned, and how often it has gone to wait for a
+/// command instead because nobody was in voice (#522): what the tests read
+/// to see that an idle server sleeps. Two counters bumped once a turn cost
+/// nothing next to the turn.
+#[derive(Default)]
+struct Turns {
+    taken: AtomicU64,
+    slept: AtomicU64,
+}
+
 fn run(
     socket: &UdpSocket,
     address: SocketAddr,
     commands: &Receiver<Command>,
     notify: &dyn Notify,
     crypto: &Arc<CryptoProvider>,
+    turns: &Turns,
 ) {
     let mut hub = Hub {
         clients: Vec::new(),
@@ -546,6 +560,25 @@ fn run(
     };
     let mut buffer = vec![0u8; 2000];
     loop {
+        // Nobody in voice: nothing to send, nobody to pass anything on to,
+        // and no connection that wants the time. Rather than turn every TICK
+        // to find that out, fifty times a second on an idle server, the loop
+        // waits for a command (#522).
+        //
+        // Nothing that reaches the socket meanwhile was for anybody. A client
+        // learns where the server is, and the credentials its checks must
+        // carry, only from its offer, made when its join is handled here; so
+        // what arrives first is from connections already gone. It waits in
+        // the socket's buffer and is read on the turns after the next join,
+        // where no connection accepts it, as none did before.
+        while hub.clients.is_empty() {
+            turns.slept.fetch_add(1, Ordering::Relaxed);
+            match commands.recv() {
+                Ok(Command::Stop) | Err(_) => return,
+                Ok(command) => hub.command(command),
+            }
+        }
+        turns.taken.fetch_add(1, Ordering::Relaxed);
         let mut commanded = false;
         loop {
             match commands.try_recv() {
@@ -729,5 +762,117 @@ fn receive(hub: &mut Hub<'_>, address: SocketAddr, packet: &[u8], source: Socket
             client.rtc.disconnect();
         }
         client.stirred = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The loop on a thread of its own, as [`Sfu::start`] runs it, with its
+    /// counters where the test can read them.
+    struct Running {
+        commands: Sender<Command>,
+        offers: Receiver<Offer>,
+        turns: Arc<Turns>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    impl Running {
+        fn start() -> Self {
+            let socket = UdpSocket::bind("127.0.0.1:0").expect("a socket");
+            let address = socket.local_addr().expect("an address");
+            let (commands, receiver) = mpsc::channel();
+            let (offered, offers) = mpsc::channel();
+            let turns = Arc::new(Turns::default());
+            let counted = Arc::clone(&turns);
+            let thread = thread::spawn(move || {
+                let crypto = Arc::new(from_feature_flags());
+                let notify = move |offer: Offer| {
+                    let _ = offered.send(offer);
+                };
+                run(&socket, address, &receiver, &notify, &crypto, &counted);
+            });
+            Self {
+                commands,
+                offers,
+                turns,
+                thread: Some(thread),
+            }
+        }
+
+        fn taken(&self) -> u64 {
+            self.turns.taken.load(Ordering::Relaxed)
+        }
+
+        fn slept(&self) -> u64 {
+            self.turns.slept.load(Ordering::Relaxed)
+        }
+
+        /// Wait for `what` to hold, however busy the machine is: a test that
+        /// waits a fixed time fails on a slow one (docs/testing-strategy.md).
+        fn until(&self, why: &str, what: impl Fn(&Self) -> bool) {
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while !what(self) {
+                assert!(Instant::now() < deadline, "{why}");
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
+    impl Drop for Running {
+        fn drop(&mut self) {
+            let _ = self.commands.send(Command::Stop);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    /// With nobody in voice the loop waits for a command instead of turning
+    /// every TICK, fifty times a second on an idle server (#522); a join
+    /// wakes it, and once the last person leaves it sleeps again.
+    ///
+    /// The waits for something to stop happening are the only fixed ones,
+    /// and they can't fail on a slow machine: once the loop is waiting for a
+    /// command, nothing but a command moves it.
+    #[test]
+    fn with_nobody_in_voice_the_loop_waits_for_a_command() {
+        let sfu = Running::start();
+        thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            sfu.taken(),
+            0,
+            "the loop turned {} times with nobody in voice",
+            sfu.taken()
+        );
+        sfu.until("the loop never went to sleep", |sfu| sfu.slept() == 1);
+
+        // Somebody joins: they get their offer, and the loop runs for them.
+        let _ = sfu.commands.send(Command::Join {
+            session: "a".into(),
+            room: "room".into(),
+        });
+        let offer = sfu
+            .offers
+            .recv_timeout(Duration::from_secs(30))
+            .expect("the newcomer's offer");
+        assert_eq!(offer.session, "a");
+        sfu.until("the loop never turned for somebody in voice", |sfu| {
+            sfu.taken() >= 3
+        });
+
+        // They leave, and it goes back to sleep.
+        let _ = sfu.commands.send(Command::Leave {
+            session: "a".into(),
+        });
+        sfu.until("the loop never went back to sleep", |sfu| sfu.slept() == 2);
+        let taken = sfu.taken();
+        thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            sfu.taken(),
+            taken,
+            "the loop kept turning after everybody left"
+        );
     }
 }
