@@ -340,7 +340,7 @@ test.describe("a name reads the same in a message and on its card (#272)", () =>
     // Both bands stopped at the same point of their pass.
     const stop = (name: Locator) =>
       name.evaluate((node) => {
-        for (const running of node.getAnimations()) {
+        for (const running of node.getAnimations({ subtree: true })) {
           running.pause();
           const length = running.effect?.getComputedTiming().duration;
           running.currentTime = typeof length === "number" ? length * 0.45 : 0;

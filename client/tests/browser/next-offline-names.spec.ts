@@ -81,7 +81,13 @@ const paint = (name: Locator): Promise<Painted> =>
       image: s.backgroundImage,
       filter: s.filter,
       shadow: s.textShadow,
-      animation: s.animationName,
+      // The shimmer's band moves under the name, not the name (#532).
+      animation:
+        node
+          .getAnimations({ subtree: true })
+          .map((running) => (running instanceof CSSAnimation ? running.animationName : "script"))
+          .sort()
+          .join(" ") || "none",
       font: s.fontFamily,
       weight: s.fontWeight,
       slant: s.fontStyle,
@@ -133,7 +139,7 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
   const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
   const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
-  const animation = look.effect === "shimmer" ? "k-name-shimmer" : "none";
+  const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
     ...((throughLetters ? painted(now.image) : now.image === "none") ? [] : [`image ${now.image}`]),

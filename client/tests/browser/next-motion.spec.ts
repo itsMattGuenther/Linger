@@ -62,14 +62,17 @@ test("a name's shimmer and glow stop under reduced motion, and the name keeps it
       if (!shimmer || !glow) return null;
       const s = getComputedStyle(shimmer);
       const g = getComputedStyle(glow);
-      // The glow is a drop shadow of the drawn name (kit/Name.css, #272).
-      return { shimmer: s.animationName, shimmerPaint: s.backgroundImage, glow: g.filter, glowColor: g.color };
+      // The shimmer's band is a window and a copy of the letters moving
+      // over the name (kit/Name.css, #532); the glow is a drop shadow of
+      // the drawn name (#272).
+      const moving = shimmer.getAnimations({ subtree: true }).map((running) => (running instanceof CSSAnimation ? running.animationName : "script"));
+      return { shimmer: moving.sort().join(" ") || "none", shimmerPaint: s.backgroundImage, glow: g.filter, glowColor: g.color };
     });
   await page.goto("/tests/fixtures/kit.html");
   await expect(page.locator("[data-section]").first()).toBeVisible();
   const moving = await look();
   expect(moving).not.toBeNull();
-  expect(moving?.shimmer).toBe("k-name-shimmer");
+  expect(moving?.shimmer).toBe("k-name-band k-name-band-letters");
   expect(moving?.glow).not.toBe("none");
 
   await page.emulateMedia({ reducedMotion: "reduce" });

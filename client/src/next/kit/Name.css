@@ -106,7 +106,149 @@
     -webkit-text-fill-color: transparent;
   }
 
-  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
+  /* Shimmer (#532): a band of `--name-shimmer` crossing the letters from
+     left to right every 4s, a quarter of the name wide (24% of its box),
+     its middle travelling from half a name before the box to half a name
+     past it. The band used to be a second background moved by
+     `background-position`, which no engine can move by itself: every
+     member's app restyled and repainted the name 60 times a second, for as
+     long as it was on screen. Now the moving parts move only by
+     `transform`, which the compositor (the part that puts the page's
+     layers together, on the GPU where there is one) does without asking the
+     page: the letters are drawn once, and the page does nothing per frame.
+
+     Three parts, in `Name.tsx`'s `ShimmerBand`:
+       - `.k-name-band-place`, where the band lives, which doesn't move;
+       - `.k-name-band`, a window as wide as the name, see-through but for
+         the band down its middle (its mask), slid across the name;
+       - its `::before`, a copy of the letters (from `data-letters`) slid
+         back by the same amount, so it stays exactly over the name while
+         the band passes over it: only the letters under the band light up.
+     The copy is generated content in an `aria-hidden` element, so it is
+     never selected, copied or read out. The Linux app paints the band
+     instead, which is cheaper there (the end of this block). */
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"]:not([data-size="inline"]) {
+    position: relative;
+  }
+
+  /* A name in its own box: the band covers the box, and the copy's box is
+     the name's (the same width, padding and "…"), so it lies letter for
+     letter on the name. The name's box cuts both. */
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band {
+    display: block;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    mask-image: linear-gradient(92deg, transparent 38%, var(--mask-solid) 50%, transparent 62%);
+    /* Only the band's part of the window is drawn, so no engine works on
+       the see-through rest of it: measurably less work in Chromium, and in
+       WebKit drawing without the GPU (#532). */
+    clip-path: inset(0 36%);
+    /* At rest (an animation stopped or not yet started), past the name's
+       end, where the old background band rested too: nothing lit. */
+    transform: translateX(100%);
+    animation: k-name-band calc(4s * var(--motion)) linear var(--loop);
+  }
+
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band::before {
+    content: attr(data-letters);
+    display: block;
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    padding-inline-end: var(--space-0-5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--name-shimmer);
+    -webkit-text-fill-color: var(--name-shimmer);
+    transform: translateX(-100%);
+    animation: k-name-band-letters calc(4s * var(--motion)) linear var(--loop);
+  }
+
+  /* Inside a sentence the name has no box of its own, only its letters on
+     the sentence's line, so the band rides that line too: its place is a
+     zero-width spot at the end of the name, and the window grows back from
+     there over the letters (right to left), as wide as they are. The copy
+     then sits on the sentence's baseline as the name does, in every face.
+     Nothing here takes any height, so no line grows. The window's height,
+     an em above and below, is room for the mask; the copy cuts itself to
+     the name's width, where the name's own paint stops. A sentence cut
+     short inside the name cuts the spot too, and the band with it, rather
+     than lighting letters under its "…". A shimmering name stays on one
+     line. */
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] {
+    white-space: nowrap;
+  }
+
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
+    display: inline-block;
+    position: static;
+    width: 0;
+    direction: rtl;
+    text-align: start;
+    vertical-align: baseline;
+  }
+
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band {
+    display: inline-block;
+    position: static;
+    direction: ltr;
+    unicode-bidi: isolate;
+    overflow: visible;
+    padding-block: 1em;
+    margin-block: -1em;
+    vertical-align: baseline;
+  }
+
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band::before {
+    display: inline-block;
+    position: static;
+    padding-inline-end: 0;
+    overflow: visible;
+    text-overflow: clip;
+    vertical-align: baseline;
+    clip-path: inset(-1em 0);
+  }
+
+  /* The window goes from a name before the box to a name past it, so the
+     band's middle goes from half a name before to half a name past; the
+     copy goes the other way by the same distance. Both start together, so
+     they stay in step. */
+  @keyframes k-name-band {
+    from {
+      transform: translateX(-100%);
+    }
+
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes k-name-band-letters {
+    from {
+      transform: translateX(100%);
+    }
+
+    to {
+      transform: translateX(-100%);
+    }
+  }
+
+  /* The Linux app (`data-shimmer="paint"`, `core/shimmer.ts`): for moving
+     layers WebKitGTK did more work every frame than for repainting the
+     name, so there the page paints the band: a second background moved by
+     `background-position`, as before #532. It looks the same. (`:where` keeps these exactly as specific as the
+     rules after them that take a name's look away: the lights off.) */
+  :root:where([data-shimmer="paint"]):not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
     background-image:
       linear-gradient(92deg, transparent 46%, var(--name-shimmer) 50%, transparent 54%),
       var(--person-paint);
@@ -131,11 +273,26 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
+    :root:where([data-shimmer="paint"]):not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
       background-image: var(--person-paint);
       background-size: 100% 100%;
       animation: none;
     }
+  }
+}
+
+/* No band where nothing should move or shine: reduced motion stops it
+   rather than freezing it, and high contrast draws the letters in the
+   system's own color, which a band would only blur. Plain names and the
+   lights off never show it (see the rules below and `Name.tsx`). */
+.k-name-band-place {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place,
+  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
+    display: none;
   }
 }
 

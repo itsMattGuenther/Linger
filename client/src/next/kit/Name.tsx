@@ -33,6 +33,22 @@ export function Name({ person, size = "name", raw = false, dim = false }: { pers
   return (
     <span {...props} data-kit="Name" data-size={size} data-dim={dim ? "yes" : undefined}>
       {person.display_name}
+      {props["data-name-effect"] === "shimmer" && !dim ? <ShimmerBand key={person.display_name} letters={person.display_name} /> : null}
+    </span>
+  );
+}
+
+/**
+ * The shimmer's moving band (#532, `Name.css`): where it lives, the window
+ * that slides across the name, and in it a copy of the letters drawn from
+ * `data-letters`, so the copy is never selected, copied or read out. Its
+ * caller keys it by the letters, so a new name starts the window and its copy
+ * again together: they move in step only because they started together.
+ */
+function ShimmerBand({ letters }: { letters: string }) {
+  return (
+    <span className="k-name-band-place" aria-hidden="true">
+      <span className="k-name-band" data-letters={letters} />
     </span>
   );
 }

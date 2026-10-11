@@ -4,6 +4,10 @@
  * It is the living style guide (open it with `pnpm exec vite` and visit
  * /tests/fixtures/kit.html) and the surface `tests/browser/kit.spec.ts`
  * measures. Add every new component and state here.
+ *
+ * `?shimmer` gives every name the Shimmer effect, so
+ * `tests/browser/next-name-shimmer.spec.ts` sees it in every face and size
+ * (#532).
  */
 import { type ReactNode, StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -53,6 +57,8 @@ import {
 import "../../src/next/styles/app.css";
 import "./kit.css";
 
+const SHIMMER = new URLSearchParams(window.location.search).has("shimmer");
+
 let seq = 0;
 function person(
   name: string,
@@ -72,7 +78,7 @@ function person(
       weight: opts.weight ?? 500,
       italic: opts.italic ?? false,
       fill,
-      effect: opts.effect ?? "none",
+      effect: SHIMMER ? "shimmer" : (opts.effect ?? "none"),
       msg_font_key: null,
     },
     status: {
