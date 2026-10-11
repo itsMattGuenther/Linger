@@ -174,9 +174,28 @@ async fn ensure_bucket(s3: &S3Config) {
     );
 }
 
+/// The ordinary server with its store wrapped, for a test that needs a store
+/// that misbehaves the way a real one can: a bucket that stops answering, say.
+pub async fn spawn_with_store(
+    wrap: impl FnOnce(
+        std::sync::Arc<dyn linger_server::storage::ObjectStore>,
+    ) -> std::sync::Arc<dyn linger_server::storage::ObjectStore>,
+) -> TestServer {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config = data_config(&dir);
+    let database = db::init(&config.db_path()).await.expect("db init");
+    let mut state = AppState::build(database, config).await.expect("state");
+    state.storage = wrap(state.storage);
+    serve(dir, state).await
+}
+
 async fn spawn_with(dir: tempfile::TempDir, config: Config) -> TestServer {
     let database = db::init(&config.db_path()).await.expect("db init");
     let state = AppState::build(database, config).await.expect("state");
+    serve(dir, state).await
+}
+
+async fn serve(dir: tempfile::TempDir, state: AppState) -> TestServer {
     let app = linger_server::app(state.clone());
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

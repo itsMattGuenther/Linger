@@ -128,7 +128,16 @@ pub async fn hydrate(
             .push(row_to_attachment(row, config)?);
     }
     for message in messages.iter_mut() {
-        message.attachments = grouped.remove(&message.id).unwrap_or_default();
+        let attachments = grouped.remove(&message.id).unwrap_or_default();
+        // A deleted message carries none (#502). The delete takes its files,
+        // and one the store couldn't delete right then waits for the
+        // sweeper; until it goes, history must not hand out its name and
+        // address.
+        message.attachments = if message.deleted_at.is_none() {
+            attachments
+        } else {
+            Vec::new()
+        };
     }
     Ok(())
 }

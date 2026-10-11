@@ -255,10 +255,10 @@ async fn a_host_can_ask_for_a_shorter_window() {
     assert_eq!(object_status(&server, &recent).await, 200);
 }
 
-/// Deleting a message empties its body and hides what it carried. The bytes
-/// were still there, counted against the pool and reachable by anybody holding
-/// the old URL. They are not any more, and a star does not save them: a star
-/// stops a file ageing out, and this is not ageing out.
+/// Deleting a message empties its body and deletes what it carried, at the
+/// delete rather than at the next pass (#502), and a star does not save it: a
+/// star stops a file ageing out, and this is not ageing out. The rest of #502
+/// is in `deleted_files.rs`.
 #[tokio::test]
 async fn a_deleted_message_takes_its_file_with_it() {
     let (server, token, room) = fixture(|_| {}).await;
@@ -279,11 +279,10 @@ async fn a_deleted_message_takes_its_file_with_it() {
         .unwrap();
     assert_eq!(gone.status(), 204);
 
-    // No ageing: the file was uploaded seconds ago.
-    let swept = expiry::sweep(&server.state).await.unwrap();
-    assert_eq!(swept.files, 1);
-    assert_eq!(swept.bytes, 5000);
+    // No sweep: the delete took it, and left the sweeper nothing.
     assert_eq!(object_status(&server, &file).await, 404);
+    assert_eq!(info(&server, &token).await.storage_used_bytes, 0);
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
 }
 
 /// A file somebody uploaded and never posted has nobody waiting for it either.

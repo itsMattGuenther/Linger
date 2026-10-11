@@ -377,6 +377,9 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
 permitted by the author, the host or
 a co-host, except that a co-host can't delete the host's messages (`FORBIDDEN`, §5).
 Deleted messages become tombstones; they are not removed, so reply chains survive.
+The files a deleted message carried are not kept (#502): the delete removes them, a
+tombstone's `attachments` is always empty, and their URLs answer `404` from the moment
+the delete does.
 
 **Read markers**
 
@@ -786,7 +789,10 @@ and audio types on the `linger-core::media` inline list are served with their ow
 type; everything else is served as `application/octet-stream` with
 `Content-Disposition: attachment`, and every response carries
 `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`
-(ARCHITECTURE §7).
+(ARCHITECTURE §7). A file on a deleted message is `404`, like one that never existed. A
+file the server sends itself goes out with `Cache-Control: private, max-age=31536000,
+immutable`: the client's own cache may keep it, a shared cache may not, because a file can
+still be deleted (ARCHITECTURE §8).
 
 **Ranges.** A file stored on the server's own disk can be fetched a piece at a time,
 which is how a video player seeks and how a browser resumes a download. One byte range
