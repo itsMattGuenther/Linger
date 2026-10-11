@@ -23,6 +23,120 @@ function Get-LingerShortcuts {
 # finished in five minutes is stuck: once an NSIS update sat for 29 minutes
 # until the job was cancelled, saying nothing about where (#414).
 $installerLimitSeconds = 300
+$stuckCount = 0
+
+# The installer's own processes: everything this script started (the
+# installers run in a thread job, so in this process), and the copy of
+# itself NSIS's uninstaller runs from the temp folder after its parent exits.
+function Get-InstallerProcesses {
+    $all = @(Get-CimInstance Win32_Process)
+    $found = @{}
+    $queue = [Collections.Generic.Queue[int]]::new()
+    $queue.Enqueue($PID)
+    foreach ($process in $all) {
+        if ($process.ExecutablePath -match '\\~nsu[^\\]*\.tmp\\') { $queue.Enqueue([int]$process.ProcessId); $found[[int]$process.ProcessId] = $process }
+    }
+    while ($queue.Count -gt 0) {
+        $parent = $queue.Dequeue()
+        foreach ($process in $all) {
+            $id = [int]$process.ProcessId
+            if ($process.ParentProcessId -eq $parent -and $id -ne $PID -and -not $found.ContainsKey($id)) {
+                $found[$id] = $process
+                $queue.Enqueue($id)
+            }
+        }
+    }
+    @($found.Values | Sort-Object CreationDate)
+}
+
+# Only when an installer is stuck: what it is waiting on, saved next to the
+# installer logs and uploaded with them (#568). The process tree, each
+# process's threads, the installer's windows with their controls' text (a
+# dialog's message and buttons), and a picture of the runner's screen. It
+# looks only at the installer's own processes, on a disposable runner.
+function Save-StuckInstallerEvidence([string]$Name) {
+    $script:stuckCount++
+    $base = Join-Path $Output "stuck-$script:stuckCount"
+    $processes = Get-InstallerProcesses
+    $report = [Collections.Generic.List[string]]::new()
+    $report.Add("Stuck: $Name")
+    $report.Add('Processes:')
+    foreach ($process in $processes) {
+        $started = if ($process.CreationDate) { $process.CreationDate.ToString('HH:mm:ss.fff') } else { '?' }
+        $report.Add("  $($process.ProcessId) (parent $($process.ParentProcessId)) $($process.Name) started ${started}: $($process.CommandLine)")
+        $threads = (Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue).Threads
+        foreach ($thread in $threads) {
+            $wait = if ($thread.ThreadState -eq 'Wait') { " $($thread.WaitReason)" } else { '' }
+            $report.Add("    thread $($thread.Id) $($thread.ThreadState)$wait")
+        }
+    }
+    try {
+        if (-not ('StuckInstallerWindows' -as [type])) {
+            Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class StuckInstallerWindows {
+  delegate bool EnumProc(IntPtr hwnd, IntPtr lParam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder name, int size);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+  static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr wParam, StringBuilder lParam, uint flags, uint timeout, out IntPtr result);
+  // WM_GETTEXT with a time limit, so a hung window can't hang this too.
+  static string Text(IntPtr hwnd) {
+    var text = new StringBuilder(2048);
+    IntPtr result;
+    SendMessageTimeout(hwnd, 0x000D, (IntPtr)text.Capacity, text, 0x0002, 2000, out result);
+    return text.ToString().Replace("\r", " ").Replace("\n", " ");
+  }
+  static string Describe(string indent, IntPtr hwnd, uint pid) {
+    var name = new StringBuilder(256);
+    GetClassName(hwnd, name, name.Capacity);
+    return String.Format("{0}{1} pid {2} [{3}]{4} \"{5}\"", indent, hwnd, pid, name, IsWindowVisible(hwnd) ? "" : " hidden", Text(hwnd));
+  }
+  public static List<string> Of(int[] pids) {
+    var wanted = new HashSet<uint>();
+    foreach (var pid in pids) wanted.Add((uint)pid);
+    var lines = new List<string>();
+    EnumWindows((hwnd, _) => {
+      uint pid;
+      GetWindowThreadProcessId(hwnd, out pid);
+      if (!wanted.Contains(pid)) return true;
+      lines.Add(Describe("  ", hwnd, pid));
+      EnumChildWindows(hwnd, (child, __) => { lines.Add(Describe("    ", child, pid)); return true; }, IntPtr.Zero);
+      return true;
+    }, IntPtr.Zero);
+    return lines;
+  }
+}
+'@
+        }
+        $report.Add('Windows:')
+        foreach ($line in [StuckInstallerWindows]::Of([int[]]@($processes | ForEach-Object { [int]$_.ProcessId }))) { $report.Add($line) }
+    } catch {
+        $report.Add("Windows: couldn't list them: $_")
+    }
+    try {
+        Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+        $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+        $bitmap.Save("$base.png", [System.Drawing.Imaging.ImageFormat]::Png)
+        $graphics.Dispose()
+        $bitmap.Dispose()
+        $report.Add("Screen: $(Split-Path -Leaf "$base.png")")
+    } catch {
+        $report.Add("Screen: couldn't take a picture: $_")
+    }
+    $report | Set-Content "$base.log"
+    foreach ($line in $report) { Write-Host $line }
+    $processes
+}
 
 function Invoke-Installer([string]$File, [string]$Arguments) {
     # Start-Process -Wait waits for everything the installer starts as well,
@@ -35,10 +149,14 @@ function Invoke-Installer([string]$File, [string]$Arguments) {
         (Start-Process $File -ArgumentList $Arguments -Wait -PassThru).ExitCode
     }
     if (-not (Wait-Job $job -Timeout $installerLimitSeconds)) {
-        Remove-Job $job -Force
+        $name = "$(Split-Path -Leaf $File) $Arguments"
+        $stuck = @()
+        try { $stuck = @(Save-StuckInstallerEvidence $name) } catch { Write-Host "Couldn't save what it was doing: $_" }
+        foreach ($process in $stuck) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
         Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($File)) -ErrorAction SilentlyContinue |
             Stop-Process -Force -ErrorAction SilentlyContinue
-        throw "Installer stuck: $(Split-Path -Leaf $File) $Arguments was still running after $installerLimitSeconds seconds, and was stopped"
+        Remove-Job $job -Force
+        throw "Installer stuck: $name was still running after $installerLimitSeconds seconds, and was stopped. What it was doing is in $(Split-Path -Leaf $Output)/stuck-$stuckCount.log and .png"
     }
     $exitCode = Receive-Job $job -ErrorAction Stop
     Remove-Job $job

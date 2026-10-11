@@ -64,7 +64,11 @@ Each install, update and uninstall gets five minutes (they take seconds), and
 each scenario is named as it starts. Once an NSIS update sat for 29 minutes
 until the job was cancelled, with nothing in the log to say where (#414); now
 a stuck installer is stopped and the check fails naming the package and its
-arguments, in its scenario.
+arguments, in its scenario. Before stopping it, the check saves what it was
+waiting on (#568): `stuck-N.log` lists the installer's processes and threads
+and its windows with their text, so a dialog's message and buttons are in the
+log, and `stuck-N.png` is the runner's screen. Both are uploaded with the
+installer logs. It looks at the installer's own processes only.
 
 ## Fixed-package results, 2026-09-22
 

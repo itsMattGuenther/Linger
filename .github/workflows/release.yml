@@ -288,6 +288,7 @@ jobs:
             package-check/audio-*/*.f32
             package-check/next-*/result.json
             package-check/updates/*.log
+            package-check/updates/*.png
           retention-days: 7
 
   # The Android phone app (SPEC §4.15, T-1604): one signed APK for 64-bit
