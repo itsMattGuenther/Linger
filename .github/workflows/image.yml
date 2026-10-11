@@ -25,7 +25,9 @@ name: image
 
 on:
   push:
-    tags: ["v*"]
+    # Not a pre-release tag (v0.4.11-1): that's a practice run of release.yml
+    # (#597), and publishing it would move `latest`, which every host pulls.
+    tags: ["v*", "!v*-*"]
   pull_request:
     # Not on every pull request: the image is a full release build of the
     # server and it is slow. These are the files it is actually made of.
