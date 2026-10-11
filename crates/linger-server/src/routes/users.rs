@@ -249,7 +249,7 @@ async fn patch_me(
     // `image_id`, so it is accepted and ignored: nothing is checked or stored
     // for it, and saving the rest of the status is never refused over it.
     // What comes back is the status to save, without the characters that
-    // change the direction of text (#488).
+    // turn text around (#488).
     let status = req.status.as_ref().map(validate::status).transpose()?;
     if let Some(sound) = &req.entrance_sound {
         if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {

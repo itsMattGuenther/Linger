@@ -262,9 +262,10 @@ async fn labels_and_values_are_capped_and_checked() {
 }
 
 /// A status can't turn itself, or the words beside it on a card, around
-/// (#488): the characters that change the direction of text are taken out of
-/// every part of it, the line, the fields and the away message, and the
-/// rest is saved as written.
+/// (#488): the characters that turn text around are taken out of every part
+/// of it, the line, the fields and the away message, and the rest is saved
+/// as written. That rest includes the direction marks: "בחוץ!" needs U+200F
+/// after it to keep its "!" at the end, and a mark can't disguise anything.
 #[tokio::test]
 async fn a_status_loses_the_characters_that_turn_text_around() {
     let server = spawn_server().await;
@@ -277,7 +278,7 @@ async fn a_status_loses_the_characters_that_turn_text_around() {
             ("Reading", "\u{202B}שלום"),
         ],
     );
-    body["status"]["away_message"] = json!("\u{200F}back after work");
+    body["status"]["away_message"] = json!("\u{202E}בחוץ!\u{200F}");
     save(&server, &host.access_token, body).await;
 
     let status = seen(&server, &jo.access_token, host.user.id).await;
@@ -287,7 +288,7 @@ async fn a_status_loses_the_characters_that_turn_text_around() {
         vec![field("Playing", "Outer Wilds"), field("Reading", "שלום")]
     );
     assert_eq!(status.reading.as_deref(), Some("שלום"));
-    assert_eq!(status.away_message.as_deref(), Some("back after work"));
+    assert_eq!(status.away_message.as_deref(), Some("בחוץ!\u{200F}"));
 
     // An app from before fields sends the three old keys: the same.
     save(

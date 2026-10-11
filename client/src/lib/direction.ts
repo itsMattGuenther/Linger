@@ -6,8 +6,10 @@
  * them. A copy of `validate::changes_direction` on the server, which says why
  * each is there.
  *
- * A display name that holds one is refused. A file's name, a status, a room's
- * name and topic, its message of the day and a poll lose them on the way in.
+ * A display name that holds one is refused, and a file's name loses all of
+ * them on the way in. A status, a room's name and topic, its message of the
+ * day and a poll lose only the ones that turn text around, and keep the marks
+ * Hebrew and Arabic writers use to place punctuation.
  */
 export const CHANGES_DIRECTION = /[\u{061C}\u{200E}\u{200F}\u{202A}-\u{202E}\u{2066}-\u{2069}]/u;
 

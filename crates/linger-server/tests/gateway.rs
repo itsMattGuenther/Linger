@@ -532,8 +532,8 @@ async fn a_new_member_shows_up_without_anybody_restarting() {
 }
 
 /// An away message sent over the socket is drawn beside the person's name on
-/// everybody's list, so it loses the characters that change the direction of
-/// text, as a saved one does (#488).
+/// everybody's list, so it loses the characters that turn text around, as a
+/// saved one does (#488).
 #[tokio::test]
 async fn an_away_message_cannot_turn_itself_around() {
     let (server, host, _room) = common::server_with_room("garage").await;

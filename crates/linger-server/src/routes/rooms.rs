@@ -39,7 +39,7 @@ async fn create(
     let topic = req
         .topic
         .as_deref()
-        .map(validate::without_direction_controls);
+        .map(validate::without_direction_overrides);
 
     let id = RoomId::new();
     let position: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(position), -1) + 1 FROM rooms")
@@ -101,7 +101,7 @@ async fn update(
     let topic = req
         .topic
         .as_deref()
-        .map(validate::without_direction_controls);
+        .map(validate::without_direction_overrides);
     let motd = match req.motd.as_deref().map(validate::motd).transpose()? {
         // The same words again, or clearing nothing, changes nothing: no second
         // line in the room, and nobody's folded strip opens again (#464).

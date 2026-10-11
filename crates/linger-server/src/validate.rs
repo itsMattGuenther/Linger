@@ -53,8 +53,8 @@ pub fn room_slug(s: &str) -> Result<(), ApiError> {
     }
 }
 
-/// A room's name, trimmed: 1–48 characters, without the characters that
-/// change the direction of text (#488).
+/// A room's name, trimmed: 1–48 characters, without the characters that turn
+/// text around (#488).
 pub fn room_name(s: &str) -> Result<String, ApiError> {
     name_of_a_place(s, "Room names are 1–48 characters.")
 }
@@ -65,7 +65,7 @@ pub fn server_name(s: &str) -> Result<String, ApiError> {
 }
 
 fn name_of_a_place(s: &str, refusal: &'static str) -> Result<String, ApiError> {
-    let straight = without_direction_controls(s);
+    let straight = without_direction_overrides(s);
     let name = straight.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(ApiError::validation(refusal));
@@ -132,27 +132,41 @@ fn breaks_the_line(c: char) -> bool {
 /// punctuation and numbers beside them. A name in Arabic or Hebrew needs none
 /// of them: its letters carry their own direction.
 fn changes_direction(c: char) -> bool {
-    matches!(
-        c,
-        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
-    )
+    turns_text_around(c) || matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}')
 }
 
-/// The text without the characters that change the direction of text
-/// ([`changes_direction`], #488), for the short text the app draws beside its
-/// own words and other people's: a file's name, a status, a room's name and
-/// topic, its message of the day, a poll, the server's name. One override can
-/// make `invoice` + U+202E + `fdp.exe` read as "invoiceexe.pdf", or turn the
-/// words after it around.
+/// The embeddings and overrides (U+202A–U+202E) and isolates (U+2066–U+2069):
+/// the bidirectional controls that turn the text after them around. One can
+/// make `invoice` + U+202E + `fdp.exe` read as "invoiceexe.pdf" (#488). The
+/// three marks can't: they only move the punctuation and numbers beside them.
+fn turns_text_around(c: char) -> bool {
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// The text without the characters that turn it around ([`turns_text_around`],
+/// #488), for the short text the app draws beside its own words and other
+/// people's: a status, a room's name and topic, its message of the day, a
+/// poll, the server's name. One left open turns the words after it around.
 ///
 /// Taken out, not refused as they are in a display name. They can't be seen,
 /// so a refusal would ask somebody to find and delete a character they have
-/// no way to find, and they mostly arrive by pasting (a song title, a file
-/// from somebody's disk). Nobody loses anything they could read: Arabic and
-/// Hebrew letters carry their own direction. A display name is still refused
-/// (#296), so people see exactly what their name is. A message's words keep
-/// them: somebody writing a paragraph in Hebrew or Arabic may want them, and
-/// the app keeps each message to itself.
+/// no way to find, and they mostly arrive by pasting (a song title, say). The
+/// three direction marks stay: people writing Hebrew or Arabic use them on
+/// purpose, to keep punctuation and numbers on the right side ("בחוץ!" needs
+/// U+200F after it), and they can't disguise anything. A display name is
+/// still refused all of them (#296), so people see exactly what their name
+/// is, and a file's name loses all of them ([`without_direction_controls`]).
+/// A message's words keep everything: somebody writing a paragraph may want
+/// them, and the app keeps each message to itself.
+pub fn without_direction_overrides(s: &str) -> String {
+    s.chars().filter(|&c| !turns_text_around(c)).collect()
+}
+
+/// A file's name without any character that changes the direction of text
+/// ([`changes_direction`], #488), the marks included. A file's name is what
+/// the "invoiceexe.pdf" trick is aimed at, and nobody needs a mark in one.
+/// [`filename`] does this on the way in; a download's header does it again
+/// for a name stored before that.
 pub fn without_direction_controls(s: &str) -> String {
     s.chars().filter(|&c| !changes_direction(c)).collect()
 }
@@ -440,9 +454,9 @@ pub fn caption(s: &str) -> Result<String, ApiError> {
 
 /// A room's message of the day, trimmed (PROTOCOL §3, #464). Empty is allowed:
 /// it's how one is cleared. It's drawn over the room as well as in it, so it
-/// loses the characters that change the direction of text (#488).
+/// loses the characters that turn text around (#488).
 pub fn motd(s: &str) -> Result<String, ApiError> {
-    let straight = without_direction_controls(s);
+    let straight = without_direction_overrides(s);
     let trimmed = straight.trim();
     if trimmed.chars().count() > MAX_MOTD_CHARS {
         return Err(ApiError::validation(format!(
@@ -506,10 +520,10 @@ pub fn style(style: &Style) -> Result<(), ApiError> {
 /// `fields` (#270) or under the three keys older apps send.
 ///
 /// What comes back is the status to save: every text in it without the
-/// characters that change the direction of text (#488), which are taken out
-/// before anything is counted.
+/// characters that turn text around (#488), which are taken out before
+/// anything is counted. The direction marks stay.
 pub fn status(status: &UserStatus) -> Result<UserStatus, ApiError> {
-    let straight = |text: &Option<String>| text.as_deref().map(without_direction_controls);
+    let straight = |text: &Option<String>| text.as_deref().map(without_direction_overrides);
     let status = UserStatus {
         line: straight(&status.line),
         reading: straight(&status.reading),
@@ -556,11 +570,11 @@ pub fn status(status: &UserStatus) -> Result<UserStatus, ApiError> {
     Ok(status)
 }
 
-/// A field without the characters that change the direction of text (#488).
+/// A field without the characters that turn text around (#488).
 fn straight_field(field: &StatusField) -> StatusField {
     StatusField {
-        label: without_direction_controls(&field.label),
-        value: without_direction_controls(&field.value),
+        label: without_direction_overrides(&field.label),
+        value: without_direction_overrides(&field.value),
     }
 }
 
@@ -569,8 +583,8 @@ fn straight_field(field: &StatusField) -> StatusField {
 /// At most three. A label is 1–24 characters and a value 1–80, counted after
 /// trimming, and neither may hold a control character: both are drawn on one
 /// line of a card, and a tab or a line break there is a way to push text
-/// somewhere it was not written. The characters that change the direction of
-/// text are taken out first, for the same reason (#488). No two fields share
+/// somewhere it was not written. The characters that turn text around are
+/// taken out first, for the same reason (#488). No two fields share
 /// a label, ignoring case, so each of the three classic labels names at most
 /// one field. An empty value is refused rather than dropped: an app leaves
 /// out a field nobody filled in.
@@ -895,11 +909,14 @@ mod tests {
         assert!(filename(&"x".repeat(300)).is_err());
     }
 
-    /// Every character `changes_direction` names, one at a time.
-    const DIRECTION_CONTROLS: [char; 12] = [
-        '\u{061C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}',
-        '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+    /// Every character `turns_text_around` names, one at a time.
+    const TURNS_TEXT_AROUND: [char; 9] = [
+        '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}',
+        '\u{2068}', '\u{2069}',
     ];
+
+    /// The three direction marks, which `changes_direction` names as well.
+    const DIRECTION_MARKS: [char; 3] = ['\u{200E}', '\u{200F}', '\u{061C}'];
 
     /// A program can't dress up as a document (#488): `invoice` + U+202E +
     /// `fdp.exe` would read "invoiceexe.pdf".
@@ -909,8 +926,10 @@ mod tests {
             filename("invoice\u{202E}fdp.exe").unwrap(),
             "invoicefdp.exe"
         );
-        for c in DIRECTION_CONTROLS {
+        // The marks too: a file's name is what the trick is aimed at.
+        for c in TURNS_TEXT_AROUND.into_iter().chain(DIRECTION_MARKS) {
             assert_eq!(filename(&format!("a{c}b.pdf")).unwrap(), "ab.pdf", "{c:?}");
+            assert_eq!(without_direction_controls(&format!("a{c}b")), "ab", "{c:?}");
         }
         // Nothing but them is no name at all.
         assert!(filename("\u{202E}\u{2066}").is_err());
@@ -919,32 +938,43 @@ mod tests {
         assert_eq!(filename("ملف.txt").unwrap(), "ملف.txt");
     }
 
-    /// The short text drawn beside other words loses them too, before it is
-    /// trimmed and counted (#488); a message's words keep them.
+    /// The short text drawn beside other words loses the characters that turn
+    /// text around, before it is trimmed and counted (#488). It keeps the
+    /// marks, which Hebrew and Arabic writers use to place punctuation; a
+    /// message's words keep everything.
     #[test]
-    fn short_text_loses_the_characters_that_change_the_direction_of_text() {
-        for c in DIRECTION_CONTROLS {
-            assert_eq!(without_direction_controls(&format!("a{c}b")), "ab", "{c:?}");
+    fn short_text_loses_the_characters_that_turn_text_around() {
+        for c in TURNS_TEXT_AROUND {
+            assert_eq!(
+                without_direction_overrides(&format!("a{c}b")),
+                "ab",
+                "{c:?}"
+            );
         }
-        assert_eq!(without_direction_controls("محمد שרה"), "محمد שרה");
+        for c in DIRECTION_MARKS {
+            let marked = format!("a{c}b");
+            assert_eq!(without_direction_overrides(&marked), marked, "{c:?}");
+        }
+        assert_eq!(without_direction_overrides("محمد שרה"), "محمد שרה");
 
         assert_eq!(motd(" \u{202E}back at 8 ").unwrap(), "back at 8");
         assert!(motd(&format!("{}\u{202E}", "x".repeat(MAX_MOTD_CHARS))).is_ok());
         assert_eq!(room_name(" \u{2067}garage\u{2069} ").unwrap(), "garage");
         assert!(room_name("\u{202E}").is_err());
         assert_eq!(server_name("\u{202D}porch").unwrap(), "porch");
+        assert_eq!(motd("בחוץ!\u{200F}").unwrap(), "בחוץ!\u{200F}");
 
         // A message keeps what was written.
         assert_eq!(caption("שלום\u{200F}!").unwrap(), "שלום\u{200F}!");
     }
 
     #[test]
-    fn a_status_loses_the_characters_that_change_the_direction_of_text() {
+    fn a_status_loses_the_characters_that_turn_text_around() {
         let held = status(&UserStatus {
             line: Some("reading \u{202E}koob".into()),
             reading: Some("\u{2066}Piranesi\u{2069}".into()),
             fields: Some(vec![field("Play\u{202E}ing", "Outer \u{202B}Wilds")]),
-            away_message: Some("\u{200F}back soon".into()),
+            away_message: Some("\u{202B}back soon".into()),
             ..UserStatus::default()
         })
         .unwrap();
@@ -962,6 +992,27 @@ mod tests {
         assert!(status_fields(&[field("Reading", &long)]).is_ok());
         // A value of nothing but them is a field nobody filled in.
         assert!(status_fields(&[field("Reading", "\u{202E}")]).is_err());
+    }
+
+    /// A mark is how somebody writing Hebrew or Arabic keeps punctuation on
+    /// the right side: "בחוץ!" draws its "!" at the start of the line
+    /// without U+200F after it. A status keeps one, and loses an override
+    /// beside it (#488).
+    #[test]
+    fn a_status_keeps_its_direction_marks() {
+        let held = status(&UserStatus {
+            line: Some("בחוץ!\u{200F}".into()),
+            away_message: Some("\u{202E}בחוץ!\u{200F}".into()),
+            fields: Some(vec![field("\u{200E}Playing", "Outer Wilds \u{061C}2")]),
+            ..UserStatus::default()
+        })
+        .unwrap();
+        assert_eq!(held.line.as_deref(), Some("בחוץ!\u{200F}"));
+        assert_eq!(held.away_message.as_deref(), Some("בחוץ!\u{200F}"));
+        assert_eq!(
+            held.fields,
+            Some(vec![field("\u{200E}Playing", "Outer Wilds \u{061C}2")])
+        );
     }
 
     #[test]

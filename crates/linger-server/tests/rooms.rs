@@ -179,7 +179,7 @@ async fn names_and_topics_lose_the_characters_that_turn_text_around() {
     let updated: Room = client
         .patch(server.url(&format!("/rooms/{}", created.id)))
         .bearer_auth(&host.access_token)
-        .json(&serde_json::json!({ "name": " garage\u{202C} ", "topic": "\u{200F}שלום" }))
+        .json(&serde_json::json!({ "name": " garage\u{202C} ", "topic": "\u{202B}בחוץ!\u{200F}" }))
         .send()
         .await
         .unwrap()
@@ -187,7 +187,8 @@ async fn names_and_topics_lose_the_characters_that_turn_text_around() {
         .await
         .unwrap();
     assert_eq!(updated.name, "garage");
-    assert_eq!(updated.topic.as_deref(), Some("שלום"));
+    // A direction mark stays: it's how "בחוץ!" keeps its "!" at the end.
+    assert_eq!(updated.topic.as_deref(), Some("בחוץ!\u{200F}"));
 
     // A name of nothing but them is no name.
     let empty = client

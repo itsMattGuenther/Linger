@@ -194,7 +194,7 @@ async fn a_poll_has_a_question_and_two_to_ten_different_choices() {
 
 /// The question and the winners are quoted in the line a room gets when the
 /// poll closes, so neither can turn the words around it (#488): the
-/// characters that change the direction of text are taken out.
+/// characters that turn text around are taken out. A direction mark stays.
 #[tokio::test]
 async fn a_poll_loses_the_characters_that_turn_text_around() {
     let (server, host, room) = common::server_with_room("wow").await;
@@ -215,7 +215,7 @@ async fn a_poll_loses_the_characters_that_turn_text_around() {
     let poll = poll.poll.expect("a poll");
     assert_eq!(poll.question, "Which noitcaf?");
     let choices: Vec<&str> = poll.choices.iter().map(|c| c.text.as_str()).collect();
-    assert_eq!(choices, ["Horde", "Alliance"]);
+    assert_eq!(choices, ["Horde", "Alliance\u{200F}"]);
 }
 
 #[tokio::test]

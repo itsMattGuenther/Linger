@@ -31,11 +31,11 @@ pub fn router() -> Router<AppState> {
 
 /// A poll's words, trimmed, after the rules every one of them follows: a
 /// question, two to ten different choices, none empty, none too long. They
-/// lose the characters that change the direction of text first (#488): the
+/// lose the characters that turn text around first (#488): the
 /// question and the winners are quoted in a line of the app's own words when
 /// the poll closes.
 fn checked(req: &CreatePollRequest) -> Result<(String, Vec<String>), ApiError> {
-    let question = validate::without_direction_controls(&req.question);
+    let question = validate::without_direction_overrides(&req.question);
     let question = question.trim();
     if question.is_empty() {
         return Err(ApiError::validation("A poll needs a question."));
@@ -49,7 +49,7 @@ fn checked(req: &CreatePollRequest) -> Result<(String, Vec<String>), ApiError> {
         .choices
         .iter()
         .map(|choice| {
-            validate::without_direction_controls(choice)
+            validate::without_direction_overrides(choice)
                 .trim()
                 .to_string()
         })

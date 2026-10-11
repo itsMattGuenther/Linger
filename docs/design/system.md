@@ -85,10 +85,12 @@ Then open <http://localhost:1431/tests/fixtures/kit.html>.
     without those characters at all (`fileNameToShow` in `lib/media.ts`):
     isolating it keeps the words around it right, but only taking them out
     stops `invoice` + U+202E + `fdp.exe` reading as "invoiceexe.pdf". The
-    server refuses them in a display name and takes them out of the other
-    short text on the way in (PROTOCOL §2). Isolating is for what's left:
-    words saved before that, a message's words, a link card's title (a web
-    page's own words), and a server that doesn't.
+    server refuses them in a display name and takes the ones that turn text
+    around out of the other short text on the way in, keeping the marks
+    Hebrew and Arabic writers use to place punctuation (PROTOCOL §2).
+    Isolating is for what's left: words saved before that, a message's
+    words, a link card's title (a web page's own words), and a server that
+    doesn't.
 
 ## Tokens
 

@@ -640,8 +640,8 @@ impl Gateway {
 
     /// Apply a client `presence.update`. Room membership only changes via
     /// `room.focus`, so it is carried over from the existing entry. The away
-    /// message loses the characters that change the direction of text, as a
-    /// saved one does (#488): it's drawn beside the person's name.
+    /// message loses the characters that turn text around, as a saved one
+    /// does (#488): it's drawn beside the person's name.
     fn apply_presence(
         &self,
         user_id: UserId,
@@ -656,7 +656,7 @@ impl Gateway {
             room_id,
             away_message: away_message
                 .as_deref()
-                .map(crate::validate::without_direction_controls),
+                .map(crate::validate::without_direction_overrides),
         };
         self.presence.insert(user_id, entry.clone());
         entry

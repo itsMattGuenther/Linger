@@ -211,8 +211,8 @@ async fn it_has_a_length_limit() {
 }
 
 /// It's drawn over the room, beside who set it, so it can't turn itself or
-/// them around (#488): the characters that change the direction of text are
-/// taken out, from the strip and from its line in the room alike.
+/// them around (#488): the characters that turn text around are taken out,
+/// from the strip and from its line in the room alike.
 #[tokio::test]
 async fn it_loses_the_characters_that_turn_text_around() {
     let (server, host, room) = common::server_with_room("general").await;
