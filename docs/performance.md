@@ -85,11 +85,11 @@ pull requests, among them the smaller release profile (#542) and the audio
 context sleeping between sounds (#543). All 38 are on `main` since later the
 same day (`fc0df82b`), with six more (#575, #576, #577, #586, #588, #590),
 so the combined column is `main` as it is now, less those six. They weren't
-measured. None runs at startup: the newest, the talk key with a game in
-front (#588), only listens while you're in voice. Seven opens of each kind,
-the two builds taking turns.
-The machine was quiet (a load average of 1–5 on 32 threads) for all but the
-first and last rounds, when other work pushed it to 15.
+measured, and none of them is about starting up: the closest, the talk key
+with a game in front (#588), only listens while you're in voice. Seven
+opens of each kind, the two builds taking turns. The machine was quiet (a
+load average of 1–5 on 32 threads) for all but the first and last rounds,
+when other work pushed it to 15.
 
 | | 0.4.10 (`39e1bdca`) | combined (`450f524`) |
 |---|---|---|
