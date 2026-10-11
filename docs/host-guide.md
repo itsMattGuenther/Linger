@@ -319,6 +319,17 @@ comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
 
+Then give the bucket one cleanup rule. While a file is going up, its pieces sit
+in the bucket under `uploads/`, and Linger deletes them once the file is done
+or given up. A piece can still arrive after that, though, because the links
+Linger hands out for sending pieces last a day, and nothing would ever remove
+it. So add a lifecycle rule that deletes anything under the prefix `uploads/`
+two days after it was written. On Cloudflare R2 that is the bucket's
+**Settings**, then **Object lifecycle rules**. On AWS S3 it is the bucket's
+**Management** tab, then **Lifecycle rules** (expire current versions after 2
+days). Set the prefix to exactly `uploads/`: everything else in the bucket is
+people's files.
+
 ## Voice
 
 Voice goes through your server: everybody sends their voice to it once, and

@@ -764,6 +764,14 @@ a client that resumes recomputes exactly the plan it was given. Each successful 
 answers with an `ETag` (which CORS exposes), and those etags may be handed back at
 complete; the server checks them against what actually landed.
 
+Each part is exactly its planned length: `part_size_bytes` for every part but the last,
+and what is left over for the last (the whole file, for a one-part upload). Send each
+part as one body of that length; a browser sets `Content-Length` from it. A longer part
+is refused when it is PUT, on both backends. On S3 a shorter one is too, because the
+length is signed into the URL and the bucket answers any other with `403`. A part
+longer than planned that reaches the store anyway makes complete fail with
+`VALIDATION_FAILED`, and that refusal is final.
+
 **Resuming.** Re-PUTting a part replaces it. Completing with parts missing is
 `VALIDATION_FAILED` and **leaves the slot alive**: send the missing parts and complete
 again. Any other refusal at complete is final — the parts are discarded and the slot

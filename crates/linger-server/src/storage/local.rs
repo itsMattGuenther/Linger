@@ -240,8 +240,11 @@ impl ObjectStore for LocalStore {
         &self,
         upload_id: UploadId,
         parts: Option<&[CompletedPart]>,
-        expected_parts: u32,
+        declared_bytes: u64,
     ) -> anyhow::Result<Staged> {
+        // Every part on this disk was already held to its length as it was
+        // written (`write_part`), so the plan is needed only for the count.
+        let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
             if parts.len() as u32 != expected_parts {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());

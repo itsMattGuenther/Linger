@@ -154,13 +154,10 @@ fn header(resp: &reqwest::Response, name: reqwest::header::HeaderName) -> String
         .to_string()
 }
 
-/// Ask the bucket directly whether a key is there.
-///
-/// Signed with the test credentials rather than anything the server handed
-/// out, so "the parts were swept" is checked against S3 itself and not against
-/// the server's own opinion of what it deleted.
-async fn bucket_has(key: &str) -> bool {
-    use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
+/// The test bucket, with the test's own credentials rather than anything the
+/// server handed out.
+fn test_bucket() -> (rusty_s3::Bucket, rusty_s3::Credentials) {
+    use rusty_s3::{Bucket, Credentials, UrlStyle};
 
     let bucket = Bucket::new(
         std::env::var("LINGER_TEST_S3_ENDPOINT")
@@ -176,6 +173,18 @@ async fn bucket_has(key: &str) -> bool {
         std::env::var("LINGER_TEST_S3_ACCESS_KEY_ID").unwrap(),
         std::env::var("LINGER_TEST_S3_SECRET_ACCESS_KEY").unwrap(),
     );
+    (bucket, credentials)
+}
+
+/// Ask the bucket directly whether a key is there.
+///
+/// Signed with the test credentials rather than anything the server handed
+/// out, so "the parts were swept" is checked against S3 itself and not against
+/// the server's own opinion of what it deleted.
+async fn bucket_has(key: &str) -> bool {
+    use rusty_s3::S3Action;
+
+    let (bucket, credentials) = test_bucket();
     let url = bucket
         .head_object(Some(&credentials), key)
         .sign(std::time::Duration::from_secs(60));
@@ -195,26 +204,30 @@ async fn bucket_has(key: &str) -> bool {
 /// reached the object by some other route would get: only the headers stored
 /// *on* the object (T-503).
 async fn bucket_get(key: &str) -> reqwest::Response {
-    use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
+    use rusty_s3::S3Action;
 
-    let bucket = Bucket::new(
-        std::env::var("LINGER_TEST_S3_ENDPOINT")
-            .unwrap()
-            .parse()
-            .unwrap(),
-        UrlStyle::Path,
-        std::env::var("LINGER_TEST_S3_BUCKET").unwrap_or_else(|_| "linger-test".to_string()),
-        std::env::var("LINGER_TEST_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-    )
-    .unwrap();
-    let credentials = Credentials::new(
-        std::env::var("LINGER_TEST_S3_ACCESS_KEY_ID").unwrap(),
-        std::env::var("LINGER_TEST_S3_SECRET_ACCESS_KEY").unwrap(),
-    );
+    let (bucket, credentials) = test_bucket();
     let url = bucket
         .get_object(Some(&credentials), key)
         .sign(std::time::Duration::from_secs(60));
     client().get(url).send().await.unwrap()
+}
+
+/// PUT bytes straight into the bucket with the test's own credentials, past
+/// every URL the server signed.
+///
+/// This is how a part arrives that no part URL would take now: one sent to a
+/// URL a server signed before part lengths were (#505), or written by anybody
+/// else who can reach the bucket. Assembly must hold the line on its own.
+async fn bucket_put(key: &str, bytes: Vec<u8>) {
+    use rusty_s3::S3Action;
+
+    let (bucket, credentials) = test_bucket();
+    let url = bucket
+        .put_object(Some(&credentials), key)
+        .sign(std::time::Duration::from_secs(60));
+    let resp = client().put(url).body(bytes).send().await.unwrap();
+    assert!(resp.status().is_success(), "the test could not write {key}");
 }
 
 /// The object key inside a served URL (`/objects/ab/cd/…`).
@@ -454,6 +467,129 @@ async fn a_part_that_does_not_match_its_etag_is_caught() {
     .await;
     assert_eq!(resp.status(), 422);
     assert_eq!(error_code(resp).await, "VALIDATION_FAILED");
+}
+
+/// A part URL takes exactly the bytes its part was planned to hold (#505).
+///
+/// The length is signed into the URL, so the bucket itself refuses any other:
+/// a member who declared a small file cannot send gigabytes to the URLs they
+/// were given, and nothing past the declared size ever lands in the bucket.
+#[tokio::test]
+async fn a_part_of_any_other_length_is_refused_by_the_bucket() {
+    let server = s3_server!("a_part_of_any_other_length_is_refused_by_the_bucket");
+    let host = bootstrap_host(&server).await;
+
+    let bytes = filler(1000);
+    let one = slot(
+        &server,
+        &host.access_token,
+        "notes.bin",
+        bytes.len() as u64,
+        "application/octet-stream",
+    )
+    .await;
+    let key = format!("uploads/{}/00001", one.upload_id);
+
+    let mut longer = bytes.clone();
+    longer.push(0);
+    let (status, _) = put_part(&one.url, longer).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "one byte too many");
+    assert!(!bucket_has(&key).await, "and none of it landed");
+
+    let (status, _) = put_part(&one.url, bytes[..999].to_vec()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "one byte too few");
+
+    let (status, _) = put_part(&one.url, filler(PART)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "a whole part's worth");
+
+    // The planned length still goes up, and the upload finishes.
+    let (status, _) = put_part(&one.url, bytes.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    let resp = finish(&server, &host.access_token, &one, None).await;
+    assert_eq!(
+        resp.status(),
+        200,
+        "complete refused: {}",
+        resp.text().await.unwrap()
+    );
+
+    // In a cut-up file, every part but the last is a full part, and the last
+    // is what is left over. Each URL is held to its own length.
+    let body = filler(PART + 4096);
+    let cut_up = slot(
+        &server,
+        &host.access_token,
+        "trip.bin",
+        body.len() as u64,
+        "application/octet-stream",
+    )
+    .await;
+    let parts = cut_up.parts.clone().expect("a file over 8 MB is cut up");
+    assert_eq!(parts.len(), 2);
+    let (status, _) = put_part(&parts[0].url, filler(PART + 1)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "a full part plus one");
+    let (status, _) = put_part(&parts[1].url, filler(PART)).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "the last part is the remainder"
+    );
+    let (status, _) = put_part(&parts[0].url, body[..PART].to_vec()).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = put_part(&parts[1].url, body[PART..].to_vec()).await;
+    assert_eq!(status, StatusCode::OK);
+    let resp = finish(&server, &host.access_token, &cut_up, None).await;
+    assert_eq!(
+        resp.status(),
+        200,
+        "complete refused: {}",
+        resp.text().await.unwrap()
+    );
+}
+
+/// A part bigger than its plan stops assembly, and that is final (#505).
+///
+/// The part here gets into the bucket the one way left: past the URLs the
+/// server signed. The file's total is exactly what was declared, the longer
+/// first part made up by a shorter last one, so only a check of each part
+/// against its own length catches it. Refused like any other wrong size: the
+/// slot is spent and the parts go.
+#[tokio::test]
+async fn assembly_stops_at_a_part_longer_than_its_plan() {
+    let server = s3_server!("assembly_stops_at_a_part_longer_than_its_plan");
+    let host = bootstrap_host(&server).await;
+
+    let body = filler(PART + 4096);
+    let slot = slot(
+        &server,
+        &host.access_token,
+        "trip.bin",
+        body.len() as u64,
+        "application/octet-stream",
+    )
+    .await;
+    let first = format!("uploads/{}/00001", slot.upload_id);
+    let last = format!("uploads/{}/00002", slot.upload_id);
+    bucket_put(&first, body[..PART + 10].to_vec()).await;
+    bucket_put(&last, body[PART + 10..].to_vec()).await;
+
+    let resp = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(resp.status(), 422);
+    assert_eq!(error_code(resp).await, "VALIDATION_FAILED");
+
+    assert!(!bucket_has(&first).await, "the parts are discarded");
+    assert!(!bucket_has(&last).await, "all of them");
+    assert!(
+        !server
+            .state
+            .config
+            .staging_dir()
+            .join(slot.upload_id.to_string())
+            .exists(),
+        "and nothing is left on the server's own disk"
+    );
+    let resp = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(resp.status(), 409, "and the slot is spent");
 }
 
 #[tokio::test]

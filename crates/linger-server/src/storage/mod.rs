@@ -136,14 +136,15 @@ pub trait ObjectStore: Send + Sync {
         size_bytes: u64,
     ) -> anyhow::Result<UploadSlot>;
 
-    /// Gather the uploaded parts into one file. Fails if a part is missing or
-    /// its etag does not match what actually landed — a half-arrived upload
-    /// must not become an attachment.
+    /// Gather the uploaded parts of a file declared at `size_bytes` into one
+    /// file. Fails if a part is missing or its etag does not match what
+    /// actually landed — a half-arrived upload must not become an attachment —
+    /// and with [`OversizedPart`] if a part holds more than the plan gives it.
     async fn assemble(
         &self,
         upload_id: UploadId,
         parts: Option<&[CompletedPart]>,
-        expected_parts: u32,
+        size_bytes: u64,
     ) -> anyhow::Result<Staged>;
 
     /// Move a staged file into place under its permanent key.
@@ -186,6 +187,39 @@ pub fn part_plan(size_bytes: u64) -> (u32, u64) {
     (count, part_size)
 }
 
+/// How many bytes part `number` (counted from 1) of an upload this size holds:
+/// a full part, or for the last one whatever is left over. `None` for a part
+/// the plan does not have.
+///
+/// A part is held to exactly this (#505). The local listener refuses a longer
+/// body, S3 signs the length into the part's URL so the bucket refuses any
+/// other, and assembly stops at a part longer than this whichever way it got in.
+#[must_use]
+pub fn part_len(size_bytes: u64, number: u32) -> Option<u64> {
+    let (count, part_size) = part_plan(size_bytes);
+    if number == 0 || number > count {
+        return None;
+    }
+    Some(if number == count {
+        size_bytes - part_size * u64::from(count - 1)
+    } else {
+        part_size
+    })
+}
+
+/// A part held more bytes than the plan gives it.
+///
+/// A type of its own, not only a message, because the route answers it
+/// differently from a missing part. Missing is a dropped connection and the
+/// slot stays alive; too many bytes is not the file that was declared, and
+/// that is final, like any other wrong size (PROTOCOL §6).
+#[derive(Debug, thiserror::Error)]
+#[error("part {part} is longer than its planned {planned} bytes")]
+pub struct OversizedPart {
+    pub part: u32,
+    pub planned: u64,
+}
+
 /// The permanent key an attachment's bytes live under.
 ///
 /// Sharded two levels by the first bytes of the id so a server with a hundred
@@ -222,6 +256,27 @@ mod tests {
         // The milestone check's 400 MB video.
         assert_eq!(part_plan(400 * 1024 * 1024).0, 50);
         assert_eq!(part_plan(500 * 1024 * 1024).0, 63);
+    }
+
+    #[test]
+    fn every_part_is_full_but_the_last_which_is_the_rest() {
+        const MB8: u64 = 8 * 1024 * 1024;
+        assert_eq!(
+            part_len(1000, 1),
+            Some(1000),
+            "a one-part file is all of it"
+        );
+        assert_eq!(part_len(MB8, 1), Some(MB8));
+        assert_eq!(part_len(2 * MB8 + 4096, 1), Some(MB8));
+        assert_eq!(part_len(2 * MB8 + 4096, 2), Some(MB8));
+        assert_eq!(part_len(2 * MB8 + 4096, 3), Some(4096));
+        assert_eq!(part_len(2 * MB8, 2), Some(MB8), "an exact fit ends full");
+        assert_eq!(part_len(2 * MB8 + 4096, 0), None);
+        assert_eq!(part_len(2 * MB8 + 4096, 4), None);
+        let size = 500 * 1024 * 1024 - 7;
+        let (count, _) = part_plan(size);
+        let total: u64 = (1..=count).filter_map(|n| part_len(size, n)).sum();
+        assert_eq!(total, size, "the parts add up to the file");
     }
 
     #[test]

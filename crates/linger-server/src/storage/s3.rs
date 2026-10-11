@@ -36,18 +36,24 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use linger_core::wire::{CompletedPart, UploadPart, UploadSlot};
 use linger_core::{AttachmentId, UploadId};
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use super::{ObjectBody, ObjectStore, ServeAs, Staged};
+use super::{ObjectBody, ObjectStore, OversizedPart, ServeAs, Staged};
 use crate::config::Config;
 
 /// How long a presigned URL is good for. Matches the local backend: long enough
 /// that an upload interrupted overnight can still be resumed in the morning,
 /// and well inside SigV4's seven-day ceiling.
+///
+/// Not shorter for part URLs, although one can still be written to after its
+/// upload has finished: the client is handed every part's URL at once and uses
+/// them for the whole upload, however slow. A late write holds no more than its
+/// part's signed length, nothing reads it, and the bucket lifecycle rule in the
+/// host guide deletes `uploads/` after two days (#505).
 const URL_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Presigned URLs the server uses itself are short-lived — they are signed and
@@ -99,11 +105,21 @@ impl S3Store {
         format!("uploads/{upload_id}/{part:05}")
     }
 
-    fn part_url(&self, upload_id: UploadId, part: u32) -> String {
-        self.bucket
-            .put_object(Some(&self.credentials), &Self::part_key(upload_id, part))
-            .sign(URL_TTL)
-            .to_string()
+    /// A presigned PUT for one part, good for a body of exactly `len` bytes.
+    ///
+    /// Left to itself a presigned URL signs only the host, and the bucket then
+    /// takes up to 5 GB on it whatever the upload declared (#505). Signing
+    /// `content-length` too makes the bucket refuse any other length as a
+    /// signature mismatch, before it stores a byte. The client never sets the
+    /// header: a browser sends it from the body, which is a slice of exactly
+    /// this length, and it is not a header CORS asks the bucket about.
+    fn part_url(&self, upload_id: UploadId, part: u32, len: u64) -> String {
+        let key = Self::part_key(upload_id, part);
+        let mut action = self.bucket.put_object(Some(&self.credentials), &key);
+        action
+            .headers_mut()
+            .insert("content-length", len.to_string());
+        action.sign(URL_TTL).to_string()
     }
 
     fn staging_dir(&self, upload_id: UploadId) -> PathBuf {
@@ -161,6 +177,42 @@ async fn check(resp: reqwest::Response, doing: &str) -> anyhow::Result<reqwest::
     );
 }
 
+/// Copy one part into the assembled file, stopping the moment it runs past
+/// the `planned` bytes it was meant to hold.
+///
+/// The bytes are counted here, not only the bucket's `Content-Length` checked:
+/// this is the one place the server writes what a member sent to its own disk,
+/// and a part must not be able to fill that disk whatever a header said (#505).
+/// The chunk that crosses the line is never written.
+async fn copy_part<S, B, E, W>(
+    number: u32,
+    planned: u64,
+    mut stream: S,
+    out: &mut W,
+) -> anyhow::Result<u64>
+where
+    S: Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+    E: std::error::Error + Send + Sync + 'static,
+    W: AsyncWrite + Unpin,
+{
+    let mut written = 0u64;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        let chunk = chunk.as_ref();
+        written += chunk.len() as u64;
+        if written > planned {
+            return Err(OversizedPart {
+                part: number,
+                planned,
+            }
+            .into());
+        }
+        out.write_all(chunk).await?;
+    }
+    Ok(written)
+}
+
 #[async_trait]
 impl ObjectStore for S3Store {
     fn slot(
@@ -170,24 +222,35 @@ impl ObjectStore for S3Store {
         size_bytes: u64,
     ) -> anyhow::Result<UploadSlot> {
         let (count, part_size) = super::part_plan(size_bytes);
+        let url_for = |number: u32| {
+            super::part_len(size_bytes, number)
+                .map(|len| self.part_url(upload_id, number, len))
+                .ok_or_else(|| anyhow::anyhow!("part {number} is not in the plan"))
+        };
         // Part one is signed once and used twice. Signing it a second time for
         // `url` produced a *different* URL whenever the clock ticked between
         // the two calls — both valid, but not equal, which is a promise this
         // type makes ("url is the first part") and an intermittent test
         // failure nobody could reproduce on purpose.
-        let first = self.part_url(upload_id, 1);
-        let parts = (count > 1).then(|| {
-            (1..=count)
-                .map(|number| UploadPart {
-                    number,
-                    url: if number == 1 {
-                        first.clone()
-                    } else {
-                        self.part_url(upload_id, number)
-                    },
-                })
-                .collect()
-        });
+        let first = url_for(1)?;
+        let parts = if count > 1 {
+            Some(
+                (1..=count)
+                    .map(|number| {
+                        Ok(UploadPart {
+                            number,
+                            url: if number == 1 {
+                                first.clone()
+                            } else {
+                                url_for(number)?
+                            },
+                        })
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()?,
+            )
+        } else {
+            None
+        };
         Ok(UploadSlot {
             upload_id,
             attachment_id,
@@ -203,8 +266,9 @@ impl ObjectStore for S3Store {
         &self,
         upload_id: UploadId,
         parts: Option<&[CompletedPart]>,
-        expected_parts: u32,
+        declared_bytes: u64,
     ) -> anyhow::Result<Staged> {
+        let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
             if parts.len() as u32 != expected_parts {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
@@ -217,6 +281,8 @@ impl ObjectStore for S3Store {
         let mut size_bytes = 0u64;
 
         for number in 1..=expected_parts {
+            let planned = super::part_len(declared_bytes, number)
+                .ok_or_else(|| anyhow::anyhow!("part {number} is not in the plan"))?;
             let key = Self::part_key(upload_id, number);
             let url = self
                 .bucket
@@ -241,13 +307,16 @@ impl ObjectStore for S3Store {
                     anyhow::bail!("part {number} does not match the etag it was sent with");
                 }
             }
-
-            let mut stream = resp.bytes_stream();
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk?;
-                size_bytes += chunk.len() as u64;
-                out.write_all(&chunk).await?;
+            // The bucket says how long the part is before sending any of it,
+            // and a part that is too long is refused on that alone.
+            if resp.content_length().is_some_and(|len| len > planned) {
+                return Err(OversizedPart {
+                    part: number,
+                    planned,
+                }
+                .into());
             }
+            size_bytes += copy_part(number, planned, resp.bytes_stream(), &mut out).await?;
         }
         out.sync_all().await?;
         Ok(Staged {
@@ -392,10 +461,82 @@ mod tests {
         );
     }
 
+    /// The bucket refuses a body whose length is not the one signed (#505),
+    /// so every part URL has to sign one. Which length is proven against a
+    /// real bucket in `tests/s3.rs`: a URL shows that a length was signed,
+    /// not what it was.
+    #[test]
+    fn every_part_url_signs_a_length() {
+        let store = store(true);
+        let upload = UploadId::new();
+        let attachment = AttachmentId(upload.0);
+
+        let single = store.slot(upload, attachment, 1000).unwrap();
+        let cut_up = store
+            .slot(upload, attachment, 2 * 8 * 1024 * 1024 + 4096)
+            .unwrap();
+        let urls = std::iter::once(single.url).chain(
+            cut_up
+                .parts
+                .expect("a 16 MB upload is cut into parts")
+                .into_iter()
+                .map(|part| part.url),
+        );
+        for url in urls {
+            assert!(
+                url.contains("X-Amz-SignedHeaders=content-length%3Bhost"),
+                "signs only the host: {url}"
+            );
+        }
+    }
+
     #[test]
     fn virtual_host_style_puts_the_bucket_in_the_hostname() {
-        let url = store(false).part_url(UploadId::new(), 1);
+        let url = store(false).part_url(UploadId::new(), 1, 1000);
         assert!(url.starts_with("https://linger-test.objects.example/uploads/"));
+    }
+
+    /// A part longer than planned stops the copy where it crosses the line,
+    /// rather than landing on this server's disk in full first (#505).
+    #[tokio::test]
+    async fn a_part_past_its_length_stops_where_it_crosses_it() {
+        // Far more than planned: a thousand chunks of a kilobyte, where four
+        // were planned. Without the cap all of it would be written.
+        let chunks = futures_util::stream::iter(
+            std::iter::repeat_with(|| Ok::<_, std::io::Error>(vec![7u8; 1024])).take(1000),
+        );
+        let mut out = Vec::new();
+        let err = copy_part(2, 4096, chunks, &mut out)
+            .await
+            .expect_err("a part four times past its length");
+        let oversized = err
+            .downcast_ref::<OversizedPart>()
+            .expect("the route tells this apart from a missing part");
+        assert_eq!((oversized.part, oversized.planned), (2, 4096));
+        assert_eq!(
+            out.len(),
+            4096,
+            "nothing past the planned length is written"
+        );
+
+        // One byte over is over.
+        let chunks = futures_util::stream::iter([
+            Ok::<_, std::io::Error>(vec![0u8; 4096]),
+            Ok(vec![0u8; 1]),
+        ]);
+        assert!(copy_part(1, 4096, chunks, &mut Vec::new()).await.is_err());
+
+        // Exactly the plan is fine, and so is less: a short file is the size
+        // check's to refuse, after assembly.
+        for len in [4096, 100] {
+            let chunks = futures_util::stream::iter([Ok::<_, std::io::Error>(vec![0u8; len])]);
+            let mut out = Vec::new();
+            assert_eq!(
+                copy_part(1, 4096, chunks, &mut out).await.unwrap(),
+                len as u64
+            );
+            assert_eq!(out.len(), len);
+        }
     }
 
     #[tokio::test]
