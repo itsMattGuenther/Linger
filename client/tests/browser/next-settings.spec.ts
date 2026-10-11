@@ -398,7 +398,8 @@ test.describe("this app", () => {
     const line = page.locator(".nx-set-bind-line");
     await expect(line).toHaveText('hl.bind("Control_R", hl.dsp.global("linger:push-to-talk"), { non_consuming = true, ignore_mods = true })');
     // It can be selected and copied, unlike the rest of Settings.
-    expect(await line.evaluate((element) => getComputedStyle(element).userSelect)).toBe("text");
+    await line.click({ clickCount: 3 });
+    expect(await page.evaluate(() => String(getSelection()))).toContain('hl.bind("Control_R"');
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => undefined);
     await page.getByRole("button", { name: "Copy", exact: true }).click();
     // Copied, or, where the browser keeps the clipboard shut, said so.
