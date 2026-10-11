@@ -35,6 +35,9 @@ const ESTIMATE_PX = 24;
 const JUMP_STILL_FRAMES = 5;
 const JUMP_MIN_FRAMES = 20;
 const JUMP_MAX_FRAMES = 90;
+/** Following a new message down: the same, without the floor, and shorter (#625). */
+const FOLLOW_STILL_FRAMES = 3;
+const FOLLOW_MAX_FRAMES = 30;
 /** How long a message you jumped to stays marked. */
 const FLASH_MS = 1600;
 
@@ -183,24 +186,66 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     return () => cancelAnimationFrame(frame);
   }, [id, rows.length, land.ready, land.at, atEnd, virtualizer, props.goTo]);
 
-  // Follow a new last message down, only when the bottom is where you are.
+  // Follow a new last message down, only when the bottom is where you were.
   // Keyed on the last row, so history loading above never triggers it.
+  //
+  // Judged by the row that was last until now, not by the distance to the new
+  // bottom: that distance includes the new rows' own height, measured as they
+  // mount. The virtualizer follows by itself only from within a pixel of the
+  // end. From anywhere else in the margin (a scroll a few pixels short, or the
+  // frame where something above changed size, a link card landing), a message
+  // taller than the margin was left below the fold and never marked read (#625).
   const lastKey = rows[rows.length - 1]?.key;
+  const lastKeyBefore = useRef(lastKey);
+  const seenNow = useRef<() => void>(() => {});
   useEffect(() => {
+    const before = lastKeyBefore.current;
+    lastKeyBefore.current = lastKey;
     const element = scroller.current;
     if (!element || rows.length === 0 || !landing.current.done || !atEnd || jumping.current) return;
-    if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
+    // The row that was last, if it's still drawn. A sent message replaced by
+    // the server's copy isn't, and the distance to the bottom judges instead.
+    const wasLast = before === undefined ? null : element.querySelector(`[data-key="${CSS.escape(before)}"]`);
+    const below = wasLast
+      ? wasLast.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom
+      : element.scrollHeight - element.scrollTop - element.clientHeight;
+    if (below > BOTTOM_MARGIN_PX) return;
+    // Aim at the end every frame until it holds still: rows are measured, and
+    // anything above settles, a frame or two after they're drawn. Somebody
+    // reaching for the conversation meanwhile takes it back at once.
     let frames = 0;
+    let stable = 0;
+    let total = -1;
     let frame = 0;
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      element.removeEventListener("wheel", stop);
+      element.removeEventListener("touchstart", stop);
+      element.removeEventListener("pointerdown", stop);
+      element.removeEventListener("keydown", stop);
+    };
     const step = () => {
       virtualizer.scrollToIndex(rowsNow.current.length - 1, { align: "end" });
-      const drawn = virtualizer.getVirtualItems();
+      const size = virtualizer.getTotalSize();
+      const there = element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
+      stable = there && size === total ? stable + 1 : 0;
+      total = size;
       frames += 1;
-      if (drawn[drawn.length - 1]?.index === rowsNow.current.length - 1 || frames >= 30) return;
+      if (stable >= FOLLOW_STILL_FRAMES || frames >= FOLLOW_MAX_FRAMES) {
+        stop();
+        // Arriving needn't scroll (the virtualizer may already have), so say
+        // the newest is in view here rather than wait for a scroll event.
+        seenNow.current();
+        return;
+      }
       frame = requestAnimationFrame(step);
     };
+    element.addEventListener("wheel", stop, { passive: true });
+    element.addEventListener("touchstart", stop, { passive: true });
+    element.addEventListener("pointerdown", stop, { passive: true });
+    element.addEventListener("keydown", stop);
     frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    return stop;
     // Deliberately keyed on the last row only: a re-render, or history
     // arriving above, must never pull the view down.
   }, [lastKey]);
@@ -244,6 +289,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     if (element.scrollHeight - element.scrollTop - element.clientHeight > BOTTOM_MARGIN_PX) return;
     onSeenNewest(newest.id);
   }, [messages, atEnd, onSeenNewest]);
+  seenNow.current = noteSeen;
   useEffect(() => {
     noteSeen();
     window.addEventListener("focus", noteSeen);
@@ -381,6 +427,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                   key={item.key}
                   className="nx-conv-row"
                   data-index={item.index}
+                  data-key={item.key}
                   ref={virtualizer.measureElement}
                   style={{ transform: `translateY(${item.start}px)` }}
                 >
