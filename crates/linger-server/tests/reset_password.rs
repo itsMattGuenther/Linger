@@ -78,6 +78,16 @@ async fn the_generated_password_gets_the_host_back_in_and_kills_the_old_one() {
         .await
         .unwrap();
     assert_eq!(refreshed.status(), 401);
+
+    // And the access token it was holding, which used to have up to fifteen
+    // minutes left in it (#496).
+    let me = reqwest::Client::new()
+        .get(server.url("/me"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(me.status(), 401, "an access token from before the reset");
 }
 
 #[tokio::test]

@@ -1076,8 +1076,10 @@ works as it is, and Settings shows no note.
 computer. With several servers, **Settings → Servers** signs out of one, and
 **Sign out of everything** out of all of them. Your account and everything in it stays exactly where it is.
 
-To change your password, use **Settings → Account & App → Password**. If you have forgotten it,
-ask whoever runs the server — they can set you a new one.
+To change your password, use **Settings → Account & App → Password**. Changing it signs
+you out of that server everywhere else at once, including any computer you forgot to sign
+out of; the one you change it on stays signed in. If you have forgotten it, ask whoever
+runs the server — they can set you a new one.
 
 ---
 

@@ -33,6 +33,20 @@ Access token: JWT, EdDSA, 15 min TTL, sent as `Authorization: Bearer <jwt>`.
 Refresh token: opaque, 30 days, **rotating**. Reuse of a consumed refresh token revokes
 the entire token family and forces re-login.
 
+Some things end every sign-in an account has at once: a password change (§5), a reset
+from the command line, and removal (§5). Each revokes every refresh family the account
+has, and refuses every access token minted before it, at once rather than when it
+expires: on REST (`UNAUTHENTICATED`) and at the gateway's `identify` and `resume`
+(`invalid_session { reason: "unauthenticated" }`). A password change and removal also
+close the account's open gateway sessions (§8). A reset from the command line runs
+while the server is stopped (`docs/host-guide.md`), which has closed them already. Each
+access token carries the account's `token_generation`
+(the `gen` claim), and ending every sign-in adds one to it, so a token whose number is
+smaller is refused (#496). It is a count rather than a time on purpose: token times are
+whole seconds, and a time could not tell a token minted just before a password change
+from the fresh one minted just after it. Tokens from before #496 carry no `gen` and
+count as 0. Clients treat the token as opaque and never read it.
+
 ```
 POST /auth/register     { invite_code, username, display_name, password }
                      →  { access_token, refresh_token, expires_in, user }
@@ -410,7 +424,8 @@ GET   /users              → User[]              # all members of this server
 GET   /users/:id          → User
 GET   /me                 → User
 PATCH /me                 { display_name?, style?, status?, entrance_sound? } → User
-PATCH /me/password        { current_password, new_password }                 → 204
+PATCH /me/password        { current_password, new_password }
+                       →  { access_token, refresh_token, expires_in, user }
 
 GET  /me/notify-rules     → NotifyRule[]
 PUT  /me/notify-rules     { target_user_id, room_id | null }   → 204
@@ -430,6 +445,26 @@ POST   /reports             { message_id } | { user_id }, note? → 201 Report  
 GET    /reports             → Report[]                          # host or co-host, open ones
 DELETE /reports/:id         → 204                               # host or co-host: dealt with
 ```
+
+### Changing your password
+
+`PATCH /me/password` checks `current_password` (`FORBIDDEN` when it doesn't match) and
+ends every sign-in the account has, the one that asked included (§2): every refresh
+family, every access token, and every open gateway session, which gets
+`invalid_session { reason: "unauthenticated" }` and is closed. The usual reason to
+change a password is that somebody else might have it, and anything that outlived the
+change would be theirs to keep.
+
+The device that asked carries on. The answer is a fresh sign-in, the same shape as
+`POST /auth/login`'s, in a new refresh family: the client swaps it in for the tokens it
+held and reconnects the gateway with it. A token refused while the answer is on its way
+is expected, and a client waits for the answer rather than spend its old refresh token,
+which is revoked and would sign it out.
+
+A server from before #496 answered 204 with no body, revoked only the refresh tokens,
+and closed nothing. A client that gets 204 signs in again with the new password. An app
+from before #496 ignores the body and does the same, which leaves the fresh family
+unused until it expires.
 
 ### Co-host (SPEC §4.16, #424)
 
@@ -477,14 +512,16 @@ removed member sitting in the room:
 - **`GET /users`** and the roster query filter deactivated accounts, so they leave the
   roster on their own.
 
-Removal also revokes every refresh family the user owns and every invite they created,
-in the same transaction as the column. Their messages are untouched; removing a person
-is not deleting what they wrote.
+Removal also ends every sign-in the user has (§2: every refresh family, and every access
+token minted before it) and revokes every invite they created, in the same transaction
+as the column. Their messages are untouched; removing a person is not deleting what they
+wrote.
 
 `restore` is not an undo. It clears the column and nothing else: the revoked invites stay
-revoked and the revoked sign-ins stay revoked, so the person signs in again with their
-password. `GET /users/removed` is how the host finds somebody to restore — a removed
-member is absent from every other surface by design.
+revoked and the revoked sign-ins stay revoked, an access token from before the removal
+included, so the person signs in again with their password. `GET /users/removed` is
+how the host finds somebody to restore — a removed member is absent from every other
+surface by design.
 
 Both endpoints announce themselves on the gateway: `remove` fans out `user.remove`, and
 `restore` fans out `user.update`, which is "here is this person, whether or not you had
@@ -1114,6 +1151,21 @@ S→C  { "op": "invalid_session", "d": { "reason": "expired" } }   # → re-iden
 
 The server holds a 500-frame ring buffer per session for 120 seconds after disconnect.
 Beyond that, the client must re-identify and refetch.
+
+### `invalid_session`
+
+The server's way of saying a session is over. It is a control frame (no `s`), and the
+socket ends after it. The reasons:
+
+| reason | when | the client |
+|---|---|---|
+| `unauthenticated` | `identify` or `resume` with a token that is not good: a bad signature, expired, or from before something ended every sign-in the account had (§2). Also sent to an open session when that happens: the account was removed or its password changed. | Gets a fresh access token and identifies. If renewal is refused, the sign-in is over. |
+| `unknown user` | `identify` for an account that is removed (§5). | Nothing works until the host restores the account. |
+| `expired` | `resume` of a session the server no longer holds: the 120 seconds passed, or the server restarted. | Identifies afresh. |
+
+A `resume` with a token from before a password change is refused with
+`unauthenticated` even when the session it names is live, and the session is left
+alone (#496).
 
 ### Client → server
 

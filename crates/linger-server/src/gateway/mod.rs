@@ -195,7 +195,8 @@ enum Ctl {
     /// right now detaches the session (#451): one that a resume has already
     /// replaced ends too, and its cleanup must leave the new socket alone.
     Detach { from: mpsc::Sender<String> },
-    /// This session's user is off the server (T-413). Say so, hang up, stop.
+    /// This session's user is off the server (T-413), or every sign-in they
+    /// had has ended (#496). Say so, hang up, stop.
     Close,
 }
 
@@ -371,9 +372,10 @@ impl Gateway {
         }));
     }
 
-    /// Hang up on every session this person has open (T-413).
+    /// Hang up on every session this person has open: they were removed
+    /// (T-413), or they changed their password (#496).
     ///
-    /// Removal is only real once the socket is gone. The token check at
+    /// Either is only real once the socket is gone. The token check at
     /// identify happens once, at the start, so an already-open socket keeps
     /// receiving every message on the server until somebody closes it — and
     /// waiting for the 15-minute access token to lapse is not closing it.
@@ -895,9 +897,11 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                         // "unauthenticated" rather than a word of its own: it is
                         // what this token now is, and it is the one reason the
                         // client already answers by asking for a fresh token —
-                        // which the server refuses, which signs them out. A
-                        // reason nobody handles would leave them reconnecting
-                        // into a locked door forever.
+                        // which the server refuses, which signs them out. (The
+                        // device a password was changed on holds a fresh pair
+                        // already, and is straight back in: #496.) A reason
+                        // nobody handles would leave them reconnecting into a
+                        // locked door forever.
                         if let Some(tx) = &sink {
                             let frame = ServerFrame::control(ServerEvent::InvalidSession {
                                 reason: "unauthenticated".into(),
