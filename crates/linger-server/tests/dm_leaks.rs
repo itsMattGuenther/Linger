@@ -314,6 +314,51 @@ async fn search_does_not_find_a_dm_by_the_name_of_a_file_in_it() {
 }
 
 #[tokio::test]
+async fn a_search_cursor_from_inside_a_dm_answers_like_one_that_names_nothing() {
+    let (server, host, _callie, dave, dm, room) = a_dm_and_an_outsider().await;
+
+    say(
+        &server,
+        &host.access_token,
+        &room.id.to_string(),
+        "the carburettor is public",
+        &[],
+    )
+    .await;
+    let private = say(
+        &server,
+        &host.access_token,
+        &dm.id.to_string(),
+        "the carburettor is private",
+        &[],
+    )
+    .await;
+
+    // Search pages from the row a cursor's message was written to (#518). If
+    // a stranger could page from a DM's message, he would get the older hits
+    // where a made-up id gets none — and the difference would tell him the
+    // message is real. A cursor is only looked up among messages he can see.
+    let from_the_dm = search(
+        &server,
+        &dave.access_token,
+        &format!("carburettor&before={}", private.id),
+    )
+    .await;
+    let made_up = search(
+        &server,
+        &dave.access_token,
+        &format!("carburettor&before={}", linger_core::MessageId::new()),
+    )
+    .await;
+    let ids = |hits: &[SearchHit]| hits.iter().map(|hit| hit.message_id).collect::<Vec<_>>();
+    assert_eq!(
+        ids(&from_the_dm),
+        ids(&made_up),
+        "a search cursor told a stranger a DM's message exists"
+    );
+}
+
+#[tokio::test]
 async fn asking_to_search_inside_someone_elses_dm_is_not_found() {
     let (server, _host, _callie, dave, dm, _room) = a_dm_and_an_outsider().await;
 

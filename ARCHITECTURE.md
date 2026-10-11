@@ -194,7 +194,9 @@ use UUIDv4 (destroys index locality).
 
 ## 5. Schema
 
-SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`.
+SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`. The server runs `PRAGMA
+optimize` on the writer at startup and after each file sweep, so the query planner has
+current measurements of every table to choose indexes by (`db::optimize`, #518).
 
 ```sql
 CREATE TABLE users (
@@ -318,6 +320,9 @@ CREATE TABLE attachments (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
+CREATE INDEX idx_attachments_message ON attachments(message_id);   -- a message's files (#518)
+CREATE INDEX idx_attachments_media_order                           -- Media's order (#518)
+  ON attachments((starred_at IS NOT NULL), created_at, id) WHERE state = 'complete';
 
 -- One row per URL in a message body, re-extracted on every edit. This is what
 -- the media grid pages over for `kind=link`; the stream re-extracts client-side
