@@ -239,6 +239,15 @@ describe("voice in the store", () => {
     });
   });
 
+  it("a second join to the same room while the first is still starting joins nothing more (#510)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    invoked.length = 0;
+    // Asked twice at once, as a double-click or two windows could.
+    await Promise.all([joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false), joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false)]);
+    expect(invoked.filter((call) => call.cmd.startsWith("voice_")).map((call) => call.cmd)).toEqual(["voice_controls", "voice_push_to_talk", "voice_join"]);
+  });
+
   it("asks the server for its relay and hands it to the core", async () => {
     const relay = {
       servers: [
