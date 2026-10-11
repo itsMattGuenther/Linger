@@ -153,6 +153,7 @@ export const HEADINGS = {
   newInvite: "New Invite",
   links: "Links You Have Made",
   members: "Members",
+  signInLinks: "Sign-in Links",
   removed: "Removed",
   blocked: "Blocked",
   reports: "Reports",

@@ -728,8 +728,9 @@ Repeat the [relay check](#the-voice-relay) after updating.
 
 ## Somebody forgot their password
 
-In the app: **Settings → Hosting → People**, then **Sign-in link** on their row. It
-asks first, then copies a link like `https://linger.example.com/sign-in/…`. Send it to
+In the app: **Settings → Hosting → People**, under **Sign-in Links**, choose them and
+press **Make a sign-in link**. It asks first, then copies a link like
+`https://linger.example.com/sign-in/…`. Send it to
 them the way you'd send an invite. They paste it into **Server or link**, choose a new
 password, and they're in. A co-host can do this too.
 

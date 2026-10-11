@@ -661,18 +661,25 @@ test.describe("hosting", () => {
 
   test("a sign-in link asks first, then shows the link, copied, and how long it works (#581)", async ({ page }) => {
     await open(page, "?section=people");
-    const members = page.getByRole("list", { name: "Members" }).locator(":scope > li");
-    // Never on your own row or the host's.
-    await expect(members.first().getByRole("button", { name: "Sign-in link" })).toHaveCount(0);
-    const callie = members.filter({ hasText: "Callie" });
-    await callie.getByRole("button", { name: "Sign-in link" }).click();
+    const block = page.getByRole("region", { name: "Sign-in Links" });
+    const who = block.getByRole("combobox", { name: "For" });
+    const make = block.getByRole("button", { name: "Make a sign-in link" });
+    await expect(make).toBeDisabled();
+    // Never for yourself or the host: neither is offered.
+    const offered = await who.locator("option").allTextContents();
+    expect(offered[0]).toBe("Choose somebody");
+    expect(offered).toContain("Callie (@callie)");
+    expect(offered.some((label) => label.includes("@matt"))).toBe(false);
+    await who.selectOption({ label: "Callie (@callie)" });
+    await make.click();
     await expect(page.getByRole("group", { name: /^Make a sign-in link for Callie\?/ })).toBeVisible();
     await page.getByRole("button", { name: "Make and copy" }).click();
-    const made = callie.locator("[data-sign-in-link]");
-    await expect(made).toContainText("k7q2xw3mfz9ab4cd5ef6gh7ij2");
+    const made = block.locator("[data-sign-in-link]");
+    await expect(made).toContainText("/sign-in/k7q2xw3mfz9ab4cd5ef6gh7ij2");
     await expect(made).toContainText(/Copied\. Send it to Callie yourself\. It works once, and runs out tomorrow at .+\. Making another cancels this one\./);
     await expect(made.getByRole("button", { name: "Copied" })).toBeVisible();
-    expect(await did(page)).toContain(`sign-in-link:${await callie.getAttribute("data-person")}`);
+    const callie = await who.inputValue();
+    expect(await did(page)).toContain(`sign-in-link:${callie}`);
   });
 
   test("your account says when somebody made you a sign-in link (#581)", async ({ page }) => {

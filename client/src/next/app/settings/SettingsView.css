@@ -619,13 +619,11 @@
   font-family: var(--font-mono);
 }
 
-/* A sign-in link the host just made for somebody (#581), under their row and
-   starting where their name does. */
+/* A sign-in link the host just made for somebody (#581). */
 .nx-set-signin-link {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding-left: calc(var(--marker-slot) + var(--space-2));
 }
 
 /* A link is one long word: it fills each line rather than leaving a hyphen
