@@ -3,9 +3,10 @@
 
 use std::sync::Arc;
 
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 
 use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_WAIT};
+use crate::backup::Backups;
 use crate::config::{Config, Storage};
 use crate::db::Db;
 use crate::gateway::Gateway;
@@ -36,6 +37,13 @@ pub struct AppState {
     /// The per-address limits bound one stranger; this bounds everybody at
     /// once, so the memory passwords take has a ceiling.
     pub passwords: Arc<PasswordWork>,
+    /// How the nightly copies of the database stand (`crate::backup`, #582):
+    /// read from `data/backups/` at startup, kept up to date by the task
+    /// that makes them.
+    pub backups: Arc<Backups>,
+    /// One pass at a time taking the oldest files to make room
+    /// (`expiry::keep_room`, #583), so two never pick the same ones.
+    pub making_room: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -81,6 +89,21 @@ impl AppState {
             tracing::info!(%address, "voice forwarding is on: clients send voice to this address");
         }
 
+        // The bucket the nightly copies also go to (#614). Opening it makes
+        // no network call; a malformed endpoint stops the server here, as a
+        // malformed LINGER_S3_ENDPOINT does.
+        let bucket = config
+            .backup_bucket
+            .as_ref()
+            .map(crate::storage::BackupBucket::open)
+            .transpose()?;
+        let backups = Arc::new(
+            Backups::new(
+                crate::backup::newest(&config.data_dir).await,
+                crate::db::now_ms(),
+            )
+            .with_bucket(bucket),
+        );
         let passwords = Arc::new(PasswordWork::new(
             config.password_checks_at_once,
             PASSWORD_WORK_WAIT,
@@ -96,6 +119,8 @@ impl AppState {
             local,
             exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
             passwords,
+            backups,
+            making_room: Arc::new(Mutex::new(())),
         })
     }
 }

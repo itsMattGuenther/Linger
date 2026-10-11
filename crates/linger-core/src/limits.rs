@@ -7,8 +7,12 @@ pub const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024;
 pub const DEFAULT_POOL_BYTES: u64 = 50 * 1024 * 1024 * 1024;
 /// Files over this use multipart upload, which is what makes uploads resumable.
 pub const MULTIPART_THRESHOLD_BYTES: u64 = 8 * 1024 * 1024;
-/// Non-starred, non-pinned files expire after this many days by default.
-pub const DEFAULT_FILE_EXPIRY_DAYS: u32 = 365;
+/// When the pool is this full, the sweeper starts taking the oldest files
+/// nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS=when-full`, #583), in
+/// percent of `LINGER_POOL_BYTES`.
+pub const WHEN_FULL_START_PERCENT: u64 = 90;
+/// ...and keeps taking them until it is down to this.
+pub const WHEN_FULL_TARGET_PERCENT: u64 = 80;
 /// How many finished uploads one message may carry.
 pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 10;
 /// Filenames are stored and echoed in a download header, so they are bounded.
@@ -242,6 +246,19 @@ pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
 /// told as these few, then as the newest once the limit allows. An app sends
 /// a handful an hour: idle, back, away.
 pub const RATE_PRESENCE: (u32, u64) = (5, 10);
+/// Moves told to everybody, per person (`room.focus`, PROTOCOL §8, #527).
+/// Each can send a `room.leave`, a `room.enter`, two `room.occupancy` and a
+/// `presence.update` to everybody connected. Past it the move still happens
+/// at once, and everybody is told where the person is by their next turn:
+/// somebody clicking through rooms faster than this is told a moment late,
+/// never wrong.
+pub const RATE_ROOM_FOCUS: (u32, u64) = (10, 10);
+/// `voice.join` and `voice.leave` per session (PROTOCOL §8, #527). Each seat
+/// taken or left makes the forwarding server offer everybody in that voice
+/// room a fresh connection, and a mute or deafen tells the whole room. An
+/// evening's joining, moving and muting stays well inside it; past it, the
+/// newest request is taken at the session's next turn.
+pub const RATE_VOICE_SEAT: (u32, u64) = (10, 10);
 /// Voice answers and restarts, per session (PROTOCOL §8). Loose, because a
 /// busy room re-offers everybody each time somebody comes or goes, and each
 /// offer wants an answer; a limit tight enough to be interesting would break

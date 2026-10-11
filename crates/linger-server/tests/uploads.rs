@@ -1467,7 +1467,8 @@ async fn attachment_state(server: &TestServer, id: Vec<u8>) -> Option<String> {
 /// year a shared file gets, and not forever when the host turns expiry off.
 #[tokio::test]
 async fn a_finished_file_nobody_posts_goes_after_a_week() {
-    let server = spawn_tuned(|config| config.file_expiry_days = None).await;
+    let server =
+        spawn_tuned(|config| config.file_expiry = linger_server::config::FileExpiry::Off).await;
     let host = bootstrap_host(&server).await;
     let old = upload(
         &server,

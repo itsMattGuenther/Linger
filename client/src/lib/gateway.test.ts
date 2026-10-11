@@ -59,6 +59,7 @@ const {
   loadBlocks,
   loadReports,
   KNOCK_TTL_MS,
+  MAX_KNOCK_CARDS,
   leaveWindow,
   loadNewer,
   loadNotifyRules,
@@ -547,17 +548,30 @@ describe("knocks", () => {
     expect(serverState(WORK).knocks).toEqual([]);
   });
 
-  it("keeps two knocks from the same person as two cards", async () => {
+  it("a second knock from the same person takes the first one's place, as a fresh card (#512)", async () => {
     await connect(fakeApi(HOME));
     arrive(HOME, ready({ user: matt, users: [matt, callie] }));
 
     arrive(HOME, { s: 2, op: "knock", d: { from_user_id: callie.id } });
+    const [first] = serverState(HOME).knocks;
     arrive(HOME, { s: 3, op: "knock", d: { from_user_id: callie.id } });
 
     const held = serverState(HOME).knocks;
-    expect(held).toHaveLength(2);
-    // Distinct ids, or React draws one card and the second knock is invisible.
-    expect(new Set(held.map((knock) => knock.id)).size).toBe(2);
+    expect(held).toHaveLength(1);
+    // A new id, so the card is drawn again and its eight seconds start over:
+    // the second knock is seen, not swallowed.
+    expect(held[0]?.id).not.toBe(first?.id);
+    expect(held[0]?.from).toBe(callie.id);
+  });
+
+  it("holds the newest few knocks, not forty (#512)", async () => {
+    await connect(fakeApi(HOME));
+    const crowd = Array.from({ length: 40 }, (_, n) => person(`u-k${n}`, `Knocker ${n}`));
+    arrive(HOME, ready({ user: matt, users: [matt, ...crowd] }));
+
+    crowd.forEach((knocker, n) => arrive(HOME, { s: n + 2, op: "knock", d: { from_user_id: knocker.id } }));
+
+    expect(serverState(HOME).knocks.map((knock) => knock.from)).toEqual(crowd.slice(-MAX_KNOCK_CARDS).map((knocker) => knocker.id));
   });
 
   it("takes one away when its card is done, and leaves nothing behind", async () => {

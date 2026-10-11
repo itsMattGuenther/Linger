@@ -11,7 +11,7 @@ import type { Room } from "../../generated/Room";
 import type { ServerFrame } from "../../generated/ServerFrame";
 import type { User } from "../../generated/User";
 import { ask, OWNER } from "./bus";
-import { CLOSED, NOTIFY, type Outcome, PASSWORD, type VoiceControlQuestion } from "./share";
+import { CLOSED, NOTIFY, type Outcome, PASSWORD, SHARED, type SharedMessage, type VoiceControlQuestion } from "./share";
 import { ANYWHERE } from "./talkHold";
 import { pressVoiceControl } from "./voiceControl";
 
@@ -810,6 +810,36 @@ describe("a viewer window sharing the owner's connection", () => {
     await vi.waitFor(() => expect(invoked.map((call) => call.cmd)).toContain("voice_leave"));
     await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice).toBeNull());
     expect(owner.gateway.serverState(HOME).myVoice).toBeNull();
+    follower.stop();
+  });
+
+  it("somebody starting to talk tells the other windows your voice seat, and nothing else, which they keep as it was (#533)", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 9).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general"));
+
+    const heard: SharedMessage[] = [];
+    const stop = await viewer.bus.listen<SharedMessage>(SHARED, (message) => heard.push(message));
+    const before = viewer.gateway.serverState(HOME);
+    ownerCore.get("voice:speaking")?.({ payload: { server: HOME, peer: "s-eli", speaking: true } });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.speaking).toEqual({ "s-eli": true }));
+    expect(heard.map((message) => Object.keys(message.shared))).toEqual([["myVoice"]]);
+    // What didn't change is the very same as before, so nothing drawn from it is drawn again.
+    const after = viewer.gateway.serverState(HOME);
+    expect(after.read).toBe(before.read);
+    expect(after.notifyRules).toBe(before.notifyRules);
+    expect(after.blocked).toBe(before.blocked);
+
+    // A frame that changes none of them sends nothing at all.
+    core({ s: 18, op: "presence.update", d: { user_id: "u-eli", state: "away", room_id: null, away_message: null } });
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).presence.find((entry) => entry.user_id === "u-eli")?.state).toBe("away"));
+    expect(heard).toHaveLength(1);
+    stop();
     follower.stop();
   });
 

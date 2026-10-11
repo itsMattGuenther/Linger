@@ -539,6 +539,57 @@ async fn an_exported_dm_is_a_file_a_person_can_find() {
     );
 }
 
+/// Removing somebody takes them out of their DMs' members, so two DMs whose
+/// other person was removed are both "just you" by name. Two entries under
+/// one name would end the archive; each keeps a file of its own instead.
+#[tokio::test]
+async fn two_dms_whose_people_were_removed_each_keep_their_own_file() {
+    let (server, host, callie, dave, dm, _room) = a_dm_and_an_outsider().await;
+    let other = dm_with(&server, &host.access_token, &[&dave.user.id.to_string()]).await;
+    say(
+        &server,
+        &host.access_token,
+        &dm.id.to_string(),
+        "said to callie",
+        &[],
+    )
+    .await;
+    say(
+        &server,
+        &host.access_token,
+        &other.id.to_string(),
+        "said to dave",
+        &[],
+    )
+    .await;
+    for gone in [&callie, &dave] {
+        let removed = client()
+            .post(server.url(&format!("/users/{}/remove", gone.user.id)))
+            .bearer_auth(&host.access_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), 204);
+    }
+
+    let files = open_archive(export_archive(&server, &host.access_token).await);
+    let holding = |words: &str| -> Vec<&str> {
+        files
+            .iter()
+            .filter(|(name, text)| name.contains("/direct/") && text.contains(words))
+            .map(|(name, _)| name.as_str())
+            .collect()
+    };
+    let to_callie = holding("said to callie");
+    let to_dave = holding("said to dave");
+    assert!(!to_callie.is_empty(), "the first DM is missing");
+    assert!(!to_dave.is_empty(), "the second DM is missing");
+    assert!(
+        to_callie.iter().all(|name| !to_dave.contains(name)),
+        "two DMs share a file: {to_callie:?} {to_dave:?}"
+    );
+}
+
 #[tokio::test]
 async fn an_export_does_not_carry_somebody_elses_unposted_upload() {
     let (server, host, _callie, dave, _dm, _room) = a_dm_and_an_outsider().await;

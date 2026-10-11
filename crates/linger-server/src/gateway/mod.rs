@@ -44,6 +44,18 @@ pub struct Gateway {
     /// until their turn (#497). One waiting task each, however many changes
     /// pile up behind it: the turn tells whatever is newest by then.
     presence_held: DashSet<UserId>,
+    /// The room each person was last told to be in, by `room.leave` and
+    /// `room.enter` (#527). Where somebody is changes in `presence` at once;
+    /// telling everybody can wait for their turn under `RATE_ROOM_FOCUS`, and
+    /// this is what the turn compares with. One entry per person who has
+    /// moved since they connected, gone when their last connection closes.
+    focus_told: DashMap<UserId, Option<RoomId>>,
+    /// People whose move is held back by `RATE_ROOM_FOCUS` until their turn
+    /// (#527), as `presence_held` is for presence.
+    focus_held: DashSet<UserId>,
+    /// Each session's newest `voice.join` or `voice.leave` held back by
+    /// `RATE_VOICE_SEAT` until its turn (#527).
+    voice_held: DashMap<String, HeldVoice>,
     conn_count: DashMap<UserId, u32>,
     /// Who is in each DM (SPEC §4.13). Public rooms are not in here — their
     /// members are everybody, and a room absent from this map is treated as
@@ -91,6 +103,57 @@ struct VoiceSeat {
     /// Which seat this is (`Gateway::seats`). A repeated join that only
     /// changes controls keeps it; moving or rejoining takes a new one.
     number: u64,
+}
+
+/// What a session asked of voice: a seat in a room (`voice.join`), as it
+/// asked for it. `None` in its place is `voice.leave`.
+#[derive(Debug, Clone, Copy)]
+struct WantedSeat {
+    room_id: RoomId,
+    controls: Option<VoiceControls>,
+    can_forward: bool,
+}
+
+/// A session's newest `voice.join` or `voice.leave`, held back by
+/// `RATE_VOICE_SEAT` until its turn (#527).
+///
+/// Unlike presence, a seat isn't taken until the turn: taking it is the
+/// expensive part, the forwarding server offering everybody in the room a
+/// fresh connection. So the turn takes the newest, once. What it can't do is
+/// pretend the requests in between never happened: an app that left, or went
+/// to another room, has closed its connection and waits for a fresh offer,
+/// even if the newest puts it back in the seat it had (`churned`).
+#[derive(Debug)]
+struct HeldVoice {
+    wanted: Option<WantedSeat>,
+    /// The room the newest request named, or `None` for a leave.
+    last_room: Option<RoomId>,
+    /// The app started its connection again while this was held.
+    churned: bool,
+}
+
+impl HeldVoice {
+    fn new(seated: Option<RoomId>, wanted: Option<WantedSeat>) -> Self {
+        let mut held = Self {
+            wanted: None,
+            last_room: seated,
+            churned: false,
+        };
+        held.newest(wanted);
+        held
+    }
+
+    /// A newer request arrived: it's the one the turn takes.
+    fn newest(&mut self, wanted: Option<WantedSeat>) {
+        let room = wanted.map(|seat| seat.room_id);
+        // A leave closes the app's connection, and so does a join anywhere
+        // but where it already is. Changing only mute or deafen doesn't.
+        if room.is_none() || room != self.last_room {
+            self.churned = true;
+        }
+        self.last_room = room;
+        self.wanted = wanted;
+    }
 }
 
 /// What a `voice.join` did (PROTOCOL §8).
@@ -262,6 +325,9 @@ impl Gateway {
             sessions: DashMap::new(),
             presence: DashMap::new(),
             presence_held: DashSet::new(),
+            focus_told: DashMap::new(),
+            focus_held: DashSet::new(),
+            voice_held: DashMap::new(),
             conn_count: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
@@ -563,6 +629,11 @@ impl Gateway {
         VoiceJoined::Seated(number)
     }
 
+    /// The room a session's seat is in, if it has one.
+    fn seat_room(&self, session_id: &str) -> Option<RoomId> {
+        self.voice.get(session_id).map(|seat| seat.room_id)
+    }
+
     /// Whether a session still holds the seat it took (#473): the same seat,
     /// in the same room, never left in between. Leaving and joining again, or
     /// moving away and back, is a different seat.
@@ -771,61 +842,79 @@ impl Gateway {
         }
     }
 
-    /// Apply a `room.focus` (or a `None` = left the room) and emit the resulting
-    /// events, in protocol order: leave → enter → occupancy → presence.
-    fn apply_room_focus(
-        &self,
-        user_id: UserId,
-        room_id: Option<RoomId>,
-        entrance_sound: Option<String>,
-    ) {
+    /// Move somebody to a room, or out of every room (`None`), answering
+    /// whether that moved them. Only in memory: a `ready` from now on has it,
+    /// and `tell_focus` tells everybody else.
+    fn move_to(&self, user_id: UserId, room_id: Option<RoomId>) -> bool {
         let prev_room = self.presence.get(&user_id).and_then(|e| e.value().room_id);
         if prev_room == room_id {
-            return;
+            return false;
         }
-
-        let entry = {
-            let mut entry = self
-                .presence
-                .get(&user_id)
-                .map(|e| e.value().clone())
-                .unwrap_or_else(|| offline_entry(user_id));
-            entry.room_id = room_id;
-            entry.state = if room_id.is_some() {
-                PresenceState::InRoom
-            } else {
-                PresenceState::Around
-            };
-            self.presence.insert(user_id, entry.clone());
-            entry
+        let mut entry = self
+            .presence
+            .get(&user_id)
+            .map(|e| e.value().clone())
+            .unwrap_or_else(|| offline_entry(user_id));
+        entry.room_id = room_id;
+        entry.state = if room_id.is_some() {
+            PresenceState::InRoom
+        } else {
+            PresenceState::Around
         };
+        self.presence.insert(user_id, entry);
+        true
+    }
 
-        // Standing in a DM is nobody's business (see `outward`): no leave,
-        // enter or occupancy is said about one, even to its own people.
-        let prev_room = prev_room.filter(|room| !self.is_dm(*room));
-        let room_id = room_id.filter(|room| !self.is_dm(*room));
-        if let Some(prev) = prev_room {
-            self.publish(ServerEvent::RoomLeave {
-                room_id: prev,
-                user_id,
-            });
-            self.publish(ServerEvent::RoomOccupancy {
-                room_id: prev,
-                user_ids: self.occupancy(prev),
-            });
+    /// Tell everybody where somebody is now, against where they were last
+    /// told to be, in protocol order: leave → enter → occupancy → presence.
+    ///
+    /// However many moves came in between, this tells one: from the room
+    /// they were last told about to the room they're in (#527). Moving away
+    /// and back again tells nobody they left.
+    ///
+    /// One teller at a time per person: the `focus_told` entry is held
+    /// throughout, so a held turn and a closing connection can't interleave
+    /// their frames. The presence goes out while it is held too, for the
+    /// reason `tell_presence` gives.
+    fn tell_focus(&self, user_id: UserId, entrance_sound: Option<String>) {
+        let mut told = self.focus_told.entry(user_id).or_insert(None);
+        let Some(now) = self.presence.get(&user_id).map(|e| e.value().room_id) else {
+            // Offline in between: `connection_closed` told everybody.
+            drop(told);
+            self.focus_told.remove(&user_id);
+            return;
+        };
+        let before = *told;
+        if before != now {
+            // Standing in a DM is nobody's business (see `outward`): no
+            // leave, enter or occupancy is said about one, even to its own
+            // people.
+            if let Some(prev) = before.filter(|room| !self.is_dm(*room)) {
+                self.publish(ServerEvent::RoomLeave {
+                    room_id: prev,
+                    user_id,
+                });
+                self.publish(ServerEvent::RoomOccupancy {
+                    room_id: prev,
+                    user_ids: self.occupancy(prev),
+                });
+            }
+            if let Some(new) = now.filter(|room| !self.is_dm(*room)) {
+                self.publish(ServerEvent::RoomEnter {
+                    room_id: new,
+                    user_id,
+                    entrance_sound,
+                });
+                self.publish(ServerEvent::RoomOccupancy {
+                    room_id: new,
+                    user_ids: self.occupancy(new),
+                });
+            }
+            *told = now;
         }
-        if let Some(new) = room_id {
-            self.publish(ServerEvent::RoomEnter {
-                room_id: new,
-                user_id,
-                entrance_sound,
-            });
-            self.publish(ServerEvent::RoomOccupancy {
-                room_id: new,
-                user_ids: self.occupancy(new),
-            });
+        if let Some(entry) = self.presence.get(&user_id) {
+            self.publish(ServerEvent::PresenceUpdate(entry.value().clone()));
         }
-        self.publish(ServerEvent::PresenceUpdate(entry));
     }
 
     /// A connection came up for this user. First connection ⇒ visible presence.
@@ -847,7 +936,17 @@ impl Gateway {
         };
         if remaining == 0 {
             self.conn_count.remove(&user_id);
-            self.apply_room_focus(user_id, None, None);
+            // Out of their room, told at once whatever their turn: the room
+            // they were last told to be in, if a move was still held.
+            let moved = self.move_to(user_id, None);
+            let told_somewhere = self
+                .focus_told
+                .get(&user_id)
+                .is_some_and(|room| room.is_some());
+            if moved || told_somewhere {
+                self.tell_focus(user_id, None);
+            }
+            self.focus_told.remove(&user_id);
             self.presence.remove(&user_id);
             self.publish(ServerEvent::PresenceUpdate(offline_entry(user_id)));
         }
@@ -1071,6 +1170,8 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
             }
         }
         gateway.sessions.remove(&session_id);
+        // A held join must not seat a session that's gone (#527).
+        gateway.voice_held.remove(&session_id);
         // A session that is really gone leaves voice, and the people it was
         // talking to are told. This is *here* rather than on socket close on
         // purpose: a dropped socket has 120 seconds to come back, and a client

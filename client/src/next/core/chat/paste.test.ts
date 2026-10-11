@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { engineHidesClipboardImages, type PasteContext, type PastedData, pastedName, planPaste, shellImage } from "./paste";
+import { engineHidesClipboardImages, type PasteContext, type PastedData, pastedName, pasteFits, planPaste, shellImage } from "./paste";
 
 /** Half past two in the afternoon, this computer's time. */
 const AT = new Date(2026, 8, 28, 14, 30, 5);
@@ -133,5 +133,20 @@ describe("which engine hides pictures on the clipboard", () => {
     // A browser has no desktop shell to ask, whatever it runs on.
     expect(engineHidesClipboardImages(WEBKITGTK_UA, false)).toBe(false);
     expect(engineHidesClipboardImages("Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36", true)).toBe(false);
+  });
+});
+
+describe("a paste too long for the box (#512)", () => {
+  it("fits up to the limit, counting what it replaces", () => {
+    expect(pasteFits("", 0, 0, "x".repeat(8000), 8000)).toBe(true);
+    expect(pasteFits("", 0, 0, "x".repeat(8001), 8000)).toBe(false);
+    expect(pasteFits("hello", 5, 5, "x".repeat(7996), 8000)).toBe(false);
+    // Pasted over all of "hello", it has those five back.
+    expect(pasteFits("hello", 0, 5, "x".repeat(8000), 8000)).toBe(true);
+  });
+
+  it("counts a line break once, as the box keeps it", () => {
+    expect(pasteFits("", 0, 0, "a\r\nb", 3)).toBe(true);
+    expect(pasteFits("", 0, 0, "a\r\nb", 2)).toBe(false);
   });
 });

@@ -52,6 +52,11 @@
  * Leaving a group DM (#565) is written down as `leave <id>` and answered with
  * the `dm.remove` the server sends; `?leavefails` has it refused.
  *
+ * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
+ * with, handed over the first time the window asks (`link_offered`), and
+ * `window.core.link(link)` is one handed over while it runs. Each ask is
+ * written down as `link_offered`.
+ *
  * The message of the day (#464): `?motd` has Eli's set in #general, just
  * after the evening. Changing a room is written down as `room <id> <body>`,
  * refused unless you host or co-host, and answered with the frames the
@@ -125,6 +130,15 @@ const blocks = new Set<string>(query.has("blocked") ? [people.jules.id] : []);
 const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
 const NO_KEYRING = "No usable keyring on this computer (no secret service).";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
+// `?servers=30`: that many servers signed in at once (#512), the three and
+// more like Casa da Ribeira, each its own.
+const extra = Math.max(0, Number(query.get("servers") ?? "0") - saved.length);
+for (let at = 1; at <= extra; at += 1) {
+  const server = `https://extra-${at}.example`;
+  states[server] = lisbon(serverState(server));
+  saved.push(server);
+  names[server] = { name: `Extra ${at}`, accent: "teal" };
+}
 
 /** How many times a session has started over (`window.core.restart`). */
 let restarts = 0;
@@ -153,8 +167,18 @@ function ready(server: string, again = ""): ServerFrame {
 
 // --- the shell -------------------------------------------------------------
 
-/** The list window's box on the screen, in the desktop's pixels. */
-const box = { x: 100, y: 40, width: 340, height: 820 };
+/** The list window's box on the screen, in the desktop's pixels: `?x=` moves it along. */
+const box = { x: Number(query.get("x") ?? 100), y: 40, width: 340, height: 820 };
+
+// The page's own view of its screen (core/screen.ts, #628), as the engine
+// gives it: a 1920 px screen with a 40 px panel, `?second` a second one to the
+// right of it, and the window where the shell has it.
+const screenLeft = query.has("second") ? 1920 : 0;
+Object.defineProperty(window.screen, "availLeft", { configurable: true, get: () => screenLeft });
+Object.defineProperty(window.screen, "availWidth", { configurable: true, get: () => 1920 });
+Object.defineProperty(window.screen, "availHeight", { configurable: true, get: () => 1040 });
+Object.defineProperty(window, "screenX", { configurable: true, get: () => box.x });
+Object.defineProperty(window, "outerWidth", { configurable: true, get: () => box.width });
 /** A size or position as the window API sends it: `{ Logical: {…} }`, or bare. */
 function logical(value: unknown): { width: number; height: number; x: number; y: number } | null {
   if (typeof value !== "object" || value === null) return null;
@@ -180,6 +204,8 @@ const deliver = (event: string, payload: unknown) => {
 const seq: Record<string, number> = {};
 
 (window as unknown as { isTauri: boolean }).isTauri = true;
+/** The `linger://` link the shell is holding for the window (#607), as it would hand it over. */
+let opened: string | null = query.get("opened");
 mockWindows("main");
 mockIPC((cmd, args) => {
   const a = (args ?? {}) as Record<string, unknown>;
@@ -239,6 +265,12 @@ mockIPC((cmd, args) => {
       // The engine opens the devices and starts sending, as the Rust core says.
       window.setTimeout(() => deliver("voice:audio", { server: String(a.baseUrl), state: "sending" }), 20);
       return null;
+    case "link_offered": {
+      note("link_offered");
+      const link = opened;
+      opened = null;
+      return link;
+    }
     case "app_version":
       return "0.3.6";
     case "update_check":
@@ -262,8 +294,12 @@ mockIPC((cmd, args) => {
       return { width: box.width, height: box.height };
     case "plugin:window|outer_position":
       return { x: box.x, y: box.y };
+    case "plugin:window|outer_size":
+      return { width: box.width, height: box.height };
+    // Never asked for (#628): on Linux it reads GTK off its thread.
     case "plugin:window|current_monitor":
-      return { name: "screen", scaleFactor: 1, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, workArea: { position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 } } };
+      note("current_monitor");
+      return null;
     case "plugin:window|set_size": {
       const size = logical(a.value);
       if (size) {
@@ -320,6 +356,8 @@ declare global {
       banner: (target: unknown) => void;
       /** The desktop shell hid the list into the tray, its close button pressed (#400). */
       hidden: () => void;
+      /** The desktop shell was handed a `linger://` link, read as the link a person would paste (#607). */
+      link: (link: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
       /** With `?down`, the server that was down answers from now on. */
@@ -356,6 +394,10 @@ window.core = {
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   hidden: () => deliver("next:hidden", null),
+  link: (link) => {
+    opened = link;
+    deliver("next:link", null);
+  },
   release: () => release(),
   up: () => {
     down = null;
@@ -732,6 +774,25 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       storage_used_bytes: 1_200_000_000,
       storage_limit_bytes: 50_000_000_000,
       file_expiry_days: 90,
+      // `?hostissues`: the server you host has a nearly full disk and no
+      // backup for four days (#582). Said to the host alone, as a server does.
+      ...(query.has("hostissues") && server === SERVER && state.me?.is_host
+        ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
+        : {}),
+      // `?hostbucket`: last night's copy is fine, but none has reached the
+      // host's bucket for four days (#614).
+      ...(query.has("hostbucket") && server === SERVER && state.me?.is_host
+        ? {
+            health: {
+              backups: true,
+              last_backup_at: Date.now() - 6 * 60 * 60 * 1000,
+              backup_overdue: false,
+              disk_nearly_full: false,
+              file_space_nearly_full: false,
+              bucket: { name: "good-company-backups", last_sent_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, overdue: true },
+            },
+          }
+        : {}),
     });
   }
   if (path === "/me" && method === "GET") return json(state.me);

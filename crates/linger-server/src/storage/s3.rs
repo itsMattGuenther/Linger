@@ -43,7 +43,7 @@ use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use super::{ObjectBody, ObjectStore, OversizedPart, ServeAs, Staged};
-use crate::config::Config;
+use crate::config::{Config, S3Config};
 
 /// How long a presigned URL is good for. Matches the local backend: long enough
 /// that an upload interrupted overnight can still be resumed in the morning,
@@ -75,23 +75,13 @@ impl S3Store {
             .s3
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("LINGER_STORAGE=s3 with no S3 settings"))?;
-
-        let endpoint = s3
-            .endpoint
-            .parse()
-            .map_err(|err| anyhow::anyhow!("LINGER_S3_ENDPOINT is not a URL: {err}"))?;
-        let style = if s3.path_style {
-            UrlStyle::Path
-        } else {
-            UrlStyle::VirtualHost
-        };
-        let bucket = Bucket::new(endpoint, style, s3.bucket.clone(), s3.region.clone())?;
+        let (bucket, credentials) = bucket_for(s3, "LINGER_S3_ENDPOINT")?;
 
         std::fs::create_dir_all(config.staging_dir())?;
 
         Ok(Self {
             bucket,
-            credentials: Credentials::new(s3.access_key_id.clone(), s3.secret_access_key.clone()),
+            credentials,
             http: reqwest::Client::builder()
                 // Uploading a 500 MB object is not a 30-second request.
                 .timeout(Duration::from_secs(15 * 60))
@@ -161,31 +151,172 @@ impl S3Store {
     }
 
     /// Every part stored so far under an upload's prefix.
-    async fn parts(
-        &self,
-        upload_id: UploadId,
-    ) -> anyhow::Result<Vec<rusty_s3::actions::list_objects_v2::ListObjectsContent>> {
-        let prefix = format!("uploads/{upload_id}/");
-        let mut parts = Vec::new();
-        let mut continuation: Option<String> = None;
-        loop {
-            let mut action = self.bucket.list_objects_v2(Some(&self.credentials));
-            action.with_prefix(prefix.clone());
-            if let Some(token) = &continuation {
-                action.with_continuation_token(token.clone());
-            }
-            let resp = self.http.get(action.sign(INTERNAL_TTL)).send().await?;
-            let body = check(resp, "listing an upload's parts")
-                .await?
-                .text()
-                .await?;
-            let listed = rusty_s3::actions::ListObjectsV2::parse_response(&body)?;
-            parts.extend(listed.contents);
-            continuation = listed.next_continuation_token;
-            if continuation.is_none() {
-                return Ok(parts);
-            }
+    async fn parts(&self, upload_id: UploadId) -> anyhow::Result<Vec<Listed>> {
+        list(
+            &self.http,
+            &self.bucket,
+            &self.credentials,
+            &format!("uploads/{upload_id}/"),
+            "listing an upload's parts",
+        )
+        .await
+    }
+}
+
+type Listed = rusty_s3::actions::list_objects_v2::ListObjectsContent;
+
+/// The bucket a set of S3 settings names, and the keys to it. `endpoint_var`
+/// is the setting a bad endpoint is blamed on.
+fn bucket_for(s3: &S3Config, endpoint_var: &str) -> anyhow::Result<(Bucket, Credentials)> {
+    let endpoint = s3
+        .endpoint
+        .parse()
+        .map_err(|err| anyhow::anyhow!("{endpoint_var} is not a URL: {err}"))?;
+    let style = if s3.path_style {
+        UrlStyle::Path
+    } else {
+        UrlStyle::VirtualHost
+    };
+    let bucket = Bucket::new(endpoint, style, s3.bucket.clone(), s3.region.clone())?;
+    Ok((
+        bucket,
+        Credentials::new(s3.access_key_id.clone(), s3.secret_access_key.clone()),
+    ))
+}
+
+/// Every object under `prefix`, a page of a thousand at a time.
+async fn list(
+    http: &reqwest::Client,
+    bucket: &Bucket,
+    credentials: &Credentials,
+    prefix: &str,
+    doing: &str,
+) -> anyhow::Result<Vec<Listed>> {
+    let mut objects = Vec::new();
+    let mut continuation: Option<String> = None;
+    loop {
+        let mut action = bucket.list_objects_v2(Some(credentials));
+        action.with_prefix(prefix.to_string());
+        if let Some(token) = &continuation {
+            action.with_continuation_token(token.clone());
         }
+        let resp = http.get(action.sign(INTERNAL_TTL)).send().await?;
+        let body = check(resp, doing).await?.text().await?;
+        let listed = rusty_s3::actions::ListObjectsV2::parse_response(&body)?;
+        objects.extend(listed.contents);
+        continuation = listed.next_continuation_token;
+        if continuation.is_none() {
+            return Ok(objects);
+        }
+    }
+}
+
+/// The bucket the nightly copies of the database also go to (#614,
+/// `crate::backup`). Separate from [`S3Store`]: it has its own settings,
+/// and it stores, lists and deletes under its prefix and nothing else. A
+/// copy is sent whole, as one PUT, and a PUT that fails leaves nothing
+/// behind, so a copy in the bucket is always a whole one.
+pub struct BackupBucket {
+    bucket: Bucket,
+    credentials: Credentials,
+    http: reqwest::Client,
+    prefix: String,
+    /// The bucket's name, for the host's Settings to say where copies go.
+    pub name: String,
+}
+
+/// One copy in the bucket: its name under the prefix, and when the bucket
+/// says it arrived.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sent {
+    pub name: String,
+    pub at: Option<i64>,
+}
+
+/// S3 takes one PUT of up to 5 GB. A database bigger than that is past
+/// anything a group of friends writes; the copy stays on the machine and the
+/// log says why.
+const MAX_SINGLE_PUT: u64 = 5 * 1024 * 1024 * 1024;
+
+impl BackupBucket {
+    /// No network call, as with [`S3Store::open`]: a wrong name or key shows
+    /// at the first copy, in the log and in the host's Settings.
+    pub fn open(config: &crate::config::BackupBucketConfig) -> anyhow::Result<Self> {
+        let (bucket, credentials) = bucket_for(&config.s3, "LINGER_BACKUP_S3_ENDPOINT")?;
+        Ok(Self {
+            bucket,
+            credentials,
+            http: reqwest::Client::builder()
+                // A big server's database is minutes of upload on a slow line.
+                .timeout(Duration::from_secs(60 * 60))
+                .build()?,
+            prefix: config.prefix.clone(),
+            name: config.s3.bucket.clone(),
+        })
+    }
+
+    fn key(&self, name: &str) -> String {
+        format!("{}{name}", self.prefix)
+    }
+
+    /// The copies in the bucket: whatever sits directly under the prefix.
+    /// Anything further down (a folder of the host's own) isn't ours.
+    pub async fn sent(&self) -> anyhow::Result<Vec<Sent>> {
+        let listed = list(
+            &self.http,
+            &self.bucket,
+            &self.credentials,
+            &self.prefix,
+            "listing the backups in the bucket",
+        )
+        .await?;
+        Ok(listed
+            .into_iter()
+            .filter_map(|object| {
+                let name = object.key.strip_prefix(&self.prefix)?;
+                (!name.is_empty() && !name.contains('/')).then(|| Sent {
+                    name: name.to_string(),
+                    at: last_modified_ms(&object.last_modified),
+                })
+            })
+            .collect())
+    }
+
+    /// Send one copy from disk under `name`.
+    pub async fn send(&self, name: &str, from: &Path) -> anyhow::Result<()> {
+        let file = tokio::fs::File::open(from).await?;
+        let len = file.metadata().await?.len();
+        if len > MAX_SINGLE_PUT {
+            anyhow::bail!(
+                "the copy is {len} bytes, more than the 5 GB one upload to a bucket can be"
+            );
+        }
+        let url = self
+            .bucket
+            .put_object(Some(&self.credentials), &self.key(name))
+            .sign(INTERNAL_TTL);
+        let body = reqwest::Body::wrap_stream(tokio_util::io::ReaderStream::new(file));
+        let resp = self
+            .http
+            .put(url)
+            .header(reqwest::header::CONTENT_LENGTH, len)
+            .header(reqwest::header::CONTENT_TYPE, "application/vnd.sqlite3")
+            .body(body)
+            .send()
+            .await?;
+        check(resp, "sending a backup to the bucket").await?;
+        Ok(())
+    }
+
+    /// Delete one copy, by its name under the prefix.
+    pub async fn drop_copy(&self, name: &str) -> anyhow::Result<()> {
+        let url = self
+            .bucket
+            .delete_object(Some(&self.credentials), &self.key(name))
+            .sign(INTERNAL_TTL);
+        let resp = self.http.delete(url).send().await?;
+        check(resp, "deleting an old backup from the bucket").await?;
+        Ok(())
     }
 }
 
@@ -305,7 +436,7 @@ impl ObjectStore for S3Store {
     ) -> anyhow::Result<Staged> {
         let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
-            if parts.len() as u32 != expected_parts {
+            if u32::try_from(parts.len()) != Ok(expected_parts) {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
             }
         }
@@ -391,6 +522,10 @@ impl ObjectStore for S3Store {
         Ok(Some(ObjectBody::Redirect(action.sign(URL_TTL).to_string())))
     }
 
+    async fn download(&self, url: &str) -> anyhow::Result<reqwest::Response> {
+        check(self.http.get(url).send().await?, "fetching a stored file").await
+    }
+
     async fn delete_object(&self, key: &str) -> anyhow::Result<()> {
         let url = self
             .bucket
@@ -451,7 +586,7 @@ mod tests {
                 secret_access_key: "secret".to_string(),
             }),
             pool_bytes: linger_core::limits::DEFAULT_POOL_BYTES,
-            file_expiry_days: Some(linger_core::limits::DEFAULT_FILE_EXPIRY_DAYS),
+            file_expiry: crate::config::FileExpiry::WhenFull,
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
@@ -461,6 +596,8 @@ mod tests {
             trusted_proxies: crate::config::TrustedProxies::default(),
             signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+            backups: true,
+            backup_bucket: None,
         }))
         .unwrap();
         store

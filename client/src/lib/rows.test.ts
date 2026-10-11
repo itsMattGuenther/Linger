@@ -79,6 +79,17 @@ describe("buildRows", () => {
     expect(shape(rows)).toEqual(["head:matt", "divider", "head:matt"]);
   });
 
+  it("breaks the session and the group when time runs backwards just as far (#512)", () => {
+    // A server whose clock jumped back: the next message is dated hours before the one above it.
+    const start = Date.now();
+    const rows = buildRows([message("matt", start), message("matt", start - 3 * HOUR - 1), message("matt", start - 3 * HOUR + MINUTE)], grouped);
+    expect(shape(rows)).toEqual(["head:matt", "divider", "head:matt", "cont"]);
+    const divider = rows[1];
+    expect(divider?.kind === "divider" ? divider.at : null).toBe(start - 3 * HOUR - 1);
+    // A small step back is no break at all.
+    expect(shape(buildRows([message("matt", start), message("matt", start - 2 * MINUTE)], grouped))).toEqual(["head:matt", "cont"]);
+  });
+
   it("labels the start of history, but not the top of a page", () => {
     const start = Date.now();
     const messages = [message("matt", start)];

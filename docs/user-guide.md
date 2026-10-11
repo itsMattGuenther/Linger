@@ -159,8 +159,14 @@ it and install the new one. That signs you out once.
 For a **new member**:
 
 1. Ask the host for an invite, such as `https://linger.example.com/invite/CODE`.
+   Opened in a browser, it shows a page with the server's name, where to get
+   Linger, and a **Copy** button for the link.
 2. Paste the **whole invite link** into **Server or link** and press **Continue**.
-   Do not remove the invite code or anything after `?`.
+   Do not remove the invite code or anything after `?`. If Linger is already
+   installed, **Open in Linger** on that page does the pasting for you: Linger
+   comes forward with the link in the box, and you press **Continue**. If
+   nothing happens (your browser may ask first, or your Linger is older than
+   that button), copy and paste it instead.
 3. Choose a username, display name, and password of at least eight characters,
    then join the server. These are new credentials for this server, not your
    Windows, Linux or GitHub password.
@@ -414,9 +420,10 @@ color).
 
 Type and press **Enter**. **Shift+Enter** starts a new line instead of sending.
 Something half-typed stays in its conversation's box, even if you close the
-tab or quit Linger, until you send it. A message can be up to 8,000 characters.
-One longer than twenty lines shows its first twenty with **Show all** under
-them, so a long paste doesn't fill everybody's screen.
+tab or quit Linger, until you send it. A message can be up to 8,000 characters;
+paste more than that and the box keeps the start, and says so. One longer
+than twenty lines shows its first twenty with **Show all** under them, so a
+long paste doesn't fill everybody's screen.
 
 A little formatting works, the kind you already type:
 
@@ -430,6 +437,12 @@ Paste a link and it becomes a link. Point at any link to see where it goes. If a
 link's words look like one web address and it goes somewhere else, the real site
 shows beside the words in grey, like **www.paypal.com** (evil.example), so you can
 tell without pointing at it.
+
+A time written with a zone, like "8PM CDT" or "20:00 UTC", has a faint dotted
+underline. Point at it, or tap it on a phone, to see it in your own clock: "9:00
+PM for you", or "3:00 AM for you, the next day". It works in messages, a room's
+message of the day and polls. Zones that could mean more than one place, like CST
+(US Central or China) or IST, are left alone.
 
 To mention somebody, type `@` and start their name or their username. A list
 of people opens by the box: **Up** and **Down** move through it, **Enter** or
@@ -830,7 +843,8 @@ person isn't left this way: it's their row in your list.
 
 **Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
-seconds, then it's gone. Their row in your list gives a little shake. That
+seconds, then it's gone. Knocking again starts their card over; it doesn't add a
+second one. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
 in your system settings, nothing moves; the card still shows. There is no message and nothing for them to
 answer. Three an hour per person, so it stays a tap; after the third, the card
@@ -855,6 +869,11 @@ conversations you can see (pictures, video, audio, files and links), filterable
 by type, person and date. Every item links back to the moment it was posted,
 and the line above the grid says how long the server keeps files and how full
 it is.
+
+Most servers keep files until they need the room: nothing goes while there's
+space, and when the server runs short, the oldest files nobody starred go
+first. **Leaving soon** shows what would go next, so you can star anything you
+want to keep. It shows nothing while there's plenty of room.
 
 The star does two jobs: it sorts things to the top, and it stops a file from
 expiring automatically. Choose **Star** to keep a file; Linger confirms when
@@ -1096,11 +1115,14 @@ Any member can ask the server for a copy of **everything on it** — every
 message, every file — at any time. You do not need the host's permission, and
 there is nothing to ask for.
 
-What you get is a single zip. Inside it: one plain text file per room in the
-order things were said, a `media` folder with every file anybody shared, and an
-index listing who shared what and when. It opens with an ordinary text editor
-and an ordinary file browser. **You do not need Linger, or an account, or the
-server to still exist**, which is the entire point.
+What you get is a single zip. Unzip it and double-click **Open me.html**: it
+opens in your web browser with every room and DM down the side, laid out the way
+Linger lays them out, pictures and all. Videos and sound play right there. The
+same conversations are there as plain text (`.md`) for a text editor, and as
+data (`.json`) for anybody who wants to write a program around them. A `media`
+folder holds every file anybody shared, and an index lists who shared what and
+when. **You do not need Linger, or an account, or the server to still exist**,
+which is the entire point.
 
 **Settings → Account & App → Take Everything with You.** Press **Export
 everything**, wait (it takes a moment on a busy server), then download it. The file opens in your

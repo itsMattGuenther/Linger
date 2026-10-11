@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { NotifyRule } from "../../generated/NotifyRule";
 import type { Room } from "../../generated/Room";
 import {
+  backupLine,
+  bucketLine,
   CHIMES,
   deviceOptions,
   draftSlug,
@@ -285,5 +287,50 @@ describe("the New Room form's slug, as the name is typed (#221)", () => {
     expect(slugNeeded(NEW_ROOM_DRAFT)).toBe(false);
     expect(slugNeeded(typed("🎮 night"))).toBe(false);
     expect(slugNeeded(slugTyped(typed("🎮🎮"), "games"))).toBe(false);
+  });
+});
+
+describe("the host's backups line (#582)", () => {
+  const now = new Date(2026, 9, 11, 15, 0).getTime();
+  const health = { backups: true, last_backup_at: new Date(2026, 9, 11, 3, 12).getTime(), backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+
+  it("says when the last copy was made", () => {
+    const line = backupLine(health, now);
+    expect(line.problem).toBe(false);
+    expect(line.words).toMatch(/^The last copy was made at 3:12\sAM\.$/);
+  });
+
+  it("calls three days without a copy a problem, and says where to look", () => {
+    const line = backupLine({ ...health, backup_overdue: true }, now);
+    expect(line.problem).toBe(true);
+    expect(line.words).toContain("log");
+    expect(backupLine({ ...health, last_backup_at: null, backup_overdue: true }, now)).toEqual({ words: "No copy has worked yet. The server's log says why.", problem: true });
+    expect(backupLine({ ...health, last_backup_at: null }, now).problem).toBe(false);
+  });
+
+  it("says the copy is off when the host turned it off", () => {
+    expect(backupLine({ ...health, backups: false }, now).words).toContain("LINGER_BACKUPS=off");
+  });
+});
+
+describe("the host's bucket line (#614)", () => {
+  const now = new Date(2026, 9, 11, 15, 0).getTime();
+  const health = { backups: true, last_backup_at: new Date(2026, 9, 11, 3, 12).getTime(), backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+  const bucket = (sent: number | null, overdue: boolean) => ({ ...health, bucket: { name: "pine-backups", last_sent_at: sent, overdue } });
+
+  it("is nothing without a bucket", () => {
+    expect(bucketLine(health, now)).toBeNull();
+  });
+
+  it("names the bucket and says when the newest copy got there", () => {
+    const line = bucketLine(bucket(new Date(2026, 9, 11, 3, 14).getTime(), false), now);
+    expect(line?.problem).toBe(false);
+    expect(line?.words).toMatch(/^Each copy also goes to the bucket pine-backups\. The newest got there at 3:14\sAM\.$/);
+    expect(bucketLine(bucket(null, false), now)).toEqual({ words: "Each copy also goes to the bucket pine-backups. The server looks at it a few minutes after it starts.", problem: false });
+  });
+
+  it("calls three days without a copy reaching it a problem", () => {
+    expect(bucketLine(bucket(new Date(2026, 9, 7, 3, 14).getTime(), true), now)?.problem).toBe(true);
+    expect(bucketLine(bucket(null, true), now)).toEqual({ words: "Each copy also goes to the bucket pine-backups. None has reached it yet. The server's log says why.", problem: true });
   });
 });

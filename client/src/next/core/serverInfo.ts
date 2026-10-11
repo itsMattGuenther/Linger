@@ -11,6 +11,7 @@
  *
  * Pure apart from its timer, so it's tested with a fake clock.
  */
+import type { ServerHealth } from "../../generated/ServerHealth";
 import type { ServerInfo } from "../../generated/ServerInfo";
 
 /**
@@ -30,8 +31,12 @@ export const INFO_EVERY_MS = 60 * 60_000;
  */
 export const INFO_RETRY_MS = 2 * 60_000;
 
-/** What the list shows of a server: its name and the host's color (a palette key). */
-export type ListedInfo = Pick<ServerInfo, "name" | "accent_key">;
+/**
+ * What the list shows of a server: its name and the host's color (a palette
+ * key), and for the host, how its machine is (#582), which the foot says
+ * while something there needs them.
+ */
+export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health">;
 
 /**
  * The list's held answers with one server's new one. The very same object
@@ -44,8 +49,22 @@ export function withInfo(
   info: ListedInfo,
 ): Readonly<Record<string, ListedInfo>> {
   const was = held[server];
-  if (was !== undefined && was.name === info.name && was.accent_key === info.accent_key) return held;
-  return { ...held, [server]: { name: info.name, accent_key: info.accent_key } };
+  if (was !== undefined && was.name === info.name && was.accent_key === info.accent_key && sameHealth(was.health, info.health)) return held;
+  return { ...held, [server]: { name: info.name, accent_key: info.accent_key, ...(info.health ? { health: info.health } : {}) } };
+}
+
+function sameHealth(a: ServerHealth | undefined, b: ServerHealth | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.backups === b.backups &&
+    a.last_backup_at === b.last_backup_at &&
+    a.backup_overdue === b.backup_overdue &&
+    a.disk_nearly_full === b.disk_nearly_full &&
+    a.file_space_nearly_full === b.file_space_nearly_full &&
+    a.bucket?.name === b.bucket?.name &&
+    a.bucket?.last_sent_at === b.bucket?.last_sent_at &&
+    a.bucket?.overdue === b.bucket?.overdue
+  );
 }
 
 /**

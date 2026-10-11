@@ -15,7 +15,12 @@ export function drawsMinimize(userAgent: string, desktop: boolean): boolean {
   return desktop && /\bWindows\b/.test(userAgent);
 }
 
+/** Minimizes this window. The same function every time, so a title bar handed it isn't drawn again for it. */
+function minimize(): void {
+  void getCurrentWindow().minimize();
+}
+
 /** Minimizes this window, where Linger draws the button, and nothing anywhere else. */
 export function minimizer(): (() => void) | undefined {
-  return drawsMinimize(navigator.userAgent, isTauri()) ? () => void getCurrentWindow().minimize() : undefined;
+  return drawsMinimize(navigator.userAgent, isTauri()) ? minimize : undefined;
 }

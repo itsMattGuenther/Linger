@@ -14,7 +14,7 @@ import { type MentionPerson, type MentionTyping, putMention } from "../../core/c
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
 import { MAX_POLL_QUESTION_CHARS, pollCommand, typingPoll } from "../../core/chat/poll";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, nonceFor, saysNothing, type Submission } from "../../core/chat/sending";
-import { planPaste } from "../../core/chat/paste";
+import { pasteFits, planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
 import { MAX_MESSAGE_CHARS } from "./EditBox";
@@ -477,10 +477,17 @@ export const Composer = memo(function Composer({
   // A paste's words, put in where the engine would have put them: at the
   // caret, over any selection, cut to the box's length, and one step for
   // Undo of its own, not merged into the typing before or after.
+  /** A paste the box will cut short says so: the engine cuts it without a word (#512). */
+  const sayIfCut = (field: HTMLTextAreaElement, words: string) => {
+    if (!pasteFits(field.value, field.selectionStart, field.selectionEnd, words, MAX_MESSAGE_CHARS))
+      say(`Only the start of that paste fit. A message can be at most ${MAX_MESSAGE_CHARS} characters.`);
+  };
+
   const putWords = (words: string) => {
     const field = box.current;
     if (!field) return;
     field.focus();
+    sayIfCut(field, words);
     const text = words.replace(/\r\n?/g, "\n");
     const seal = () => field.setSelectionRange(field.selectionStart, field.selectionEnd, field.selectionDirection);
     seal();
@@ -695,29 +702,34 @@ export const Composer = memo(function Composer({
             const selection = performance.now() - middleAt.current < MIDDLE_PASTE_MS;
             middleAt.current = Number.NEGATIVE_INFINITY;
             const plan = planPaste(event.clipboardData, { shell: clipboardImage !== undefined, selection, at: new Date() });
-            if (plan.kind === "engine") return;
+            if (plan.kind === "engine") {
+              sayIfCut(event.currentTarget, event.clipboardData.getData("text/plain"));
+              return;
+            }
             event.preventDefault();
             if (plan.kind === "files") attach(plan.files);
             else if (clipboardImage) pasteThroughShell(clipboardImage, plan.words);
           }}
         />
-        {voiceMessage ? <IconButton icon="mic" label="Record a voice message" expanded={voiceMessage.state !== null} onClick={voiceMessage.open} /> : null}
-        <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />
-        <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
-          <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />
-          {emoji ? (
-            <EmojiPicker
-              custom={customEmoji}
-              serverName={serverName}
-              onPick={putEmoji}
-              onClose={() => {
-                setEmoji(false);
-                box.current?.focus();
-              }}
-            />
-          ) : null}
+        <span className="nx-composer-tools">
+          {voiceMessage ? <IconButton icon="mic" label="Record a voice message" expanded={voiceMessage.state !== null} onClick={voiceMessage.open} /> : null}
+          <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />
+          <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
+            <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />
+            {emoji ? (
+              <EmojiPicker
+                custom={customEmoji}
+                serverName={serverName}
+                onPick={putEmoji}
+                onClose={() => {
+                  setEmoji(false);
+                  box.current?.focus();
+                }}
+              />
+            ) : null}
+          </span>
+          <IconButton icon="send" label="Send" tone="accent" disabled={saysNothing(draft) && ready.length === 0} onClick={submit} />
         </span>
-        <IconButton icon="send" label="Send" tone="accent" disabled={saysNothing(draft) && ready.length === 0} onClick={submit} />
         <input
           ref={picker}
           type="file"

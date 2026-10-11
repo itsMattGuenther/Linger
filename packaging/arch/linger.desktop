@@ -2,8 +2,9 @@
 Type=Application
 Name=Linger
 Comment=A small place for friends to hang out
-Exec=linger-client
+Exec=linger-client %u
 Icon=linger-client
 Terminal=false
 Categories=Network;InstantMessaging;
 StartupWMClass=linger-client
+MimeType=x-scheme-handler/linger;
