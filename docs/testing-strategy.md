@@ -204,8 +204,15 @@ rules that came out of them:
   not the test.** Chromium drops every request in flight when a network
   interface comes or goes, and Docker adds one each time it starts a container
   on its own network (a VPN or Wi-Fi change does the same). Don't start
-  containers while the Chromium tests run. `webkit.sh`'s container shares the
-  machine's network and adds nothing.
+  containers while the Chromium tests run. `check.sh`'s own containers add
+  nothing: actionlint runs with no network, and `webkit.sh`'s container shares
+  the machine's. Until #528, actionlint ran on Docker's network, so every
+  `check.sh` that started blanked pages in any other `check.sh` already
+  running its browser tests: 4 of 96 sign-in tests failed beside one
+  container a second, and none beside the same container with no network.
+  The relay and server-image checks (`coturn-test.sh`,
+  `image-start-test.sh`) need a network, so don't run them beside a browser
+  run.
 
 ## Browser tests
 

@@ -48,7 +48,10 @@ bash scripts/android-signing-test.sh >/dev/null
 bash scripts/tidy-branches-test.sh >/dev/null
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="
-  docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
+  # No network: on Docker's own network the container adds a network
+  # interface to this machine for a moment, and Chromium in any other
+  # check.sh running beside this one drops its page loads (#528).
+  docker run --rm --network none -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
 fi
 
 if on rust; then

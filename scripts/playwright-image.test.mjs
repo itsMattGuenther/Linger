@@ -47,3 +47,20 @@ test("every Playwright image is the client's Playwright version", () => {
     assert.equal(version, playwright, `${name} runs the v${version} image, and the client has Playwright ${playwright}`);
   }
 });
+
+test("the local gate's containers never join Docker's own network", () => {
+  // A container on Docker's network adds a network interface to the machine
+  // while it runs, and Chromium drops every page load in flight when one comes
+  // or goes (net::ERR_NETWORK_CHANGED). check.sh's actionlint ran that way, so
+  // each check.sh that started blanked pages in the others' browser tests
+  // (#528). The containers check.sh and webkit.sh start have no network or
+  // share the machine's.
+  for (const script of ["scripts/check.sh", "scripts/webkit.sh"]) {
+    const text = readFileSync(new URL(script, root), "utf8").replace(/\\\n\s*/g, " ");
+    const runs = text.split("\n").filter((line) => /^\s*docker run\b/.test(line));
+    assert.ok(runs.length > 0, `${script} starts no container any more; drop it from this test`);
+    for (const run of runs) {
+      assert.match(run, /--network (none|host)\b/, `${script} starts a container on Docker's network: ${run.trim()}`);
+    }
+  }
+});
