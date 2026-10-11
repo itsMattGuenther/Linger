@@ -410,6 +410,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | NOTE-5 | Banners are silent at the OS level, and the app's own chime plays instead. | `src-tauri/src/notifications.rs` | Same | D | 🟡 unchanged; needs a desktop check |
 | NOTE-6 | Permission is asked once; a refusal is final and silent. | `notify.ts` | Same | U | ✅ (lib/notifyPermission.test.ts) |
 | NOTE-7 | What clicking a banner does. | today: the OS default | **Decision 20** | F/D | 🟡 a banner opens its conversation at the message (decision 20): the target it carries (`lib/notify.test.ts`), what counts as a click and the Linux `default` action (`notifications.rs` tests), the list window opening it for a signed-in server only (`next-list-window`). Needs a desktop check: click a real banner on Linux and on Windows. Windows only reports the click while the banner is on screen |
+| NOTE-8 | A banner shows a message's words as typed, never as markup: `<b>` in a message stays `<b>`, on every desktop (#489). | today: Linux daemons that read markup (mako, dunst, KDE, Omarchy's shell) styled it | Same | D | 🟡 the body is escaped for a Linux daemon that says it reads markup and left alone for one that doesn't; the title is never escaped, since every daemon shows it as plain text; Windows' toast library escapes on its own (`notifications.rs` tests). Needs a desktop check: a message with `<b>`, `&` and `<a href>` on Omarchy (mako or its shell) and on KDE |
 
 ## SND — sounds
 
