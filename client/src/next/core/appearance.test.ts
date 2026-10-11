@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The desktop shell: a window that remembers its zoom, size and smallest size, on a 1920 by 1080 screen.
+// The desktop shell: a window that remembers its zoom, size and smallest size, on a 1920 by 1080 screen with a 40 px panel.
 const shell = vi.hoisted(() => ({
   zoom: 1,
   size: { width: 340, height: 820 },
@@ -24,7 +24,6 @@ vi.mock("@tauri-apps/api/window", () => ({
       readonly height: number,
     ) {}
   },
-  currentMonitor: async () => ({ size: { width: 3840, height: 2160 }, scaleFactor: 2 }),
   getCurrentWindow: () => ({
     label: shell.label,
     scaleFactor: async () => 2,
@@ -52,6 +51,7 @@ beforeEach(() => {
   shell.broadcast = [];
   vi.stubGlobal("window", {
     location: { search: "" },
+    screen: { availWidth: 1920, availHeight: 1040 },
     localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => void storage.set(key, value) },
   });
   vi.stubGlobal("document", { documentElement: { dataset: {} as Record<string, string> } });

@@ -19,7 +19,7 @@
  */
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { currentMonitor, getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { validScale } from "../../lib/interface";
 import { applyNormalize, loadNormalize } from "../../lib/normalize";
 import { PROTOCOL, tauriBus } from "./bus";
@@ -228,12 +228,18 @@ async function applyOnce(): Promise<void> {
  * The window's smallest size, grown with the interface size (#512). A phone's
  * screen is the window, so it has none. A desktop that ignores it (a tiling
  * one) still gets the zoom and the resize.
+ *
+ * The screen's size is the page's own (`window.screen`), never the shell's
+ * `currentMonitor()`: on Linux, Tauri reads the monitor's details off GTK's
+ * thread, and asked for as the window opens, that crashed the packaged app
+ * about half the time (#623). An engine that shrinks the screen by the page's
+ * zoom only makes the floor smaller, the safe way to be wrong.
  */
 async function keepMinimum(label: string, scale: number): Promise<void> {
   if (onPhone()) return;
   try {
-    const monitor = await currentMonitor();
-    const screen = monitor ? { width: monitor.size.width / monitor.scaleFactor, height: monitor.size.height / monitor.scaleFactor } : null;
+    const shown = window.screen as Screen | undefined;
+    const screen = shown && shown.availWidth > 0 && shown.availHeight > 0 ? { width: shown.availWidth, height: shown.availHeight } : null;
     const least = scaledMinimum(WINDOW_MINIMUMS[windowKind(label)], scale, screen);
     await getCurrentWindow().setMinSize(new LogicalSize(least.width, least.height));
   } catch {
