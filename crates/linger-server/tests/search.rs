@@ -565,6 +565,37 @@ async fn fts_syntax_arrives_as_words_to_look_for() {
     );
 }
 
+/// A control character in the box splits words the way a space does (#498). A
+/// NUL used to reach `MATCH` inside a phrase, where SQLite reads the string
+/// only as far as the NUL, and the search came back a 500.
+#[tokio::test]
+async fn a_control_character_in_a_query_separates_words_rather_than_breaking_search() {
+    let (server, host, room) = server_with_room("shop").await;
+    let message = post(&server, &host.access_token, &room, "the drive cage arrived").await;
+
+    for query in [
+        "drive\0cage",
+        "\"drive\0cage\"",
+        "drive\u{1}\u{7f}cage",
+        "\0drive cage\0",
+    ] {
+        assert_eq!(
+            ids(&search(&server, &host.access_token, &q(query)).await),
+            vec![message.id.to_string()],
+            "{query:?} did not search for the two words"
+        );
+    }
+
+    // Nothing but control characters is nothing to search for, the same as a
+    // blank box.
+    for query in ["\0", "\0\u{1}\u{1b}\u{7f}", "\"\0\""] {
+        let resp = search_raw(&server, &host.access_token, &q(query)).await;
+        assert_eq!(resp.status(), 422, "{query:?} answered instead of refusing");
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["error"]["code"], "VALIDATION_FAILED");
+    }
+}
+
 #[tokio::test]
 async fn a_hit_marks_the_words_that_matched() {
     let (server, host, room) = server_with_room("garage").await;

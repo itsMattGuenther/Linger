@@ -781,8 +781,9 @@ end-to-end encryption. A layer that would stop even the host is #200.
 voice address, which works from behind almost any home router; a strict office network
 that blocks UDP goes through the relay (TURN) instead. The host runs one beside the
 server, and it is the host's, not a third party's. What it carries is the encrypted
-stream, which it cannot read, and the server's only part is handing a member a
-short-lived password for it at the moment they join. A host who runs no relay has voice
+stream, which it cannot read, to the server's voice address and nowhere else (#501),
+and the server's only part is handing a member a short-lived password for it at the
+moment they join. A host who runs no relay has voice
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's

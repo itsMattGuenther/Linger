@@ -80,7 +80,11 @@ their short install section for the fuller download table and update steps the
 previous release used.
 
 **4. Publish it.** Publishing is what makes installed copies see the update, and
-it is a person's click on purpose. It also starts the Arch package job (below).
+it is a person's click on purpose. It also starts the Arch package job (below),
+and it moves new servers on: `deploy/setup.sh` fetches its files from the
+newest release's tag (#507), and they go with that tag's image. So check the
+tag's `image` run went green first; until it does, `latest` is still the
+previous server, and a new server would get files ahead of it.
 
 **5. The website.** The site ([linger-site.netlify.app](https://linger-site.netlify.app),
 built from the private `itsMattGuenther/linger-site` repo) shows the version,

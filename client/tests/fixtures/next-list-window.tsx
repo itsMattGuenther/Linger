@@ -17,7 +17,10 @@
  * to; `?revoked` has The Good Company refuse its saved sign-in (with `?one`,
  * that leaves nothing signed in). The sign-in routes take any username;
  * the password `wrong` is refused, invite `DEAD` and setup token `used` are
- * spent, and `nowhere.example` doesn't answer. `?hold` keeps the health
+ * spent, and `nowhere.example` doesn't answer. The usernames `crowd`,
+ * `guesser` and `busy` meet the server's limits (#538): a network out of
+ * sign-ups for now, one out of sign-in tries, and a server busy checking
+ * passwords. `?hold` keeps the health
  * check waiting until `window.core.release()`.
  * Tokens rotate as a server's do: each refresh spends the one presented and
  * hands out the next, and one presented twice is refused and written down
@@ -437,6 +440,12 @@ function page(room: string, params: URLSearchParams): Message[] {
   return upTo.slice(-limit);
 }
 
+/** What a server says for each of its limits on the way in (#538). */
+const SIGNUPS_PAUSED =
+  "Lots of people have joined from your network in the last hour, so this server is pausing new sign-ups from it. Try again in about 10 minutes. If your group is joining together, the host can raise this limit.";
+const SIGN_INS_PAUSED = "Too many sign-in tries from your network in the last minute. Try again in 12 seconds.";
+const SERVER_BUSY = "The server is busy letting other people in. Try again in a moment.";
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -453,7 +462,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   note(`${method} ${server}${path}`);
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
   await new Promise((settle) => window.setTimeout(settle, 10));
-  const refuse = (status: number, code: string, message: string) => json({ error: { code, message, retry_after_ms: null } }, status);
+  const refuse = (status: number, code: string, message: string, retryAfterMs: number | null = null) =>
+    json({ error: { code, message, retry_after_ms: retryAfterMs } }, status);
   const signedIn = () => {
     minted += 1;
     issued[server] = `refresh-${minted}-${server}`;
@@ -483,6 +493,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if ((path === "/auth/login" || path === "/auth/register" || path === "/setup") && method === "POST") {
     note(`signin ${JSON.stringify(body)}`);
     if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
+    // The server's limits (#538), in the words it sends.
+    if (body.username === "crowd") return refuse(429, "RATE_LIMITED", SIGNUPS_PAUSED, 599_990);
+    if (body.username === "guesser") return refuse(429, "RATE_LIMITED", SIGN_INS_PAUSED, 11_250);
+    if (body.username === "busy") return refuse(429, "RATE_LIMITED", SERVER_BUSY, 5_000);
     return signedIn();
   }
   if (path === "/read") return json(state.read);

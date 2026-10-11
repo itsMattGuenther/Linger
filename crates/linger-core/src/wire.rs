@@ -1084,7 +1084,8 @@ pub struct IceServer {
 #[ts(export)]
 pub struct IceServers {
     pub servers: Vec<IceServer>,
-    /// How long the TURN credentials in `servers` stay valid, in seconds.
+    /// How long the TURN credentials in `servers` stay valid from now, in
+    /// seconds: a day or a little more, since they hold for the hour (#501).
     /// Zero when there are none. A client asks again on every join, so this
     /// only has to cover one call.
     pub ttl_secs: u64,

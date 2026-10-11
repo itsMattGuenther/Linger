@@ -51,10 +51,15 @@ The unsigned Linux/Windows package workflow runs these checks:
   element availability, runs the current production sound player in the packaged
   WebKitGTK, and records a private virtual PulseAudio speaker. Five knocks and
   five DM chimes cover first Preview, repeated Preview, a 35 ms graph-setup
-  delay, received-event playback and Preview after a quiet gap. Knock runs
-  first on the cold context. The recording must contain all ten complete cues,
-  without abrupt sample jumps or clipped attacks. Each knock must retain both
-  taps, their 140 ms spacing and full decays. Each cue must also be the sound
+  delay, received-event playback and Preview after a quiet long enough for
+  the player to close its context (#531): the probe fails unless the
+  context is closed by then, and that cue must open a new one with no click
+  and play whole. The probe's click goes through the player's gesture
+  handler first, as every app window's first click does; in the app it
+  opens nothing. Knock runs first on the cold context. The recording must
+  contain all ten complete cues, without abrupt sample jumps or clipped
+  attacks. Each knock must retain both taps, their 140 ms spacing and full
+  decays. Each cue must also be the sound
   the player made, a millisecond at a time: the probe renders the player's own
   score at the WebView's rate, and the check converts it to the speaker's
   48 kHz ([below](#each-chime-as-the-player-made-it-387-2026-10-02)).
@@ -116,8 +121,8 @@ host ends the disposable process after checking the result. Closing the context
 as soon as its analyser sees samples can discard audio still queued for output.
 A controlled local comparison with one second of output delay reproduced a
 silent recording with immediate closure and recorded the same tone with the
-context kept open. This changes only the test: Linger already keeps one audio
-context for the lifetime of the app.
+context kept open. This changes only the test: Linger closes a window's audio
+context only 10 s after its last sound (#531).
 
 The Linux host also waits for the recorder's first samples before launching
 the app. Starting the recorder process does not prove its monitor stream is
@@ -167,10 +172,18 @@ listening to Preview and an actual received knock on the affected installation.
 
 A separate diagnostic that explicitly called `AudioContext.suspend()` then
 `resume()` produced no resumed cue with either the original or corrected
-player in this Linux package. Linger does not explicitly suspend this context.
-That diagnostic is not a passed sleep/wake check; OS sleep/wake and device
-changes still require real-client verification. The combined check uses an
-idle but open context, matching the player's normal lifetime.
+player in this Linux package. #531 (2026-10-10) reproduced it in the
+package check: with the context suspended 10 s after the knocks and resumed
+for the next one, `resume()` resolved but no sound reached the speaker and
+the context's clock did not move, while WebView2 played every cue. (The
+audit that opened #531 had heard a resumed context play in a newer
+WebKitGTK; the AppImage carries Ubuntu 22.04's.) So the player never
+suspends: a running context holds an output stream open and plays silence
+into it, 2–5% of a core per window, and the player **closes** it 10 s after
+the last sound instead. The next sound makes a new context, which plays from
+its first sample, as every first cue here shows. The combined check's last
+cue of each kind comes after that close, with no click, on both platforms.
+OS sleep/wake and device changes still require real-client verification.
 
 ## Lost audio on a paused runner (#384, 2026-10-02)
 

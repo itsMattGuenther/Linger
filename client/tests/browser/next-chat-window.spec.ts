@@ -654,6 +654,18 @@ test("Join asks the list window to join voice here", async ({ page }) => {
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "voice.join", server: SERVER, roomId: "r-general" });
 });
 
+test("a double-click on Join asks the list window once (#510)", async ({ page }) => {
+  await open(page);
+  const joins = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.join");
+  // The list window hasn't answered yet, so Join is still under the pointer for the second click.
+  await page.getByRole("button", { name: "Join" }).dblclick();
+  await page.waitForTimeout(500);
+  expect(await joins()).toEqual([{ kind: "voice.join", server: SERVER, roomId: "r-general" }]);
+  // A click a moment later asks again: the join could have failed.
+  await page.getByRole("button", { name: "Join" }).click();
+  await expect.poll(joins).toHaveLength(2);
+});
+
 // A start that failed in the list window reaches this window with the
 // devices it asked for, which decide what the strip says (#261, #273).
 test("a failed start shared by the list window says what fixes it, and Pick yours opens Settings on Sound & Voice", async ({ page }) => {

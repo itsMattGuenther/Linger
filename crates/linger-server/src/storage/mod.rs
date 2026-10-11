@@ -97,8 +97,13 @@ impl ServeAs {
 /// `Content-Disposition`, with the filename twice: a plain ASCII version every
 /// browser understands, and the real one percent-encoded for the rest of the
 /// alphabet (RFC 6266).
+///
+/// Without the characters that change the direction of text (#488), which a
+/// name stored before uploads lost them may still hold: a browser's list of
+/// downloads would show `invoice` + U+202E + `fdp.exe` as "invoiceexe.pdf".
 fn content_disposition(inline: bool, filename: &str) -> String {
     let kind = if inline { "inline" } else { "attachment" };
+    let filename = crate::validate::without_direction_controls(filename);
     let ascii: String = filename
         .chars()
         .map(|c| {
@@ -249,6 +254,18 @@ mod tests {
         assert!(!header.contains('\n') && !header.contains('\r'));
         assert_eq!(header.matches("filename=\"").count(), 1);
         assert!(header.contains("filename=\"report _final_.pdf\""));
+    }
+
+    /// A name saved before uploads lost them still downloads without them
+    /// (#488).
+    #[test]
+    fn a_download_name_cannot_turn_itself_around() {
+        let header = content_disposition(false, "invoice\u{202E}fdp.exe");
+        assert!(header.contains("filename=\"invoicefdp.exe\""), "{header}");
+        assert!(
+            header.ends_with("filename*=UTF-8''invoicefdp.exe"),
+            "{header}"
+        );
     }
 
     #[test]

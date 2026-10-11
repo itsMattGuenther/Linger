@@ -181,3 +181,10 @@ button.nx-poll-pick:focus-visible {
   font-size: var(--text-meta);
   line-height: var(--line-meta);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-poll-question,
+.nx-poll-text {
+  unicode-bidi: isolate;
+}

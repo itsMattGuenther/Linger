@@ -16,6 +16,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
+use linger_core::limits::RATE_VOICE_ICE;
 use linger_core::wire::IceServers;
 use linger_core::{RoomId, UserId};
 
@@ -60,10 +61,18 @@ async fn take_out(
 }
 
 /// `GET /voice/ice` — the relay, for the member asking, for the next while.
+/// Rate-limited per member (#501): the app asks once a join, and nothing
+/// needs to ask more often than somebody can click.
 async fn ice(
     State(state): State<AppState>,
     auth: AuthedUser,
 ) -> Result<Json<IceServers>, ApiError> {
+    if let Err(retry_after_ms) = state
+        .limiter
+        .check(&format!("voice-ice:{}", auth.id), RATE_VOICE_ICE)
+    {
+        return Err(ApiError::rate_limited(retry_after_ms));
+    }
     let answer = match &state.config.turn {
         Some(turn) => turn::ice_servers(turn, auth.id, turn::now_unix()),
         None => IceServers {

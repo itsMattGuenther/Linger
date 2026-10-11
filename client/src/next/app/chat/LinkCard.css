@@ -59,3 +59,9 @@
   color: var(--text-muted);
   font: var(--text-label) / var(--line-meta) var(--font-mono);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-linkcard-title {
+  unicode-bidi: isolate;
+}
