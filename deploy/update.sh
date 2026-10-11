@@ -90,14 +90,13 @@ elif [[ -z "$voice" ]]; then
   say "carries no voice. To turn voice on, see https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice"
 fi
 
-# The server keeps its data folder to itself (#506): only it and root can look
-# inside, and the backup below has to.
-[[ ! -d data || -x data ]] ||
-  fail "this account can't look inside the data folder, which only the server and root can,
-so nobody else on this machine can read your server's messages. Run: sudo $0"
-[[ -f data/linger.db ]] ||
+# The server keeps its data folder to itself (#506), so from an account that
+# isn't root it won't open, and a folder that won't open is a server's. Nothing
+# here reads inside it: the backup below comes out through a container.
+if [[ ! -d data ]] || [[ -x data && ! -f data/linger.db ]]; then
   fail "can't find data/linger.db here. This script expects the data folder next to compose.yaml,
 as the standard compose.yaml sets it up."
+fi
 
 # The relay is behind the `voice` profile, and a command without the profile
 # leaves it on its old version. It's set up here if its container exists,
@@ -165,16 +164,19 @@ else
   # Stopped cleanly, SQLite has folded its journal back into linger.db. The
   # -wal and -shm files are copied too whenever they're there, since
   # linger.db without its -wal can be missing the newest messages.
-  files=(linger.db)
-  for extra in linger.db-wal linger.db-shm; do
-    if [[ -e "data/$extra" ]]; then files+=("$extra"); fi
-  done
-  if ! tar czf "$backup" -C data "${files[@]}"; then
+  #
+  # The copy comes out through a one-off container of the server's image, so
+  # the account running this needs Docker and nothing more: the data folder
+  # opens only for the server and root (#506). Root inside the container only
+  # reads, whoever owns the files, and the archive arrives here on stdout.
+  # shellcheck disable=SC2016 # the $(ls …) is for the container's shell
+  if ! compose run --rm --no-deps -T --user root --entrypoint sh linger -c \
+    'cd /data && exec tar czf - linger.db $(ls linger.db-wal linger.db-shm 2>/dev/null)' >"$backup"; then
     rm -f "$backup"
     # The old server's container is still there, on its old image.
     compose start linger >/dev/null 2>&1 || true
     fail "couldn't copy the database into backups/, so nothing was updated and the server is
-running its old version again. If you type sudo before docker commands, run: sudo $0"
+running its old version again."
   fi
   say "Saved $backup"
   # Keep the newest few. Their names start with the version, so go by age.
@@ -222,8 +224,7 @@ To go back to $before with the backup you just made, run:
 
   cd $here
   docker compose stop linger
-  rm -f data/linger.db-wal data/linger.db-shm
-  tar xzf $backup -C data
+  docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'cd /data && rm -f linger.db-wal linger.db-shm && tar xzf -' <$backup
   $pin
   docker compose ${profiles[*]:+${profiles[*]} }up -d
 

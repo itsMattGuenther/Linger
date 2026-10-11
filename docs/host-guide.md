@@ -429,14 +429,14 @@ The whole server is the `data` folder next to your `compose.yaml`. It holds
 of `.env` somewhere safe too: it holds your settings and the relay's secret.
 
 Only the server and root can open the `data` folder, so nobody else with an
-account on this machine can read it. Copying it takes root: in a root session
-as below, or with `sudo` in front of `tar`.
-
-Copy it while the server is stopped, so you never catch the database mid-write:
+account on this machine can read it. So the copy is made by a throwaway
+Linger container, which can open it; any account that runs `docker` can do
+this, no `sudo` needed. Copy it while the server is stopped, so you never
+catch the database mid-write:
 
 ```bash
 docker compose stop linger
-(umask 077 && tar czf linger-backup-$(date +%F).tar.gz data)
+(umask 077 && docker compose run --rm --no-deps -T --user root --entrypoint tar linger czf - -C /data . >linger-backup-$(date +%F).tar.gz)
 docker compose start linger
 ```
 
@@ -449,7 +449,17 @@ server, readable by you alone. That copy is for going back after an update: it
 has the messages but not the uploaded files, and it's on the same machine. It
 doesn't replace this.
 
-To restore: stop everything, put the `data` folder back, start again.
+To restore, unpack a copy into the `data` folder the same way, with the server
+stopped (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
+
+```bash
+docker compose stop linger
+docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'rm -f /data/linger.db-wal /data/linger.db-shm && tar xzf - -C /data' <linger-backup-2026-10-10.tar.gz
+docker compose start linger
+```
+
+It clears the database's two journal files first: left over from another
+copy, they would be applied to this one.
 
 (If you moved files to a cloud bucket, `data/objects/` is empty and the bucket
 is the other half of your backup.)
@@ -502,10 +512,8 @@ the version before and after. If the new version doesn't start, it prints the
 commands that put the old one back. When there's nothing new, it says so and
 changes nothing.
 
-Nothing updates itself. You decide when. Not in a root session? Run
-`sudo ./update.sh`. It copies the database out of the `data` folder, which
-only the server and root can open, so it needs `sudo` even on an account that
-runs `docker` without it.
+Nothing updates itself. You decide when. If you type `sudo` before `docker`
+commands, run `sudo ./update.sh`.
 
 **No `update.sh` in your folder?** Servers set up before 0.4.5 get it once:
 

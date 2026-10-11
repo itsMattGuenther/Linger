@@ -19,7 +19,8 @@ mkdir -p "$work/bin"
 cat >"$work/bin/docker" <<'FAKE'
 #!/usr/bin/env bash
 # Answers from $FAKE: config, relay, running, running_image, tag_image,
-# remote_image, broken. Image ids sha256:old and sha256:new are 0.4.3 and 0.4.4.
+# remote_image, broken, nocopy. Image ids sha256:old and sha256:new are 0.4.3
+# and 0.4.4.
 set -euo pipefail
 S="$FAKE"
 echo "docker $*" >>"$S/log"
@@ -58,6 +59,19 @@ case "${args[*]}" in
       "$(version_of "$image")" ;;
   "logs --tail 30 linger") echo "linger-1  | the new server's last words" ;;
   "image rm "*) ;;
+  "run --rm --no-deps -T --user root --entrypoint sh linger -c "*)
+    # A one-off container: root, with this folder's data/ as its /data. Root
+    # opens any folder, so the stand-in borrows the owner's right to for a
+    # data/ this account can't open (#506).
+    [[ ! -f "$S/nocopy" ]] || { echo "stand-in docker: the copy failed" >&2; exit 1; }
+    [[ ! -f "$S/running" ]] || { echo "stand-in docker: the server is still running" >&2; exit 1; }
+    closed=""
+    if [[ ! -x data ]]; then chmod u+x data; closed=yes; fi
+    script="${args[-1]}"
+    status=0
+    bash -c "${script//\/data/$PWD/data}" || status=$?
+    if [[ -n "$closed" ]]; then chmod u-x data; fi
+    exit "$status" ;;
   *) echo "stand-in docker: unexpected call: docker $*" >&2; exit 99 ;;
 esac
 FAKE
@@ -122,6 +136,11 @@ never() { ! grep -qF -- "$1" "$FAKE/log"; }
 # The line number of the first call matching, for checking order.
 at() { grep -nxF -- "$1" "$FAKE/log" | head -1 | cut -d: -f1; }
 before() { [[ -n "$(at "$1")" && -n "$(at "$2")" && "$(at "$1")" -lt "$(at "$2")" ]]; }
+# The line of the one-off container that copies the database out.
+copied_at() {
+  grep -nF -- "docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c cd /data && exec tar czf -" \
+    "$FAKE/log" | head -1 | cut -d: -f1
+}
 
 # --- An update, with old backups to trim ----------------------------------------
 
@@ -139,10 +158,13 @@ check "an update exits 0" test "$code" -eq 0
 check "it says both versions" has "Linger is on 0.4.4 (was 0.4.3)."
 check "it pulls while the old server is up" before "docker compose pull" "docker compose stop linger"
 check "it backs up before starting the new server" before "docker compose stop linger" "docker compose up -d"
-backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' | head -1)"
+backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' 2>/dev/null | head -1 || true)"
 check "the backup is named for the old version" test -n "$backup"
 check "the backup holds the database and its journal" \
   bash -c "tar tzf '$dir/$backup' | sort | tr '\n' ' ' | grep -qx 'linger.db linger.db-wal '"
+check "it's copied out through a container, never read from data/ here (#506)" test -n "$(copied_at)"
+check "the copy is taken with the server stopped" test "$(at "docker compose stop linger")" -lt "$(copied_at)"
+check "and before the new server starts" test "$(copied_at)" -lt "$(at "docker compose up -d")"
 check "the backup is the owner's alone, 0600 (#506)" test "$(stat -c %a "$dir/$backup")" = 600
 check "and so is the folder, closing it on the old copies (#506)" test "$(stat -c %a "$dir/backups")" = 700
 check "five backups are kept" test "$(find "$dir/backups" -type f | wc -l)" -eq 5
@@ -176,6 +198,35 @@ check "it says the relay is updated" has "The voice relay is set up here"
 check "the relay is pulled" called "docker compose --profile voice pull"
 check "the relay is started" called "docker compose --profile voice up -d"
 
+# --- A data folder this account can't open (#506) --------------------------------
+
+# The server keeps its data folder to itself, so an account that runs docker
+# without being root can't open it. The update has to work all the same, with
+# no sudo. Root opens any folder, so this case needs an account that isn't.
+if ((EUID != 0)); then
+  setup private
+  chmod 600 "$dir/data"
+  run
+  chmod 700 "$dir/data"
+  check "a data folder this account can't open still updates" test "$code" -eq 0
+  check "it says both versions there too" has "Linger is on 0.4.4 (was 0.4.3)."
+  backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' 2>/dev/null | head -1 || true)"
+  check "the backup holds the database all the same" \
+    bash -c "tar tzf '$dir/$backup' | grep -qx linger.db"
+  check "nothing asks for sudo" lacks "sudo"
+fi
+
+# --- The copy fails -------------------------------------------------------------
+
+setup nocopy
+touch "$FAKE/nocopy"
+run
+check "a failed copy exits 1" test "$code" -eq 1
+check "it says nothing was updated" has "couldn't copy the database into backups/, so nothing was updated"
+check "the old server is started again" called "docker compose start linger"
+check "the new one never is" never "up -d"
+check "no half-written backup is left" test -z "$(find "$dir/backups" -type f)"
+
 # --- The new server never answers -----------------------------------------------
 
 setup broken
@@ -184,7 +235,8 @@ run
 check "a failed update exits 1" test "$code" -eq 1
 check "it shows the server's last lines" has "the new server's last words"
 check "it prints the way back to the old version" has "To go back to 0.4.3"
-check "the way back restores the backup" has "tar xzf backups/linger-0.4.3-"
+check "the way back restores the backup, through a container (#506)" has "tar xzf -' <backups/linger-0.4.3-"
+check "the way back never reaches into data/ from here" lacks " data/linger.db"
 check "the way back pins the old version" \
   has "sed -i 's#ghcr.io/itsmattguenther/linger:latest#ghcr.io/itsmattguenther/linger:0.4.3#' compose.yaml"
 check "it keeps the old image for the way back" never "image rm"
@@ -205,19 +257,6 @@ check "a missing database stops it" test "$code" -eq 1
 check "it names the missing file" has "can't find data/linger.db"
 check "it pulls nothing then" never "pull"
 
-# A server keeps its data folder to itself (#506), so an account that isn't
-# root can't look inside to back it up. Root opens any folder, so this case
-# needs an account that isn't.
-if ((EUID != 0)); then
-  setup private
-  chmod 600 "$dir/data"
-  run
-  chmod 700 "$dir/data"
-  check "a data folder it can't open stops it" test "$code" -eq 1
-  check "it says to run it with sudo" has "Run: sudo $dir/update.sh"
-  check "it doesn't call that a missing database" lacks "can't find data/linger.db"
-  check "it pulls nothing then" never "pull"
-fi
 
 setup nocompose
 rm "$dir/compose.yaml"

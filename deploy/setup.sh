@@ -73,11 +73,11 @@ if [[ -f data/linger.db ]]; then
   fail "this folder already runs a Linger server ($here/data/linger.db is here), so there's
 nothing to set up. ./update.sh updates it."
 fi
-# A server keeps its data folder to itself (#506), so from another account the
-# database can't be seen, only a folder that won't open.
+# A server keeps its data folder to itself (#506), so from an account that
+# isn't root the database can't be seen, only a folder that won't open.
 if [[ -d data && ! -x data ]]; then
-  fail "this folder already runs a Linger server ($here/data is its data folder, which only
-the server and root can open), so there's nothing to set up. sudo ./update.sh updates it."
+  fail "this folder already runs a Linger server ($here/data is its data folder), so there's
+nothing to set up. ./update.sh updates it."
 fi
 
 # --- 1. The files -------------------------------------------------------------

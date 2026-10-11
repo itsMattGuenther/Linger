@@ -63,11 +63,22 @@ done
 # The same question update.sh asks, with nothing hidden, so a failure here
 # says why rather than leaving the script to time out.
 echo "== the 0.4.2 server's version, asked from inside its container"
-answer="$(docker compose exec -T linger bash -c \
-  "exec 3<>/dev/tcp/127.0.0.1/8420 && printf 'GET /api/v1/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
-  </dev/null)" || fail "asking the server for its version failed"
+health() {
+  docker compose exec -T linger bash -c \
+    "exec 3<>/dev/tcp/127.0.0.1/8420 && printf 'GET /api/v1/health HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3" \
+    </dev/null
+}
+answer="$(health)" || fail "asking the server for its version failed"
 echo "$answer"
 grep -qF '"version":"0.4.2"' <<<"$answer" || fail "the server didn't say it was 0.4.2"
+
+# A server keeps its data folder to itself from #506 on; 0.4.2 doesn't, so it's
+# closed here the same way. From this account it then won't open, and the
+# update has to back up all the same, with no sudo.
+docker compose run --rm --no-deps --user root --entrypoint chmod linger -R go-rwx /data
+if ((EUID != 0)); then
+  [[ ! -x data ]] || fail "the data folder still opens from this account"
+fi
 
 echo "== the update"
 out="$(LINGER_UPDATE_WAIT=90 ./update.sh 2>&1)" || fail "update.sh failed:
@@ -91,5 +102,20 @@ echo "$out"
 expect "already the newest version (0.4.3)"
 expect "Linger is on 0.4.3."
 [[ "$(find backups -type f | wc -l)" -eq 1 ]] || fail "the second run made another backup"
+
+# The way back update.sh prints when a new server never answers, run as it's
+# printed: the backup goes back in through a container too.
+echo "== the way back's restore, as update.sh prints it"
+restore="$(grep -o "docker compose run .*tar xzf -'" "$repo/deploy/update.sh")" ||
+  fail "update.sh prints no restore command"
+docker compose stop linger
+eval "$restore" <"$backup" || fail "the restore failed: $restore"
+docker compose start linger
+answer=""
+for _ in $(seq 30); do
+  answer="$(health 2>/dev/null)" && grep -q '"ok":true' <<<"$answer" && break
+  sleep 1
+done
+grep -qF '"version":"0.4.3"' <<<"$answer" || fail "the server didn't come back after the restore: $answer"
 
 echo "update-docker-test: passed"

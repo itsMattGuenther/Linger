@@ -16,8 +16,8 @@
 # be able to read it. Started as root, the folder is made 0700, which also
 # shuts away what an older server made 0644. Either way the server runs with
 # umask 077, so what it makes from now on is 0600, and its folders 0700.
-# Nothing else needs in: Caddy only talks to the server, and update.sh reads
-# the database as root.
+# Nothing on the host needs in: Caddy only talks to the server, and update.sh
+# copies the database out through a one-off container of this image.
 set -eu
 
 data="${LINGER_DATA_DIR:-/data}"

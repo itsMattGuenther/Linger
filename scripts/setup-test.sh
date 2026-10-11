@@ -230,7 +230,8 @@ if ((EUID != 0)); then
   run "${answers[@]}"
   chmod 700 "$dir/data"
   check "a folder running a server it can't open is refused" test "$code" -eq 1
-  check "it points at sudo ./update.sh" has "sudo ./update.sh updates it."
+  check "it says the data folder is a server's" has "$dir/data is its data folder"
+  check "it points at update.sh, no sudo needed" bash -c "grep -qF './update.sh updates it.' <<<\"\$1\" && ! grep -qF sudo <<<\"\$1\"" _ "$out"
   check "it downloads nothing there either" never "curl"
   check "it starts nothing there either" never "up -d"
 fi
