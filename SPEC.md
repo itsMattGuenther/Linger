@@ -615,8 +615,17 @@ carry sender feedback to a different person.
 
 ### 4.11 Export
 
-Any member can export the entire server at any time: messages as markdown, media as
-files, in one archive. No gatekeeping, no host approval, one export per hour.
+Any member can export the entire server at any time: every conversation as a page any
+web browser opens, as markdown and as data (JSON), and media as files, in one archive.
+No gatekeeping, no host approval, one export per hour.
+
+The archive opens with a double-click (#585). `Open me.html` lists every room and DM,
+and each conversation's page is laid out the way the app lays it out: names in their
+colors, replies with their quote, reactions, polls, pictures in place, and video and
+sound that play. The pages have no scripts, use the system's fonts, and load nothing
+from anywhere else, so they open offline on any computer for as long as browsers read
+HTML. The same rules as ever decide what goes in: what you can see, and your own DMs,
+never anybody else's.
 
 This is a trust feature and an anti-lock-in guarantee. It costs a weekend and it is the
 most credible thing in the product.

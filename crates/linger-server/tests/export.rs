@@ -306,6 +306,199 @@ async fn an_archive_holds_every_message_and_every_file_and_it_opens() {
     );
 }
 
+/// Ask for an archive, download it the way a person would, and unzip it.
+async fn exported(server: &TestServer, token: &str) -> Vec<(String, Vec<u8>)> {
+    let job = export_now(server, token).await;
+    let url = job.url.expect("a finished export has a url");
+    let archive = client()
+        .get(format!("{}{}", server.base, url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(archive.status(), 200);
+    open_archive(archive.bytes().await.unwrap().to_vec())
+}
+
+/// Every page in the archive, by name.
+fn pages(files: &[(String, Vec<u8>)]) -> Vec<(&str, &str)> {
+    files
+        .iter()
+        .filter(|(name, _)| name.ends_with(".html"))
+        .map(|(name, bytes)| {
+            (
+                name.as_str(),
+                std::str::from_utf8(bytes).expect("a page is utf-8"),
+            )
+        })
+        .collect()
+}
+
+/// A friend double-clicks `Open me.html` and reads the room in their browser
+/// (#585): the words as they were drawn, replies with their quote, the
+/// picture in place. A program reads the same room from its JSON.
+#[tokio::test]
+async fn the_pages_show_the_rooms_the_way_linger_does_and_the_data_matches() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let sam = join_member(&server, &host.access_token, "sam").await;
+    let general = make_room(&server, &host.access_token, "general", Some("the big one")).await;
+    make_room(&server, &host.access_token, "quiet", None).await;
+
+    let opener = say(&server, &host.access_token, &general, "first thing said").await;
+    let answer = reply(
+        &server,
+        &sam.access_token,
+        &general,
+        "**bold** reply",
+        &opener,
+    )
+    .await;
+    share(
+        &server,
+        &sam.access_token,
+        &general,
+        "holiday photo.png",
+        "look at this",
+    )
+    .await;
+
+    let files = exported(&server, &host.access_token).await;
+    let names = names(&files);
+    for expected in [
+        "/Open me.html",
+        "/media.html",
+        "/rooms/general.html",
+        "/rooms/general.json",
+        "/rooms/general.md",
+        "/rooms/quiet.html",
+    ] {
+        assert!(
+            names.iter().any(|name| name.ends_with(expected)),
+            "the archive has no {expected}: {names:?}"
+        );
+    }
+
+    let opener_page = text_of(&files, "/Open me.html");
+    assert!(opener_page.contains("href=\"rooms/general.html\""));
+    assert!(opener_page.contains("the big one"));
+
+    let page = text_of(&files, "rooms/general.html");
+    assert!(page.contains("first thing said"));
+    assert!(
+        page.contains("<strong>bold</strong> reply"),
+        "the markdown wasn't drawn: {page}"
+    );
+    // The reply's quote jumps to what it answered, which is on the page.
+    assert!(page.contains(&format!("id=\"m-{}\"", opener.id)));
+    assert!(page.contains(&format!("href=\"#m-{}\"", opener.id)));
+    assert!(
+        page.contains("<img src=\"../media/holiday%20photo.png\""),
+        "the picture isn't in place: {page}"
+    );
+    // Every room is in the side list of every page.
+    assert!(page.contains("href=\"../rooms/quiet.html\""));
+    assert!(page.contains("aria-current=\"page\">#general<"));
+    for (name, html) in pages(&files) {
+        assert!(html.contains("script-src 'none'"), "{name} allows scripts");
+        assert!(!html.contains("<script"), "{name} carries a script");
+        assert!(
+            !html.contains("http://") && !html.contains("https://"),
+            "{name} loads something from elsewhere"
+        );
+    }
+
+    let data: serde_json::Value =
+        serde_json::from_str(text_of(&files, "rooms/general.json")).expect("the data parses");
+    assert_eq!(data["format"], "linger-export-conversation/1");
+    assert_eq!(data["conversation"]["slug"], "general");
+    let messages = data["messages"].as_array().expect("messages");
+    assert_eq!(messages.len(), 3);
+    assert_eq!(messages[0]["body"], "first thing said");
+    assert_eq!(messages[0]["author"]["username"], "matt");
+    assert_eq!(messages[1]["id"], answer.id.to_string());
+    assert_eq!(messages[1]["reply_to"], opener.id.to_string());
+    assert_eq!(messages[1]["body"], "**bold** reply");
+    assert_eq!(messages[2]["files"][0]["path"], "media/holiday photo.png");
+    assert_eq!(messages[2]["files"][0]["name"], "holiday photo.png");
+    assert!(
+        files
+            .iter()
+            .any(|(name, _)| name.ends_with("/media/holiday photo.png")),
+        "the data points at a file the archive doesn't have"
+    );
+
+    let quiet: serde_json::Value =
+        serde_json::from_str(text_of(&files, "rooms/quiet.json")).expect("an empty room parses");
+    assert_eq!(quiet["messages"].as_array().map(Vec::len), Some(0));
+
+    assert!(text_of(&files, "/media.html").contains("holiday photo.png"));
+}
+
+/// Words, names, topics and filenames are other people's text. On a page in
+/// somebody's browser, every one of them has to be characters and never
+/// markup (#585).
+#[tokio::test]
+async fn hostile_words_names_and_filenames_are_characters_on_the_page() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let eve = join_member(&server, &host.access_token, "eve").await;
+    let renamed = client()
+        .patch(server.url("/me"))
+        .bearer_auth(&eve.access_token)
+        .json(&serde_json::json!({ "display_name": "<img src=x onerror=alert(1)>" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renamed.status(), 200, "{}", renamed.text().await.unwrap());
+
+    let room = make_room(
+        &server,
+        &host.access_token,
+        "general",
+        Some("<script>alert('topic')</script>"),
+    )
+    .await;
+    say(
+        &server,
+        &eve.access_token,
+        &room,
+        "<script>alert('body')</script> [click](javascript:alert(1)) <iframe src=x>",
+    )
+    .await;
+    share(
+        &server,
+        &eve.access_token,
+        &room,
+        "<svg onload=alert(3)>.png",
+        "",
+    )
+    .await;
+
+    let files = exported(&server, &host.access_token).await;
+    let page = text_of(&files, "rooms/general.html");
+    assert!(
+        page.contains("&lt;script&gt;alert(&#39;body&#39;)&lt;/script&gt;"),
+        "the words aren't on the page as words: {page}"
+    );
+    assert!(page.contains("&lt;img src=x onerror=alert(1)&gt;"));
+    assert!(page.contains("&lt;svg onload=alert(3)&gt;.png"));
+    assert!(page.contains("&lt;script&gt;alert(&#39;topic&#39;)&lt;/script&gt;"));
+    for (name, html) in pages(&files) {
+        for markup in [
+            "<script",
+            "<img src=x",
+            "<svg",
+            "<iframe",
+            "href=\"javascript",
+        ] {
+            assert!(
+                !html.contains(markup),
+                "{name} carries {markup:?} as markup: {html}"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn a_second_export_within_the_hour_is_refused() {
     let (server, host) = {
