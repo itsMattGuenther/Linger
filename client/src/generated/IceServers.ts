@@ -11,7 +11,8 @@ import type { IceServer } from "./IceServer";
  */
 export type IceServers = { servers: Array<IceServer>, 
 /**
- * How long the TURN credentials in `servers` stay valid, in seconds.
+ * How long the TURN credentials in `servers` stay valid from now, in
+ * seconds: a day or a little more, since they hold for the hour (#501).
  * Zero when there are none. A client asks again on every join, so this
  * only has to cover one call.
  */

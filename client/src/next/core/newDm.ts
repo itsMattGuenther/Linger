@@ -39,12 +39,17 @@ export function candidates(users: readonly User[], meId: UserId | null, query: s
     .sort((a, b) => a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }));
 }
 
-/** The DM you already have with exactly these people, if any. */
-export function existingDm<T extends Pick<Room, "member_ids">>(dms: readonly T[], meId: UserId | null, picked: readonly UserId[]): T | null {
+/**
+ * The DM you already have with exactly these people, if any: the one the
+ * server would find for them. Never a group somebody has left (#565), which
+ * the server no longer finds by its people, so asking for them makes a new one.
+ */
+export function existingDm<T extends Pick<Room, "member_ids" | "someone_left">>(dms: readonly T[], meId: UserId | null, picked: readonly UserId[]): T | null {
   if (meId === null || picked.length === 0) return null;
   const wanted = new Set([meId, ...picked]);
   return (
     dms.find((dm) => {
+      if (dm.someone_left === true) return false;
       const members = new Set(dm.member_ids ?? []);
       return members.size === wanted.size && [...wanted].every((id) => members.has(id));
     }) ?? null

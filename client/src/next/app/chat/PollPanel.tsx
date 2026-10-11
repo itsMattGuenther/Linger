@@ -2,7 +2,9 @@
  * Asking a poll (SPEC §4.18, #474): the panel `/poll` opens over a room's box,
  * as a voice message's does. The question, two to ten choices, whether people
  * can pick more than one, and how long it runs before it closes on its own.
- * Nothing is posted until Post poll.
+ * Nothing is posted until Post poll. Pressed again after a failure with
+ * nothing changed, it asks with the first press's one-time key, so a poll
+ * that did get asked isn't asked twice (#524).
  */
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -13,8 +15,10 @@ import {
   MAX_POLL_CHOICES,
   MAX_POLL_QUESTION_CHARS,
   MIN_POLL_CHOICES,
+  type PollAsk,
   POLL_LENGTHS,
   type PollLength,
+  pollNonce,
 } from "../../core/chat/poll";
 import { Button, IconButton, Select, Switch, TextField } from "../../kit";
 import "./PollPanel.css";
@@ -39,6 +43,9 @@ export function PollPanel({
   const [length, setLength] = useState<PollLength>(DEFAULT_POLL_LENGTH);
   const [posting, setPosting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The last press of Post poll and its one-time key: pressed again after a
+  // failure with nothing changed, it's the same ask (#524).
+  const pressed = useRef<{ ask: PollAsk; nonce: string } | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   // Typing straight on: the question when there isn't one yet, else the first choice.
   useEffect(() => {
@@ -70,7 +77,10 @@ export function PollPanel({
     if (why !== null || posting) return;
     setPosting(true);
     setProblem(null);
-    onPost({ question: question.trim(), choices: filled, multi, closes_in_days: Number(length) })
+    const ask: PollAsk = { question: question.trim(), choices: filled, multi, closes_in_days: Number(length) };
+    const nonce = pollNonce(pressed.current, ask, () => crypto.randomUUID());
+    pressed.current = { ask, nonce };
+    onPost({ ...ask, nonce })
       .catch((error: unknown) => setProblem(error instanceof Error ? error.message : "Couldn't post the poll. Try again."))
       .finally(() => setPosting(false));
   };

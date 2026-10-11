@@ -8,6 +8,7 @@
  * Always a toggle, never press-and-hold: a finger slips off and a hold sends
  * half a thought. And stopping never sends: you hear it back first.
  */
+import type { Attachment } from "../../../generated/Attachment";
 
 /** The longest a voice message runs. The recorder stops there by itself. */
 export const LONGEST_MS = 5 * 60_000;
@@ -34,8 +35,23 @@ export type VoiceMessage =
   | { kind: "recording"; since: number; levels: readonly number[] }
   /** Stopped; the clip is being put together. */
   | { kind: "stopping" }
-  /** Recorded: listen back, then Send or Discard. */
-  | { kind: "kept"; url: string; file: File; ms: number; note: string | null; sending: boolean; problem: string | null };
+  /**
+   * Recorded: listen back, then Send or Discard. `nonce` is its send's one-time
+   * key, and `attachment` the file once it has gone up: both kept so Send
+   * pressed again after a failure is the same send retried, never a second
+   * copy (#524).
+   */
+  | {
+      kind: "kept";
+      url: string;
+      file: File;
+      ms: number;
+      note: string | null;
+      sending: boolean;
+      problem: string | null;
+      nonce: string;
+      attachment: Attachment | null;
+    };
 
 /** The latest level added to the lines, the oldest dropping off the front. */
 export function withLevel(levels: readonly number[], level: number): number[] {

@@ -110,6 +110,36 @@ test("an invite leads to joining, named for its server, and Join waits for eight
   expect(sent).toEqual([`signin ${JSON.stringify({ invite_code: "ABCD-1234", username: "jules", display_name: "Jules R.", password: "12345678" })}`]);
 });
 
+test("joining with a name that looks like somebody's already there says so on the name, and waits for a new one (#574)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/invite/ABCD-1234`);
+  const form = page.getByRole("form", { name: "Join" });
+  const name = form.getByRole("textbox", { name: "Display name" });
+  const join = form.getByRole("button", { name: "Join" });
+  await form.getByRole("textbox", { name: "Username" }).fill("callie");
+  await name.fill("MATT");
+  await form.getByLabel("Password").fill("12345678");
+  await join.click();
+
+  const sentence = "Someone here already goes by a name that looks like that. Try something a little different.";
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(sentence);
+  // On the name, and only there: not again under the form.
+  await expect(form.getByRole("alert")).toHaveCount(0);
+  await expect(form.getByText(sentence)).toHaveCount(1);
+  // Still joining, with everything as typed, and nothing to send until the name changes.
+  await expect(form.getByRole("textbox", { name: "Username" })).toHaveValue("callie");
+  await expect(join).toBeDisabled();
+
+  await name.fill("Callie");
+  await expect(name).not.toHaveAttribute("aria-invalid", "true");
+  await expect(join).toBeEnabled();
+  await join.click();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  const sent = (await did(page)).filter((line) => line.startsWith("signin "));
+  expect(sent.map((line) => (JSON.parse(line.slice("signin ".length)) as { display_name: string }).display_name)).toEqual(["MATT", "Callie"]);
+});
+
 test("an invite opened by somebody who already has an account here leads to signing in instead, and makes nobody new", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/ABCD-1234`);
@@ -159,6 +189,37 @@ test("a setup link leads to setting the server up, and Change goes back to the b
   expect(sent).toEqual([
     `signin ${JSON.stringify({ token: "t0k", server_name: "The Good Company", username: "matt", display_name: "Matt", password: "12345678" })}`,
   ]);
+});
+
+test("a limit on the way in says what's happening and how long to wait, each in its own words (#538)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/invite/ABCD-1234`);
+  const join = page.getByRole("form", { name: "Join" });
+  await join.getByRole("textbox", { name: "Username" }).fill("crowd");
+  await join.getByRole("textbox", { name: "Display name" }).fill("Crowd");
+  await join.getByLabel("Password").fill("12345678");
+  await join.getByRole("button", { name: "Join" }).click();
+  const said = join.getByRole("alert");
+  await expect(said).toHaveText(
+    "Lots of people have joined from your network in the last hour, so this server is pausing new sign-ups from it. Try again in about 10 minutes. If your group is joining together, the host can raise this limit.",
+  );
+  // All of it, wrapped inside the window rather than cut off at its edge.
+  expect(await said.evaluate((element) => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  // Still here with what was typed, to try again.
+  await expect(join.getByRole("textbox", { name: "Username" })).toHaveValue("crowd");
+
+  // A server that's only busy says that instead: nothing about anybody's network.
+  await join.getByRole("textbox", { name: "Username" }).fill("busy");
+  await join.getByRole("button", { name: "Join" }).click();
+  await expect(said).toHaveText("The server is busy letting other people in. Try again in a moment.");
+
+  await join.getByRole("button", { name: "Sign in" }).click();
+  const signIn = page.getByRole("form", { name: "Sign in" });
+  await signIn.getByRole("textbox", { name: "Username" }).fill("guesser");
+  await signIn.getByLabel("Password").fill("porch light");
+  await signIn.getByRole("button", { name: "Sign in" }).click();
+  await expect(signIn.getByRole("alert")).toHaveText("Too many sign-in tries from your network in the last minute. Try again in 12 seconds.");
+  await expect(page.locator("[data-screen='signin']")).toBeVisible();
 });
 
 test("while it checks, it says so and a second Enter asks nothing more", async ({ page }) => {

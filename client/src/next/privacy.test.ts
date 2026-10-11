@@ -87,6 +87,38 @@ describe("privacy, from the source", () => {
     const ASKING = /GetForegroundWindow|GetWindowText|EnumWindows|_NET_ACTIVE_WINDOW|_NET_WM_NAME|WM_NAME|NSWorkspace|frontmostApplication|active_win|get_active_window|x11rb|xcb::|wmctrl|xdotool|hyprctl|swaymsg|sysinfo|\/proc\//;
     expect(uses(RUST, ASKING)).toEqual([]);
     const crates = readFileSync(join(SHELL, "Cargo.toml"), "utf8");
-    expect(crates).not.toMatch(/^(active-win|active-win-pos-rs|x-win|x11rb|xcb|sysinfo|windows|windows-sys|objc2-app-kit)\s*=/m);
+    expect(crates).not.toMatch(/^(active-win|active-win-pos-rs|x-win|x11rb|xcb|x11|x11-dl|sysinfo|windows|objc2-app-kit)\s*=/m);
+    // `windows-sys` only to ask whether the one talk key is down (#500):
+    // none of Windows' windows, processes or hooks.
+    expect(featuresOf(crates, "windows-sys")).toEqual(["Win32_UI_Input_KeyboardAndMouse"]);
+  });
+
+  it("never sees the whole keyboard: only the one talk key, only in voice (PRIV-2, #500)", () => {
+    // Nothing that hooks, grabs, records or reads every key: no keyboard or
+    // mouse hook, no raw input, no snapshot of every key's state, no X11
+    // keymap or grab, no input device read directly, no event tap.
+    const WHOLE_KEYBOARD =
+      /SetWindowsHookEx|WH_KEYBOARD|WH_MOUSE|GetKeyboardState|RegisterRawInputDevices|GetRawInputData|GetRawInputBuffer|RAWINPUT|XQueryKeymap|XGrabKey|XGrabKeyboard|XISelectEvents|XIRawEvent|XRecord|\/dev\/input|evdev|libinput|uinput|CGEventTapCreate|addGlobalMonitorForEvents|IOHIDManager|NSEvent/;
+    expect(uses(RUST, WHOLE_KEYBOARD)).toEqual([]);
+    // Windows is asked about one key in one place: the talk key's code.
+    expect(uses(RUST, /GetAsyncKeyState\(/)).toEqual([expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: .*GetAsyncKeyState\(i32::from\(vk\)\)/)]);
+    const crates = readFileSync(join(SHELL, "Cargo.toml"), "utf8");
+    expect(crates).not.toMatch(/^(rdev|device_query|device-query|inputbot|global-hotkey|tauri-plugin-global-shortcut|livesplit-hotkey|willhook|multiinput|evdev|evdev-rs|input|uinput|keyboard-query|mki)\s*=/m);
+    // The desktop's portal for global shortcuts and nothing else of it: not
+    // input capture, remote desktop or screen casting.
+    expect(featuresOf(crates, "ashpd")).toEqual(["async-io", "global_shortcuts"]);
+    // Every dependency is a one-line table, so the checks above read all of it.
+    expect(crates).not.toMatch(/\.(windows-sys|ashpd)\]/);
   });
 });
+
+/** The features a dependency names in Cargo.toml (`name = { …, features = [...] }`), every place it's named, in order. */
+function featuresOf(toml: string, name: string): string[] {
+  const lines = toml.split("\n").filter((line) => line.startsWith(`${name} =`) || line.startsWith(`${name}=`));
+  expect(lines.length, `${name} in Cargo.toml`).toBeGreaterThan(0);
+  return lines.flatMap((line) => {
+    const listed = /features\s*=\s*\[([^\]]*)\]/.exec(line)?.[1] ?? "";
+    expect(line, `${name} turns off default features, so none come in unnamed`).toMatch(/default-features\s*=\s*false|^windows-sys/);
+    return [...listed.matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? "");
+  });
+}

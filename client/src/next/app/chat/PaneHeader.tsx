@@ -4,6 +4,7 @@ import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { sentencesOf } from "../../core/knock";
 import { Button, GroupMarker, HashMark, Marker, MARKER_WORDS, MarkerCluster, markerOf, markerStateOf, Name } from "../../kit";
+import { LeaveGroup } from "../LeaveGroup";
 import { PersonFields } from "../PersonFields";
 import "./PaneHeader.css";
 
@@ -29,7 +30,22 @@ export type PaneHeaderProps =
        * the header. Where they are, as their row in the list says it.
        */
       person?: { note: string };
+      /**
+       * A group, however few are left in it (#565): drawn as a group, never
+       * as its one other person.
+       */
+      group?: boolean;
+      /** A group's ⋯ menu, with Leave (#565). Never on a one-to-one DM. */
+      leave?: HeaderLeave;
     };
+
+/** Leaving a group from its header (#565). */
+export interface HeaderLeave {
+  /** Nobody else is in it any more, so leaving deletes it. */
+  last: boolean;
+  /** Resolves to null once it's done, or the problem in words. */
+  onLeave: () => Promise<string | null>;
+}
 
 /**
  * The Knock in a one-to-one DM's header, with everything it can say
@@ -91,7 +107,7 @@ type DmHeaderProps = Extract<PaneHeaderProps, { kind: "dm" }> & { Box: "div" | "
 /** A DM's header: who's in it, and for one person, their status and Knock. */
 function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
   const [only] = props.people;
-  const single = props.people.length === 1 && only ? only : null;
+  const single = props.people.length === 1 && only && props.group !== true ? only : null;
   const status = single ? (single.user.status?.away_message ?? single.user.status?.line ?? null) : null;
   const knock = props.knock;
   const problem = knock?.problem ?? null;
@@ -186,6 +202,7 @@ function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
         <span className="nx-pane-fill" />
       )}
       {knockButton}
+      {props.leave ? <LeaveGroup label={props.label} last={props.leave.last} onLeave={props.leave.onLeave} /> : null}
     </Box>
   );
 }

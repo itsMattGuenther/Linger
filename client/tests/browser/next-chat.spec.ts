@@ -74,6 +74,11 @@ async function did(page: Page): Promise<string[]> {
   return ((await page.locator("body").getAttribute("data-did")) ?? "").split("|").filter(Boolean);
 }
 
+/** Each send so far, as its words and its one-time key (#524). */
+async function sends(page: Page): Promise<string[]> {
+  return ((await page.locator("body").getAttribute("data-keys")) ?? "").split("|").filter(Boolean);
+}
+
 /** Where a message's row sits inside the log, so a test can tell whether it moved. */
 async function offsetIn(page: Page, id: string): Promise<number> {
   return page.evaluate((messageId) => {
@@ -439,6 +444,21 @@ test.describe("the keyboard", () => {
     // Straight back to the box, to carry on.
     await expect(box(page)).toBeFocused();
   });
+
+  // #488: a message's words keep a character that turns text around (people
+  // write in Hebrew and Arabic), so the words are kept to themselves and
+  // can't turn the "edited" after them into "detide".
+  test("words ending in a character that turns text around leave “edited” the right way round", async ({ page }) => {
+    await box(page).click();
+    await page.keyboard.press("ArrowUp");
+    const edit = page.getByRole("textbox", { name: /Edit/ });
+    await edit.fill("Count me in.\u{202E}");
+    await page.keyboard.press("Enter");
+    const row = message(page, /^Matt\s*Count me in\./);
+    await expect(row.locator(".nx-msg-edited")).toBeVisible();
+    expect(await drawn(row.locator(".nx-msg-edited"))).toBe("edited");
+    expect(await drawn(row.locator(".nx-text"))).toBe("Count me in.edited");
+  });
 });
 
 test.describe("emoji", () => {
@@ -627,6 +647,41 @@ test.describe("a send the server refuses", () => {
     await expect(box(page)).toHaveValue("second, still typing");
     await unsent.getByRole("button", { name: "Retry" }).click();
     await expect.poll(async () => (await did(page)).filter((one) => one === "send:first").length).toBe(2);
+  });
+
+  // #524: a send that did land, whose answer was lost, must not post twice
+  // when it's sent again. The server tells a retry by its one-time key.
+  test("Retry sends it again with the key its first try had", async ({ page }) => {
+    await open(page, "?fail=held");
+    await box(page).click();
+    await page.keyboard.type("first");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("second, still typing");
+    await page.evaluate(() => window.chat?.refuse());
+    const unsent = page.getByRole("group", { name: "Unsent message" });
+    await unsent.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(async () => (await sends(page)).length).toBe(2);
+    const [first, retry] = await sends(page);
+    expect(first).toMatch(/^first=[0-9a-f-]{36}$/);
+    expect(retry).toBe(first);
+  });
+
+  test("words put back and sent again as they were keep their key; changed, they're a new send", async ({ page }) => {
+    await open(page, "?fail");
+    await box(page).click();
+    await page.keyboard.type("hello?");
+    await page.keyboard.press("Enter");
+    await expect(box(page)).toHaveValue("hello?");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await sends(page)).length).toBe(2);
+    await expect(box(page)).toHaveValue("hello?");
+    await page.keyboard.type("!");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await sends(page)).length).toBe(3);
+    const [first, again, changed] = await sends(page);
+    expect(again).toBe(first);
+    expect(changed).toMatch(/^hello\?!=[0-9a-f-]{36}$/);
+    expect(changed?.split("=")[1]).not.toBe(first?.split("=")[1]);
   });
 });
 
@@ -955,6 +1010,16 @@ test.describe("a file to download", () => {
     await expect(card(page)).not.toContainText("saved");
   });
 
+  // #488: a name saved before the server took them out, or from a server
+  // that doesn't, would read "invoiceexe.pdf". Read left to right as drawn.
+  test("a name with a character that turns text around shows what the file really is", async ({ page }) => {
+    await open(page, "?file&turned");
+    const name = page.locator(".nx-att-card .nx-att-name", { hasText: "invoice" });
+    expect(await drawn(name)).toBe("invoicefdp.exe");
+    expect(await name.evaluate((span) => getComputedStyle(span).unicodeBidi)).toBe("isolate");
+    await expect(page.locator(".nx-att-card", { hasText: "invoice" }).getByRole("button", { name: "Download" })).toBeVisible();
+  });
+
   test("a browser that won't open says so, offers another go, and the address", async ({ page }) => {
     await open(page, "?file&downloadfail");
     await card(page).getByRole("button", { name: "Download" }).click();
@@ -1163,3 +1228,28 @@ test.describe("reactions refused or off", () => {
     await expect(row.getByRole("button", { name: /^React to/ })).toHaveCount(0);
   });
 });
+
+/**
+ * The letters in an element as they're drawn: line by line, left to right,
+ * leaving out what draws nothing. A character that turns text around (#488)
+ * changes this and not the element's text.
+ */
+async function drawn(locator: Locator): Promise<string> {
+  return locator.evaluate((element) => {
+    const range = document.createRange();
+    const letters: { letter: string; line: number; left: number }[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node instanceof Text; node = walker.nextNode()) {
+      for (let at = 0; at < node.length; at += 1) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const box = range.getBoundingClientRect();
+        if (box.width > 0) letters.push({ letter: node.data[at] ?? "", line: Math.round(box.top + box.height / 2), left: box.left });
+      }
+    }
+    return letters
+      .sort((a, b) => a.line - b.line || a.left - b.left)
+      .map(({ letter }) => letter)
+      .join("");
+  });
+}

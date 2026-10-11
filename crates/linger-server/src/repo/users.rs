@@ -9,7 +9,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqliteConnection, SqliteExecutor, SqlitePool};
 
 use crate::error::ApiError;
-use crate::status_fields;
+use crate::{names, status_fields};
 
 const USER_SELECT: &str = "
     SELECT u.id, u.username, u.display_name, u.is_host, u.is_cohost, u.last_seen_at,
@@ -211,4 +211,42 @@ pub async fn expect(db: &SqlitePool, id: UserId) -> Result<User, ApiError> {
     by_id(db, id)
         .await?
         .ok_or_else(|| ApiError::not_found("No such person on this server."))
+}
+
+/// Refuse `name` when somebody else here already goes by one that looks like
+/// it (#574, `names`): any active member's display name or username, except
+/// `me`'s own, so keeping your name or changing its capitals is never refused
+/// over yourself. Removed members don't count. Nobody can see their names any
+/// more (T-413), and a name shouldn't stay locked because somebody left.
+///
+/// Takes the writer's connection, inside the transaction that then saves the
+/// name: writes queue behind the one writer, so two people can't both pass
+/// this with look-alike names at the same moment. It reads every member and
+/// works out their shapes each time: about half a millisecond for sixty
+/// members, paid only when somebody sets a name. A stored column of shapes
+/// would need a migration and would go stale whenever Unicode's look-alike
+/// list does.
+pub async fn refuse_look_alike(
+    tx: &mut SqliteConnection,
+    name: &str,
+    me: Option<UserId>,
+) -> Result<(), ApiError> {
+    let wanted = names::Shapes::of(name);
+    let members: Vec<(Vec<u8>, String, String)> =
+        sqlx::query_as("SELECT id, username, display_name FROM users WHERE deactivated_at IS NULL")
+            .fetch_all(&mut *tx)
+            .await?;
+    let me = me.map(|id| id.to_vec());
+    let taken = members
+        .iter()
+        .filter(|(id, _, _)| me.as_ref() != Some(id))
+        .any(|(_, username, display_name)| {
+            wanted.meet(&names::Shapes::of(display_name))
+                || wanted.meet(&names::Shapes::of(username))
+        });
+    if taken {
+        Err(ApiError::display_name_taken())
+    } else {
+        Ok(())
+    }
 }

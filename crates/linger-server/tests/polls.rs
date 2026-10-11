@@ -192,6 +192,32 @@ async fn a_poll_has_a_question_and_two_to_ten_different_choices() {
     }
 }
 
+/// The question and the winners are quoted in the line a room gets when the
+/// poll closes, so neither can turn the words around it (#488): the
+/// characters that turn text around are taken out. A direction mark stays.
+#[tokio::test]
+async fn a_poll_loses_the_characters_that_turn_text_around() {
+    let (server, host, room) = common::server_with_room("wow").await;
+    let resp = ask(
+        &server,
+        &host.access_token,
+        &room,
+        &json!({
+            "question": "Which \u{202E}noitcaf?",
+            "choices": ["\u{2067}Horde\u{2069}", "Alliance\u{200F}"],
+            "multi": false,
+            "closes_in_days": 7,
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), 200, "{}", resp.text().await.unwrap());
+    let poll: Message = resp.json().await.unwrap();
+    let poll = poll.poll.expect("a poll");
+    assert_eq!(poll.question, "Which noitcaf?");
+    let choices: Vec<&str> = poll.choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(choices, ["Horde", "Alliance\u{200F}"]);
+}
+
 #[tokio::test]
 async fn a_dm_has_no_polls() {
     let (server, host, _room) = common::server_with_room("wow").await;
@@ -585,4 +611,57 @@ async fn the_room_sees_each_vote_and_the_close_as_they_happen() {
     );
     assert!(frames[2]["d"]["poll"]["closed_at"].is_number());
     assert_eq!(frames[3]["d"]["poll_closed"]["poll_id"], json!(poll.id));
+}
+
+/// #524: a poll asked again with its one-time key, as the app does when the
+/// answer to the first ask was lost on the way back, is answered with the
+/// poll the first ask made. One poll in the room, one `message.create`.
+#[tokio::test]
+async fn a_poll_asked_again_with_its_nonce_is_asked_once() {
+    let (server, host, room) = common::server_with_room("wow").await;
+    let callie = common::join_member(&server, &host.access_token, "callie").await;
+    let mut watching = connect(&server, &callie.access_token).await;
+    drain(&mut watching, SETTLE).await;
+
+    let mut poll = faction();
+    poll["nonce"] = json!("7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f");
+    let first: Message = ask(&server, &host.access_token, &room, &poll)
+        .await
+        .json()
+        .await
+        .unwrap();
+    let resp = ask(&server, &host.access_token, &room, &poll).await;
+    assert_eq!(resp.status(), 200, "{}", resp.text().await.unwrap());
+    let again: Message = resp.json().await.unwrap();
+    assert_eq!(again.id, first.id);
+    assert!(again.poll.is_some());
+
+    let frames = drain(&mut watching, SETTLE).await;
+    let created: Vec<&Value> = frames
+        .iter()
+        .filter(|frame| frame["op"] == "message.create")
+        .collect();
+    assert_eq!(created.len(), 1, "announced more than once: {frames:?}");
+    let polls: Vec<_> = history(&server, &host.access_token, &room)
+        .await
+        .into_iter()
+        .filter(|message| message.poll.is_some())
+        .map(|message| message.id)
+        .collect();
+    assert_eq!(polls, vec![first.id]);
+}
+
+/// #524: a poll's key follows a message's rules: short and plain, or the ask
+/// is refused and nothing is asked.
+#[tokio::test]
+async fn a_poll_nonce_that_is_not_short_and_plain_is_refused() {
+    let (server, host, room) = common::server_with_room("wow").await;
+    let mut poll = faction();
+    poll["nonce"] = json!("two words");
+    let resp = ask(&server, &host.access_token, &room, &poll).await;
+    assert_eq!(resp.status(), 422);
+    assert!(history(&server, &host.access_token, &room)
+        .await
+        .iter()
+        .all(|message| message.poll.is_none()));
 }

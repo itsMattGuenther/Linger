@@ -15,6 +15,7 @@ pub mod gateway;
 pub mod join_line;
 pub mod links;
 pub mod media;
+pub mod names;
 pub mod polls;
 pub mod ratelimit;
 pub mod repo;
@@ -25,6 +26,7 @@ pub mod state;
 pub mod status_fields;
 pub mod storage;
 pub mod turn;
+pub mod unsent;
 pub mod validate;
 
 pub use state::AppState;

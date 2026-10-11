@@ -1,6 +1,8 @@
 //! Auth endpoints (PROTOCOL §2): register through an invite, login, rotating
 //! refresh, logout, and the unauthenticated invite preview.
 
+use std::sync::atomic::{AtomicI64, Ordering};
+
 use axum::extract::{Path, State};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
@@ -13,10 +15,11 @@ use linger_core::wire::{
     RegisterRequest,
 };
 use linger_core::UserId;
+use sqlx::SqliteExecutor;
 
 use crate::auth::{self, RefreshOutcome};
 use crate::db::now_ms;
-use crate::error::ApiError;
+use crate::error::{wait_in_words, ApiError};
 use crate::state::AppState;
 use crate::{repo, validate};
 
@@ -30,8 +33,13 @@ pub fn router() -> Router<AppState> {
 }
 
 /// Mint a full auth response: fresh access token + a new refresh family.
+///
+/// Also the answer to a password change (#496), which has just ended every
+/// sign-in the account had: the generation is read here, after that commit, so
+/// this token belongs to the new one.
 pub async fn auth_response(state: &AppState, user_id: UserId) -> Result<AuthResponse, ApiError> {
-    let (access_token, _) = state.jwt.mint(user_id)?;
+    let generation = auth::token_generation(&state.db.read, user_id).await?;
+    let (access_token, _) = state.jwt.mint(user_id, generation)?;
     let refresh_token = auth::issue_refresh_family(&state.db.write, user_id).await?;
     let user = repo::users::expect(&state.db.read, user_id).await?;
     Ok(AuthResponse {
@@ -44,16 +52,42 @@ pub async fn auth_response(state: &AppState, user_id: UserId) -> Result<AuthResp
 
 async fn register(
     State(state): State<AppState>,
+    parts: Parts,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
+    if let Some(per_hour) = state.config.signups_per_hour {
+        if let Err(retry) = state
+            .limiter
+            .check(&format!("register:{ip}"), (per_hour, 3_600))
+        {
+            if TELL_HOST_SIGNUPS_PAUSED.due(now_ms()) {
+                tracing::warn!("{}", signups_paused_for_the_host(per_hour));
+            }
+            return Err(signups_paused(retry));
+        }
+    }
+
     validate::username(&req.username)?;
     validate::display_name(&req.display_name)?;
     validate::password(&req.password)?;
-
-    let password_hash = auth::hash_password(req.password).await?;
-    let user_id = UserId::new();
-    let now = now_ms();
     let code = req.invite_code.trim().to_lowercase();
+
+    // The invite before the password (#495). Hashing is the expensive half of
+    // signing up, about 19 MB and a core for a moment, and it used to come
+    // first, so anybody with no invite at all could make the server do it on
+    // demand. This read reserves nothing: the guarded UPDATE below still
+    // decides who gets an invite's last use, and a hash refused while the
+    // server is busy has spent no use at all.
+    if let Some(refusal) = invite_refusal(&state.db.read, &code, now_ms()).await? {
+        return Err(refusal);
+    }
+
+    let password_hash = state.passwords.hash(req.password).await?;
+    let user_id = UserId::new();
+    // Read after the hash, which may have waited for a turn: an invite that
+    // ran out meanwhile has run out.
+    let now = now_ms();
 
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
 
@@ -72,26 +106,16 @@ async fn register(
     .rows_affected();
 
     if consumed == 0 {
-        let expired: Option<(Option<i64>,)> =
-            sqlx::query_as("SELECT expires_at FROM invites WHERE code = ? AND revoked_at IS NULL")
-                .bind(&code)
-                .fetch_optional(&mut *tx)
-                .await?;
-        return Err(match expired {
-            Some((Some(at),)) if at <= now => ApiError {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: ErrorCode::InviteExpired,
-                message: "That invite has expired.".into(),
-                retry_after_ms: None,
-            },
-            _ => ApiError {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: ErrorCode::InviteInvalid,
-                message: "That invite isn't valid.".into(),
-                retry_after_ms: None,
-            },
-        });
+        // It was good a moment ago: somebody else got the last use while
+        // this one hashed, or it expired or was revoked meanwhile.
+        return Err(invite_refusal(&mut *tx, &code, now)
+            .await?
+            .unwrap_or_else(invite_invalid));
     }
+
+    // After the invite, so somebody without one learns nothing about who is
+    // here. Inside the transaction, so a refusal hands the use back (#574).
+    repo::users::refuse_look_alike(&mut tx, req.display_name.trim(), None).await?;
 
     let inserted = sqlx::query(
         "INSERT INTO users (id, username, display_name, password_hash, is_host, created_at)
@@ -130,6 +154,118 @@ async fn register(
     Ok(Json(response))
 }
 
+/// What somebody is told when their network has used up its sign-ups for
+/// now (#538). It isn't anything they did: a crowd joining from one school,
+/// office or phone network looks like this. So it says what is happening, when
+/// to come back, and who can change it.
+fn signups_paused(retry_after_ms: u64) -> ApiError {
+    ApiError::rate_limited_with(
+        retry_after_ms,
+        format!(
+            "Lots of people have joined from your network in the last hour, so this server \
+             is pausing new sign-ups from it. Try again in {}. If your group is joining \
+             together, the host can raise this limit.",
+            wait_in_words(retry_after_ms)
+        ),
+    )
+}
+
+/// The host's half of [`signups_paused`]: the log line that says people
+/// were turned away and which setting lets more in. Never the address.
+fn signups_paused_for_the_host(per_hour: u32) -> String {
+    format!(
+        "Sign-ups from one network reached this server's limit of {per_hour} an hour \
+         (LINGER_SIGNUPS_PER_HOUR), so somebody was told to try again later. If a group is \
+         joining together from one place, raise LINGER_SIGNUPS_PER_HOUR in .env, or set it \
+         to off, and run `docker compose up -d` (docs/host-guide.md, \"A big group joining \
+         at once\"). The address isn't logged, and this is said at most once every 5 minutes."
+    )
+}
+
+/// [`signups_paused_for_the_host`] is said at most this often. A crowd
+/// turned away all evening is one fact for the host, not a line a minute.
+const TELL_HOST_EVERY_MS: i64 = 5 * 60 * 1_000;
+
+/// When the host was last told that sign-ups were paused.
+static TELL_HOST_SIGNUPS_PAUSED: Sometimes = Sometimes::new(TELL_HOST_EVERY_MS);
+
+/// Says yes at most once every `every_ms`, however many ask at once.
+struct Sometimes {
+    last: AtomicI64,
+    every_ms: i64,
+}
+
+impl Sometimes {
+    const fn new(every_ms: i64) -> Self {
+        Self {
+            last: AtomicI64::new(i64::MIN),
+            every_ms,
+        }
+    }
+
+    /// Whether it's time again at `now` (unix ms). Only one of several
+    /// asking at the same moment is told yes.
+    fn due(&self, now: i64) -> bool {
+        let last = self.last.load(Ordering::SeqCst);
+        now.saturating_sub(last) >= self.every_ms
+            && self
+                .last
+                .compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+    }
+}
+
+/// What somebody is told when their network has had its sign-in tries for
+/// the minute: the brake on guessing passwords (ARCHITECTURE §7), not
+/// something a host can raise, so it doesn't say anybody can.
+fn sign_ins_paused(retry_after_ms: u64) -> ApiError {
+    ApiError::rate_limited_with(
+        retry_after_ms,
+        format!(
+            "Too many sign-in tries from your network in the last minute. Try again in {}.",
+            wait_in_words(retry_after_ms)
+        ),
+    )
+}
+
+/// Why `code` can't let anybody in at `now`, as the refusal to send, or
+/// `None` when it can. An expired invite is said to be expired whatever else
+/// is wrong with it, unless it was revoked; every other reason, a made-up
+/// code included, is "isn't valid".
+async fn invite_refusal<'e>(
+    db: impl SqliteExecutor<'e>,
+    code: &str,
+    now: i64,
+) -> Result<Option<ApiError>, ApiError> {
+    // (expires_at, max_uses, uses, revoked_at)
+    type InviteRow = (Option<i64>, Option<u32>, u32, Option<i64>);
+    let row: Option<InviteRow> =
+        sqlx::query_as("SELECT expires_at, max_uses, uses, revoked_at FROM invites WHERE code = ?")
+            .bind(code)
+            .fetch_optional(db)
+            .await?;
+    Ok(match row {
+        None | Some((_, _, _, Some(_))) => Some(invite_invalid()),
+        Some((Some(at), _, _, None)) if at <= now => Some(ApiError {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: ErrorCode::InviteExpired,
+            message: "That invite has expired.".into(),
+            retry_after_ms: None,
+        }),
+        Some((_, Some(max), uses, None)) if uses >= max => Some(invite_invalid()),
+        Some(_) => None,
+    })
+}
+
+fn invite_invalid() -> ApiError {
+    ApiError {
+        status: StatusCode::UNPROCESSABLE_ENTITY,
+        code: ErrorCode::InviteInvalid,
+        message: "That invite isn't valid.".into(),
+        retry_after_ms: None,
+    }
+}
+
 /// A stable argon2 hash to verify against when the username doesn't exist, so
 /// unknown-user and wrong-password take comparable time.
 fn dummy_hash() -> &'static str {
@@ -142,12 +278,12 @@ async fn login(
     parts: Parts,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts);
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
     if let Err(retry) = state
         .limiter
         .check(&format!("login:{ip}"), RATE_LOGIN_PER_IP)
     {
-        return Err(ApiError::rate_limited(retry));
+        return Err(sign_ins_paused(retry));
     }
 
     let row: Option<(Vec<u8>, String)> = sqlx::query_as(
@@ -166,7 +302,7 @@ async fn login(
         None => (None, dummy_hash().to_string()),
     };
 
-    let verified = !hash.is_empty() && auth::verify_password(req.password, hash).await?;
+    let verified = !hash.is_empty() && state.passwords.verify(req.password, hash).await?;
     let Some(user_id) = user_id.filter(|_| verified) else {
         return Err(ApiError::unauthenticated_with(
             "That username and password don't match.",
@@ -187,8 +323,12 @@ async fn refresh(
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, ApiError> {
     match auth::rotate_refresh(&state.db.write, &req.refresh_token).await? {
-        RefreshOutcome::Rotated { user_id, new_token } => {
-            let (access_token, _) = state.jwt.mint(user_id)?;
+        RefreshOutcome::Rotated {
+            user_id,
+            generation,
+            new_token,
+        } => {
+            let (access_token, _) = state.jwt.mint(user_id, generation)?;
             Ok(Json(RefreshResponse {
                 access_token,
                 refresh_token: new_token,
@@ -243,4 +383,49 @@ async fn invite_preview(
         server_name,
         expires_at,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_host_is_told_once_then_not_again_for_five_minutes() {
+        let told = Sometimes::new(TELL_HOST_EVERY_MS);
+        let start = 1_760_000_000_000;
+        assert!(told.due(start));
+        assert!(!told.due(start));
+        assert!(!told.due(start + TELL_HOST_EVERY_MS - 1));
+        assert!(told.due(start + TELL_HOST_EVERY_MS));
+        assert!(!told.due(start + TELL_HOST_EVERY_MS + 1));
+    }
+
+    #[test]
+    fn the_host_is_told_which_setting_raises_it() {
+        // It's given no address, so it can't log one.
+        let line = signups_paused_for_the_host(60);
+        assert!(line.contains("60 an hour"), "{line}");
+        assert!(line.contains("LINGER_SIGNUPS_PER_HOUR"), "{line}");
+        assert!(line.contains("docs/host-guide.md"), "{line}");
+    }
+
+    #[test]
+    fn each_limit_says_its_own_sentence_with_the_wait() {
+        let paused = signups_paused(599_990);
+        assert_eq!(paused.code, ErrorCode::RateLimited);
+        assert_eq!(paused.retry_after_ms, Some(599_990));
+        assert_eq!(
+            paused.message,
+            "Lots of people have joined from your network in the last hour, so this server is \
+             pausing new sign-ups from it. Try again in about 10 minutes. If your group is \
+             joining together, the host can raise this limit."
+        );
+        let paused = sign_ins_paused(11_250);
+        assert_eq!(paused.code, ErrorCode::RateLimited);
+        assert_eq!(
+            paused.message,
+            "Too many sign-in tries from your network in the last minute. Try again in 12 \
+             seconds."
+        );
+    }
 }

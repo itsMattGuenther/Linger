@@ -118,6 +118,21 @@ describe("polls (#474)", () => {
   });
 });
 
+describe("somebody leaving a group DM (#565)", () => {
+  const left = (n: number, author: string, at: number, extra: Partial<Message> = {}) => message(n, author, at, { body: "left", left: true, ...extra });
+
+  it("is a line of its own, and whoever speaks next is named again", () => {
+    const rows = chatRows([message(1, "eli", T0), left(2, "eli", T0 + MIN), message(3, "eli", T0 + 2 * MIN)], [], { atStart: false, leftOff: null });
+    expect(heads(rows)).toEqual([["m000001", true], ["m000002", true], ["m000003", true]]);
+  });
+
+  it("is never what Up edits, and one taken back just isn't there", () => {
+    expect(lastEditable([message(1, "matt", T0), left(2, "matt", T0 + MIN)], "matt", true)?.id).toBe("m000001");
+    const rows = chatRows([message(1, "eli", T0), left(2, "jules", T0 + MIN, { deleted_at: T0 + 2 * MIN, body: "" })], [], { atStart: false, leftOff: null });
+    expect(heads(rows)).toEqual([["m000001", true]]);
+  });
+});
+
 describe("somebody joining voice (#473)", () => {
   const join = (n: number, author: string, at: number) => message(n, author, at, { body: "joined voice", voice_join: true });
   const drawn = (rows: ReturnType<typeof chatRows>) =>
