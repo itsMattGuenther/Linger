@@ -78,9 +78,20 @@ test("a room clicked in the list opens beside it, in the same window, with the c
 });
 
 /**
- * How many times the window draws in three idle seconds, once it has stopped
- * drawing for one (#511). Three is longer than the two-second clock it once
- * kept for nothing (tests/fixtures/next/commits.tsx counts).
+ * When the page's clock starts. The idle tests install Playwright's clock
+ * before the page loads, so they decide which seconds pass (#511).
+ */
+const START = Date.parse("2026-10-10T20:00:00Z");
+/** Longer than the two-second clock the window once kept for nothing (#511). */
+const IDLE_MS = 3_000;
+
+/**
+ * How many times the window draws in three seconds of its own time, once it
+ * has stopped drawing for a whole second (#511; tests/fixtures/next/
+ * commits.tsx counts). The page's clock is held still and those three
+ * seconds are run through, every timer due in them fired, so they're the
+ * same three seconds on a loaded machine as on an idle one. The once-a-minute
+ * clocks first fire a minute after the page opened, after the span watched.
  */
 async function drawsWhileIdle(page: Page): Promise<number> {
   const commits = () => page.evaluate(() => window.commits ?? 0);
@@ -91,11 +102,20 @@ async function drawsWhileIdle(page: Page): Promise<number> {
     if (now === last) break;
     last = now;
   }
-  await page.waitForTimeout(3_000);
-  return (await commits()) - last;
+  const held = (await page.evaluate(() => Date.now())) + 1_000;
+  await page.clock.pauseAt(held);
+  expect(held + IDLE_MS - START, "the span watched ends before the minute clocks first fire").toBeLessThan(60_000);
+  // Settling the clock may have fired a timer: counted from here.
+  await page.waitForTimeout(250);
+  const before = await commits();
+  await page.clock.runFor(IDLE_MS);
+  // Whatever those seconds asked React to draw, it has drawn.
+  await page.waitForTimeout(250);
+  return (await commits()) - before;
 }
 
 test("with a room beside the list and nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await page.clock.install({ time: START });
   await open(page);
   await room(page, "general").click();
   await grown(page);
