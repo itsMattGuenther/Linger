@@ -11,7 +11,6 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
-import { followShimmer } from "./core/shimmer";
 import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { followMediaKeys } from "../lib/mediaKeys";
@@ -22,10 +21,6 @@ import { App } from "./app/App";
 // Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
-
-// A Shimmer name's band, drawn whichever way this engine does cheapest
-// (core/shimmer.ts, #532).
-followShimmer(document.documentElement, navigator.userAgent, isTauri());
 
 // The phone app's one window (SPEC §4.15, core/phone.ts): its styles keep
 // clear of the phone's own bars and cutouts, and of the keyboard

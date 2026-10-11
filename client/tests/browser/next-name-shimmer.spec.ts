@@ -205,37 +205,3 @@ test("a shimmering name's copy is never selected, copied or read out (#532)", as
   await expect(sentence.locator(".k-name-band").first()).toBeHidden();
   expect(await sentence.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
 });
-
-test("on the Linux app the page paints the band itself, as before, and it stops as it did (#532)", async ({ page }) => {
-  await page.goto("/tests/fixtures/kit.html?shimmer");
-  // WebKitGTK does less work repainting the name than moving layers
-  // (core/shimmer.ts), so the Linux app marks the page for that.
-  await page.evaluate(() => {
-    document.documentElement.dataset.shimmer = "paint";
-  });
-  const section = page.locator("[data-section='names']");
-  const lit = section.locator(".name[data-name-effect='shimmer']:not([data-dim])");
-  const dim = section.locator(".name[data-name-effect='shimmer'][data-dim]");
-  await expect(lit).toHaveCount(12 + 5 + 3);
-  const painted = (names: Locator) =>
-    names.evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const moving = node.getAnimations({ subtree: true }).map((running) => {
-          const effect = running.effect;
-          const keyframes = effect instanceof KeyframeEffect ? effect.getKeyframes() : [];
-          // Chromium names the longhands (backgroundPositionX and Y), WebKit the shorthand.
-          const moves = [...new Set(keyframes.flatMap((frame) => Object.keys(frame)))].filter((key) => !["offset", "computedOffset", "easing", "composite"].includes(key));
-          return moves.every((key) => key.startsWith("backgroundPosition")) ? "background-position" : moves.join(" ");
-        });
-        const band = node.querySelector(".k-name-band-place");
-        return { moving, band: band ? getComputedStyle(band).display : "none", layers: getComputedStyle(node).backgroundImage.split("linear-gradient").length - 1 };
-      }),
-    );
-  // The band is the name's own second background, moving; no window.
-  for (const name of await painted(lit)) expect(name).toEqual({ moving: ["background-position"], band: "none", layers: 2 });
-  // The lights off: nothing moves.
-  for (const name of await painted(dim)) expect(name.moving).toEqual([]);
-  // Reduced motion: their paint stays, the band goes.
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  for (const name of await painted(lit)) expect(name).toEqual({ moving: [], band: "none", layers: 1 });
-});

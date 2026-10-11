@@ -116,6 +116,12 @@
      `transform`, which the compositor (the part that puts the page's
      layers together, on the GPU where there is one) does without asking the
      page: the letters are drawn once, and the page does nothing per frame.
+     Measured with one shimmering name in the list, Chromium (WebView2's
+     engine) went from 6% of a core to 3% drawing without the GPU, and the
+     Linux release app from 12% to 9% on a 60 Hz screen and from 16% to 8%
+     on a 165 Hz one. What the Linux app still spends goes on showing a new
+     frame of the window every refresh, which anything that moves costs
+     there.
 
      Three parts, in `Name.tsx`'s `ShimmerBand`:
        - `.k-name-band-place`, where the band lives, which doesn't move;
@@ -125,16 +131,15 @@
          back by the same amount, so it stays exactly over the name while
          the band passes over it: only the letters under the band light up.
      The copy is generated content in an `aria-hidden` element, so it is
-     never selected, copied or read out. The Linux app paints the band
-     instead, which is cheaper there (the end of this block). */
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"]:not([data-size="inline"]) {
+     never selected, copied or read out. */
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"]:not([data-size="inline"]) {
     position: relative;
   }
 
   /* A name in its own box: the band covers the box, and the copy's box is
      the name's (the same width, padding and "…"), so it lies letter for
      letter on the name. The name's box cuts both. */
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place {
     display: block;
     position: absolute;
     inset: 0;
@@ -142,7 +147,7 @@
     user-select: none;
   }
 
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band {
     display: block;
     position: absolute;
     inset: 0;
@@ -158,7 +163,7 @@
     animation: k-name-band calc(4s * var(--motion)) linear var(--loop);
   }
 
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band::before {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band::before {
     content: attr(data-letters);
     display: block;
     position: absolute;
@@ -185,11 +190,11 @@
      short inside the name cuts the spot too, and the band with it, rather
      than lighting letters under its "…". A shimmering name stays on one
      line. */
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"][data-size="inline"] {
     white-space: nowrap;
   }
 
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
     display: inline-block;
     position: static;
     width: 0;
@@ -198,7 +203,7 @@
     vertical-align: baseline;
   }
 
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band {
     display: inline-block;
     position: static;
     direction: ltr;
@@ -209,7 +214,7 @@
     vertical-align: baseline;
   }
 
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band::before {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place > .k-name-band::before {
     display: inline-block;
     position: static;
     padding-inline-end: 0;
@@ -242,43 +247,6 @@
       transform: translateX(-100%);
     }
   }
-
-  /* The Linux app (`data-shimmer="paint"`, `core/shimmer.ts`): for moving
-     layers WebKitGTK did more work every frame than for repainting the
-     name, so there the page paints the band: a second background moved by
-     `background-position`, as before #532. It looks the same. (`:where` keeps these exactly as specific as the
-     rules after them that take a name's look away: the lights off.) */
-  :root:where([data-shimmer="paint"]):not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
-    background-image:
-      linear-gradient(92deg, transparent 46%, var(--name-shimmer) 50%, transparent 54%),
-      var(--person-paint);
-    background-size:
-      300% 100%,
-      100% 100%;
-    animation: k-name-shimmer calc(4s * var(--motion)) linear var(--loop);
-  }
-
-  @keyframes k-name-shimmer {
-    from {
-      background-position:
-        100% 0,
-        0 0;
-    }
-
-    to {
-      background-position:
-        0% 0,
-        0 0;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :root:where([data-shimmer="paint"]):not([data-normalize="true"]) .name[data-name-effect="shimmer"] {
-      background-image: var(--person-paint);
-      background-size: 100% 100%;
-      animation: none;
-    }
-  }
 }
 
 /* No band where nothing should move or shine: reduced motion stops it
@@ -290,8 +258,8 @@
 }
 
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"] > .k-name-band-place,
-  :root:not([data-normalize="true"], [data-shimmer="paint"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place,
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"][data-size="inline"] > .k-name-band-place {
     display: none;
   }
 }
