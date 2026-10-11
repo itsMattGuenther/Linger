@@ -1241,7 +1241,8 @@ says what replaced it: a status somebody typed.
 Read this before building and again at month three.
 
 **Novelty features do not retain people.** Everything in §4 gets tried once. What keeps
-a friend group on this app is that it opens in 400ms, does not nag them, and does not
+a friend group on this app is that it opens in about a second
+(`docs/performance.md` measures it, #591), does not nag them, and does not
 lose their photos. The differentiators buy the first week. The absence of friction buys
 the next two years.
 

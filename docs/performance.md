@@ -1,7 +1,8 @@
 # How fast Linger opens, and what it costs to keep open
 
-SPEC §7 rests on Linger opening in 400 ms. This page is where that, and the
-rest of T-910 (size, memory, idle processor use), gets measured, with the
+SPEC §7 rests on Linger opening fast: in about a second, which is what this
+page measured (it said 400 ms, which nobody had measured, until #591). This
+page is where that, and the rest of T-910 (size, memory, idle processor use), gets measured, with the
 machine, the method and the numbers, so each release can be checked against
 the last. Newest measurements first. Measure again when something that runs
 at startup changes, and before a release that touches the shell, WebKit
@@ -201,8 +202,7 @@ server, Linger takes about 1.6–2 seconds to open on this machine.
 
 What a change may cost before it needs a reason in its pull request, on this
 machine, measured with the script. They are where Linger is today plus some
-room, not the goal: SPEC §7 says 400 ms, and Linger takes about two and a
-half times that here (#591).
+room, so it doesn't get slower than the second SPEC §7 promises (#591).
 
 | | Budget |
 |---|---|

@@ -343,7 +343,8 @@ one where it still makes sense, and is otherwise closed with a note.
   `docs/performance.md`, with budgets: opening (after a restart, cold and
   warm), memory, idle processor use and sizes, for 0.4.10 and the night
   audit's combined branch, now on `main`. `scripts/startup-time.mjs`
-  measures it again. It opens in about a second, not SPEC §7's 400 ms.
+  measures it again. It opens in about a second, and SPEC §7 now says so
+  (#591; it said 400 ms).
   Left: Windows (the page has the steps for a friend), a long session,
   four-person voice, history growth.
 
