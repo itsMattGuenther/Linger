@@ -9,7 +9,8 @@
 #
 # In order, it:
 #   1. downloads compose.yaml, the Caddyfile, update.sh and .env.example next
-#      to itself, unless they're here already;
+#      to itself, unless they're here already, from the newest release: the
+#      one the server image comes from (#507);
 #   2. asks for your server's name, and whether to run the voice relay;
 #   3. finds this machine's public address and checks both names point at it;
 #   4. writes .env: the name, a fresh relay secret, a file pool that fits the
@@ -18,17 +19,23 @@
 #      to forward when a router or a cloud network sits in front of it;
 #   6. starts the server and prints the one-time setup link.
 #
-# It sends nothing anywhere except GitHub for the files, api.ipify.org to
-# learn this machine's public address (the host guide's own way), and Docker
-# downloading the images. A folder that already runs a server is left alone:
-# ./update.sh updates that.
+# It sends nothing anywhere except GitHub, to ask which release is the newest
+# and fetch its files, api.ipify.org to learn this machine's public address
+# (the host guide's own way), and Docker downloading the images. A folder that
+# already runs a server is left alone: ./update.sh updates that.
 #
 # Answers can come from the environment instead of questions, for scripts:
 # LINGER_SETUP_DOMAIN, LINGER_SETUP_RELAY (yes or no), and LINGER_SETUP_YES=1
-# to carry on past a name that points somewhere else.
+# to carry on past a name that points somewhere else. LINGER_SETUP_REF names
+# where the files come from instead of the newest release: a release
+# (v0.4.9) or a branch (main, for trying what's next). LINGER_SETUP_FROM, a
+# whole address to fetch them from (a fork's, a file:// folder), wins over it.
 set -euo pipefail
 
-readonly FILES_FROM="${LINGER_SETUP_FROM:-https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy}"
+readonly REPO=itsMattGuenther/Linger
+# GitHub's newest release. A pre-release is never it, which keeps out the
+# `arch` release, the Arch package repository (ARCHITECTURE §7.8).
+readonly RELEASES_API="https://api.github.com/repos/$REPO/releases/latest"
 readonly IMAGE=ghcr.io/itsmattguenther/linger:latest
 # How long the server gets to print its setup link, and Caddy to answer.
 # The tests shorten them.
@@ -76,15 +83,67 @@ fi
 
 # --- 1. The files -------------------------------------------------------------
 
+# Where the files come from (#507): the newest release, the one the `latest`
+# image in compose.yaml was built from. main can be ahead of every release,
+# and its files can ask for a setting or a flag that image doesn't have yet.
+# The image stays `latest` rather than this release's number: update.sh takes
+# a number there as the host's choice to stay on it, so a pinned server would
+# never update. Matching still holds, because a release is published after
+# its tag's image is pushed (docs/releasing.md): `latest` is this release's
+# image or, until the next release is published, a newer one, and older files
+# with a newer image is how every server runs after ./update.sh. This script
+# itself comes from main, so it has to work with the newest release's files.
+files_from=""
+choose_files() {
+  if [[ -n "${LINGER_SETUP_FROM:-}" ]]; then
+    files_from="$LINGER_SETUP_FROM"
+    say "Files from $files_from, as LINGER_SETUP_FROM says."
+    return
+  fi
+  local ref="${LINGER_SETUP_REF:-}"
+  if [[ -n "$ref" ]]; then
+    [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] ||
+      fail "LINGER_SETUP_REF=$ref isn't the name of a release or a branch, such as v0.4.10 or main."
+    if [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      say "Files from Linger $ref, as LINGER_SETUP_REF says."
+    else
+      say "Files from $ref, as LINGER_SETUP_REF says. Docker still downloads the newest release's"
+      say "server, and $ref's files can ask for something it doesn't have yet."
+    fi
+  else
+    local answer pre=""
+    local yourself="Or name a release yourself, from https://github.com/$REPO/releases:
+
+  LINGER_SETUP_REF=v0.4.10 bash setup.sh"
+    answer="$(curl -fsSL --max-time 20 "$RELEASES_API" 2>/dev/null)" ||
+      fail "couldn't ask GitHub which release is the newest ($RELEASES_API).
+Check this machine can reach github.com and run this again.
+$yourself"
+    ref="$(grep -o '"tag_name": *"[^"]*"' <<<"$answer" | head -1 | cut -d'"' -f4 || true)"
+    # Only a version: never `arch`, nor a pre-release, should GitHub's answer
+    # ever change.
+    if grep -q '"prerelease": *true' <<<"$answer"; then pre=" (a pre-release)"; fi
+    if [[ -n "$pre" || ! "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      fail "GitHub gave \"${ref:-no name}\"$pre as the newest release, which isn't a
+finished release of the server, so there's no telling which files go with it.
+Run this again later.
+$yourself"
+    fi
+    say "Files from Linger $ref, the newest release, to match the server Docker downloads."
+  fi
+  files_from="https://raw.githubusercontent.com/$REPO/$ref/deploy"
+}
+
 step "Getting the server's files"
 for file in compose.yaml Caddyfile update.sh .env.example; do
   if [[ -f "$file" ]]; then
     say "$file is here already."
-  else
-    curl -fsSL -o "$file" "$FILES_FROM/$file" ||
-      fail "couldn't download $file from $FILES_FROM/$file."
-    say "Downloaded $file."
+    continue
   fi
+  [[ -n "$files_from" ]] || choose_files
+  curl -fsSL -o "$file" "$files_from/$file" ||
+    fail "couldn't download $file from $files_from/$file."
+  say "Downloaded $file."
 done
 chmod +x update.sh
 grep -q '^ *env_file: .env' compose.yaml ||

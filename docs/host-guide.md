@@ -85,7 +85,8 @@ and whether to run the [voice relay](#the-voice-relay) for people on networks
 that block voice (yes is a good answer). Then it:
 
 - downloads the server's files into the folder: `compose.yaml`, `Caddyfile`,
-  `update.sh` and `.env.example`;
+  `update.sh` and `.env.example`, from the newest release, so they go with
+  the server Docker downloads;
 - checks that both names point at this machine, and stops if one doesn't yet,
   so you can fix it and run the script again;
 - writes `.env`, the one file that holds your settings, with a new secret for
@@ -106,10 +107,15 @@ link, restart Linger to replace it.
 
 The script can't change your provider's own firewall (DigitalOcean's Cloud
 Firewalls, say): open the ports there yourself, as in step 1. It sends nothing
-anywhere except GitHub for the files and
-[api.ipify.org](https://api.ipify.org) to learn the server's public address.
-Running it again is safe: it keeps an `.env` that's already there, and it
-won't touch a folder that already runs a server.
+anywhere except GitHub, to ask which release is the newest and fetch its
+files, and [api.ipify.org](https://api.ipify.org) to learn the server's public
+address. Running it again is safe: it keeps an `.env` that's already there,
+and it won't touch a folder that already runs a server.
+
+If GitHub can't say which release is the newest, the script stops and says
+so. `LINGER_SETUP_REF=v0.4.10 bash setup.sh` names a release yourself.
+`LINGER_SETUP_REF=main` takes files that aren't released yet, for trying
+what's next: they can ask for something the released server doesn't have.
 
 From **your own computer**, check the address before opening the app:
 `curl -f https://linger.example.com/api/v1/health` (replace the example name with
@@ -122,11 +128,20 @@ The same steps, one at a time. Using [two free names](#using-free-names)
 rather than `cdn.` in front of yours? This is your way, since the script
 checks for `cdn.`.
 
+The `release=` line asks GitHub for the newest release's name, such as
+`v0.4.10`, and `echo` shows it. The files come from that release, so they go
+with the server Docker downloads; the ones on `main` can be ahead of it. If
+`echo` shows nothing, GitHub didn't answer: type the newest name from
+[the releases page](https://github.com/itsMattGuenther/Linger/releases/latest)
+yourself, as `release=v0.4.10`, and run the lines after it again.
+
 ```bash
 mkdir linger
 cd linger
+release=$(curl -fsSL https://api.github.com/repos/itsMattGuenther/Linger/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+echo "$release"
 for file in compose.yaml Caddyfile update.sh .env.example; do
-  curl -fLO "https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/$file"
+  curl -fLO "https://raw.githubusercontent.com/itsMattGuenther/Linger/$release/deploy/$file"
 done
 chmod +x update.sh
 cp .env.example .env
@@ -497,7 +512,8 @@ commands, run `sudo ./update.sh`.
 **No `update.sh` in your folder?** Servers set up before 0.4.5 get it once:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/update.sh
+release=$(curl -fsSL https://api.github.com/repos/itsMattGuenther/Linger/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+curl -fLO "https://raw.githubusercontent.com/itsMattGuenther/Linger/$release/deploy/update.sh"
 chmod +x update.sh
 ```
 
@@ -521,8 +537,10 @@ on its old version.
 
 **A newer `compose.yaml` or `Caddyfile`.** A server set up with the setup
 script, or by hand from 0.4.9, keeps every setting in `.env`, so a newer copy
-of either file can replace the old one as it is:
-`curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml`
+of either file can replace the old one as it is. Take the newest release's,
+which goes with the server `./update.sh` downloads: the `release=` line from
+[By hand](#by-hand-instead-of-the-script), then
+`curl -fLO "https://raw.githubusercontent.com/itsMattGuenther/Linger/$release/deploy/compose.yaml"`
 (and the same for `Caddyfile`), then `./update.sh`.
 
 **Moving an older server's settings into `.env`.** A server set up before

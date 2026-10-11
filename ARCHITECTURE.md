@@ -821,6 +821,16 @@ name, checks the DNS, makes the secret, opens `ufw`) and starts everything; doin
 hand is copying `.env.example`. An older compose file with its settings written inline
 keeps working.
 
+**The files come from a release** (#507). `setup.sh` fetches `compose.yaml`, the Caddyfile,
+`update.sh` and `.env.example` from the newest release's tag (GitHub's `releases/latest`,
+which never names a pre-release such as the `arch` one, and the script refuses anything
+but a `vX.Y.Z` tag besides), not from `main`, which can be ahead of every released image.
+The image line stays `latest`: `update.sh` reads a version there as the host's choice to
+stay on it. A release is published after its tag's image is pushed, so `latest` is that
+release's image or a newer one, and older files with a newer image is how every server
+runs after `update.sh` anyway. `setup.sh` itself is fetched from `main`, so it has to work
+with the newest release's files. `LINGER_SETUP_REF` names another release or a branch.
+
 Voice goes through the `linger` container itself (#197): with UDP 3479 open, each client
 sends its voice there once and the server passes it on. Where clients send it is
 `LINGER_VOICE_ADDRESS` if set; unset, the server looks `LINGER_DOMAIN` up once at startup

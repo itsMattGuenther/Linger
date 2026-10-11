@@ -6,8 +6,10 @@
 # Stand-ins for docker, curl, getent, ip, ufw, df and id record every call
 # and answer from a few files, so each case can check what the script did, in
 # which order, and what it wrote: the .env, the ports, the setup link, and
-# what it refused to touch. The files it "downloads" are the repository's
-# own deploy/ files. No Docker or network needed.
+# what it refused to touch. GitHub's answer about the newest release is a file
+# too. The files it "downloads" are the repository's own deploy/ files,
+# whatever address it asked for; the log holds the address. No Docker or
+# network needed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo="$PWD"
@@ -40,6 +42,8 @@ case "${args[*]}" in
 esac'
 stand_in curl '
 case "$*" in
+  "-fsSL --max-time 20 https://api.github.com/repos/itsMattGuenther/Linger/releases/latest")
+    if [[ -f "$S/release" ]]; then cat "$S/release"; else exit 22; fi ;;
   "-fsSL -o "*) cp "'"$repo"'/deploy/$(basename "$4")" "$3" ;;
   "-4fsS --max-time 10 https://api.ipify.org") cat "$S/public" ;;
   "-fsS --max-time 10 https://"*/api/v1/health) [[ -f "$S/answers" ]] ;;
@@ -63,9 +67,18 @@ esac'
 stand_in df 'printf "  Size\n %sG\n" "$(cat "$S/disk")"'
 stand_in id '[[ "$1" == -u ]] && cat "$S/uid"'
 
+# GitHub's answer to "which release is the newest", cut down to the lines
+# setup.sh reads and laid out the way the API lays it out.
+release_answer() { # tag, whether it's a pre-release
+  printf '{\n  "html_url": "https://github.com/itsMattGuenther/Linger/releases/tag/%s",\n  "tag_name": "%s",\n  "target_commitish": "main",\n  "draft": false,\n  "prerelease": %s,\n  "body": "Linger \\"%s\\""\n}\n' \
+    "$1" "$1" "$2" "$1" >"$FAKE/release"
+}
+raw=https://raw.githubusercontent.com/itsMattGuenther/Linger
+
 # A fresh folder holding only setup.sh, and the stand-ins' world: a machine at
 # 203.0.113.7 that both names point at, ufw on, root, a 50 GB disk, a 0.4.9
-# image, a server that prints its link and a Caddy that answers.
+# image, a newest release of v0.4.10, a server that prints its link and a
+# Caddy that answers.
 setup() {
   local name="$1"
   dir="$work/$name"
@@ -80,6 +93,7 @@ setup() {
   echo 0 >"$FAKE/uid"
   echo 50 >"$FAKE/disk"
   echo 0.4.9 >"$FAKE/version"
+  release_answer v0.4.10 false
 }
 run() { # runs the script with the given answers; output in $out, exit code in $code
   set +e
@@ -115,7 +129,13 @@ run LINGER_SETUP_DOMAIN=" https://Linger.Example.com/ " LINGER_SETUP_RELAY=yes
 check "a fresh setup succeeds" test "$code" -eq 0
 for file in compose.yaml Caddyfile update.sh .env.example; do
   check "it downloads $file" cmp -s "$dir/$file" "$repo/deploy/$file"
+  check "$file comes from the newest release, v0.4.10 (#507)" \
+    called "curl -fsSL -o $file $raw/v0.4.10/deploy/$file"
 done
+check "it asks GitHub which release is the newest" \
+  called "curl -fsSL --max-time 20 https://api.github.com/repos/itsMattGuenther/Linger/releases/latest"
+check "nothing comes from main" never "/main/"
+check "it says which release the files are from" has "Linger v0.4.10"
 check "update.sh can run" test -x "$dir/update.sh"
 check "the name is tidied into a bare name" in_env "LINGER_DOMAIN=linger.example.com"
 check "the relay gets a fresh 64-character secret" in_env "LINGER_TURN_SECRET=[0-9a-f]{64}"
@@ -188,6 +208,76 @@ run "${answers[@]}"
 check "a Caddy that doesn't answer yet isn't a failure" test "$code" -eq 0
 check "it says why it might not answer" has "didn't answer from here yet"
 check "the link is printed anyway" has "/setup?token=0123456789abcdef"
+
+# --- Where the files come from (#507) -----------------------------------------------
+# The image is `latest`, the newest release, so the files are that release's
+# too: files from main can ask for something the image doesn't have yet.
+
+setup mainfiles
+run "${answers[@]}" LINGER_SETUP_REF=main
+check "LINGER_SETUP_REF=main sets up" test "$code" -eq 0
+for file in compose.yaml Caddyfile update.sh .env.example; do
+  check "LINGER_SETUP_REF=main fetches $file from main" called "curl -fsSL -o $file $raw/main/deploy/$file"
+done
+check "LINGER_SETUP_REF asks GitHub nothing" never "api.github.com"
+check "it says the files are main's" has "Files from main, as LINGER_SETUP_REF says."
+check "it says main can be ahead of the image" has "main's files can ask for something it doesn't have yet"
+
+setup oldtag
+run "${answers[@]}" LINGER_SETUP_REF=v0.4.9
+check "LINGER_SETUP_REF=v0.4.9 sets up" test "$code" -eq 0
+check "LINGER_SETUP_REF=v0.4.9 fetches that release's files" \
+  called "curl -fsSL -o compose.yaml $raw/v0.4.9/deploy/compose.yaml"
+check "a release named there asks GitHub nothing" never "api.github.com"
+
+setup elsewherefiles
+run "${answers[@]}" LINGER_SETUP_FROM=https://example.org/linger/deploy LINGER_SETUP_REF=main
+check "LINGER_SETUP_FROM sets up" test "$code" -eq 0
+check "LINGER_SETUP_FROM is where the files come from" \
+  called "curl -fsSL -o compose.yaml https://example.org/linger/deploy/compose.yaml"
+check "LINGER_SETUP_FROM wins over LINGER_SETUP_REF" never "/main/"
+check "LINGER_SETUP_FROM asks GitHub nothing" never "api.github.com"
+
+setup kept
+for file in compose.yaml Caddyfile update.sh .env.example; do cp "$repo/deploy/$file" "$dir/"; done
+run "${answers[@]}"
+check "files already here set up" test "$code" -eq 0
+check "files already here need no release" never "api.github.com"
+
+setup archlatest
+release_answer arch true
+run "${answers[@]}"
+check "the arch package repository is never taken for a release" test "$code" -eq 1
+check "it says the answer isn't a release" has "GitHub gave \"arch\" (a pre-release) as the newest release"
+check "it says how to name one" has "  LINGER_SETUP_REF=v0.4.10 bash setup.sh"
+check "it downloads nothing then" never "curl -fsSL -o"
+check "it writes no .env then (arch)" test ! -e "$dir/.env"
+
+setup prerelease
+release_answer v0.5.0 true
+run "${answers[@]}"
+check "a pre-release is never taken for a release" test "$code" -eq 1
+check "it says it's a pre-release" has "GitHub gave \"v0.5.0\" (a pre-release)"
+check "it downloads nothing for a pre-release" never "curl -fsSL -o"
+
+# Kept out by its name alone, too, should it ever stop being a pre-release.
+setup archrelease
+release_answer arch false
+run "${answers[@]}"
+check "arch is never taken for a release, pre-release or not" test "$code" -eq 1
+check "it downloads nothing for arch" never "curl -fsSL -o"
+
+setup nogithub
+rm "$FAKE/release"
+run "${answers[@]}"
+check "no answer from GitHub stops it" test "$code" -eq 1
+check "it says it couldn't ask GitHub" has "couldn't ask GitHub which release is the newest"
+check "it downloads nothing without an answer" never "curl -fsSL -o"
+
+setup badref
+run "${answers[@]}" LINGER_SETUP_REF='v0.4.10?x=1'
+check "a LINGER_SETUP_REF that isn't a name stops it" test "$code" -eq 1
+check "it downloads nothing for a bad LINGER_SETUP_REF" never "curl -fsSL -o"
 
 # --- What stops it ----------------------------------------------------------------
 
