@@ -770,7 +770,7 @@ async fn localize(
         crate::storage::ObjectBody::Redirect(url) => {
             let target = scratch.join(key.replace('/', "_"));
             let mut file = tokio::fs::File::create(&target).await?;
-            let mut response = reqwest::get(&url).await?.error_for_status()?;
+            let mut response = state.storage.download(&url).await?;
             while let Some(chunk) = response.chunk().await? {
                 tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
             }
