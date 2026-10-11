@@ -608,3 +608,179 @@ async fn a_removed_member_stops_seeing_a_dm_they_used_to_be_in() {
         .is_some_and(|a| a.filename == "was-hers-too.png")));
     let _ = dm;
 }
+
+// ---------------------------------------------------------------------------
+// Somebody who left a group DM (#565)
+// ---------------------------------------------------------------------------
+
+/// Leaving is losing access everywhere at once (SPEC §4.13). The same shape as
+/// everything above, the other way round: Callie is a member, every surface
+/// answers her; she leaves, and every one of them answers as if she had never
+/// been in it. The people still in it keep all of it, which is what proves the
+/// filter is a filter.
+#[tokio::test]
+async fn somebody_who_left_a_group_sees_nothing_of_it_anywhere() {
+    let (server, host, callie, dave, _dm, room) = a_dm_and_an_outsider().await;
+    let group = dm_with(
+        &server,
+        &host.access_token,
+        &[&callie.user.id.to_string(), &dave.user.id.to_string()],
+    )
+    .await;
+    let id = group.id.to_string();
+
+    let secret = upload(&server, &dave.access_token, "carburettor-receipt.png").await;
+    let said = say(
+        &server,
+        &dave.access_token,
+        &id,
+        "carburettor at https://example.com/secret-plans",
+        &[&secret],
+    )
+    .await;
+    let pinned = client()
+        .post(server.url(&format!("/messages/{}/pin", said.id)))
+        .bearer_auth(&dave.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pinned.status(), 200);
+    say(
+        &server,
+        &host.access_token,
+        &room.id.to_string(),
+        "carburettor in the open",
+        &[],
+    )
+    .await;
+
+    // Her read position and a notification rule naming the group, both of
+    // which name it back to her if they outlive her membership.
+    let marked = client()
+        .put(server.url(&format!("/rooms/{id}/read")))
+        .bearer_auth(&callie.access_token)
+        .json(&json!({ "last_read_id": said.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(marked.status(), 204);
+    let ruled = client()
+        .put(server.url("/me/notify-rules"))
+        .bearer_auth(&callie.access_token)
+        .json(&json!({ "target_user_id": dave.user.id, "room_id": group.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ruled.status(), 204);
+
+    // While she's in it, every surface answers her: otherwise the checks
+    // after she leaves would prove nothing.
+    assert_eq!(
+        search(&server, &callie.access_token, "carburettor")
+            .await
+            .len(),
+        2
+    );
+    let hers = serde_json::to_string(&media(&server, &callie.access_token, "").await).unwrap();
+    assert!(hers.contains("carburettor-receipt.png") && hers.contains("secret-plans"));
+
+    let left = client()
+        .post(server.url(&format!("/dms/{id}/leave")))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(left.status(), 204);
+
+    // Search: only the room.
+    let found = search(&server, &callie.access_token, "carburettor").await;
+    assert_eq!(found.len(), 1, "search still reached into a group she left");
+    assert_eq!(found[0].room_id, room.id);
+    let inside = client()
+        .get(server.url(&format!("/search?q=carburettor&room_id={id}")))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(inside.status(), 404);
+
+    // Media: not its file, its link or its pin.
+    let grid = serde_json::to_string(&media(&server, &callie.access_token, "").await).unwrap();
+    assert!(
+        !grid.contains("carburettor-receipt.png"),
+        "Media kept a file from a group she left"
+    );
+    assert!(
+        !grid.contains("secret-plans"),
+        "Media kept a link from a group she left"
+    );
+    let star = client()
+        .put(server.url(&format!("/media/{}/star", secret.id)))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(star.status(), 404);
+
+    // The export: no sign of it, by its words or its id.
+    let archive = everything(&open_archive(
+        export_archive(&server, &callie.access_token).await,
+    ));
+    assert!(archive.contains("carburettor in the open"));
+    assert!(
+        !archive.contains("carburettor at"),
+        "an export carried a group she left"
+    );
+    assert!(!archive.contains(&id), "an export named a group she left");
+
+    // Her read position and her rule for it are gone, and neither can be put back.
+    let read: Value = client()
+        .get(server.url("/read"))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        read.get(&id).is_none(),
+        "her read position still names it: {read}"
+    );
+    let rules = client()
+        .get(server.url("/me/notify-rules"))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        !rules.contains(&id),
+        "a notification rule still names it: {rules}"
+    );
+    let again = client()
+        .put(server.url(&format!("/rooms/{id}/read")))
+        .bearer_auth(&callie.access_token)
+        .json(&json!({ "last_read_id": said.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(again.status(), 404);
+
+    // Dave still has all of it, his export included (an export a person can
+    // ask for only so often, so the one before she left is his, not hers).
+    assert_eq!(
+        search(&server, &dave.access_token, "carburettor")
+            .await
+            .len(),
+        2
+    );
+    let his = serde_json::to_string(&media(&server, &dave.access_token, "").await).unwrap();
+    assert!(his.contains("carburettor-receipt.png") && his.contains("secret-plans"));
+    let archive = everything(&open_archive(
+        export_archive(&server, &dave.access_token).await,
+    ));
+    assert!(archive.contains("carburettor at"));
+}

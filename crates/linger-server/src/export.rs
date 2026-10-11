@@ -686,6 +686,10 @@ fn message_markdown(
             who
         );
     }
+    // The line written when somebody left a group DM (#565): who and when.
+    if message.left == Some(true) {
+        return format!("**{}** — {} left\n\n", clock(message.created_at), who);
+    }
     // The line written when a poll closed (#474): its body already says it.
     if message.poll_closed.is_some() {
         return format!("**{}** — {}\n\n", clock(message.created_at), message.body);
@@ -1073,6 +1077,7 @@ mod tests {
             voice_join: Some(true),
             poll: None,
             poll_closed: None,
+            left: None,
         };
         let written = message_markdown(
             &line,
@@ -1082,6 +1087,38 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(written, "**20:50** — somebody who is gone joined voice\n\n");
+    }
+
+    /// A line saying somebody left a group DM reads as one line in the
+    /// archive, not as them having typed "left" (#565).
+    #[test]
+    fn a_left_line_is_who_and_when_and_nothing_under_it() {
+        let line = Message {
+            id: MessageId::new(),
+            room_id: RoomId::new(),
+            author_id: UserId::new(),
+            body: crate::repo::dms::LEFT_BODY.to_string(),
+            reply_to: None,
+            attachments: Vec::new(),
+            reactions: Vec::new(),
+            pinned_at: None,
+            edited_at: None,
+            deleted_at: None,
+            created_at: 20 * 3_600_000 + 50 * 60_000,
+            motd: None,
+            voice_join: None,
+            poll: None,
+            poll_closed: None,
+            left: Some(true),
+        };
+        let written = message_markdown(
+            &line,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert_eq!(written, "**20:50** — somebody who is gone left\n\n");
     }
 
     /// A poll reads as its question and who picked what, not the words an
@@ -1121,6 +1158,7 @@ mod tests {
                 closed_by: None,
             }),
             poll_closed: None,
+            left: None,
         };
         let written = message_markdown(
             &asked,

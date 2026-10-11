@@ -39,4 +39,12 @@ motd?: Motd,
  * none and takes no new ones. Left out when they're on, by a server from
  * before the switch, and on every DM, which has no host and is never off.
  */
-reactions_off?: boolean, };
+reactions_off?: boolean, 
+/**
+ * `true` on a DM somebody has left (#565, PROTOCOL §3.1). It is a group
+ * whatever its size now, and `POST /dms` never finds it by its people
+ * again, so an app doesn't offer it as "the DM with these people" either.
+ * Left out on every other room and DM, and by a server from before
+ * leaving, which an app reads the same way.
+ */
+someone_left?: boolean, };

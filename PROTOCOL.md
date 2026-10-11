@@ -143,6 +143,7 @@ POST /rooms/:id/archive  (host or co-host)                                → Ro
 
 GET  /dms                → Room[]                       # the DMs you are in
 POST /dms                { user_ids }                   → Room
+POST /dms/:id/leave                                     → 204   # a group DM you're in (§3.1)
 ```
 
 ```ts
@@ -155,6 +156,7 @@ type Room = {
   last_message_id: string | null;   // client compares to read marker; never a motd line
   motd?: { text: string; set_by: string; set_at: number };   // left out when none
   reactions_off?: true;             // the host turned reactions off here (§4); left out when on
+  someone_left?: true;              // a DM somebody has left (§3.1, #565); left out otherwise
 }
 ```
 
@@ -209,6 +211,7 @@ reads as "maybe" (#306).
 ```
 GET  /dms                → Room[]
 POST /dms   { user_ids } → Room
+POST /dms/:id/leave      → 204
 ```
 
 `POST /dms` is **create-or-find**: the same set of people always gives the same DM, so
@@ -217,12 +220,50 @@ asking twice is not how you end up with two conversations with the same three pe
 not name themselves; naming yourself, or the same person twice, is
 `VALIDATION_FAILED`, and so is an empty list, because a DM with only you in it is not a
 conversation. Two to eight people in total. An id that is not a member of this server
-is `NOT_FOUND`.
+is `NOT_FOUND`. A DM somebody has left is never found this way (below).
 
-**Membership is fixed at creation.** There is no endpoint to add or remove somebody:
-a different set of people is a different DM. Adding one later would mean deciding what
-they can read of what was already said, and that decision is a permission system in its
-first disguise (AGENTS rule 10).
+**Membership is fixed at creation.** There is no endpoint to add somebody: a different
+set of people is a different DM. Adding one later would mean deciding what they can read
+of what was already said, and that decision is a permission system in its first
+disguise (AGENTS rule 10). The one change is leaving, which only goes one way.
+
+**Leaving a group DM** (SPEC §4.13, #565). `POST /dms/:id/leave` takes the caller out of
+a group DM they are in, and answers `204`. A group is a DM made for three or more
+people, or one somebody has already left, so a group that shrinks to two stays a group.
+
+| Refusal | When |
+|---|---|
+| `404 NOT_FOUND` "No such room on this server." | a DM the caller isn't in (as for any room they can't see), or a room, which nobody leaves |
+| `422 VALIDATION_FAILED` "A DM with one person can't be left. It's their row in your list." | a one-to-one DM |
+
+One transaction does all of it:
+
+- **The caller stops being a member**, so everything that asks whose (`GET /dms`,
+  `ready`, messages, search, Media, the export, typing, voice, `room.focus`) stops
+  answering them about it, exactly as for a DM they were never in.
+- **The DM stops matching its people.** `POST /dms` with the same set makes a new DM,
+  so nobody is pulled back into one they left, and the DM carries `someone_left: true`
+  from now on, so an app can tell it apart from a DM it would find by its people.
+- **The caller's read position and notification rules for it go.**
+- **The people still in it get a line**, a `Message` from whoever left with the body
+  "left" and `left: true` (§4). Like the line saying somebody joined voice it is never a
+  room's `last_message_id`, search passes over it, it can't be edited or reacted to, and
+  an app neither notifies nor sounds for it. An app from before the field shows it as
+  them saying "left".
+
+Frames, in this order. If the caller was in the DM's voice, each of their seats there
+gets `voice.removed` and the people still in it the `voice.state` without them (§8).
+Then **every session of the caller gets `dm.remove { room_id }`**, and nothing about
+the DM after it. Then the people still in it get `room.update`, with the new
+`member_ids`, and the line's `message.create`. An app from before `dm.remove` ignores
+it, as any unknown frame (§9): it keeps showing the DM until it next signs in afresh,
+and everything it asks about it is `NOT_FOUND`.
+
+**The last person to leave deletes the conversation.** Nobody is left who could read it,
+and nobody can be added. Every message in it is deleted as `DELETE /messages/:id`
+deletes one (a tombstone, its body emptied), its reactions and link cards go, its files
+are swept straight away rather than at the sweeper's next pass (§6), and no line is
+written.
 
 Everything else about a DM is a room. `GET /rooms/:id/messages`, `POST` to it,
 reactions, uploads, typing and presence all work unchanged and are addressed by the
@@ -295,6 +336,7 @@ type Message = {
   voice_join?: true;                           // the line saying somebody joined voice (§8, #473)
   poll?: Poll;                                 // the poll this message asks (#474), below
   poll_closed?: PollClosed;                    // on the line a closing poll leaves (#474), below
+  left?: true;                                 // the line saying its author left a group DM (§3.1, #565)
 }
 ```
 
@@ -309,7 +351,7 @@ your own twice is one, and taking back one you never left is `204` too.
 |---|---|
 | `422 VALIDATION_FAILED` "A reaction is one emoji." | the key is words, two emoji, a lone skin tone or joiner (the twelve names reactions had before #485 included) |
 | `404 NOT_FOUND` "That emoji isn't on this server." | `emoji:<id>` names no emoji this server has, or writes the id another way |
-| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice |
+| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice or left a group DM |
 | `403 FORBIDDEN` "Reactions are off in this room." | the host turned them off (§3); taking one back is still allowed |
 | `409 CONFLICT` "This message has six different reactions, the most it can hold. Add yours to one of them." | it has `MAX_REACTIONS_PER_MESSAGE` (6) different emoji already, and this isn't one of them |
 
@@ -328,7 +370,9 @@ before the field shows the line as an ordinary message from whoever set it. Nor 
 line saying somebody joined voice (`voice_join`, §8): nobody typed it. Its body is
 "joined voice" and its author whoever joined, so an app from before the field shows it
 as them saying so; it is never a room's `last_message_id`, search passes over it, and a
-client neither notifies nor sounds for it.
+client neither notifies nor sounds for it. The line saying somebody left a group DM
+(`left`, §3.1) is the same in every way, with the body "left"; whoever left can't reach
+it to edit it anyway.
 
 **Polls** (SPEC §4.18, #474). A question the host or a co-host asks a room, which everybody
 in it answers with a click.
@@ -1142,6 +1186,7 @@ Beyond that, the client must re-identify and refetch.
 | `user.update` | `User` — the current state of this person, **whether or not the client already had them**. A display name, style or status change, and equally somebody who was not on the roster a moment ago: the client's fold appends when the id is unknown |
 | `user.remove` | `{ user_id }` — this person is off the server. The mirror of `user.update`, and it names an id rather than carrying a `User` because there is no state left to describe: `User` has no `deactivated_at` field and is not going to grow one to carry a tombstone |
 | `room.create` / `room.update` | `Room` — a DM's `room.create` reaches its members and nobody else, which is how the other members find out it exists |
+| `dm.remove` | `{ room_id }` — **sent to the sessions of the person who left that group DM and nobody else's** (§3.1, #565): it's gone from their list. Nothing about the DM reaches them after it |
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
@@ -1149,7 +1194,7 @@ Beyond that, the client must re-identify and refetch.
 | `emoji.update` | `{ emoji: CustomEmoji[] }` — the server's emoji changed (one added, renamed or removed, §5): the whole set every time, to everybody |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
 | `voice.offer` | `{ sdp, tracks: [{ mid, session_id }], bitrate? }` — the forwarding server's offer, **addressed to one session**, whole every time somebody joins or leaves. `bitrate` is what to send the microphone at, in bits a second (#431) |
-| `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
+| `voice.removed` | `{ room_id }` — **addressed to one session**: the host or a co-host took it out of that room's voice (#423), or its person left that group DM (§3.1), just before the room's `voice.state` without it. It says why; leaving is the `voice.state`, which an app from before this frame acts on the same |
 
 ```ts
 type PresenceEntry = {
@@ -1335,6 +1380,10 @@ told the thing.
   sessions of the person who blocked or unblocked, the second to the host's and
   every co-host's.
   Neither names a room.
+- `dm.remove` is addressed to the sessions of whoever left that group DM (§3.1). It
+  names a room, but a room they are no longer in, so a membership check would drop it;
+  it is published to them by address instead, after they are out of the DM's audience,
+  so the frames about it from then on (the line, the new `member_ids`) never reach them.
 
 ---
 

@@ -256,7 +256,8 @@ CREATE TABLE rooms (
   name            TEXT NOT NULL,
   topic           TEXT,
   kind            TEXT NOT NULL DEFAULT 'room',-- room | dm (M11)
-  member_key      TEXT UNIQUE,                 -- DMs: sorted member ids, canonical
+  member_key      TEXT UNIQUE,                 -- DMs: sorted member ids, canonical;
+                                               -- NULL once somebody has left (#565)
   position        INTEGER NOT NULL,
   archived_at     INTEGER,
   created_at      INTEGER NOT NULL,
@@ -271,6 +272,8 @@ CREATE TABLE rooms (
 -- stale the moment somebody joins. `member_key` is what makes create-or-find
 -- work — the ids sorted and joined, so the same set of people always produces
 -- the same string, and UNIQUE is what settles two people asking at once.
+-- Leaving a group DM (#565) deletes the leaver's row and clears the key, so the
+-- group never matches its people again.
 CREATE TABLE room_members (
   room_id         BLOB NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -292,8 +295,10 @@ CREATE TABLE messages (
                                                -- day was set; never last_message_id
   voice_join      INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying somebody joined
                                                -- voice (#473); never last_message_id
-  poll_closed     BLOB REFERENCES messages(id) -- on the line a closing poll leaves (#474):
+  poll_closed     BLOB REFERENCES messages(id),-- on the line a closing poll leaves (#474):
                                                -- which poll; never last_message_id
+  dm_left         INTEGER NOT NULL DEFAULT 0   -- 1: the line saying somebody left a
+                                               -- group DM (#565); never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;

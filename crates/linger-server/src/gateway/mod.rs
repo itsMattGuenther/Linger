@@ -43,9 +43,11 @@ pub struct Gateway {
     /// focus are decided while a socket is being torn down, with no database
     /// handle and no place to await one. So it is loaded once at startup by
     /// [`Gateway::reload_dms`], and every path that can change a DM's
-    /// membership calls that again — creating a DM, and removing or restoring
-    /// a member. There are exactly three, and there is no fourth, because
-    /// membership is fixed when a DM is made (PROTOCOL §3.1).
+    /// membership updates it — creating a DM ([`Gateway::note_dm`]), removing
+    /// or restoring a member (`reload_dms` again), and somebody leaving a
+    /// group DM ([`Gateway::left_dm`], #565). There are exactly four, and
+    /// there is no fifth, because nobody can be added to a DM once it is made
+    /// (PROTOCOL §3.1).
     ///
     /// **The startup load is not allowed to fail quietly.** `main` refuses to
     /// start the server if it does, because the failure mode of an empty map is
@@ -161,6 +163,11 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
         // Addressed to one person's sessions (PROTOCOL §5, "Report and
         // block"): the blocker's own, or the host's. Neither names a room.
         ServerEvent::BlockUpdate { .. } | ServerEvent::ReportsChanged {} => None,
+
+        // Addressed to the sessions of whoever left a group DM (#565). It
+        // names the DM, but they're no longer in it, so the room check would
+        // drop it: it goes by address (`publish_to`) instead.
+        ServerEvent::DmRemove { .. } => None,
 
         // Session control. These never reach the bus — they are written
         // straight to one socket — but they are variants of the same enum, so
@@ -326,6 +333,27 @@ impl Gateway {
     /// announcement is the leak.
     pub fn note_dm(&self, room_id: RoomId, members: Vec<UserId>) {
         self.dm_members.insert(room_id, members.into());
+    }
+
+    /// Somebody left a group DM (#565): take them out of its audience, before
+    /// anything about it is published again, so the line saying they left and
+    /// every frame after it never reach them.
+    ///
+    /// It takes one person out of what the map holds rather than reloading
+    /// the DM's members from the database, so two people leaving at the same
+    /// moment can't put each other back: a reload that read before the other
+    /// leave committed, and landed after it, would. The entry stays when the
+    /// last person leaves, with nobody in it, because a room missing from the
+    /// map is a public one.
+    pub fn left_dm(&self, room_id: RoomId, user_id: UserId) {
+        if let Some(mut members) = self.dm_members.get_mut(&room_id) {
+            let staying: Vec<UserId> = members
+                .iter()
+                .copied()
+                .filter(|id| *id != user_id)
+                .collect();
+            *members = staying.into();
+        }
     }
 
     /// May this person see this room at all?

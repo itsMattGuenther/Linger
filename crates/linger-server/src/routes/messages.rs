@@ -254,9 +254,12 @@ async fn edit(
             "That line can't be edited. Set a new message of the day instead.",
         ));
     }
-    // Nor the line saying somebody joined voice (#473), or that a poll
-    // closed (#474): nobody typed them.
-    if message.voice_join == Some(true) || message.poll_closed.is_some() {
+    // Nor the line saying somebody joined voice (#473), that a poll closed
+    // (#474), or that somebody left a group DM (#565): nobody typed them.
+    if message.voice_join == Some(true)
+        || message.poll_closed.is_some()
+        || message.left == Some(true)
+    {
         return Err(ApiError::validation("That line can't be edited."));
     }
     // Nor a poll: its votes would end up pointing at different words (#474).
@@ -398,9 +401,13 @@ async fn add_reaction(
     if message.deleted_at.is_some() {
         return Err(ApiError::not_found("That message is gone."));
     }
-    // A line the server wrote about somebody joining voice or a poll closing
-    // isn't something anybody said (#473, #474).
-    if message.voice_join == Some(true) || message.poll_closed.is_some() {
+    // A line the server wrote about somebody joining voice, a poll closing or
+    // somebody leaving a group DM isn't something anybody said (#473, #474,
+    // #565).
+    if message.voice_join == Some(true)
+        || message.poll_closed.is_some()
+        || message.left == Some(true)
+    {
         return Err(ApiError::validation("Nobody can react to that line."));
     }
     let off: Option<i64> = sqlx::query_scalar("SELECT reactions_off FROM rooms WHERE id = ?")

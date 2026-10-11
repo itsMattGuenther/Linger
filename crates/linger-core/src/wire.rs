@@ -438,6 +438,14 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reactions_off: Option<bool>,
+    /// `true` on a DM somebody has left (#565, PROTOCOL §3.1). It is a group
+    /// whatever its size now, and `POST /dms` never finds it by its people
+    /// again, so an app doesn't offer it as "the DM with these people" either.
+    /// Left out on every other room and DM, and by a server from before
+    /// leaving, which an app reads the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub someone_left: Option<bool>,
 }
 
 /// A room's message of the day (SPEC §4.1, #464): what's happening now, set by
@@ -536,6 +544,16 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub poll_closed: Option<PollClosed>,
+    /// `true` on the line the server writes when somebody leaves a group DM
+    /// (#565): its author is who left, its body "left". Left out on every
+    /// other message, so an app that doesn't know the field shows it as that
+    /// person saying "left".
+    ///
+    /// Like the line saying somebody joined voice it never makes a DM look
+    /// new, never notifies, and can't be edited or reacted to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub left: Option<bool>,
 }
 
 /// A poll (SPEC §4.18, #474): a question the host or a co-host asks a room,

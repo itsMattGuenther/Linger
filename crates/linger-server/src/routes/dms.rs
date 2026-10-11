@@ -1,18 +1,21 @@
 //! DMs (SPEC §4.13, PROTOCOL §3.1, T-1301).
 //!
-//! Two endpoints, and almost all of the file is the check on the way in.
+//! Three endpoints: the list, create-or-find, and leaving a group (#565).
+//! Most of the file is the check on the way in.
 //!
 //! A DM is a room, so there is no `GET /dms/:id/messages` and no DM anything
 //! else: once it exists it is addressed by `room_id` like any room, and the
 //! membership check lives in `repo::rooms::visible_to`, which every room-scoped
 //! route already goes through.
 
-use axum::extract::State;
-use axum::routing::get;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
 use linger_core::limits::{MAX_DM_MEMBERS, MIN_DM_MEMBERS};
 use linger_core::wire::{CreateDmRequest, Room};
+use linger_core::RoomId;
 
 use crate::auth::AuthedUser;
 use crate::error::ApiError;
@@ -20,7 +23,9 @@ use crate::repo;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/dms", get(list).post(create))
+    Router::new()
+        .route("/dms", get(list).post(create))
+        .route("/dms/{id}/leave", post(leave))
 }
 
 /// The DMs this person is in. Never anybody else's — there is no argument that
@@ -89,4 +94,66 @@ async fn create(
     }
 
     Ok(Json(room))
+}
+
+/// Leave a group DM (SPEC §4.13, PROTOCOL §3.1, #565).
+///
+/// The database does the leaving in one go (`repo::dms::leave`); this tells
+/// everybody, and **the order is the privacy**. The leaver comes out of the
+/// DM's audience first, so nothing published about it from then on can reach
+/// them: not the line, not the new member list. Then any seat of theirs in the
+/// DM's voice ends. Then their own sessions are told it's gone, by address,
+/// since they're no longer anybody the room's frames go to. Then the people
+/// still in it get the DM as it is now and the line.
+async fn leave(
+    State(state): State<AppState>,
+    auth: AuthedUser,
+    Path(room_id): Path<RoomId>,
+) -> Result<StatusCode, ApiError> {
+    let left = repo::dms::leave(&state.db.write, room_id, auth.id).await?;
+
+    state.gateway.left_dm(room_id, auth.id);
+    // Every seat they had in its voice (a laptop and a desktop are two): each
+    // is told why it ended, and the people still in it see them go (#423).
+    state.gateway.voice_take_out(room_id, auth.id);
+    state
+        .gateway
+        .publish_to(auth.id, ServerEvent::DmRemove { room_id });
+
+    match left {
+        // They're out whatever happens next, so a failure to read the DM back
+        // is logged rather than answered: an error here would tell them the
+        // leave didn't happen. The others catch up at their next `ready`.
+        repo::dms::Left::Stays { line } => {
+            if let Err(error) = tell_the_others(&state, room_id, line).await {
+                tracing::warn!(error = ?error, "couldn't tell a DM somebody left it");
+            }
+        }
+        // Nobody can read it now, so its files needn't wait for the sweeper's
+        // next pass, up to six hours off, to give the server its space back.
+        repo::dms::Left::Emptied => {
+            let state = state.clone();
+            tokio::spawn(async move {
+                if let Err(error) = crate::expiry::sweep(&state).await {
+                    tracing::warn!(error = ?error, "couldn't sweep a deleted DM's files");
+                }
+            });
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The people still in a DM somebody left: the DM as it is now, with its new
+/// `member_ids`, then the line saying so.
+async fn tell_the_others(
+    state: &AppState,
+    room_id: RoomId,
+    line: linger_core::MessageId,
+) -> Result<(), ApiError> {
+    let room = repo::rooms::expect(&state.db.read, room_id).await?;
+    let line = repo::messages::expect(&state.db.read, &state.config, line).await?;
+    state.gateway.publish(ServerEvent::RoomUpdate(room));
+    state.gateway.publish(ServerEvent::MessageCreate(line));
+    Ok(())
 }

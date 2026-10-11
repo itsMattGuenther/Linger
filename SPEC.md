@@ -654,6 +654,24 @@ conversations with the same three people. Adding somebody later would mean decid
 whether they can read what was said before they arrived, and that question is a
 permission system in its first disguise: a new set of people is a new DM.
 
+**Leaving a group DM** (Matt, 2026-10-10, #565). Leaving is the one change a DM's
+membership can take, and it only goes one way: nobody can be added, so nobody who left
+can be put back. You leave from the group's ⋯ menu or its header, after one
+confirmation that says what happens. It goes from your list on every device you're
+signed in on, and you can't read it any more: it's gone from your search, Media and
+export, like any DM you were never in. The people still in it see a quiet line,
+"Callie left", which never notifies anybody or makes the DM new; they keep the
+conversation, and what you said stays in it, the way somebody's messages stay in a room.
+**A group somebody has left no longer matches its people:** asking later for a DM with
+the same set starts a new one, so nobody is pulled back into a conversation they left;
+anybody can still start a new one with you. A group that shrinks to two stays a group,
+and never merges into the two people's own DM. **A one-to-one DM can't be left:** it is
+that friend's row in the list (#351). **When the last person leaves,** nobody can ever
+read the conversation again, so it is deleted: every message the way a deleted message
+is, and its files with them. Keeping the artifact (§2, principle 3) is for the people
+who made it; bytes nobody can reach would only take up the server's storage, and the
+only way left to read them would be the database file, which is the host reading DMs.
+
 **Two to eight people.** A DM has no host and its members are fixed when it is made,
 so it stays a conversation on the side; a group that wants to be bigger is a room, where
 the host decides who is in it. You cannot DM yourself —
