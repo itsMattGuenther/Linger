@@ -170,6 +170,18 @@ pub trait ObjectStore: Send + Sync {
 
     async fn read_object(&self, key: &str, serve: &ServeAs) -> anyhow::Result<Option<ObjectBody>>;
 
+    /// Fetch the bytes behind an [`ObjectBody::Redirect`] this store handed
+    /// out, for the server's own use (an export, a display copy).
+    ///
+    /// On the store's own HTTP client (#524): a fresh client per file meant a
+    /// fresh connection and TLS handshake per file, which for an export of a
+    /// few thousand photos is a few thousand handshakes. A store that never
+    /// redirects has nothing to fetch.
+    async fn download(&self, url: &str) -> anyhow::Result<reqwest::Response> {
+        let _ = url;
+        anyhow::bail!("this store hands out files, not addresses")
+    }
+
     async fn delete_object(&self, key: &str) -> anyhow::Result<()>;
 
     /// Drop everything belonging to an upload that will never complete.
@@ -237,8 +249,9 @@ pub struct OversizedPart {
 /// The permanent key an attachment's bytes live under.
 ///
 /// Sharded two levels by the first bytes of the id so a server with a hundred
-/// thousand files is still a directory a person can `ls`. The id is a UUIDv7
-/// with 74 random bits, which is what makes the served URL unguessable.
+/// thousand files is still a directory a person can `ls`. The id is a UUIDv7,
+/// and its random part is what makes the served URL unguessable
+/// (`routes::objects` says how much of it there is).
 #[must_use]
 pub fn object_key(id: AttachmentId) -> String {
     let hex = id.to_string();

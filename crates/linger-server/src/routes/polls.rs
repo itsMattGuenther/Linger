@@ -2,6 +2,7 @@
 //! closing one. Closing on time is `crate::polls`.
 
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 use axum::extract::{Path, State};
 use axum::routing::{post, put};
@@ -91,7 +92,7 @@ fn checked(req: &CreatePollRequest) -> Result<(String, Vec<String>), ApiError> {
 fn as_words(question: &str, choices: &[String]) -> String {
     let mut words = format!("**Poll:** {question}\n");
     for choice in choices {
-        words.push_str(&format!("\n- {choice}"));
+        let _ = write!(words, "\n- {choice}");
     }
     words
 }

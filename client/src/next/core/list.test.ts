@@ -10,7 +10,7 @@ vi.mock("../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
 const { apply, serverState } = await import("../../lib/gateway");
-const { listModel, personRow, splitPeople, splitRooms, talkingFirstIds, PEOPLE_SHOWN } = await import("./list");
+const { keepSame, listModel, personRow, splitPeople, splitRooms, talkingFirstIds, PEOPLE_SHOWN } = await import("./list");
 type RoomRow = import("./list").RoomRow;
 type GatewayState = import("../../lib/gateway").GatewayState;
 
@@ -453,5 +453,44 @@ describe("the people you talk to, by id (#197)", () => {
     expect(talkingFirstIds(held, ["u-eli", "u-sam", "u-jen", "u-jules"])).toEqual(["u-jules", "u-jen", "u-sam", "u-eli"]);
     // Nobody you talk to: the order given.
     expect(talkingFirstIds(held, ["u-eli", "u-matt"])).toEqual(["u-eli", "u-matt"]);
+  });
+});
+
+describe("the list made again after a change (#533)", () => {
+  it("keeps every row that reads the same as the very same object, and makes only the changed ones anew", () => {
+    const state = evening();
+    const before = listModel(state, NOW);
+    // Sam comes back from being away: their row changes, and moves from Away to Here.
+    const next = keepSame(before, listModel({ ...state, presence: state.presence.map((entry) => (entry.user_id === "u-sam" ? presence("u-sam", "around") : entry)) }, NOW));
+    const sam = next.people.here.find((row) => row.user.id === "u-sam");
+    expect(sam?.state).toBe("around");
+    expect(before.people.away.some((row) => row === sam)).toBe(false);
+    // Everybody else is who they were, row for row.
+    const jules = next.people.here.find((row) => row.user.id === "u-jules");
+    expect(jules).toBe(before.people.here.find((row) => row.user.id === "u-jules"));
+    expect(next.rooms).toBe(before.rooms);
+    expect(next.me).toBe(before.me);
+    // The group with Eli and Sam shows Sam's mark, so it's new too.
+    expect(next.groups[0]?.people.find((one) => one.user.id === "u-sam")?.state).toBe("around");
+    expect(next.groups[0]).not.toBe(before.groups[0]);
+  });
+
+  it("keeps a whole list as it was when none of its rows changed, and a room whose people changed is new", () => {
+    const state = evening();
+    const before = listModel(state, NOW);
+    const same = keepSame(before, listModel({ ...state }, NOW));
+    expect(same.people).toBe(before.people);
+    expect(same.rooms).toBe(before.rooms);
+
+    // Jules walks into #general: that room's row is new, the others' aren't.
+    const moved = keepSame(before, listModel({ ...state, occupancy: { "r-general": ["u-matt", "u-eli", "u-jules"] } }, NOW));
+    expect(moved.rooms).not.toBe(before.rooms);
+    expect(moved.rooms.find((row) => row.id === "r-general")).not.toBe(before.rooms.find((row) => row.id === "r-general"));
+    expect(moved.rooms.find((row) => row.id === "r-plans")).toBe(before.rooms.find((row) => row.id === "r-plans"));
+  });
+
+  it("with nothing to compare against, is the model as it was made", () => {
+    const made = listModel(evening(), NOW);
+    expect(keepSame(null, made)).toBe(made);
   });
 });

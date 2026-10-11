@@ -188,6 +188,26 @@ def missing(recorded, reference):
                 best, shift = difference, candidate
         return shift
 
+    def starts_here(block, at):
+        """Whether the block begins as the reference does at `at`, for long
+        enough to tell, and then stops being it: the cut is inside it."""
+        if at < 0:
+            return False
+        for length in range(BLOCK - EDGE, EDGE * 2 - 1, -EDGE):
+            head = block[:length]
+            energy = sum(v * v for v in head)
+            if energy < FLOOR * length / BLOCK:
+                return False
+            limit = MATCH * energy
+            total = 0.0
+            for a, b in zip(head, padded[at:at + length]):
+                total += (a - b) * (a - b)
+                if total > limit:
+                    break
+            else:
+                return True
+        return False
+
     # One mark per millisecond, the last overlapping the one before:
     # [kind, shift, where]. A recorded sample at `at` is the reference's at
     # `at + shift`. Only audible milliseconds say what the shift is. It
@@ -216,10 +236,19 @@ def missing(recorded, reference):
             edged = (max(abs(v) for v in block[:EDGE]) <= 0.00001
                      or max(abs(v) for v in block[-EDGE:]) <= 0.00001)
             found = None
-            for start, stop in ((shift - DRIFT, shift + DRIFT + 1), (shift - DRIFT - held, shift - DRIFT),
-                                (shift + DRIFT + 1, len(reference))):
+            for start, stop in ((shift - DRIFT, shift + DRIFT + 1), (shift - DRIFT - held, shift - DRIFT)):
                 if found is None and not edged and start < stop:
                     found = find(block, energy, at, start, stop)
+            # A millisecond that starts as the reference does here and then
+            # stops being it has a skip inside it. Neither side of the cut
+            # is the reference's for the whole millisecond, so it can only
+            # match further on by chance: a knock's two taps are alike, and
+            # one cut 19 ms in matched the second tap. The shift it took
+            # was too far on to come back from, since audio never repeats,
+            # and a skip read as a fault (#567). It is a seam; the next
+            # millisecond says where the sound went on.
+            if found is None and not edged and not starts_here(block, at + shift):
+                found = find(block, energy, at, shift + DRIFT + 1, len(reference))
             if found is not None:
                 shift = found
                 marks.append(["match", shift, at])

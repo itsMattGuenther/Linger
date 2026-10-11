@@ -408,7 +408,7 @@ async fn handle_client_frame(
             // message keeps (#497): an archived room takes no new ones, so
             // nobody is shown typing one there.
             match repo::rooms::visible_to(&state.db.read, room_id, user_id).await {
-                Ok(room) if room.archived_at.is_none() => {}
+                Ok(room) if !room.archived => {}
                 _ => return,
             }
             let key = format!("typing:{user_id}:{room_id}");

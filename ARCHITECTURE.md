@@ -592,6 +592,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
    network), and then only its last entry, the one that proxy wrote; earlier entries
    are whatever the client sent (`auth::client_ip`). The first header from any other
    peer is logged once per start, so a host behind a proxy elsewhere sees what to set.
+   An IPv6 address counts by its /64, the block one home connection or VPS is handed,
+   so stepping through its addresses gets nobody a fresh allowance (#546). The
+   limiter remembers only keys that are still refilling: a key whose bucket is full
+   again is forgotten within a minute, so its memory doesn't grow with every address
+   it has ever seen.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
@@ -658,6 +663,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
   looks fine. Both Silkscreen faces went that way (#318). CI's web job runs
   `scripts/csp-assets.mjs` on each build to hold it.
 - Markdown rendering: allowlist-based sanitizer, no raw HTML passthrough, ever.
+  The one place the server draws markdown is the export's pages (#585,
+  `export/body.rs`): the app's subset, parsed to a tree and written out with
+  every piece of text escaped, links through the same `http`/`https`/`mailto`
+  gate, and a page policy that refuses every script.
 
 **The origin split is enforced, not just advertised.** `LINGER_MEDIA_DOMAIN` defaults to
 `cdn.<LINGER_DOMAIN>`, and the server refuses to start if it is the same host as the app.

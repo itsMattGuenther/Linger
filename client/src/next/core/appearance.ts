@@ -23,6 +23,7 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { validScale } from "../../lib/interface";
 import { applyNormalize, loadNormalize } from "../../lib/normalize";
 import { PROTOCOL, tauriBus } from "./bus";
+import { onPhone } from "./phone";
 
 /** Settings changed how things look; every window applies it. */
 export const APPEARANCE = "next:appearance";
@@ -100,6 +101,48 @@ export function resizedFor(size: { width: number; height: number }, from: number
   return { width: Math.round(size.width * ratio), height: Math.round(size.height * ratio) };
 }
 
+/**
+ * The smallest each window may be at 100%, as the desktop shell builds it:
+ * the list in `src-tauri/tauri.conf.json`, the others in
+ * `src-tauri/src/window.rs`. `appearance.test.ts` reads both, so the numbers
+ * here can't drift from them.
+ */
+export const WINDOW_MINIMUMS = {
+  list: { width: 300, height: 480 },
+  chat: { width: 360, height: 360 },
+  settings: { width: 560, height: 480 },
+  tool: { width: 360, height: 420 },
+} as const;
+
+/** Which of `WINDOW_MINIMUMS` a window is, by the label the shell gave it. */
+export function windowKind(label: string): keyof typeof WINDOW_MINIMUMS {
+  if (label === "settings") return "settings";
+  if (label === "search" || label === "media") return "tool";
+  if (label.startsWith("chat-")) return "chat";
+  return "list";
+}
+
+/**
+ * A window's smallest size at an interface size (#512): the one it was
+ * designed at, grown by the same ratio as the page, so the page is never
+ * squeezed below the width its layout was made for. At 150% the list's 300
+ * would otherwise be 200 of the page's pixels, and the message box over it
+ * an 8 px slot. Never more than nine tenths of the screen, so a big size on
+ * a small screen still leaves a window that fits on it.
+ */
+export function scaledMinimum(
+  designed: { width: number; height: number },
+  scale: number,
+  screen: { width: number; height: number } | null,
+): { width: number; height: number } {
+  const grown = resizedFor(designed, 100, scale);
+  if (!screen) return grown;
+  return {
+    width: Math.min(grown.width, Math.floor(screen.width * 0.9)),
+    height: Math.min(grown.height, Math.floor(screen.height * 0.9)),
+  };
+}
+
 /** The zoom this page has; a page opens at 100. */
 let zoomed = 100;
 
@@ -158,6 +201,8 @@ async function applyOnce(): Promise<void> {
       zoomed = scale;
       await getCurrentWebview().setZoom(scale / 100);
     }
+    // Before any resize: a smaller window may need the old floor gone first.
+    await keepMinimum(current.label, scale);
     let sizedFor = 100;
     try {
       sizedFor = validScale(Number(window.localStorage.getItem(sizedForKey(current.label)) ?? "100"));
@@ -176,6 +221,29 @@ async function applyOnce(): Promise<void> {
     }
   } catch {
     // A desktop that won't resize (a tiling one) still gets the zoom.
+  }
+}
+
+/**
+ * The window's smallest size, grown with the interface size (#512). A phone's
+ * screen is the window, so it has none. A desktop that ignores it (a tiling
+ * one) still gets the zoom and the resize.
+ *
+ * The screen's size is the page's own (`window.screen`), never the shell's
+ * `currentMonitor()`: on Linux, Tauri reads the monitor's details off GTK's
+ * thread, and asked for as the window opens, that crashed the packaged app
+ * about half the time (#623). An engine that shrinks the screen by the page's
+ * zoom only makes the floor smaller, the safe way to be wrong.
+ */
+async function keepMinimum(label: string, scale: number): Promise<void> {
+  if (onPhone()) return;
+  try {
+    const shown = window.screen as Screen | undefined;
+    const screen = shown && shown.availWidth > 0 && shown.availHeight > 0 ? { width: shown.availWidth, height: shown.availHeight } : null;
+    const least = scaledMinimum(WINDOW_MINIMUMS[windowKind(label)], scale, screen);
+    await getCurrentWindow().setMinSize(new LogicalSize(least.width, least.height));
+  } catch {
+    // Refused or not offered: the window keeps the shell's floor.
   }
 }
 

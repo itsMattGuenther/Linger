@@ -18,8 +18,9 @@
  * messages before the evening in #general; `&message=` opens at one. The photo
  * loads only where something serves
  * `PHOTO_PATH` (the spec does). Mute, Deafen and Leave are made by the list
- * window, which answers with their sound (#241): `?hold` keeps each change
- * waiting until `window.owner.finish()`, and `?refuse` has it fail.
+ * window, which answers with their sound (#241): `?hold` has it take a
+ * moment over each change, writing `held:<n>` with how many sounds had
+ * started when it finished, and `?refuse` has it fail.
  *
  * `window.owner` lets a test act as the owner or the shell; what the window
  * asked for is written to `body[data-did]`, `|`-separated, every sound it
@@ -91,16 +92,28 @@ const desktop = fakeDesktop({
   },
 });
 
-hearSounds(desktop.note);
+const heard = hearSounds(desktop.note);
+
+/**
+ * How long `?hold` has the list window take over a change. Timed here, on the
+ * page's own clock, not by the test: the window gives the list window a
+ * second to answer (`CONFIRM_WITHIN_MS`) and plays nothing later, and a test
+ * holding the answer across its own round trips to a busy browser ran past
+ * that second (#528).
+ */
+const HOLD_MS = 200;
 
 // The list window's half of Mute, Deafen and Leave (VOICE_CONTROL in
 // core/share.ts): it makes the change, tells every window the new seat, and
-// only then answers with the sound that confirms it. `?hold` keeps the
-// change waiting until the test finishes it; `?refuse` has it fail, as a
-// change the voice engine refused.
-let finishing: (() => void)[] = [];
+// only then answers with the sound that confirms it. `?hold` has it take
+// HOLD_MS over the change and write down how many sounds had started by the
+// time it finished, which should be none of this change's; `?refuse` has it
+// fail, as a change the voice engine refused.
 async function voiceControl(question: Record<string, unknown>): Promise<{ cue: string | null }> {
-  if (query.has("hold")) await new Promise<void>((finish) => finishing.push(finish));
+  if (query.has("hold")) {
+    await new Promise<void>((done) => setTimeout(done, HOLD_MS));
+    desktop.note(`held:${heard.started()}`);
+  }
   if (query.has("refuse")) throw new Error("Couldn't change voice controls. Voice was disconnected; join again to retry.");
   const state = serverState(SERVER);
   const mine = state.myVoice;
@@ -139,8 +152,6 @@ declare global {
       signInGuild: () => void;
       /** Settings turned push-to-talk on or off mid-call, as the list window tells every window (#231). */
       pushToTalk: (on: boolean) => void;
-      /** With `?hold`: the list window finishes the Mute, Deafen or Leave it's making. */
-      finish: () => void;
       /** Starting voice in a room failed in the list window, which shares why and the devices it asked for (#261, #273). */
       voiceFailed: (roomId: string, problem: string, devices: { input: string | null; output: string | null }) => void;
     };
@@ -162,11 +173,6 @@ window.owner = {
   signInGuild: () => desktop.signIn(GUILD, guild(serverState(GUILD))),
   pushToTalk: (on) =>
     desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice: seat && { ...seat, pushToTalk: on }, read: night.read, readLoaded: true, notifyRules: [] } }),
-  finish: () => {
-    const waiting = finishing;
-    finishing = [];
-    for (const finish of waiting) finish();
-  },
   voiceFailed: (roomId, problem, devices) => {
     const { myVoice, read, readLoaded, notifyRules } = serverState(SERVER);
     desktop.deliver("next:shared", { v: 1, server: SERVER, shared: { myVoice, voiceFailed: { roomId, problem, devices }, read, readLoaded, notifyRules } });

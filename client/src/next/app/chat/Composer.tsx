@@ -711,23 +711,25 @@ export const Composer = memo(function Composer({
             else if (clipboardImage) pasteThroughShell(clipboardImage, plan.words);
           }}
         />
-        {voiceMessage ? <IconButton icon="mic" label="Record a voice message" expanded={voiceMessage.state !== null} onClick={voiceMessage.open} /> : null}
-        <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />
-        <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
-          <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />
-          {emoji ? (
-            <EmojiPicker
-              custom={customEmoji}
-              serverName={serverName}
-              onPick={putEmoji}
-              onClose={() => {
-                setEmoji(false);
-                box.current?.focus();
-              }}
-            />
-          ) : null}
+        <span className="nx-composer-tools">
+          {voiceMessage ? <IconButton icon="mic" label="Record a voice message" expanded={voiceMessage.state !== null} onClick={voiceMessage.open} /> : null}
+          <IconButton icon="plus" label="Add a file" onClick={() => picker.current?.click()} />
+          <span className="nx-composer-emoji-anchor" ref={emojiAnchor}>
+            <IconButton icon="smile" label="Emoji" expanded={emoji} onClick={() => setEmoji((open) => !open)} />
+            {emoji ? (
+              <EmojiPicker
+                custom={customEmoji}
+                serverName={serverName}
+                onPick={putEmoji}
+                onClose={() => {
+                  setEmoji(false);
+                  box.current?.focus();
+                }}
+              />
+            ) : null}
+          </span>
+          <IconButton icon="send" label="Send" tone="accent" disabled={saysNothing(draft) && ready.length === 0} onClick={submit} />
         </span>
-        <IconButton icon="send" label="Send" tone="accent" disabled={saysNothing(draft) && ready.length === 0} onClick={submit} />
         <input
           ref={picker}
           type="file"

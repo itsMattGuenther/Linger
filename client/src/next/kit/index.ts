@@ -30,4 +30,5 @@ export { Switch } from "./Switch";
 export { TabStrip, type TabItem, type TabLead, type TabStripProps } from "./Tabs";
 export { TextField, type TextFieldProps } from "./TextField";
 export { TitleBar, type TitleBarProps } from "./TitleBar";
+export { TooltipBubble, useTooltip } from "./Tooltip";
 export { VoiceGlyph } from "./VoiceGlyph";

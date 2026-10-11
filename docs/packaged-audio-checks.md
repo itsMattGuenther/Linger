@@ -270,6 +270,33 @@ plays paused every one to two seconds, seven lost audio and passed when played
 again and one lost none; and two runs paused throughout lost audio twice and
 failed.
 
+## A skip inside a millisecond (#567, 2026-10-11)
+
+A runner on PR #538 recorded the first knock 41 ms short, and the check failed
+at once with "Abrupt chime onset" instead of playing the set again. The probe
+had measured that knock clean in the WebView (largest step 0.009), and every
+other cue in the set arrived whole. Against the score, the recording was the
+knock sample for sample for 19.7 ms, then skipped 1,946 samples ahead and was
+the knock again to the end: a paused runner, as in #384.
+
+`missing()` gave up on it because the cut fell inside a millisecond. That
+millisecond was neither side's whole, but what it held matched the knock's
+second tap 133 ms further on, and the two taps are alike. The check took that
+shift, could not come back from it (audio never repeats, so it looks back only
+as far as the quiet before), and read the rest as a fault. Cuts that fell on a
+millisecond's edge, as the fixtures' did, never met this.
+
+Now a millisecond that begins as the score does at the current shift and then
+stops being it is a seam, the cut itself, and is not looked for further on;
+the millisecond after it says where the sound went on. Across 512 skips of a
+clean knock (700 to 3,100 samples, at every third sample around four places),
+the old check read 9 as faults and this one none. Of 228 skips of a DM chime,
+16 read as faults before and 11 now. A click, a crackle or a quieter stretch
+is excused as lost audio no more often than before (6 of 234 quieter stretches
+in a decaying tail, the same ones: a fainter piece of a fade can look like a
+later piece of it). Taking the nearest match further on rather than the best
+was tried and dropped: it excused 17 of those 234.
+
 ## Still requires listening
 
 Use Preview in Settings → sound & voice on actual Linux and Windows clients,

@@ -3,8 +3,10 @@
 //! **This is the anti-lock-in guarantee, so it is deliberately not clever.**
 //! Any member can ask for the whole server at any time — no host approval, no
 //! gatekeeping — and what comes back is a zip a person can open on any machine
-//! with no software from this project: one markdown file per room, the files
-//! themselves in `media/`, and an index. Nothing in it needs Linger to read.
+//! with no software from this project: `Open me.html` and a page per room for
+//! any browser (#585, `page.rs`), the same rooms as markdown and as JSON
+//! (`json.rs`), the files themselves in `media/`, and an index. Nothing in it
+//! needs Linger to read.
 //!
 //! Three shapes decide how it is built:
 //!
@@ -47,6 +49,10 @@ use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
 use crate::storage::ServeAs;
+
+mod body;
+mod json;
+mod page;
 
 /// `ApiError` is a response rather than a failure, so it is not a
 /// `std::error::Error` and does not flow into `anyhow` on its own. The worker
@@ -585,29 +591,114 @@ async fn assemble(
     tokio::fs::create_dir_all(scratch.join("rooms")).await?;
     tokio::fs::create_dir_all(scratch.join("direct")).await?;
 
+    // A reaction with one of the server's own emoji is kept by its id; the
+    // archive says its name, as a message would (#485).
+    let emoji: HashMap<String, String> = crate::repo::emoji::all(&state.db.read, &state.config)
+        .await
+        .map_err(anyhowed)?
+        .into_iter()
+        .map(|one| {
+            (
+                format!("{CUSTOM_REACTION_PREFIX}{}", one.id),
+                format!(":{}:", one.name),
+            )
+        })
+        .collect();
+
+    // Where each conversation goes, worked out before any is written, so
+    // every page's side list can point at all of them. DMs live in their own
+    // folder, named by who they are with. Mixing them into `rooms/` would put
+    // a private conversation next to the server's rooms in a file somebody
+    // opens a year from now with no other context.
+    let mut taken: HashSet<String> = HashSet::new();
+    let places: Vec<String> = rooms
+        .iter()
+        .map(|room| {
+            let wanted = if room.kind == RoomKind::Dm {
+                format!("direct/{}", dm_slug(room, &by_id, asker))
+            } else {
+                format!("rooms/{}", room.slug)
+            };
+            // Two DMs can share a name: two whose other people have all left
+            // are both `just-you`. Each keeps its own file.
+            let mut place = wanted.clone();
+            let mut n = 2;
+            while !taken.insert(place.clone()) {
+                place = format!("{wanted}-{n}");
+                n += 1;
+            }
+            place
+        })
+        .collect();
+
+    let server = server_name(state)
+        .await
+        .unwrap_or_else(|| "A Linger server".to_string());
+    let mut nav = page::Nav {
+        server: server.clone(),
+        rooms: Vec::new(),
+        dms: Vec::new(),
+    };
+    let mut topics: HashMap<String, String> = HashMap::new();
+    for (room, place) in rooms.iter().zip(&places) {
+        let href = format!("{place}.html");
+        if let Some(topic) = room.topic.as_deref().map(str::trim) {
+            if !topic.is_empty() {
+                topics.insert(href.clone(), topic.to_string());
+            }
+        }
+        let item = page::NavItem {
+            href,
+            title: nav_title(room, &by_id, asker),
+            archived: room.archived_at.is_some(),
+        };
+        if room.kind == RoomKind::Dm {
+            nav.dms.push(item);
+        } else {
+            nav.rooms.push(item);
+        }
+    }
+
+    let ctx = page::Context {
+        users: &by_id,
+        names: &names,
+        emoji: &emoji,
+    };
+
     // Rooms are two thirds of the work and media is the other third, roughly.
     let total = rooms.len().max(1) as f64;
-    for (done, room) in rooms.iter().enumerate() {
-        let text = room_markdown(state, room, &by_id, &names, asker)
-            .await
-            .map_err(anyhowed)?;
-        // DMs live in their own folder, named by who they are with. Mixing them
-        // into `rooms/` would put a private conversation next to the server's
-        // rooms in a file somebody opens a year from now with no other context.
-        let name = if room.kind == RoomKind::Dm {
-            format!("direct/{}.md", dm_slug(room, &by_id, asker))
-        } else {
-            format!("rooms/{}.md", room.slug)
-        };
-        let path = scratch.join(&name);
-        tokio::fs::write(&path, text).await?;
-        entries.push(Entry {
-            name,
-            source: path,
-            compress: true,
-        });
+    for (done, (room, place)) in rooms.iter().zip(&places).enumerate() {
+        write_conversation(state, room, place, asker, &ctx, &nav, scratch).await?;
+        for kind in ["md", "html", "json"] {
+            let name = format!("{place}.{kind}");
+            entries.push(Entry {
+                source: scratch.join(&name),
+                name,
+                compress: true,
+            });
+        }
         set_progress(state, id, 0.6 * (done + 1) as f64 / total).await;
     }
+
+    let opener = scratch.join(page::INDEX);
+    tokio::fs::write(&opener, page::index(&nav, now_ms(), &topics)).await?;
+    entries.push(Entry {
+        name: page::INDEX.to_string(),
+        source: opener,
+        compress: true,
+    });
+
+    let gallery = scratch.join(page::MEDIA);
+    tokio::fs::write(
+        &gallery,
+        media_page(&nav, &media, &by_id, &names, &rooms, asker),
+    )
+    .await?;
+    entries.push(Entry {
+        name: page::MEDIA.to_string(),
+        source: gallery,
+        compress: true,
+    });
 
     let index = scratch.join("media.md");
     tokio::fs::write(
@@ -622,7 +713,7 @@ async fn assemble(
     });
 
     let readme = scratch.join("README.md");
-    tokio::fs::write(&readme, readme_markdown(state, &rooms, &media).await).await?;
+    tokio::fs::write(&readme, readme_markdown(&server, &rooms, &media)).await?;
     entries.push(Entry {
         name: "README.md".to_string(),
         source: readme,
@@ -679,7 +770,7 @@ async fn localize(
         crate::storage::ObjectBody::Redirect(url) => {
             let target = scratch.join(key.replace('/', "_"));
             let mut file = tokio::fs::File::create(&target).await?;
-            let mut response = reqwest::get(&url).await?.error_for_status()?;
+            let mut response = state.storage.download(&url).await?;
             while let Some(chunk) = response.chunk().await? {
                 tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
             }
@@ -763,12 +854,9 @@ async fn media_rows(state: &AppState, asker: UserId) -> anyhow::Result<Vec<Media
 }
 
 // ---------------------------------------------------------------------------
-// Markdown
+// Conversations
 // ---------------------------------------------------------------------------
 
-/// One room, in the order it happened.
-///
-/// Walks forward in batches rather than loading the room, because "every
 /// What a DM is called inside an archive (SPEC §4.13).
 ///
 /// A DM's `slug` is generated and means nothing, so an archive that used it
@@ -823,49 +911,108 @@ fn conversation_title(room: &Room, users: &HashMap<UserId, User>, asker: UserId)
     }
 }
 
-/// message" includes the room with four years in it.
-async fn room_markdown(
+/// How a conversation is listed down the side of a page: `#garage` for a
+/// room, and the names of who it is with for a DM.
+fn nav_title(room: &Room, users: &HashMap<UserId, User>, asker: UserId) -> String {
+    if room.kind != RoomKind::Dm {
+        return format!("#{}", room.slug);
+    }
+    let names: Vec<&str> = room
+        .member_ids
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter(|id| **id != asker)
+        .filter_map(|id| users.get(id).map(|u| u.display_name.as_str()))
+        .collect();
+    if names.is_empty() {
+        "just you".to_string()
+    } else {
+        names.join(", ")
+    }
+}
+
+/// A file in scratch written a piece at a time, so a room with years in it
+/// is never held in memory once, let alone three times over.
+struct Sink(tokio::io::BufWriter<tokio::fs::File>);
+
+impl Sink {
+    async fn create(path: PathBuf) -> std::io::Result<Self> {
+        Ok(Self(tokio::io::BufWriter::new(
+            tokio::fs::File::create(path).await?,
+        )))
+    }
+
+    async fn put(&mut self, text: &str) -> std::io::Result<()> {
+        tokio::io::AsyncWriteExt::write_all(&mut self.0, text.as_bytes()).await
+    }
+
+    async fn finish(mut self) -> std::io::Result<()> {
+        tokio::io::AsyncWriteExt::flush(&mut self.0).await
+    }
+}
+
+/// One conversation, in the order it happened, three ways at once: markdown
+/// to read (`<place>.md`), a page to look at (`<place>.html`), and data for
+/// programs (`<place>.json`).
+///
+/// Walks forward in batches rather than loading the room, because "every
+/// message" includes the room with four years in it, and writes each batch
+/// out before reading the next.
+async fn write_conversation(
     state: &AppState,
     room: &Room,
-    users: &HashMap<UserId, User>,
-    names: &HashMap<String, String>,
+    place: &str,
     asker: UserId,
-) -> Result<String, ApiError> {
-    let mut out = String::new();
-    out.push_str(&format!("# {}\n\n", conversation_title(room, users, asker)));
+    ctx: &page::Context<'_>,
+    nav: &page::Nav,
+    scratch: &Path,
+) -> anyhow::Result<()> {
+    let users = ctx.users;
+    let title = conversation_title(room, users, asker);
+    let mut md = Sink::create(scratch.join(format!("{place}.md"))).await?;
+    let mut html = Sink::create(scratch.join(format!("{place}.html"))).await?;
+    let mut data = Sink::create(scratch.join(format!("{place}.json"))).await?;
+
+    let mut head = format!("# {title}\n\n");
     if room.kind != RoomKind::Dm && room.name != room.slug {
-        out.push_str(&format!("**{}**\n\n", room.name));
+        head.push_str(&format!("**{}**\n\n", room.name));
     }
     if let Some(topic) = &room.topic {
         if !topic.trim().is_empty() {
-            out.push_str(&format!("*{}*\n\n", topic.trim()));
+            head.push_str(&format!("*{}*\n\n", topic.trim()));
         }
     }
     if room.archived_at.is_some() {
-        out.push_str("*This room was archived.*\n\n");
+        head.push_str("*This room was archived.*\n\n");
     }
-    out.push_str("*Times are UTC.*\n");
+    head.push_str("*Times are UTC.*\n");
+    md.put(&head).await?;
+    html.put(&page::open(
+        &format!("{} · {}", nav_title(room, users, asker), nav.server),
+        false,
+    ))
+    .await?;
+    // "direct message with Sam" reads as a sentence in the markdown; as a
+    // page's heading it starts with a capital.
+    let heading: String = title
+        .chars()
+        .take(1)
+        .flat_map(char::to_uppercase)
+        .chain(title.chars().skip(1))
+        .collect();
+    html.put(&page::conversation_header(room, &heading)).await?;
+    data.put(&json::open(room, &title)).await?;
 
     let mut after: Option<MessageId> = None;
     let mut day: Option<(i64, u32, u32)> = None;
+    let mut run = page::Run::default();
     let mut wrote_any = false;
     // What each message said, in a few words, so a reply can quote the thing it
     // is answering. A reply pointing at nothing is the least readable part of a
     // transcript, and this is the whole cost of fixing it: a short string per
     // message, in a room this loop is already walking.
-    let mut said: HashMap<MessageId, String> = HashMap::new();
-    // A reaction with one of the server's own emoji is kept by its id; the
-    // transcript says its name, as a message would (#485).
-    let emoji: HashMap<String, String> = crate::repo::emoji::all(&state.db.read, &state.config)
-        .await?
-        .into_iter()
-        .map(|one| {
-            (
-                format!("{CUSTOM_REACTION_PREFIX}{}", one.id),
-                format!(":{}:", one.name),
-            )
-        })
-        .collect();
+    let mut said: HashMap<MessageId, Said> = HashMap::new();
 
     loop {
         let batch = crate::repo::messages::batch_ascending(
@@ -875,12 +1022,15 @@ async fn room_markdown(
             after,
             BATCH,
         )
-        .await?;
+        .await
+        .map_err(anyhowed)?;
         if batch.is_empty() {
             break;
         }
         after = batch.last().map(|m| m.id);
 
+        let (mut md_out, mut html_out, mut data_out) =
+            (String::new(), String::new(), String::new());
         for message in &batch {
             // A deleted message is a tombstone with an empty body. Somebody
             // deleted it; an archive that resurrects it would be a worse
@@ -891,19 +1041,37 @@ async fn room_markdown(
             let today = civil_date(message.created_at);
             if day != Some(today) {
                 let (y, m, d) = today;
-                out.push_str(&format!("\n---\n\n## {y:04}-{m:02}-{d:02}\n\n"));
+                md_out.push_str(&format!("\n---\n\n## {y:04}-{m:02}-{d:02}\n\n"));
                 day = Some(today);
             }
-            out.push_str(&message_markdown(message, users, names, &emoji, &said));
-            said.insert(message.id, excerpt(message, users));
+            md_out.push_str(&message_markdown(
+                message, users, ctx.names, ctx.emoji, &said,
+            ));
+            html_out.push_str(&run.message(message, ctx, &said));
+            if wrote_any {
+                data_out.push_str(",\n");
+            }
+            data_out.push_str(&json::message(message, users, ctx.names, ctx.emoji));
+            said.insert(message.id, excerpt(message));
             wrote_any = true;
         }
+        md.put(&md_out).await?;
+        html.put(&html_out).await?;
+        data.put(&data_out).await?;
     }
 
     if !wrote_any {
-        out.push_str("\nNothing was ever said in this room.\n");
+        md.put("\nNothing was ever said in this room.\n").await?;
+        html.put(page::empty_conversation()).await?;
     }
-    Ok(out)
+    html.put(&page::close(nav, 1, &format!("{place}.html")))
+        .await?;
+    data.put(json::close()).await?;
+
+    md.finish().await?;
+    html.finish().await?;
+    data.finish().await?;
+    Ok(())
 }
 
 /// One message: who, when, what, and what came with it.
@@ -912,7 +1080,7 @@ fn message_markdown(
     users: &HashMap<UserId, User>,
     names: &HashMap<String, String>,
     emoji: &HashMap<String, String>,
-    said: &HashMap<MessageId, String>,
+    said: &HashMap<MessageId, Said>,
 ) -> String {
     let mut out = String::new();
     let who = users.get(&message.author_id).map_or_else(
@@ -962,7 +1130,7 @@ fn message_markdown(
     if let Some(replied_to) = message.reply_to {
         match said.get(&replied_to) {
             // A blockquote, which is what a reply looks like everywhere else.
-            Some(quoted) => out.push_str(&format!("> ↩ {quoted}\n")),
+            Some(quoted) => out.push_str(&format!("> ↩ {}\n", quoted.markdown(users))),
             // The message it answered was deleted, or came before this room's
             // first batch. Say that rather than quoting nothing.
             None => out.push_str("> ↩ *a message that is no longer here*\n"),
@@ -1050,26 +1218,40 @@ fn poll_markdown(
     out
 }
 
-/// A message in a few words, for the reply above it to quote.
-fn excerpt(message: &Message, users: &HashMap<UserId, User>) -> String {
-    let who = users
-        .get(&message.author_id)
-        .map_or("somebody who is gone", |u| u.display_name.as_str());
-    let body: String = message
-        .body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+/// What a message said, in a few words, for a reply under it to quote.
+struct Said {
+    author: UserId,
+    /// The words on one line, cut to 60 characters.
+    short: String,
+}
+
+impl Said {
+    /// The quote as the markdown writes it: `**Matt**: first thing said`.
+    fn markdown(&self, users: &HashMap<UserId, User>) -> String {
+        let who = users
+            .get(&self.author)
+            .map_or("somebody who is gone", |u| u.display_name.as_str());
+        if self.short.is_empty() {
+            format!("**{who}**")
+        } else {
+            format!("**{who}**: {}", self.short)
+        }
+    }
+}
+
+/// A message in a few words, for the reply above it to quote: its words with
+/// the markdown taken off, as the app quotes them.
+fn excerpt(message: &Message) -> Said {
+    let body = body::plain_text(&message.body);
     let short: String = body.chars().take(60).collect();
     let short = if short.chars().count() < body.chars().count() {
         format!("{short}…")
     } else {
         short
     };
-    if short.is_empty() {
-        format!("**{who}**")
-    } else {
-        format!("**{who}**: {short}")
+    Said {
+        author: message.author_id,
+        short,
     }
 }
 
@@ -1130,11 +1312,40 @@ fn media_markdown(
     out
 }
 
-/// The first thing anybody opens.
-async fn readme_markdown(state: &AppState, rooms: &[Room], media: &[MediaRow]) -> String {
-    let name = server_name(state)
-        .await
-        .unwrap_or_else(|| "a Linger server".to_string());
+/// The page of every file (`media.html`), in the same order as the index.
+fn media_page(
+    nav: &page::Nav,
+    media: &[MediaRow],
+    users: &HashMap<UserId, User>,
+    names: &HashMap<String, String>,
+    rooms: &[Room],
+    asker: UserId,
+) -> String {
+    let rooms: HashMap<RoomId, &Room> = rooms.iter().map(|room| (room.id, room)).collect();
+    let tiles: Vec<page::Tile<'_>> = media
+        .iter()
+        .map(|item| page::Tile {
+            file: names.get(&item.object_key).map(String::as_str),
+            filename: &item.filename,
+            mime: &item.mime,
+            who: users
+                .get(&item.uploader_id)
+                .map_or("somebody who is gone", |u| u.display_name.as_str()),
+            when: item.created_at,
+            place: item.room_id.and_then(|id| rooms.get(&id)).map_or_else(
+                || "not posted".to_string(),
+                |room| nav_title(room, users, asker),
+            ),
+            size_bytes: item.size_bytes,
+            starred: item.starred,
+        })
+        .collect();
+    page::media(nav, &tiles)
+}
+
+/// The read-me for anybody who opens the folder in a text editor rather than
+/// a browser.
+fn readme_markdown(name: &str, rooms: &[Room], media: &[MediaRow]) -> String {
     let (y, m, d) = civil_date(now_ms());
     let bytes: i64 = media.iter().map(|item| item.size_bytes).sum();
 
@@ -1143,21 +1354,26 @@ async fn readme_markdown(state: &AppState, rooms: &[Room], media: &[MediaRow]) -
          Everything on this server, exported on {y:04}-{m:02}-{d:02}. Times \
          throughout are UTC.\n\n\
          ## What is in here\n\n\
-         - `rooms/` — one file per room, in the order things were said. \
-         {} room{}.\n\
+         - `{}` — open this in any web browser. Every conversation, laid out \
+         the way Linger lays it out, with the pictures in place.\n\
+         - `rooms/` and `direct/` — one conversation per name, in the order \
+         things were said, three ways: a page (`.html`), plain text \
+         (`.md`), and data for programs (`.json`). {} conversation{}.\n\
          - `media/` — every file anybody shared. {} file{}, {}.\n\
-         - `media.md` — an index of those files: who shared each one, when, and \
-         in which room.\n\n\
+         - `{}` and `media.md` — every file: who shared each one, when, and in \
+         which room.\n\n\
          ## Reading it\n\n\
-         These are plain markdown and plain files. Any text editor opens the \
-         rooms; anything at all opens the media. You do not need Linger, or an \
-         account, or this server to still exist.\n\n\
+         These are plain web pages, plain markdown and plain files. Any \
+         browser opens the pages and any text editor opens the rest. You do \
+         not need Linger, or an account, or this server to still exist.\n\n\
          Deleted messages are not here. Somebody deleted them.\n",
+        page::INDEX,
         rooms.len(),
         if rooms.len() == 1 { "" } else { "s" },
         media.len(),
         if media.len() == 1 { "" } else { "s" },
         human_size(bytes),
+        page::MEDIA,
     )
 }
 
