@@ -2180,6 +2180,20 @@ export function typistsIn(current: GatewayState, roomId: RoomId, now: number): U
 }
 
 /**
+ * When the next of a room's typists stops counting (`typistsIn`), or null
+ * when nobody is typing: the moment the "is typing" line next changes by
+ * itself. The line is drawn again then, rather than on a clock (#511).
+ */
+export function typingRunsOut(current: GatewayState, roomId: RoomId, now: number): number | null {
+  const room = current.typing[roomId];
+  if (!room) return null;
+  const ends = Object.entries(room)
+    .filter(([userId, at]) => now - at < TYPING_TTL_MS && userId !== current.me?.id)
+    .map(([, at]) => at + TYPING_TTL_MS);
+  return ends.length === 0 ? null : Math.min(...ends);
+}
+
+/**
  * Take one knock's card off the screen (T-1102).
  *
  * Called by the card itself when its time is up — there is no dismiss control,

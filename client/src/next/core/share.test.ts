@@ -132,7 +132,7 @@ function fakeOwnerApi(tokens: string[]) {
     heldToken: () => ({ token: tokens[issued] ?? "exhausted", expiresAt: Date.now() + 600_000 }),
     put: vi.fn(async () => undefined),
     delete: vi.fn(async () => undefined),
-    changePassword: vi.fn(async (_request: { current_password: string }) => undefined),
+    changePassword: vi.fn(async (_request: { current_password: string }) => false),
     post: vi.fn(async () => undefined),
     get: vi.fn(async () => []),
   };
@@ -346,6 +346,8 @@ describe("a viewer window sharing the owner's connection", () => {
     const refusal = (status: number, message: string) => new owner.api.ApiError(status, { code: "UNAUTHENTICATED", message, retry_after_ms: null });
     api.changePassword.mockImplementation(async (request) => {
       if (request.current_password !== "old-secret") throw refusal(401, "That isn't your current password.");
+      // A server from before #496, which answers with nothing.
+      return false;
     });
 
     // A rule: saved by the owner, and every window learns it.
@@ -364,12 +366,24 @@ describe("a viewer window sharing the owner's connection", () => {
       const user = { ...owner.gateway.serverState(HOME).me };
       return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 600, user }), { status: 200 });
     });
+    // A server busy checking other people's passwords says so, in its own words (#538).
+    api.changePassword.mockRejectedValueOnce(
+      new owner.api.ApiError(429, { code: "RATE_LIMITED", message: "The server is busy letting other people in. Try again in a moment.", retry_after_ms: 5_000 }),
+    );
+    const busy = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "old-secret", next: "new-secret-1" });
+    expect(busy).toEqual({ problem: "The server is busy letting other people in. Try again in a moment." });
     const wrong = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "nope", next: "new-secret-1" });
     expect(wrong).toEqual({ problem: "That isn't your current password." });
     expect(fetched).toEqual([]);
     const right = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "old-secret", next: "new-secret-1" });
     expect(right).toEqual({ problem: null });
     expect(fetched).toEqual([`POST ${HOME}/api/v1/auth/login {"username":"matt","password":"new-secret-1"}`]);
+    // A server from #496 on hands the sign-in a fresh pair, which it carries
+    // on with: no signing in again.
+    api.changePassword.mockResolvedValueOnce(true);
+    const carried = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "old-secret", next: "new-secret-2" });
+    expect(carried).toEqual({ problem: null });
+    expect(fetched).toHaveLength(1);
     vi.unstubAllGlobals();
 
     await follower.intend({ kind: "settings", section: "invites" });

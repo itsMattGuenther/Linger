@@ -65,6 +65,32 @@ Then open <http://localhost:1431/tests/fixtures/kit.html>.
    anything typed, an error (`role="alert"`), and a link meant for copying. A
    new part stays unselectable unless it is one of those. On the phone a
    message stays unselectable too, since holding it opens its actions.
+10. **Somebody's words keep their direction to themselves (#488).** A few
+    invisible characters turn the text after them around (U+202E, the
+    "right-to-left override", and its relatives), so one in a name or a
+    status could flip the app's own words beside it. Every part that draws
+    short words somebody wrote is `unicode-bidi: isolate` in its own CSS,
+    whether it's a block or a word in a sentence: a `Name`, a row's title,
+    note and second line, a tab's and a title bar's title, a chip's text,
+    a file's name, a status and its fields, a room's name and topic, a
+    poll's question and choices, a mention, a link card's title, a server's
+    name, the message of the day, and the words a reply quotes. A new part
+    that draws such words does the same. A message keeps every character
+    it was written with, since people writing Hebrew or Arabic may want
+    them, so its words are isolated wherever something follows them on
+    their line: "edited" and the pin after its last words
+    (`.nx-text-words`), which a message ending in U+202E turned into
+    "detide". Each of its other paragraphs is a block of its own, and
+    direction never crosses a block's edge. A file's name is also shown
+    without those characters at all (`fileNameToShow` in `lib/media.ts`):
+    isolating it keeps the words around it right, but only taking them out
+    stops `invoice` + U+202E + `fdp.exe` reading as "invoiceexe.pdf". The
+    server refuses them in a display name and takes the ones that turn text
+    around out of the other short text on the way in, keeping the marks
+    Hebrew and Arabic writers use to place punctuation (PROTOCOL §2).
+    Isolating is for what's left: words saved before that, a message's
+    words, a link card's title (a web page's own words), and a server that
+    doesn't.
 
 ## Tokens
 
@@ -787,7 +813,10 @@ replaces an unread count.
   (Join, Move voice here, Start talking, Talk here instead). In the room
   you're in voice in, it ends with your Mute, Deafen and Leave voice as small
   plain `IconButton`s (#216), the same symbols, sizes and spacing as the
-  list's voice bar (#230); the word is each one's name and tooltip. Chips
+  list's voice bar (#230); the word is each one's name and tooltip. Join and
+  Leave redraw the buttons under the pointer (Deafen where Join was, Join
+  where Leave was), so a double-click on the strip is one click, and for
+  400 ms after either a click there doesn't count (#510). Chips
   that don't fit are cut at the end of the list of people. The list cuts on
   every side and a chip is as tall as it, so a glowing name's light stays
   inside its chip's border; across the chip it fades out as in the list's
@@ -932,6 +961,29 @@ built on the rows' own grid so nothing new lines up by eye:
   `away` button (#392), as with one server.
 - **One server** draws the list exactly as before, with no section header.
 
+## When something can't be drawn
+
+A part that throws while it's drawn says so in its place, and the rest of
+the window carries on (#509, `app/Boundary.tsx`). Before, one throw blanked
+the whole list window.
+
+- **A pane:** a conversation, Media, Search, or a section of Settings. Its
+  place says "This conversation couldn't be shown." (or "Media…",
+  "This section…"), a muted line under it, and a small Try again: laid out
+  as a window with nothing to show is, centered in the pane, and in Settings
+  on the header's edge, where a section's first block would start. No alarm
+  color and never the lamp: nothing new happened. The tabs, the list and the
+  title bar go on working, and showing another conversation draws again.
+- **A window:** the last place it's caught, at the root of every window
+  (`main.tsx`). Its title bar, so it can still be moved and closed, a line
+  saying so, and Reload.
+- **A time a date can't hold** draws as no time rather than throwing
+  (`validTime` in `lib/time.ts`): a message, a line or a search hit without
+  its time, a message of the day without "at 10:52 PM", a divider not drawn.
+
+What broke goes to this computer's console, where React writes every error
+it catches, and nowhere else (AGENTS.md hard rule 4).
+
 ## What the tests enforce
 
 | Rule | Test |
@@ -955,6 +1007,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
+| A name with a character that turns text around in it leaves the words after it the right way round, read letter by letter as drawn, and a row's title, note, second line and name are isolated; a file named `invoice` + U+202E + `fdp.exe` shows "invoicefdp.exe" on its card, isolated, and in Media and Search; a message ending in U+202E leaves its "edited" the right way round (#488) | `kit.spec.ts` › a name that turns text around; `next-chat.spec.ts` › a name with a character that turns text around, words ending in a character that turns text around; `lib/media.test.ts`, `core/search.test.ts` |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (one caught mid-band too); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |
@@ -991,6 +1044,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | No `!important` | `discipline.test.ts` › never uses !important |
 | `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
+| A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
 | Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The

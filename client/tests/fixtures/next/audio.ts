@@ -8,11 +8,13 @@
  * the device a rendered buffer, not a name, so the cue is found by comparing
  * the buffer with each cue rendered here the same way (`lib/chimes.ts`).
  *
- * As in the app (`src/next/main.tsx`), the device opens on the first pointer
- * or key in the window; until then there is none, and nothing plays.
+ * The shell answers nothing to `sound_play` here, so every sound takes the
+ * page's own way, as one the shell couldn't play does in the app: the player
+ * opens a device for it, with or without a click, and closes it again once
+ * the window has been quiet for a while (#531).
  */
 import { CHIMES, renderChime } from "../../../src/lib/chimes";
-import { type SoundCue, unlockAudio } from "../../../src/lib/sound";
+import { type SoundCue, unlockAudioOnGesture } from "../../../src/lib/sound";
 
 /** Low, so rendering every cue here is quick; any rate the renderer takes will do. */
 const RATE = 8_000;
@@ -36,6 +38,10 @@ export function hearSounds(note: (what: string) => void): void {
       this.state = "running";
       return Promise.resolve();
     }
+    close(): Promise<void> {
+      this.state = "closed";
+      return Promise.resolve();
+    }
     createBufferSource() {
       const source = {
         buffer: null as AudioBuffer | null,
@@ -52,6 +58,5 @@ export function hearSounds(note: (what: string) => void): void {
   }
   window.AudioContext = Device as unknown as typeof AudioContext;
 
-  window.addEventListener("pointerdown", () => unlockAudio());
-  window.addEventListener("keydown", () => unlockAudio());
+  unlockAudioOnGesture(window);
 }

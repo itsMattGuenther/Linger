@@ -562,11 +562,23 @@ carry sender feedback to a different person.
 
 - 500 MB per file
 - 50 GB per server pool (host-configurable)
+- The pool is everybody's, so nobody can fill it alone, by accident or on purpose
+  (#503). One person can have 1 GB of uploads going up at once; past that, they're
+  told it's their uploads, not that the server is full. An upload that has received
+  nothing for an hour gives its space back, and so does one taken out of the box
+  while it's going up. A file somebody uploads and never sends is deleted after a
+  week (sooner if the host's window is shorter, and even with expiry off). Removing
+  a member deletes their uploads in progress and the files they never sent; what
+  they sent stays.
 - Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- Deleting a message deletes its files with it, at once and starred or not: nothing
+  serves, shows, lists or exports them after (#502)
 - Resumable uploads
 - **EXIF stripped from all images on upload, always, no toggle.** Camera photos carry
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
-  an embarrassing bug.
+  an embarrassing bug. The one thing EXIF says that is kept is which way up the photo
+  goes: a picture is turned the way its Orientation tag says first, then stripped, so a
+  phone photo shows the way it was taken (#569).
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
 - A picture in a conversation or on a media tile is drawn from a copy the server
   makes, 960 px on its longest side; the viewer and downloads open the original.
@@ -590,6 +602,15 @@ files, in one archive. No gatekeeping, no host approval, one export per hour.
 
 This is a trust feature and an anti-lock-in guarantee. It costs a weekend and it is the
 most credible thing in the product.
+
+An archive is something you download, not something the server keeps (#504). Each
+member has one at a time, and the server deletes it **a week** after it's ready, or
+when the host removes that member, whichever comes first. Most people download theirs
+within minutes; a week covers a weekend away or a download that has to be resumed, and
+anybody who misses it asks again. The app says when the link stops working. An export
+the server's disk can't hold is refused before it starts, in words, because a full disk
+stops the whole server. An export cut off by a restart shows as failed, and the person
+can ask again straight away.
 
 ### 4.12 Search
 
@@ -781,8 +802,9 @@ end-to-end encryption. A layer that would stop even the host is #200.
 voice address, which works from behind almost any home router; a strict office network
 that blocks UDP goes through the relay (TURN) instead. The host runs one beside the
 server, and it is the host's, not a third party's. What it carries is the encrypted
-stream, which it cannot read, and the server's only part is handing a member a
-short-lived password for it at the moment they join. A host who runs no relay has voice
+stream, which it cannot read, to the server's voice address and nowhere else (#501),
+and the server's only part is handing a member a short-lived password for it at the
+moment they join. A host who runs no relay has voice
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's

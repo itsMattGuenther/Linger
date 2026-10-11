@@ -1,7 +1,7 @@
 // Test-only code bundled with the production player, then injected into an
 // unchanged package with an empty profile. No account or microphone is used.
 import { renderChime } from "../client/src/lib/chimes";
-import { loadSoundPrefs, playKnock, playPreview, playSound } from "../client/src/lib/sound";
+import { AUDIO_KEEP_OPEN_MS, loadSoundPrefs, playKnock, playPreview, playSound, unlockAudio } from "../client/src/lib/sound";
 
 (() => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,7 +57,12 @@ import { loadSoundPrefs, playKnock, playPreview, playSound } from "../client/src
         for (const scenario of ["first-preview", "repeat-preview", "delayed-preview", "live", "idle-preview"]) {
           const label = `${cue}-${scenario}`;
           stall = scenario === "delayed-preview" || scenario === "live";
-          if (scenario === "idle-preview") await wait(2000);
+          // Long enough for the player to close its context (#531): the cue
+          // after it must open a new one, with no click, and play whole.
+          if (scenario === "idle-preview") {
+            await wait(AUDIO_KEEP_OPEN_MS + 1000);
+            if (context.state !== "closed") throw new Error(`${label} context still ${context.state} after the quiet`);
+          }
           const played = scenario === "live"
             ? await (cue === "knock" ? playKnock() : playSound("dm"))
             : await playPreview(cue);
@@ -130,6 +135,8 @@ import { loadSoundPrefs, playKnock, playPreview, playSound } from "../client/src
   const button = document.createElement("button");
   button.id = "linger-audio-probe";
   button.textContent = "Test packaged audio";
-  button.onclick = () => { button.disabled = true; void run(); };
+  // As in every app window, the click goes to the player's gesture handler,
+  // which in the app opens nothing (#531): the first cue opens the audio.
+  button.onclick = () => { button.disabled = true; void unlockAudio(); void run(); };
   document.body.replaceChildren(button);
 })();

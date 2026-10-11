@@ -333,7 +333,7 @@ function Hit({
                   <span key="icon" className="nx-hit-file">
                     <Icon name="file" size="sm" />
                   </span>,
-                  <mark key="file">{line.file}</mark>,
+                  <mark key="file" className="nx-hit-file-name">{line.file}</mark>,
                   line.also ? (
                     <span key="also" className="nx-hit-also">
                       {line.also}

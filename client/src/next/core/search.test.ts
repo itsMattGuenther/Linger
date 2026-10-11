@@ -135,6 +135,12 @@ describe("a hit", () => {
     expect(hitLine(hit({ snippet: [] }), names, null, NOW).label).toBe(`Eli in #general, ${full}: no words`);
   });
 
+  it("says nothing about when for a time that can't be drawn, rather than throwing (#509)", () => {
+    const line = hitLine(hit({ created_at: 9e15 }), names, null, NOW);
+    expect(line.when).toBe("");
+    expect(line.label).toBe("Eli in #general: the one with the rain sounds");
+  });
+
   it("says when, short: the day and time this year, the day and year before", () => {
     const thisYear = hitWhen(AT, NOW);
     expect(thisYear).toContain("25");
@@ -204,6 +210,11 @@ describe("the words around a search", () => {
     expect(filesNamed(["a.png", "b.pdf"])).toBe("a.png and b.pdf");
     const many = filesNamed(["a.png", "b.pdf", "c.txt", "d.mov"]);
     expect(many).toBe("a.png, b.pdf and others");
+  });
+
+  // #488: an override in the first name would turn "and b.pdf" around too.
+  it("names files without the characters that turn text around", () => {
+    expect(filesNamed(["invoice\u{202E}fdp.exe", "b.pdf"])).toBe("invoicefdp.exe and b.pdf");
   });
 
   it("says it's searching, or what went wrong, by server when there are several", () => {

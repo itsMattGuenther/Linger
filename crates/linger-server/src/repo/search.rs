@@ -16,11 +16,27 @@
 //! makes every operator inert. There is no input that can reach `MATCH` as
 //! syntax.
 //!
-//! **Paging is keyset on the message id.** Message ids are UUIDv7, so their
-//! bytes sort in the order the messages were said; `before` is one, and the
-//! next page is everything ordered before it. Nothing repeats and nothing is
-//! skipped when somebody posts while a reader is paging, which an `OFFSET`
-//! cannot promise.
+//! **Newest first means the order the server wrote them** (#518). The index's
+//! row numbers are the messages table's, which SQLite hands out in the order
+//! rows are written, so walking them backwards is newest first. FTS5 can walk
+//! its matches in that order and stop at the end of the page, which means it
+//! makes a snippet only for the hits it returns. Ordering by the message id
+//! instead made it find every match, make a snippet for each and sort them all:
+//! 111 ms for two common words with 18,000 hits on a year-sized server, against
+//! under a millisecond now.
+//!
+//! The two orders agree except for messages written in the same instant. An id
+//! is minted just before its row is written, so two posts racing for the one
+//! writer can land in the other order, milliseconds apart. Nobody can see that
+//! in a list of results, and the message stream still orders by id.
+//!
+//! **Paging is keyset.** The cursor is still the last hit's message id, and the
+//! next page is every hit written before that message. Nothing repeats and
+//! nothing is skipped when somebody posts while a reader is paging, which an
+//! `OFFSET` cannot promise. The cursor's message is looked up only among the
+//! ones the reader can see, so a cursor naming a message in somebody else's DM
+//! is an empty page, the same as a cursor naming nothing: the answer cannot
+//! say the message exists.
 
 use linger_core::limits::{MAX_SEARCH_TERMS, SEARCH_SNIPPET_TOKENS};
 use linger_core::wire::{SearchHit, SearchSnippetPart};
@@ -71,10 +87,16 @@ impl Terms {
     /// a quoted phrase, `OR`, `*` and `(` are just characters for the tokenizer
     /// to break on.
     ///
+    /// A control character counts as a space, so `a`, NUL, `b` looks for `a`
+    /// and `b`. It must never reach `MATCH`: SQLite reads that string only as
+    /// far as a NUL, so one inside a phrase cut off its closing quote and the
+    /// search failed (#498).
+    ///
     /// Returns `None` when there is nothing left to search for — an empty box,
-    /// or a query made only of punctuation. That is a validation error at the
-    /// endpoint rather than an empty result, because "no messages contain `***`"
-    /// and "you did not ask for anything" are different answers.
+    /// or a query made only of punctuation or control characters. That is a
+    /// validation error at the endpoint rather than an empty result, because
+    /// "no messages contain `***`" and "you did not ask for anything" are
+    /// different answers.
     #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         let mut phrases = Vec::new();
@@ -90,6 +112,7 @@ impl Terms {
         };
 
         for c in raw.chars() {
+            let c = if c.is_control() { ' ' } else { c };
             match c {
                 '"' => {
                     flush(&mut current, &mut phrases);
@@ -123,8 +146,9 @@ fn is_searchable(phrase: &str) -> bool {
     phrase.chars().any(char::is_alphanumeric)
 }
 
-/// One page of hits, newest first.
-pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiError> {
+/// The query for one page. Apart from [`page`] so the test that checks its
+/// plan (#518) reads the very statement the server sends.
+pub(crate) fn page_sql(query: &Query) -> String {
     // `message_fts` is not aliased: FTS5 wants the table's own name on the left
     // of MATCH and as the first argument to snippet()/highlight().
     let mut sql = String::from(
@@ -151,12 +175,19 @@ pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiE
         sql.push_str(" AND m.author_id = ?");
     }
     if query.before.is_some() {
-        sql.push_str(" AND m.id < ?");
+        sql.push_str(&format!(
+            " AND message_fts.rowid < (SELECT c.rowid FROM messages c WHERE c.id = ? AND {})",
+            crate::repo::rooms::visible_rooms("c")
+        ));
     }
-    // Newest first, and the id *is* the order: a UUIDv7 blob sorts
-    // chronologically, so this is the same walk the message stream does.
-    sql.push_str(" ORDER BY m.id DESC LIMIT ?");
+    // Newest first, in the order the rows were written: see the module notes.
+    sql.push_str(" ORDER BY message_fts.rowid DESC LIMIT ?");
+    sql
+}
 
+/// One page of hits, newest first.
+pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiError> {
+    let sql = page_sql(query);
     let mut request = sqlx::query(&sql)
         .bind(MARK_START)
         .bind(MARK_END)
@@ -172,7 +203,7 @@ pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiE
         request = request.bind(author_id.to_vec());
     }
     if let Some(before) = query.before {
-        request = request.bind(before.to_vec());
+        request = request.bind(before.to_vec()).bind(query.viewer.to_vec());
     }
     request = request.bind(i64::from(query.limit));
 
@@ -196,8 +227,8 @@ pub async fn page(db: &SqlitePool, query: &Query) -> Result<Vec<SearchHit>, ApiE
         .collect()
 }
 
-/// A cursor is the message id, hex, and nothing else — the sort is on that id
-/// alone, so there is nothing to break a tie with.
+/// A cursor is the message id, hex, and nothing else. The sort is on the row
+/// the id names, which is unique, so there is nothing to break a tie with.
 fn cursor_of(id: MessageId) -> String {
     hex::encode(id.to_vec())
 }
@@ -294,6 +325,18 @@ mod tests {
         assert!(Terms::parse("   ").is_none());
         assert!(Terms::parse("*** --- ???").is_none());
         assert!(Terms::parse("\"\"").is_none());
+        assert!(Terms::parse("\0\u{1}\u{7f}\u{9f}").is_none());
+    }
+
+    #[test]
+    fn a_control_character_is_a_space_and_never_reaches_match() {
+        assert_eq!(Terms::parse("a\0b").unwrap().to_match(), "\"a\" \"b\"");
+        // Inside quotes it stays one phrase, with a space where the NUL was.
+        assert_eq!(Terms::parse("\"a\0b\"").unwrap().to_match(), "\"a b\"");
+        let match_text = Terms::parse("a\u{1}b\u{2}c\u{1b}d\u{85}e")
+            .unwrap()
+            .to_match();
+        assert!(!match_text.chars().any(char::is_control), "{match_text:?}");
     }
 
     #[test]
