@@ -8,9 +8,11 @@
  * sentence case (SPEC §5.6, #90).
  */
 import type { NotifyRule } from "../../generated/NotifyRule";
+import type { ServerHealth } from "../../generated/ServerHealth";
 import type { Room } from "../../generated/Room";
 import type { UserId } from "../../generated/UserId";
 import { QUIET_STEP_MINUTES, type SoundCategory, type SoundCue } from "../../lib/sound";
+import { setWhen } from "../../lib/time";
 
 export type SettingsKey =
   | "profile"
@@ -122,8 +124,9 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "emoji":
       return "Pictures everyone here can put in a message by name, like :party_parrot:.";
     case "server":
-      // Only the host sees the version (#424): who runs the machine updates it.
-      return scope.cohost === true ? "Its name and color as everyone sees them." : "The version it runs, and its name and color as everyone sees them.";
+      // Only the host sees the version and the backups (#424, #582): who runs
+      // the machine looks after it.
+      return scope.cohost === true ? "Its name and color as everyone sees them." : "The version it runs, its backups, and its name and color as everyone sees them.";
   }
 }
 
@@ -160,9 +163,51 @@ export const HEADINGS = {
   addEmoji: "Add Emoji",
   emoji: "This Server's Emoji",
   serverVersion: "Version",
+  backups: "Backups",
+  disk: "Disk Space",
   serverName: "Name",
   accent: "Accent",
 } as const;
+
+/**
+ * What Settings → Hosting → Server says about the nightly copy of the
+ * database (#582), and whether it's a problem.
+ */
+export function backupLine(health: ServerHealth, now: number): { words: string; problem: boolean } {
+  if (!health.backups) {
+    return { words: "The nightly copy is off on this server (LINGER_BACKUPS=off), so back it up another way.", problem: false };
+  }
+  const last = health.last_backup_at;
+  if (last === null) {
+    return health.backup_overdue
+      ? { words: "No copy has worked yet. The server's log says why.", problem: true }
+      : { words: "No copy yet. The first is made a few minutes after the server starts.", problem: false };
+  }
+  const when = setWhen(last, now);
+  return health.backup_overdue
+    ? { words: `The last copy was made ${when}, and none has worked since. The server's log says why.`, problem: true }
+    : { words: `The last copy was made ${when}.`, problem: false };
+}
+
+/**
+ * What Settings → Hosting → Server says about the bucket the nightly copies
+ * also go to (#614), or null when the host hasn't named one.
+ */
+export function bucketLine(health: ServerHealth, now: number): { words: string; problem: boolean } | null {
+  const bucket = health.bucket;
+  if (!bucket) return null;
+  const sends = `Each copy also goes to the bucket ${bucket.name}.`;
+  const last = bucket.last_sent_at;
+  if (last === null) {
+    return bucket.overdue
+      ? { words: `${sends} None has reached it yet. The server's log says why.`, problem: true }
+      : { words: `${sends} The server looks at it a few minutes after it starts.`, problem: false };
+  }
+  const when = setWhen(last, now);
+  return bucket.overdue
+    ? { words: `${sends} The newest got there ${when}, and none has since. The server's log says why.`, problem: true }
+    : { words: `${sends} The newest got there ${when}.`, problem: false };
+}
 
 /** The small words a title leaves lower case unless they start it. */
 const MINOR = new Set(["a", "an", "and", "at", "for", "in", "of", "on", "or", "the", "to", "with"]);

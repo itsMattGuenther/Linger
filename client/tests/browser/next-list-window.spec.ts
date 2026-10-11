@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { catchAnimations, stopCatching } from "./caught";
 
 // The real list window, the owner (tests/fixtures/next-list-window.tsx): the
 // sign-ins restored from the keyring, a connection per server, the list with
@@ -149,6 +150,9 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await open(page);
   const list = page.locator("[data-screen='list']");
   await expect(list).not.toHaveAttribute("data-rock");
+  // Each rock held where it starts, to be measured: it's over in under half a
+  // second, often before a busy browser has answered the next question (#528).
+  await catchAnimations(page, "[data-screen='list']", { hold: true });
   const knock = (from: string) =>
     page.evaluate(([server, who]) => window.core?.frame(server, { op: "knock", d: { from_user_id: who } } as never), [GUILD, from] as const);
   await knock("g-rui");
@@ -163,11 +167,13 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
       rock.currentTime = at;
       return new DOMMatrix(getComputedStyle(node).transform).m41;
     }, ms);
-  expect(await leftAt(70)).toBeLessThan(-2);
+  await expect.poll(() => leftAt(70)).toBeLessThan(-2);
   await knock("g-rui");
   await expect(list).toHaveAttribute("data-rock", "b");
   expect(await list.evaluate((node) => getComputedStyle(node).animationName)).toBe("nx-list-rock-b");
 
+  // With less motion it runs as it would, uncaught: over at once.
+  await stopCatching(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await knock("g-rui");
   await expect(list).toHaveAttribute("data-rock", "a");
@@ -177,12 +183,29 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await expect(page.locator("[data-screen='knocks'] [data-kit='Notice']").first()).toContainText("knocked.");
 });
 
+test("a second knock from somebody takes their first card's place, and forty at once show the newest three (#512)", async ({ page }) => {
+  await open(page);
+  const cards = page.locator("[data-screen='knocks'] [data-kit='Notice']");
+  const knock = (server: string, from: string) =>
+    page.evaluate(([to, who]) => window.core?.frame(to, { op: "knock", d: { from_user_id: who } } as never), [server, from] as const);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await expect(cards).toContainText("knocked.");
+  // Forty people on two servers: forty cards covered the whole list for eight seconds.
+  for (let n = 0; n < 40; n += 1) await knock(n % 2 === 0 ? GUILD : HOME, `crowd-${n}`);
+  await expect(cards).toHaveCount(3);
+});
+
 // The list is the window's exact size, so a rock takes it a few pixels past the
 // window's edges. The page grew scroll bars to follow, which Windows draws, on
 // and off with each swing (#251). Nothing past the edge is on screen anyway.
 test("a rock never gives the page anything to scroll (#251)", async ({ page }) => {
   await open(page);
   const list = page.locator("[data-screen='list']");
+  // Held where it starts: it's over in under half a second (#528).
+  await catchAnimations(page, "[data-screen='list']", { hold: true });
   await page.evaluate((server) => window.core?.frame(server, { op: "knock", d: { from_user_id: "g-rui" } } as never), GUILD);
   await expect(list).toHaveAttribute("data-rock", "a");
   // Held at each swing: left and tilted, right, back.
@@ -306,6 +329,31 @@ test.describe("adding a server", () => {
     await expect(page.getByRole("banner")).toContainText("The Good Company");
     // Never disconnected, or connected again, along the way.
     expect((await did(page)).filter((line) => line.includes("connect ")).length).toBe(before);
+  });
+
+  test("a link an invite page sends while Linger runs opens the sign-in for it, the link in the box, asking nothing yet (#607)", async ({ page }) => {
+    await open(page, "?one");
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("ready ")).length).toBeGreaterThan(0);
+    const link = "https://ashen-lanterns.example/invite/LANTERN7";
+    await page.evaluate((sent) => window.core?.link(sent), link);
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    const box = page.getByRole("textbox", { name: "Server or link" });
+    await expect(box).toHaveValue(link);
+    expect((await did(page)).filter((line) => line.startsWith("GET https://ashen-lanterns.example"))).toEqual([]);
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("form", { name: "Join" }).getByText("You're joining Ashen Lanterns.", { exact: false })).toBeVisible();
+    // Back to the list: the link is used up, and adding a server from
+    // Settings later starts with an empty box.
+    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByRole("button", { name: "Back to the list" }).click();
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    await expect(page.getByRole("heading", { name: "Add a server." })).toBeVisible();
+    await expect(box).toHaveValue("");
+    // The same link opened again is offered again.
+    await page.getByRole("button", { name: "Back to the list" }).click();
+    await page.evaluate((sent) => window.core?.link(sent), link);
+    await expect(box).toHaveValue(link);
   });
 
   test("signing in to another server adds it to the list, below the ones you have", async ({ page }) => {
@@ -968,6 +1016,27 @@ test("a new version gets one quiet line, and Update… opens Settings where it's
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(
     `next_open_settings:${JSON.stringify({ section: "account" })}`,
   );
+});
+
+test("a server you host says when its disk is nearly full or it hasn't been backed up, and Hosting… opens its Settings (#582)", async ({ page }) => {
+  await open(page, "?one&hostissues");
+  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
+  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+});
+
+test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
+  await open(page, "?one&hostbucket");
+  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
+  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+});
+
+test("a server somebody else hosts says nothing about its machine (#582)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one&hostissues&guest");
+  await page.clock.runFor(10_000);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
 });
 
 test("a computer that can't keep sign-ins keeps saying so under the list, once signed in", async ({ page }) => {

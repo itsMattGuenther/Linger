@@ -64,8 +64,10 @@ export function storageDetail(
   usedBytes: number,
   limitBytes: number,
   expiryDays: number | null,
+  whenFull = false,
 ): string {
   const share = `${fileSize(usedBytes)} of ${fileSize(limitBytes)} used`;
+  if (whenFull) return `${share}. Old files go only when the server needs the room, oldest first, unless they are starred or on a pinned message.`;
   return expiryDays === null
     ? `${share}. Files are kept for good on this server.`
     : `${share}. Files are removed after ${expiryText(expiryDays)} unless they are starred or on a pinned message.`;

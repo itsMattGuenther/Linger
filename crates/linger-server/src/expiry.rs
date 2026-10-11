@@ -1,16 +1,27 @@
-//! The sweeper: what SPEC §4.10 means by "files expire after 365 days", and
-//! the used sign-in tokens nothing else ever deleted (#520).
+//! The sweeper: what SPEC §4.10 means by "files stay until the server needs
+//! the room", and the used sign-in tokens nothing else ever deleted (#520).
 //!
 //! A shared server fills up. Left alone it fills up forever, because nobody
 //! goes back and tidies a year of screenshots, and the day it is full is the
-//! day somebody cannot share the thing they wanted to share. So files age out —
+//! day somebody cannot share the thing they wanted to share. So old files go —
 //! and the two ways to say "keep this" are the two the product already has: a
 //! star on the file, or a pin on the message carrying it (SPEC §4.4).
 //!
-//! Three kinds of object get taken, and only the first is about age:
+//! Three kinds of object get taken, and only the first is about the host's
+//! setting:
 //!
-//! 1. **Old files** — complete, unstarred, not on a pinned message, older than
-//!    `LINGER_FILE_EXPIRY_DAYS`. This is the rule in the spec.
+//! 1. **Old files** — complete, unstarred, not on a pinned message. What makes
+//!    one go is `LINGER_FILE_EXPIRY_DAYS` (`config::FileExpiry`, #583):
+//!    - `when-full`, the default: nothing goes while the pool has room. Once
+//!      it is 90% full the oldest go, oldest first, until it is down to 80%
+//!      ([`keep_room`]). A year-old photo on a half-empty server stays, which
+//!      is the point: a setting used to delete it on day 365 whatever the disk
+//!      said. A pass checks on the reservations' fifteen-minute clock, and an
+//!      upload that wouldn't fit makes the room it needs before it is refused
+//!      ([`make_room_for`]).
+//!    - a number of days: a file goes that long after it was shared, the rule
+//!      from before #583.
+//!    - `off`: none go, and a full pool refuses uploads.
 //! 2. **Files on deleted messages** — a deleted message is a tombstone with an
 //!    empty body (`routes::messages::delete`), and what it carried is deleted
 //!    with it. The delete itself takes them, through [`take_from_message`],
@@ -60,10 +71,13 @@
 
 use std::time::Duration;
 
+use linger_core::limits::{WHEN_FULL_START_PERCENT, WHEN_FULL_TARGET_PERCENT};
 use linger_core::{AttachmentId, MessageId};
 
+use crate::config::FileExpiry;
 use crate::db::now_ms;
 use crate::error::ApiError;
+use crate::repo::attachments::pool_used;
 use crate::state::AppState;
 use crate::unsent;
 
@@ -122,7 +136,21 @@ pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
                         tracing::warn!(error = %err, "could not update the query planner's statistics");
                     }
                 }
-                _ = reservations.tick() => unsent::release_idle_logged(&state).await,
+                _ = reservations.tick() => {
+                    unsent::release_idle_logged(&state).await;
+                    // Under `when-full`, the pool is looked at four times an
+                    // hour rather than every six, so a busy evening of
+                    // photos doesn't run it up to the ceiling between passes.
+                    match keep_room(&state).await {
+                        Ok(swept) if swept.files > 0 => tracing::info!(
+                            files = swept.files,
+                            bytes = swept.bytes,
+                            "made room: took the oldest files nobody starred or pinned"
+                        ),
+                        Ok(_) => {}
+                        Err(err) => tracing::warn!(error = ?err, "could not make room in the file space"),
+                    }
+                }
             }
         }
     })
@@ -168,10 +196,13 @@ async fn drain(state: &AppState) {
 /// without waiting six hours or backdating the clock.
 pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     let now = now_ms();
+    // The age rule's cutoff; NULL under `when-full` and `off`, which makes
+    // the age comparison below false.
     let cutoff = state
         .config
-        .file_expiry_days
-        .map(|days| now - i64::from(days) * 24 * 60 * 60 * 1000);
+        .file_expiry
+        .days()
+        .map(|days| now - i64::from(days) * DAY_MS);
     let unposted = unsent::unposted_cutoff(&state.config, now);
 
     // Three reasons in one query so paging and counting stay one thing. The
@@ -238,8 +269,181 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     .rows_affected();
 
     swept.archives = crate::export::sweep(state).await?;
+
+    let made = keep_room(state).await?;
+    swept.files += made.files;
+    swept.bytes += made.bytes;
     Ok(swept)
 }
+
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// Where `when-full` starts taking files, and where it stops (#583): 90% and
+/// 80% of the pool.
+#[must_use]
+pub fn when_full_marks(pool: u64) -> (u64, u64) {
+    (
+        pool / 100 * WHEN_FULL_START_PERCENT,
+        pool / 100 * WHEN_FULL_TARGET_PERCENT,
+    )
+}
+
+/// The files `when-full` may take, oldest first: complete, unstarred, on a
+/// message that is neither pinned nor deleted. A file nobody posted is rule
+/// 3's, with its week (#503), and the server's emoji are on no message, so
+/// neither is here. The order is a file's age and nothing else: no "least
+/// looked at", no guessing what matters (SPEC §2).
+///
+/// It reads Media's own index (`idx_attachments_media_order`, migration 0017)
+/// from the unstarred end, oldest first, so finding the oldest few doesn't
+/// sort every file on the server. That is why "unstarred" is written as the
+/// index's own expression, and why `CROSS JOIN` puts the files first.
+pub(crate) const OLDEST_FIRST_SQL: &str =
+    "SELECT a.id, a.object_key, a.poster_key, a.display_key, a.size_bytes
+       FROM attachments a CROSS JOIN messages m ON m.id = a.message_id
+      WHERE a.state = 'complete' AND (a.starred_at IS NOT NULL) = 0
+        AND m.deleted_at IS NULL AND m.pinned_at IS NULL
+      ORDER BY a.created_at, a.id
+      LIMIT ?";
+
+/// Under `when-full`, a pool 90% full is brought down to 80% (#583). Anything
+/// else, or a pool with room, takes nothing. Another pass already making room
+/// is left to it.
+pub async fn keep_room(state: &AppState) -> Result<Swept, ApiError> {
+    if state.config.file_expiry != FileExpiry::WhenFull {
+        return Ok(Swept::default());
+    }
+    let (start, target) = when_full_marks(state.config.pool_bytes);
+    if pool_used(&state.db.read).await? < start {
+        return Ok(Swept::default());
+    }
+    let Ok(_turn) = state.making_room.try_lock() else {
+        return Ok(Swept::default());
+    };
+    take_oldest(state, target).await
+}
+
+/// Under `when-full`, make room for an upload of `size` bytes that wouldn't
+/// otherwise fit, before it is refused (#583). Only what it needs, so the
+/// request doesn't wait on a whole pass: the rest is [`keep_room`]'s, which
+/// the upload starts in the background. Waits for a pass already running,
+/// which may make the room by itself.
+pub async fn make_room_for(state: &AppState, size: u64) -> Result<Swept, ApiError> {
+    if state.config.file_expiry != FileExpiry::WhenFull {
+        return Ok(Swept::default());
+    }
+    let _turn = state.making_room.lock().await;
+    take_oldest(state, state.config.pool_bytes.saturating_sub(size)).await
+}
+
+/// Take the oldest files nobody starred or pinned until everything spoken for
+/// is at or under `target` bytes, or there are none left to take. Holding
+/// the caller's turn (`AppState::making_room`), so two passes never pick the
+/// same files.
+async fn take_oldest(state: &AppState, target: u64) -> Result<Swept, ApiError> {
+    let mut swept = Swept::default();
+    loop {
+        let used = pool_used(&state.db.read).await?;
+        if used <= target {
+            break;
+        }
+        let over = used - target;
+        let rows: Vec<Expired> = sqlx::query_as(OLDEST_FIRST_SQL)
+            .bind(SWEEP_BATCH)
+            .fetch_all(&state.db.read)
+            .await?;
+        if rows.is_empty() {
+            break;
+        }
+        let mut freed: u64 = 0;
+        for (id, object_key, poster_key, display_key, size_bytes) in rows {
+            if freed >= over {
+                break;
+            }
+            let Ok(id) = AttachmentId::from_slice(&id) else {
+                continue;
+            };
+            if take(
+                state,
+                id,
+                &object_key,
+                poster_key.as_deref(),
+                display_key.as_deref(),
+            )
+            .await?
+            {
+                let size = u64::try_from(size_bytes).unwrap_or(0);
+                freed = freed.saturating_add(size);
+                swept.files += 1;
+                swept.bytes = swept.bytes.saturating_add(size);
+            }
+        }
+        // A store refusing every delete: the next pass tries again.
+        if freed == 0 {
+            break;
+        }
+    }
+    Ok(swept)
+}
+
+/// Whether `when-full` has anything left it could take: a pool past 90%
+/// with nothing to take is one only the host can fix (#582's foot line).
+pub async fn anything_to_take(state: &AppState) -> Result<bool, ApiError> {
+    let found: Option<Expired> = sqlx::query_as(OLDEST_FIRST_SQL)
+        .bind(1_i64)
+        .fetch_optional(&state.db.read)
+        .await?;
+    Ok(found.is_some())
+}
+
+/// What Media's "Leaving soon" shows (#583): files nobody starred or pinned,
+/// shared at or before the moment this returns. `None` is nothing leaving
+/// soon at all.
+///
+/// - Days: within 30 days of their date.
+/// - `when-full`: once the pool is past 80%, the oldest that add up to a
+///   tenth of it, which is what one pass takes when it reaches 90%. Below
+///   80% nothing is leaving soon, and saying otherwise would have people
+///   starring things for nothing.
+/// - `off`: nothing.
+pub async fn leaving_cutoff(state: &AppState, now: i64) -> Result<Option<i64>, ApiError> {
+    match state.config.file_expiry {
+        FileExpiry::Off => Ok(None),
+        FileExpiry::After(days) => {
+            let warning = i64::from(days.saturating_sub(LEAVING_SOON_DAYS));
+            Ok(Some(now - warning * DAY_MS))
+        }
+        FileExpiry::WhenFull => {
+            let pool = state.config.pool_bytes;
+            let (_, target) = when_full_marks(pool);
+            if pool_used(&state.db.read).await? < target {
+                return Ok(None);
+            }
+            let batch = i64::try_from(pool / 10).unwrap_or(i64::MAX);
+            let (at,): (Option<i64>,) = sqlx::query_as(LEAVING_WHEN_FULL_SQL)
+                .bind(batch)
+                .fetch_one(&state.db.read)
+                .await?;
+            // Not a tenth's worth left to take: all of it is next in line.
+            Ok(Some(at.unwrap_or(i64::MAX)))
+        }
+    }
+}
+
+/// Under `when-full`, the date of the newest file in the next tenth of the
+/// pool to go, oldest first: a running total over the same files, in the
+/// same order, as [`OLDEST_FIRST_SQL`].
+/// `NULL` when they don't add up to that much.
+pub(crate) const LEAVING_WHEN_FULL_SQL: &str = "SELECT MIN(created_at) FROM (
+       SELECT a.created_at,
+              SUM(a.size_bytes) OVER (ORDER BY a.created_at, a.id) AS running
+         FROM attachments a CROSS JOIN messages m ON m.id = a.message_id
+        WHERE a.state = 'complete' AND (a.starred_at IS NOT NULL) = 0
+          AND m.deleted_at IS NULL AND m.pinned_at IS NULL)
+      WHERE running >= ?";
+
+/// How long before its date a file shows as leaving soon, under an age rule.
+pub const LEAVING_SOON_DAYS: u32 = 30;
 
 // ---------------------------------------------------------------------------
 // Taking a file. Everything a pass does belongs in `sweep` above; these two

@@ -185,6 +185,25 @@ test("a used sign-in link says so, and signing in says where to get one (#581)",
   await expect(page.getByRole("form", { name: "Sign in" }).getByText("Forgot your password? Ask the host for a sign-in link")).toBeVisible();
 });
 
+test("a link an invite page opened Linger with waits in the box, and asks nothing until Continue (#607)", async ({ page }) => {
+  const link = `${HOME}/invite/ABCD-1234`;
+  await open(page, `?one&signedout&opened=${encodeURIComponent(link)}`);
+  await expect(pasteBox(page)).toHaveValue(link);
+  await expect(page.getByText("From the link you opened. Check the address, then Continue.")).toBeVisible();
+  await expect(go(page)).toBeEnabled();
+  // A page can point a browser at any link: nothing is asked of that server
+  // until the person has seen the address and pressed Continue.
+  expect(await did(page)).toContain("link_offered");
+  expect((await did(page)).filter((line) => line.startsWith("GET"))).toEqual([]);
+  await go(page).click();
+  const form = page.getByRole("form", { name: "Join" });
+  await expect(form.getByText("You're joining The Good Company.", { exact: false })).toBeVisible();
+  // Changing the box drops the line about where it came from.
+  await form.getByRole("button", { name: "Change" }).click();
+  await pasteBox(page).fill("good-company.example");
+  await expect(page.getByText("From the link you opened.", { exact: false })).toHaveCount(0);
+});
+
 test("a spent invite or setup link says so, and the box keeps what was pasted", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/DEAD`);

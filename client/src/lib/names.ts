@@ -85,6 +85,32 @@ export function nameProps(person: User | undefined, extra?: string): NameProps {
 }
 
 /**
+ * One emoji as a name holds it: a flag, a keycap, or a picture with its skin
+ * tone and joined parts. Only ones drawn as pictures: a © or ™ is a letter
+ * unless it asks to be a picture (U+FE0F), and stays in the name's paint.
+ */
+const NAME_EMOJI =
+  /(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)\p{Emoji_Modifier}?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)/gu;
+
+/**
+ * A name's letters in runs, its emoji apart (#512). A gradient or a shimmer
+ * is painted through the letters' shapes, and an emoji painted that way is a
+ * flat block of the paint; drawn on its own it keeps its colors. A name with
+ * no emoji is one run.
+ */
+export function nameRuns(name: string): Array<{ text: string; emoji: boolean }> {
+  const runs: Array<{ text: string; emoji: boolean }> = [];
+  let at = 0;
+  for (const found of name.matchAll(NAME_EMOJI)) {
+    if (found.index > at) runs.push({ text: name.slice(at, found.index), emoji: false });
+    runs.push({ text: found[0], emoji: true });
+    at = found.index + found[0].length;
+  }
+  if (at < name.length || runs.length === 0) runs.push({ text: name.slice(at), emoji: false });
+  return runs;
+}
+
+/**
  * The person's first (or only) palette key, or null for somebody with no style
  * we can use.
  */

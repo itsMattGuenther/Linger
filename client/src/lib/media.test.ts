@@ -200,6 +200,9 @@ describe("the storage figure", () => {
     expect(storageDetail(gb, 50 * gb, 365)).toContain("starred");
     expect(storageDetail(gb, 50 * gb, null)).toContain("kept for good");
     expect(storageDetail(gb, 50 * gb, null)).not.toContain("removed");
+    // When-full (#583): the server says null days, and old files go only when it needs the room.
+    expect(storageDetail(gb, 50 * gb, null, true)).toContain("only when the server needs the room");
+    expect(storageDetail(gb, 50 * gb, null, true)).not.toContain("for good");
   });
 
   it("rounds a window only when rounding it is exact", () => {

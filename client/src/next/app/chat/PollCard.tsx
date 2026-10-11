@@ -19,6 +19,7 @@ import { closesWhen, setWhen } from "../../../lib/time";
 import { nextVote, pollOpen, votesOf } from "../../core/chat/poll";
 import { Button, Icon, IconButton, Marker } from "../../kit";
 import { markerFor } from "../markers";
+import { WrittenTimes } from "./MessageText";
 import { PeopleCard } from "./PeopleCard";
 import "./PollCard.css";
 
@@ -100,7 +101,9 @@ export const PollCard = memo(function PollCard({
         <span className="nx-poll-label">Poll</span>
         <span className="nx-poll-how">{open ? (poll.multi ? "pick any" : "pick one") : "closed"}</span>
       </p>
-      <p className="nx-poll-question">{poll.question}</p>
+      <p className="nx-poll-question">
+        <WrittenTimes text={poll.question} writtenAt={message.created_at} />
+      </p>
       <ul className="nx-poll-choices" role={open ? (poll.multi ? "group" : "radiogroup") : undefined} aria-label={poll.question}>
         {poll.choices.map((choice, at) => {
           const picked = mine.includes(at);
@@ -114,7 +117,9 @@ export const PollCard = memo(function PollCard({
                   {picked ? <Icon name="check" size="sm" /> : null}
                 </span>
               ) : null}
-              <span className="nx-poll-text">{choice.text}</span>
+              <span className="nx-poll-text">
+                <WrittenTimes text={choice.text} writtenAt={message.created_at} still />
+              </span>
             </>
           );
           return (

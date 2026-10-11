@@ -22,6 +22,7 @@ import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "..
 import {
   appVersion,
   checkForUpdate,
+  HOST_BACKUP_GUIDE_URL,
   HOST_UPDATE_GUIDE_URL,
   installUpdate,
   newestVersion,
@@ -792,6 +793,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                       openGuide: () => openExternal(HOST_UPDATE_GUIDE_URL),
                     }
                   : undefined,
+                // The server says this to its host alone (#582).
+                health: info?.health ? { health: info.health, now, openGuide: () => openExternal(HOST_BACKUP_GUIDE_URL) } : undefined,
                 name: serverName,
                 accent: info?.accent_key ?? null,
                 save: async (change) => {

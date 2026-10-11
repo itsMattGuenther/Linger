@@ -261,6 +261,7 @@ interface Match {
  */
 function parseInline(source: string, depth: number, inLink = false): Inline[] {
   const nodes: Inline[] = [];
+  const partners = new Partners(source);
   let plain = "";
   const flush = (): void => {
     if (plain !== "") {
@@ -297,7 +298,7 @@ function parseInline(source: string, depth: number, inLink = false): Inline[] {
     }
 
     if (ch === "[" && !inLink && depth < MAX_INLINE_DEPTH) {
-      const found = matchLink(source, at, depth);
+      const found = matchLink(source, at, depth, partners);
       if (found) {
         flush();
         nodes.push(found.node);
@@ -307,7 +308,7 @@ function parseInline(source: string, depth: number, inLink = false): Inline[] {
     }
 
     if (depth < MAX_INLINE_DEPTH) {
-      const found = matchEmphasis(source, at, depth, inLink);
+      const found = matchEmphasis(source, at, depth, inLink, partners);
       if (found) {
         flush();
         nodes.push(found.node);
@@ -366,22 +367,77 @@ function matchCode(source: string, at: number): Match | null {
   return { node: { kind: "code", text }, next: close + run };
 }
 
-/** Scan forward from an opening bracket to its partner, honouring nesting. */
-function matchBracket(source: string, at: number, open: string, close: string): number {
-  let depth = 0;
-  for (let i = at; i < source.length; i += 1) {
-    const ch = source[i];
-    if (ch === "\\") {
-      i += 1;
-      continue;
+/**
+ * Where each opener's partner is, worked out once per source rather than
+ * scanned for again from every opener (#512). Scanning from each one was
+ * quadratic: 8,000 `[` took about 124 ms to parse, every time the row was
+ * drawn, since each looked to the end of the message for a `]` that wasn't
+ * there, and `*a *a *a …` did the same for its closing `*`.
+ */
+class Partners {
+  private readonly brackets = new Map<string, Int32Array>();
+  private readonly closes = new Map<string, number[]>();
+
+  constructor(private readonly source: string) {}
+
+  /**
+   * The bracket that closes the one at `at`, honouring nesting and `\`
+   * escapes, or -1. Worked out for every opener at once, from the end: an
+   * opener's scan steps over a nested pair in one jump, and stops at a nested
+   * opener that never closes, since nothing after that can close it either.
+   */
+  bracket(at: number, open: string, close: string): number {
+    let partner = this.brackets.get(open);
+    if (!partner) {
+      const source = this.source;
+      partner = new Int32Array(source.length).fill(-1);
+      for (let start = source.length - 1; start >= 0; start -= 1) {
+        if (source[start] !== open) continue;
+        let i = start + 1;
+        while (i < source.length) {
+          const ch = source[i];
+          if (ch === "\\") i += 2;
+          else if (ch === open) {
+            const nested = partner[i] ?? -1;
+            if (nested < 0) break;
+            i = nested + 1;
+          } else if (ch === close) {
+            partner[start] = i;
+            break;
+          } else i += 1;
+        }
+      }
+      this.brackets.set(open, partner);
     }
-    if (ch === open) depth += 1;
-    else if (ch === close) {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
+    return partner[at] ?? -1;
   }
-  return -1;
+
+  /**
+   * The first place at or after `from` where `open` can close a span: not
+   * after whitespace, and for underscores not before a letter. Every such
+   * place is found once, in order, and looked up by halves.
+   */
+  emphasisClose(open: string, from: number): number {
+    let found = this.closes.get(open);
+    if (!found) {
+      const source = this.source;
+      const underscore = open.startsWith("_");
+      found = [];
+      for (let at = source.indexOf(open, 1); at >= 0; at = source.indexOf(open, at + 1)) {
+        const before = source[at - 1];
+        if (before !== undefined && !/\s/.test(before) && (!underscore || !isWordChar(source[at + open.length]))) found.push(at);
+      }
+      this.closes.set(open, found);
+    }
+    let low = 0;
+    let high = found.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if ((found[middle] ?? 0) < from) low = middle + 1;
+      else high = middle;
+    }
+    return found[low] ?? -1;
+  }
 }
 
 /**
@@ -391,10 +447,10 @@ function matchBracket(source: string, at: number, open: string, close: string): 
  */
 const LINK_TITLE = /^(\S+)\s+(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\))$/s;
 
-function matchLink(source: string, at: number, depth: number): Match | null {
-  const labelEnd = matchBracket(source, at, "[", "]");
+function matchLink(source: string, at: number, depth: number, partners: Partners): Match | null {
+  const labelEnd = partners.bracket(at, "[", "]");
   if (labelEnd < 0 || source[labelEnd + 1] !== "(") return null;
-  const targetEnd = matchBracket(source, labelEnd + 1, "(", ")");
+  const targetEnd = partners.bracket(labelEnd + 1, "(", ")");
   if (targetEnd < 0) return null;
 
   // A title is dropped, not shown: what pointing at a link says is always
@@ -499,7 +555,7 @@ function countOf(text: string, ch: string): number {
   return total;
 }
 
-function matchEmphasis(source: string, at: number, depth: number, inLink: boolean): Match | null {
+function matchEmphasis(source: string, at: number, depth: number, inLink: boolean, partners: Partners): Match | null {
   for (const { open, kind } of EMPHASIS) {
     if (!source.startsWith(open, at)) continue;
 
@@ -513,15 +569,7 @@ function matchEmphasis(source: string, at: number, depth: number, inLink: boolea
     const opening = source[from];
     if (opening === undefined || /\s/.test(opening)) continue;
 
-    let close = source.indexOf(open, from + 1);
-    while (close >= 0) {
-      const before = source[close - 1];
-      const after = source[close + open.length];
-      const closes =
-        before !== undefined && !/\s/.test(before) && (!underscore || !isWordChar(after));
-      if (closes) break;
-      close = source.indexOf(open, close + 1);
-    }
+    const close = partners.emphasisClose(open, from + 1);
     if (close < 0) continue;
 
     return {

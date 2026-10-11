@@ -122,6 +122,28 @@ The link it shows starts with `https://` + `LINGER_DOMAIN`, or, on a server with
 one, the address the browser used. It isn't a directory and isn't sign-up: the code
 is still the only way in.
 
+Under the link, for somebody who already has the app, the page offers **Open in
+Linger** (#607): the same link as a `linger://` one, with "Nothing happened? Paste
+the link instead." under it, since a computer without Linger does nothing with it.
+It carries the server and the code or token, and nothing else:
+
+```
+linger://invite?server=linger.example&code=CODE
+linger://setup?server=linger.example&token=TOKEN
+linger://sign-in?server=linger.example&code=CODE     (#581, on a sign-in link's page)
+```
+
+`server` is the host (and port) of an `https://` server, or the whole origin of one
+reached over plain `http://` (`http%3A%2F%2F127.0.0.1%3A8420`); everything in it but
+letters, digits and `-._~` is percent-encoded. The desktop installers, the Linux
+menu entries and the phone app's intent filter register the scheme. The app reads
+the link strictly (`client/src-tauri/src/deep_link.rs`): exactly one shape, those
+two parameters once each, a host the paste box would accept, a code of letters and
+digits, a hex token, or it's dropped. It turns it into the `https://` link above and
+puts that in the **Server or link** box, with the paste box's own rules after that
+(an invite still makes a new account). Nothing is contacted until the person presses
+Continue, so a page can't make the app reach any server by itself.
+
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console
 https://linger.example/invite/CODE     an invite (?code=CODE is also accepted)
@@ -281,7 +303,7 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             voice? }
+                             file_expiry_when_full?, voice?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -338,17 +360,40 @@ The line is never a room's `last_message_id`, so it never makes a room look new,
 client neither notifies nor marks a mention for it. A room with no message of the day,
 and every server from before this, leaves `motd` out.
 
-**The three storage figures** are read-only and every member sees them; the status bar
+**The storage figures** are read-only and every member sees them; the status bar
 draws the first two (SPEC §5.6). `storage_used_bytes` counts stored objects *and*
 uploads still in flight, because a slot already handed out is not space anybody else can
 have. `storage_limit_bytes` is the pool ceiling. `file_expiry_days` is how long a file
-stands before the server sweeps it, or `null` on a server that keeps files for good;
-starred files, files on pinned messages and the server's emoji pictures (§5, "Custom
-emoji") never expire whatever it says (SPEC §4.10).
+stands before the server sweeps it, or `null` when no age rule takes files.
+`file_expiry_when_full` (#583, optional, always sent by a server that has it) is `true`
+when old files go only once the server needs the room: past 90% of
+`storage_limit_bytes`, the oldest go first until it is under 80%. `file_expiry_days` is
+then `null`, which a client from before reads as "kept for good", the nearest thing it
+knows. Both `null` and `false` is a server that keeps files for good. Starred files,
+files on pinned messages and the server's emoji pictures (§5, "Custom emoji") never
+expire whatever these say (SPEC §4.10).
 
 They are not on `PATCH /server`. Both knobs are environment variables set in the
 deployment (`LINGER_POOL_BYTES`, `LINGER_FILE_EXPIRY_DAYS`), not rows a host edits from
 inside the app — see `docs/decisions.md`.
+
+**`health`** is for the host alone (#582): not a co-host, not a member, and a server
+from before it leaves it out. `{ backups, last_backup_at, backup_overdue,
+disk_nearly_full, file_space_nearly_full }`: whether the server makes its nightly copy
+of the database (`LINGER_BACKUPS`), when the newest copy that checked out was made
+(`null` before the first), whether it has run three days without one (always `false`
+with backups off), whether less than a tenth of the disk under its data folder is free,
+and whether uploads take 90% or more of `storage_limit_bytes` (under `when-full`, only
+when nothing is left that could go: every file starred, pinned or not yet sent). The app says each of the
+last three in words at the foot of the host's list while it is true, and never as a
+figure. Nothing in it is a count of anything.
+
+`health.bucket` is there only when the host set `LINGER_BACKUP_S3_*` (#614), and left out
+by a server from before it: `{ name, last_sent_at, overdue }`, the bucket's name, when
+the newest copy in it got there by the bucket's own clock (`null` before the server has
+looked, a few minutes after it starts, or when none has), and whether the server has run
+three days without a copy reaching it. The app says the last in words at the foot of the
+host's list too, unless the copy itself is overdue, which says it already.
 
 **`voice`** says whether this server carries voice: it has a voice address, set or worked
 out from its domain (§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so
@@ -1179,7 +1224,7 @@ image's: either way, draw `url`. A copy is not counted in the pool, is not in an
 
 ```
 GET /media?kind=image|video|audio|file|link|pin
-          &author=<user_id>&since=<ms>&until=<ms>
+          &author=<user_id>&since=<ms>&until=<ms>&leaving=true
           &before=<cursor>&limit=<1..100>               → MediaItem[]
 PUT    /media/:attachment_id/star                        → 204
 DELETE /media/:attachment_id/star                        → 204
@@ -1191,6 +1236,14 @@ before it starts is `VALIDATION_FAILED` rather than an empty answer.
 
 **Order.** Starred first, then newest first. Only an upload can be starred, so
 everything starred comes ahead of every link and pin.
+
+**`leaving=true`** is "Leaving soon" (#583): only the uploads that would go next, in the
+same order and with the same paging. Never a starred file or one on a pinned message,
+and never a link or a pin. Under `when-full` (§3), nothing until the file space is past
+80% of `storage_limit_bytes`, then the oldest files that add up to a tenth of it; under
+an age rule, the files within 30 days of their date; with expiry off, nothing. A server
+from before #583 ignores the parameter and answers with everything, so a client asks
+only a server that sends `file_expiry_when_full`.
 
 **Paging** is keyset, not offset: pass the last item's `cursor` back as
 `before`. A cursor is opaque — do not parse it, build one, or compare two. All
@@ -1508,9 +1561,9 @@ alone (#496).
 | op | payload | notes |
 |---|---|---|
 | `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). `away_message` is held to `PATCH /me`'s rule, 240 characters; told at most `RATE_PRESENCE` times (below) |
-| `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
+| `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room. Told at most `RATE_ROOM_FOCUS` times (below) |
 | `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room; ignored in an archived room, which takes no messages |
-| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
+| `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306). At most `RATE_VOICE_SEAT` with `voice.leave` (below) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
 | `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
@@ -1532,6 +1585,24 @@ typing where no message can go (#497).
   turn comes, the server tells whatever is newest then, once, however many changes came
   in between. The server has the newest from the start, so a `ready` in between already
   carries it. An app sends a handful an hour, and never sees the limit.
+
+**`room.focus`, `voice.join` and `voice.leave`** each make the server tell many people
+something, so a burst from one app is cut short the same way (#527): a few, then the
+newest, never dropped.
+
+- **Moves are told at most `RATE_ROOM_FOCUS` times per person**: ten, then one a second.
+  Each can be a `room.leave`, a `room.enter`, two `room.occupancy` and a
+  `presence.update` to everybody. The move itself happens when the frame arrives, so a
+  `ready` has it at once and a `presence.update` after it lands in order. Only the
+  telling waits: at the person's turn, everybody is told where they are by then, once.
+  A room they passed through on the way hears nothing and plays no entrance sound.
+- **Joins and leaves are taken at most `RATE_VOICE_SEAT` times per session**: ten, then
+  one a second, mute and deafen changes included. Each seat taken or left makes the
+  forwarding server offer everybody in that voice room a fresh connection. Past the limit
+  the newest request waits for the session's turn and is taken then, so a burst ends
+  where its last frame said, with one round of offers. A session that left or moved while
+  it waited, and ends up back in the seat it had, still gets a fresh `voice.offer`: its
+  app closed the old connection.
 
 ### Server → client
 

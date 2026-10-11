@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Style } from "../generated/Style";
 import type { User } from "../generated/User";
 import { FONT_KEYS, fontVar } from "./fonts";
-import { nameProps, paletteKey, personStyle } from "./names";
+import { nameProps, nameRuns, paletteKey, personStyle } from "./names";
 
 function person(style: Partial<Style>): User {
   return {
@@ -128,5 +128,24 @@ describe("fontVar", () => {
   it("hands back the fallback for null and for anything else", () => {
     expect(fontVar(null, "var(--font-body)")).toBe("var(--font-body)");
     expect(fontVar("../../evil", "var(--font-body)")).toBe("var(--font-body)");
+  });
+});
+
+describe("nameRuns (#512)", () => {
+  it("keeps a name with no emoji in one run", () => {
+    expect(nameRuns("Jules")).toEqual([{ text: "Jules", emoji: false }]);
+    expect(nameRuns("")).toEqual([{ text: "", emoji: false }]);
+    // A © or ™ is a letter unless it asks to be a picture.
+    expect(nameRuns("Acme™ ©")).toEqual([{ text: "Acme™ ©", emoji: false }]);
+  });
+
+  it("takes each emoji apart from the letters, whole", () => {
+    expect(nameRuns("Juno 🌙✨")).toEqual([
+      { text: "Juno ", emoji: false },
+      { text: "🌙", emoji: true },
+      { text: "✨", emoji: true },
+    ]);
+    // Skin tones, joined families, flags, keycaps and a © asking to be a picture stay whole.
+    expect(nameRuns("👋🏽Sam👨‍👩‍👧🇧🇷1️⃣©️").map((run) => run.text)).toEqual(["👋🏽", "Sam", "👨‍👩‍👧", "🇧🇷", "1️⃣", "©️"]);
   });
 });

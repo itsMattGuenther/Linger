@@ -114,6 +114,7 @@ fn media_queries() -> Vec<(&'static str, media::Query, bool)> {
         before: None,
         since: None,
         until: None,
+        leaving_before: None,
         limit: 60,
     };
     let cursor = Some(media::Cursor::parse(&format!("1700000500000:{}", "0".repeat(32))).unwrap());
@@ -156,6 +157,14 @@ fn media_queries() -> Vec<(&'static str, media::Query, bool)> {
             media::Query {
                 since: Some(1),
                 until: Some(2),
+                ..base.clone()
+            },
+            false,
+        ),
+        (
+            "leaving soon",
+            media::Query {
+                leaving_before: Some(1_700_000_000_000),
                 ..base
             },
             false,
@@ -240,4 +249,32 @@ async fn search_stops_at_the_end_of_the_page() {
             "{shape}: search finds and sorts every match to hand back one page: {plan}"
         );
     }
+}
+
+#[tokio::test]
+async fn making_room_reads_the_oldest_files_in_order_and_sorts_nothing() {
+    let (_dir, db) = grown_server().await;
+    let plan = plan(&db.read, crate::expiry::OLDEST_FIRST_SQL).await;
+    assert!(
+        !plan.contains("TEMP B-TREE"),
+        "making room sorts every file to find the oldest few: {plan}"
+    );
+    assert!(
+        plan.starts_with("SEARCH a USING INDEX idx_attachments_media_order"),
+        "making room doesn't start from the files, in order: {plan}"
+    );
+}
+
+#[tokio::test]
+async fn leaving_soon_adds_up_the_oldest_files_without_sorting_them() {
+    let (_dir, db) = grown_server().await;
+    let plan = plan(&db.read, crate::expiry::LEAVING_WHEN_FULL_SQL).await;
+    assert!(
+        plan.contains("USING INDEX idx_attachments_media_order"),
+        "leaving soon doesn't read the files in order: {plan}"
+    );
+    assert!(
+        !plan.contains("TEMP B-TREE"),
+        "leaving soon sorts every file: {plan}"
+    );
 }

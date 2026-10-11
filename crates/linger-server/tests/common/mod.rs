@@ -2,9 +2,9 @@
 //! against the production router with a temp SQLite file. No mocks.
 #![allow(dead_code)] // each test binary uses a different subset of helpers
 
-use linger_core::limits::{DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES};
+use linger_core::limits::DEFAULT_POOL_BYTES;
 use linger_core::wire::{AuthResponse, Invite};
-use linger_server::config::{Config, S3Config, Storage};
+use linger_server::config::{Config, FileExpiry, S3Config, Storage};
 use linger_server::{db, AppState};
 
 pub struct TestServer {
@@ -63,7 +63,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         storage: Storage::Local,
         s3: None,
         pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+        file_expiry: FileExpiry::WhenFull,
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
@@ -73,6 +73,8 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
+        backup_bucket: None,
     }
 }
 
@@ -88,7 +90,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         storage: Storage::Local,
         s3: None,
         pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+        file_expiry: FileExpiry::WhenFull,
         turn: None,
         voice_forwarding: None,
         voice_from_domain: None,
@@ -98,6 +100,8 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
+        backup_bucket: None,
     };
     spawn_with(dir, config).await
 }
@@ -113,6 +117,36 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
 /// never be able to write into somebody's actual bucket by inheriting its
 /// environment.
 pub async fn spawn_s3_server() -> Option<TestServer> {
+    let s3 = test_s3_config().await?;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config = Config {
+        data_dir: dir.path().to_path_buf(),
+        bind: "127.0.0.1:0".parse().unwrap(),
+        domain: None,
+        media_domain: None,
+        storage: Storage::S3,
+        s3: Some(s3),
+        pool_bytes: DEFAULT_POOL_BYTES,
+        file_expiry: FileExpiry::WhenFull,
+        turn: None,
+        voice_forwarding: None,
+        voice_from_domain: None,
+        voice_line_after: std::time::Duration::from_millis(
+            linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
+        trusted_proxies: linger_server::config::TrustedProxies::default(),
+        signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+        password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
+        backup_bucket: None,
+    };
+    Some(spawn_with(dir, config).await)
+}
+
+/// The test bucket's settings, made if it isn't there yet, or `None` with no
+/// `LINGER_TEST_S3_ENDPOINT` (see [`spawn_s3_server`]).
+pub async fn test_s3_config() -> Option<S3Config> {
     let endpoint = std::env::var("LINGER_TEST_S3_ENDPOINT")
         .ok()
         .filter(|value| !value.trim().is_empty())?;
@@ -128,28 +162,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
             .expect("LINGER_TEST_S3_SECRET_ACCESS_KEY"),
     };
     ensure_bucket(&s3).await;
-
-    let dir = tempfile::tempdir().expect("tempdir");
-    let config = Config {
-        data_dir: dir.path().to_path_buf(),
-        bind: "127.0.0.1:0".parse().unwrap(),
-        domain: None,
-        media_domain: None,
-        storage: Storage::S3,
-        s3: Some(s3),
-        pool_bytes: DEFAULT_POOL_BYTES,
-        file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
-        turn: None,
-        voice_forwarding: None,
-        voice_from_domain: None,
-        voice_line_after: std::time::Duration::from_millis(
-            linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
-        ),
-        trusted_proxies: linger_server::config::TrustedProxies::default(),
-        signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
-        password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
-    };
-    Some(spawn_with(dir, config).await)
+    Some(s3)
 }
 
 /// Create the test bucket if this is the first run against a fresh MinIO.

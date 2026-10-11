@@ -663,6 +663,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
   looks fine. Both Silkscreen faces went that way (#318). CI's web job runs
   `scripts/csp-assets.mjs` on each build to hold it.
 - Markdown rendering: allowlist-based sanitizer, no raw HTML passthrough, ever.
+  The one place the server draws markdown is the export's pages (#585,
+  `export/body.rs`): the app's subset, parsed to a tree and written out with
+  every piece of text escaped, links through the same `http`/`https`/`mailto`
+  gate, and a page policy that refuses every script.
 
 **The origin split is enforced, not just advertised.** `LINGER_MEDIA_DOMAIN` defaults to
 `cdn.<LINGER_DOMAIN>`, and the server refuses to start if it is the same host as the app.
@@ -934,8 +938,15 @@ line it leaves in the room.
 It runs at startup and every six hours, in batches, and takes three kinds of file, and
 used sign-in tokens:
 
-- files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
-  pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
+- files that are neither starred nor on a pinned message, by `LINGER_FILE_EXPIRY_DAYS`
+  (`config::FileExpiry`) — the rule in SPEC §4.10. The default, `when-full` (#583),
+  takes nothing while the pool has room; once it is 90% full, `expiry::keep_room` takes
+  the oldest, oldest first, until it is under 80%. It looks four times an hour, on the
+  reservations' clock, and `POST /uploads` makes the room an upload needs
+  (`expiry::make_room_for`) before refusing it, then starts the rest in the background.
+  One pass at a time (`AppState::making_room`). Both read Media's own index from its
+  unstarred end, so finding the oldest few sorts nothing. A number of days is the age
+  rule from before; `off` takes nothing.
 - files on a **deleted** message, whatever their age, as the retry. The delete itself
   takes them there and then (#502, below); this rule finishes any the store refused at
   that moment, and any a server from before #502 left behind. A star does not hold
@@ -1008,10 +1019,12 @@ server on the disk, or in the bucket, for good. Now:
 - A job whose row was deleted while it built (the member asked again, or was removed)
   deletes the archive it stored instead of leaving it with nothing pointing at it.
 
-**The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
+**The pool and the expiry rule are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not
 rows a host edits from inside the app (`docs/decisions.md`). `GET /server` reports the
-used figure, the ceiling and the window, and the status bar draws the first two.
+used figure, the ceiling and the rule, and the status bar draws the first two. The pool
+is the file space in every storage mode: on S3 the bucket has no ceiling of its own, so
+`when-full` measures against `LINGER_POOL_BYTES` there too.
 
 ---
 
@@ -1118,9 +1131,18 @@ two DNS records: the domain, and `cdn.` in front of it for uploaded files (§7).
 a token to stdout. Host opens it, creates their account, names the server. No env-var
 bootstrap credentials.
 
-**Backup:** the entire server is `data/linger.db` plus `data/objects/`. Document
-`sqlite3 linger.db ".backup"` and a cron one-liner in the README. Do not build a backup
-feature.
+**Backup:** the entire server is `data/linger.db` plus `data/objects/`. The server makes
+one copy by itself (#582, `backup.rs`): once a day, `VACUUM INTO` writes the database to
+`data/backups/` through a read-only connection of its own, so it never holds up the one
+writer, then `PRAGMA integrity_check` checks the copy. It keeps 7 daily and 4 weekly
+copies; `LINGER_BACKUPS=off` turns it off. With `LINGER_BACKUP_S3_*` set (#614) it also
+sends the newest daily and weekly copy to that bucket after each one checks out, and
+keeps the same 7 and 4 there, touching only names it made under its prefix; a send that
+fails never costs the copy on disk, and is tried again hourly. That is the whole
+feature: the uploads are the host's to copy off the machine, and the host guide gives
+the `rsync` and `rclone` lines. No restore button. The host alone hears, on `GET
+/server`'s `health`, when the copies stop working, stop reaching the bucket, or the
+disk is nearly full.
 
 **Locked out:** no reset email. A member who forgot their password gets a sign-in link
 from the host or a co-host (#581, PROTOCOL §5): one use, one day, and it ends every

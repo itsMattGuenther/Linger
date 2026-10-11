@@ -203,7 +203,9 @@ Then **Hosting → Invites → New Invite**. You choose how many people the invi
 is good for and when it expires; the link is copied for you the moment it is
 made. Send it however you normally talk to your friends. A friend who taps it
 before they have Linger gets a page from your server with the server's name,
-where to download the app, and the link to paste into it.
+where to download the app, and the link to paste into it. A friend who already
+has Linger can press **Open in Linger** there instead, and the app opens with
+the link in its box. Nothing about this needs setting up on the server.
 
 **Hosting → Server** shows which version your server runs, and says when a
 newer one is out, with a link to [updating the server](#updating-the-server).
@@ -274,7 +276,8 @@ controls are in Settings, under **Hosting**:
   sent, are deleted when they're removed, and don't come back with them.
 - **Server**: its name and color. The name is what everybody's list shows and
   what an invite link tells a stranger; the color is the server's stripe in
-  everybody's list.
+  everybody's list. You also see which version it runs, when it last backed
+  itself up, and whether its disk is nearly full ([Backups](#backups)).
 
 Newcomers start on the name color the fewest people on the server wear, so a
 big group isn't a list of gray names. Anyone can change theirs in **Settings →
@@ -345,7 +348,9 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | Setting | What it does | Default |
 |---|---|---|
 | `LINGER_POOL_BYTES` | Total storage the server will use. Write `250GB`, `500MB`, or a plain number. | `50GB` |
-| `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps every sent file forever. Starred files never expire. | `365` |
+| `LINGER_FILE_EXPIRY_DAYS` | When old files are deleted. `when-full` keeps them until the server needs the room: past 90% of `LINGER_POOL_BYTES`, the oldest go first until it's under 80%. A number of days deletes each file that long after it was shared, however much room there is. `off` keeps every sent file forever, and uploads are refused once it's full. Starred files, and files on pinned messages, never go. | `when-full` |
+| `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
+| `LINGER_BACKUP_S3_*` | A bucket each nightly copy is also sent to, so it survives the machine: `_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`, plus `_ENDPOINT`, `_REGION` and `_PATH_STYLE` as for files, and `_PREFIX` for where in the bucket. See [Sending the copies to a bucket](#sending-the-copies-to-a-bucket). | unset — copies stay on the machine |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
 | `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. The relay carries voice there and nowhere else. See [Voice](#voice). | the address your name points at |
@@ -356,6 +361,15 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_TRUSTED_PROXIES` | Which proxies the server believes about who's connecting, for the limits on signing in and signing up. Only needed for a proxy that isn't on this machine or a private network, such as Caddy on another machine reaching this one over Tailscale: `private,100.64.0.0/10`. Comma-separated addresses and ranges; `private` is this machine and private networks, and leaving it out stops trusting them. See [Other problems](#other-problems). | `private` |
 
 One file can be up to 500 MB.
+
+**How full it gets.** With `when-full`, the default, the file space is meant
+to fill up: nothing is deleted while there's room, so files take up to 90% of
+`LINGER_POOL_BYTES` before the oldest start going. Set `LINGER_POOL_BYTES` to
+what you're happy to give files, not the whole disk; the setup script picks a
+size that fits yours. On a cloud bucket it's the same: the bucket has no limit
+of its own, so `LINGER_POOL_BYTES` is the one Linger fills to, and you pay for
+what's in the bucket. In the app, Media's **Leaving soon** shows people what
+would go next, so they can star what they want kept.
 
 Nobody can fill the storage by themselves. One person can have 1 GB of files
 uploading at once; past that, they're told to let those finish first. An upload
@@ -378,7 +392,8 @@ two days after it was written. On Cloudflare R2 that is the bucket's
 **Settings**, then **Object lifecycle rules**. On AWS S3 it is the bucket's
 **Management** tab, then **Lifecycle rules** (expire current versions after 2
 days). Set the prefix to exactly `uploads/`: everything else in the bucket is
-people's files.
+people's files (and the nightly copies, if you
+[send them here](#sending-the-copies-to-a-bucket)).
 
 ### A big group joining at once
 
@@ -547,6 +562,80 @@ The whole server is the `data` folder next to your `compose.yaml`. It holds
 `linger.db` (every message) and `objects/` (every uploaded file). Keep a copy
 of `.env` somewhere safe too: it holds your settings and the relay's secret.
 
+### What the server does by itself
+
+Every night the server copies its database into `data/backups/` while it keeps
+running, so nobody notices, and checks that the copy opens cleanly. It keeps a
+week of nightly copies (`linger-daily-2026-10-11.db`) and a month of weekly
+ones (`linger-weekly-…`), and deletes older ones itself. The first copy is made
+a couple of minutes after the server starts, then one every 24 hours. Each is
+about the size of your database. The uploaded files aren't in them.
+
+**These copies are on the same disk as the server.** They save you from a bad
+update, a mistaken command or a damaged database file. They don't survive the
+disk dying, the machine being deleted, or your hosting account closing. For
+that, keep a copy somewhere else too: let the server
+[send them to a bucket](#sending-the-copies-to-a-bucket), or copy them
+yourself ([below](#a-copy-somewhere-else)).
+
+In the app, **Settings → Hosting → Server** says when the last copy was made.
+If the server goes three days without making one, a quiet line at the foot of
+your list says so ("Pinecone hasn't been backed up for 3 days."), and the
+server's log (`docker compose logs linger`) says why. A full disk is the usual
+reason. Only you see that line, not co-hosts or anybody else.
+
+The same place tells you when the disk is nearly full (less than a tenth
+free), or when uploaded files have nearly used up `LINGER_POOL_BYTES`. A full
+disk stops the server for everybody, so don't wait for it: free some space,
+lower `LINGER_POOL_BYTES`, or [move to a bigger machine](#moving-to-a-new-machine).
+
+Already back up the `data` folder another way and don't want the copies? Put
+`LINGER_BACKUPS=off` in `.env`, then `docker compose up -d`.
+
+### Sending the copies to a bucket
+
+The server can send each night's copy to a cloud bucket as well, so it
+survives this machine. Any S3-compatible storage works; Cloudflare R2 is a
+good pick, and a month of copies of a friend group's database costs pennies
+or nothing. Make a bucket and a key that can write to it, then fill in these
+lines in `.env` (they're there as comments) and run `docker compose up -d`:
+
+```bash
+LINGER_BACKUP_S3_BUCKET=linger-backups
+LINGER_BACKUP_S3_ENDPOINT=https://ACCOUNT.r2.cloudflarestorage.com
+LINGER_BACKUP_S3_REGION=auto
+LINGER_BACKUP_S3_ACCESS_KEY_ID=...
+LINGER_BACKUP_S3_SECRET_ACCESS_KEY=...
+```
+
+They work like the `LINGER_S3_*` lines for files: leave out the endpoint for
+AWS itself. They're separate, so your files can stay on this disk while the
+copies go away. If your files are already in a bucket you can use the same
+one, with the same keys: the copies go under `backups/`, out of the files'
+way. `LINGER_BACKUP_S3_PREFIX` puts them somewhere else in the bucket
+(`/` for its top level).
+
+A few minutes after the server starts it looks at the bucket and sends the
+newest copy if the bucket doesn't have it yet. After that, each night's copy
+goes once it has checked out. The bucket keeps the same week of nightly copies
+and month of weekly ones as `data/backups`, and the server deletes older ones
+there too. It never touches anything else in the bucket. If the bucket can't
+be reached, the copy on the disk is still made, and the server tries the
+bucket again every hour.
+
+**Settings → Hosting → Server** says when the newest copy got there. If none
+has for three days, a quiet line at the foot of your list says so ("Pinecone's
+backups haven't reached its bucket for 3 days."), and the server's log says
+why: usually a wrong key or bucket name.
+
+If some of the lines are filled in but not the bucket or both keys, the server
+won't start, and its log names the missing one.
+
+This sends the database, not the uploaded files. Copy those yourself, as
+below.
+
+### A copy somewhere else
+
 Only the server and root can open the `data` folder, so nobody else with an
 account on this machine can read it. So the copy is made by a throwaway
 Linger container, which can open it; any account that runs `docker` can do
@@ -560,16 +649,45 @@ docker compose start linger
 ```
 
 `umask 077` makes the copy readable by you alone, like the folder. That is a
-few seconds of downtime. Put it in a scheduled job and keep the copies
-somewhere that is not this machine.
+few seconds of downtime. Then move the file to another machine, or to cloud
+storage you trust.
 
-`update.sh` also saves the database into `backups/` whenever it updates the
-server, readable by you alone. That copy is for going back after an update: it
-has the messages but not the uploaded files, and it's on the same machine. It
-doesn't replace this.
+Without stopping anything, you can copy the nightly copies and the uploaded
+files off the machine instead. An uploaded file never changes once it's up,
+so each run only sends what's new. With `rsync` to another machine you can
+SSH into:
 
-To restore, unpack a copy into the `data` folder the same way, with the server
-stopped (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
+```bash
+sudo rsync -a data/backups data/objects you@other-machine:linger-backup/
+```
+
+or with [`rclone`](https://rclone.org/), to cloud storage you've set up for
+root as `remote:` (`sudo rclone config`), the same two folders:
+`sudo rclone copy data/backups remote:linger-backup/backups` and
+`sudo rclone copy data/objects remote:linger-backup/objects`. Either is a line
+to put in a scheduled job (`sudo crontab -e`).
+
+`update.sh` also saves the database into `backups/` (next to `compose.yaml`,
+not inside `data`) whenever it updates the server. That copy is for going back
+after an update, and it doesn't replace the others.
+
+### Restoring
+
+From one of the nightly copies, with the server stopped (put the copy's name
+in place of `linger-daily-2026-10-10.db`):
+
+```bash
+docker compose stop linger
+docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'cd /data && rm -f linger.db-wal linger.db-shm && cp backups/linger-daily-2026-10-10.db linger.db && chmod 600 linger.db'
+docker compose start linger
+```
+
+Everything written after that copy was made is gone: messages, people who
+joined, rooms you made. Uploaded files sent since then stay on the disk but
+nothing points at them anymore.
+
+From a full copy you made yourself, unpack it into the `data` folder the same
+way (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
 
 ```bash
 docker compose stop linger
@@ -577,11 +695,53 @@ docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'rm -
 docker compose start linger
 ```
 
-It clears the database's two journal files first: left over from another
+Both clear the database's two journal files first: left over from another
 copy, they would be applied to this one.
+
+From a copy in your bucket, download it first (from the provider's website,
+or `rclone copy`), put it in `data/backups/` with the same name, and restore
+it as a nightly copy:
+
+```bash
+docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'cat > /data/backups/linger-daily-2026-10-10.db' <linger-daily-2026-10-10.db
+```
+
+then the three lines for a nightly copy above.
 
 (If you moved files to a cloud bucket, `data/objects/` is empty and the bucket
 is the other half of your backup.)
+
+## Moving to a new machine
+
+Everything the server is lives in the `linger` folder: `compose.yaml`, the
+`Caddyfile`, `.env` and `data`. Moving it is copying that folder and pointing
+your names at the new machine. Friends' apps follow the name: they reconnect
+once the names point at the new machine, and stay signed in.
+
+1. On the new machine, [install Docker](#1-install-docker-on-the-server) and
+   open the same firewall ports as before.
+2. On the old machine, stop everything and pack the folder up, keeping who
+   owns what:
+
+   ```bash
+   cd linger
+   docker compose down
+   cd ..
+   sudo tar --numeric-owner -czpf linger-move.tar.gz linger
+   ```
+
+3. Copy `linger-move.tar.gz` to the new machine (with `scp`, say) and unpack
+   it there: `sudo tar --numeric-owner -xzpf linger-move.tar.gz`.
+4. Point both names (`linger.` and `cdn.linger.`) at the new machine's
+   address, as in [step 2](#2-point-two-names-at-the-server). If `.env` has
+   `LINGER_VOICE_ADDRESS` or `LINGER_RELAY_EXTERNAL_IP` set to the old
+   machine's address, change it to the new one.
+5. On the new machine, `cd linger` and `docker compose up -d`. Caddy gets new
+   certificates by itself once the names point here.
+6. Check the app connects, then delete the old machine.
+
+With `LINGER_STORAGE=s3` the files stay in the bucket and the new machine
+reads them there; only the folder moves.
 
 ## Exports (and what they do to your disk)
 
@@ -663,7 +823,8 @@ docker compose pull
 docker compose up -d
 ```
 
-Without `update.sh` nothing makes a backup first; see [Backups](#backups).
+Without `update.sh` nothing makes a backup first, apart from the server's own
+nightly copy; see [Backups](#backups).
 These commands use the image name already in your `compose.yaml`. If that line
 still says `ghcr.io/matthewguenther/linger`, change it to
 `ghcr.io/itsmattguenther/linger:latest` (all lowercase) before pulling.

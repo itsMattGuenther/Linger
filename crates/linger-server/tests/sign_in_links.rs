@@ -327,6 +327,15 @@ async fn the_link_opens_a_page_in_a_browser() {
         html.contains(&format!(">{}/sign-in/{}</code>", server.base, link.code)),
         "{html}"
     );
+    // Open in Linger (#607) works for a sign-in link too.
+    assert!(
+        html.contains(&format!(
+            "href=\"linger://sign-in?server={}&amp;code={}\"",
+            server.base.replace(':', "%3A").replace('/', "%2F"),
+            link.code
+        )),
+        "{html}"
+    );
     // Opening the page doesn't use the link.
     assert!(preview(&server, &link.code).await.valid);
 

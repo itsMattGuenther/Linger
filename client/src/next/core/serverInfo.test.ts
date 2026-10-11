@@ -41,6 +41,16 @@ describe("a server's name and color, held for the list (#536)", () => {
     const held: Readonly<Record<string, ListedInfo>> = withInfo({}, HOME, info());
     expect(held[HOME]).toEqual({ name: "The Good Company", accent_key: "amber" });
   });
+
+  it("keeps what a server tells its host about the machine, and notices when it changes (#582)", () => {
+    const health = { backups: true, last_backup_at: 5, backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+    const held = withInfo({}, HOME, info({ health }));
+    expect(held[HOME]?.health).toEqual(health);
+    expect(withInfo(held, HOME, info({ health: { ...health } }))).toBe(held);
+    expect(withInfo(held, HOME, info({ health: { ...health, disk_nearly_full: true } }))[HOME]?.health?.disk_nearly_full).toBe(true);
+    // No longer the host: it's gone.
+    expect(withInfo(held, HOME, info())[HOME]).toEqual({ name: "The Good Company", accent_key: "amber" });
+  });
 });
 
 describe("asking a server while its connection is up (#536)", () => {

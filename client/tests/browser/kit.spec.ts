@@ -577,6 +577,57 @@ test("tabs lead with a room's # or a person's marker, and a server stripe in a p
   expect(stripes[0]?.color).not.toBe(stripes[1]?.color);
 });
 
+test("a name in wide letters leaves the place beside it whole (#512)", async ({ page }) => {
+  // Thirty-two letters each wider than a word squeezed "in #the-den" to one letter.
+  const row = page.locator(".k-row", { hasText: "in #the-den" });
+  const note = row.locator(".k-row-note");
+  await expect(note).toHaveText("in #the-den");
+  const [shown, needed] = await note.evaluate((node) => [node.clientWidth, node.scrollWidth]);
+  expect(shown).toBeGreaterThanOrEqual(needed);
+  // The name gives way instead, and stays inside the row.
+  const rowBox = await row.boundingBox();
+  const nameBox = await row.locator(".k-name").boundingBox();
+  const noteBox = await note.boundingBox();
+  if (!rowBox || !nameBox || !noteBox) throw new Error("row not drawn");
+  expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(noteBox.x + HALF_PIXEL);
+  expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width);
+});
+
+test("an emoji in a gradient or shimmering name keeps its own colors (#512)", async ({ page }) => {
+  // Painted through with the name's gradient, an emoji drew as a flat block of it.
+  const emoji = page.getByTestId("emoji-names").locator(".k-name-emoji");
+  await expect(emoji).toHaveText(["🌙", "✨", "🇧🇷", "🔥"]);
+  for (const one of await emoji.all()) {
+    const fill = await one.evaluate((node) => getComputedStyle(node).webkitTextFillColor);
+    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
+  }
+  // The letters beside them keep the paint.
+  const letters = await page
+    .getByTestId("emoji-names")
+    .locator(".k-name")
+    .first()
+    .evaluate((node) => getComputedStyle(node).webkitTextFillColor);
+  expect(letters).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("the tab you're on stays in the strip when the window narrows (#512)", async ({ page }) => {
+  const strip = page.getByRole("tablist", { name: "Conversations" });
+  const window = page.getByTestId("tabbed-window");
+  const tab = strip.getByRole("tab", { name: "#raid-night" });
+  await window.evaluate((node) => (node.style.width = "900px"));
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  // Narrower: it was left out past the strip's end.
+  await window.evaluate((node) => (node.style.width = "420px"));
+  await expect
+    .poll(async () => {
+      const [outer, inner] = [await strip.boundingBox(), await tab.boundingBox()];
+      if (!outer || !inner) return false;
+      return inner.x >= outer.x - HALF_PIXEL && inner.x + inner.width <= outer.x + outer.width + HALF_PIXEL;
+    })
+    .toBe(true);
+});
+
 test("a list of places moves with the arrow keys, Home and End, with only the showing one in the tab order", async ({ page }) => {
   const nav = page.getByRole("tablist", { name: "Settings sections" });
   const showing = () => nav.getByRole("tab", { selected: true });

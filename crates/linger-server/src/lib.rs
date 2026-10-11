@@ -5,8 +5,10 @@
 //! thin shell around [`config`] + [`db`] + [`app`].
 
 pub mod auth;
+pub mod backup;
 pub mod config;
 pub mod db;
+pub mod disk;
 pub mod display;
 pub mod error;
 pub mod expiry;

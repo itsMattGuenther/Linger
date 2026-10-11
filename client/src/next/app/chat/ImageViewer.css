@@ -25,6 +25,13 @@
   border-radius: var(--radius-md);
 }
 
+.nx-viewer-failed {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
 .nx-viewer-name {
   flex: none;
   max-width: 100%;

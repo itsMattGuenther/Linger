@@ -354,7 +354,7 @@ export const MessageRow = memo(function MessageRow({
           <EditBox message={message} onSave={(body) => actions.save(message, body)} onDone={() => actions.edit(null)} />
         ) : justCard ? null : (
           <Fold id={message.id}>
-            <MessageText source={message.body} mentions={mentions} emoji={emoji} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} />
+            <MessageText source={message.body} mentions={mentions} emoji={emoji} onOpenLink={actions.openLink} trailing={wordless ? undefined : marks} writtenAt={message.created_at} />
           </Fold>
         )}
         {deleted || editing || poll !== null ? null : wordless && marks !== undefined ? (

@@ -85,6 +85,27 @@
   color: var(--text-secondary);
 }
 
+/* A time written with a zone (#584): faintly underlined, and pointing at it
+   says what it is in the reader's clock. */
+.nx-text-time {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--text-muted);
+  text-underline-offset: var(--space-0-5);
+}
+
+/* The same words for a screen reader, out of sight. From the stylesheet
+   rather than the page, so they're not part of the message: copying it
+   copies only what was written. */
+.nx-text-time::after {
+  content: attr(data-for-you);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .nx-mention {
   color: var(--text-secondary);
   font-weight: 600;
