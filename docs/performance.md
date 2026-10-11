@@ -130,7 +130,7 @@ drivers: with GTK drawing without the GPU (`GDK_GL=disable`) the window came
 at all. Splitting it further needs a profiler, which this machine doesn't
 have (#591).
 The servers' part (asking, connecting, answering) is about 150 ms here. Cold
-adds about 100 ms, a restart about 150–250 ms, almost all of it before the
+adds about 100 ms, a restart 80–250 ms, almost all of it before the
 window appears.
 
 **Memory**, warm, main: the app's own process 106 MB, WebKit's page process
