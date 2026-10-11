@@ -92,6 +92,31 @@ test("folds to one line, and stays folded after the app is closed and opened aga
   await expect(fold(page)).toBeVisible();
 });
 
+test("a link in it whose words name another site shows where it really goes (#580)", async ({ page }) => {
+  await open(page, "&motd");
+  await openGeneral(page);
+  await page.evaluate(
+    ([server, text]) =>
+      window.core?.frame(server, {
+        op: "room.update",
+        d: {
+          id: "r-general",
+          slug: "general",
+          name: "general",
+          topic: "Good company. No hurry.",
+          kind: "room",
+          member_ids: null,
+          position: 0,
+          archived_at: null,
+          last_message_id: "m000016",
+          motd: { text, set_by: "u-eli", set_at: Date.now() },
+        },
+      } as never),
+    [HOME, "Sign up at [raidhelper.example](https://evil.example/form)"] as const,
+  );
+  await expect(strip(page)).toContainText("Sign up at raidhelper.example (evil.example)");
+});
+
 test("a new message of the day opens again for everybody who folded the last", async ({ page }) => {
   await open(page, "&motd");
   await openGeneral(page);

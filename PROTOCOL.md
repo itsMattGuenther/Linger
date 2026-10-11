@@ -84,9 +84,32 @@ the newcomer with, and would not see them until it reconnected.
 
 ### 2.2 Shareable links
 
-Nothing on the server serves these paths — they exist so a person has one thing to
-paste into the client, which parses them and calls the endpoints above. The origin
-is the server; everything else is the client's business.
+These exist so a person has one thing to paste into the client, which parses them
+and calls the endpoints above. The origin is the server; everything else is the
+client's business.
+
+People tap links, though, so the server answers the first two in a browser with one
+small page (#578), outside `/api/v1` and only on the app's host, never the media
+host. `GET /invite/:code` (and `/invite?code=`) says which server the invite is for
+and how long it has left, in words ("about 6 days": the page can't know the reader's
+time zone), then three steps: get the app (Windows, Linux and Android, all to the
+project's latest release), paste this link into **Server or link**, make your
+account. A used-up, revoked or made-up code says the invite doesn't work, an expired
+one that it has run out, and neither names the server (`404`), as
+`GET /auth/invite/:code` doesn't. `GET /setup?token=` (and `/setup/:token`) is the
+same page with a warning not to share the link; a wrong token, or a server already
+set up, says so (`404`). Only an invite-shaped code (lowercase base32) or a hex token
+is ever looked up or written into the page.
+
+The page is inert: its one style sheet and one script (the Copy button) are fixed,
+and their hashes are its whole `Content-Security-Policy`
+(`default-src 'none'; style-src 'sha256-…'; script-src 'sha256-…'; base-uri 'none';
+form-action 'none'; frame-ancestors 'none'`). It loads no fonts or images and
+nothing from anywhere else, and is sent with `Cache-Control: no-store`,
+`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and `X-Robots-Tag: noindex`.
+The link it shows starts with `https://` + `LINGER_DOMAIN`, or, on a server without
+one, the address the browser used. It isn't a directory and isn't sign-up: the code
+is still the only way in.
 
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console
@@ -198,7 +221,8 @@ it off; the sign-in figure is the brake on guessing passwords and isn't a settin
 Past either, the answer is `RATE_LIMITED` with `retry_after_ms`. The address is the
 connection's own; from a proxy the server trusts (`LINGER_TRUSTED_PROXIES`, by
 default the same machine or a private network), it is the last `X-Forwarded-For`
-entry, never an earlier one. Checking a password is slow on purpose and the server
+entry, never an earlier one. An IPv6 address counts by its /64, so every address in
+one home connection's block shares one allowance (#546). Checking a password is slow on purpose and the server
 does only a few at once (`LINGER_PASSWORD_CHECKS_AT_ONCE`, default 4), so a sign-in,
 sign-up, first-run setup or password change that can't get a turn within 5 seconds
 is also `RATE_LIMITED`. `POST /auth/register` checks the invite before it touches

@@ -200,6 +200,19 @@ test.describe("what a message says", () => {
     await expect(nested.getByRole("link")).toHaveText("[https://a.example](https://b.example)");
   });
 
+  test("a link whose words name another site shows where it really goes, beside them (#580)", async ({ page }) => {
+    await open(page);
+    const decoy = row(page, await post(page, "pay here: [www.paypal.com](https://evil.example/steal)")).locator(".nx-text");
+    const honest = row(page, await post(page, "[paypal.com](https://www.paypal.com/signin) and [the menu](https://evil.example/menu)")).locator(".nx-text");
+    // The real site sits beside the words, outside the link, without pointing.
+    await expect(decoy).toHaveText("pay here: www.paypal.com (evil.example)");
+    await expect(decoy.getByRole("link")).toHaveText("www.paypal.com");
+    await expect(decoy.locator(".nx-text-link-real")).toHaveText(" (evil.example)");
+    // Words naming the same site, and ordinary words, are left as they are.
+    await expect(honest).toHaveText("paypal.com and the menu");
+    await expect(honest.locator(".nx-text-link-real")).toHaveCount(0);
+  });
+
   test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
     await open(page);
     // Typed as the report did: a line, Shift+Enter, the next line, Enter.

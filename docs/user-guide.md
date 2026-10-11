@@ -159,6 +159,8 @@ it and install the new one. That signs you out once.
 For a **new member**:
 
 1. Ask the host for an invite, such as `https://linger.example.com/invite/CODE`.
+   Opened in a browser, it shows a page with the server's name, where to get
+   Linger, and a **Copy** button for the link.
 2. Paste the **whole invite link** into **Server or link** and press **Continue**.
    Do not remove the invite code or anything after `?`.
 3. Choose a username, display name, and password of at least eight characters,
@@ -426,7 +428,10 @@ A little formatting works, the kind you already type:
 - a list
 ```
 
-Paste a link and it becomes a link.
+Paste a link and it becomes a link. Point at any link to see where it goes. If a
+link's words look like one web address and it goes somewhere else, the real site
+shows beside the words in grey, like **www.paypal.com** (evil.example), so you can
+tell without pointing at it.
 
 To mention somebody, type `@` and start their name or their username. A list
 of people opens by the box: **Up** and **Down** move through it, **Enter** or

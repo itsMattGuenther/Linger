@@ -7,9 +7,13 @@
 //! (`RESUME_WINDOW_MS`) so a reconnecting client can replay what it missed —
 //! no gaps, no duplicates.
 //!
+//! Each event is turned into JSON once, however many sessions it reaches, and
+//! that one string is what every session's ring holds (`frame`, #519).
+//!
 //! Presence lives in memory only, on purpose (ARCHITECTURE §5): restart ⇒
 //! everyone offline until they reconnect.
 
+mod frame;
 mod socket;
 
 use std::collections::VecDeque;
@@ -27,6 +31,7 @@ use linger_core::{RoomId, UserId};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
+use frame::EventJson;
 pub use socket::ws_route;
 
 /// Everything the fan-out layer holds. Lives in `AppState` as `Arc<Gateway>`;
@@ -120,6 +125,36 @@ struct Fanout {
     /// Which room this frame is about, if any. Worked out from the event by
     /// `room_of` for every frame that names a room, and passed in for
     /// `reaction.update`, which names a message instead.
+    room: Option<RoomId>,
+    /// What everybody it reaches is told, made by the first session that
+    /// needs it and shared by every other (#519). `None` inside when it
+    /// couldn't be made into JSON, which no event does.
+    told: OnceLock<Option<Told>>,
+}
+
+impl Fanout {
+    fn new(
+        event: ServerEvent,
+        to: Option<UserId>,
+        to_session: Option<String>,
+        room: Option<RoomId>,
+    ) -> Self {
+        Self {
+            event,
+            to,
+            to_session,
+            room,
+            told: OnceLock::new(),
+        }
+    }
+}
+
+/// A published frame as everybody it reaches is told it (#519).
+struct Told {
+    /// As JSON, without its `s`.
+    json: EventJson,
+    /// For a `presence.update`, the room it names once `outward` has had its
+    /// say. Somebody who can't see that room gets their own copy without it.
     room: Option<RoomId>,
 }
 
@@ -291,12 +326,9 @@ impl Gateway {
     pub fn publish(&self, event: ServerEvent) {
         let room = room_of(&event);
         // No receivers just means nobody is connected; that is fine.
-        let _ = self.bus.send(Arc::new(Fanout {
-            event,
-            to: None,
-            to_session: None,
-            room,
-        }));
+        let _ = self
+            .bus
+            .send(Arc::new(Fanout::new(event, None, None, room)));
     }
 
     /// Fan out a frame that belongs to a room without naming it.
@@ -306,12 +338,9 @@ impl Gateway {
     /// the message in hand and so has the room; the frame does not carry it,
     /// because a client that receives the frame already holds the message.
     pub fn publish_in(&self, room_id: RoomId, event: ServerEvent) {
-        let _ = self.bus.send(Arc::new(Fanout {
-            event,
-            to: None,
-            to_session: None,
-            room: Some(room_id),
-        }));
+        let _ = self
+            .bus
+            .send(Arc::new(Fanout::new(event, None, None, Some(room_id))));
     }
 
     /// Reload who is in every DM, from the database.
@@ -384,12 +413,12 @@ impl Gateway {
     /// needs it: a peer connection is between two clients, so an answer meant
     /// for the laptop is meaningless on the desktop.
     pub fn publish_to_session(&self, session_id: &str, event: ServerEvent) {
-        let _ = self.bus.send(Arc::new(Fanout {
+        let _ = self.bus.send(Arc::new(Fanout::new(
             event,
-            to: None,
-            to_session: Some(session_id.to_string()),
-            room: None,
-        }));
+            None,
+            Some(session_id.to_string()),
+            None,
+        )));
     }
 
     /// Fan an event out to one person's sessions and nobody else's (T-1101).
@@ -398,12 +427,9 @@ impl Gateway {
     /// one person, and a knock that landed on whichever machine happened to
     /// connect first would be a knock they never saw.
     pub fn publish_to(&self, user_id: UserId, event: ServerEvent) {
-        let _ = self.bus.send(Arc::new(Fanout {
-            event,
-            to: Some(user_id),
-            to_session: None,
-            room: None,
-        }));
+        let _ = self
+            .bus
+            .send(Arc::new(Fanout::new(event, Some(user_id), None, None)));
     }
 
     /// Hang up on every session this person has open: they were removed
@@ -827,14 +853,15 @@ impl Gateway {
         }
     }
 
-    /// PROTOCOL §8 fan-out rules: what this person gets, if anything.
+    /// PROTOCOL §8 fan-out rules: what this person gets, if anything, as
+    /// JSON without its `s`.
     ///
-    /// Returns the frame to send, which is not always the frame that was
-    /// published — `presence.update` is *redacted* for somebody who cannot see
-    /// the room its subject is in, rather than withheld. Withholding it would
-    /// make that person look offline to everybody they are not currently
-    /// talking to, which is both wrong and a slower way of leaking the same
-    /// thing (SPEC §4.13).
+    /// Nearly always the one copy everybody it reaches shares (`told`, #519).
+    /// The exception is `presence.update`, which is *redacted* for somebody
+    /// who cannot see the room its subject is in, rather than withheld.
+    /// Withholding it would make that person look offline to everybody they
+    /// are not currently talking to, which is both wrong and a slower way of
+    /// leaking the same thing (SPEC §4.13).
     ///
     /// Four rules, in order:
     /// 0. A session-addressed frame reaches that one client and no other, not
@@ -845,17 +872,16 @@ impl Gateway {
     /// 3. `room.enter` narrows further, to clients standing in that room.
     /// 4. `presence.update` naming a room the receiver cannot see loses the
     ///    room and keeps the person.
-    fn visible_to(
-        &self,
-        receiver: UserId,
-        session_id: &str,
-        fanout: &Fanout,
-    ) -> Option<ServerEvent> {
+    fn visible_to(&self, receiver: UserId, session_id: &str, fanout: &Fanout) -> Option<EventJson> {
         if let Some(target) = &fanout.to_session {
-            return (target == session_id).then(|| fanout.event.clone());
+            return (target == session_id)
+                .then(|| self.told(fanout).map(|told| told.json.clone()))
+                .flatten();
         }
         if let Some(target) = fanout.to {
-            return (target == receiver).then(|| fanout.event.clone());
+            return (target == receiver)
+                .then(|| self.told(fanout).map(|told| told.json.clone()))
+                .flatten();
         }
 
         if let Some(room_id) = fanout.room {
@@ -874,17 +900,40 @@ impl Gateway {
             }
         }
 
-        if let ServerEvent::PresenceUpdate(entry) = &fanout.event {
-            let mut told = self.outward(entry.clone());
-            if let Some(room_id) = told.room_id {
-                if !self.can_see_room(receiver, room_id) {
-                    told.room_id = None;
-                }
+        let told = self.told(fanout)?;
+        if let (Some(room_id), ServerEvent::PresenceUpdate(entry)) = (told.room, &fanout.event) {
+            if !self.can_see_room(receiver, room_id) {
+                let mut redacted = self.outward(entry.clone());
+                redacted.room_id = None;
+                return EventJson::of(&ServerEvent::PresenceUpdate(redacted)).ok();
             }
-            return Some(ServerEvent::PresenceUpdate(told));
         }
+        Some(told.json.clone())
+    }
 
-        Some(fanout.event.clone())
+    /// What everybody a frame reaches is told, made once (#519): the first
+    /// session to need it makes it, and every other reuses it. Making it
+    /// once also means everybody is told the same thing, even if a DM's
+    /// membership changes while the frame is on its way round.
+    ///
+    /// A `presence.update` goes out as `outward` has it, which is the same
+    /// for everybody: being in a DM is being around, to all.
+    fn told<'a>(&self, fanout: &'a Fanout) -> Option<&'a Told> {
+        fanout
+            .told
+            .get_or_init(|| match &fanout.event {
+                ServerEvent::PresenceUpdate(entry) => {
+                    let entry = self.outward(entry.clone());
+                    let room = entry.room_id;
+                    EventJson::of(&ServerEvent::PresenceUpdate(entry))
+                        .ok()
+                        .map(|json| Told { json, room })
+                }
+                event => EventJson::of(event)
+                    .ok()
+                    .map(|json| Told { json, room: None }),
+            })
+            .as_ref()
     }
 }
 
@@ -917,7 +966,9 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
 
     tokio::spawn(async move {
         let mut seq: u64 = 0;
-        let mut ring: VecDeque<(u64, String)> = VecDeque::with_capacity(RESUME_BUFFER_FRAMES);
+        // Every entry is the same string every other session holds for that
+        // event (#519); its `s` is spliced in as it's sent.
+        let mut ring: VecDeque<(u64, EventJson)> = VecDeque::with_capacity(RESUME_BUFFER_FRAMES);
         let mut sink: Option<mpsc::Sender<String>> = None;
         // Held alongside the sink and replaced with it: it belongs to whichever
         // socket is attached right now, not to the session.
@@ -930,20 +981,19 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
             tokio::select! {
                 event = bus_rx.recv() => match event {
                     Ok(event) => {
-                        let Some(mine) = gateway.visible_to(user_id, &session_id, &event) else {
+                        let Some(json) = gateway.visible_to(user_id, &session_id, &event) else {
                             continue;
                         };
                         seq += 1;
-                        let frame = ServerFrame::sequenced(mine, seq);
-                        let Ok(json) = serde_json::to_string(&frame) else { continue };
                         if ring.len() == RESUME_BUFFER_FRAMES {
                             ring.pop_front();
                         }
-                        ring.push_back((seq, json.clone()));
+                        let frame = json.sequenced(seq);
+                        ring.push_back((seq, json));
                         if let Some(tx) = &sink {
                             // A full queue means a dead or pathologically slow
                             // socket; detach and let resume recover it.
-                            if tx.try_send(json).is_err() {
+                            if tx.try_send(frame).is_err() {
                                 sink = None;
                                 closer = None;
                                 detached_at = Some(Instant::now());
@@ -961,7 +1011,7 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                         let replay: Vec<String> = ring
                             .iter()
                             .filter(|(s, _)| *s > resume_from)
-                            .map(|(_, j)| j.clone())
+                            .map(|(s, json)| json.sequenced(*s))
                             .collect();
                         if is_resume {
                             let resumed = ServerFrame::control(ServerEvent::Resumed {
