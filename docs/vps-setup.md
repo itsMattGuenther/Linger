@@ -75,7 +75,7 @@ outbound allowances for TCP, UDP and ICMP.
 | App connection | TCP | `443` | All IPv4 |
 | Voice relay, if using voice | TCP | `3478` | All IPv4 |
 | Voice relay, if using voice | UDP | `3478` | All IPv4 |
-| Voice audio, if using voice | UDP | `49160-49200` | All IPv4 |
+| Voice audio, if using voice | UDP | `49160-49359` | All IPv4 |
 
 If you enable IPv6, add the corresponding IPv6 sources too. Do not open
 Linger's internal port `8420` or Docker's control ports.

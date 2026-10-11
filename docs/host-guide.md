@@ -207,7 +207,7 @@ these ports to that address:
 - **TCP 80 and 443**, for the app;
 - **UDP 3479**, for voice. Without it text chat works and nobody hears anybody;
 - if you run [the relay](#the-voice-relay), **TCP and UDP 3478** and **UDP
-  49160 to 49200** too.
+  49160 to 49359** too.
 
 Allow the same ports in the computer's firewall (the setup script does this
 when `ufw` is on, and lists them for you). This is the extra step a VPS avoids.
@@ -385,11 +385,21 @@ step 4 to check it. Otherwise, run these steps **on the server**, inside the
    [server files](#by-hand-instead-of-the-script), `cp .env.example .env`, and
    fill in just those two lines.)
 2. Allow inbound port **3478**, both TCP and UDP, and UDP ports **49160 to
-   49200** in the provider's firewall and any firewall on the server. Keep
+   49359** in the provider's firewall and any firewall on the server. Keep
    TCP **80 and 443** open too. If the machine is behind a home router rather
    than on a public address, forward them as well, and remove the `#` before
    `LINGER_RELAY_EXTERNAL_IP` in `.env` with your public IP after it, so the
    relay tells people where it really is.
+
+   Those 200 ports are room for everybody in voice at once. While the relay
+   is on, each person in voice holds one, even when their voice goes straight
+   to your server, and somebody whose connection drops can hold a second for
+   up to ten minutes. So 200 covers a voice room of 60, the most one room
+   holds, with plenty to spare for reconnects. Expecting more than 100 people
+   in voice at once, across all your rooms? Raise `--max-port=49359` in
+   `compose.yaml`, open the wider range in both firewalls, and run
+   `docker compose --profile voice up -d`. A newer `compose.yaml` puts it
+   back, so make the change again whenever you replace the file.
 3. Start Linger and the relay together so both read the secret:
    ```bash
    docker compose up -d
@@ -519,6 +529,23 @@ If you run the relay and your `.env` has no `COMPOSE_PROFILES=voice` line, add
 `--profile voice` after `docker compose` in both commands, or the relay stays
 on its old version.
 
+**Run the voice relay? It needs more ports open after 0.4.10.** From the
+release after 0.4.10, the relay uses UDP ports **49160 to 49359**, so it has
+room for a 60-person voice room. Before, it was 49160 to 49200. When you
+update to that release:
+
+1. Open UDP **49160 to 49359** in your provider's firewall and in any firewall
+   on the server (with `ufw`: `sudo ufw allow 49160:49359/udp`). At home,
+   forward the same range on your router too.
+2. Get the new `compose.yaml` (just below), then run `./update.sh`.
+
+Do them in that order. With the new `compose.yaml` and the old firewall, the
+relay hands most of the people who need it a port your firewall drops, and
+they can't get into voice (the app says `can't reach`). Everybody whose voice
+goes straight to your server is fine either way. Kept the old `compose.yaml`?
+Nothing breaks, but the relay stays at 41 ports, and fills up once about 40
+people are in voice at once.
+
 **A newer `compose.yaml` or `Caddyfile`.** A server set up with the setup
 script, or by hand from 0.4.9, keeps every setting in `.env`, so a newer copy
 of either file can replace the old one as it is:
@@ -599,7 +626,7 @@ For people on a network that blocks voice, the relay has to be running. Run
   by default. Run `docker compose --profile voice up -d` after either fix
   and check that coturn stays Up.
 - **Stays Up, but voice says `can't reach`:** check inbound TCP/UDP 3478 and
-  UDP 49160–49200 in both firewalls (and router forwarding at home). After
+  UDP 49160–49359 in both firewalls (and router forwarding at home). After
   changing `.env`, run `docker compose --profile voice up -d` to apply the
   same secret to both containers; restarting only coturn is not enough.
 

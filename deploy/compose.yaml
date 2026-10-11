@@ -32,7 +32,7 @@
 # offices, some public wifi). It is optional, and the server says so at
 # startup when it's missing. .env turns it on: a secret in LINGER_TURN_SECRET
 # and COMPOSE_PROFILES=voice. Open port 3478 (TCP and UDP) and UDP
-# 49160–49200 for it too.
+# 49160–49359 for it too.
 
 services:
   linger:
@@ -66,6 +66,13 @@ services:
   # The voice relay (T-1403). Runs on the host's network directly: a relay's
   # whole job is being reachable on its real address and a range of UDP ports,
   # which Docker's own network translation would get in the way of.
+  #
+  # Its range is 200 ports (--min-port and --max-port below). The app takes
+  # one for every call while the relay is on, whether or not the call ends up
+  # needing it, and a call that drops without hanging up holds its port until
+  # the relay gives up on it ten minutes later. 200 is a 60-person raid with
+  # room for its reconnects (#197). Nothing is published per port, so a wider
+  # range costs nothing until a port is used.
   coturn:
     image: coturn/coturn:4
     restart: unless-stopped
@@ -94,7 +101,7 @@ services:
           --use-auth-secret \
           --static-auth-secret="$$LINGER_TURN_SECRET" \
           --min-port=49160 \
-          --max-port=49200 \
+          --max-port=49359 \
           --fingerprint \
           --no-cli \
           --no-tls \

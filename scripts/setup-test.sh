@@ -89,6 +89,10 @@ run() { # runs the script with the given answers; output in $out, exit code in $
 }
 answers=(LINGER_SETUP_DOMAIN=linger.example.com LINGER_SETUP_RELAY=yes)
 
+# The relay's ports, as compose.yaml gives them to coturn.
+relay_min="$(sed -n 's/^ *--min-port=\([0-9]*\).*/\1/p' deploy/compose.yaml)"
+relay_max="$(sed -n 's/^ *--max-port=\([0-9]*\).*/\1/p' deploy/compose.yaml)"
+
 failures=0
 check() { # description, then a command that must succeed
   local what="$1"
@@ -123,7 +127,7 @@ check "the relay starts with everything else" in_env "COMPOSE_PROFILES=voice"
 check "a 50 GB disk gets a 10 GB pool" in_env "LINGER_POOL_BYTES=10GB"
 check "nobody has to write a voice address" bash -c "! grep -q '^LINGER_VOICE_ADDRESS=' '$dir/.env'"
 check ".env is the owner's alone" test "$(stat -c %a "$dir/.env")" = 600
-for port in 80/tcp 443/tcp 3479/udp 3478/tcp 3478/udp 49160:49200/udp; do
+for port in 80/tcp 443/tcp 3479/udp 3478/tcp 3478/udp "$relay_min:$relay_max/udp"; do
   check "ufw allows $port" called "ufw allow $port"
 done
 check "a 0.4.9 server needs no chown" never "--entrypoint chown"
@@ -149,7 +153,7 @@ run "${answers[@]}"
 check "behind a router succeeds" test "$code" -eq 0
 check "it says something sits in front" has "Something sits between this machine and the internet"
 check "it names this machine's own address" has "(192.168.1.50)"
-check "it lists the relay's range to let through" has "49160–49200/udp"
+check "it lists the relay's range to let through" has "$relay_min–$relay_max/udp"
 check "the relay is told its public address" in_env "LINGER_RELAY_EXTERNAL_IP=203.0.113.7"
 
 setup bigdisk
@@ -188,6 +192,33 @@ run "${answers[@]}"
 check "a Caddy that doesn't answer yet isn't a failure" test "$code" -eq 0
 check "it says why it might not answer" has "didn't answer from here yet"
 check "the link is printed anyway" has "/setup?token=0123456789abcdef"
+
+# --- The relay's range, the same everywhere ------------------------------------------
+
+# Each person in voice holds one relay port while the relay is on, and a call
+# that drops holds its port ten more minutes: 200 is a 60-person raid with
+# room for its reconnects (#197). A host opens what setup.sh and the guides
+# say, so a range they don't match leaves people who need the relay with a
+# port nothing lets through.
+ranged() { [[ "$relay_min" =~ ^[0-9]+$ && "$relay_max" =~ ^[0-9]+$ ]]; }
+check "compose.yaml gives the relay a range" ranged
+check "the relay has room for a raid: 200 ports at least (#197)" \
+  bash -c "(( ${relay_max:-0} - ${relay_min:-0} + 1 >= 200 ))"
+# Every port number in the 49000s that deploy/ or a guide names is one of the
+# range's two ends, except in what the range was ("was 49160 to 49200"), for
+# hosts updating. Release notes and docs/tasks/ are history, and not read.
+stray="$(awk -v lo="$relay_min" -v hi="$relay_max" '{
+  line = $0
+  gsub("was " lo "( to |–|-)49[0-9][0-9][0-9]", "", line)
+  while (match(line, /(^|[^0-9])49[0-9][0-9][0-9]([^0-9]|$)/)) {
+    port = substr(line, RSTART, RLENGTH)
+    gsub(/[^0-9]/, "", port)
+    if (port != lo && port != hi) print "      not the range compose.yaml has: " FILENAME ":" FNR ": " port
+    line = substr(line, RSTART + RLENGTH - 1)
+  }
+}' deploy/* docs/*.md README.md)"
+[[ -z "$stray" ]] || echo "$stray"
+check "the guides name the relay's range as compose.yaml has it" test -z "$stray"
 
 # --- What stops it ----------------------------------------------------------------
 

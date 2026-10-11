@@ -189,7 +189,7 @@ fi
 # --- 5. Ports -------------------------------------------------------------------
 
 ports=("80/tcp" "443/tcp" "3479/udp")
-if [[ "$relay" == yes ]]; then ports+=("3478/tcp" "3478/udp" "49160:49200/udp"); fi
+if [[ "$relay" == yes ]]; then ports+=("3478/tcp" "3478/udp" "49160:49359/udp"); fi
 
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
   step "Opening the ports in this machine's firewall"
