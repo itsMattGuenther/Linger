@@ -123,6 +123,7 @@ check "the relay starts with everything else" in_env "COMPOSE_PROFILES=voice"
 check "a 50 GB disk gets a 10 GB pool" in_env "LINGER_POOL_BYTES=10GB"
 check "nobody has to write a voice address" bash -c "! grep -q '^LINGER_VOICE_ADDRESS=' '$dir/.env'"
 check ".env is the owner's alone" test "$(stat -c %a "$dir/.env")" = 600
+check "so is the data folder, from the start (#506)" test "$(stat -c %a "$dir/data")" = 700
 for port in 80/tcp 443/tcp 3479/udp 3478/tcp 3478/udp 49160:49200/udp; do
   check "ufw allows $port" called "ufw allow $port"
 done
@@ -217,6 +218,22 @@ check "a folder running a server is refused" test "$code" -eq 1
 check "it points at update.sh" has "./update.sh updates it."
 check "it downloads nothing there" never "curl"
 check "it starts nothing there" never "up -d"
+
+# From an account that isn't root, a server's data folder won't open (#506),
+# so the database inside can't be seen. Root opens any folder, so this case
+# needs an account that isn't.
+if ((EUID != 0)); then
+  setup runningprivate
+  mkdir -p "$dir/data"
+  echo "a database" >"$dir/data/linger.db"
+  chmod 600 "$dir/data"
+  run "${answers[@]}"
+  chmod 700 "$dir/data"
+  check "a folder running a server it can't open is refused" test "$code" -eq 1
+  check "it points at sudo ./update.sh" has "sudo ./update.sh updates it."
+  check "it downloads nothing there either" never "curl"
+  check "it starts nothing there either" never "up -d"
+fi
 
 setup oldcompose
 printf 'services:\n  linger:\n    environment:\n      LINGER_DOMAIN: linger.example.com\n' >"$dir/compose.yaml"

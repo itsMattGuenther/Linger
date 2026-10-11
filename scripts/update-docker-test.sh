@@ -78,6 +78,7 @@ expect "asks for version 0.4.3, so this keeps you on it"
 grep -qF "carries no voice" <<<"$out" && fail "it warned about voice, which is set"
 backup="$(find backups -name 'linger-0.4.2-*.tar.gz' | head -1)"
 [[ -n "$backup" ]] || fail "no backup named for 0.4.2 in backups/"
+[[ "$(stat -c %a "$backup")" == 600 ]] || fail "$backup is $(stat -c %a "$backup"), not the owner's alone (#506)"
 # The whole listing first: `tar | grep -q` under pipefail fails whenever grep
 # quits before tar has printed linger.db-wal (#321).
 listing="$(tar tzf "$backup")" || fail "$backup isn't a readable archive"

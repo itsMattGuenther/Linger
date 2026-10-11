@@ -90,6 +90,11 @@ elif [[ -z "$voice" ]]; then
   say "carries no voice. To turn voice on, see https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#voice"
 fi
 
+# The server keeps its data folder to itself (#506): only it and root can look
+# inside, and the backup below has to.
+[[ ! -d data || -x data ]] ||
+  fail "this account can't look inside the data folder, which only the server and root can,
+so nobody else on this machine can read your server's messages. Run: sudo $0"
 [[ -f data/linger.db ]] ||
   fail "can't find data/linger.db here. This script expects the data folder next to compose.yaml,
 as the standard compose.yaml sets it up."
@@ -149,7 +154,12 @@ if [[ -n "$old_image_id" && "$old_image_id" == "$new_image_id" ]]; then
   say "The server is already the newest version${before:+ ($before)}. Nothing to back up."
 else
   step "Backing up the database (the server is down for a few seconds)"
+  # A backup is the whole database, so it's as private as the data folder
+  # (#506): the folder 0700 and each copy 0600. The chmod also shuts away
+  # copies an older update.sh left readable by everybody.
+  umask 077
   mkdir -p backups
+  chmod 700 backups
   backup="backups/linger-${before:-unknown}-$(date +%Y-%m-%d-%H%M%S).tar.gz"
   compose stop linger
   # Stopped cleanly, SQLite has folded its journal back into linger.db. The

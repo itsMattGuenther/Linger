@@ -126,9 +126,11 @@ before() { [[ -n "$(at "$1")" && -n "$(at "$2")" && "$(at "$1")" -lt "$(at "$2")
 # --- An update, with old backups to trim ----------------------------------------
 
 setup update
-mkdir -p "$dir/backups"
+# As an older update.sh left them: a folder and copies anybody could read.
+mkdir -m 755 "$dir/backups"
 for n in 1 2 3 4 5 6; do
   echo old >"$dir/backups/linger-0.3.$n-2026-01-0$n-000000.tar.gz"
+  chmod 644 "$dir/backups/linger-0.3.$n-2026-01-0$n-000000.tar.gz"
   touch -d "2026-01-0$n" "$dir/backups/linger-0.3.$n-2026-01-0$n-000000.tar.gz"
 done
 echo "unsaved journal" >"$dir/data/linger.db-wal"
@@ -141,6 +143,8 @@ backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' | head -1)"
 check "the backup is named for the old version" test -n "$backup"
 check "the backup holds the database and its journal" \
   bash -c "tar tzf '$dir/$backup' | sort | tr '\n' ' ' | grep -qx 'linger.db linger.db-wal '"
+check "the backup is the owner's alone, 0600 (#506)" test "$(stat -c %a "$dir/$backup")" = 600
+check "and so is the folder, closing it on the old copies (#506)" test "$(stat -c %a "$dir/backups")" = 700
 check "five backups are kept" test "$(find "$dir/backups" -type f | wc -l)" -eq 5
 check "the oldest are the ones removed" \
   bash -c "! ls '$dir/backups' | grep -qE 'linger-0\.3\.[12]-'"
@@ -200,6 +204,20 @@ run
 check "a missing database stops it" test "$code" -eq 1
 check "it names the missing file" has "can't find data/linger.db"
 check "it pulls nothing then" never "pull"
+
+# A server keeps its data folder to itself (#506), so an account that isn't
+# root can't look inside to back it up. Root opens any folder, so this case
+# needs an account that isn't.
+if ((EUID != 0)); then
+  setup private
+  chmod 600 "$dir/data"
+  run
+  chmod 700 "$dir/data"
+  check "a data folder it can't open stops it" test "$code" -eq 1
+  check "it says to run it with sudo" has "Run: sudo $dir/update.sh"
+  check "it doesn't call that a missing database" lacks "can't find data/linger.db"
+  check "it pulls nothing then" never "pull"
+fi
 
 setup nocompose
 rm "$dir/compose.yaml"

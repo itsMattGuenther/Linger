@@ -829,7 +829,11 @@ machine. `off`, or no domain to look up, and the server carries no voice (#306).
 
 The image starts as root only to give the data folder to its `linger` user, then runs the
 server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
-root, which used to need a `chown` before the first start.
+root, which used to need a `chown` before the first start. It also makes the folder 0700
+and runs the server with umask 077, so what the server writes is 0600 (#506): on a
+machine with more than one account, the others can't read the database or the files.
+`update.sh` reads the database for its backup, so it runs as root, and writes the
+backup 0600 too.
 
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
