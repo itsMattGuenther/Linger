@@ -493,6 +493,17 @@ Not a 400px billboard. Images render inline at true aspect ratio, capped at 400p
 height, click to expand. One so tall that it would be under 120px wide there (a
 phone's scrolling screenshot) is drawn 120px wide, showing its top (#512).
 
+**A link says where it goes.** A link's words are whatever its sender wrote, and
+pointing at it always shows the real address. When the words are themselves an
+address or a domain (`www.paypal.com`, `https://paypal.com/login`) and the link
+goes to a different site, the real site is drawn beside them, quietly:
+**www.paypal.com** (evil.example). It reads without pointing, which a phone can't do
+(#580). The same site, once a leading `www.` is dropped or one name sits inside the
+other (`login.paypal.com`), counts as the same; ordinary words ("the menu") say
+nothing about where they go and are left alone. Names are compared as the computer
+reads them, so words in look-alike letters (a Cyrillic `а`) show the real name in
+its `xn--` form. No warning, no dialog, no list of bad sites.
+
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface
 scale is an optional reading preference, not a requirement for a usable layout.

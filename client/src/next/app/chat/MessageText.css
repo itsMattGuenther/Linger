@@ -79,6 +79,12 @@
   text-decoration-color: var(--accent);
 }
 
+/* Where a link really goes, when its words name another site (#580): quiet,
+   in the words' own face, beside the link rather than part of it. */
+.nx-text-link-real {
+  color: var(--text-secondary);
+}
+
 .nx-mention {
   color: var(--text-secondary);
   font-weight: 600;
@@ -111,6 +117,7 @@
 /* Words somebody wrote keep their direction to themselves (#488): one that
    turns text around can't reach past them. */
 .nx-mention,
+.nx-text-link-real,
 .nx-text-words {
   unicode-bidi: isolate;
 }

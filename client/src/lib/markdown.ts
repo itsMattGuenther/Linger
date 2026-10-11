@@ -565,7 +565,8 @@ function flattenBlocks(blocks: readonly Block[]): string {
     .join(" ");
 }
 
-function flattenInline(nodes: readonly Inline[]): string {
+/** Inline nodes as the plain words they draw: a link's words, without the markdown. */
+export function flattenInline(nodes: readonly Inline[]): string {
   return nodes
     .map((node) => {
       switch (node.kind) {
