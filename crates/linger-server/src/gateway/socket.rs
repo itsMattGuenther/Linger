@@ -18,17 +18,32 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{spawn_session, Ctl, SessionHandle, VoiceJoined};
 use crate::db::now_ms;
-use crate::repo;
 use crate::state::AppState;
-use crate::validate;
+use crate::{auth, repo, validate};
 
 /// How long the client has to send identify/resume after hello.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Reader liveness: 2.5× the heartbeat interval with no traffic ⇒ dead peer.
 const LIVENESS_TIMEOUT: Duration = Duration::from_millis(HEARTBEAT_INTERVAL_MS * 5 / 2);
 
+/// How much of the network the socket reads at a time. The library's default,
+/// 128 KiB, is set aside for every connection, signed in or not, and every
+/// frame an app sends but `voice.answer` is a few hundred bytes.
+const READ_BUFFER_BYTES: usize = 4 * 1024;
+
+/// The socket's limits are set here, before anybody has identified (#517), so
+/// a connection that hasn't signed in can't make the server hold more than the
+/// biggest frame an app really sends. A frame that says it is bigger than
+/// `MAX_CLIENT_FRAME_BYTES` ends the connection as soon as its header is read,
+/// and so does a message pieced together from smaller frames once it passes
+/// the same size. The write side keeps the library's settings: it sets nothing
+/// aside until there is something to send, and the writer task flushes each
+/// frame as it goes.
 pub async fn ws_route(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.read_buffer_size(READ_BUFFER_BYTES)
+        .max_frame_size(linger_core::limits::MAX_CLIENT_FRAME_BYTES)
+        .max_message_size(linger_core::limits::MAX_CLIENT_FRAME_BYTES)
+        .on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 async fn send_control(sink: &mpsc::Sender<String>, event: ServerEvent) {
@@ -173,7 +188,7 @@ async fn handshake(
 
     match frame {
         ClientFrame::Identify { token, client: _ } => {
-            let Ok(user_id) = state.jwt.verify(&token) else {
+            let Ok(bearer) = state.jwt.verify(&token) else {
                 send_control(
                     sink,
                     ServerEvent::InvalidSession {
@@ -183,6 +198,7 @@ async fn handshake(
                 .await;
                 return None;
             };
+            let user_id = bearer.user_id;
             let Ok(user) = repo::users::expect(&state.db.read, user_id).await else {
                 send_control(
                     sink,
@@ -203,6 +219,28 @@ async fn handshake(
                     ctl: ctl.clone(),
                 },
             );
+
+            // Is the token from before a password change (#496)? Asked after
+            // the session is in the map, not before: ending sign-ins commits
+            // first and then closes every session it finds, so either this
+            // read sees the change, or the change finds this session.
+            match auth::still_signed_in(&state.db.read, bearer).await {
+                Ok(true) => {}
+                still => {
+                    // Dropping its last handle ends the session task.
+                    state.gateway.sessions.remove(&session_id);
+                    if still.is_ok() {
+                        send_control(
+                            sink,
+                            ServerEvent::InvalidSession {
+                                reason: "unauthenticated".into(),
+                            },
+                        )
+                        .await;
+                    }
+                    return None;
+                }
+            }
 
             // Snapshot after the session subscribed to the bus: anything that
             // lands in between is both in the snapshot and replayed as
@@ -246,7 +284,16 @@ async fn handshake(
             token,
             s,
         } => {
-            let Ok(user_id) = state.jwt.verify(&token) else {
+            // A token from before a password change resumes nothing (#496),
+            // not even a session somebody opened since with a good one.
+            let signed_in = match state.jwt.verify(&token) {
+                Ok(bearer) => auth::still_signed_in(&state.db.read, bearer)
+                    .await
+                    .ok()?
+                    .then_some(bearer.user_id),
+                Err(_) => None,
+            };
+            let Some(user_id) = signed_in else {
                 send_control(
                     sink,
                     ServerEvent::InvalidSession {

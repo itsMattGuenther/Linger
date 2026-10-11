@@ -353,6 +353,71 @@ async fn resume_of_unknown_session_and_bad_identify_are_rejected() {
     assert_eq!(invalid["d"]["reason"], "unauthenticated");
 }
 
+/// #517. A frame bigger than any an app sends ends the connection, and it does
+/// before anybody has identified: otherwise a socket that never signs in can
+/// make the server hold up to 64 MB, the WebSocket library's default. The frame
+/// is a real identify with a good token, padded to one byte over the cap, so a
+/// server without the cap answers it with `ready`.
+#[tokio::test]
+async fn a_frame_over_the_cap_ends_the_connection_before_identify() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let cap = linger_core::limits::MAX_CLIENT_FRAME_BYTES;
+
+    let (mut ws, _) = connect_async(server.gateway_url()).await.unwrap();
+    let _hello = recv_json(&mut ws).await;
+    let identify = |client: &str| {
+        json!({ "op": "identify", "d": { "token": host.access_token, "client": client } })
+            .to_string()
+    };
+    let frame = identify(&"x".repeat(cap + 1 - identify("").len()));
+    assert_eq!(frame.len(), cap + 1);
+    // The server can hang up before all of it is written.
+    let _ = ws.send(WsMessage::Text(frame.into())).await;
+
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match ws.next().await {
+                Some(Ok(WsMessage::Text(text))) => {
+                    let frame: Value = serde_json::from_str(text.as_str()).expect("frame json");
+                    assert_ne!(frame["op"], "ready", "a frame over the cap was read");
+                }
+                Some(Ok(WsMessage::Close(_)) | Err(_)) | None => return,
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the connection stayed open");
+
+    // The next connection, an ordinary one, is none the worse for it.
+    connect_ready(&server, &host.access_token).await;
+}
+
+/// The cap leaves room for the biggest frame an app sends (#517): a
+/// `voice.answer` whose `sdp` is `MAX_VOICE_PAYLOAD_BYTES` exactly. SDP is
+/// short lines, and JSON writes each line break as four characters, not two,
+/// so the frame is bigger than the `sdp` in it. The connection stays open and
+/// answers the next heartbeat.
+#[tokio::test]
+async fn the_biggest_voice_answer_an_app_sends_fits_under_the_cap() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let (mut ws, _) = connect_ready(&server, &host.access_token).await;
+
+    let most = linger_core::limits::MAX_VOICE_PAYLOAD_BYTES;
+    let line = "a=rtcp-mux\r\n";
+    let mut sdp = line.repeat(most / line.len());
+    sdp.push_str(&"a".repeat(most - sdp.len()));
+    assert_eq!(sdp.len(), most);
+    let frame = json!({ "op": "voice.answer", "d": { "sdp": sdp } });
+    assert!(frame.to_string().len() > most + most / 10);
+    send_json(&mut ws, frame).await;
+
+    send_json(&mut ws, json!({ "op": "heartbeat", "d": { "s": 0 } })).await;
+    wait_for(&mut ws, "heartbeat_ack").await;
+}
+
 /// Whether the server has hung up on this socket: reads whatever is waiting,
 /// and answers true at a close or the end of the stream, false once it goes
 /// quiet.
@@ -513,6 +578,96 @@ async fn removing_a_member_hangs_up_on_them_and_tells_everybody_else() {
     .await;
     let (frame, _) = wait_for(&mut again, "invalid_session").await;
     assert_eq!(frame["d"]["reason"], "unknown user");
+}
+
+/// #496. Changing your password ends every sign-in the account had, and an
+/// open socket is the one nothing else reached: it was let in once, at
+/// identify, and never asked again. Somebody holding a copy of the token kept
+/// receiving every message on the server long after the change.
+#[tokio::test]
+async fn changing_your_password_hangs_up_on_every_sign_in_it_ended() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    // A copy of callie's sign-in, connected: a stolen token, or a computer
+    // she forgot to sign out of.
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+
+    let changed = reqwest::Client::new()
+        .patch(server.url("/me/password"))
+        .bearer_auth(&member.access_token)
+        .json(&json!({
+            "current_password": "a perfectly fine password",
+            "new_password": "a brand new passphrase",
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(changed.status().is_success(), "{}", changed.status());
+
+    // Told the token is no good...
+    let (frame, _) = wait_for(&mut theirs, "invalid_session").await;
+    assert_eq!(frame["d"]["reason"], "unauthenticated");
+    // ...and hung up on: what is said after the change never reaches it.
+    rest_send(&server, &host.access_token, &room_id, "after the change").await;
+    let after = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut frames = Vec::new();
+        loop {
+            match theirs.next().await {
+                None | Some(Err(_) | Ok(WsMessage::Close(_))) => return frames,
+                Some(Ok(WsMessage::Text(text))) => {
+                    frames.push(serde_json::from_str::<Value>(text.as_str()).unwrap());
+                }
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await
+    .expect("the socket a password change ended must close");
+    assert!(
+        after.iter().all(|frame| frame["op"] != "message.create"),
+        "a message reached a sign-in the password change ended: {after:?}"
+    );
+
+    // The old token can't open a new session either.
+    let (mut again, _) = connect_async(server.gateway_url())
+        .await
+        .expect("ws connect");
+    assert_eq!(recv_json(&mut again).await["op"], "hello");
+    send_json(
+        &mut again,
+        json!({ "op": "identify", "d": { "token": member.access_token, "client": "test/0" } }),
+    )
+    .await;
+    let (frame, _) = wait_for(&mut again, "invalid_session").await;
+    assert_eq!(frame["d"]["reason"], "unauthenticated");
+
+    // The device that changed it carries on, with the pair it was handed.
+    let fresh: linger_core::wire::AuthResponse = changed.json().await.unwrap();
+    let (mut mine, session_id) = connect_ready(&server, &fresh.access_token).await;
+
+    // The old token can't take over that session by resuming it.
+    let (mut thief, _) = connect_async(server.gateway_url())
+        .await
+        .expect("ws connect");
+    assert_eq!(recv_json(&mut thief).await["op"], "hello");
+    send_json(
+        &mut thief,
+        json!({ "op": "resume", "d": {
+            "session_id": session_id,
+            "token": member.access_token,
+            "s": 0,
+        }}),
+    )
+    .await;
+    let (frame, skipped) = wait_for(&mut thief, "invalid_session").await;
+    assert_eq!(frame["d"]["reason"], "unauthenticated");
+    assert!(skipped.is_empty(), "resumed with an old token: {skipped:?}");
+
+    rest_send(&server, &host.access_token, &room_id, "still here?").await;
+    let (frame, _) = wait_for(&mut mine, "message.create").await;
+    assert_eq!(frame["d"]["body"], "still here?");
 }
 
 #[tokio::test]

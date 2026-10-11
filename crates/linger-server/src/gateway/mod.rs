@@ -15,7 +15,7 @@ mod socket;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use dashmap::{DashMap, DashSet};
 use linger_core::gateway::{
@@ -25,6 +25,7 @@ use linger_core::limits::{MAX_VOICE_PEERS, RESUME_BUFFER_FRAMES, RESUME_WINDOW_M
 use linger_core::wire::{PresenceEntry, PresenceState};
 use linger_core::{RoomId, UserId};
 use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::time::Instant;
 
 pub use socket::ws_route;
 
@@ -199,7 +200,8 @@ enum Ctl {
     /// right now detaches the session (#451): one that a resume has already
     /// replaced ends too, and its cleanup must leave the new socket alone.
     Detach { from: mpsc::Sender<String> },
-    /// This session's user is off the server (T-413). Say so, hang up, stop.
+    /// This session's user is off the server (T-413), or every sign-in they
+    /// had has ended (#496). Say so, hang up, stop.
     Close,
 }
 
@@ -376,9 +378,10 @@ impl Gateway {
         }));
     }
 
-    /// Hang up on every session this person has open (T-413).
+    /// Hang up on every session this person has open: they were removed
+    /// (T-413), or they changed their password (#496).
     ///
-    /// Removal is only real once the socket is gone. The token check at
+    /// Either is only real once the socket is gone. The token check at
     /// identify happens once, at the start, so an already-open socket keeps
     /// receiving every message on the server until somebody closes it — and
     /// waiting for the 15-minute access token to lapse is not closing it.
@@ -854,6 +857,19 @@ fn offline_entry(user_id: UserId) -> PresenceEntry {
     }
 }
 
+/// Done once a session detached since `detached_at` has waited out the
+/// resume window, and never while a socket is attached. A timer only while
+/// detached, rather than a sweep every five seconds for the session's whole
+/// life, so an attached session, nearly every one, never wakes for it (#522).
+async fn resume_window_closes(detached_at: Option<Instant>) {
+    match detached_at {
+        Some(since) => {
+            tokio::time::sleep_until(since + Duration::from_millis(RESUME_WINDOW_MS)).await;
+        }
+        None => std::future::pending().await,
+    }
+}
+
 /// Spawn a session task; returns its control handle. See module docs for shape.
 fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> mpsc::Sender<Ctl> {
     let (ctl_tx, mut ctl_rx) = mpsc::channel::<Ctl>(16);
@@ -866,9 +882,9 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
         // Held alongside the sink and replaced with it: it belongs to whichever
         // socket is attached right now, not to the session.
         let mut closer: Option<oneshot::Sender<()>> = None;
-        // Starts "detached": if the handshake never attaches, the sweep reaps us.
+        // Starts "detached": if the handshake never attaches, the resume
+        // window runs out and the session ends.
         let mut detached_at: Option<Instant> = Some(Instant::now());
-        let mut sweep = tokio::time::interval(Duration::from_secs(5));
 
         loop {
             tokio::select! {
@@ -939,9 +955,11 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                         // "unauthenticated" rather than a word of its own: it is
                         // what this token now is, and it is the one reason the
                         // client already answers by asking for a fresh token —
-                        // which the server refuses, which signs them out. A
-                        // reason nobody handles would leave them reconnecting
-                        // into a locked door forever.
+                        // which the server refuses, which signs them out. (The
+                        // device a password was changed on holds a fresh pair
+                        // already, and is straight back in: #496.) A reason
+                        // nobody handles would leave them reconnecting into a
+                        // locked door forever.
                         if let Some(tx) = &sink {
                             let frame = ServerFrame::control(ServerEvent::InvalidSession {
                                 reason: "unauthenticated".into(),
@@ -959,13 +977,7 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                     }
                     None => break,
                 },
-                _ = sweep.tick() => {
-                    let expired = detached_at
-                        .is_some_and(|t| t.elapsed() >= Duration::from_millis(RESUME_WINDOW_MS));
-                    if expired {
-                        break;
-                    }
-                }
+                () = resume_window_closes(detached_at) => break,
             }
         }
         gateway.sessions.remove(&session_id);
@@ -979,4 +991,84 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
     });
 
     ctl_tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WINDOW: Duration = Duration::from_millis(RESUME_WINDOW_MS);
+
+    /// A socket for the session: its frames and its closer, both kept open.
+    struct Socket {
+        sink: mpsc::Sender<String>,
+        _frames: mpsc::Receiver<String>,
+        _closed: oneshot::Receiver<()>,
+    }
+
+    async fn attach(ctl: &mpsc::Sender<Ctl>, is_resume: bool) -> Socket {
+        let (sink, frames) = mpsc::channel(16);
+        let (closer, closed) = oneshot::channel();
+        ctl.send(Ctl::Attach {
+            sink: sink.clone(),
+            closer,
+            resume_from: 0,
+            is_resume,
+        })
+        .await
+        .expect("the session is running");
+        Socket {
+            sink,
+            _frames: frames,
+            _closed: closed,
+        }
+    }
+
+    /// A session that never gets a socket ends when the resume window
+    /// does, as one whose socket went does (PROTOCOL §8).
+    #[tokio::test(start_paused = true)]
+    async fn a_session_nobody_attaches_to_ends_with_the_resume_window() {
+        let gateway = Arc::new(Gateway::new());
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), UserId::new());
+        tokio::time::sleep(WINDOW - Duration::from_secs(1)).await;
+        assert!(
+            !ctl.is_closed(),
+            "the session ended before its window ran out"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(ctl.is_closed(), "the session outlived its window");
+    }
+
+    /// The window counts only while a session is detached, from when it
+    /// detached (#522): an attached session never ends on a timer, and one
+    /// that resumed gets a whole window again when its socket goes.
+    #[tokio::test(start_paused = true)]
+    async fn the_resume_window_counts_only_while_detached() {
+        let gateway = Arc::new(Gateway::new());
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), UserId::new());
+        let socket = attach(&ctl, false).await;
+        tokio::time::sleep(WINDOW * 5).await;
+        assert!(!ctl.is_closed(), "an attached session ended");
+
+        // Its socket goes, and the app comes back before the window runs out.
+        ctl.send(Ctl::Detach { from: socket.sink })
+            .await
+            .expect("the session is running");
+        tokio::time::sleep(WINDOW - Duration::from_secs(20)).await;
+        let socket = attach(&ctl, true).await;
+        tokio::time::sleep(WINDOW * 5).await;
+        assert!(!ctl.is_closed(), "a resumed session ended");
+
+        // Gone again: a whole window from now, and not a moment more.
+        ctl.send(Ctl::Detach { from: socket.sink })
+            .await
+            .expect("the session is running");
+        tokio::time::sleep(WINDOW - Duration::from_secs(1)).await;
+        assert!(
+            !ctl.is_closed(),
+            "the session ended before its window ran out"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(ctl.is_closed(), "the session outlived its window");
+    }
 }

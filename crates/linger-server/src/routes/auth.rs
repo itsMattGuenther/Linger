@@ -30,8 +30,13 @@ pub fn router() -> Router<AppState> {
 }
 
 /// Mint a full auth response: fresh access token + a new refresh family.
+///
+/// Also the answer to a password change (#496), which has just ended every
+/// sign-in the account had: the generation is read here, after that commit, so
+/// this token belongs to the new one.
 pub async fn auth_response(state: &AppState, user_id: UserId) -> Result<AuthResponse, ApiError> {
-    let (access_token, _) = state.jwt.mint(user_id)?;
+    let generation = auth::token_generation(&state.db.read, user_id).await?;
+    let (access_token, _) = state.jwt.mint(user_id, generation)?;
     let refresh_token = auth::issue_refresh_family(&state.db.write, user_id).await?;
     let user = repo::users::expect(&state.db.read, user_id).await?;
     Ok(AuthResponse {
@@ -187,8 +192,12 @@ async fn refresh(
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, ApiError> {
     match auth::rotate_refresh(&state.db.write, &req.refresh_token).await? {
-        RefreshOutcome::Rotated { user_id, new_token } => {
-            let (access_token, _) = state.jwt.mint(user_id)?;
+        RefreshOutcome::Rotated {
+            user_id,
+            generation,
+            new_token,
+        } => {
+            let (access_token, _) = state.jwt.mint(user_id, generation)?;
             Ok(Json(RefreshResponse {
                 access_token,
                 refresh_token: new_token,

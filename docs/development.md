@@ -407,6 +407,15 @@ How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).
   at the root never touch it. Build it with `pnpm tauri`; its own tests are `cd
   client/src-tauri && cargo test`. A few need a real desktop session — an
   unlocked keyring, for one — and are marked `#[ignore]`.
+- **So the app has its own release profile.** Cargo reads `[profile.release]`
+  only from a workspace's root, so the root `Cargo.toml`'s never reached the
+  app, which shipped unstripped through 0.4.10 (#521).
+  `client/src-tauri/Cargo.toml` now has its own: thin LTO, one codegen unit,
+  stripped, with panics still unwinding (its comment says why). On Linux the
+  binary went from 43.0 MB to 24.2 MB, and 9.3 MB to 7.5 MB compressed; a
+  release build takes a minute or two longer. Dev builds, tests and the PR
+  package check (a debug build) don't use it. The release workflow checks the
+  Linux binary is stripped, after checking it starts.
 - **There are two content-security policies, and you develop under the loose
   one.** `pnpm tauri dev` may reach `http://localhost:*`; nothing you ship can.
   Tighten one and you must tighten both — `client/src-tauri/tests/csp.rs` fails
