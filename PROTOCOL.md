@@ -198,7 +198,8 @@ it off; the sign-in figure is the brake on guessing passwords and isn't a settin
 Past either, the answer is `RATE_LIMITED` with `retry_after_ms`. The address is the
 connection's own; from a proxy the server trusts (`LINGER_TRUSTED_PROXIES`, by
 default the same machine or a private network), it is the last `X-Forwarded-For`
-entry, never an earlier one. Checking a password is slow on purpose and the server
+entry, never an earlier one. An IPv6 address counts by its /64, so every address in
+one home connection's block shares one allowance (#546). Checking a password is slow on purpose and the server
 does only a few at once (`LINGER_PASSWORD_CHECKS_AT_ONCE`, default 4), so a sign-in,
 sign-up, first-run setup or password change that can't get a turn within 5 seconds
 is also `RATE_LIMITED`. `POST /auth/register` checks the invite before it touches

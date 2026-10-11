@@ -592,6 +592,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
    network), and then only its last entry, the one that proxy wrote; earlier entries
    are whatever the client sent (`auth::client_ip`). The first header from any other
    peer is logged once per start, so a host behind a proxy elsewhere sees what to set.
+   An IPv6 address counts by its /64, the block one home connection or VPS is handed,
+   so stepping through its addresses gets nobody a fresh allowance (#546). The
+   limiter remembers only keys that are still refilling: a key whose bucket is full
+   again is forgotten within a minute, so its memory doesn't grow with every address
+   it has ever seen.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
