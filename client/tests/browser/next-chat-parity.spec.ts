@@ -224,8 +224,10 @@ test.describe("what a message says", () => {
       // The two clock times with a zone; a bare number and code are words.
       await expect(times).toHaveCount(2);
       await expect(times.first()).toContainText("20:00 UTC");
-      // A screen reader hears it after the words.
-      await expect(times.first().locator(".k-sr-only")).toHaveText(" (1:30 AM for you, the next day)");
+      // A screen reader hears it after the words, drawn by the stylesheet
+      // so it isn't part of the words: copying the message copies only them.
+      await expect(times.first()).toHaveText("20:00 UTC");
+      expect(await times.first().evaluate((node) => getComputedStyle(node, "::after").content)).toBe('" (1:30 AM for you, the next day)"');
       const tip = page.locator(".k-tooltip");
       await times.first().hover();
       await expect(tip).toHaveText("1:30 AM for you, the next day");

@@ -294,7 +294,9 @@ export function WrittenTimes({ text, writtenAt, still = false }: { text: string;
  * A written time, faintly underlined (#584). Pointing at it or focusing it
  * says what it is in the reader's clock; a click or a tap keeps that open
  * until the next one, or until it loses focus, since a phone can't point. A
- * screen reader hears it after the words.
+ * screen reader hears it after the words, from `data-for-you` drawn after
+ * them out of sight (MessageText.css): drawn by the stylesheet, it isn't
+ * part of the words, so copying a message copies only what was written.
  */
 function WrittenTime({ words, time, still }: { words: string; time: FoundTime; still: boolean }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -303,9 +305,14 @@ function WrittenTime({ words, time, still }: { words: string; time: FoundTime; s
   if (still) {
     return (
       <>
-        <time className="nx-text-time" dateTime={new Date(time.at).toISOString()} onPointerEnter={(event) => setAnchor(event.currentTarget)} onPointerLeave={() => setAnchor(null)}>
+        <time
+          className="nx-text-time"
+          dateTime={new Date(time.at).toISOString()}
+          data-for-you={` (${said})`}
+          onPointerEnter={(event) => setAnchor(event.currentTarget)}
+          onPointerLeave={() => setAnchor(null)}
+        >
           {words}
-          <span className="k-sr-only"> ({said})</span>
         </time>
         {anchor ? <TooltipBubble anchor={anchor}>{said}</TooltipBubble> : null}
       </>
@@ -316,6 +323,7 @@ function WrittenTime({ words, time, still }: { words: string; time: FoundTime; s
       <time
         className="nx-text-time"
         dateTime={new Date(time.at).toISOString()}
+        data-for-you={` (${said})`}
         tabIndex={0}
         onPointerEnter={(event) => setAnchor(event.currentTarget)}
         onPointerLeave={() => {
@@ -342,7 +350,6 @@ function WrittenTime({ words, time, still }: { words: string; time: FoundTime; s
         }}
       >
         {words}
-        <span className="k-sr-only"> ({said})</span>
       </time>
       {anchor ? <TooltipBubble anchor={anchor}>{said}</TooltipBubble> : null}
     </>
