@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Room } from "../../generated/Room";
 import type { SearchHit } from "../../generated/SearchHit";
 import type { User } from "../../generated/User";
@@ -142,6 +142,31 @@ describe("a hit", () => {
     const lastYear = hitWhen(Date.parse("2025-03-02T09:15:00"), NOW);
     expect(lastYear).toContain("2025");
     expect(lastYear).not.toContain("9:15");
+  });
+
+  it("builds no date formatter until a hit's time is formatted, then keeps it (#535)", async () => {
+    // A bare spy on this built-in hands `new` an object with no `format`, so
+    // this one builds the real thing.
+    const Real = Intl.DateTimeFormat;
+    const build = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (...args: ConstructorParameters<typeof Real>) {
+      return new Real(...args);
+    });
+    try {
+      vi.resetModules();
+      const search = await import("./search");
+      expect(build).not.toHaveBeenCalled();
+
+      const lastYear = Date.parse("2025-03-02T09:15:00");
+      expect(search.hitWhen(AT, NOW)).toBe(new Real(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(AT));
+      expect(search.hitWhen(lastYear, NOW)).toBe(new Real(undefined, { month: "short", day: "numeric", year: "numeric" }).format(lastYear));
+      expect(build).toHaveBeenCalledTimes(2);
+      build.mockClear();
+      search.hitWhen(AT + 1, NOW);
+      search.hitWhen(lastYear + 1, NOW);
+      expect(build).not.toHaveBeenCalled();
+    } finally {
+      build.mockRestore();
+    }
   });
 
   it("keeps its first match in view, cutting a long run of words before it to a word", () => {

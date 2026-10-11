@@ -45,18 +45,30 @@ function daysBetween(from: Date, to: Date): number {
 // stream re-renders rows on every frame. Before these were shared, formatting
 // dates was a quarter of the work of a scroll (#170).
 //
-// `undefined` is still the machine's own locale; it is just read once, when
-// the app loads, rather than on every call.
-const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "long" });
-const MONTH_DAY = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric" });
-const MONTH_DAY_YEAR = new Intl.DateTimeFormat(undefined, {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
-const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const FULL = new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "short" });
-const HIT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+// Each is built the first time something formats with it, not when the file
+// loads. The first formatter a page builds loads the engine's date and
+// time-zone data, 12-55 ms in WebKitGTK, and every window loads this file,
+// including ones that show no date at all (#535).
+//
+// `undefined` is still the machine's own locale and zone; they are read once,
+// the first time each formatter is used, rather than on every call.
+
+/**
+ * A date formatter in the machine's own locale, built on first use and then
+ * kept. The other modules that format dates use it too, so loading any of
+ * them builds nothing (#535).
+ */
+export function dateFormat(options: Intl.DateTimeFormatOptions): () => Intl.DateTimeFormat {
+  let built: Intl.DateTimeFormat | undefined;
+  return () => (built ??= new Intl.DateTimeFormat(undefined, options));
+}
+
+const WEEKDAY = dateFormat({ weekday: "long" });
+const MONTH_DAY = dateFormat({ month: "long", day: "numeric" });
+const MONTH_DAY_YEAR = dateFormat({ month: "long", day: "numeric", year: "numeric" });
+const CLOCK = dateFormat({ hour: "numeric", minute: "2-digit" });
+const FULL = dateFormat({ dateStyle: "full", timeStyle: "short" });
+const HIT = dateFormat({ dateStyle: "medium", timeStyle: "short" });
 
 /**
  * The natural-language label on a session divider: `SATURDAY MORNING`,
@@ -82,11 +94,11 @@ export function sessionLabel(at: number, now: number): string {
   // and "in 2 days morning" is worse than being slightly wrong for a minute.
   const today = new Date(now);
   const ago = Math.max(0, daysBetween(anchor, today));
-  const weekday = WEEKDAY.format(anchor);
+  const weekday = WEEKDAY().format(anchor);
   const dated =
     anchor.getFullYear() === today.getFullYear()
-      ? MONTH_DAY.format(anchor)
-      : MONTH_DAY_YEAR.format(anchor);
+      ? MONTH_DAY().format(anchor)
+      : MONTH_DAY_YEAR().format(anchor);
 
   // Past a week the weekday alone stops locating anything, so the date joins it.
   const suffix = ago < 7 ? "" : `, ${dated}`;
@@ -107,7 +119,7 @@ export function sessionLabel(at: number, now: number): string {
 
 /** The local time on a message group header. */
 export function clockTime(at: number): string {
-  return CLOCK.format(at);
+  return CLOCK().format(at);
 }
 
 /**
@@ -120,10 +132,10 @@ export function setWhen(at: number, now: number): string {
   const then = new Date(at);
   const today = new Date(now);
   const days = daysBetween(then, today);
-  if (days <= 0) return `at ${CLOCK.format(at)}`;
+  if (days <= 0) return `at ${CLOCK().format(at)}`;
   if (days === 1) return "yesterday";
-  if (days < 7) return `on ${WEEKDAY.format(at)}`;
-  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR).format(at)}`;
+  if (days < 7) return `on ${WEEKDAY().format(at)}`;
+  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR)().format(at)}`;
 }
 
 /**
@@ -136,15 +148,15 @@ export function closesWhen(at: number, now: number): string {
   const then = new Date(at);
   const today = new Date(now);
   const days = daysBetween(today, then);
-  if (days <= 0) return `at ${CLOCK.format(at)}`;
-  if (days === 1) return `tomorrow at ${CLOCK.format(at)}`;
-  if (days < 7) return `on ${WEEKDAY.format(at)}`;
-  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR).format(at)}`;
+  if (days <= 0) return `at ${CLOCK().format(at)}`;
+  if (days === 1) return `tomorrow at ${CLOCK().format(at)}`;
+  if (days < 7) return `on ${WEEKDAY().format(at)}`;
+  return `on ${(then.getFullYear() === today.getFullYear() ? MONTH_DAY : MONTH_DAY_YEAR)().format(at)}`;
 }
 
 /** The full date and time, for the tooltip on a timestamp. */
 export function fullTime(at: number): string {
-  return FULL.format(at);
+  return FULL().format(at);
 }
 
 /**
@@ -155,7 +167,7 @@ export function fullTime(at: number): string {
  * the date has to fit beside them and still say which year.
  */
 export function hitTime(at: number): string {
-  return HIT.format(at);
+  return HIT().format(at);
 }
 
 /**
