@@ -748,9 +748,10 @@ test("push-to-talk with the key up shows no mute, to you or to anyone else; a mu
   await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
   await expect(yours.locator(".k-chip-state")).toHaveCount(0);
   await expect(bar.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1)).toBe(
-    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`,
-  );
+  // The tray icon shows you in voice with push-to-talk, held key or not (#601).
+  const trayNow = async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1);
+  const trayPushToTalk = `next_tray_voice:${JSON.stringify({ inVoice: true, muted: false, deafened: false, pushToTalk: true, place: "in #general" })}`;
+  await expect.poll(trayNow).toBe(trayPushToTalk);
   // The microphone is closed by the key's own gate; the room is told it's on.
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
   expect(await reported(page)).toEqual({ muted: false, deafened: false });
@@ -758,6 +759,7 @@ test("push-to-talk with the key up shows no mute, to you or to anyone else; a mu
   // Holding the key opens it and letting go closes it, still without a mute.
   await page.keyboard.down("ControlRight");
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: false });
+  expect(await trayNow(), "the tray doesn't flicker with the key").toBe(trayPushToTalk);
   await expect(bar.getByRole("status")).toHaveCount(0);
   await page.keyboard.up("ControlRight");
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
@@ -840,7 +842,7 @@ test("Settings turning push-to-talk off and on, or picking its key, applies to t
   await expect(line).toHaveCount(0);
   expect(await reported(page)).toEqual({ muted: true, deafened: false });
   await expect.poll(async () => (await did(page)).filter((one) => one.startsWith("next_tray_voice")).at(-1)).toBe(
-    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`,
+    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true, deafened: false, pushToTalk: false, place: "in #general" })}`,
   );
   // All in the one call.
   expect(await joins()).toBe(joined);
