@@ -683,6 +683,24 @@ introduce an upload id of S3's own, handed out by a network call, which is exact
 per-upload state this design does not want to store. The finished object goes up as one
 PUT; files are capped at 500 MB, well under S3's 5 GB single-PUT limit.
 
+**Each part URL is signed for its exact length** (#505). A presigned URL signs only the
+host unless told otherwise, and then the bucket takes up to 5 GB on it whatever the
+upload declared. So every part URL also signs `content-length`: 8 MB for a full part,
+the remainder for the last one, the declared size for a one-part upload. The bucket
+refuses a body of any other length as a signature mismatch (`403`), before storing any
+of it. Nothing changes for the client: a browser always sets `Content-Length` itself
+from the body, and the client sends each part as a slice of exactly the planned length.
+`Content-Length` is a header the browser owns rather than one the page adds, so it is
+not in the CORS preflight either. `assemble` still counts every part's bytes as it
+streams them to local disk and stops at the first one longer than planned, which is
+final like any other wrong size: a part that reached the bucket some other way (a URL
+signed by a server from before this, anybody else with access to the bucket) cannot
+fill the server's disk. Part URLs still last 24 hours, because the client is handed
+every part's URL at once and uses them for the whole upload. One that is written to
+after its upload finished or was cancelled holds at most that part's length and is never
+read; the host guide's bucket lifecycle rule, deleting `uploads/` after two days,
+clears it.
+
 Serving from S3 is a redirect to a presigned GET, so bytes never cross the app process on
 the way out either. The `Content-Type` and `Content-Disposition` that force a download for
 anything off the inline allowlist are signed into that URL as `response-*` overrides,

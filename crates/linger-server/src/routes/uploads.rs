@@ -30,7 +30,7 @@ use crate::auth::AuthedUser;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
-use crate::storage::{display_key, object_key, part_plan, poster_key, ServeAs};
+use crate::storage::{display_key, object_key, poster_key, OversizedPart, ServeAs};
 use crate::{repo, validate};
 
 /// Parts of an upload that never completed are swept once they are this old.
@@ -140,30 +140,40 @@ async fn complete(
 
     let upload_id = UploadId(record.id.0);
     let req = body.map(|Json(body)| body);
-    let (expected_parts, _) = part_plan(record.size_bytes);
 
-    // Assembly is the one failure that leaves the slot alive. "Some of it never
-    // arrived" is the ordinary shape of a dropped connection, and the fix is to
-    // send the missing parts and ask again — which is the whole point of
-    // cutting the file up. Nothing is thrown away here.
-    let staged = state
+    let assembled = state
         .storage
         .assemble(
             upload_id,
             req.as_ref().and_then(|r| r.parts.as_deref()),
-            expected_parts,
+            record.size_bytes,
         )
-        .await
-        .map_err(|err| {
+        .await;
+    let outcome = match assembled {
+        Ok(staged) => finish(&state, &record, &staged).await,
+        // A part longer than its plan is not a dropped connection. It is a
+        // different file from the one declared, and final like any other
+        // wrong size (#505).
+        Err(err) if err.is::<OversizedPart>() => {
+            tracing::info!(error = %err, "upload refused at assembly");
+            Err(wrong_size())
+        }
+        // Otherwise assembly is the one failure that leaves the slot alive.
+        // "Some of it never arrived" is the ordinary shape of a dropped
+        // connection, and the fix is to send the missing parts and ask again —
+        // which is the whole point of cutting the file up. Nothing is thrown
+        // away here.
+        Err(err) => {
             tracing::info!(error = %err, "upload could not be assembled");
-            ApiError::validation(
+            return Err(ApiError::validation(
                 "Some of that file never arrived. Send the missing parts and try again.",
-            )
-        })?;
+            ));
+        }
+    };
 
     // Past that point a refusal is about the bytes themselves, and re-sending
     // them cannot help: the slot is spent, and the parts go with it.
-    match finish(&state, &record, &staged).await {
+    match outcome {
         Ok(attachment) => Ok(Json(attachment)),
         Err(err) => {
             let _ = state.storage.discard(upload_id).await;
@@ -189,9 +199,7 @@ async fn finish(
         )));
     }
     if staged.size_bytes != record.size_bytes {
-        return Err(ApiError::validation(
-            "That file isn't the size it was going to be.",
-        ));
+        return Err(wrong_size());
     }
 
     let processed = crate::media::process(&staged.path, &record.mime, &record.filename).await?;
@@ -269,6 +277,12 @@ async fn finish(
     repo::attachments::by_id(&state.db.read, &state.config, record.id)
         .await?
         .ok_or_else(ApiError::internal)
+}
+
+/// What arrived is not the size that was declared. Always final: sending the
+/// same bytes again cannot change their size.
+fn wrong_size() -> ApiError {
+    ApiError::validation("That file isn't the size it was going to be.")
 }
 
 /// `DELETE /uploads/:id` — give up on an upload, or throw away a finished one
