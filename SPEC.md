@@ -957,7 +957,8 @@ their minds two screens later; a poll is one place that shows where the room lan
   opens a panel over the box: the question, two to ten choices, whether people can pick
   more than one, and how long it runs (a day, three days, a week, two weeks or four; a
   week unless changed). Nothing is posted until Post poll. Rooms only, as a message of
-  the day is.
+  the day is. Post poll pressed again after a failure never asks it twice when the first
+  press did land, as a message sent again never posts twice (§4.7).
 - **Every `/` command is the host's or a co-host's** (Matt, 2026-10-10): `/motd` and
   `/poll` today, and any to come. Anybody else's box says who can, and Enter doesn't send
   the words. Anything else starting with `/` is sent as typed. This isn't a level: a

@@ -35,6 +35,7 @@
  *   asked which faction, open, with votes. With `?raid` too, thirty raiders
  *   pick Horde. `?member`: you aren't the host, so `/poll` isn't yours.
  *   Votes, closes and new polls are written to `body[data-did]`.
+ *   `&pollfail`: the first poll asked is refused (#524).
  * - `?reactions`: reactions (#485). In #general, five people loved what you
  *   said and two left the server's porch light; you left a 💯 on Eli's "No
  *   plans"; "Count me in" has six different, the most a message holds; and
@@ -511,6 +512,9 @@ function Fixture() {
   const onTyping = useCallback(() => undefined, []);
   const startPoll = useCallback(async (request: CreatePollRequest) => {
     note(`poll:${JSON.stringify(request)}`);
+    if (query.has("pollfail") && did.filter((line) => line.startsWith("poll:")).length === 1) {
+      throw new Error("Couldn't post the poll. Couldn't reach the server.");
+    }
   }, []);
   const onJoin = useCallback(() => note("join"), []);
   const onPickDevice = useCallback(() => note("settings:sound"), []);

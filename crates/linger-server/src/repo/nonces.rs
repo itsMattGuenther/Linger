@@ -10,9 +10,13 @@
 //! nothing but a retry ever asks, and a retry only comes from an app still
 //! showing the unsent message. Each post that carries a key clears out the
 //! ones past that first, so the table holds about a week of posts.
+//!
+//! A poll is a post too (`routes::polls`): asking one takes a key the same
+//! way, and its keys live here with every other message's.
 
 use linger_core::limits::NONCE_KEPT_MS;
 use linger_core::{MessageId, UserId};
+use sqlx::SqliteConnection;
 
 use crate::error::ApiError;
 
@@ -48,6 +52,20 @@ pub async fn forget_old<'e>(db: impl sqlx::SqliteExecutor<'e>, now: i64) -> Resu
         .execute(db)
         .await?;
     Ok(())
+}
+
+/// What a post asks inside its own transaction: clear out the old keys,
+/// then [`posted`]. The clearing out is a write, so the transaction holds the
+/// one writer (`db.rs`) from its first statement, and a retry sent while the
+/// first try was still being saved waited for it and finds it here.
+pub async fn check_in(
+    conn: &mut SqliteConnection,
+    author: UserId,
+    nonce: &str,
+    now: i64,
+) -> Result<Option<MessageId>, ApiError> {
+    forget_old(&mut *conn, now).await?;
+    posted(&mut *conn, author, nonce, now).await
 }
 
 /// Remember that this person's key posted this message. Written in the same

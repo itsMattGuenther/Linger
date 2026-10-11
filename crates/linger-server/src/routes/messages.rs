@@ -151,11 +151,8 @@ async fn create(
     if let Some(nonce) = nonce {
         // Asked again in here, where this post has the one writer to itself
         // (`db.rs`): a retry sent while the first try was still being saved
-        // waited for it, and finds it now. Clearing out the old keys comes
-        // first, as it's a write, so the transaction holds the writer from
-        // its first statement.
-        repo::nonces::forget_old(&mut *tx, now).await?;
-        if let Some(saved) = repo::nonces::posted(&mut *tx, auth.id, nonce, now).await? {
+        // waited for it, and finds it now.
+        if let Some(saved) = repo::nonces::check_in(&mut tx, auth.id, nonce, now).await? {
             tx.rollback().await?;
             return already_posted(&state, room_id, saved).await.map(Json);
         }
@@ -214,7 +211,9 @@ async fn create(
 /// Edited since, it's the edited message. Deleted since, it's the tombstone,
 /// and the retry posts nothing: the key stays spent, so a retry can't bring
 /// back what its author or a host took down.
-async fn already_posted(
+///
+/// Asking a poll answers its retries with this too (`routes::polls`).
+pub(crate) async fn already_posted(
     state: &AppState,
     room_id: RoomId,
     id: MessageId,

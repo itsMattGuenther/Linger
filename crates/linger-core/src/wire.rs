@@ -592,6 +592,12 @@ pub struct CreatePollRequest {
     pub multi: bool,
     /// How long until it closes on its own: one of `POLL_DAYS`.
     pub closes_in_days: u32,
+    /// The ask's one-time key, as `CreateMessageRequest::nonce` (#524): the
+    /// same rules, and the same week. Sent again with the same key, a poll
+    /// that was asked is answered with that poll, and nothing is asked twice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

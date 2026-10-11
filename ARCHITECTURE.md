@@ -400,8 +400,9 @@ CREATE TABLE read_markers (
   PRIMARY KEY (user_id, room_id)
 );
 
--- A post's one-time key (PROTOCOL §4, #524): a retry whose key is here is
--- answered with the message it posted rather than posting it twice. Written
+-- A post's one-time key (PROTOCOL §4, #524), a message's or a poll's: a retry
+-- whose key is here is answered with the message it posted rather than
+-- posting it twice. Written
 -- in the post's own transaction; kept a week (`limits::NONCE_KEPT_MS`), and
 -- each keyed post first clears out the older ones.
 CREATE TABLE message_nonces (

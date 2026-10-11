@@ -283,7 +283,7 @@ left nothing behind, so sending it again doesn't post it twice, and its files
 are still free to send.
 
 `nonce` is what makes sending again safe when the post did land and only its
-answer was lost on the way back (#524). It is a one-time key the client makes
+answer was lost on the way back (#524). Asking a poll takes one the same way (below). It is a one-time key the client makes
 up for each send (the app uses a UUID) and sends again, unchanged, with every
 retry of that send: 1–64 letters, digits, `-` or `_`
 (`linger-core::limits::MAX_NONCE_CHARS`), or `VALIDATION_FAILED`. When the same
@@ -361,7 +361,7 @@ client neither notifies nor sounds for it.
 in it answers with a click.
 
 ```
-POST /rooms/:id/polls      (host or co-host) { question, choices, multi, closes_in_days } → Message
+POST /rooms/:id/polls      (host or co-host) { question, choices, multi, closes_in_days, nonce? } → Message
 PUT  /messages/:id/vote    { choices: number[] }                                       → Message
 POST /messages/:id/close   (whoever asked)                                             → Message
 ```
@@ -387,6 +387,9 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
   is a room's `last_message_id` like anything said. Its body is the question and the choices
   as a Markdown list, so an app from before polls shows them as words, and search finds them.
   A client neither notifies nor sounds for one, whoever it names. It can't be edited.
+  `nonce` is the ask's one-time key, exactly as a message's (above, #524): the same rules,
+  the same week, kept in the same place, so asked again with its key, a poll that was
+  asked is answered with that poll and nothing is asked twice.
 - **Voting** is anybody who can see the room, whoever asked included: the choices' places,
   replacing any vote before, `[]` taking it back; more than one only when `multi`; at most
   `RATE_POLL_VOTE` (20 in 10 s). A poll that is closed, or whose `closes_at` has passed, takes
