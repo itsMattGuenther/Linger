@@ -11,7 +11,7 @@ import type { MediaKind } from "../../generated/MediaKind";
 import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { dayEnd, dayStart, durationText, expiryText, fileSize, itemLabel, KIND_FILTERS } from "../../lib/media";
-import { fullTime } from "../../lib/time";
+import { dateFormat, fullTime } from "../../lib/time";
 import { inWhere, type Directory } from "./search";
 
 /** A page. Big enough that scrolling is rare, small enough to arrive fast. */
@@ -59,7 +59,8 @@ export type Face =
   | { kind: "link"; icon: string | null; domain: string }
   | { kind: "glyph"; of: MediaKind; word: string };
 
-const DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+// Built the first time a tile is drawn, not when the file loads (#535).
+const DATE = dateFormat({ month: "short", day: "numeric", year: "numeric" });
 
 /** Everything one tile says. */
 export interface TileLine {
@@ -123,7 +124,7 @@ export function tileLine(item: MediaItem, names: Directory, serverName: string |
   const noun = item.kind === "pin" ? "Pinned message" : WORD[item.kind];
   const dm = item.room_id !== null && names.isDm(item.room_id);
   const place = `${item.room_id === null ? "" : inWhere(where, dm)}${serverName === null ? "" : ` on ${serverName}`}`;
-  const date = DATE.format(item.created_at);
+  const date = DATE().format(item.created_at);
   return {
     face: faceOf(item),
     title,

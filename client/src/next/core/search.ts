@@ -17,7 +17,7 @@ import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { conversationLabel } from "../../lib/dm";
 import { snippetText } from "../../lib/search";
-import { hitTime } from "../../lib/time";
+import { dateFormat, hitTime } from "../../lib/time";
 import type { ViewServer } from "./scope";
 
 /** Who and where on one server, looked up by id. Built once per server, not per hit. */
@@ -84,8 +84,9 @@ export function filesNamed(names: readonly string[]): string | null {
   return `${first}, ${second} and others`;
 }
 
-const SHORT_THIS_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-const SHORT_OTHER_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+// Built the first time a hit's time is shown, not when the file loads (#535).
+const SHORT_THIS_YEAR = dateFormat({ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const SHORT_OTHER_YEAR = dateFormat({ month: "short", day: "numeric", year: "numeric" });
 
 /**
  * When, short enough for the end of a hit's first line in a narrow window:
@@ -93,7 +94,7 @@ const SHORT_OTHER_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", da
  * time is in the hit's sentence for a screen reader.
  */
 export function hitWhen(at: number, now: number): string {
-  return new Date(at).getFullYear() === new Date(now).getFullYear() ? SHORT_THIS_YEAR.format(at) : SHORT_OTHER_YEAR.format(at);
+  return new Date(at).getFullYear() === new Date(now).getFullYear() ? SHORT_THIS_YEAR().format(at) : SHORT_OTHER_YEAR().format(at);
 }
 
 /**

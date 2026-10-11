@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Attachment } from "../../generated/Attachment";
 import type { MediaItem } from "../../generated/MediaItem";
 import type { Room } from "../../generated/Room";
@@ -115,6 +115,27 @@ describe("a tile", () => {
     const line = tileLine(item({ starred_at: AT }), names, "Ashen Lanterns");
     expect(line.starred).toBe(true);
     expect(line.label).toBe(`Image, speakers.png, shared by Jules in #general on Ashen Lanterns, ${line.date}, starred`);
+  });
+
+  it("builds no date formatter until a tile's day is formatted, then keeps it (#535)", async () => {
+    // A bare spy on this built-in hands `new` an object with no `format`, so
+    // this one builds the real thing.
+    const Real = Intl.DateTimeFormat;
+    const build = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (...args: ConstructorParameters<typeof Real>) {
+      return new Real(...args);
+    });
+    try {
+      vi.resetModules();
+      const media = await import("./media");
+      expect(build).not.toHaveBeenCalled();
+
+      expect(media.tileLine(item(), names, null).date).toBe(new Real(undefined, { month: "short", day: "numeric", year: "numeric" }).format(item().created_at));
+      build.mockClear();
+      media.tileLine(item(), names, null);
+      expect(build).not.toHaveBeenCalled();
+    } finally {
+      build.mockRestore();
+    }
   });
 
   it("draws a video's poster and length, and a sound's length in words beside its glyph", () => {
