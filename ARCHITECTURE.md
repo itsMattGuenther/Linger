@@ -74,7 +74,16 @@ Consequences:
    WebView can't choose an output (WebKitGTK has no `setSinkId`; WebView2's
    device names don't match CPAL's), and its audio could start late in a
    window that isn't in front (#241). Web Audio playback in the WebView is
-   the fallback, and what plays outside the app. For it, Linux AppImages must
+   the fallback, and what plays outside the app. A window's one
+   `AudioContext` is open only around its sounds (#531): a running context
+   holds an output stream open and plays silence into it, 2–5% of a core per
+   window. In the app it is made for a sound the shell couldn't play (the
+   webview needs no click: wry allows autoplay); outside the app, on the
+   window's first click or key, as browsers require. It is closed 10 s after
+   the last sound (the shell speaker's `KEEP_OPEN`), and the next sound makes
+   a new one. Closed rather than suspended, because the packaged WebKitGTK
+   plays nothing after a suspended context is resumed.
+   For the fallback, Linux AppImages must
    bundle GStreamer and its playback plugins; DEB/RPM packages must require
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise that fallback's real WebView
@@ -194,7 +203,9 @@ use UUIDv4 (destroys index locality).
 
 ## 5. Schema
 
-SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`.
+SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`. The server runs `PRAGMA
+optimize` on the writer at startup and after each file sweep, so the query planner has
+current measurements of every table to choose indexes by (`db::optimize`, #518).
 
 ```sql
 CREATE TABLE users (
@@ -206,7 +217,8 @@ CREATE TABLE users (
   is_cohost       INTEGER NOT NULL DEFAULT 0,  -- set by the host only (#424, 0010)
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
-  deactivated_at  INTEGER
+  deactivated_at  INTEGER,
+  token_generation INTEGER NOT NULL DEFAULT 0  -- +1 ends every sign-in (#496, 0016)
 );
 
 -- name and message styling; see SPEC §4.5
@@ -318,6 +330,9 @@ CREATE TABLE attachments (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
+CREATE INDEX idx_attachments_message ON attachments(message_id);   -- a message's files (#518)
+CREATE INDEX idx_attachments_media_order                           -- Media's order (#518)
+  ON attachments((starred_at IS NOT NULL), created_at, id) WHERE state = 'complete';
 
 -- One row per URL in a message body, re-extracted on every edit. This is what
 -- the media grid pages over for `kind=link`; the stream re-extracts client-side
@@ -448,10 +463,13 @@ CREATE TABLE refresh_tokens (
                                                -- reuse of a rotated token revokes it
   token_hash      TEXT NOT NULL,               -- sha256 of the token
   device_label    TEXT,
-  expires_at      INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,            -- 30 days on; then the sweeper deletes it
   revoked_at      INTEGER,
   created_at      INTEGER NOT NULL
 );
+CREATE INDEX idx_refresh_hash ON refresh_tokens(token_hash);
+CREATE INDEX idx_refresh_family ON refresh_tokens(family_id);   -- logout, reuse (#520)
+CREATE INDEX idx_refresh_user ON refresh_tokens(user_id);       -- revoke everything a person holds
 
 CREATE TABLE server_config (
   key             TEXT PRIMARY KEY,
@@ -509,9 +527,25 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 ### Baseline requirements
 
-1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt.
+1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt. Each hash
+   or check holds about 19 MB and a core while it runs, so the server runs at most four
+   at once by default (`DEFAULT_PASSWORD_CHECKS_AT_ONCE`, `auth.rs`): about 76 MB,
+   whatever arrives. A host with cores and memory to spare raises it with
+   `LINGER_PASSWORD_CHECKS_AT_ONCE` (1 to 256; N at once is N × 19 MB at peak). There
+   is no `off`: no ceiling is what let strangers fill the memory. A request that can't
+   get a turn within 5 seconds is refused with `RATE_LIMITED`, saying the server is
+   busy. Sign-up checks the invite before it hashes anything, so a request without a
+   good invite costs one read (#495).
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
-   hashed. Reuse of a rotated refresh token revokes the whole family.
+   hashed. Reuse of a rotated refresh token revokes the whole family. A token's row
+   is deleted by the sweeper once its 30 days are up (#520), so reuse is caught for
+   those 30 days; after them the token is refused as expired. A password change
+   (and a reset, and removal) ends every sign-in the account has, at once: refresh
+   families are revoked, and every access token minted before it is refused, because
+   each carries the account's `token_generation` and ending sign-ins adds one to it
+   (#496, PROTOCOL §2). Open gateway sessions are closed. A count, not a time: token
+   times are whole seconds and could not order a token against a change in the same
+   second. The device that changed the password gets a fresh pair in the answer.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
@@ -523,8 +557,22 @@ E2EE launders a false promise, which is worse than an honest limitation.
    iPhone yet.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
-5. **Rate limits:** login 5/min/IP, message send 10/10s/user, upload slot 20/hour/user,
-   invite creation 10/day/user, knock 3/hour/target, search 30/min/user.
+5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,
+   then one a minute), message send 10/10s/user, upload slot 20/hour/user, invite
+   creation 10/day/user, knock 3/hour/target, search 30/min/user, relay passwords
+   20/min/user. The sign-up figure is the host's: `LINGER_SIGNUPS_PER_HOUR` raises it
+   for a crowd that arrives from one address (a school, a phone network), or `off`
+   removes it, since the invite still decides who gets in and the password-check
+   ceiling still bounds what sign-ups cost.
+   When it turns somebody away the server logs one line naming the setting, at most
+   every 5 minutes and never with the address (#538). The login figure is the brake on
+   guessing passwords and isn't a setting. Each limit's refusal says what is happening
+   and when to try again (PROTOCOL §2). The IP is the connection's
+   own. `X-Forwarded-For` is believed only from a peer `LINGER_TRUSTED_PROXIES` lists,
+   by default loopback and private networks (the Caddy container, over Docker's
+   network), and then only its last entry, the one that proxy wrote; earlier entries
+   are whatever the client sent (`auth::client_ip`). The first header from any other
+   peer is logged once per start, so a host behind a proxy elsewhere sees what to set.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
@@ -534,7 +582,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
 7. **Tauri capabilities:** the WebView gets the minimum permission set. Every
    native capability it has is one narrow command in `client/src-tauri/src/`, and
    it has no others — not the updater plugin's own commands, not the keyring, not
-   the socket.
+   the socket. Of the notification plugin, the list window may only ask whether
+   it may notify (`is_permission_granted`, `request_permission`); every banner
+   goes through the app's own `show_notification`, never the plugin's `notify`,
+   which would let a page show any banner it liked (#548, `src/acl.rs`).
 8. **Signed auto-updates.** Tauri's updater, with one minisign key whose public half
    is committed in `client/src-tauri/tauri.conf.json` and whose private half is
    **generated once by `scripts/updater-key.sh` and backed up offline** (T-701).
@@ -634,9 +685,13 @@ door.
 this server sits on a home LAN next to a router admin page. `links.rs` fetches them, and
 the rules are: `http(s)` on default ports only; the hostname is resolved by the server and
 the whole name refused if **any** address it answers with is private, loopback,
-link-local (which is where cloud metadata services live), CGNAT or reserved; the
-connection is then pinned to the address that was checked, so the name cannot resolve to
-something else in between; redirects are followed by hand, three at most, every hop
+link-local (which is where cloud metadata services live), CGNAT or reserved, however
+the address is written. An IPv6 address that carries an IPv4 one in a fixed place
+(v4-mapped `::ffff:a.b.c.d`, v4-compatible `::a.b.c.d`, NAT64 `64:ff9b::/96`, 6to4
+`2002::/16`) is judged by the IPv4 address inside; Teredo `2001::/32`, local-use NAT64
+`64:ff9b:1::/48`, site-local `fec0::/10` and anything else outside global unicast
+`2000::/3` are refused outright. The connection is then pinned to the address that was
+checked, so the name cannot resolve to something else in between; redirects are followed by hand, three at most, every hop
 re-checked; time and bytes are both capped and the body is read in chunks. Nothing the
 response says is trusted either — the HTML is scanned for a title and an icon href by a
 small tag reader and never rendered, and an icon is kept only if its *bytes* sniff as a
@@ -647,6 +702,20 @@ The fetch is host-side for a privacy reason before a caching one: if each client
 its own preview, every site anybody linked would collect the IP of every person who
 scrolled past the message, and a remote favicon would do it without a click. The host's
 IP does it once for everybody, and the icon reaches the client as a small `data:` URI.
+
+**The voice relay is the other forwarding machine** (#501). coturn runs on the host's
+own network and sends whatever a member with a relay password asks it to, so left to its
+defaults it would reach the home network, a cloud's metadata service, the Docker networks
+and the internet as the host. Voice only ever needs the server's voice address, so
+`deploy/compose.yaml` refuses every peer address (`--denied-peer-ip`, IPv4 and IPv6) and
+lets through only that one (`--allowed-peer-ip`, which coturn checks first): the IP in
+`LINGER_VOICE_ADDRESS`, or with it unset the public addresses `LINGER_DOMAIN` points at,
+looked up when the relay starts, as the server does. No address, or `off`, and it relays
+nothing; a name DNS doesn't answer for within a minute stops it, so Docker restarts it to
+ask again rather than leaving it relaying nothing. It relays UDP only (`--no-tcp-relay`), holds one password to ten relay ports
+(`--user-quota`) and one port to 3 Mbit/s (`--max-bps`). The server gives a member the
+same password all hour (`turn.rs`), so the quota counts a person, and hands out at most
+20 a minute per member.
 
 ---
 
@@ -781,22 +850,40 @@ not by `AppState`, so building the state in a test never starts a loop nobody as
 The other closes polls whose time is up (`polls.rs`, #474): at startup, for any that ran
 out while the server was down, then every thirty seconds, each in one transaction with the
 line it leaves in the room.
-It runs at startup and every six hours, in batches, and takes three kinds of object:
+It runs at startup and every six hours, in batches, and takes three kinds of file, and
+used sign-in tokens:
 
 - files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
   pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
-- files on a **deleted** message, at once. A delete is a tombstone with an empty body,
-  and neither the stream nor the media collection will ever draw what it carried again,
-  so the bytes are unreachable and still counted against the pool. A star does not hold
+- files on a **deleted** message, whatever their age, as the retry. The delete itself
+  takes them there and then (#502, below); this rule finishes any the store refused at
+  that moment, and any a server from before #502 left behind. A star does not hold
   one of these: a star stops a file ageing out, and this is not ageing out.
 - **finished uploads that never became a message**, once they are past the same window.
   The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
+- **refresh tokens past their 30 days** (#520). Every renewal marks the token it used
+  up and makes a new one, so an app left open adds about a hundred rows a day, and
+  nothing else deletes them. A used one inside its 30 days stays, for reuse detection
+  (§7). File expiry being off doesn't stop this one.
 
 A file a status picture pointed at used to be kept at any age. Status pictures are
 gone (#269), so such a file is now an upload that never became a message, and the
 third rule takes it. Deletion is bytes first, row second — the other order can lose
 an object with nothing left pointing at it, and a crash between the two leaves a row the
-next pass finishes.
+next pass finishes. Each pass also takes export archives a week old (below).
+
+**Deleting a message takes its files there and then** (#502), in the sweeper's own
+per-file step (`expiry::take_from_message`): the original, its poster frame and its
+display copy, then the rows. The delete waits at most five seconds for the store, so a
+bucket that stops answering cannot hold the answer up, and whatever did not finish is
+the second rule's. Either way the file is out of reach from the moment of the delete:
+`/objects` answers it `404` as if it had never been, history carries no attachments on
+a tombstone (`repo::attachments::hydrate`), and the media collection, search and
+exports all pass over it. A file the server sends itself goes out with
+`Cache-Control: private`, so the app's own cache keeps it for as long as it likes but a
+shared cache in front of the media host (a CDN proxy) keeps no copy that would outlive a
+delete. On S3 the bucket sends the bytes, from a link that is signed for a day and dead
+once the object is.
 
 **Exports are the one path that brings bytes back to the app host.** An archive
 (`export.rs`, SPEC §4.11) is built in scratch under `{data_dir}/staging` and then stored
@@ -808,6 +895,34 @@ member's visible data on local disk while it builds, and costs a full download o
 data in egress (free on R2, billed on plain S3). The scratch is deleted when the job ends
 and the finished zip lives in the bucket, but a host sizing an S3-backed box should size
 the staging disk for the largest export, not only for the uploads in flight.
+
+**An archive lasts a week** (#504, SPEC §4.11). Before, nothing removed one but the same
+member exporting again, so each member who had ever exported kept a copy of the whole
+server on the disk, or in the bucket, for good. Now:
+
+- The sweeper takes an archive `export::KEPT_FOR_MS` (seven days) after `finished_at`,
+  bytes first, on either backend, and failed jobs as old with it. This is not
+  `LINGER_FILE_EXPIRY_DAYS` and is not turned off with it. `GET /export/:job_id` says
+  when (`expires_at`), and the app shows it.
+- Removing a member deletes their archive and its job.
+- `POST /export` is refused with `QUOTA_EXCEEDED` (507) when the disk under `staging/`
+  has less free than the archive needs: the files it carries, twice that on `s3`, plus
+  256 MB of headroom for the transcripts and for SQLite. On `local`, the member's own
+  archive, which a new one replaces, counts as free. The check runs again when a queued
+  job gets its turn, because members asking at once all pass it at the door. A server
+  that can't measure free space (anything but Unix) skips it. The route takes the
+  hour's token before it starts and gives it back when the export is refused
+  (`RateLimiter::refund`), so the limit stays race-free and a refusal for room doesn't
+  spend the member's hour.
+- At startup, before anything is served, `main` runs `export::recover`: jobs left
+  `queued` or `running` are marked failed, and everything in `staging/` is deleted.
+  Nothing can be using it yet, and an export killed mid-zip otherwise left up to a whole
+  archive's worth of scratch there. A job writes its `object_key` when it starts
+  building, so a process stopped between storing an archive and marking it complete
+  leaves a row that says where the bytes are; the sweeper and the member's next export
+  delete by that column.
+- A job whose row was deleted while it built (the member asked again, or was removed)
+  deletes the archive it stored instead of leaving it with nothing pointing at it.
 
 **The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not
@@ -863,6 +978,16 @@ name, checks the DNS, makes the secret, opens `ufw`) and starts everything; doin
 hand is copying `.env.example`. An older compose file with its settings written inline
 keeps working.
 
+**The files come from a release** (#507). `setup.sh` fetches `compose.yaml`, the Caddyfile,
+`update.sh` and `.env.example` from the newest release's tag (GitHub's `releases/latest`,
+which never names a pre-release such as the `arch` one, and the script refuses anything
+but a `vX.Y.Z` tag besides), not from `main`, which can be ahead of every released image.
+The image line stays `latest`: `update.sh` reads a version there as the host's choice to
+stay on it. A release is published after its tag's image is pushed, so `latest` is that
+release's image or a newer one, and older files with a newer image is how every server
+runs after `update.sh` anyway. `setup.sh` itself is fetched from `main`, so it has to work
+with the newest release's files. `LINGER_SETUP_REF` names another release or a branch.
+
 Voice goes through the `linger` container itself (#197): with UDP 3479 open, each client
 sends its voice there once and the server passes it on. Where clients send it is
 `LINGER_VOICE_ADDRESS` if set; unset, the server looks `LINGER_DOMAIN` up once at startup
@@ -871,7 +996,23 @@ machine. `off`, or no domain to look up, and the server carries no voice (#306).
 
 The image starts as root only to give the data folder to its `linger` user, then runs the
 server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
-root, which used to need a `chown` before the first start.
+root, which used to need a `chown` before the first start. It also makes the folder 0700
+and runs the server with umask 077, so what the server writes is 0600 (#506): on a
+machine with more than one account, the others can't read the database or the files.
+Nothing on the host reads inside it: `update.sh` copies the database out through a
+one-off container of the image and writes the backup 0600, so a host needs Docker and
+not root.
+
+The image sets `MALLOC_MMAP_THRESHOLD_=1048576` (#523), so memory a password hash used goes
+back to the system. Each argon2 hash borrows about 19 MB at once (§7). glibc, the C
+library under the image's Debian base, gives the first such block back, then raises its
+own threshold for a big block to match and keeps every later one in its pools, spread
+over the blocking threads hashing runs on, so memory only ever grew: 220 sign-ups left the
+server holding 225 MB one at a time, 815 MB four at a time. A fixed 1 MB threshold makes
+every larger block a mapping of its own, unmapped the moment it is freed, and the same
+sign-ups leave 16–17 MB. `MALLOC_ARENA_MAX=2`, the usual advice for this, held 168 MB and
+946 MB. Only glibc reads the variable. While hashes run, they still take 19 MB each; how
+many may run at once is a separate limit.
 
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
@@ -879,7 +1020,11 @@ needs no secret and runs no relay. Its one secret lives in `.env`, never in the 
 with `linger` so the server can sign the short-lived relay passwords it hands
 members (`PROTOCOL.md` §7, `GET /voice/ice`). It runs on the host's own network
 because a relay's job is being reachable at its real address on a range of UDP
-ports, and container NAT would get in the way of exactly that.
+ports, and container NAT would get in the way of exactly that. Being on the host's
+network is also why it relays to the server's voice address and nowhere else (§7, #501).
+A relayed client sends to that address like everybody else, the public one in the
+offer, and the host hands it to the `linger` container through the published UDP port,
+so the relay never needs Docker's own addresses.
 
 Caddy is bundled specifically so TLS certificates are automatic. A self-hoster should
 never have to think about certbot. Its Caddyfile has two blocks and the deployment needs
@@ -923,7 +1068,8 @@ passes its check.
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
 (2026-08-29 and 2026-08-31). **M12 is built:** signalling, audio path,
 controls, relay and device recovery, with voice in daily use across separate
-networks. M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
+networks. M13 ambient voice was never started as a milestone, but later voice
+work built part of it (its row below; `TASKS.md` M13 has what's left). The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
 on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
@@ -938,7 +1084,7 @@ is gone (#306).
 | **M10** | Search | Type a word, get the messages containing it, click one, land on it in its room | 3–4 days — **built: index and endpoint 2026-08-30, surface 2026-08-31. Its check passed in a running app** |
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
-| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
+| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days — **part built by later voice work: silence isn't sent (#430, 0.4.9), being in a room's voice is being in the room (#420, 0.4.8), and joining leaves a quiet line (#473). Left: no join step, the controls that make it safe (T-1502), and a working day's CPU and battery measured on a real computer** |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 

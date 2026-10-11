@@ -642,6 +642,25 @@ async fn an_export_pulls_the_files_back_out_of_the_bucket() {
     }
     assert!(found, "the file never came back out of the bucket");
     assert_eq!(&image[1..4], b"PNG", "and the bytes are the real file");
+
+    // A week after it finished, the sweeper takes it out of the bucket too
+    // (#504): on S3 an archive nobody downloads is billed every month.
+    let key = linger_server::export::object_key(started.job_id);
+    assert!(
+        bucket_has(&key).await,
+        "the archive was never in the bucket"
+    );
+    sqlx::query("UPDATE exports SET finished_at = finished_at - ?")
+        .bind(linger_server::export::KEPT_FOR_MS + 60_000)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let swept = linger_server::expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(swept.archives, 1);
+    assert!(
+        !bucket_has(&key).await,
+        "an old archive is still in the bucket"
+    );
 }
 
 /// A large image's display copy (#382) lives in the bucket next to it, is
@@ -729,4 +748,65 @@ async fn an_earlier_image_gets_its_display_copy_from_the_bucket() {
         image::load_from_memory(&fetch_object(&server, &display).await.bytes().await.unwrap())
             .unwrap();
     assert_eq!((copy.width(), copy.height()), (960, 576));
+}
+
+/// Deleting a message takes its file and the file's display copy out of the
+/// bucket as the delete answers, not at the next sweep (#502).
+#[tokio::test]
+async fn a_deleted_messages_file_leaves_the_bucket_at_once() {
+    let server = s3_server!("a_deleted_messages_file_leaves_the_bucket_at_once");
+    let host = bootstrap_host(&server).await;
+
+    let room: linger_core::wire::Room = client()
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "slug": "general", "name": "general" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "regret.png",
+        "image/png",
+        png(1500, 900),
+    )
+    .await;
+    let display = attachment.display_url.clone().unwrap();
+    let posted: linger_core::wire::Message = client()
+        .post(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "body": "oops", "attachment_ids": [attachment.id] }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(bucket_has(&key_of(&attachment.url)).await);
+    assert!(bucket_has(&key_of(&display)).await);
+
+    let resp = client()
+        .delete(server.url(&format!("/messages/{}", posted.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+
+    // Asked of the bucket itself: an old presigned link to either is dead too.
+    assert!(
+        !bucket_has(&key_of(&attachment.url)).await,
+        "the file stayed"
+    );
+    assert!(!bucket_has(&key_of(&display)).await, "its copy stayed");
+    let resp = client()
+        .get(format!("{}{}", server.base, attachment.url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
 }

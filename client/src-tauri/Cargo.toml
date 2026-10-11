@@ -12,6 +12,32 @@ repository = "https://github.com/itsMattGuenther/Linger"
 # `pnpm tauri dev` / `pnpm tauri build` inside client/.
 [workspace]
 
+# How the app people download is built (#521): every desktop package and the
+# Android APK. Being its own workspace, this crate never sees the root
+# Cargo.toml's profile; cargo only reads profiles from a workspace's root.
+# Measured on Linux, the binary went from 43.0 MB, unstripped, to 24.2 MB.
+#
+# - `lto = "thin"`, as the server has: optimizes across crates, so the parts
+#   of webrtc, tauri and the rest that Linger never calls are left out.
+# - `codegen-units = 1`: each crate is optimized as one piece rather than
+#   sixteen, which finds more to leave out. Release builds take a minute or
+#   two longer. `pnpm tauri dev` and the tests use the dev profile, untouched.
+# - `strip = true`, as the server has: no symbol names in the binary. On
+#   Windows the linker then writes no .pdb, which nothing ships or uploads.
+#   On Android the library keeps the functions Java calls into: those are
+#   exports, and strip leaves exports alone. The updater signs the finished
+#   packages, after all of this.
+#
+# Panics still unwind: deliberately not `panic = "abort"`. Unwinding is what
+# lets `tray::install` survive a desktop whose tray library is missing, and
+# what keeps a panic in one task or audio callback to that thread rather
+# than ending the whole app. The cost is a panic's backtrace without function
+# names, which is little: nothing is ever reported anywhere.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
 [lib]
 name = "linger_client_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

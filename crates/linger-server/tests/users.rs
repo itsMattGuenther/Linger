@@ -169,8 +169,11 @@ async fn away_message_stamps_away_since_server_side() {
     assert!(user.status.unwrap().away_since.is_none());
 }
 
+/// A password change ends every sign-in the account had (#496): refresh tokens,
+/// and access tokens too, which used to keep working for the rest of their
+/// fifteen minutes. The device that asked is handed a fresh pair.
 #[tokio::test]
-async fn password_change_verifies_current_and_revokes_refresh_tokens() {
+async fn password_change_verifies_current_and_ends_every_sign_in() {
     let server = common::spawn_server().await;
     let host = common::bootstrap_host(&server).await;
     let client = reqwest::Client::new();
@@ -195,7 +198,46 @@ async fn password_change_verifies_current_and_revokes_refresh_tokens() {
         .send()
         .await
         .unwrap();
-    assert_eq!(ok.status(), 204);
+    assert!(ok.status().is_success(), "{}", ok.status());
+
+    let me = |token: String| {
+        let request = client.get(server.url("/me")).bearer_auth(token);
+        async move { request.send().await.unwrap().status() }
+    };
+    assert_eq!(
+        me(host.access_token.clone()).await,
+        401,
+        "the access token from before the change"
+    );
+
+    assert_eq!(ok.status(), 200);
+    let fresh: linger_core::wire::AuthResponse = ok.json().await.unwrap();
+    // Minted in the same second as the change, very likely, and good anyway:
+    // what tells the two apart is a count, not the time.
+    assert_eq!(me(fresh.access_token.clone()).await, 200, "the fresh pair");
+    let renewed = client
+        .post(server.url("/auth/refresh"))
+        .json(&serde_json::json!({ "refresh_token": fresh.refresh_token }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renewed.status(), 200, "the fresh refresh token");
+
+    // Changed again straight away, with the fresh token: the one it was asked
+    // with goes the same way, and the newest pair works.
+    let again = client
+        .patch(server.url("/me/password"))
+        .bearer_auth(&fresh.access_token)
+        .json(&serde_json::json!({
+            "current_password": "a brand new passphrase", "new_password": "a brand new passphrase"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(again.status(), 200);
+    let newest: linger_core::wire::AuthResponse = again.json().await.unwrap();
+    assert_eq!(me(fresh.access_token.clone()).await, 401);
+    assert_eq!(me(newest.access_token.clone()).await, 200);
 
     // Old refresh token is dead; new password logs in.
     let refresh = client
@@ -445,6 +487,16 @@ async fn removing_a_member_shuts_every_door_and_restore_reopens_them() {
         .await
         .unwrap();
     assert_eq!(login.status(), 200, "restore is a way back in");
+
+    // Only through the front door: an access token from before the removal
+    // stays dead, though it would not have expired yet (#496).
+    let before = client
+        .get(server.url("/me"))
+        .bearer_auth(&member.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(before.status(), 401, "a token from before the removal");
 
     // Restore is not an undo: the invite they had made stays revoked.
     let preview: serde_json::Value = client
