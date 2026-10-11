@@ -133,10 +133,11 @@ async fn create(
             .execute(&mut *tx)
             .await?;
     }
+    // Asking is catching up, as saying anything is (#454), and saved with the
+    // poll, as a post's marker is with the post (#524).
+    crate::routes::messages::advance_read_marker(&mut *tx, host.id, room_id, id).await?;
     tx.commit().await?;
 
-    // Asking is catching up, as saying anything is (#454).
-    crate::routes::messages::advance_read_marker(&state, host.id, room_id, id).await?;
     let message = repo::messages::expect(&state.db.read, &state.config, id).await?;
     state
         .gateway

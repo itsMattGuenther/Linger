@@ -187,7 +187,7 @@ async fn update(
     if let Some(message_id) = line {
         // Its links go in the collection like any message's (SPEC §4.4).
         repo::links::replace_for_message(
-            &state.db.write,
+            &mut *state.db.write.acquire().await?,
             message_id,
             &crate::links::extract(motd.as_deref().unwrap_or_default()),
         )
