@@ -831,6 +831,17 @@ The image starts as root only to give the data folder to its `linger` user, then
 server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
 root, which used to need a `chown` before the first start.
 
+The image sets `MALLOC_MMAP_THRESHOLD_=1048576` (#523), so memory a password hash used goes
+back to the system. Each argon2 hash borrows about 19 MB at once (§7). glibc, the C
+library under the image's Debian base, gives the first such block back, then raises its
+own threshold for a big block to match and keeps every later one in its pools, spread
+over the blocking threads hashing runs on, so memory only ever grew: 220 sign-ups left the
+server holding 225 MB one at a time, 815 MB four at a time. A fixed 1 MB threshold makes
+every larger block a mapping of its own, unmapped the moment it is freed, and the same
+sign-ups leave 16–17 MB. `MALLOC_ARENA_MAX=2`, the usual advice for this, held 168 MB and
+946 MB. Only glibc reads the variable. While hashes run, they still take 19 MB each; how
+many may run at once is a separate limit.
+
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
 needs no secret and runs no relay. Its one secret lives in `.env`, never in the compose file, and is shared
