@@ -172,7 +172,7 @@ jobs:
         # tauri.conf.json's beforeBuildCommand.
         run: pnpm install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The AppImage bundler takes FFmpeg from here, not the system (#358).
@@ -236,12 +236,17 @@ jobs:
             [user guide](https://github.com/${{ github.repository }}/blob/main/docs/user-guide.md)
             covers installing and using Linger in plain language.
           # Draft on purpose: publishing is what ships the update to everyone,
-          # and that is a decision, not a side effect of pushing a tag.
+          # and that is a decision, not a side effect of pushing a tag. Since
+          # 1.0 a run for a release that's already published fails rather
+          # than changing it, and every run sets the draft's name and text
+          # again, so hand edits to the text wait until the jobs are done.
           releaseDraft: true
           prerelease: false
           # `latest.json` — the manifest the updater reads. Every matrix job
-          # merges its platform into the same file on the same release.
-          includeUpdaterJson: true
+          # merges its platform into the same file on the same release. 1.0
+          # writes its links as GitHub API links; `updater-json` below puts
+          # the normal download links back once every job has added its own.
+          uploadUpdaterJson: true
 
       # Check the signed packages too, while the release is still a draft.
       # A successful compile is not proof that native media plugins shipped.
@@ -304,6 +309,37 @@ jobs:
             package-check/updates/*.log
             package-check/updates/*.png
           retention-days: 7
+
+  # latest.json is the file every installed copy reads to find an update.
+  # tauri-action 1.0 writes each platform's link as a GitHub API link, which
+  # GitHub answers 60 times an hour per address without a token: a household
+  # with several copies behind one connection could miss an update. This
+  # puts the normal download links back (as 0.x wrote them), after every
+  # desktop job has merged its platforms in, and checks the files kept the
+  # names the website, the Arch job and the docs look for (#597). It runs
+  # after a partial build too, so a missing platform fails here, not quietly.
+  updater-json:
+    name: latest.json links to the downloads
+    needs: [bundle]
+    if: ${{ !cancelled() && github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: normal download links, and the files named as before
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/updater"
+          mkdir -p "$dir"
+          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$dir"
+          gh release view "$GITHUB_REF_NAME" --json assets > "$dir/assets.json"
+          node scripts/updater-urls.mjs "$dir/latest.json" "$dir/assets.json" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+          gh release upload "$GITHUB_REF_NAME" "$dir/latest.json" --clobber
 
   # The Android phone app (SPEC §4.15, T-1604): one signed APK for 64-bit
   # phones, added to the draft the desktop bundles opened. Until there is a

@@ -98,10 +98,18 @@ describe("privacy, from the source", () => {
     // mouse hook, no raw input, no snapshot of every key's state, no X11
     // keymap or grab, no input device read directly, no event tap.
     const WHOLE_KEYBOARD =
-      /SetWindowsHookEx|WH_KEYBOARD|WH_MOUSE|GetKeyboardState|RegisterRawInputDevices|GetRawInputData|GetRawInputBuffer|RAWINPUT|XQueryKeymap|XGrabKey|XGrabKeyboard|XISelectEvents|XIRawEvent|XRecord|\/dev\/input|evdev|libinput|uinput|CGEventTapCreate|addGlobalMonitorForEvents|IOHIDManager|NSEvent/;
+      /SetWindowsHookEx|WH_KEYBOARD|WH_MOUSE|GetKeyboardState|RegisterRawInputDevices|GetRawInputData|GetRawInputBuffer|RAWINPUT|XQueryKeymap|XGrabKey|XGrabKeyboard|XISelectEvents|XIRawEvent|XRecord|\/dev\/input|evdev|libinput|uinput|CGEventTapCreate|CGEventSourceFlagsState|CGEventSourceCounterForEventType|addGlobalMonitorForEvents|IOHIDManager|NSEvent/;
     expect(uses(RUST, WHOLE_KEYBOARD)).toEqual([]);
     // Windows is asked about one key in one place: the talk key's code.
     expect(uses(RUST, /GetAsyncKeyState\(/)).toEqual([expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: .*GetAsyncKeyState\(i32::from\(vk\)\)/)]);
+    // And macOS the same way (#587): one key or one button, named once each
+    // where it's declared and once where it's asked, nowhere else.
+    expect(uses(RUST, /CGEventSource\w*\(/)).toEqual([
+      expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: +fn CGEventSourceKeyState\(state_id: i32, key: u16\) -> bool;$/),
+      expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: +fn CGEventSourceButtonState\(state_id: i32, button: u32\) -> bool;$/),
+      expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: .*CGEventSourceKeyState\(COMBINED_SESSION_STATE, code\)/),
+      expect.stringMatching(/^src-tauri\/src\/talk_key\/mod\.rs:\d+: .*CGEventSourceButtonState\(COMBINED_SESSION_STATE, button\)/),
+    ]);
     const crates = readFileSync(join(SHELL, "Cargo.toml"), "utf8");
     expect(crates).not.toMatch(/^(rdev|device_query|device-query|inputbot|global-hotkey|tauri-plugin-global-shortcut|livesplit-hotkey|willhook|multiinput|evdev|evdev-rs|input|uinput|keyboard-query|mki)\s*=/m);
     // The desktop's portal for global shortcuts and nothing else of it: not
