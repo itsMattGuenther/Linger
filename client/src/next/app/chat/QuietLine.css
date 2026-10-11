@@ -1,6 +1,6 @@
 /*
  * A quiet line in the conversation: somebody joining voice (#473), a poll
- * closing (#474). On the message grid, its words where a name starts and its
+ * closing (#474), somebody leaving a group DM (#565). On the message grid, its words where a name starts and its
  * time in the time column, always shown; all grey. A group's space above it,
  * as any line that starts a group has, and nothing that moves on hover.
  * Tokens only.

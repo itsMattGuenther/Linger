@@ -16,7 +16,7 @@ import type { MessageId } from "../../generated/MessageId";
 import type { Room } from "../../generated/Room";
 import type { RoomId } from "../../generated/RoomId";
 import type { User } from "../../generated/User";
-import { dmLabel, orderDms, others, peopleIn } from "../../lib/dm";
+import { canLeave, dmLabel, lastOneIn, orderDms, others, peopleIn } from "../../lib/dm";
 import { type GatewayState, hasNewActivity, voicePeersIn } from "../../lib/gateway";
 import { occupantsOf } from "../../lib/occupancy";
 import { buildRoster, type RosterEntry, shortAgo, shownState, voiceRoomsOf } from "../../lib/roster";
@@ -31,8 +31,11 @@ export interface ListModel {
    * named as it was, since it has no person's row to live on.
    */
   groups: DmRow[];
-  /** Every DM you're in, by who is in it, so the picker opens the one you have (SPEC §4.13). */
-  dmMembers: { id: RoomId; member_ids: string[] }[];
+  /**
+   * Every DM you're in, by who is in it, so the picker opens the one you have
+   * (SPEC §4.13), and whether somebody has left it, when it never will (#565).
+   */
+  dmMembers: { id: RoomId; member_ids: string[]; someone_left?: boolean }[];
   people: PeopleGroups;
 }
 
@@ -63,6 +66,10 @@ export interface DmRow {
   /** Everyone in it, you included, as the server lists them: the DM's identity (SPEC §4.13). */
   memberIds: string[];
   fresh: boolean;
+  /** You can leave it (#565): a group, never a one-to-one DM. */
+  leavable: boolean;
+  /** Nobody else is in it any more, so leaving deletes it. */
+  last: boolean;
 }
 
 /** A person and their presence, which is all a marker needs. */
@@ -134,6 +141,8 @@ export function listModel(state: GatewayState, now: number): ListModel {
       people: peopleIn(room, users, meId).map((user) => ({ user, state: stateOf(user.id) })),
       memberIds: room.member_ids ?? [],
       fresh: hasNewActivity(state, room.id),
+      leavable: canLeave(room),
+      last: lastOneIn(room, meId),
     }),
   );
   const talkedAt = (room: Room | undefined): MessageId | null => talkedIn(state, room);
@@ -175,7 +184,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
     me,
     rooms,
     groups,
-    dmMembers: state.dms.map((room) => ({ id: room.id, member_ids: room.member_ids ?? [] })),
+    dmMembers: state.dms.map((room) => ({ id: room.id, member_ids: room.member_ids ?? [], someone_left: room.someone_left })),
     people: { here: talking(people.here), away: talking(people.away), offline: talking(people.offline) },
   };
 }
@@ -226,7 +235,9 @@ function byTalking<T>(items: readonly T[], fresh: (item: T) => boolean, talkedAt
 
 /**
  * Your DMs: a DM with exactly one other person the server lists is that
- * person's; every other DM is a group, drawn with the rooms (#351).
+ * person's; every other DM is a group, drawn with the rooms (#351). So is a
+ * group somebody has left, even down to the two of you (#565): it isn't your
+ * DM with them, and never takes their row.
  */
 function dmsByPerson(state: GatewayState): { byPerson: Map<string, Room>; groups: Room[] } {
   const meId = state.me?.id ?? null;
@@ -235,7 +246,7 @@ function dmsByPerson(state: GatewayState): { byPerson: Map<string, Room>; groups
   const groups: Room[] = [];
   for (const room of state.dms) {
     const [other, ...rest] = others(room, meId);
-    if (other !== undefined && rest.length === 0 && listed.has(other) && !byPerson.has(other)) byPerson.set(other, room);
+    if (other !== undefined && rest.length === 0 && listed.has(other) && !byPerson.has(other) && room.someone_left !== true) byPerson.set(other, room);
     else groups.push(room);
   }
   return { byPerson, groups };

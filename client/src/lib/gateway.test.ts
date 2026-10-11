@@ -1250,6 +1250,52 @@ describe("DMs", () => {
     expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
   });
 
+  it("leaving a group, here or on another device, forgets it and all it held (#565)", async () => {
+    const api = fakeApi(HOME, () => [{ ...message(5), room_id: "d1", author_id: "u-callie" }]);
+    await connect(api);
+    arrive(
+      HOME,
+      ready({
+        user: person("u-matt", "Matt"),
+        dms: [dm("d1", ["u-matt", "u-callie", "u-dave"]), dm("d2", ["u-matt", "u-callie"])],
+      }),
+    );
+    await openRoom(api, "d1");
+    arrive(HOME, { s: 2, op: "typing", d: { room_id: "d1", user_id: "u-callie" } } as ServerFrame);
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(6), room_id: "d1", author_id: "u-callie" } } as ServerFrame);
+    expect(serverState(HOME).streams["d1"]?.messages).toHaveLength(2);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+
+    arrive(HOME, { s: 4, op: "dm.remove", d: { room_id: "d1" } } as ServerFrame);
+    const state = serverState(HOME);
+    // Gone from the list, and nothing left behind that could draw it, light
+    // it or find it again; the one-to-one DM beside it is untouched.
+    expect(state.dms.map((held) => held.id)).toEqual(["d2"]);
+    expect(state.streams["d1"]).toBeUndefined();
+    expect(state.typing["d1"]).toBeUndefined();
+    expect(state.newest["d1"]).toBeUndefined();
+    expect(hasNewActivity(state, "d1")).toBe(false);
+
+    // Told twice (two windows replaying, say), it's still just gone.
+    arrive(HOME, { s: 5, op: "dm.remove", d: { room_id: "d1" } } as ServerFrame);
+    expect(serverState(HOME).dms.map((held) => held.id)).toEqual(["d2"]);
+  });
+
+  it("somebody else leaving keeps the group, with its new people and a line that's nothing new (#565)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), dms: [dm("d1", ["u-matt", "u-callie", "u-dave"])] }));
+
+    arrive(HOME, { s: 2, op: "room.update", d: { ...dm("d1", ["u-matt", "u-dave"]), someone_left: true } } as ServerFrame);
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(7), room_id: "d1", author_id: "u-callie", body: "left", left: true } } as ServerFrame);
+
+    const state = serverState(HOME);
+    expect(state.dms).toHaveLength(1);
+    expect(state.dms[0]?.member_ids).toEqual(["u-matt", "u-dave"]);
+    expect(state.dms[0]?.someone_left).toBe(true);
+    // The line is in the history for whoever opens it, and calls nobody over.
+    expect(hasNewActivity(state, "d1")).toBe(false);
+  });
+
   it("a person who is in no DMs has an empty list, not somebody else's", async () => {
     await connect(fakeApi(HOME));
     // `ready` carries the DMs *this person* is in, so a stranger's client has

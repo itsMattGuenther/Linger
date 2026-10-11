@@ -719,6 +719,15 @@ except only the people in it can see it, anywhere: not in media, not in search,
 not in anybody else's export. There's no way to add someone later; a different
 set of people is a different conversation.
 
+**Leaving a group.** Done with a group conversation? Hover its row under
+**Rooms**, or look at the top right of the conversation, and press **⋯**, then
+**Leave this group…**. It says what happens before it does anything. The group
+goes from your list on every device you use, and nobody can add you back,
+though anybody in it can start a new one with you. The others see a small grey
+line saying you left, and keep what you said. If you're the last one in it, it's
+deleted for good, so export first if you want a copy. A conversation with one
+person isn't left this way: it's their row in your list.
+
 **Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Their row in your list gives a little shake. That

@@ -45,6 +45,9 @@
  * (#423) is written down as `takeout <room> <user>`, and refused unless
  * you're the host.
  *
+ * Leaving a group DM (#565) is written down as `leave <id>` and answered with
+ * the `dm.remove` the server sends; `?leavefails` has it refused.
+ *
  * The message of the day (#464): `?motd` has Eli's set in #general, just
  * after the evening. Changing a room is written down as `room <id> <body>`,
  * refused unless you host or co-host, and answered with the frames the
@@ -552,6 +555,23 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       window.core?.frame(SERVER, { op: "message.create", d: line } as Omit<ServerFrame, "s">);
     }, 10);
     return json(room);
+  }
+  // Leaving a group DM (#565): written down as `leave <id>`, refused for a
+  // one-to-one DM as the server refuses it, and answered with the frame the
+  // server sends every one of your sessions. `?leavefails` has the server
+  // not answer.
+  const leaveOf = server === SERVER ? /^\/dms\/([^/]+)\/leave$/.exec(path) : null;
+  if (leaveOf && method === "POST") {
+    const id = decodeURIComponent(leaveOf[1] ?? "");
+    note(`leave ${id}`);
+    if (query.has("leavefails")) return refuse(503, "INTERNAL", "The server couldn't do that just now. Try again in a moment.");
+    const found = state.dms.find((dm) => dm.id === id);
+    if (!found) return refuse(404, "NOT_FOUND", "No such room on this server.");
+    if (found.someone_left !== true && (found.member_ids?.length ?? 0) <= 2) {
+      return refuse(422, "VALIDATION_FAILED", "A DM with one person can't be left. It's their row in your list.");
+    }
+    window.setTimeout(() => window.core?.frame(SERVER, { op: "dm.remove", d: { room_id: id } } as Omit<ServerFrame, "s">), 10);
+    return new Response(null, { status: 204 });
   }
   if (path === "/links/preview") return json([]);
   // Media and Search beside the list (#337), from the same finds as their own windows' page.

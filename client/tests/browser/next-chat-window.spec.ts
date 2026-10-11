@@ -780,3 +780,14 @@ test("select-all in a conversation carries who wrote each message, though a name
   const selected = await page.evaluate(() => String(getSelection()));
   expect(selected).toMatch(new RegExp(`Eli\\s+${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 });
+
+test("a group left from its own window's ⋯ closes the window, calmly (#565)", async ({ page }) => {
+  await open(page, "room=d-eli-sam");
+  await expect(page.getByRole("region", { name: "Eli and Sam" })).toBeVisible();
+  // The header is the title bar here, and its ⋯ is in it.
+  await page.locator(".k-titlebar").getByRole("button", { name: "More for Eli and Sam" }).click();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+  await page.getByRole("dialog", { name: "Leave Eli and Sam" }).getByRole("button", { name: "Leave", exact: true }).click();
+  await expect.poll(() => did(page)).toContain("POST /dms/d-eli-sam/leave as token-1");
+  await expect.poll(() => did(page)).toContain("window:close");
+});

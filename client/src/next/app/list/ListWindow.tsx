@@ -801,6 +801,7 @@ function Servers({
             // The host, with a report open (T-1605): Settings, People, where they are.
             onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
             onStartDm: (people) => startDm(api, people),
+            onLeaveDm: (room) => leaveDm(api, room),
             onHost: (section) => shell.settings(section),
             showing: besideTab?.server === baseUrl ? besideTab.roomId : null,
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
@@ -1153,6 +1154,19 @@ async function startDm(api: ServerSession["api"], people: User[]): Promise<strin
     return null;
   } catch (error: unknown) {
     return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't open the DM.";
+  }
+}
+
+/**
+ * Leave a group DM (#565). The server tells every window it's gone, so its
+ * row, tab and window go by themselves; this only asks.
+ */
+async function leaveDm(api: ServerSession["api"], roomId: RoomId): Promise<string | null> {
+  try {
+    await api.leaveDm(roomId);
+    return null;
+  } catch (error: unknown) {
+    return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't leave the group.";
   }
 }
 

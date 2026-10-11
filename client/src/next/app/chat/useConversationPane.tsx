@@ -8,7 +8,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
-import { dmLabel } from "../../../lib/dm";
+import { canLeave, dmLabel, lastOneIn } from "../../../lib/dm";
 import { openExternal, openExternalChecked } from "../../../lib/external";
 import { hostsHere } from "../../../lib/host";
 import {
@@ -472,6 +472,14 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [api],
   );
 
+  // Leaving a group from its header (#565). The server tells every window
+  // it's gone, and this tab or window goes with it.
+  const leaveGroup = useCallback(
+    (roomId: RoomId): Promise<string | null> =>
+      api ? said(api.leaveDm(roomId), "Couldn't leave the group.") : Promise.resolve("You're not signed in to that server any more."),
+    [api],
+  );
+
   const onJoin = useCallback(() => {
     if (active) void intend({ kind: "voice.join", server: active.server, roomId: active.roomId }).catch(() => undefined);
   }, [active, intend]);
@@ -488,24 +496,29 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     const dm = room.kind === "dm";
     const others = dm ? dmPeople(state, room) : [];
     const [only] = others;
+    // A one-to-one DM is its person; a group somebody left is a group
+    // however few are left in it (#565), with no Knock and no card.
+    const single = others.length === 1 && only && room.someone_left !== true ? only : null;
     const header: ChatPane["header"] = dm
       ? {
           kind: "dm",
           label: dmLabel(room, state.users, state.me?.id ?? null),
           people: others,
-          knock:
-            others.length === 1 && only
-              ? {
-                  onKnock: () => knock(only.user),
-                  phase: knocks.get(only.user.id)?.phase ?? "idle",
-                  problem: knocks.get(only.user.id)?.problem ?? null,
-                  // Offline, Knock stays in the header, greyed out, and says why (#288).
-                  unavailable: only.state === "offline" ? knockOfflineLine(only.user.display_name) : undefined,
-                }
-              : undefined,
+          knock: single
+            ? {
+                onKnock: () => knock(single.user),
+                phase: knocks.get(single.user.id)?.phase ?? "idle",
+                problem: knocks.get(single.user.id)?.problem ?? null,
+                // Offline, Knock stays in the header, greyed out, and says why (#288).
+                unavailable: single.state === "offline" ? knockOfflineLine(single.user.display_name) : undefined,
+              }
+            : undefined,
           server: several ? serverTag(active.server) : undefined,
           // Beside the list, a one-to-one DM's header is their card (#351).
-          person: others.length === 1 && only ? { note: personRow(state, only.user.id, now)?.note ?? "" } : undefined,
+          person: single ? { note: personRow(state, single.user.id, now)?.note ?? "" } : undefined,
+          // A group can be left, from its ⋯ (#565).
+          group: canLeave(room),
+          leave: canLeave(room) ? { last: lastOneIn(room, state.me?.id ?? null), onLeave: () => leaveGroup(room.id) } : undefined,
         }
       : { kind: "room", name: room.name, topic: room.topic, people: peopleInRoom(state, room.id), server: several ? serverTag(active.server) : undefined };
     return {

@@ -68,7 +68,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 ## ✨ What it does
 
 - **The buddy list.** One tall window of places and people: you, the rooms
-  with who's in each (your group DMs with them), and everyone on the server,
+  with who's in each (your group DMs with them, which you can leave), and everyone on the server,
   here, away (with their away message) or offline. A DM lives on its person:
   their row lights up when they write, the people you're talking to stay at
   the top, and clicking someone opens them beside the list. Closing it keeps Linger running in the tray, and it can start when

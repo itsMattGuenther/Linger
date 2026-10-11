@@ -427,3 +427,25 @@ test("holding a message reacts with one of six, or any emoji from the picker at 
   const view = page.viewportSize();
   expect(box && view && box.y + box.height).toBeGreaterThan((view?.height ?? 0) - 40);
 });
+
+test("a group is left from its screen's ⋯, the menu and the question rising from the bottom, and the list comes back without it (#565)", async ({ page }) => {
+  await phone(page);
+  const group = page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^Eli and Sam/ });
+  await group.click();
+  await expect(screen(page)).toBeVisible();
+  await title(page).getByRole("button", { name: "More for Eli and Sam" }).click();
+  const sheet = page.getByRole("menu");
+  await expect(sheet.locator(".k-menu-head")).toHaveText("Eli and Sam");
+  expect(await sticksOut(page), "the menu").toEqual([]);
+  await sheet.getByRole("menuitem", { name: "Leave this group…" }).click();
+
+  const ask = page.getByRole("dialog", { name: "Leave Eli and Sam" });
+  await expect(ask).toContainText("Nobody can add you back");
+  expect(await sticksOut(page), "the question").toEqual([]);
+  await ask.getByRole("button", { name: "Leave", exact: true }).click();
+
+  await expect(list(page)).toBeVisible();
+  await expect(screen(page)).toHaveCount(0);
+  await expect(group).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual(["leave d-eli-sam"]);
+});

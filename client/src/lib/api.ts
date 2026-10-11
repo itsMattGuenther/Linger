@@ -679,6 +679,20 @@ export class AuthedApi {
   }
 
   /**
+   * Leave a group DM (#565, PROTOCOL §3.1). Nobody can put you back; the
+   * server tells every window and device you have that it's gone
+   * (`dm.remove`), so nothing here changes the store itself. A one-to-one DM
+   * is refused: it's that friend's row in the list.
+   */
+  leaveDm(id: RoomId): Promise<void> {
+    return this.#withAuth((accessToken) =>
+      requestVoid(this.baseUrl, "POST", `/dms/${encodeURIComponent(id)}/leave`, {
+        accessToken,
+      }),
+    );
+  }
+
+  /**
    * Everybody the host has removed (T-413). A separate call rather than a flag
    * on `GET /users`, because the roster is a list of people who are here and a
    * removed member is not one of them.

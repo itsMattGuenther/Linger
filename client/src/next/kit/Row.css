@@ -169,9 +169,10 @@
   color: var(--text-away);
 }
 
-/* Actions sit at the end of the row and appear on hover or keyboard focus.
-   While they show, the text column gives them room instead of running under
-   them, and the note steps aside. */
+/* Actions sit at the end of the row and appear on hover or keyboard focus,
+   and stay while one's menu is open, so what it opened isn't left pointing
+   at nothing (#565). While they show, the text column gives them room
+   instead of running under them, and the note steps aside. */
 .k-row-actions {
   position: absolute;
   top: 0;
@@ -182,7 +183,7 @@
   gap: var(--space-1);
 }
 
-.k-row:is(:hover, :focus-within) .k-row-actions {
+.k-row:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-actions {
   display: flex;
 }
 
@@ -198,11 +199,11 @@
   --row-reserve: calc(3 * var(--control-md) + 2 * var(--space-1) + var(--space-2));
 }
 
-.k-row[data-actions]:is(:hover, :focus-within) .k-row-text {
+.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-text {
   padding-right: var(--row-reserve);
 }
 
-.k-row[data-actions]:is(:hover, :focus-within) .k-row-note {
+.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-note {
   display: none;
 }
 
@@ -218,7 +219,7 @@
   margin-left: var(--space-2);
 }
 
-.k-row[data-actions]:is(:hover, :focus-within) .k-row-end {
+.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-end {
   display: none;
 }
 
