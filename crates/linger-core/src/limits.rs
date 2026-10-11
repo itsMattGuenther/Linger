@@ -156,6 +156,16 @@ pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
 pub const RESUME_BUFFER_FRAMES: usize = 500;
 pub const RESUME_WINDOW_MS: u64 = 120_000;
 
+/// The biggest frame a client may send the gateway, in bytes of JSON (PROTOCOL
+/// §8, #517). The server takes in a frame whole before it can look inside, so
+/// without a cap of its own a socket that never identifies could make it hold
+/// the WebSocket library's default, 64 MB. The largest frame an app sends is
+/// `voice.answer`, whose `sdp` is capped at [`MAX_VOICE_PAYLOAD_BYTES`]; JSON
+/// adds a little to that (a line break is written as four characters, not
+/// two), so twice the cap is room to spare and still small. It is tied to that
+/// cap so the two can't drift apart. Frames the server sends aren't capped.
+pub const MAX_CLIENT_FRAME_BYTES: usize = MAX_VOICE_PAYLOAD_BYTES * 2;
+
 /// Rate limits (ARCHITECTURE §7). Format: (events, per_seconds).
 /// A server's own emoji (SPEC §4.8, #359): pictures the host or a co-host adds
 /// for everybody on it, written `:name:` in a message.

@@ -1070,6 +1070,14 @@ type Frame = { op: string; d: unknown; s?: number }
 
 `s` is a monotonically increasing sequence number, present on server→client frames only.
 
+A client→server frame is one WebSocket text message of at most `MAX_CLIENT_FRAME_BYTES`
+(256 KiB) of JSON, twice `MAX_VOICE_PAYLOAD_BYTES`: the biggest frame a client sends is
+`voice.answer`, and JSON writes the line breaks in its `sdp` longer than they are. A
+bigger message ends the connection at once, before `identify` as after, and nothing in
+it is read: the server stops at the header that gives its size, or, for a message sent
+in pieces, at the piece that takes it past the cap (#517). Server→client frames have no
+such cap.
+
 ### Handshake
 
 ```

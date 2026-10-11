@@ -324,6 +324,71 @@ async fn resume_of_unknown_session_and_bad_identify_are_rejected() {
     assert_eq!(invalid["d"]["reason"], "unauthenticated");
 }
 
+/// #517. A frame bigger than any an app sends ends the connection, and it does
+/// before anybody has identified: otherwise a socket that never signs in can
+/// make the server hold up to 64 MB, the WebSocket library's default. The frame
+/// is a real identify with a good token, padded to one byte over the cap, so a
+/// server without the cap answers it with `ready`.
+#[tokio::test]
+async fn a_frame_over_the_cap_ends_the_connection_before_identify() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let cap = linger_core::limits::MAX_CLIENT_FRAME_BYTES;
+
+    let (mut ws, _) = connect_async(server.gateway_url()).await.unwrap();
+    let _hello = recv_json(&mut ws).await;
+    let identify = |client: &str| {
+        json!({ "op": "identify", "d": { "token": host.access_token, "client": client } })
+            .to_string()
+    };
+    let frame = identify(&"x".repeat(cap + 1 - identify("").len()));
+    assert_eq!(frame.len(), cap + 1);
+    // The server can hang up before all of it is written.
+    let _ = ws.send(WsMessage::Text(frame.into())).await;
+
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match ws.next().await {
+                Some(Ok(WsMessage::Text(text))) => {
+                    let frame: Value = serde_json::from_str(text.as_str()).expect("frame json");
+                    assert_ne!(frame["op"], "ready", "a frame over the cap was read");
+                }
+                Some(Ok(WsMessage::Close(_)) | Err(_)) | None => return,
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the connection stayed open");
+
+    // The next connection, an ordinary one, is none the worse for it.
+    connect_ready(&server, &host.access_token).await;
+}
+
+/// The cap leaves room for the biggest frame an app sends (#517): a
+/// `voice.answer` whose `sdp` is `MAX_VOICE_PAYLOAD_BYTES` exactly. SDP is
+/// short lines, and JSON writes each line break as four characters, not two,
+/// so the frame is bigger than the `sdp` in it. The connection stays open and
+/// answers the next heartbeat.
+#[tokio::test]
+async fn the_biggest_voice_answer_an_app_sends_fits_under_the_cap() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let (mut ws, _) = connect_ready(&server, &host.access_token).await;
+
+    let most = linger_core::limits::MAX_VOICE_PAYLOAD_BYTES;
+    let line = "a=rtcp-mux\r\n";
+    let mut sdp = line.repeat(most / line.len());
+    sdp.push_str(&"a".repeat(most - sdp.len()));
+    assert_eq!(sdp.len(), most);
+    let frame = json!({ "op": "voice.answer", "d": { "sdp": sdp } });
+    assert!(frame.to_string().len() > most + most / 10);
+    send_json(&mut ws, frame).await;
+
+    send_json(&mut ws, json!({ "op": "heartbeat", "d": { "s": 0 } })).await;
+    wait_for(&mut ws, "heartbeat_ack").await;
+}
+
 /// Whether the server has hung up on this socket: reads whatever is waiting,
 /// and answers true at a close or the end of the stream, false once it goes
 /// quiet.
