@@ -710,15 +710,23 @@ just under what a message shows: `--control-sm` tall, `--radius-pill`, the
 emoji and then its count in the UI face at `--text-meta`, tabular. Other
 people's are `--surface-control`; yours are `--react-mine-wash` with a
 `--react-mine-edge` outline, the palette's azure as Discord's blue, never the
-lamp. Hovering a pill names who left it. With reactions on, a message's right
-column holds a smiley to the left of its ···, so `--msg-actions-w` is two
-small buttons there, and quiet lines share it so every time lines up. The
-smiley-plus after the pills shows on hover (always on a phone) while a message
-has room for another. Both open the message box's own `EmojiPicker`
-(`floating`), above the opener when it fits; at six reactions it offers only
-those six and says why. On a phone, the hold sheet's `top` is the six emoji
-you use most and a smiley-plus. In high contrast a pill keeps a `ButtonText`
-edge, and yours is lit in `Highlight`.
+lamp. Hovering a pill names who left it. On a touch screen, where there's
+no hovering, holding a pill for `HOLD_MS` (half a second, `core/hold.ts`)
+opens the `PeopleCard` of who left it, headed "Reacted with" and the emoji,
+over the pill (#573). A finger that drifts more than `HOLD_SLOP_PX` is a
+scroll and opens nothing, and the hold is never also a tap: the click a
+release can leave behind is swallowed, and so are the phone's own long-press
+menu and the message's sheet. A tap on the pill with the card open closes
+it. The pill's own name already says who, for a screen reader. With
+reactions on, a message's right column holds a smiley to the left of its
+···, so `--msg-actions-w` is two small buttons there, and quiet lines share
+it so every time lines up. The smiley-plus after the pills shows on hover
+(always on a phone) while a message has room for another. Both open the
+message box's own `EmojiPicker` (`floating`), above the opener when it
+fits; at six reactions it offers only those six and says why. On a phone,
+the hold sheet's `top` is the six emoji you use most and a smiley-plus. In
+high contrast a pill keeps a `ButtonText` edge, and yours is lit in
+`Highlight`.
 
 **Shared audio** has Linger's own player, not the engine's (#247):
 WebKitGTK's controls drop their volume slider on anything under 136px
@@ -806,7 +814,9 @@ replaces an unread count.
   four names; past that three, then everybody else as small markers with their
   names as tooltips, and past sixteen markers the `people` mark as a small plain
   `IconButton` that opens everybody by name (`PeopleCard`, a `Popover` over
-  it, drawn on the page's body since the rows are placed by a transform). One
+  it, drawn on the page's body since the rows are placed by a transform; it
+  takes the focus as it opens and gives it back to its opener on Escape, its
+  close or Back, and a press anywhere else closes it too). One
   line, ending in "…" where it runs out; never a number. It starts a group of
   its own, so whoever speaks next is named. No actions, no hover. Somebody you
   blocked isn't in it. Its layout is `QuietLine.css`, which the poll's closed
@@ -951,6 +961,7 @@ built on the rows' own grid so nothing new lines up by eye:
 | A press anywhere on a title bar but a control moves the window, in the kit and in every window; beside the list that includes the tab row's empty space, and never a tab | `title-bars.spec.ts`, with Tauri's rule copied into the page (`tauri-drag.ts`) |
 | On Windows every window's title bar has minimize just before close, and it minimizes that window; on Linux there's none (#386) | `window-buttons.spec.ts`, `core/windowControls.test.ts` |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
+| A reaction pill held on a touch screen lists who left it, by name, over the pill, and adds nothing; it isn't the message's sheet; Escape gives the focus back to the pill and a tap elsewhere closes it; a tap still adds yours and takes it back; a finger that moves opens nothing (#573) | `next-reactions.spec.ts` › held on a phone; `core/hold.test.ts` |
 | An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |

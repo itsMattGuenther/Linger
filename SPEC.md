@@ -517,7 +517,12 @@ mockups led here; `docs/decisions.md` has what was tried and why.
 - **Any emoji, the server's own included** (§4.17), from the same picker the message
   box uses. A server's emoji is kept by its id, so renaming it keeps its reactions,
   and **removing it takes them with it**: a pill with no picture would look broken.
-- **Hover a pill for who**: "Jules and Dave reacted with :porch_light:".
+- **Hover a pill for who**: "Jules and Dave reacted with :porch_light:". A phone
+  has no hover, so there you **hold a pill** for half a second instead, as on
+  Discord (Matt, 2026-10-11, #573): a small card over it lists everybody who
+  left that emoji, by name. Holding it doesn't add yours; a tap still does. A
+  finger that moves is scrolling, and opens nothing. A touch screen on a
+  computer works the same way.
 - **Six different emoji on one message at most.** That fits one line on a computer,
   and keeps a message from becoming a wall of stickers. At six, the picker offers only
   those six and says why; anybody can still add theirs to one of them.
