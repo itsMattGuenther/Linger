@@ -259,7 +259,11 @@ for (const scale of [1, 2]) {
 
 test("from a name's card, Message asks the list window to show the DM and Knock knocks", async ({ page }) => {
   await open(page);
-  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  // Once nothing above is moving it: a click aimed where it was lands beside
+  // it, and opens nothing (#361, #572).
+  await still(name);
+  await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await card.getByRole("button", { name: "Knock" }).click();
   await expect(card.getByRole("button", { name: "Knocked" })).toBeVisible();
@@ -275,7 +279,9 @@ test("a knock the server refuses for the hour says, on the card, when you can kn
   // The fake server refuses as the real one does: 429, RATE_LIMITED, and
   // retry_after_ms of 19 minutes 10 seconds, read by the real REST client.
   await open(page, "room=r-general&limit");
-  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  await still(name);
+  await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await card.getByRole("button", { name: "Knock" }).click();
   await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
