@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CardSafety } from "../../core/safety";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
@@ -99,13 +99,28 @@ export function ServerBody({
   const oneLine = useOneLine() && !onPhone();
   // The host or a co-host (#424): the ways from an empty place to Hosting.
   const host = hostsHere(model.me?.user);
-  const toggle = (fold: Fold) =>
-    setFolded((current) => {
-      const next = new Set(current);
-      if (next.has(fold)) next.delete(fold);
-      else next.add(fold);
-      return next;
-    });
+  const toggle = useCallback(
+    (fold: Fold) =>
+      setFolded((current) => {
+        const next = new Set(current);
+        if (next.has(fold)) next.delete(fold);
+        else next.add(fold);
+        return next;
+      }),
+    [],
+  );
+  // One for each heading, the same every time, so a heading isn't drawn again for nothing (#533).
+  const toggles = useMemo(
+    (): Record<Fold, () => void> => ({
+      rooms: () => toggle("rooms"),
+      more: () => toggle("more"),
+      people: () => toggle("people"),
+      away: () => toggle("away"),
+      others: () => toggle("others"),
+      offline: () => toggle("offline"),
+    }),
+    [toggle],
+  );
   const open = (fold: Fold) => !folded.has(fold);
   const talking = (user: User) => speaking?.has(user.id) ?? false;
   const id = (fold: Fold) => `nx-${idPrefix}${fold}`;
@@ -153,112 +168,80 @@ export function ServerBody({
     opener.current?.focus();
   };
 
+  // The same few functions for every row, so a row is drawn again only when
+  // what it shows changes (#533): they read the newest of everything else.
+  const knockNow = useRef(knock);
+  knockNow.current = knock;
+  const openPersonNow = useRef(onOpenPerson);
+  openPersonNow.current = onOpenPerson;
+  const hands = useMemo<PersonHands>(() => {
+    const cardFor = (row: PersonRow, rowButton: HTMLButtonElement, problem?: string) => {
+      opener.current = rowButton;
+      const box = rowButton.getBoundingClientRect();
+      setCard({ row, anchor: { top: box.top, bottom: box.bottom }, problem });
+    };
+    return {
+      card: (row, rowButton) => {
+        if (rowButton) cardFor(row, rowButton);
+      },
+      knock: (row, rowButton) =>
+        void knockNow.current(row.user).then((result) => {
+          // A knock that didn't go says why, on their card.
+          if (!result.ok && rowButton) cardFor(row, rowButton, result.problem);
+        }),
+      activate: (row) => {
+        setCard(null);
+        openPersonNow.current?.(row.user, row.dm);
+      },
+    };
+  }, []);
   const person = (row: PersonRow) => (
-    <Row
+    <PersonItem
       key={row.user.id}
-      lead={{ kind: "person", person: markerFor(row.user, row.state) }}
-      lines={oneLine ? "one" : "two"}
-      // The lights are on only for somebody here (#301): idle, away and
-      // offline names are the dim grey, and their mark says which.
-      title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
-      // Written to you and not read: said in words too, never a count (SPEC §4.2).
-      // One line per person has no second line, so the status goes in the words (#197).
-      label={`${row.user.display_name}, ${row.note}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}
-      trailing={row.inVoice ? <VoiceGlyph speaking={talking(row.user)} /> : undefined}
-      note={row.note}
-      detail={row.line ?? undefined}
-      detailTip
-      away={row.state === "away"}
-      // Their DM with you lives on their row (#351): unread, it's lit (#291).
-      lit={row.fresh}
+      row={row}
+      oneLine={oneLine}
+      talking={talking(row.user)}
       // Their card is open, or they're showing beside the list (#351).
       selected={card?.row.user.id === row.user.id || (showing !== null && row.dm === showing)}
       knocked={knocked.has(row.user.id)}
-      actions={[
-        // Their card, for a look at their fields without opening them (#351).
-        <IconButton
-          key="card"
-          icon="card"
-          size="sm"
-          label={`${row.user.display_name}'s card`}
-          onClick={(event) => {
-            const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
-            if (!rowButton) return;
-            opener.current = rowButton;
-            const box = rowButton.getBoundingClientRect();
-            setCard({ row, anchor: { top: box.top, bottom: box.bottom } });
-          }}
-        />,
-        <IconButton
-          key="knock"
-          icon="knock"
-          size="sm"
-          label={knocked.has(row.user.id) ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
-          disabled={knocked.has(row.user.id)}
-          // Offline, it stays greyed out and says why, on hover, on focus
-          // and to a screen reader (#288).
-          unavailable={row.state === "offline" ? knockOfflineLine(row.user.display_name) : undefined}
-          onClick={(event) => {
-            const rowButton = event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
-            void knock(row.user).then((result) => {
-              // A knock that didn't go says why, on their card.
-              if (result.ok || !rowButton) return;
-              opener.current = rowButton;
-              const box = rowButton.getBoundingClientRect();
-              setCard({ row, anchor: { top: box.top, bottom: box.bottom }, problem: result.problem });
-            });
-          }}
-        />,
-      ]}
-      // Them beside the list, card and conversation (#351).
-      onActivate={() => {
-        setCard(null);
-        onOpenPerson?.(row.user, row.dm);
-      }}
+      hands={hands}
     />
   );
 
+  const openRoomNow = useRef(onOpenRoom);
+  openRoomNow.current = onOpenRoom;
+  const openDmNow = useRef(onOpenDm);
+  openDmNow.current = onOpenDm;
+  const leaveDmNow = useRef(onLeaveDm);
+  leaveDmNow.current = onLeaveDm;
+  const openRoom = useCallback((id: RoomId) => openRoomNow.current?.(id), []);
+  const openDm = useCallback((id: RoomId) => openDmNow.current?.(id), []);
+  const leaveDm = useCallback((id: RoomId) => leaveDmNow.current?.(id) ?? Promise.resolve(null), []);
   // A group DM: a small private room, drawn with the rooms (#351).
   const groupRow = (dm: DmRow) => (
-    <Row
-      key={dm.id}
-      lead={
-        dm.people.length === 1 && dm.people[0]
-          ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
-          : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
-      }
-      lines="one"
-      title={dm.label}
-      fresh={dm.fresh}
-      // Addressed to you: unread, it's lit, not only bold (#291).
-      lit={dm.fresh}
-      selected={dm.id === showing}
-      // Its ⋯ menu, with Leave (#565). Never on a one-to-one DM, which has
-      // no row of its own.
-      actions={onLeaveDm && dm.leavable ? [<LeaveGroup key="more" label={dm.label} last={dm.last} onLeave={() => onLeaveDm(dm.id)} />] : undefined}
-      onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
-    />
+    <GroupItem key={dm.id} dm={dm} selected={dm.id === showing} onOpen={onOpenDm ? openDm : undefined} onLeave={onLeaveDm ? leaveDm : undefined} />
   );
   const rooms = splitRooms(model.rooms);
   const roomRow = (room: RoomRow) => (
-    <Row
-      key={room.id}
-      lead={{ kind: "room" }}
-      lines="one"
-      title={room.name}
-      fresh={room.fresh}
-      selected={room.id === showing}
-      label={roomLabel(room.name, room.people.length, room.voice)}
-      end={
-        room.people.length > 0 || room.voice ? (
-          <span className="nx-list-room-end">
-            {room.voice ? <VoiceGlyph speaking={room.people.some(talking)} /> : null}
-            <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} max={ROOM_DOTS} />
-          </span>
-        ) : undefined
-      }
-      onActivate={onOpenRoom ? () => onOpenRoom(room.id) : undefined}
-    />
+    <RoomItem key={room.id} room={room} selected={room.id === showing} talking={room.people.some(talking)} onOpen={onOpenRoom ? openRoom : undefined} />
+  );
+  // The + on Rooms: a new group, from the people here.
+  const canStart = onStartDm !== undefined;
+  const startLabel = on("Start a group");
+  const startGroup = useMemo(
+    () =>
+      canStart ? (
+        <IconButton
+          icon="plus"
+          label={startLabel}
+          size="sm"
+          onClick={(event) => {
+            pickerOpener.current = event.currentTarget;
+            setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
+          }}
+        />
+      ) : undefined,
+    [canStart, startLabel],
   );
   const nobodyElse = model.people.here.length + model.people.away.length + model.people.offline.length === 0;
   // A big server (#197): the people you talk to, then everyone else folded.
@@ -274,23 +257,11 @@ export function ServerBody({
       <SectionLabel
         label="Rooms"
         open={open("rooms")}
-        onToggle={() => toggle("rooms")}
+        onToggle={toggles.rooms}
         controls={id("rooms")}
         // Folded, it's lit while a group DM inside hasn't been read (#291).
         lit={!open("rooms") && model.groups.some((group) => group.fresh)}
-        action={
-          onStartDm ? (
-            <IconButton
-              icon="plus"
-              label={on("Start a group")}
-              size="sm"
-              onClick={(event) => {
-                pickerOpener.current = event.currentTarget;
-                setPicking({ bottom: event.currentTarget.getBoundingClientRect().bottom });
-              }}
-            />
-          ) : undefined
-        }
+        action={startGroup}
       />
       {open("rooms") ? (
         <div id={id("rooms")}>
@@ -305,7 +276,7 @@ export function ServerBody({
           ) : null}
           {rooms.more.length > 0 ? (
             <>
-              <SectionLabel label="More rooms" level="group" open={open("more")} onToggle={() => toggle("more")} controls={id("more")} />
+              <SectionLabel label="More rooms" level="group" open={open("more")} onToggle={toggles.more} controls={id("more")} />
               {open("more") ? (
                 <div id={id("more")}>
                   <RowList label={on("More rooms")}>{rooms.more.map(roomRow)}</RowList>
@@ -319,7 +290,7 @@ export function ServerBody({
       <SectionLabel
         label="People"
         open={open("people")}
-        onToggle={() => toggle("people")}
+        onToggle={toggles.people}
         controls={id("people")}
         // Folded, it's lit while somebody inside has written to you (#291, #351).
         lit={!open("people") && everyone.some((row) => row.fresh)}
@@ -338,19 +309,19 @@ export function ServerBody({
           )}
           {split && split.others.length > 0 ? (
             <>
-              <SectionLabel label="Everyone else" level="group" open={open("others")} onToggle={() => toggle("others")} controls={id("others")} />
+              <SectionLabel label="Everyone else" level="group" open={open("others")} onToggle={toggles.others} controls={id("others")} />
               <Group fold="others" rows={split.others} open={open("others")} id={id("others")} label={on("Everyone else")} person={person} />
             </>
           ) : null}
           {!split && model.people.away.length > 0 ? (
             <>
-              <SectionLabel label="Away" level="group" open={open("away")} onToggle={() => toggle("away")} controls={id("away")} />
+              <SectionLabel label="Away" level="group" open={open("away")} onToggle={toggles.away} controls={id("away")} />
               <Group fold="away" rows={model.people.away} open={open("away")} id={id("away")} label={on("Away")} person={person} />
             </>
           ) : null}
           {model.people.offline.length > 0 ? (
             <>
-              <SectionLabel label="Offline" level="group" open={open("offline")} onToggle={() => toggle("offline")} controls={id("offline")} />
+              <SectionLabel label="Offline" level="group" open={open("offline")} onToggle={toggles.offline} controls={id("offline")} />
               <Group fold="offline" rows={model.people.offline} open={open("offline")} id={id("offline")} label={on("Offline")} person={person} />
             </>
           ) : null}
@@ -395,6 +366,147 @@ export function ServerBody({
     </>
   );
 }
+
+/** What a person's row does: the same functions for every row (#533). */
+interface PersonHands {
+  /** Their card, beside the row it came from. */
+  card: (row: PersonRow, rowButton: HTMLButtonElement | null) => void;
+  knock: (row: PersonRow, rowButton: HTMLButtonElement | null) => void;
+  /** Them beside the list, card and conversation (#351). */
+  activate: (row: PersonRow) => void;
+}
+
+/** The row's own main button, which a card opened from the row goes back to. */
+function rowButtonOf(button: HTMLElement): HTMLButtonElement | null {
+  return button.closest("li")?.querySelector<HTMLButtonElement>(".k-row-main") ?? null;
+}
+
+/** A person, on their row: drawn again only when what it shows changes (#533). */
+const PersonItem = memo(function PersonItem({
+  row,
+  oneLine,
+  talking,
+  selected,
+  knocked,
+  hands,
+}: {
+  row: PersonRow;
+  oneLine: boolean;
+  talking: boolean;
+  selected: boolean;
+  knocked: boolean;
+  hands: PersonHands;
+}) {
+  return (
+    <Row
+      lead={{ kind: "person", person: markerFor(row.user, row.state) }}
+      lines={oneLine ? "one" : "two"}
+      // The lights are on only for somebody here (#301): idle, away and
+      // offline names are the dim grey, and their mark says which.
+      title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
+      // Written to you and not read: said in words too, never a count (SPEC §4.2).
+      // One line per person has no second line, so the status goes in the words (#197).
+      label={`${row.user.display_name}, ${row.note}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}
+      trailing={row.inVoice ? <VoiceGlyph speaking={talking} /> : undefined}
+      note={row.note}
+      detail={row.line ?? undefined}
+      detailTip
+      away={row.state === "away"}
+      // Their DM with you lives on their row (#351): unread, it's lit (#291).
+      lit={row.fresh}
+      selected={selected}
+      knocked={knocked}
+      actions={[
+        // Their card, for a look at their fields without opening them (#351).
+        <IconButton
+          key="card"
+          icon="card"
+          size="sm"
+          label={`${row.user.display_name}'s card`}
+          onClick={(event) => hands.card(row, rowButtonOf(event.currentTarget))}
+        />,
+        <IconButton
+          key="knock"
+          icon="knock"
+          size="sm"
+          label={knocked ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
+          disabled={knocked}
+          // Offline, it stays greyed out and says why, on hover, on focus
+          // and to a screen reader (#288).
+          unavailable={row.state === "offline" ? knockOfflineLine(row.user.display_name) : undefined}
+          onClick={(event) => hands.knock(row, rowButtonOf(event.currentTarget))}
+        />,
+      ]}
+      onActivate={() => hands.activate(row)}
+    />
+  );
+});
+
+/** A room, on its row (#533). */
+const RoomItem = memo(function RoomItem({
+  room,
+  selected,
+  talking,
+  onOpen,
+}: {
+  room: RoomRow;
+  selected: boolean;
+  talking: boolean;
+  onOpen?: (id: RoomId) => void;
+}) {
+  return (
+    <Row
+      lead={{ kind: "room" }}
+      lines="one"
+      title={room.name}
+      fresh={room.fresh}
+      selected={selected}
+      label={roomLabel(room.name, room.people.length, room.voice)}
+      end={
+        room.people.length > 0 || room.voice ? (
+          <span className="nx-list-room-end">
+            {room.voice ? <VoiceGlyph speaking={talking} /> : null}
+            <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} max={ROOM_DOTS} />
+          </span>
+        ) : undefined
+      }
+      onActivate={onOpen ? () => onOpen(room.id) : undefined}
+    />
+  );
+});
+
+/** A group DM, on its row with the rooms (#351, #533). */
+const GroupItem = memo(function GroupItem({
+  dm,
+  selected,
+  onOpen,
+  onLeave,
+}: {
+  dm: DmRow;
+  selected: boolean;
+  onOpen?: (id: RoomId) => void;
+  onLeave?: (id: RoomId) => Promise<string | null>;
+}) {
+  return (
+    <Row
+      lead={
+        dm.people.length === 1 && dm.people[0]
+          ? { kind: "person", person: markerFor(dm.people[0].user, dm.people[0].state) }
+          : { kind: "group", people: dm.people.map(({ user, state }) => markerFor(user, state)) }
+      }
+      lines="one"
+      title={dm.label}
+      fresh={dm.fresh}
+      // Addressed to you: unread, it's lit, not only bold (#291).
+      lit={dm.fresh}
+      selected={selected}
+      // Its ⋯ menu, with Leave (#565). Never on a one-to-one DM, which has
+      // no row of its own.
+      actions={onLeave && dm.leavable ? [<LeaveGroup key="more" label={dm.label} last={dm.last} onLeave={() => onLeave(dm.id)} />] : undefined}
+      onActivate={onOpen ? () => onOpen(dm.id) : undefined}
+    />
+  );
+});
 
 /**
  * A room row's accessible name. The markers are decoration, so the words say

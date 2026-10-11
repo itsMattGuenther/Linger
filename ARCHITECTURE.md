@@ -663,6 +663,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
   looks fine. Both Silkscreen faces went that way (#318). CI's web job runs
   `scripts/csp-assets.mjs` on each build to hold it.
 - Markdown rendering: allowlist-based sanitizer, no raw HTML passthrough, ever.
+  The one place the server draws markdown is the export's pages (#585,
+  `export/body.rs`): the app's subset, parsed to a tree and written out with
+  every piece of text escaped, links through the same `http`/`https`/`mailto`
+  gate, and a page policy that refuses every script.
 
 **The origin split is enforced, not just advertised.** `LINGER_MEDIA_DOMAIN` defaults to
 `cdn.<LINGER_DOMAIN>`, and the server refuses to start if it is the same host as the app.

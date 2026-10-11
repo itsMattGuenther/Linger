@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Button, Icon, Spinner } from "../../kit";
 import type { ListNote } from "../../core/notes";
 import "./ListNotes.css";
@@ -9,7 +10,7 @@ import "./ListNotes.css";
  * Hosting…, #582), a new version. Only while there is something to say;
  * otherwise nothing is drawn at all.
  */
-export function ListNotes({
+export const ListNotes = memo(function ListNotes({
   notes,
   onUpdate,
   onRetry,
@@ -48,7 +49,7 @@ export function ListNotes({
       ))}
     </div>
   );
-}
+});
 
 /** Each line's mark, where it isn't a spinner. */
 const MARK = { keyring: "key", host: "house", update: "download" } as const;

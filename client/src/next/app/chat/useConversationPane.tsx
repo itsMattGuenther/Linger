@@ -29,7 +29,8 @@ import {
   startedTyping,
   typingRunsOut,
   trimHistory,
-  useServers,
+  useServersAmong,
+  useServersPick,
   sendReport,
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
@@ -73,6 +74,15 @@ const REFUSED_MS = 8_000;
 type HeaderKnockNow = { phase: "knocking" | "knocked"; problem?: undefined } | { phase: "idle"; problem: string };
 
 const NO_MESSAGES: readonly Message[] = [];
+const NO_SERVERS: readonly string[] = [];
+
+/** Where your voice seat is, as a tab id, on whichever server has it. */
+function voiceSeatOf(servers: Readonly<Record<string, GatewayState>>): string | null {
+  for (const [server, state] of Object.entries(servers)) {
+    if (state.myVoice) return keyOf({ server, roomId: state.myVoice.roomId });
+  }
+  return null;
+}
 const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
 const NO_MENTIONS: readonly MentionPerson[] = [];
 
@@ -111,6 +121,12 @@ export interface PaneHost {
   voiceControl?: (press: VoiceControlQuestion) => void;
   /** Something was typed in a conversation's box: a preview tab of it is kept (#351). */
   onTyped?: (conversation: string) => void;
+  /**
+   * The servers this place has tabs on, for their names and marks. Only
+   * these, the showing conversation's and the open card's are followed, so
+   * an event on another server draws nothing here (#533).
+   */
+  among?: readonly string[];
 }
 
 export interface ConversationPane {
@@ -143,8 +159,18 @@ export interface ConversationPane {
  * name opens. The place that holds it decides which conversation shows and
  * what surrounds it.
  */
-export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped }: PaneHost): ConversationPane {
-  const servers = useServers();
+export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped, among = NO_SERVERS }: PaneHost): ConversationPane {
+  // A name in a conversation opens that person's card (PPL-6), the same card
+  // the list shows, beside the name. Your own opens yours, as friends see it
+  // (#271).
+  const [card, setCard] = useState<{ server: string; userId: string; anchor: { top: number; bottom: number; left: number } } | null>(null);
+  const activeServer = active?.server ?? null;
+  const cardServer = card?.server ?? null;
+  const followed = useMemo(
+    () => [...new Set([...among, ...(activeServer === null ? [] : [activeServer]), ...(cardServer === null ? [] : [cardServer])])],
+    [among, activeServer, cardServer],
+  );
+  const servers = useServersAmong(followed);
   const now = useNow();
   // Bumped when the cursor should go in the box.
   const [focusAsk, setFocusAsk] = useState(1);
@@ -205,12 +231,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   }, [firstMessage, goToMessage]);
 
   // Where your voice seat is, as a tab id, on whichever server has it.
-  const voiceTab = useMemo(() => {
-    for (const [server, state] of Object.entries(servers)) {
-      if (state.myVoice) return keyOf({ server, roomId: state.myVoice.roomId });
-    }
-    return null;
-  }, [servers]);
+  const voiceTab = useServersPick(voiceSeatOf);
 
   // With several servers every conversation says where it's from: a stripe
   // on its tab in the server's color, and its name in the header (MULTI-6).
@@ -330,10 +351,6 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     },
     [api],
   );
-  // A name in a conversation opens that person's card (PPL-6), the same card
-  // the list shows, beside the name. Your own opens yours, as friends see it
-  // (#271).
-  const [card, setCard] = useState<{ server: string; userId: string; anchor: { top: number; bottom: number; left: number } } | null>(null);
   // The name that opened it gets the keyboard back when it closes.
   const cardOpener = useRef<HTMLElement | null>(null);
   const activeNow = useRef(active);

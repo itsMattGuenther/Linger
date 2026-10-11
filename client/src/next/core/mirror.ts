@@ -152,10 +152,10 @@ export async function followOwner(bus: Bus): Promise<Following> {
     bus.listen<SharedMessage>(SHARED, (message) => {
       if (message.v !== PROTOCOL || signedOut.has(message.server)) return;
       if (live.has(message.server)) adoptShared(message.server, message.shared);
-      // Still catching up: the newest is kept, and applied over the snapshot
-      // once it's adopted. The owner sends one whenever a value changes, so
-      // the newest is never older than the snapshot.
-      else if (!settled || catching.has(message.server)) sharedMeanwhile.set(message.server, message.shared);
+      // Still catching up: the newest of each field is kept, and applied
+      // over the snapshot once it's adopted. The owner sends a field whenever
+      // it changes, so the newest is never older than the snapshot.
+      else if (!settled || catching.has(message.server)) sharedMeanwhile.set(message.server, { ...sharedMeanwhile.get(message.server), ...message.shared });
     }),
     bus.listen<SignedOutMessage>(SIGNED_OUT, (message) => {
       if (message.v === PROTOCOL) letGo(message.server);

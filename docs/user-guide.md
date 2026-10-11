@@ -433,6 +433,12 @@ link's words look like one web address and it goes somewhere else, the real site
 shows beside the words in grey, like **www.paypal.com** (evil.example), so you can
 tell without pointing at it.
 
+A time written with a zone, like "8PM CDT" or "20:00 UTC", has a faint dotted
+underline. Point at it, or tap it on a phone, to see it in your own clock: "9:00
+PM for you", or "3:00 AM for you, the next day". It works in messages, a room's
+message of the day and polls. Zones that could mean more than one place, like CST
+(US Central or China) or IST, are left alone.
+
 To mention somebody, type `@` and start their name or their username. A list
 of people opens by the box: **Up** and **Down** move through it, **Enter** or
 **Tab** (or a click) puts them in, and **Escape** closes it and keeps what you
@@ -1096,11 +1102,14 @@ Any member can ask the server for a copy of **everything on it** — every
 message, every file — at any time. You do not need the host's permission, and
 there is nothing to ask for.
 
-What you get is a single zip. Inside it: one plain text file per room in the
-order things were said, a `media` folder with every file anybody shared, and an
-index listing who shared what and when. It opens with an ordinary text editor
-and an ordinary file browser. **You do not need Linger, or an account, or the
-server to still exist**, which is the entire point.
+What you get is a single zip. Unzip it and double-click **Open me.html**: it
+opens in your web browser with every room and DM down the side, laid out the way
+Linger lays them out, pictures and all. Videos and sound play right there. The
+same conversations are there as plain text (`.md`) for a text editor, and as
+data (`.json`) for anybody who wants to write a program around them. A `media`
+folder holds every file anybody shared, and an index lists who shared what and
+when. **You do not need Linger, or an account, or the server to still exist**,
+which is the entire point.
 
 **Settings → Account & App → Take Everything with You.** Press **Export
 everything**, wait (it takes a moment on a busy server), then download it. The file opens in your
