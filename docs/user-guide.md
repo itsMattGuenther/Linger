@@ -679,7 +679,12 @@ window, so you don't need the list in front to mute:
 - The arrow beside the room's name opens its conversation.
 
 With the list tucked away in the tray, the tray icon's menu has **Mute** and
-**Leave voice**.
+**Leave voice**. The icon itself shows you're still in voice: the door gets
+an amber microphone while your microphone is on, and a grey crossed-out one
+while you're muted or deafened. With push-to-talk on, it shows the amber one
+the whole time you're in voice, held key or not. On Windows and macOS,
+pointing at it says where you are ("Linger · in voice in #general, muted").
+Leave voice and the plain door comes back.
 
 **Push to talk** is in **Settings → Sound & Voice**. With it on, your
 microphone is open only while you hold the **talk key**: **Right Ctrl** unless

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- The small mark in voice with the microphone live (#601): the door
+       (linger-door.svg) with the kit's `mic` on a lamp badge, the lamp being
+       "your voice" (docs/design/system.md). The tray shows this file at 64px
+       (client/src-tauri/icons/tray-voice.png) while you're in voice. -->
+  <path d="M5.2 21.2 V8.6 A6.8 6.8 0 0 1 18.8 8.6 V21.2 Z" fill="#2a3550" stroke="#2ec5f2" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M8.4 13 V9.4 A3.6 3.6 0 0 1 15.6 9.4 V13 Z" fill="#ffc674"/>
+  <circle cx="15.4" cy="16.6" r="1.15" fill="#f3b55c"/>
+  <rect x="2.6" y="21" width="18.8" height="1.9" rx=".95" fill="#f3b55c"/>
+  <circle cx="18" cy="17.4" r="5.9" fill="#f3b55c" stroke="#131a28" stroke-width="1.4"/>
+  <g transform="translate(18 17.4) scale(.62) translate(-8 -8)">
+    <rect x="5.6" y="1.8" width="4.8" height="8" rx="2.4" fill="#1c1206"/>
+    <path d="M3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2" stroke="#1c1206" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

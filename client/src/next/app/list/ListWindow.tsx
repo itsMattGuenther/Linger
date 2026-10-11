@@ -66,7 +66,7 @@ import {
   type VoiceControlQuestion,
   type WindowOpener,
 } from "../../core/share";
-import { desktopOf, firstTimeInTray, loadCloseList, trayNotice, type VoicePlace } from "../../core/closing";
+import { desktopOf, firstTimeInTray, loadCloseList, placeWords, trayNotice, type VoicePlace } from "../../core/closing";
 import { cardSafety } from "../../core/safety";
 import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
@@ -753,10 +753,6 @@ function Servers({
   // The tray menu's Mute and Leave (decision 5): the only ones in reach while
   // the list is hidden in the tray. The shell greys them out out of voice.
   const trayMuted = voiceState?.myVoice?.muted ?? false;
-  useEffect(() => {
-    if (!isTauri()) return;
-    void invoke("next_tray_voice", { inVoice: voiceServer !== null, muted: trayMuted }).catch(() => undefined);
-  }, [voiceServer, trayMuted]);
   const trayVoice = useRef<(action: string) => void>(() => undefined);
   trayVoice.current = (action) => {
     if (voiceServer === null) return;
@@ -815,6 +811,21 @@ function Servers({
   const voicePlace = useRef<VoicePlace | null>(null);
   const myVoice = voiceState?.myVoice ?? null;
   voicePlace.current = voice && myVoice ? { where: voice.where, room: !voiceState?.dms.some((dm) => dm.id === myVoice.roomId) } : null;
+
+  // The tray says where voice is (decision 5, #601): its Mute and Leave are
+  // enabled only in voice, and its icon and tooltip show whether you're in
+  // voice and your microphone is live, so a hidden list can't leave it open
+  // unnoticed. Leaving, being taken out and dropping out all end here as
+  // out of voice, which puts the plain icon back.
+  const trayDeafened = myVoice?.deafened ?? false;
+  const trayPushToTalk = myVoice?.pushToTalk ?? false;
+  const trayPlace = voicePlace.current ? placeWords(voicePlace.current) : null;
+  useEffect(() => {
+    if (!isTauri()) return;
+    const inVoice = voiceServer !== null;
+    const where = inVoice ? { deafened: trayDeafened, pushToTalk: trayPushToTalk, place: trayPlace } : {};
+    void invoke("next_tray_voice", { inVoice, muted: trayMuted, ...where }).catch(() => undefined);
+  }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace]);
   useEffect(() => {
     if (!isTauri()) return;
     let stop: (() => void) | null = null;

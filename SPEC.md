@@ -157,7 +157,9 @@ takes the window, and ◧ goes back to the list. A tab can be popped out into a 
 of its own and put back, and Settings → Windows can open every conversation in a
 window of its own instead.
 Closing the list keeps Linger running in the tray, with its sounds and voice; a
-setting makes closing it quit instead. The first time the list is closed on a
+setting makes closing it quit instead. The tray icon shows whether you're in voice
+and whether your microphone is live, and its tooltip says so in words (#601), so a
+hidden list can't leave a microphone open unnoticed. The first time the list is closed on a
 computer, and never again, a notification says where Linger went and how to quit
 it, and that you're still in voice if you are (#400): Windows 11 hides a new
 tray icon under the ^ by the clock. Another starts Linger when you sign in to

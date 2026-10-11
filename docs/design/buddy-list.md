@@ -173,7 +173,12 @@ name set in a big serif or a small pixel face never changes the spacing.
 sign's cyan, its window lit amber, and the lamp-lit step under it. The porch
 picture can't be read at the 16–20px the mark gets; its door can. The title
 bar draws it from tokens (`app/LogoMark.tsx`), and the tray icon is the same
-drawing (`src-tauri/icons/tray.png`). Four earlier pixel-drawn tries (a pixel
+drawing (`src-tauri/icons/tray.png`). In voice it carries a badge in its
+lower right (#601): the kit's `mic` on the lamp while your microphone is on
+(`linger-door-voice.svg`, `tray-voice.png`), and `micOff` on grey while
+you're muted or deafened (`linger-door-muted.svg`, `tray-muted.png`). At
+16px the microphone is mush and the badge's colour carries it; the tooltip
+says it in words. Four earlier pixel-drawn tries (a pixel
 "L", the logo's three dots, the lamp, the word) were turned down. The app
 icon is still the porch picture the friend group chose.
 

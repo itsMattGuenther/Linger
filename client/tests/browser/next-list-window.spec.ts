@@ -434,7 +434,7 @@ test("the list tells the desktop what closing it does: the tray by default, and 
   );
 });
 
-test("the tray menu's Mute and Leave follow voice, and do what they say while the list is hidden", async ({ page }) => {
+test("the tray menu's Mute and Leave, and the tray icon, follow voice, and do what they say while the list is hidden", async ({ page }) => {
   await open(page, "?one");
   const trayLines = async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice"));
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
@@ -449,10 +449,12 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
       { timeout: 10_000 },
     )
     .toBe(1);
-  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`);
+  // Where, and whether the microphone is live, for the icon and its tooltip (#601).
+  const inGeneral = { deafened: false, pushToTalk: false, place: "in #general" };
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: false, ...inGeneral })}`);
   await page.evaluate(() => window.core?.tray("mute"));
   await expect(bar.getByRole("button", { name: "Muted" })).toBeVisible();
-  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`);
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: true, ...inGeneral })}`);
   await page.evaluate(() => window.core?.tray("leave"));
   await expect(bar).toHaveCount(0);
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
