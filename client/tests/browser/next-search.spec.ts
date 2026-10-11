@@ -377,30 +377,31 @@ for (const width of [340, 780]) {
   test.describe(`built on the system, ${width} wide`, () => {
     test.use({ viewport: { width, height: 720 } });
 
-    test("every control 24, 32 or 40px, hits 48px, nothing cut off or past the edge", async ({ page }) => {
-      for (const [query, words] of [
-        ["", ""],
-        ["", "porch"],
-        ["?long", "porch"],
-        ["?servers", "porch"],
-        ["?servers&long", "porch"],
-        ["?servers&start=guild", "porch"],
-        ["", "speakers"],
-        ["?fail", "porch"],
-        ["?many", "porch"],
-      ] as const) {
+    // One test a page: as one test, the nine pages took 10 seconds on CI,
+    // a third of its time, and ran out of it on a busy machine (#528).
+    for (const [query, words] of [
+      ["", ""],
+      ["", "porch"],
+      ["?long", "porch"],
+      ["?servers", "porch"],
+      ["?servers&long", "porch"],
+      ["?servers&start=guild", "porch"],
+      ["", "speakers"],
+      ["?fail", "porch"],
+      ["?many", "porch"],
+    ] as const) {
+      test(`every control 24, 32 or 40px, hits 48px, nothing cut off or past the edge: ${query || "one server"}, ${words ? `"${words}"` : "nothing typed"}`, async ({ page }) => {
         await open(page, `${query}${query ? "&" : "?"}w=${width}`);
         if (words) {
           await box(page).fill(words);
           await expect(page.locator(".nx-hit-main, .nx-find-status[data-problem]").first()).toBeVisible();
         }
-        const where = `${query} ${words}`;
-        expect(await misSized(page), where).toEqual([]);
-        expect(await clipped(page), where).toEqual([]);
-        for (const height of await hits(page).evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height))) expect(height, where).toBe(48);
-        expect(await page.locator("[data-screen='search']").evaluate((pane) => pane.scrollWidth <= pane.clientWidth + 1), where).toBe(true);
-      }
-    });
+        expect(await misSized(page)).toEqual([]);
+        expect(await clipped(page)).toEqual([]);
+        for (const height of await hits(page).evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height))) expect(height).toBe(48);
+        expect(await page.locator("[data-screen='search']").evaluate((pane) => pane.scrollWidth <= pane.clientWidth + 1)).toBe(true);
+      });
+    }
 
     test("the words start on the box's edge, and mixed servers' words on the picker's", async ({ page }) => {
       await open(page, `?w=${width}`);
