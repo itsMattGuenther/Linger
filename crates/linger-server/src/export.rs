@@ -481,6 +481,10 @@ struct MediaRow {
 /// A server emoji's picture (#359) is an unposted upload too, of whoever added
 /// it. It isn't one of their files, and it stays out of every archive: the
 /// messages there keep `:name:` as they were written.
+///
+/// A file on a deleted message stays out too, as the message does (#502). The
+/// delete takes it, so this is for one the store couldn't delete right then,
+/// which waits for the sweeper.
 async fn media_rows(state: &AppState, asker: UserId) -> anyhow::Result<Vec<MediaRow>> {
     let rows = sqlx::query(&format!(
         "SELECT a.object_key, a.filename, a.mime, a.size_bytes, a.uploader_id,
@@ -491,7 +495,7 @@ async fn media_rows(state: &AppState, asker: UserId) -> anyhow::Result<Vec<Media
            AND (
              (a.message_id IS NULL AND a.uploader_id = ?
               AND a.id NOT IN (SELECT attachment_id FROM custom_emoji))
-             OR {visible}
+             OR (m.deleted_at IS NULL AND {visible})
            )
          ORDER BY a.created_at, a.id",
         visible = crate::repo::rooms::visible_rooms("m"),
@@ -939,9 +943,16 @@ fn write_zip(target: &Path, root: &str, entries: &[Entry]) -> anyhow::Result<()>
             // An archive of a server with a lot of video is over 4 GB, which is
             // where zip needs its 64-bit fields.
             .large_file(true);
+        // A file deleted while the archive was being built (#502) is left
+        // out, like one already gone when its bytes were looked for, rather
+        // than costing somebody the whole archive. Opened before its entry
+        // is started, so it leaves no empty one behind.
+        let mut source = match std::fs::File::open(&entry.source) {
+            Ok(source) => source,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
+        };
         zip.start_file(format!("{root}/{}", entry.name), options)?;
-
-        let mut source = std::fs::File::open(&entry.source)?;
         std::io::copy(&mut source, &mut zip)?;
     }
 
@@ -1157,6 +1168,41 @@ mod tests {
             assert!(!safe.starts_with('.'), "{hostile:?} became {safe:?}");
             assert!(!safe.is_empty(), "{hostile:?} became empty");
         }
+    }
+
+    /// A message deleted while an archive builds takes its file at once
+    /// (#502), so the file can vanish between being found and being zipped.
+    /// The archive goes on without it.
+    #[test]
+    fn a_file_deleted_while_the_archive_builds_is_left_out() {
+        use std::io::Read;
+
+        let dir = tempfile::tempdir().unwrap();
+        let kept = dir.path().join("kept.txt");
+        std::fs::write(&kept, b"still here").unwrap();
+        let entries = [
+            Entry {
+                name: "media/gone.jpg".to_string(),
+                source: dir.path().join("gone.jpg"),
+                compress: false,
+            },
+            Entry {
+                name: "media/kept.txt".to_string(),
+                source: kept,
+                compress: true,
+            },
+        ];
+        let target = dir.path().join("out.zip");
+        write_zip(&target, "linger-test", &entries).unwrap();
+
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&target).unwrap()).unwrap();
+        assert_eq!(
+            zip.file_names().collect::<Vec<_>>(),
+            ["linger-test/media/kept.txt"]
+        );
+        let mut text = String::new();
+        zip.by_index(0).unwrap().read_to_string(&mut text).unwrap();
+        assert_eq!(text, "still here");
     }
 
     #[test]

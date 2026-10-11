@@ -17,6 +17,13 @@
 //! the message, so every item has a cursor of its own to use as a key; `before`
 //! ignores it.
 //!
+//! **Ids are compared as the bytes they are stored as**, not as `hex(id)`.
+//! Every id is 16 bytes, and hex strings of the same length sort the way the
+//! bytes they spell do, so it is the same order either way — but only the
+//! bytes can be read off an index, and sorting by `hex(id)` made SQLite sort
+//! every file on the server to hand back one page (#518). A test below holds
+//! the two orders to each other. The cursor on the wire is unchanged.
+//!
 //! **A message's links stay together.** Each source is limited by *group* — an
 //! upload is a group of one, a message's links are a group of however many it
 //! has — and the merge stops on a group boundary. Otherwise a page could end
@@ -54,9 +61,9 @@ pub struct Query {
 #[derive(Debug, Clone)]
 pub struct Cursor {
     pub created_at: i64,
-    /// Uppercase, because that is what SQLite's `hex()` returns and the
-    /// comparison happens in SQL.
-    pub id_hex: String,
+    /// The id's 16 bytes, as stored, so SQL can compare and look it up as
+    /// the column it is.
+    pub id: [u8; 16],
 }
 
 impl Cursor {
@@ -68,14 +75,12 @@ impl Cursor {
             .next()
             .and_then(|value| value.parse::<i64>().ok())
             .ok_or_else(|| ApiError::validation("That's not a media cursor."))?;
-        let id_hex = parts
+        let mut id = [0u8; 16];
+        parts
             .next()
-            .filter(|value| value.len() == 32 && value.chars().all(|c| c.is_ascii_hexdigit()))
+            .and_then(|value| hex::decode_to_slice(value, &mut id).ok())
             .ok_or_else(|| ApiError::validation("That's not a media cursor."))?;
-        Ok(Self {
-            created_at,
-            id_hex: id_hex.to_ascii_uppercase(),
-        })
+        Ok(Self { created_at, id })
     }
 }
 
@@ -114,7 +119,7 @@ pub async fn page(
         b.starred
             .cmp(&a.starred)
             .then(b.created_at.cmp(&a.created_at))
-            .then(b.id_hex.cmp(&a.id_hex))
+            .then(b.id.cmp(&a.id))
     });
 
     let mut items = Vec::new();
@@ -131,7 +136,7 @@ pub async fn page(
 struct Group {
     starred: bool,
     created_at: i64,
-    id_hex: String,
+    id: [u8; 16],
     items: Vec<MediaItem>,
 }
 
@@ -145,17 +150,20 @@ fn wants_attachments(kind: Option<MediaKind>) -> bool {
 /// Whether the item a cursor points at is a starred upload. Anything that is
 /// not an upload cannot be starred, so a miss is simply "no".
 async fn is_starred(db: &SqlitePool, cursor: &Cursor) -> Result<bool, ApiError> {
-    let found: Option<(Option<i64>,)> =
-        sqlx::query_as("SELECT starred_at FROM attachments WHERE hex(id) = ?")
-            .bind(&cursor.id_hex)
-            .fetch_optional(db)
-            .await?;
+    let found: Option<(Option<i64>,)> = sqlx::query_as(IS_STARRED_SQL)
+        .bind(cursor.id.to_vec())
+        .fetch_optional(db)
+        .await?;
     Ok(matches!(found, Some((Some(_),))))
 }
 
-/// `created_at`/`id` comparison against the cursor, as SQL. Two binds.
+/// The id is bound as the 16 bytes it is stored as. Comparing `hex(id)` to a
+/// string instead gives the same answer by reading every file's row (#518).
+pub(crate) const IS_STARRED_SQL: &str = "SELECT starred_at FROM attachments WHERE id = ?";
+
+/// `created_at`/`id` comparison against the cursor, as SQL. Three binds.
 fn cursor_sql(table: &str) -> String {
-    format!("({table}.created_at < ? OR ({table}.created_at = ? AND hex({table}.id) < ?))")
+    format!("({table}.created_at < ? OR ({table}.created_at = ? AND {table}.id < ?))")
 }
 
 fn mime_list(kind: MediaKind) -> Vec<&'static str> {
@@ -186,17 +194,21 @@ fn excerpt(body: &str) -> Option<String> {
     Some(links::shorten(trimmed, MAX_MEDIA_EXCERPT_CHARS))
 }
 
-async fn attachment_groups(
-    db: &SqlitePool,
-    config: &Config,
-    query: &Query,
-    past_starred: bool,
-) -> Result<Vec<Group>, ApiError> {
+/// The uploads query for one page.
+///
+/// It reads files in the collection's own order (starred first, then newest)
+/// off `idx_attachments_media_order` (migration 0017), and stops at the
+/// page's limit, looking up each file's message as it goes. `CROSS JOIN` is SQLite's
+/// way of saying "in this order": there are far fewer files than messages and
+/// the order is the files', so starting from the messages means reading every
+/// one of them to sort a year of files for one page, which is what happened
+/// before #518.
+pub(crate) fn attachment_sql(query: &Query, past_starred: bool) -> String {
     // An upload that is not on a message has not been shared with anybody yet,
     // and a message that was deleted took what it was carrying out of the room.
     let mut sql = format!(
         "SELECT a.*, m.room_id AS msg_room_id, m.body AS msg_body
-         FROM attachments a JOIN messages m ON m.id = a.message_id
+         FROM attachments a CROSS JOIN messages m ON m.id = a.message_id
          WHERE a.state = 'complete' AND m.deleted_at IS NULL
            AND {visible}",
         visible = crate::repo::rooms::visible_rooms("m"),
@@ -227,10 +239,17 @@ async fn attachment_groups(
             ));
         }
     }
-    sql.push_str(
-        " ORDER BY (a.starred_at IS NOT NULL) DESC, a.created_at DESC, hex(a.id) DESC LIMIT ?",
-    );
+    sql.push_str(" ORDER BY (a.starred_at IS NOT NULL) DESC, a.created_at DESC, a.id DESC LIMIT ?");
+    sql
+}
 
+async fn attachment_groups(
+    db: &SqlitePool,
+    config: &Config,
+    query: &Query,
+    past_starred: bool,
+) -> Result<Vec<Group>, ApiError> {
+    let sql = attachment_sql(query, past_starred);
     let mut request = sqlx::query(&sql);
     // The viewer is bound first because the clause is first. Every query in
     // this module puts it there, so there is one order to remember.
@@ -253,7 +272,7 @@ async fn attachment_groups(
         request = request
             .bind(cursor.created_at)
             .bind(cursor.created_at)
-            .bind(&cursor.id_hex);
+            .bind(cursor.id.to_vec());
     }
     request = request.bind(i64::from(query.limit));
 
@@ -270,7 +289,7 @@ fn attachment_group(row: &SqliteRow, config: &Config) -> Result<Group, ApiError>
     let room_id =
         RoomId::from_slice(&row.get::<Vec<u8>, _>("msg_room_id")).map_err(anyhow::Error::from)?;
     let body: String = row.get("msg_body");
-    let id_hex = hex::encode_upper(attachment.id.as_bytes());
+    let id = *attachment.id.as_bytes();
     let item = MediaItem {
         kind: kind_of(&attachment.mime),
         cursor: cursor_of(attachment.created_at, &attachment.id.to_string()),
@@ -286,17 +305,19 @@ fn attachment_group(row: &SqliteRow, config: &Config) -> Result<Group, ApiError>
     Ok(Group {
         starred: item.starred_at.is_some(),
         created_at: item.created_at,
-        id_hex,
+        id,
         items: vec![item],
     })
 }
 
-/// Links, grouped by the message they were typed in.
+/// The links query for one page.
 ///
 /// The inner `SELECT` picks the messages this page covers; the outer one takes
 /// every link on each of them. That is what keeps a message's links together
-/// when the page ends.
-async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiError> {
+/// when the page ends. The inner one starts from the links (`CROSS JOIN`, as
+/// in [`attachment_sql`]): about one message in a hundred has one, and
+/// starting from the messages read all of them (#518).
+pub(crate) fn link_sql(query: &Query) -> String {
     // First, so it is bound first — and inside `filters` rather than beside it,
     // because `filters` is what gets re-aliased into the inner query. A DM's
     // links have to be excluded from both halves or the outer query happily
@@ -318,24 +339,28 @@ async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiEr
         filters.push_str(&format!(" AND {}", cursor_sql("m")));
     }
 
-    let sql = format!(
+    format!(
         "SELECT l.url, l.position, m.id AS message_id, m.room_id, m.author_id, m.body,
                 m.created_at, p.state AS preview_state, p.title, p.icon
          FROM message_links l
          JOIN messages m ON m.id = l.message_id
          LEFT JOIN link_previews p ON p.url = l.url
          WHERE {filters} AND m.id IN (
-             SELECT m2.id FROM message_links l2 JOIN messages m2 ON m2.id = l2.message_id
+             SELECT m2.id FROM message_links l2 CROSS JOIN messages m2 ON m2.id = l2.message_id
              WHERE {inner}
              GROUP BY m2.id
-             ORDER BY m2.created_at DESC, hex(m2.id) DESC
+             ORDER BY m2.created_at DESC, m2.id DESC
              LIMIT ?
          )
-         ORDER BY m.created_at DESC, hex(m.id) DESC, l.position ASC",
+         ORDER BY m.created_at DESC, m.id DESC, l.position ASC",
         filters = filters,
         inner = filters.replace("m.", "m2."),
-    );
+    )
+}
 
+/// Links, grouped by the message they were typed in.
+async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiError> {
+    let sql = link_sql(query);
     let mut request = sqlx::query(&sql);
     // The filters appear twice — once outside, once in the subquery — so every
     // bind is made twice, in the same order.
@@ -354,7 +379,7 @@ async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiEr
             request = request
                 .bind(cursor.created_at)
                 .bind(cursor.created_at)
-                .bind(&cursor.id_hex);
+                .bind(cursor.id.to_vec());
         }
     }
     request = request.bind(i64::from(query.limit));
@@ -412,7 +437,7 @@ async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiEr
             _ => groups.push(Group {
                 starred: false,
                 created_at,
-                id_hex: hex::encode_upper(message_id.as_bytes()),
+                id: *message_id.as_bytes(),
                 items: vec![item],
             }),
         }
@@ -446,7 +471,7 @@ async fn pin_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiErr
     if query.before.is_some() {
         sql.push_str(&format!(" AND {}", cursor_sql("m")));
     }
-    sql.push_str(" ORDER BY m.created_at DESC, hex(m.id) DESC LIMIT ?");
+    sql.push_str(" ORDER BY m.created_at DESC, m.id DESC LIMIT ?");
 
     let mut request = sqlx::query(&sql);
     request = request.bind(query.viewer.to_vec());
@@ -463,7 +488,7 @@ async fn pin_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiErr
         request = request
             .bind(cursor.created_at)
             .bind(cursor.created_at)
-            .bind(&cursor.id_hex);
+            .bind(cursor.id.to_vec());
     }
     request = request.bind(i64::from(query.limit));
 
@@ -476,7 +501,7 @@ async fn pin_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiErr
             Ok(Group {
                 starred: false,
                 created_at,
-                id_hex: hex::encode_upper(message_id.as_bytes()),
+                id: *message_id.as_bytes(),
                 items: vec![MediaItem {
                     kind: MediaKind::Pin,
                     cursor: cursor_of(created_at, &message_id.to_string()),
@@ -539,7 +564,7 @@ mod tests {
         let raw = cursor_of(1_724_000_000_000, &id.to_string());
         let parsed = Cursor::parse(&raw).unwrap();
         assert_eq!(parsed.created_at, 1_724_000_000_000);
-        assert_eq!(parsed.id_hex, hex::encode_upper(id.as_bytes()));
+        assert_eq!(&parsed.id, id.as_bytes());
     }
 
     #[test]
@@ -548,7 +573,81 @@ mod tests {
         let raw = format!("{}:2", cursor_of(17, &id.to_string()));
         let parsed = Cursor::parse(&raw).unwrap();
         assert_eq!(parsed.created_at, 17);
-        assert_eq!(parsed.id_hex, hex::encode_upper(id.as_bytes()));
+        assert_eq!(&parsed.id, id.as_bytes());
+    }
+
+    /// SQL orders and pages ids as the bytes they are stored as, where it used
+    /// to use `hex(id)` (#518). Nobody can see the difference only if the two
+    /// are the same order, which this holds them to: ids that differ in each
+    /// byte position, at the digits where hex turns from `9` to `A`, a burst of
+    /// real ones minted together, and random ones.
+    #[tokio::test]
+    async fn ids_sort_and_page_the_same_as_bytes_as_they_did_as_hex() {
+        let db = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE t (id BLOB NOT NULL)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let mut ids: Vec<[u8; 16]> = Vec::new();
+        for position in 0..16 {
+            for byte in [
+                0x00, 0x09, 0x0a, 0x0f, 0x10, 0x90, 0x99, 0x9a, 0xa0, 0xa9, 0xf0, 0xff,
+            ] {
+                let mut id = [0x55; 16];
+                id[position] = byte;
+                ids.push(id);
+            }
+        }
+        ids.extend((0..300).map(|_| *AttachmentId::new().as_bytes()));
+        ids.extend((0..300).map(|_| rand::random::<[u8; 16]>()));
+        ids.sort_unstable();
+        ids.dedup();
+        for id in &ids {
+            sqlx::query("INSERT INTO t (id) VALUES (?)")
+                .bind(id.to_vec())
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+
+        let column = |sql: &'static str| {
+            let db = db.clone();
+            async move {
+                sqlx::query_scalar::<_, Vec<u8>>(sql)
+                    .fetch_all(&db)
+                    .await
+                    .unwrap()
+            }
+        };
+        let by_hex = column("SELECT id FROM t ORDER BY hex(id) DESC").await;
+        let by_bytes = column("SELECT id FROM t ORDER BY id DESC").await;
+        assert_eq!(by_hex, by_bytes, "SQLite orders hex and bytes differently");
+
+        // `page` merges its three sources by the same ids, in Rust.
+        let mut merged = ids.clone();
+        merged.sort_by(|a, b| b.cmp(a));
+        let merged: Vec<Vec<u8>> = merged.iter().map(|id| id.to_vec()).collect();
+        assert_eq!(merged, by_bytes, "the merge orders ids differently");
+
+        // And a cursor at any of them picks out the same rows either way.
+        for id in ids.iter().step_by(7) {
+            let (as_hex,): (i64,) = sqlx::query_as("SELECT count(*) FROM t WHERE hex(id) < ?")
+                .bind(hex::encode_upper(id))
+                .fetch_one(&db)
+                .await
+                .unwrap();
+            let (as_bytes,): (i64,) = sqlx::query_as("SELECT count(*) FROM t WHERE id < ?")
+                .bind(id.to_vec())
+                .fetch_one(&db)
+                .await
+                .unwrap();
+            assert_eq!(
+                as_hex,
+                as_bytes,
+                "a cursor at {} pages differently",
+                hex::encode(id)
+            );
+        }
     }
 
     #[test]

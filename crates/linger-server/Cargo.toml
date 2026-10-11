@@ -59,4 +59,7 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # The raid-sized voice load test (examples/voice_load.rs) stands in for the
 # app's WebRTC with the same library the server forwards with.
 str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }
+# A paused clock, so a test can wait out the gateway's two-minute resume window
+# in no time (#522).
+tokio = { workspace = true, features = ["test-util"] }
 tokio-tungstenite = "0.29"

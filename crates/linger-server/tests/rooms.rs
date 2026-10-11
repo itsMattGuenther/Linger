@@ -150,3 +150,65 @@ async fn server_patch_validates_the_palette_key() {
     assert_eq!(good.accent_key.map(|c| c.0), Some("azure".to_string()));
     assert_eq!(good.name, "the garage");
 }
+
+/// A room's name and topic, and the server's name, can't turn themselves or
+/// the words beside them around (#488): the characters that change the
+/// direction of text are taken out, on the way in, whether the room is being
+/// made or changed.
+#[tokio::test]
+async fn names_and_topics_lose_the_characters_that_turn_text_around() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let client = reqwest::Client::new();
+
+    let created: Room = client
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({
+            "slug": "garage", "name": "\u{202E}egarag", "topic": "drives\u{2066} and drivers"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(created.name, "egarag");
+    assert_eq!(created.topic.as_deref(), Some("drives and drivers"));
+
+    let updated: Room = client
+        .patch(server.url(&format!("/rooms/{}", created.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "name": " garage\u{202C} ", "topic": "\u{202B}בחוץ!\u{200F}" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(updated.name, "garage");
+    // A direction mark stays: it's how "בחוץ!" keeps its "!" at the end.
+    assert_eq!(updated.topic.as_deref(), Some("בחוץ!\u{200F}"));
+
+    // A name of nothing but them is no name.
+    let empty = client
+        .patch(server.url(&format!("/rooms/{}", created.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "name": "\u{202E}" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(empty.status(), 422);
+
+    let named: ServerInfo = client
+        .patch(server.url("/server"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "name": "the \u{202D}porch" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(named.name, "the porch");
+}
