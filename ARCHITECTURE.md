@@ -722,22 +722,35 @@ image's header first, works out what decoding it will take, and refuses it as un
 of the memory is asked for. Neither side of a picture or a GIF's canvas may pass 16 384
 px either.
 
-- **A still picture** counts the decoded picture, the decoder's own working memory, the
-  one full-size copy re-encoding makes (none when it already decodes as RGB for a JPEG,
-  or RGBA for anything else), and the working memory of resizing it for its display copy.
-  A thumbnail for the blurhash is taken from the picture as decoded, not from a copy.
+- **A still picture** counts the file, the decoded picture, the decoder's own working
+  memory, the one full-size copy re-encoding makes (none when it already decodes as RGB
+  for a JPEG, or RGBA for anything else), and the working memory of resizing it for its
+  display copy. `image` limits what the PNG decoder allocates but gives the JPEG and
+  WebP decoders no limit, so what those hold was measured and is counted per pixel: a
+  copy of the file for both; for a progressive JPEG, its coefficients, two bytes a pixel
+  for each channel (a baseline JPEG, what cameras and phones write, needs none); for
+  WebP, seven bytes a pixel. So the biggest progressive JPEG taken is about 40
+  megapixels, and the biggest WebP about 35, against about 100 for a baseline JPEG.
 - **A GIF** comes out of its decoder one whole canvas per frame, however small each
-  frame was in the file. Its frames are counted first, without decoding them, and
-  frames × canvas as RGBA may not pass the same 512 MB. Each frame is then encoded as
-  soon as it is decoded, so only one is held at a time; the ceiling also bounds the time
-  and disk a GIF costs.
+  frame was in the file, and a frame bigger than the canvas is decoded whole before the
+  canvas clips it. Its frames are counted first, without decoding them, each as the
+  bigger of the canvas and itself, and together as RGBA they may not pass the same 512
+  MB. Each frame is then encoded as soon as it is decoded, so only one is held at a time.
+  The ceiling also bounds the time a GIF costs. The encoder chooses a frame's colours at
+  speed 10 of 30: measured on a desktop core, a GIF at the limit takes about 8 seconds,
+  where speed 1 took nearly two minutes.
 
-The clean file is written to disk as it is encoded, not built up in memory first. And
-only two images are worked on at once, uploads, video posters and the display-copy pass
-together (`media::image_job`), so pictures cost the server 1 GB at most, inside the 2 GB
-droplet `docs/vps-setup.md` starts from. A `complete` that arrives while two are under
-way waits its turn. One whose request is dropped keeps its place until its work ends,
-because the memory is still in use until then.
+The clean picture is written to a new file beside the upload as it is encoded, a PNG
+included (`image`'s own PNG writer would hold all of it in memory first), and put in the
+upload's place by a rename once it is whole: one that fails part-way leaves the upload
+as it was. Only two images are worked on at once, uploads, video posters and the
+display-copy pass together (`media::ImageLane`), and the file is read only once its
+turn has come, so pictures cost the server about 1 GB at most, inside the 2 GB droplet
+`docs/vps-setup.md` starts from. A `complete` waits up to 10 seconds for its turn, well
+inside the app's 30, then answers `RATE_LIMITED` and leaves the upload alive to be
+completed again (PROTOCOL §6); a video in the same wait is stored without a blurhash. One
+whose request is dropped keeps its place until its work ends, because the memory is
+still in use until then.
 
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and

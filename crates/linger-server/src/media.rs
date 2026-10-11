@@ -34,21 +34,31 @@ pub(crate) const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// Decoded-pixel guards against a small file that claims enormous dimensions.
 const MAX_IMAGE_DIMENSION: u32 = 16_384;
 /// What one image may cost in memory while it is worked on, whatever its
-/// type (#487). For a still picture that is the decoded picture, the decoder's
-/// own working memory and every full-size copy made from it, together. For a
-/// GIF it is also the ceiling on its frames counted as whole pictures, though
-/// only one is held at a time: that bounds the time and disk it costs too.
-/// A file a few hundred bytes long can claim a canvas of gigabytes, and a
-/// failed allocation stops the whole server, so this is checked before the
-/// memory is asked for, never after.
+/// type (#487): the file itself, the decoded picture, the decoder's own
+/// working memory, and every full-size copy made from it, together. For a GIF
+/// it is also the ceiling on its frames counted as whole pictures, though only
+/// one is held at a time: that bounds the time it costs too. A file a few
+/// hundred bytes long can claim a canvas of gigabytes, and a failed allocation
+/// stops the whole server, so this is checked before the memory is asked for,
+/// never after.
 const MAX_DECODE_ALLOC: u64 = 512 * 1024 * 1024;
 /// How many images are worked on at once: uploads, video posters and the
 /// display-copy catch-up together. Each can cost up to [`MAX_DECODE_ALLOC`],
-/// so this many times that is the most pictures can cost the server: 1 GB,
-/// inside the 2 GB of the droplet `docs/vps-setup.md` starts from. Two rather
-/// than one so that one slow animation doesn't hold up every photo behind it.
+/// so this many times that is the most pictures can cost the server: about
+/// 1 GB, inside the 2 GB of the droplet `docs/vps-setup.md` starts from. Two
+/// rather than one so that one slow picture doesn't hold up every one behind.
 const IMAGE_JOBS: usize = 2;
 static IMAGE_WORK: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(IMAGE_JOBS);
+/// How long an upload waits for one of those places before it is told the
+/// server is busy. The app gives a request 30 seconds, and the picture still
+/// has to be worked on once its turn comes.
+const IMAGE_WAIT: Duration = Duration::from_secs(10);
+/// When to try again after being told the server is busy with pictures.
+const IMAGE_BUSY_RETRY_MS: u64 = 5_000;
+/// How hard the GIF encoder works at a frame of more than 256 colours, from 1
+/// (slowest) to 30. At 1 a 2048 × 2048 frame took 3.5 s to choose its colours;
+/// at 10 it takes 0.24 s and looks the same in a conversation (#487).
+const GIF_SPEED: i32 = 10;
 /// Blurhash is meant to be a smear of colour, so it is computed from a thumbnail.
 const BLURHASH_MAX_EDGE: u32 = 64;
 /// The longest side of an image's display copy (#382, PROTOCOL §6). A photo in
@@ -123,21 +133,14 @@ pub async fn process(
                      Send it as a file, or shrink it first.",
                 ));
             }
-            let bytes = tokio::fs::read(path).await.map_err(io)?;
+            // The place in the queue comes first and the file is read inside
+            // it, so an upload waiting its turn holds none of its bytes.
+            let lane = ImageLane::wait_at_most(IMAGE_WAIT).await?;
             let owned_mime = mime.clone();
-            let owned_path = path.to_path_buf();
-            // The clean picture replaces the original in the same file as it
-            // is encoded, rather than being built up in memory first: the
-            // original is already in `bytes`, and an image that fails here is
-            // refused and its file thrown away.
-            let clean = image_job(move || {
-                let mut file =
-                    std::io::BufWriter::new(std::fs::File::create(&owned_path).map_err(io)?);
-                let clean = reencode_image(&bytes, &owned_mime, &mut file)?;
-                file.into_inner().map_err(|err| io(err.into_error()))?;
-                Ok::<_, ApiError>(clean)
-            })
-            .await??;
+            let staged = path.to_path_buf();
+            let clean = lane
+                .run(move || reencode_in_place(&staged, &owned_mime))
+                .await??;
             out.size_bytes = tokio::fs::metadata(path).await.map_err(io)?.len();
             out.mime = clean.mime.clone();
             out.filename = corrected_filename(&out.filename, &mime, &clean.mime);
@@ -152,16 +155,25 @@ pub async fn process(
             out.width = probe.as_ref().and_then(|p| p.width);
             out.height = probe.as_ref().and_then(|p| p.height);
             if let Some(poster) = poster_frame(path).await {
-                let frame = poster.clone();
                 // A poster is a picture of the video's own size, and the video
                 // is as hostile as any upload: it waits its turn like an image.
-                let described = image_job(move || {
-                    decode_limited(&frame, |_, _, _| 0)
+                // A video whose turn doesn't come in time is stored without
+                // a blurhash, as one is on a server without ffmpeg.
+                let described = match ImageLane::wait_at_most(IMAGE_WAIT).await {
+                    Ok(lane) => {
+                        let frame = poster.clone();
+                        lane.run(move || {
+                            decode_limited(&frame, |_, _, _| 0).ok().map(|decoded| {
+                                (decoded.width(), decoded.height(), blurhash_of(&decoded))
+                            })
+                        })
+                        .await
                         .ok()
-                        .map(|decoded| (decoded.width(), decoded.height(), blurhash_of(&decoded)))
-                })
-                .await;
-                if let Ok(Some((width, height, blurhash))) = described {
+                        .flatten()
+                    }
+                    Err(_) => None,
+                };
+                if let Some((width, height, blurhash)) = described {
                     out.width = out.width.or(Some(width));
                     out.height = out.height.or(Some(height));
                     out.blurhash = blurhash;
@@ -182,26 +194,59 @@ fn io(err: std::io::Error) -> ApiError {
     ApiError::internal()
 }
 
-/// Decode or encode a picture off the async threads, no more than
-/// [`IMAGE_JOBS`] at a time across the server (#487).
-///
-/// The place in the queue goes into the blocking work and is given up when
-/// the work ends, not when the caller stops waiting: an upload whose request
-/// is dropped still holds its memory until its decode is done, and the next
-/// one must not start beside it as if it had finished.
-pub(crate) async fn image_job<T: Send + 'static>(
-    work: impl FnOnce() -> T + Send + 'static,
-) -> Result<T, ApiError> {
-    let place = IMAGE_WORK
-        .acquire()
+/// A place in the image queue: one of [`IMAGE_JOBS`] across the server
+/// (#487). Every picture is read into memory and decoded inside one.
+pub(crate) struct ImageLane {
+    /// Held only to be let go of: the place frees when this does.
+    _place: tokio::sync::SemaphorePermit<'static>,
+}
+
+impl ImageLane {
+    /// Wait for a place for as long as it takes. For work nobody is waiting
+    /// on, like the display-copy catch-up.
+    pub(crate) async fn wait() -> Result<Self, ApiError> {
+        IMAGE_WORK
+            .acquire()
+            .await
+            .map(|place| Self { _place: place })
+            .map_err(|_| ApiError::internal())
+    }
+
+    /// Wait for a place, but not past `limit`: then the answer is that the
+    /// server is busy with pictures, while the person who sent this one is
+    /// still waiting to hear, rather than a request that runs out of time.
+    pub(crate) async fn wait_at_most(limit: Duration) -> Result<Self, ApiError> {
+        tokio::time::timeout(limit, Self::wait())
+            .await
+            .unwrap_or_else(|_| Err(busy()))
+    }
+
+    /// Do the work off the async threads, holding this place until it ends.
+    ///
+    /// The place goes into the work and is given up when the work is done,
+    /// not when the caller stops waiting: an upload whose request is dropped
+    /// still holds its memory until its decode is over, and the next one must
+    /// not start beside it as if it had finished.
+    pub(crate) async fn run<T: Send + 'static>(
+        self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, ApiError> {
+        tokio::task::spawn_blocking(move || {
+            let _place = self;
+            work()
+        })
         .await
-        .map_err(|_| ApiError::internal())?;
-    tokio::task::spawn_blocking(move || {
-        let _place = place;
-        work()
-    })
-    .await
-    .map_err(|_| ApiError::internal())
+        .map_err(|_| ApiError::internal())
+    }
+}
+
+/// Too many pictures ahead of this one. It says nothing about the picture,
+/// so the upload it belongs to can be completed again (PROTOCOL §6).
+fn busy() -> ApiError {
+    let mut refusal = ApiError::rate_limited(IMAGE_BUSY_RETRY_MS);
+    refusal.message =
+        "The server is busy with other pictures. Send this one again in a moment.".to_string();
+    refusal
 }
 
 // ---------------------------------------------------------------------------
@@ -303,16 +348,55 @@ fn limits(budget: u64) -> image::Limits {
     limits
 }
 
-/// Decode a still picture inside [`MAX_DECODE_ALLOC`], counting the full-size
-/// copies the caller will make from it (#487).
+/// Re-encode the upload at `path`, writing the clean picture beside it and
+/// putting it in the upload's place only once it is whole (#487).
+///
+/// Writing straight over the upload would leave half a picture behind one
+/// that fails part-way, and an encode still running for a request nobody is
+/// waiting on any more would write into the file a retry assembles under the
+/// same name. A rename is all or nothing.
+fn reencode_in_place(path: &Path, mime: &str) -> Result<CleanImage, ApiError> {
+    let bytes = std::fs::read(path).map_err(io)?;
+    let beside = path.parent().ok_or_else(ApiError::internal)?;
+    let mut clean_file = tempfile::NamedTempFile::new_in(beside).map_err(io)?;
+    let clean = {
+        let mut out = std::io::BufWriter::new(clean_file.as_file_mut());
+        let clean = reencode_image(&bytes, mime, &mut out)?;
+        out.flush().map_err(io)?;
+        clean
+    };
+    drop(bytes);
+    // Stored as the upload was, not as the private scratch file it began as.
+    let permissions = std::fs::metadata(path).map_err(io)?.permissions();
+    clean_file
+        .as_file()
+        .set_permissions(permissions)
+        .map_err(io)?;
+    clean_file.persist(path).map_err(|err| io(err.error))?;
+    Ok(clean)
+}
+
+/// Decode a still picture inside [`MAX_DECODE_ALLOC`] (#487). See
+/// [`decode_within`].
+fn decode_limited(
+    bytes: &[u8],
+    copies: impl FnOnce(u32, u32, image::ColorType) -> u64,
+) -> Result<image::DynamicImage, ApiError> {
+    decode_within(bytes, MAX_DECODE_ALLOC, copies)
+}
+
+/// Decode a still picture inside `budget`, counting with it the file, what
+/// its decoder holds that `image` doesn't count, and the full-size copies the
+/// caller will make from it.
 ///
 /// `copies` is told the picture's size and the type it decodes as, read from
 /// its header alone, and answers how many bytes of copies will follow. Only
-/// what is left of the budget goes to the decoder, which counts the picture
-/// and its own working memory against it. A picture that would fit, but not
-/// with its copies, is refused before any of it is decoded.
-fn decode_limited(
+/// what is left goes to the decoder, which counts the picture itself and what
+/// it allocates through `image`'s limits against that. A picture that would
+/// fit, but not with all the rest, is refused before any of it is decoded.
+fn decode_within(
     bytes: &[u8],
+    budget: u64,
     copies: impl FnOnce(u32, u32, image::ColorType) -> u64,
 ) -> Result<image::DynamicImage, ApiError> {
     use image::ImageDecoder;
@@ -322,17 +406,55 @@ fn decode_limited(
             .with_guessed_format()
             .map_err(|_| unreadable())
     };
-    let header = reader()?.into_decoder().map_err(|_| unreadable())?;
+    let first = reader()?;
+    let format = first.format();
+    let header = first.into_decoder().map_err(|_| unreadable())?;
     let (width, height) = header.dimensions();
-    let copies = copies(width, height, header.color_type());
+    let held = bytes.len() as u64
+        + decoder_scratch(format, bytes, width, height)?
+        + copies(width, height, header.color_type());
     drop(header);
-    let left = MAX_DECODE_ALLOC
-        .checked_sub(copies)
-        .ok_or_else(unreadable)?;
+    let left = budget.checked_sub(held).ok_or_else(unreadable)?;
 
     let mut reader = reader()?;
     reader.limits(limits(left));
     reader.decode().map_err(|_| unreadable())
+}
+
+/// What a decoder holds besides the picture it makes, where `image` gives it
+/// no limit to count against (#487, measured on 8000 × 8000 pictures).
+///
+/// A JPEG decoder keeps a copy of the file. A progressive JPEG keeps every
+/// coefficient until its last pass, two bytes a pixel for each channel: 6.2
+/// bytes a pixel in all for a colour one, where a baseline JPEG, what cameras
+/// and phones write, holds a few rows at a time. The WebP decoder works
+/// through a buffer of its own, up to 6.6 bytes a pixel for a lossy picture
+/// with transparency. The PNG decoder is given the limit itself.
+fn decoder_scratch(
+    format: Option<image::ImageFormat>,
+    bytes: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<u64, ApiError> {
+    let pixels = u64::from(width) * u64::from(height);
+    let file = bytes.len() as u64;
+    Ok(match format {
+        Some(image::ImageFormat::Jpeg) => {
+            // The header as the decoder that will do the work reads it.
+            let mut jpeg =
+                zune_jpeg::JpegDecoder::new(zune_jpeg::zune_core::bytestream::ZCursor::new(bytes));
+            jpeg.decode_headers().map_err(|_| unreadable())?;
+            let info = jpeg.info().ok_or_else(unreadable)?;
+            let coefficients = if info.sof.is_progressive() {
+                pixels * (2 * u64::from(info.components) + 1)
+            } else {
+                0
+            };
+            file + coefficients
+        }
+        Some(image::ImageFormat::WebP) => file + pixels * 7,
+        _ => 0,
+    })
 }
 
 /// The bytes of a full-size copy of a `width` × `height` picture converted
@@ -359,7 +481,7 @@ fn display_scratch(width: u32, height: u32) -> u64 {
 }
 
 /// Re-encode an image so nothing of the original file survives except pixels,
-/// writing the clean picture to `out`.
+/// writing the clean picture to `out` as it is encoded.
 ///
 /// GIFs go through frame by frame so an animation stays animated. WebP has no
 /// encoder in the `image` crate, so a WebP comes back as a PNG — same picture,
@@ -392,14 +514,13 @@ fn reencode_image(bytes: &[u8], mime: &str, out: &mut impl Write) -> Result<Clea
     let (width, height) = (picture.width(), picture.height());
     let blurhash = blurhash_of(&picture);
 
-    let (pixels, color) = (picture.as_bytes(), picture.color().into());
-    let written = if mime == "image/jpeg" {
+    if mime == "image/jpeg" {
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut *out, 88)
-            .write_image(pixels, width, height, color)
+            .write_image(picture.as_bytes(), width, height, picture.color().into())
+            .map_err(|_| ApiError::internal())?;
     } else {
-        image::codecs::png::PngEncoder::new(&mut *out).write_image(pixels, width, height, color)
-    };
-    written.map_err(|_| ApiError::internal())?;
+        write_png(picture.as_bytes(), width, height, out)?;
+    }
 
     let display = display_copy(&picture, mime)?;
     Ok(CleanImage {
@@ -411,16 +532,32 @@ fn reencode_image(bytes: &[u8], mime: &str, out: &mut impl Write) -> Result<Clea
     })
 }
 
+/// Write RGBA pixels as a PNG, a few rows at a time. `image`'s own PNG writer
+/// compresses the whole picture in memory before it writes any of it: 269 MB
+/// more for a noisy 8000 × 8000 picture, measured (#487).
+fn write_png(rgba: &[u8], width: u32, height: u32, out: &mut impl Write) -> Result<(), ApiError> {
+    let mut encoder = png::Encoder::new(out, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    // What `image` sets.
+    encoder.set_compression(png::Compression::Balanced);
+    encoder.set_filter(png::Filter::Adaptive);
+    let mut writer = encoder.write_header().map_err(|_| ApiError::internal())?;
+    let mut rows = writer.stream_writer().map_err(|_| ApiError::internal())?;
+    rows.write_all(rgba).map_err(|_| ApiError::internal())?;
+    rows.finish().map_err(|_| ApiError::internal())?;
+    writer.finish().map_err(|_| ApiError::internal())
+}
+
 /// Re-encode a GIF one frame at a time.
 ///
 /// The decoder hands back every frame as a whole canvas, however small the
 /// frame was in the file, so a GIF's cost is its canvas times its frames.
 /// Three checks keep that inside [`MAX_DECODE_ALLOC`] (#487): the canvas is
-/// held to [`MAX_IMAGE_DIMENSION`] and the decoder to the budget, less the
-/// one-byte-a-pixel copy the encoder makes of each frame; the frames are
-/// counted, without being decoded, and refused if as whole canvases they
-/// would come to more than the budget; and each frame is encoded as soon as
-/// it is decoded, so only one is held at a time.
+/// held to [`MAX_IMAGE_DIMENSION`], and the decoder to the budget less the
+/// file and the encoder's buffers; the frames are counted, without being
+/// decoded, by [`gif_frames`]; and each frame is encoded as soon as it is
+/// decoded, so only one is held at a time.
 fn reencode_gif(bytes: &[u8], out: &mut impl Write) -> Result<CleanImage, ApiError> {
     use image::codecs::gif::{GifDecoder, GifEncoder, Repeat};
     use image::{AnimationDecoder, ImageDecoder};
@@ -428,15 +565,17 @@ fn reencode_gif(bytes: &[u8], out: &mut impl Write) -> Result<CleanImage, ApiErr
     let mut decoder = GifDecoder::new(std::io::Cursor::new(bytes)).map_err(|_| unreadable())?;
     let (width, height) = decoder.dimensions();
     let canvas = u64::from(width) * u64::from(height);
-    let left = MAX_DECODE_ALLOC
-        .checked_sub(canvas)
-        .ok_or_else(unreadable)?;
+    // Beside the decoder: the file, and the encoder's two buffers for a
+    // frame, a byte a pixel for its colours and up to one and a half for
+    // them compressed.
+    let held = bytes.len() as u64 + canvas * 3;
+    let left = MAX_DECODE_ALLOC.checked_sub(held).ok_or_else(unreadable)?;
     decoder.set_limits(limits(left)).map_err(|_| unreadable())?;
-    let frames = gif_frames(bytes, MAX_DECODE_ALLOC / (canvas * 4).max(1))?;
+    let frames = gif_frames(bytes, canvas)?;
 
     let mut blurhash = None;
     let mut encoded = 0;
-    let mut encoder = GifEncoder::new(&mut *out);
+    let mut encoder = GifEncoder::new_with_speed(&mut *out, GIF_SPEED);
     encoder
         .set_repeat(Repeat::Infinite)
         .map_err(|_| ApiError::internal())?;
@@ -472,24 +611,28 @@ fn reencode_gif(bytes: &[u8], out: &mut impl Write) -> Result<CleanImage, ApiErr
 }
 
 /// How many frames a GIF has, counted without decoding any of them, or a
-/// refusal as soon as there are more than `most`. A frame of one pixel takes
-/// a dozen bytes of file, so a small file can hold a great many.
-fn gif_frames(bytes: &[u8], most: u64) -> Result<usize, ApiError> {
+/// refusal as soon as they come to more than [`MAX_DECODE_ALLOC`] as whole
+/// RGBA pictures.
+///
+/// Each frame counts as the bigger of the canvas, which the decoder hands
+/// back for every frame, and the frame itself, which it decodes whole even
+/// where the canvas cuts it off. A frame of one pixel takes a dozen bytes of
+/// file, so a small file can hold a great many.
+fn gif_frames(bytes: &[u8], canvas: u64) -> Result<usize, ApiError> {
+    let most = MAX_DECODE_ALLOC / 4;
     let mut options = gif::DecodeOptions::new();
     options.skip_frame_decoding(true);
     let mut reader = options.read_info(bytes).map_err(|_| unreadable())?;
-    let mut frames: u64 = 0;
-    while reader
-        .read_next_frame()
-        .map_err(|_| unreadable())?
-        .is_some()
-    {
+    let (mut frames, mut pixels) = (0, 0u64);
+    while let Some(frame) = reader.read_next_frame().map_err(|_| unreadable())? {
+        let own = u64::from(frame.width) * u64::from(frame.height);
+        pixels += canvas.max(own).max(1);
         frames += 1;
-        if frames > most {
+        if pixels > most {
             return Err(unreadable());
         }
     }
-    usize::try_from(frames).map_err(|_| unreadable())
+    Ok(frames)
 }
 
 /// An image's display copy (#382): the picture fitted inside [`DISPLAY_EDGE`]
@@ -833,18 +976,130 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(2));
     }
 
+    /// A frame can be bigger than its canvas, and is decoded whole before
+    /// the canvas clips it. Fifteen 3000 × 3000 frames on a canvas of one
+    /// pixel: 135 million pixels to decode, in a file of a few hundred KB,
+    /// refused before any of them is decoded.
+    #[test]
+    fn a_gif_whose_frames_are_bigger_than_its_canvas_is_counted_by_its_frames() {
+        let mut gif = Vec::new();
+        {
+            let mut encoder = gif::Encoder::new(&mut gif, 1, 1, &[0, 0, 0, 255, 255, 255]).unwrap();
+            let mut frame = gif::Frame {
+                width: 3000,
+                height: 3000,
+                buffer: std::borrow::Cow::Owned(vec![0; 3000 * 3000]),
+                ..gif::Frame::default()
+            };
+            // Compressed once, written fifteen times.
+            frame.make_lzw_pre_encoded();
+            for _ in 0..15 {
+                encoder.write_lzw_pre_encoded_frame(&frame).unwrap();
+            }
+        }
+        let started = std::time::Instant::now();
+        let refused = reencoded(&gif, "image/gif")
+            .err()
+            .expect("frames past the budget are refused, whatever the canvas");
+        assert_eq!(refused.message, "That image can't be read.");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    /// The clean picture is written beside the upload and put in its place
+    /// only once it is whole. A picture that fails part-way leaves the upload
+    /// as it arrived, and a re-encode still running for a request nobody is
+    /// waiting on never writes into a file a retry has made since.
+    #[tokio::test]
+    async fn a_picture_that_fails_to_re_encode_leaves_the_upload_as_it_was() {
+        let _turn = QUEUE.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("assembled");
+        // A real PNG, cut off after its header: it sniffs as a PNG and its
+        // pixels can't be read.
+        let mut broken = png_bytes(64, 64);
+        broken.truncate(100);
+        tokio::fs::write(&path, &broken).await.unwrap();
+
+        let refused = process(&path, "image/png", "cut.png")
+            .await
+            .err()
+            .expect("a cut-off PNG is refused");
+        assert_eq!(refused.message, "That image can't be read.");
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), broken);
+        // Nothing left lying beside it either.
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
     /// The line is drawn at the budget, not short of it: on that canvas, the
     /// frames that fit in 512 MB are counted, and one more is refused.
     #[test]
     fn a_gif_may_have_as_many_frames_as_the_budget_holds() {
-        let most = MAX_DECODE_ALLOC / (2048 * 2048 * 4);
-        let fit = usize::try_from(most).unwrap();
-        assert_eq!(gif_frames(&gif_bytes(2048, 2048, fit), most).unwrap(), fit);
-        assert!(gif_frames(&gif_bytes(2048, 2048, fit + 1), most).is_err());
+        let canvas = 2048 * 2048;
+        let fit = usize::try_from(MAX_DECODE_ALLOC / (canvas * 4)).unwrap();
+        assert_eq!(
+            gif_frames(&gif_bytes(2048, 2048, fit), canvas).unwrap(),
+            fit
+        );
+        assert!(gif_frames(&gif_bytes(2048, 2048, fit + 1), canvas).is_err());
+    }
+
+    /// A progressive JPEG keeps every coefficient until its last pass, about
+    /// three times the memory of a plain one, and `image` doesn't count it.
+    /// Two copies of one 64 × 64 picture: the plain one needs its file twice
+    /// and 12 KB of pixels, under 14 KB; the progressive one 7 bytes a pixel
+    /// more, 30 KB. At 24 KB the plain one decodes and the progressive one
+    /// is refused.
+    #[test]
+    fn a_progressive_jpeg_counts_what_its_decoder_holds() {
+        let baseline = include_bytes!("../tests/fixtures/baseline-64.jpg");
+        let progressive = include_bytes!("../tests/fixtures/progressive-64.jpg");
+        let budget = 24 * 1024;
+        assert!(decode_within(baseline, budget, |_, _, _| 0).is_ok());
+        let refused = decode_within(progressive, budget, |_, _, _| 0)
+            .expect_err("the coefficients are counted");
+        assert_eq!(refused.message, "That image can't be read.");
+        // With room for them, it decodes like any other.
+        assert!(decode_within(progressive, 2 * budget, |_, _, _| 0).is_ok());
     }
 
     /// The tests of the image queue share it, so they take turns with it.
     static QUEUE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    /// Work done in the image queue, as an upload does it.
+    async fn queued<T: Send + 'static>(
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, ApiError> {
+        ImageLane::wait().await?.run(work).await
+    }
+
+    /// An upload that can't get a place in time hears that the server is
+    /// busy, and when to try again, well before the app gives up on it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_upload_that_cant_get_a_place_in_time_hears_the_server_is_busy() {
+        let _turn = QUEUE.lock().await;
+
+        let mut holders = tokio::task::JoinSet::new();
+        for _ in 0..IMAGE_JOBS {
+            let lane = ImageLane::wait().await.unwrap();
+            holders.spawn(lane.run(|| std::thread::sleep(Duration::from_millis(500))));
+        }
+        let waited = tokio::time::timeout(
+            Duration::from_secs(2),
+            ImageLane::wait_at_most(Duration::from_millis(50)),
+        )
+        .await
+        .expect("the wait for a place has a limit");
+        let refused = waited.err().expect("no place came free in time");
+        assert_eq!(refused.code, linger_core::wire::ErrorCode::RateLimited);
+        assert_eq!(refused.retry_after_ms, Some(IMAGE_BUSY_RETRY_MS));
+
+        while let Some(held) = holders.join_next().await {
+            held.unwrap().unwrap();
+        }
+        assert!(ImageLane::wait_at_most(Duration::from_millis(50))
+            .await
+            .is_ok());
+    }
 
     /// At most [`IMAGE_JOBS`] run at once, however many are waiting.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -859,7 +1114,7 @@ mod tests {
         let mut jobs = tokio::task::JoinSet::new();
         for _ in 0..6 {
             let (running, most) = (running.clone(), most.clone());
-            jobs.spawn(image_job(move || {
+            jobs.spawn(queued(move || {
                 let now = running.fetch_add(1, Ordering::SeqCst) + 1;
                 most.fetch_max(now, Ordering::SeqCst);
                 std::thread::sleep(Duration::from_millis(100));
@@ -885,7 +1140,7 @@ mod tests {
         let finished = Arc::new(AtomicUsize::new(0));
         for _ in 0..IMAGE_JOBS {
             let finished = finished.clone();
-            let job = image_job(move || {
+            let job = queued(move || {
                 std::thread::sleep(Duration::from_millis(300));
                 finished.fetch_add(1, Ordering::SeqCst);
             });
@@ -897,9 +1152,7 @@ mod tests {
         // The next one gets the first place to come free, which is when the
         // first of them is done: not as soon as nobody is waiting for them.
         let seen = finished.clone();
-        let finished_first = image_job(move || seen.load(Ordering::SeqCst))
-            .await
-            .unwrap();
+        let finished_first = queued(move || seen.load(Ordering::SeqCst)).await.unwrap();
         assert!(finished_first >= 1, "the next image started beside them");
     }
 

@@ -32,6 +32,9 @@ image = { version = "0.25", default-features = false, features = ["gif", "jpeg",
 # Magic-byte sniffing: what a file actually is, as opposed to what it claimed.
 infer = "0.22"
 jsonwebtoken = { workspace = true }
+# The PNG writer `image` uses, named directly to write a picture a few rows at
+# a time rather than all of it in memory first (#487). Already built for `image`.
+png = "0.18"
 rand = { workspace = true }
 # The S3 backend talks to the bucket over HTTP; `rusty-s3` only signs the URLs.
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
@@ -57,11 +60,12 @@ tracing-subscriber = { workspace = true }
 unicode-properties = "0.1"
 uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+# The JPEG decoder `image` uses, named directly to read whether a JPEG is
+# progressive before decoding it: one of those holds about three times the
+# memory (#487). Already built for `image`.
+zune-jpeg = "0.5"
 
 [dev-dependencies]
-# Writes the one-bit PNG the image budget test decodes (#487), which `image`
-# can read but not write. Already built for `image`.
-png = "0.18"
 # The raid-sized voice load test (examples/voice_load.rs) stands in for the
 # app's WebRTC with the same library the server forwards with.
 str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }

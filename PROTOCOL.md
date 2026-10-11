@@ -768,9 +768,12 @@ complete; the server checks them against what actually landed.
 
 **Resuming.** Re-PUTting a part replaces it. Completing with parts missing is
 `VALIDATION_FAILED` and **leaves the slot alive**: send the missing parts and complete
-again. Any other refusal at complete is final — the parts are discarded and the slot
-cannot be retried, because resending the same bytes under the same declaration cannot
-make them acceptable.
+again. So does `RATE_LIMITED` ("The server is busy with other pictures…", with
+`retry_after_ms`), which an image gets when the server has been working on two others
+for longer than it can wait (ARCHITECTURE §8): complete again after `retry_after_ms`. Any
+other refusal at complete is final — the parts are discarded and the slot cannot be
+retried, because resending the same bytes under the same declaration cannot make them
+acceptable.
 
 `DELETE /uploads/:id` throws an upload away, finished or not, along with its bytes. It is
 `CONFLICT` once the attachment is on a message; delete the message instead. It is
