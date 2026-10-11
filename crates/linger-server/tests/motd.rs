@@ -210,6 +210,30 @@ async fn it_has_a_length_limit() {
     assert_eq!(set.status(), 200, "{}", set.text().await.unwrap());
 }
 
+/// It's drawn over the room, beside who set it, so it can't turn itself or
+/// them around (#488): the characters that turn text around are taken out,
+/// from the strip and from its line in the room alike.
+#[tokio::test]
+async fn it_loses_the_characters_that_turn_text_around() {
+    let (server, host, room) = common::server_with_room("general").await;
+    let set = set_motd(
+        &server,
+        &host.access_token,
+        &room,
+        "raid at \u{202E}8 tonight\u{202C}",
+    )
+    .await;
+    assert_eq!(set.status(), 200, "{}", set.text().await.unwrap());
+    let now = rooms(&server, &host.access_token)
+        .await
+        .into_iter()
+        .find(|r| r.id == room.id)
+        .unwrap();
+    assert_eq!(now.motd.unwrap().text, "raid at 8 tonight");
+    let lines = messages(&server, &host.access_token, &room).await;
+    assert_eq!(lines[0]["body"], "raid at 8 tonight");
+}
+
 #[tokio::test]
 async fn the_same_words_again_change_nothing_and_empty_clears_it() {
     let (server, host, room) = common::server_with_room("general").await;

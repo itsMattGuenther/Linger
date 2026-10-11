@@ -1681,15 +1681,18 @@ dependencies = [
  "blurhash",
  "dashmap",
  "futures-util",
+ "gif",
  "hex",
  "image",
  "infer",
  "jsonwebtoken",
  "linger-core",
  "linger-sfu",
+ "png",
  "rand 0.8.7",
  "reqwest",
  "ring",
+ "rustix",
  "rusty-s3",
  "serde",
  "serde_json",
@@ -1707,6 +1710,7 @@ dependencies = [
  "unicode-properties",
  "uuid",
  "zip",
+ "zune-jpeg",
 ]
 
 [[package]]

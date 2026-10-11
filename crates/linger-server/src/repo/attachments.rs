@@ -96,6 +96,18 @@ pub async fn by_id(
         .transpose()
 }
 
+/// The query [`hydrate`] runs for a page of `count` messages. Apart so the
+/// test that checks it is served by `idx_attachments_message` (#518) reads the
+/// very statement the server sends.
+pub(crate) fn hydrate_sql(count: usize) -> String {
+    let placeholders = vec!["?"; count].join(",");
+    format!(
+        "SELECT * FROM attachments
+         WHERE state = 'complete' AND message_id IN ({placeholders})
+         ORDER BY id"
+    )
+}
+
 /// Hang each message's finished attachments off it, oldest first.
 pub async fn hydrate(
     db: &SqlitePool,
@@ -105,12 +117,7 @@ pub async fn hydrate(
     if messages.is_empty() {
         return Ok(());
     }
-    let placeholders = vec!["?"; messages.len()].join(",");
-    let sql = format!(
-        "SELECT * FROM attachments
-         WHERE state = 'complete' AND message_id IN ({placeholders})
-         ORDER BY id"
-    );
+    let sql = hydrate_sql(messages.len());
     let mut query = sqlx::query(&sql);
     for message in messages.iter() {
         query = query.bind(message.id.to_vec());
@@ -128,7 +135,16 @@ pub async fn hydrate(
             .push(row_to_attachment(row, config)?);
     }
     for message in messages.iter_mut() {
-        message.attachments = grouped.remove(&message.id).unwrap_or_default();
+        let attachments = grouped.remove(&message.id).unwrap_or_default();
+        // A deleted message carries none (#502). The delete takes its files,
+        // and one the store couldn't delete right then waits for the
+        // sweeper; until it goes, history must not hand out its name and
+        // address.
+        message.attachments = if message.deleted_at.is_none() {
+            attachments
+        } else {
+            Vec::new()
+        };
     }
     Ok(())
 }

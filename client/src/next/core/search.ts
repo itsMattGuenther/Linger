@@ -16,6 +16,7 @@ import type { SearchSnippetPart } from "../../generated/SearchSnippetPart";
 import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { conversationLabel } from "../../lib/dm";
+import { fileNameToShow } from "../../lib/media";
 import { snippetText } from "../../lib/search";
 import { hitTime } from "../../lib/time";
 import type { ViewServer } from "./scope";
@@ -74,10 +75,12 @@ export function personChoices(place: Pick<ViewServer, "me" | "users">): { value:
 
 /**
  * Which files a hit matched on, by name, for a hit whose words didn't match.
- * Past two it stops listing and says "and others", in words.
+ * Past two it stops listing and says "and others", in words. Each name is as
+ * the app shows it (#488): one that could turn itself around would turn the
+ * rest of the line with it.
  */
 export function filesNamed(names: readonly string[]): string | null {
-  const [first, second, third] = names;
+  const [first, second, third] = names.map(fileNameToShow);
   if (first === undefined) return null;
   if (second === undefined) return first;
   if (third === undefined) return `${first} and ${second}`;

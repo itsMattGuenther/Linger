@@ -559,6 +559,20 @@ async function replyTo(page: Page, words: string, whose: string) {
 /** Somebody starts typing here, as the server says it. */
 const typing = (page: Page, user_id: string) => page.evaluate((id) => window.owner?.frame({ op: "typing", d: { room_id: "r-general", user_id: id } } as never), user_id);
 
+/**
+ * Somebody keeps typing here: said now, and again every two seconds while the
+ * page is open. Typing shows for six seconds after it was last said, and on a
+ * busy machine measuring a name's light takes longer than that: the typing
+ * line went in the middle of it, and the test waited for it until it ran out
+ * of time (#528).
+ */
+const keepTyping = (page: Page, user_id: string) =>
+  page.evaluate((id) => {
+    const say = () => window.owner?.frame({ op: "typing", d: { room_id: "r-general", user_id: id } } as never);
+    say();
+    window.setInterval(say, 2_000);
+  }, user_id);
+
 /** Everybody in the evening's voice room, as the server would say it. */
 const everyoneInVoice = (page: Page) =>
   page.evaluate(() =>
@@ -576,6 +590,9 @@ for (const scale of [1, 2]) {
     test.use({ viewport: { width: 780, height: 820 }, deviceScaleFactor: scale });
 
     test("a glowing name fades out past its box in a reply's quote, the reply line and the typing line, and inside a voice strip chip", async ({ page }) => {
+      // Long by design: five names measured, each against three shots. At
+      // 200% it took up to 17 seconds in WebKit on CI (#528).
+      test.slow();
       await openChat(page);
       await restyleInChat(page, styled(people.eli, AMBER_GLOW));
       await restyleInChat(page, styled(people.jules, GRADIENT_GLOW));
@@ -607,10 +624,9 @@ for (const scale of [1, 2]) {
       notes.push(`reply: ${show(replied)}`);
       expectFades(replied, "in the reply line");
 
-      await typing(page, people.jules.id);
+      await keepTyping(page, people.jules.id);
       const typist = inTyping(page);
       await settled(page, typist);
-      await typing(page, people.jules.id);
       const typed = await lightOf(page, typist);
       notes.push(`typing: ${show(typed)}`);
       expectFades(typed, "in the typing line");

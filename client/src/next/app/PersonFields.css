@@ -46,3 +46,10 @@
 .nx-person-link:hover {
   text-decoration-color: var(--accent);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-person-field dt,
+.nx-person-field dd {
+  unicode-bidi: isolate;
+}
