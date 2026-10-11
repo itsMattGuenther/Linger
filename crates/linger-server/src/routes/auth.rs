@@ -7,12 +7,13 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP};
+use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP, RATE_REGISTER_PER_IP};
 use linger_core::wire::{
     AuthResponse, ErrorCode, InvitePreview, LoginRequest, RefreshRequest, RefreshResponse,
     RegisterRequest,
 };
 use linger_core::UserId;
+use sqlx::SqliteExecutor;
 
 use crate::auth::{self, RefreshOutcome};
 use crate::db::now_ms;
@@ -44,16 +45,37 @@ pub async fn auth_response(state: &AppState, user_id: UserId) -> Result<AuthResp
 
 async fn register(
     State(state): State<AppState>,
+    parts: Parts,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
+    if let Err(retry) = state
+        .limiter
+        .check(&format!("register:{ip}"), RATE_REGISTER_PER_IP)
+    {
+        return Err(ApiError::rate_limited(retry));
+    }
+
     validate::username(&req.username)?;
     validate::display_name(&req.display_name)?;
     validate::password(&req.password)?;
-
-    let password_hash = auth::hash_password(req.password).await?;
-    let user_id = UserId::new();
-    let now = now_ms();
     let code = req.invite_code.trim().to_lowercase();
+
+    // The invite before the password (#495). Hashing is the expensive half of
+    // signing up, about 19 MB and a core for a moment, and it used to come
+    // first, so anybody with no invite at all could make the server do it on
+    // demand. This read reserves nothing: the guarded UPDATE below still
+    // decides who gets an invite's last use, and a hash refused while the
+    // server is busy has spent no use at all.
+    if let Some(refusal) = invite_refusal(&state.db.read, &code, now_ms()).await? {
+        return Err(refusal);
+    }
+
+    let password_hash = state.passwords.hash(req.password).await?;
+    let user_id = UserId::new();
+    // Read after the hash, which may have waited for a turn: an invite that
+    // ran out meanwhile has run out.
+    let now = now_ms();
 
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
 
@@ -72,25 +94,11 @@ async fn register(
     .rows_affected();
 
     if consumed == 0 {
-        let expired: Option<(Option<i64>,)> =
-            sqlx::query_as("SELECT expires_at FROM invites WHERE code = ? AND revoked_at IS NULL")
-                .bind(&code)
-                .fetch_optional(&mut *tx)
-                .await?;
-        return Err(match expired {
-            Some((Some(at),)) if at <= now => ApiError {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: ErrorCode::InviteExpired,
-                message: "That invite has expired.".into(),
-                retry_after_ms: None,
-            },
-            _ => ApiError {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: ErrorCode::InviteInvalid,
-                message: "That invite isn't valid.".into(),
-                retry_after_ms: None,
-            },
-        });
+        // It was good a moment ago: somebody else got the last use while
+        // this one hashed, or it expired or was revoked meanwhile.
+        return Err(invite_refusal(&mut *tx, &code, now)
+            .await?
+            .unwrap_or_else(invite_invalid));
     }
 
     let inserted = sqlx::query(
@@ -130,6 +138,44 @@ async fn register(
     Ok(Json(response))
 }
 
+/// Why `code` can't let anybody in at `now`, as the refusal to send, or
+/// `None` when it can. An expired invite is said to be expired whatever else
+/// is wrong with it, unless it was revoked; every other reason, a made-up
+/// code included, is "isn't valid".
+async fn invite_refusal<'e>(
+    db: impl SqliteExecutor<'e>,
+    code: &str,
+    now: i64,
+) -> Result<Option<ApiError>, ApiError> {
+    // (expires_at, max_uses, uses, revoked_at)
+    type InviteRow = (Option<i64>, Option<u32>, u32, Option<i64>);
+    let row: Option<InviteRow> =
+        sqlx::query_as("SELECT expires_at, max_uses, uses, revoked_at FROM invites WHERE code = ?")
+            .bind(code)
+            .fetch_optional(db)
+            .await?;
+    Ok(match row {
+        None | Some((_, _, _, Some(_))) => Some(invite_invalid()),
+        Some((Some(at), _, _, None)) if at <= now => Some(ApiError {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: ErrorCode::InviteExpired,
+            message: "That invite has expired.".into(),
+            retry_after_ms: None,
+        }),
+        Some((_, Some(max), uses, None)) if uses >= max => Some(invite_invalid()),
+        Some(_) => None,
+    })
+}
+
+fn invite_invalid() -> ApiError {
+    ApiError {
+        status: StatusCode::UNPROCESSABLE_ENTITY,
+        code: ErrorCode::InviteInvalid,
+        message: "That invite isn't valid.".into(),
+        retry_after_ms: None,
+    }
+}
+
 /// A stable argon2 hash to verify against when the username doesn't exist, so
 /// unknown-user and wrong-password take comparable time.
 fn dummy_hash() -> &'static str {
@@ -142,7 +188,7 @@ async fn login(
     parts: Parts,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts);
+    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
     if let Err(retry) = state
         .limiter
         .check(&format!("login:{ip}"), RATE_LOGIN_PER_IP)
@@ -166,7 +212,7 @@ async fn login(
         None => (None, dummy_hash().to_string()),
     };
 
-    let verified = !hash.is_empty() && auth::verify_password(req.password, hash).await?;
+    let verified = !hash.is_empty() && state.passwords.verify(req.password, hash).await?;
     let Some(user_id) = user_id.filter(|_| verified) else {
         return Err(ApiError::unauthenticated_with(
             "That username and password don't match.",

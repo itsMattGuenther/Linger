@@ -310,6 +310,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
 | `LINGER_TURN_SECRET` | Shared key for Linger and the relay; you must also start the relay below. | unset — no relay |
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
+| `LINGER_TRUSTED_PROXIES` | Which proxies the server believes about who's connecting, for the limits on signing in and signing up. Only needed for a proxy that isn't on this machine or a private network, such as Caddy on another machine reaching this one over Tailscale: `private,100.64.0.0/10`. Comma-separated addresses and ranges; `private` is this machine and private networks, and leaving it out stops trusting them. See [Other problems](#other-problems). | `private` |
 
 One file can be up to 500 MB.
 
@@ -626,6 +627,22 @@ Do not share your `.env` or setup token when asking for help.
   account, it is gone for good — that is deliberate. If no account was made
   but the link was exposed or lost, `docker compose restart linger` prints a
   new one and invalidates the old one.
+- **People are told to slow down when they've barely tried.** Each address
+  gets 5 sign-in tries a minute and 60 sign-ups an hour. The server takes the
+  address from the connection. It believes the `X-Forwarded-For` header only
+  when the connection comes from a proxy it trusts, and then only the header's
+  last entry, the one that proxy wrote. By default it trusts this machine and
+  private networks, which is how Caddy from `compose.yaml` connects, so the
+  shipped setup needs nothing more. A proxy anywhere else, such as Caddy on a
+  VPS reaching a home server over Tailscale, has to be listed in
+  `LINGER_TRUSTED_PROXIES` in `.env` (`private,100.64.0.0/10` for
+  Tailscale), or everybody counts as the proxy and shares one allowance:
+  Linger's log says so once, with the proxy's address, the first time it
+  happens. A proxy of your own instead of Caddy has to set that header too
+  (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+  Behind a second proxy in front of Caddy, such as Cloudflare's, the address
+  the server sees is that proxy's, so people who come through the same one
+  share an allowance.
 - **The startup log warns that `LINGER_DOMAIN` is not set.** Then your friends
   cannot connect, whatever else looks fine. The app only talks to `https`
   addresses. Go back to [Before you start](#before-you-start).

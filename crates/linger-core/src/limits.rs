@@ -191,6 +191,13 @@ pub const MAX_REACTIONS_PER_MESSAGE: usize = 6;
 pub const CUSTOM_REACTION_PREFIX: &str = "emoji:";
 
 pub const RATE_LOGIN_PER_IP: (u32, u64) = (5, 60);
+/// Sign-ups from one address (#495): sixty at once, then one a minute. A
+/// raid's worth of friends on one connection can join in one go, and so can
+/// `examples/voice_load.rs`, which signs up 49 from one machine. A script
+/// that keeps going is held to one a minute. The invite is checked before
+/// the password is hashed, so an attempt without a good invite costs one
+/// read; this bounds what somebody holding a good one can make the server do.
+pub const RATE_REGISTER_PER_IP: (u32, u64) = (60, 3_600);
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);

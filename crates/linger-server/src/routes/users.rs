@@ -397,11 +397,11 @@ async fn change_password(
         return Err(ApiError::unauthenticated());
     };
 
-    if !auth::verify_password(req.current_password, hash).await? {
+    if !state.passwords.verify(req.current_password, hash).await? {
         return Err(ApiError::forbidden("Current password doesn't match."));
     }
 
-    let new_hash = auth::hash_password(req.new_password).await?;
+    let new_hash = state.passwords.hash(req.new_password).await?;
     sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
         .bind(new_hash)
         .bind(auth.id.to_vec())

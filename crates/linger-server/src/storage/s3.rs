@@ -358,6 +358,7 @@ mod tests {
             voice_line_after: std::time::Duration::from_millis(
                 linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
             ),
+            trusted_proxies: crate::config::TrustedProxies::default(),
         }))
         .unwrap();
         store

@@ -70,6 +70,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        trusted_proxies: linger_server::config::TrustedProxies::default(),
     }
 }
 
@@ -92,6 +93,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        trusted_proxies: linger_server::config::TrustedProxies::default(),
     };
     spawn_with(dir, config).await
 }
@@ -139,6 +141,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        trusted_proxies: linger_server::config::TrustedProxies::default(),
     };
     Some(spawn_with(dir, config).await)
 }
