@@ -111,6 +111,13 @@ describe("a tile", () => {
     expect(line.date).toContain("2026");
   });
 
+  it("says nothing about when for a time that can't be drawn, rather than throwing (#509)", () => {
+    const line = tileLine(item({ created_at: 9e15 }), names, null);
+    expect(line.date).toBe("");
+    expect(line.moment).toBe("");
+    expect(line.label).toBe("Image, speakers.png, shared by Jules in #general");
+  });
+
   it("says which server it's from when several are mixed, and that it's starred", () => {
     const line = tileLine(item({ starred_at: AT }), names, "Ashen Lanterns");
     expect(line.starred).toBe(true);

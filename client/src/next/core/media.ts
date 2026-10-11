@@ -11,7 +11,7 @@ import type { MediaKind } from "../../generated/MediaKind";
 import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { dayEnd, dayStart, durationText, expiryText, fileSize, itemLabel, KIND_FILTERS } from "../../lib/media";
-import { fullTime } from "../../lib/time";
+import { fullTime, validTime } from "../../lib/time";
 import { inWhere, type Directory } from "./search";
 
 /** A page. Big enough that scrolling is rare, small enough to arrive fast. */
@@ -123,7 +123,8 @@ export function tileLine(item: MediaItem, names: Directory, serverName: string |
   const noun = item.kind === "pin" ? "Pinned message" : WORD[item.kind];
   const dm = item.room_id !== null && names.isDm(item.room_id);
   const place = `${item.room_id === null ? "" : inWhere(where, dm)}${serverName === null ? "" : ` on ${serverName}`}`;
-  const date = DATE.format(item.created_at);
+  // Nothing, for a time that can't be drawn (#509).
+  const date = validTime(item.created_at) ? DATE.format(item.created_at) : "";
   return {
     face: faceOf(item),
     title,
@@ -138,7 +139,7 @@ export function tileLine(item: MediaItem, names: Directory, serverName: string |
     starrable: file !== null,
     starred,
     opens: item.message_id !== null && where !== undefined,
-    label: `${noun}, ${title}, shared by ${whoName}${place}, ${date}${starred ? ", starred" : ""}`,
+    label: `${noun}, ${title}, shared by ${whoName}${place}${date === "" ? "" : `, ${date}`}${starred ? ", starred" : ""}`,
   };
 }
 

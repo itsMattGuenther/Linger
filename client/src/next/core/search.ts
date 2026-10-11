@@ -17,7 +17,7 @@ import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { conversationLabel } from "../../lib/dm";
 import { snippetText } from "../../lib/search";
-import { hitTime } from "../../lib/time";
+import { hitTime, validTime } from "../../lib/time";
 import type { ViewServer } from "./scope";
 
 /** Who and where on one server, looked up by id. Built once per server, not per hit. */
@@ -93,6 +93,8 @@ const SHORT_OTHER_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", da
  * time is in the hit's sentence for a screen reader.
  */
 export function hitWhen(at: number, now: number): string {
+  // Nothing, for a time that can't be drawn (#509).
+  if (!validTime(at)) return "";
   return new Date(at).getFullYear() === new Date(now).getFullYear() ? SHORT_THIS_YEAR.format(at) : SHORT_OTHER_YEAR.format(at);
 }
 
@@ -171,7 +173,7 @@ export function hitLine(hit: SearchHit, names: Directory, serverName: string | n
     words: file === null ? hitWords(hit.snippet) : null,
     file,
     also: file === null ? "" : text,
-    label: `${whoName}${place}, ${when}: ${said}`,
+    label: `${whoName}${place}${when === "" ? "" : `, ${when}`}: ${said}`,
   };
 }
 

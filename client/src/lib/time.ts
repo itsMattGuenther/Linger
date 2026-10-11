@@ -16,6 +16,27 @@ export const GROUP_BREAK_MS = 10 * MINUTE_MS;
 /** A session breaks when the *room* goes quiet this long (SPEC §4.7). */
 export const SESSION_BREAK_MS = 3 * HOUR_MS;
 
+/** The furthest a `Date` reaches either side of 1970. */
+const MAX_TIME_MS = 8.64e15;
+
+/**
+ * Whether a time can be drawn at all. Every time drawn comes from a server,
+ * and one past what a `Date` can hold, or not a number, makes
+ * `Intl.DateTimeFormat#format` and `Date#toISOString` throw `RangeError`.
+ * Thrown while drawing, that blanked the whole list window (#509). A server
+ * stamps its own times, so it takes a bug, a damaged database or a server
+ * running different code; every formatter here draws such a time as no
+ * time ("") rather than throwing.
+ */
+export function validTime(at: number): boolean {
+  return typeof at === "number" && Math.abs(at) <= MAX_TIME_MS;
+}
+
+/** A `<time>`'s machine-readable `dateTime`, or none for a time that can't be drawn (#509). */
+export function isoTime(at: number): string | undefined {
+  return validTime(at) ? new Date(at).toISOString() : undefined;
+}
+
 /** The part of the day a timestamp falls in. */
 type Part = "late night" | "morning" | "afternoon" | "evening" | "night";
 
@@ -67,6 +88,7 @@ const HIT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle:
  * whatever language and date order the machine is set to.
  */
 export function sessionLabel(at: number, now: number): string {
+  if (!validTime(at) || !validTime(now)) return "";
   const when = new Date(at);
   const part = partOf(when.getHours());
 
@@ -77,6 +99,8 @@ export function sessionLabel(at: number, now: number): string {
     part === "late night"
       ? new Date(when.getFullYear(), when.getMonth(), when.getDate() - 1)
       : when;
+  // The first moment a date can hold has no day before it (#509).
+  if (!validTime(anchor.getTime())) return "";
 
   // Clamped because a clock that is behind the server's makes this negative,
   // and "in 2 days morning" is worse than being slightly wrong for a minute.
@@ -107,7 +131,7 @@ export function sessionLabel(at: number, now: number): string {
 
 /** The local time on a message group header. */
 export function clockTime(at: number): string {
-  return CLOCK.format(at);
+  return validTime(at) ? CLOCK.format(at) : "";
 }
 
 /**
@@ -117,6 +141,7 @@ export function clockTime(at: number): string {
  * (#464): "set by Matt at 10:52 PM".
  */
 export function setWhen(at: number, now: number): string {
+  if (!validTime(at)) return "";
   const then = new Date(at);
   const today = new Date(now);
   const days = daysBetween(then, today);
@@ -133,6 +158,7 @@ export function setWhen(at: number, now: number): string {
  * (#474): "Closes tomorrow at 8:52 PM."
  */
 export function closesWhen(at: number, now: number): string {
+  if (!validTime(at)) return "";
   const then = new Date(at);
   const today = new Date(now);
   const days = daysBetween(today, then);
@@ -144,7 +170,7 @@ export function closesWhen(at: number, now: number): string {
 
 /** The full date and time, for the tooltip on a timestamp. */
 export function fullTime(at: number): string {
-  return FULL.format(at);
+  return validTime(at) ? FULL.format(at) : "";
 }
 
 /**
@@ -155,7 +181,7 @@ export function fullTime(at: number): string {
  * the date has to fit beside them and still say which year.
  */
 export function hitTime(at: number): string {
-  return HIT.format(at);
+  return validTime(at) ? HIT.format(at) : "";
 }
 
 /**

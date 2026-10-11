@@ -8,7 +8,7 @@ import type { User } from "../../../generated/User";
 import { messageFontVar } from "../../../lib/fonts";
 import { linkTargets, mentionHandles } from "../../../lib/markdown";
 import { hasRoom, shownGroups } from "../../../lib/reactions";
-import { ageOpacity, clockTime, fullTime } from "../../../lib/time";
+import { ageOpacity, clockTime, fullTime, isoTime } from "../../../lib/time";
 import { cardOnly, excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
 import { Attachments } from "./Attachments";
@@ -382,7 +382,7 @@ export const MessageRow = memo(function MessageRow({
         ) : null}
       </div>
 
-      <time className="nx-msg-time" dateTime={new Date(message.created_at).toISOString()} title={fullTime(message.created_at)}>
+      <time className="nx-msg-time" dateTime={isoTime(message.created_at)} title={fullTime(message.created_at)}>
         {pending ? "sending" : clockTime(message.created_at)}
       </time>
 

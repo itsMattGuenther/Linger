@@ -56,6 +56,14 @@
   padding: 0 var(--space-6) var(--space-6);
 }
 
+/* A section that couldn't be drawn (#509) says so where its first part would
+   start, on the header's edge, as everything else in Settings lines up. */
+.nx-set-sections > .nx-unshown {
+  align-items: flex-start;
+  padding: var(--space-4) 0 var(--space-5);
+  text-align: start;
+}
+
 /* One part of a section: a heading, a sentence, the controls. */
 .nx-set-block {
   display: flex;
