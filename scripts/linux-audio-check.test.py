@@ -10,10 +10,15 @@ runner stopping, not the app. Freezing it also lost stretches of DM chimes
 that every measurement passed (#387), so each recorded cue is now compared
 with the probe's rendering of the player's own score.
 
+On 2026-10-11 another runner skipped 41 ms of the first knock, 19.7 ms in
+(package check run 38108892814, #567): the cut fell inside a millisecond, and
+the check read what was left of that millisecond as the knock's second tap,
+called it a fault, and failed at once instead of playing the set again.
+
 Fixtures, all 32-bit floats: `knock-lost-81ms.f32` is that knock and
-`knock-clean.f32` a clean one from the same recording, and `dm-clean.f32` a
-clean DM chime from a container run, as the 48 kHz virtual speaker recorded
-them. `score-knock-44100.f32` and `score-dm-44100.f32` are the probe's
+`knock-clean.f32` a clean one from the same recording, `knock-skipped-41ms.f32`
+the knock from #567, and `dm-clean.f32` a clean DM chime from a container
+run, as the 48 kHz virtual speaker recorded them. `score-knock-44100.f32` and `score-dm-44100.f32` are the probe's
 renderings at the WebView's 44.1 kHz, which the check converts to 48 kHz.
 
 Run with `python3 scripts/linux-audio-check.test.py`.
@@ -48,6 +53,7 @@ def fixture(name):
 
 KNOCK = fixture("knock-clean.f32")
 LOST = fixture("knock-lost-81ms.f32")
+SKIPPED = fixture("knock-skipped-41ms.f32")
 DM = fixture("dm-clean.f32")
 SCORES = {cue: audio.score(base64.b64encode((HERE / "fixtures" / f"score-{cue}-44100.f32").read_bytes()), 44100)
           for cue in ("knock", "dm")}
@@ -132,6 +138,18 @@ class AsThePlayerMadeIt(unittest.TestCase):
 
     def test_a_skip_is_lost_audio(self):
         self.assertLost("knock", KNOCK[:20 * MS] + KNOCK[60 * MS:], 40)
+
+    def test_the_knock_that_skipped_inside_a_millisecond_on_ci_lost_41_ms(self):
+        # #567: what was left of the millisecond the cut fell in matched the
+        # second tap, and the check followed it there.
+        with self.assertRaisesRegex(AssertionError, "Abrupt chime onset"):
+            audio.judge(first_of_five("knock", SKIPPED), CUES["knock"], SCORES)
+        self.assertLost("knock", SKIPPED, 41)
+
+    def test_a_skip_inside_a_millisecond_is_lost_audio_wherever_it_falls(self):
+        for cut in range(19 * MS, 21 * MS, 3):
+            with self.subTest(cut=cut):
+                self.assertLost("knock", KNOCK[:cut] + KNOCK[cut + 1946:], 1946 / MS)
 
     def test_silence_in_place_of_sound_is_lost_audio(self):
         self.assertLost("knock", changed("knock", silence(160, 190)), 30)
