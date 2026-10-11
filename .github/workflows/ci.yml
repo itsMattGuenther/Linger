@@ -37,7 +37,7 @@ jobs:
       shell: ${{ steps.classify.outputs.shell }}
       coturn: ${{ steps.classify.outputs.coturn }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: classify changed files
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: shipped relay starts and refuses an empty secret
         run: bash scripts/coturn-test.sh
       - name: update and setup scripts pass shellcheck
@@ -74,11 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: ffmpeg
         # Video posters and durations shell out to ffmpeg, and the tests for
         # them skip themselves when it is missing rather than failing (a server
@@ -115,9 +116,11 @@ jobs:
       LINGER_TEST_S3_ACCESS_KEY_ID: lingertest
       LINGER_TEST_S3_SECRET_ACCESS_KEY: lingertestsecret
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # MinIO no longer publishes images or binaries: the Docker Hub image went
       # first (#64), then the quay.io image and the dl.min.io downloads. The
       # source is still public, so build the pinned release from it. The tag is
@@ -125,11 +128,11 @@ jobs:
       # nobody can debug — and the binary is cached, so this builds once per tag.
       - name: minio binary cache
         id: minio-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/minio-bin
           key: minio-RELEASE.2025-09-07T16-13-09Z-${{ runner.os }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.minio-cache.outputs.cache-hit != 'true'
         with:
           go-version: "1.24"
@@ -167,8 +170,8 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: enable pnpm
@@ -224,8 +227,8 @@ jobs:
         # and these steps use bash: (( )) arithmetic and mapfile.
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: enable pnpm
@@ -236,7 +239,7 @@ jobs:
         run: pnpm test:browser --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/${{ matrix.shards }}
       - name: browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-failures-${{ matrix.engine }}-${{ matrix.shard }}
           path: client/test-results
@@ -270,10 +273,10 @@ jobs:
         # and these steps use bash: (( )) arithmetic and mapfile.
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: enable pnpm
@@ -301,7 +304,7 @@ jobs:
             --repeat-each=${{ steps.pick.outputs.repeat }} "${tests[@]}"
       - name: browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: new-test-failures-${{ matrix.engine }}
           path: client/test-results
@@ -317,7 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: system webview deps
         run: |
           sudo apt-get update
@@ -326,10 +329,11 @@ jobs:
           # cmake, so no libopus package is needed here or anywhere.
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev libasound2-dev
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
         with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: client/src-tauri
       - name: clippy (shell)
@@ -351,7 +355,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: rules lint
@@ -360,8 +364,10 @@ jobs:
         # An updater that compares the wrong version is a release that installs
         # nothing and reports success (T-701).
         run: scripts/version-check.sh
-      - name: test CI selection, and that every job is in the gate
-        run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
+      - name: test CI selection, that every job is in the gate, and that every action is pinned
+        # A tag can be moved to new code by whoever owns the action; a commit
+        # SHA can't, and the release job hands the actions its signing key (#491).
+        run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs
       - name: test the build's CSP check
         run: node --test scripts/csp-assets.test.mjs
       - name: a new issue with no label gets one from its body

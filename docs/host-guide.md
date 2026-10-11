@@ -240,7 +240,8 @@ lets you add `cdn.` in front of a free name.
 Almost everything is done inside the app, not in a config file. The host
 controls are in Settings, under **Hosting**:
 
-- **Rooms**: create, rename, set a topic, reorder, archive.
+- **Rooms**: create, rename, set a topic, reorder, archive, and turn
+  reactions off or on (below).
 - **Invites**: make a link, and see or **Revoke** the ones still open.
 - **People**: remove someone (it asks first; they lose access, and their
   messages stay), and let them back in. Removals are reversible; that is the
@@ -252,6 +253,20 @@ controls are in Settings, under **Hosting**:
 Newcomers start on the name color the fewest people on the server wear, so a
 big group isn't a list of gray names. Anyone can change theirs in **Settings →
 Profile**.
+
+**Reactions in a room.** People can react to a message with any emoji, your
+server's own included ([how they work](user-guide.md#saying-things)). They
+never notify anybody. To turn them off in one room, open **Hosting → Rooms**,
+press **Edit** beside the room, switch off **Reactions**, and **Save**. The
+room then shows no reactions to anybody, and offers no way to add one. Nothing
+is deleted: switch them back on and they're all there again. A DM has no host,
+so it always has reactions. Anybody can also hide reactions just for
+themselves, in **Settings → Appearance**; that changes nothing for anyone else.
+
+A server on 0.4.10 or older can't take reactions, so the app offers none
+there, and the switch has nothing to turn off: [update the
+server](#updating-the-server) first. Friends whose app is 0.4.10 or older see
+no reactions until they update it.
 
 **Going away? Make somebody a co-host.** Open their card (click their name),
 then **···** and **Make Jules a co-host**. A co-host gets the same **Hosting**
@@ -281,7 +296,7 @@ emoji. In the app: **Settings → Emoji**, under Hosting (you or a co-host).
 - **Rename** one in place. Names are 2 to 32 lowercase letters, digits or
   underscores.
 - **Remove** asks first. Messages that used it show its `:name:` as words from
-  then on.
+  then on, and reactions made with it are gone.
 
 They're in everyone's picker straight away, under your server's name. The
 pictures are kept with your server's files and never expire; a backup of

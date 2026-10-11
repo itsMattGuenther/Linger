@@ -74,7 +74,16 @@ Consequences:
    WebView can't choose an output (WebKitGTK has no `setSinkId`; WebView2's
    device names don't match CPAL's), and its audio could start late in a
    window that isn't in front (#241). Web Audio playback in the WebView is
-   the fallback, and what plays outside the app. For it, Linux AppImages must
+   the fallback, and what plays outside the app. A window's one
+   `AudioContext` is open only around its sounds (#531): a running context
+   holds an output stream open and plays silence into it, 2–5% of a core per
+   window. In the app it is made for a sound the shell couldn't play (the
+   webview needs no click: wry allows autoplay); outside the app, on the
+   window's first click or key, as browsers require. It is closed 10 s after
+   the last sound (the shell speaker's `KEEP_OPEN`), and the next sound makes
+   a new one. Closed rather than suspended, because the packaged WebKitGTK
+   plays nothing after a suspended context is resumed.
+   For the fallback, Linux AppImages must
    bundle GStreamer and its playback plugins; DEB/RPM packages must require
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise that fallback's real WebView
@@ -206,7 +215,8 @@ CREATE TABLE users (
   is_cohost       INTEGER NOT NULL DEFAULT 0,  -- set by the host only (#424, 0010)
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
-  deactivated_at  INTEGER
+  deactivated_at  INTEGER,
+  token_generation INTEGER NOT NULL DEFAULT 0  -- +1 ends every sign-in (#496, 0016)
 );
 
 -- name and message styling; see SPEC §4.5
@@ -511,7 +521,13 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt.
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
-   hashed. Reuse of a rotated refresh token revokes the whole family.
+   hashed. Reuse of a rotated refresh token revokes the whole family. A password change
+   (and a reset, and removal) ends every sign-in the account has, at once: refresh
+   families are revoked, and every access token minted before it is refused, because
+   each carries the account's `token_generation` and ending sign-ins adds one to it
+   (#496, PROTOCOL §2). Open gateway sessions are closed. A count, not a time: token
+   times are whole seconds and could not order a token against a change in the same
+   second. The device that changed the password gets a fresh pair in the answer.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
@@ -534,7 +550,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
 7. **Tauri capabilities:** the WebView gets the minimum permission set. Every
    native capability it has is one narrow command in `client/src-tauri/src/`, and
    it has no others — not the updater plugin's own commands, not the keyring, not
-   the socket.
+   the socket. Of the notification plugin, the list window may only ask whether
+   it may notify (`is_permission_granted`, `request_permission`); every banner
+   goes through the app's own `show_notification`, never the plugin's `notify`,
+   which would let a page show any banner it liked (#548, `src/acl.rs`).
 8. **Signed auto-updates.** Tauri's updater, with one minisign key whose public half
    is committed in `client/src-tauri/tauri.conf.json` and whose private half is
    **generated once by `scripts/updater-key.sh` and backed up offline** (T-701).
@@ -633,9 +652,13 @@ door.
 this server sits on a home LAN next to a router admin page. `links.rs` fetches them, and
 the rules are: `http(s)` on default ports only; the hostname is resolved by the server and
 the whole name refused if **any** address it answers with is private, loopback,
-link-local (which is where cloud metadata services live), CGNAT or reserved; the
-connection is then pinned to the address that was checked, so the name cannot resolve to
-something else in between; redirects are followed by hand, three at most, every hop
+link-local (which is where cloud metadata services live), CGNAT or reserved, however
+the address is written. An IPv6 address that carries an IPv4 one in a fixed place
+(v4-mapped `::ffff:a.b.c.d`, v4-compatible `::a.b.c.d`, NAT64 `64:ff9b::/96`, 6to4
+`2002::/16`) is judged by the IPv4 address inside; Teredo `2001::/32`, local-use NAT64
+`64:ff9b:1::/48`, site-local `fec0::/10` and anything else outside global unicast
+`2000::/3` are refused outright. The connection is then pinned to the address that was
+checked, so the name cannot resolve to something else in between; redirects are followed by hand, three at most, every hop
 re-checked; time and bytes are both capped and the body is read in chunks. Nothing the
 response says is trusted either — the HTML is scanned for a title and an icon href by a
 small tag reader and never rendered, and an icon is kept only if its *bytes* sniff as a
@@ -831,6 +854,17 @@ The image starts as root only to give the data folder to its `linger` user, then
 server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
 root, which used to need a `chown` before the first start.
 
+The image sets `MALLOC_MMAP_THRESHOLD_=1048576` (#523), so memory a password hash used goes
+back to the system. Each argon2 hash borrows about 19 MB at once (§7). glibc, the C
+library under the image's Debian base, gives the first such block back, then raises its
+own threshold for a big block to match and keeps every later one in its pools, spread
+over the blocking threads hashing runs on, so memory only ever grew: 220 sign-ups left the
+server holding 225 MB one at a time, 815 MB four at a time. A fixed 1 MB threshold makes
+every larger block a mapping of its own, unmapped the moment it is freed, and the same
+sign-ups leave 16–17 MB. `MALLOC_ARENA_MAX=2`, the usual advice for this, held 168 MB and
+946 MB. Only glibc reads the variable. While hashes run, they still take 19 MB each; how
+many may run at once is a separate limit.
+
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
 needs no secret and runs no relay. Its one secret lives in `.env`, never in the compose file, and is shared
@@ -881,7 +915,8 @@ passes its check.
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
 (2026-08-29 and 2026-08-31). **M12 is built:** signalling, audio path,
 controls, relay and device recovery, with voice in daily use across separate
-networks. M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
+networks. M13 ambient voice was never started as a milestone, but later voice
+work built part of it (its row below; `TASKS.md` M13 has what's left). The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
 on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
@@ -896,7 +931,7 @@ is gone (#306).
 | **M10** | Search | Type a word, get the messages containing it, click one, land on it in its room | 3–4 days — **built: index and endpoint 2026-08-30, surface 2026-08-31. Its check passed in a running app** |
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
-| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
+| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days — **part built by later voice work: silence isn't sent (#430, 0.4.9), being in a room's voice is being in the room (#420, 0.4.8), and joining leaves a quiet line (#473). Left: no join step, the controls that make it safe (T-1502), and a working day's CPU and battery measured on a real computer** |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 

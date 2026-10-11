@@ -33,6 +33,20 @@ Access token: JWT, EdDSA, 15 min TTL, sent as `Authorization: Bearer <jwt>`.
 Refresh token: opaque, 30 days, **rotating**. Reuse of a consumed refresh token revokes
 the entire token family and forces re-login.
 
+Some things end every sign-in an account has at once: a password change (§5), a reset
+from the command line, and removal (§5). Each revokes every refresh family the account
+has, and refuses every access token minted before it, at once rather than when it
+expires: on REST (`UNAUTHENTICATED`) and at the gateway's `identify` and `resume`
+(`invalid_session { reason: "unauthenticated" }`). A password change and removal also
+close the account's open gateway sessions (§8). A reset from the command line runs
+while the server is stopped (`docs/host-guide.md`), which has closed them already. Each
+access token carries the account's `token_generation`
+(the `gen` claim), and ending every sign-in adds one to it, so a token whose number is
+smaller is refused (#496). It is a count rather than a time on purpose: token times are
+whole seconds, and a time could not tell a token minted just before a password change
+from the fresh one minted just after it. Tokens from before #496 carry no `gen` and
+count as 0. Clients treat the token as opaque and never read it.
+
 ```
 POST /auth/register     { invite_code, username, display_name, password }
                      →  { access_token, refresh_token, expires_in, user }
@@ -442,7 +456,8 @@ GET   /users              → User[]              # all members of this server
 GET   /users/:id          → User
 GET   /me                 → User
 PATCH /me                 { display_name?, style?, status?, entrance_sound? } → User
-PATCH /me/password        { current_password, new_password }                 → 204
+PATCH /me/password        { current_password, new_password }
+                       →  { access_token, refresh_token, expires_in, user }
 
 GET  /me/notify-rules     → NotifyRule[]
 PUT  /me/notify-rules     { target_user_id, room_id | null }   → 204
@@ -462,6 +477,35 @@ POST   /reports             { message_id } | { user_id }, note? → 201 Report  
 GET    /reports             → Report[]                          # host or co-host, open ones
 DELETE /reports/:id         → 204                               # host or co-host: dealt with
 ```
+
+### Changing your password
+
+`PATCH /me/password` checks `current_password` (`FORBIDDEN` when it doesn't match) and
+ends every sign-in the account has, the one that asked included (§2): every refresh
+family, every access token, and every open gateway session, which gets
+`invalid_session { reason: "unauthenticated" }` and is closed. The usual reason to
+change a password is that somebody else might have it, and anything that outlived the
+change would be theirs to keep.
+
+The device that asked carries on. The answer is a fresh sign-in, the same shape as
+`POST /auth/login`'s, in a new refresh family: the client swaps it in for the tokens it
+held and reconnects the gateway with it. A token refused while the answer is on its way
+is expected, and a client waits for the answer rather than spend its old refresh token,
+which is revoked and would sign it out.
+
+A server from before #496 answered 204 with no body, revoked only the refresh tokens,
+and closed nothing. A client that gets 204 signs in again with the new password.
+
+An app from before #496 (0.4.10 and earlier) ignores the body and signs in again with
+the new password, which leaves the fresh family unused until it expires. It doesn't
+wait, though. Its own connection is closed like every other, and its reconnect asks
+for a token, by the second ask at the latest renewing with the refresh token the change
+just revoked. That is refused, and the app signs itself out. Whichever lands last, that or its own sign-in,
+decides whether it stays signed in, so the person may have to sign in again with the
+new password. The server closes that connection too, on purpose. The only thing that
+could pick it out is the access token it identified with, which is usually older than
+the one the change was made with, and a thief holding that same token would be spared
+along with it.
 
 ### Co-host (SPEC §4.16, #424)
 
@@ -509,14 +553,16 @@ removed member sitting in the room:
 - **`GET /users`** and the roster query filter deactivated accounts, so they leave the
   roster on their own.
 
-Removal also revokes every refresh family the user owns and every invite they created,
-in the same transaction as the column. Their messages are untouched; removing a person
-is not deleting what they wrote.
+Removal also ends every sign-in the user has (§2: every refresh family, and every access
+token minted before it) and revokes every invite they created, in the same transaction
+as the column. Their messages are untouched; removing a person is not deleting what they
+wrote.
 
 `restore` is not an undo. It clears the column and nothing else: the revoked invites stay
-revoked and the revoked sign-ins stay revoked, so the person signs in again with their
-password. `GET /users/removed` is how the host finds somebody to restore — a removed
-member is absent from every other surface by design.
+revoked and the revoked sign-ins stay revoked, an access token from before the removal
+included, so the person signs in again with their password. `GET /users/removed` is
+how the host finds somebody to restore — a removed member is absent from every other
+surface by design.
 
 Both endpoints announce themselves on the gateway: `remove` fans out `user.remove`, and
 `restore` fans out `user.update`, which is "here is this person, whether or not you had
@@ -560,7 +606,7 @@ type UserStatus = {
   fields: StatusField[] | null;       // <= 3, in order; absent from servers before #270
   image_id: string | null;            // always null; accepted and ignored (#269)
   image_url: string | null;           // always null; server-owned
-  away_message: string | null;        // supersedes `line` when set
+  away_message: string | null;        // <= 240 chars; supersedes `line` when set
   away_since: number | null;
 }
 
@@ -968,12 +1014,13 @@ is no relevance ordering and no parameter to ask for one.
 of it and looks for all of them; a run inside double quotes is one phrase, those
 words in that order. Nothing else is syntax: `AND`, `OR`, `NEAR`, `*`, `(` and
 `^` are characters to tokenize like any other, so no input is a parse error and
-none of it can be made to mean something the person typing did not intend.
+none of it can be made to mean something the person typing did not intend. A
+control character (NUL, escape, a C1 code) splits words the way a space does.
 Matching is on whole words with simple English endings folded together, so
 `photo` finds `photos`.
 
-A `q` that holds no searchable characters — empty, blank, or only punctuation —
-is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
+A `q` that holds no searchable characters — empty, blank, or only punctuation
+or control characters — is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
 are ignored rather than refused, and a `q` over 200 characters is
 `VALIDATION_FAILED`. `room_id` or `author_id` naming something that is not here
 is `NOT_FOUND`, because "no results" and "no such room" send a reader looking in
@@ -1105,6 +1152,14 @@ type Frame = { op: string; d: unknown; s?: number }
 
 `s` is a monotonically increasing sequence number, present on server→client frames only.
 
+A client→server frame is one WebSocket text message of at most `MAX_CLIENT_FRAME_BYTES`
+(256 KiB) of JSON, twice `MAX_VOICE_PAYLOAD_BYTES`: the biggest frame a client sends is
+`voice.answer`, and JSON writes the line breaks in its `sdp` longer than they are. A
+bigger message ends the connection at once, before `identify` as after, and nothing in
+it is read: the server stops at the header that gives its size, or, for a message sent
+in pieces, at the piece that takes it past the cap (#517). Server→client frames have no
+such cap.
+
 ### Handshake
 
 ```
@@ -1150,17 +1205,50 @@ S→C  { "op": "invalid_session", "d": { "reason": "expired" } }   # → re-iden
 The server holds a 500-frame ring buffer per session for 120 seconds after disconnect.
 Beyond that, the client must re-identify and refetch.
 
+### `invalid_session`
+
+The server's way of saying a session is over. It is a control frame (no `s`), and the
+socket ends after it. The reasons:
+
+| reason | when | the client |
+|---|---|---|
+| `unauthenticated` | `identify` or `resume` with a token that is not good: a bad signature, expired, or from before something ended every sign-in the account had (§2). Also sent to an open session when that happens: the account was removed or its password changed. | Gets a fresh access token and identifies. If renewal is refused, the sign-in is over. |
+| `unknown user` | `identify` for an account that is removed (§5). | Nothing works until the host restores the account. |
+| `expired` | `resume` of a session the server no longer holds: the 120 seconds passed, or the server restarted. | Identifies afresh. |
+
+A `resume` with a token from before a password change is refused with
+`unauthenticated` even when the session it names is live, and the session is left
+alone (#496).
+
 ### Client → server
 
 | op | payload | notes |
 |---|---|---|
-| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). |
+| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). `away_message` is held to `PATCH /me`'s rule, 240 characters; told at most `RATE_PRESENCE` times (below) |
 | `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
-| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room |
+| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room; ignored in an archived room, which takes no messages |
 | `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
 | `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
+
+The gateway has no way to answer a client frame, so a frame that breaks a rule is
+**ignored, whole**, and nothing it says is told to anybody. The rules are the ones REST
+keeps for the same thing: a room the sender can't see, an away message over its cap,
+typing where no message can go (#497).
+
+**`presence.update`** goes to everybody connected, and the state it sets is in every
+`ready` until it changes, so the server keeps two rules for it (#497):
+
+- **The away message is held to the rule `PATCH /me` holds it to**: at most 240
+  characters (`MAX_STATUS_LINE_CHARS`). A frame with a longer one is ignored whole: its
+  `state` doesn't change either, and nobody is told anything.
+- **A burst is told as a few, then the newest.** One that changes nothing is told to
+  nobody. Changes are told at most `RATE_PRESENCE` times per person: five, and then one
+  every two seconds. Past that, a change is held back, not dropped: when the person's
+  turn comes, the server tells whatever is newest then, once, however many changes came
+  in between. The server has the newest from the start, so a `ready` in between already
+  carries it. An app sends a handful an hour, and never sees the limit.
 
 ### Server → client
 

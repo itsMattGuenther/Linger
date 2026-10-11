@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimum permission surface for the main window (ARCHITECTURE §7). The updater plugin is registered in lib.rs but is deliberately absent from this list: the page never checks for or installs an update itself, it calls the app's own update_check / update_install commands in src/updates.rs. Granting updater:default here would hand a WebView the ability to download and run an installer.",
+  "description": "Minimum permission surface for the main window (ARCHITECTURE §7). The updater plugin is registered in lib.rs but is deliberately absent from this list: the page never checks for or installs an update itself, it calls the app's own update_check / update_install commands in src/updates.rs. Granting updater:default here would hand a WebView the ability to download and run an installer. The notification plugin is narrowed the same way (#548): the page may ask whether it may notify (is_permission_granted, which the plugin's start-up script also asks, and request_permission, behind isPermissionGranted and requestPermission in client/src/lib/notify.ts), and nothing else. Every banner goes through the app's own show_notification command (src/notifications.rs, owner.json), never the plugin's notify, which notification:default would grant and which would let a page show any banner it liked.",
   "platforms": ["linux", "macOS", "windows"],
   "windows": ["main"],
   "permissions": [
@@ -10,6 +10,7 @@
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
-    "notification:default"
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
   ]
 }
