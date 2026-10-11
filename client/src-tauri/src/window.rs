@@ -318,12 +318,17 @@ static UNSEEN: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 /// seen, unseen, or nothing new. `minimized` and `visible` are the window's
 /// state as the event arrives. Windows sends a size change when a window is
 /// minimized and when it's restored; focus means it's on screen, however it
-/// got there.
+/// got there, but only while it is shown and not minimized. On Windows
+/// Tauri's focus event is WebView2's: hiding the page of a window that has
+/// the focus hands the focus to the window, wry hands it straight back to
+/// WebView2, and that "focus" must not show the page again. Without this
+/// rule the list closed to the tray kept drawing (#594, caught by
+/// client/scripts/windows-hidden-check.mjs).
 fn seen_by(event: &tauri::WindowEvent, minimized: bool, visible: bool) -> Option<bool> {
     match event {
         tauri::WindowEvent::Resized(_) if minimized => Some(false),
         tauri::WindowEvent::Resized(_) if visible => Some(true),
-        tauri::WindowEvent::Focused(true) => Some(true),
+        tauri::WindowEvent::Focused(true) if visible && !minimized => Some(true),
         _ => None,
     }
 }
@@ -531,6 +536,16 @@ mod tests {
         assert_eq!(
             seen_by(&WindowEvent::Focused(true), false, true),
             Some(true)
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(true), false, false),
+            None,
+            "focus handed back to a window in the tray isn't seeing it"
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(true), true, true),
+            None,
+            "nor to a minimized one"
         );
         assert_eq!(
             seen_by(&WindowEvent::Focused(false), false, true),

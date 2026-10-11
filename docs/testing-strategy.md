@@ -27,7 +27,7 @@ what CI adds on top.
 | --- | --- | --- |
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
-| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, nothing the shipped CSP refuses | Signed-in use, every distro, physical speakers, real-network voice |
+| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses | Signed-in use, every distro, physical speakers, real-network voice, a real GPU |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
 The package audio harness injects a test-only bundle of the real sound player
@@ -35,8 +35,14 @@ into the installed app, signed in nowhere, and records what reaches a private
 virtual speaker. Until 0.4.3 it also measured the previous client's layout in
 the package; that part went with the previous client (#306). The Buddy list's
 own start-up and layout in the package are `scripts/linux-next-check.mjs` and
-`client/scripts/windows-next-check.mjs`. None of these is a live-server test;
-a signed-in desktop check is T-1820.
+`client/scripts/windows-next-check.mjs`. What a minimized or tray-hidden
+window does on Windows is `client/scripts/windows-hidden-check.mjs` (#594,
+`docs/windows-update-checks.md`), which drives the installed list window with
+Win32 calls (`client/scripts/windows-window.ps1`) and reads its page over
+WebView2's debugging port. Nobody building Linger has a Windows computer, so
+Windows behavior is checked like this, on GitHub's Windows runners, not by
+hand. None of these is a live-server test; a signed-in desktop check is
+T-1820.
 
 Run the existing `scripts/linux-audio-check.py` and Windows package scripts as
 documented in [packaged audio checks](packaged-audio-checks.md). They require a

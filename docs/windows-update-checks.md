@@ -156,3 +156,45 @@ packaged icon and WebView2 audio checks passed.
 shell. [Regular CI](https://github.com/itsMattGuenther/Linger/actions/runs/35766080785)
 passed all seven jobs. These are disposable-runner results, not a retest on the
 reporter's computer, and do not close the existing release checks.
+
+## A minimized or tray-hidden window (#594, 2026-10-11)
+
+`client/scripts/windows-hidden-check.mjs` runs in the Windows package check,
+after `windows-icon-check.ps1` has installed the app. It starts the installed
+app with WebView2's debugging port on (the same HKLM policy as the other
+checks, removed after), finds the list window by the app's own main window
+handle, and does to it what a person does, with Win32 calls from
+`client/scripts/windows-window.ps1`: minimize, restore, close to the tray,
+and start Linger again to bring it back (the same `tray::show_list` as the
+tray's Show Linger). A busy canvas on the page gives WebView2 something to
+draw. At each step it reads whether WebView2 has switched its own windows
+inside Linger's off (their `WS_VISIBLE`), the frames the page draws, and the
+page's own busy time (Chromium's `TaskDuration`); that an event emitted
+through the shell comes back to the hidden page within a second, which is how
+a server's messages reach it; and, after each return, a capture of the window
+that mustn't be one flat colour. The captures, the page's screenshots and
+`result.json` are uploaded as `package-check-Windows`.
+
+What it found on a runner, before the fix was finished:
+
+- [Without the fix](https://github.com/itsMattGuenther/Linger/actions/runs/38184377348/job/114603465517)
+  (the app as 0.4.10 has it): minimized or in the tray, the page drew about 64
+  frames a second and kept its main thread as busy as when shown. 7 of 16
+  checks failed.
+- [With the fix, before its focus rule](https://github.com/itsMattGuenther/Linger/actions/runs/38184377348/job/114603465358):
+  minimized, WebView2 switched off, no frames, no work; but closed to the tray
+  it was switched straight back on. On Windows Tauri's focus event is
+  WebView2's, and switching off the WebView of a window that has the focus
+  hands the focus to the window, which wry hands back to WebView2. The fix
+  took that "focus" as the window being seen. 4 of 16 failed, all in the
+  tray. Focus now counts only while the window is shown and not minimized.
+- Either way, `document.visibilityState` stayed `"visible"` with no
+  `visibilitychange`, and a 100 ms timer fired on time: WebView2's
+  `IsVisible` stops drawing, not the page's timers. The check records this
+  rather than asserting it (`docs/design/architecture.md`, "A page nobody can
+  see").
+
+What it can't show: a runner has no GPU and no person at it. How much CPU a
+real machine saves, and that the window comes back right with a real
+graphics card and display scaling, still want a quick try on a real Windows
+computer.
