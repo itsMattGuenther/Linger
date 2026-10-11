@@ -71,10 +71,16 @@ impl Terms {
     /// a quoted phrase, `OR`, `*` and `(` are just characters for the tokenizer
     /// to break on.
     ///
+    /// A control character counts as a space, so `a`, NUL, `b` looks for `a`
+    /// and `b`. It must never reach `MATCH`: SQLite reads that string only as
+    /// far as a NUL, so one inside a phrase cut off its closing quote and the
+    /// search failed (#498).
+    ///
     /// Returns `None` when there is nothing left to search for — an empty box,
-    /// or a query made only of punctuation. That is a validation error at the
-    /// endpoint rather than an empty result, because "no messages contain `***`"
-    /// and "you did not ask for anything" are different answers.
+    /// or a query made only of punctuation or control characters. That is a
+    /// validation error at the endpoint rather than an empty result, because
+    /// "no messages contain `***`" and "you did not ask for anything" are
+    /// different answers.
     #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         let mut phrases = Vec::new();
@@ -90,6 +96,7 @@ impl Terms {
         };
 
         for c in raw.chars() {
+            let c = if c.is_control() { ' ' } else { c };
             match c {
                 '"' => {
                     flush(&mut current, &mut phrases);
@@ -294,6 +301,18 @@ mod tests {
         assert!(Terms::parse("   ").is_none());
         assert!(Terms::parse("*** --- ???").is_none());
         assert!(Terms::parse("\"\"").is_none());
+        assert!(Terms::parse("\0\u{1}\u{7f}\u{9f}").is_none());
+    }
+
+    #[test]
+    fn a_control_character_is_a_space_and_never_reaches_match() {
+        assert_eq!(Terms::parse("a\0b").unwrap().to_match(), "\"a\" \"b\"");
+        // Inside quotes it stays one phrase, with a space where the NUL was.
+        assert_eq!(Terms::parse("\"a\0b\"").unwrap().to_match(), "\"a b\"");
+        let match_text = Terms::parse("a\u{1}b\u{2}c\u{1b}d\u{85}e")
+            .unwrap()
+            .to_match();
+        assert!(!match_text.chars().any(char::is_control), "{match_text:?}");
     }
 
     #[test]
