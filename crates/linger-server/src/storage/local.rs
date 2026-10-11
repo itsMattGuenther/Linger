@@ -240,8 +240,11 @@ impl ObjectStore for LocalStore {
         &self,
         upload_id: UploadId,
         parts: Option<&[CompletedPart]>,
-        expected_parts: u32,
+        declared_bytes: u64,
     ) -> anyhow::Result<Staged> {
+        // Every part on this disk was already held to its length as it was
+        // written (`write_part`), so the plan is needed only for the count.
+        let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
             if parts.len() as u32 != expected_parts {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
@@ -326,6 +329,32 @@ impl ObjectStore for LocalStore {
         let _ = tokio::fs::remove_dir_all(self.upload_dir(upload_id)).await;
         Ok(())
     }
+
+    /// The newest modification time in the upload's directory. A part still
+    /// streaming in is an `.incoming` file whose time moves with every write,
+    /// so a slow part keeps its upload alive while it arrives.
+    async fn last_received(&self, upload_id: UploadId) -> anyhow::Result<Option<i64>> {
+        let mut entries = match tokio::fs::read_dir(self.upload_dir(upload_id)).await {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let mut newest: Option<i64> = None;
+        while let Some(entry) = entries.next_entry().await? {
+            // A file that went between the listing and this look was a part
+            // being renamed into place as it finished: it arrived just now.
+            let at = match entry.metadata().await.and_then(|meta| meta.modified()) {
+                Ok(modified) => modified
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |since| {
+                        i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+                    }),
+                Err(_) => now_ms(),
+            };
+            newest = newest.max(Some(at));
+        }
+        Ok(newest)
+    }
 }
 
 #[cfg(test)]
@@ -349,6 +378,9 @@ mod tests {
             voice_line_after: std::time::Duration::from_millis(
                 linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
             ),
+            trusted_proxies: crate::config::TrustedProxies::default(),
+            signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+            password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         }))
         .unwrap()
     }

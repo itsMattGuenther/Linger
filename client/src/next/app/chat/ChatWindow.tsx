@@ -6,7 +6,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { AuthedApi } from "../../../lib/api";
 import { serverState } from "../../../lib/gateway";
 import { loadVoicePrefs } from "../../../lib/voice";
-import { isTalkKey } from "../../core/talkKey";
+import { isTalkButton, isTalkKey } from "../../core/talkKey";
 import { PROTOCOL, tauriBus } from "../../core/bus";
 import { conversationIn } from "../../core/chat/conversation";
 import { leaveDraft, takeDraft } from "../../core/handoff";
@@ -202,25 +202,44 @@ function OwnWindow({ following }: { following: Following }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  // Push-to-talk works in this window too; the owner holds the microphone.
+  // Push-to-talk works in this window too; the owner holds the microphone,
+  // and counts a press this window and the shell both hear once (#500).
   const pushToTalk = Object.values(servers).some((state) => state.myVoice?.pushToTalk === true);
   useEffect(() => {
     if (!pushToTalk) return;
     const say = (down: boolean) => void intend({ kind: "voice.talk", down }).catch(() => undefined);
+    const key = () => loadVoicePrefs().pushToTalkKey;
     const down = (event: KeyboardEvent) => {
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey) && !event.repeat) say(true);
+      if (isTalkKey(event, key()) && !event.repeat) say(true);
     };
     const up = (event: KeyboardEvent) => {
-      if (isTalkKey(event, loadVoicePrefs().pushToTalkKey)) say(false);
+      if (isTalkKey(event, key())) say(false);
     };
-    const release = () => say(false);
+    // A mouse button as the talk key does only that here: no paste, no going back.
+    const press = (event: MouseEvent) => {
+      if (!isTalkButton(event, key())) return;
+      event.preventDefault();
+      say(true);
+    };
+    const lift = (event: MouseEvent) => {
+      if (!isTalkButton(event, key())) return;
+      event.preventDefault();
+      say(false);
+    };
+    // Losing focus lets go of this window's press only: with another app in
+    // front, the shell may still hear the key held.
+    const away = () => void intend({ kind: "voice.talk", down: false, away: true }).catch(() => undefined);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    window.addEventListener("blur", release);
+    window.addEventListener("mousedown", press);
+    window.addEventListener("mouseup", lift);
+    window.addEventListener("blur", away);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", release);
+      window.removeEventListener("mousedown", press);
+      window.removeEventListener("mouseup", lift);
+      window.removeEventListener("blur", away);
     };
   }, [pushToTalk, intend]);
 

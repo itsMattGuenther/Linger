@@ -256,6 +256,15 @@ pub enum ServerEvent {
     RoomCreate(Room),
     #[serde(rename = "room.update")]
     RoomUpdate(Room),
+    /// This person left the group DM `room_id` (#565, PROTOCOL §3.1): it goes
+    /// from their list. Sent to every session of the person who left and
+    /// nobody else's, after they're out of its audience, so nothing about the
+    /// DM reaches them after it. An app from before it ignores it, as any
+    /// unknown frame, and finds the DM gone at its next fresh `ready`.
+    #[serde(rename = "dm.remove")]
+    DmRemove {
+        room_id: RoomId,
+    },
     Typing {
         room_id: RoomId,
         user_id: UserId,
@@ -484,6 +493,21 @@ mod tests {
             json.get("s").is_none(),
             "control frames must omit s entirely"
         );
+    }
+
+    /// Leaving a group DM (#565) is its own frame, and an app from before it
+    /// can't read it as anything it knows: a frame it can't parse is one it
+    /// skips (PROTOCOL §9), where one it misread would change its list.
+    #[test]
+    fn leaving_a_dm_travels_as_its_own_frame() {
+        let room_id = RoomId::new();
+        let frame = ServerFrame::sequenced(ServerEvent::DmRemove { room_id }, 9);
+        let wire = serde_json::to_value(&frame).unwrap();
+        assert_eq!(wire["op"], "dm.remove");
+        assert_eq!(wire["d"]["room_id"], room_id.to_string());
+        assert_eq!(wire["s"], 9);
+        let back: ServerFrame = serde_json::from_value(wire).unwrap();
+        assert!(matches!(back.event, ServerEvent::DmRemove { room_id: id } if id == room_id));
     }
 
     #[test]

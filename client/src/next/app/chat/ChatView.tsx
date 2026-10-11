@@ -10,13 +10,14 @@ import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
 import { minimizer } from "../../core/windowControls";
 import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
+import { PaneBoundary } from "../Boundary";
 import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
 import { ImageViewer } from "./ImageViewer";
 import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
-import { Typing } from "./Typing";
+import { Typing, type TypingNow } from "./Typing";
 import { type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
@@ -84,8 +85,11 @@ export interface ChatPane {
   blocked?: ReadonlySet<string>;
   /** Who is talking right now. */
   speaking: ReadonlySet<string>;
-  /** Who is writing here right now, not counting you. */
-  typing: readonly User[];
+  /**
+   * Who is writing here at a moment, not counting you, and when that next
+   * changes by itself: the typing line asks again then (#511).
+   */
+  typing: (now: number) => TypingNow;
   /** Who an `@` in the box offers, in order (core/chat/mentions.ts). */
   mentionable: readonly MentionPerson[];
   stream: ChatStream;
@@ -244,58 +248,62 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
 
       {pane && actions ? (
         <section className="nx-pane" id={`nx-pane-${pane.id}`} role={alone ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
-          {alone ? null : <PaneHeader {...pane.header} />}
-          {pane.motd ? (
-            <MotdStrip
-              motd={pane.motd.motd}
+          {/* One conversation that can't be drawn says so in its place, and
+              the tabs, the list and every other conversation carry on (#509). */}
+          <PaneBoundary what="This conversation couldn't be shown." resetKey={pane.id}>
+            {alone ? null : <PaneHeader {...pane.header} />}
+            {pane.motd ? (
+              <MotdStrip
+                motd={pane.motd.motd}
+                people={pane.people}
+                me={pane.me}
+                customEmoji={pane.customEmoji}
+                now={pane.stream.now}
+                folded={pane.motd.folded}
+                onFold={pane.motd.onFold}
+                onOpenLink={actions.openLink}
+              />
+            ) : null}
+            {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} /> : null}
+            <Conversation
+              key={pane.id}
+              id={pane.id}
+              label={pane.header.kind === "room" ? `Messages in ${titleOf(pane.header)}` : `Messages with ${pane.header.label}`}
+              {...pane.stream}
               people={pane.people}
               me={pane.me}
+              blocked={pane.blocked}
               customEmoji={pane.customEmoji}
-              now={pane.stream.now}
-              folded={pane.motd.folded}
-              onFold={pane.motd.onFold}
-              onOpenLink={actions.openLink}
+              editing={editing?.tab === pane.id ? editing.id : null}
+              empty={
+                pane.header.kind === "room"
+                  ? `Nothing's been said in ${titleOf(pane.header)} yet.`
+                  : `This is the start of your DM with ${pane.header.label}.`
+              }
+              actions={actions}
             />
-          ) : null}
-          {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} /> : null}
-          <Conversation
-            key={pane.id}
-            id={pane.id}
-            label={pane.header.kind === "room" ? `Messages in ${titleOf(pane.header)}` : `Messages with ${pane.header.label}`}
-            {...pane.stream}
-            people={pane.people}
-            me={pane.me}
-            blocked={pane.blocked}
-            customEmoji={pane.customEmoji}
-            editing={editing?.tab === pane.id ? editing.id : null}
-            empty={
-              pane.header.kind === "room"
-                ? `Nothing's been said in ${titleOf(pane.header)} yet.`
-                : `This is the start of your DM with ${pane.header.label}.`
-            }
-            actions={actions}
-          />
-          <Typing people={pane.typing} />
-          <Composer
-            conversation={pane.id}
-            title={titleOf(pane.header)}
-            isDm={pane.header.kind === "dm"}
-            replyTo={replyTo}
-            onClearReply={onClearReply}
-            onRestoreReply={onRestoreReply}
-            onEditLast={onEditLast}
-            mentionable={pane.mentionable}
-            customEmoji={pane.customEmoji}
-            serverName={pane.serverName}
-            {...pane.composer}
-          />
+            <Typing typing={pane.typing} />
+            <Composer
+              conversation={pane.id}
+              title={titleOf(pane.header)}
+              isDm={pane.header.kind === "dm"}
+              replyTo={replyTo}
+              onClearReply={onClearReply}
+              onRestoreReply={onRestoreReply}
+              onEditLast={onEditLast}
+              mentionable={pane.mentionable}
+              customEmoji={pane.customEmoji}
+              serverName={pane.serverName}
+              {...pane.composer}
+            />
+          </PaneBoundary>
         </section>
       ) : other ? null : (
         <p className="nx-chat-none">Nothing open. Pick a room or a person in the list.</p>
       )}
       {others.map((one) => (
         <section key={one.id} className="nx-pane nx-pane-other" id={`nx-pane-${one.id}`} role={alone ? "region" : "tabpanel"} aria-label={one.label} hidden={one !== other}>
-          {one.body}
+          <PaneBoundary what={`${one.label} couldn't be shown.`}>{one.body}</PaneBoundary>
         </section>
       ))}
 

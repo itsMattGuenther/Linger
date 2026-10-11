@@ -182,6 +182,24 @@ test.describe("what a message says", () => {
     expect(page.url()).toContain("/tests/fixtures/next-chat-parity.html");
   });
 
+  test("a link whose words are another address opens only where it goes, once (#508)", async ({ page }) => {
+    await open(page);
+    const decoy = row(page, await post(page, "[https://good.example/login](https://evil.example/steal)")).locator(".nx-text");
+    const nested = row(page, await post(page, "[[https://a.example](https://b.example)](https://c.example)")).locator(".nx-text");
+    // One click each. Both clicks' opens are asked for in order, so once the
+    // second's has arrived, anything the first set off is in the list too.
+    await decoy.getByRole("link").first().click();
+    await nested.getByRole("link").first().click();
+    await expect
+      .poll(async () => (await did(page)).filter((line) => line.startsWith("open:")))
+      .toEqual(["open:https://evil.example/steal", "open:https://c.example/"]);
+    // One link each, and pointing at it says where it really goes.
+    await expect(decoy.getByRole("link")).toHaveAttribute("title", "https://evil.example/steal");
+    await expect(decoy.getByRole("link")).toHaveText("https://good.example/login");
+    await expect(nested.getByRole("link")).toHaveAttribute("title", "https://c.example/");
+    await expect(nested.getByRole("link")).toHaveText("[https://a.example](https://b.example)");
+  });
+
   test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
     await open(page);
     // Typed as the report did: a line, Shift+Enter, the next line, Enter.
@@ -719,6 +737,23 @@ test.describe("files", () => {
     await expect(box(page)).toHaveValue("keep me");
   });
 
+  // A slot holds its file's size against the pool everybody shares (#503):
+  // a file taken out mid-upload stops sending and gives it back at once,
+  // rather than finishing into a file nothing will ever post.
+  test("a file taken out while it's still going up stops going up, and its space is given back (#503)", async ({ page }) => {
+    await open(page, "room=r-general&holdparts");
+    await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "long-video.mov", mimeType: "video/quicktime", buffer: Buffer.from("big") });
+    const listed = page.getByRole("list", { name: "Files for this message" });
+    await expect(listed.getByRole("progressbar", { name: "Uploading long-video.mov" })).toBeVisible();
+    await expect.poll(async () => did(page)).toContain("PUT /store/f-1/1");
+
+    await page.getByRole("button", { name: "Don't send long-video.mov" }).click();
+    await expect(listed).toHaveCount(0);
+    await expect.poll(async () => did(page)).toContain("stopped PUT /store/f-1/1");
+    await expect.poll(async () => did(page)).toContain("DELETE /uploads/f-1 as token-1");
+    expect(await did(page)).not.toContain("POST /uploads/f-1/complete as token-1");
+  });
+
   test("a file can be taken out before sending, and one already up is withdrawn from the server (FILE-2)", async ({ page }) => {
     await open(page);
     await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "wrong-photo.txt", mimeType: "text/plain", buffer: Buffer.from("oops") });
@@ -786,7 +821,7 @@ test.describe("files in the conversation", () => {
     };
   }
 
-  test("a picture has its true shape before its bytes arrive, a tall one is capped at 400, and neither moves its row (FILE-3)", async ({ page }) => {
+  test("a picture has its true shape before its bytes arrive, a tall one is capped at 400, a very tall one is kept wide enough to see, and none moves its row (FILE-3, #512)", async ({ page }) => {
     await open(page);
     // The pictures' bytes wait until the test lets them go. (Routed after
     // opening: the newest route that matches is the one that answers.)
@@ -796,15 +831,20 @@ test.describe("files in the conversation", () => {
     });
     await page.route(`${SERVER}/media/pic-*`, async (route) => {
       await waiting;
-      const tall = route.request().url().endsWith("pic-tall");
-      const [w, h] = tall ? [600, 2400] : [320, 180];
+      const shapes: Record<string, [number, number]> = { "pic-tall": [900, 2400], "pic-strip": [1080, 8000] };
+      const [w, h] = shapes[route.request().url().split("/").pop() ?? ""] ?? [320, 180];
       await route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#445"/></svg>` });
     });
-    const id = await post(page, "two pictures", "u-eli", {
-      attachments: [attachment("pic-wide", "wide.svg", "image/svg+xml", { width: 320, height: 180 }), attachment("pic-tall", "tall.svg", "image/svg+xml", { width: 600, height: 2400 })],
+    const id = await post(page, "three pictures", "u-eli", {
+      attachments: [
+        attachment("pic-wide", "wide.svg", "image/svg+xml", { width: 320, height: 180 }),
+        attachment("pic-tall", "tall.svg", "image/svg+xml", { width: 900, height: 2400 }),
+        // A phone's scrolling screenshot: its own shape at 400 tall is a 54 px strip.
+        attachment("pic-strip", "scroll.svg", "image/svg+xml", { width: 1080, height: 8000 }),
+      ],
     });
     const pictures = row(page, id).locator(".nx-att-image img");
-    await expect(pictures).toHaveCount(2);
+    await expect(pictures).toHaveCount(3);
     await expect(pictures.first()).toHaveAttribute("loading", "lazy");
     const sizes = () =>
       pictures.evaluateAll((images) =>
@@ -815,7 +855,7 @@ test.describe("files in the conversation", () => {
       );
     const rowHeight = () => row(page, id).evaluate((node) => node.getBoundingClientRect().height);
     // Nothing has arrived yet.
-    expect(await pictures.evaluateAll((images) => images.map((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toEqual([false, false]);
+    expect(await pictures.evaluateAll((images) => images.map((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toEqual([false, false, false]);
     const before = await sizes();
     const [wideW = 0, wideH = 0] = before[0] ?? [];
     const [tallW = 0, tallH = 0] = before[1] ?? [];
@@ -824,11 +864,20 @@ test.describe("files in the conversation", () => {
     expect(wideW).toBeLessThanOrEqual(320);
     expect(Math.abs(wideW / wideH - 320 / 180)).toBeLessThan(0.03);
     expect(tallH).toBe(400);
-    expect(Math.abs(tallW / tallH - 600 / 2400)).toBeLessThan(0.01);
+    expect(Math.abs(tallW / tallH - 900 / 2400)).toBeLessThan(0.01);
+    // Kept 120 wide rather than a sliver (#512).
+    expect(before[2]).toEqual([120, 400]);
     const heightBefore = await rowHeight();
 
     letGo();
-    await expect.poll(() => pictures.evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    // Pictures load as they come into view, and the three together are taller
+    // than the conversation: bring each one in until all have arrived.
+    await expect
+      .poll(async () => {
+        for (const picture of await pictures.all()) await picture.scrollIntoViewIfNeeded();
+        return pictures.evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0));
+      })
+      .toBe(true);
     expect(await sizes()).toEqual(before);
     expect(await rowHeight()).toBe(heightBefore);
   });
@@ -1557,6 +1606,29 @@ test.describe("voice messages (#401)", () => {
     const message = log(page).locator(".nx-att-card[data-kind='audio']").last();
     await expect(message.locator(".nx-att-name")).toHaveText("Voice message");
     expect(await asked(page, "clip_cancel")).toEqual([]);
+  });
+
+  // #524: a voice message the server saved, whose answer was lost on the way
+  // back, is sent again as the same send: the file that already went up, and
+  // the same one-time key, so the server answers with the message it posted.
+  test("sent again after its answer was lost, it's the same send, and shows once", async ({ page }) => {
+    await open(page, "room=r-general&dropanswer");
+    const cards = log(page).locator(".nx-att-card[data-kind='audio']");
+    const before = await cards.count();
+    await recording(page);
+    await panel(page).getByRole("button", { name: "Stop" }).click();
+    await panel(page).getByRole("button", { name: "Send voice message" }).click();
+    await expect(panel(page).getByRole("alert")).toHaveText("Couldn't reach the server. The voice message is kept here.");
+
+    await panel(page).getByRole("button", { name: "Send voice message" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    const said = `sent:${JSON.stringify({ body: "", reply_to: null, attachment_ids: ["f-1"] })}`;
+    expect(await asked(page, "sent:")).toEqual([said, said]);
+    const [first, again] = await asked(page, "key:");
+    expect(first).toMatch(/^key:[0-9a-f-]{36}$/);
+    expect(again).toBe(first);
+    expect((await did(page)).filter((line) => /^POST \/uploads( |$)/.test(line))).toHaveLength(1);
+    await expect(cards).toHaveCount(before + 1);
   });
 
   test("discard throws it away, and the box is as it was", async ({ page }) => {

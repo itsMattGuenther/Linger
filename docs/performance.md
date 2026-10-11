@@ -79,14 +79,19 @@ header has the exact commands.
 Omarchy (Arch Linux, kernel 7.2.5), Hyprland 0.56.2, WebKitGTK 2.52.6. A fast
 desktop: most of the people Linger is for have slower computers.
 
-**The builds:** `main` is 0.4.10 as on `main` at `39e1bdca`. "Combined" is the
-night audit's `integration` branch (`450f524`, `main` plus 38 pull requests),
-which adds the smaller release profile (#542) and the audio context sleeping
-between sounds (#543). Seven opens of each kind, the two builds taking turns.
+**The builds:** "0.4.10" is `main` at `39e1bdca`, the 0.4.10 release. "Combined"
+is the night audit's `integration` branch at `450f524`: `39e1bdca` plus 38
+pull requests, among them the smaller release profile (#542) and the audio
+context sleeping between sounds (#543). All 38 are on `main` since later the
+same day (`fc0df82b`), with six more (#575, #576, #577, #586, #588, #590),
+so the combined column is `main` as it is now, less those six. They weren't
+measured. None runs at startup: the newest, the talk key with a game in
+front (#588), only listens while you're in voice. Seven opens of each kind,
+the two builds taking turns.
 The machine was quiet (a load average of 1–5 on 32 threads) for all but the
 first and last rounds, when other work pushed it to 15.
 
-| | main (0.4.10) | combined |
+| | 0.4.10 (`39e1bdca`) | combined (`450f524`) |
 |---|---|---|
 | **Opens, warm** (median / worst of 7) | **1.03 s** / 1.37 s | **1.08 s** / 1.27 s |
 | **Opens, cold** | **1.14 s** / 1.54 s | **1.12 s** / 1.41 s |
@@ -104,7 +109,7 @@ than the spread between one open and the next. A 19 MB smaller binary didn't
 make opening faster, because reading it from this disk takes a few
 milliseconds. The memory is the same too.
 
-**Where the second goes**, warm, main (the combined branch is within 20 ms
+**Where the second goes**, warm, 0.4.10 (the combined branch is within 20 ms
 at every step):
 
 | ms after the process starts | |
@@ -133,7 +138,7 @@ The servers' part (asking, connecting, answering) is about 150 ms here. Cold
 adds about 100 ms, a restart 80–250 ms, almost all of it before the
 window appears.
 
-**Memory**, warm, main: the app's own process 106 MB, WebKit's page process
+**Memory**, warm, 0.4.10: the app's own process 106 MB, WebKit's page process
 152 MB, WebKit's network process 38 MB (proportional: a library two of them
 share is split between them). GTK's image loader, which runs in a sandbox of
 its own (`glycin`), adds about 4 MB for the first few seconds.
@@ -154,7 +159,7 @@ The servers above are on the same computer. With 60 ms between the app and
 both servers (`--rtt 60`: a server across the country), three opens of each
 kind:
 
-| | main (0.4.10) | combined |
+| | 0.4.10 (`39e1bdca`) | combined (`450f524`) |
 |---|---|---|
 | Opens, warm (median / worst) | 1.54 s / 1.56 s | 1.58 s / 1.86 s |
 | Opens, cold | 1.78 s / 1.99 s | 1.70 s / 1.71 s |
@@ -163,7 +168,7 @@ kind:
 The extra half second is waiting. Before the list is complete the app waits
 for about seven answers in a row, because the page asks the server for each
 thing it needs, and the WebView first asks permission for each new kind of
-request (a CORS preflight, an `OPTIONS` request). Warm, main, in ms after the
+request (a CORS preflight, an `OPTIONS` request). Warm, 0.4.10, in ms after the
 process starts:
 
 | ms | |

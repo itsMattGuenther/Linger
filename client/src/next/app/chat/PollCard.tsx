@@ -80,13 +80,19 @@ export const PollCard = memo(function PollCard({
   };
 
   const closer = poll.closed_by === null ? undefined : people.get(poll.closed_by);
+  // A time that can't be drawn (#509) says nothing about when.
+  const closedWhen = poll.closed_at === null ? "" : setWhen(poll.closed_at, now);
+  const closesAt = closesWhen(poll.closes_at, now);
+  const closedHow = poll.closed_by === null ? "Closed on its own" : `Closed by ${closer?.display_name ?? "whoever asked"}`;
   const foot = !open
     ? poll.closed_at === null
       ? "Closing now."
-      : poll.closed_by === null
-        ? `Closed on its own ${setWhen(poll.closed_at, now)}.`
-        : `Closed by ${closer?.display_name ?? "whoever asked"} ${setWhen(poll.closed_at, now)}.`
-    : `Closes ${closesWhen(poll.closes_at, now)}.`;
+      : closedWhen === ""
+        ? `${closedHow}.`
+        : `${closedHow} ${closedWhen}.`
+    : closesAt === ""
+      ? ""
+      : `Closes ${closesAt}.`;
 
   return (
     <div className="nx-poll" data-closed={open ? undefined : "yes"}>

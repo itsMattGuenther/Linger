@@ -43,9 +43,11 @@ additional services or browser engines:
   tests skip S3 without that service. MinIO no longer publishes downloads, so
   build it from source with Go first; the script's header has the command.
 - `bash scripts/coturn-test.sh` needs Docker Engine and Compose. It checks
-  that the shipped voice relay starts and refuses an empty secret, without
-  opening host ports or using your server data. CI runs this too; it does not
-  replace the voice checks on separate networks.
+  that the shipped voice relay starts, carries packets to the voice address
+  and refuses any other (#501), carries nothing when it has no voice address,
+  stops when DNS never answers (so Docker starts it again), and refuses an
+  empty secret, without opening host ports or using your server data. CI
+  runs this too; it does not replace the voice checks on separate networks.
 - `bash scripts/update-docker-test.sh` needs Docker and network access to
   ghcr.io. It runs `deploy/update.sh` on a real 0.4.2 server, checks it comes
   back as 0.4.3 with a database backup, then runs it again with nothing new.
@@ -418,6 +420,15 @@ How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).
   at the root never touch it. Build it with `pnpm tauri`; its own tests are `cd
   client/src-tauri && cargo test`. A few need a real desktop session — an
   unlocked keyring, for one — and are marked `#[ignore]`.
+- **So the app has its own release profile.** Cargo reads `[profile.release]`
+  only from a workspace's root, so the root `Cargo.toml`'s never reached the
+  app, which shipped unstripped through 0.4.10 (#521).
+  `client/src-tauri/Cargo.toml` now has its own: thin LTO, one codegen unit,
+  stripped, with panics still unwinding (its comment says why). On Linux the
+  binary went from 43.0 MB to 24.2 MB, and 9.3 MB to 7.5 MB compressed; a
+  release build takes a minute or two longer. Dev builds, tests and the PR
+  package check (a debug build) don't use it. The release workflow checks the
+  Linux binary is stripped, after checking it starts.
 - **There are two content-security policies, and you develop under the loose
   one.** `pnpm tauri dev` may reach `http://localhost:*`; nothing you ship can.
   Tighten one and you must tighten both — `client/src-tauri/tests/csp.rs` fails

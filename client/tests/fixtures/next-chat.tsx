@@ -15,7 +15,8 @@
  *   150 at a time from the newest, as the store pages them.
  * - `?fail`: every send is refused, 120 ms after it's sent. `?fail=held`:
  *   each refusal waits until the test calls `window.chat.refuse()`, so a
- *   test decides what happens first (#341).
+ *   test decides what happens first (#341). Every send's words and one-time
+ *   key go on `data-keys`, so a test can tell a retry from a new send (#524).
  * - `?file`: Sam shares a PDF in #general; `&downloadfail` has the desktop
  *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
@@ -34,6 +35,7 @@
  *   asked which faction, open, with votes. With `?raid` too, thirty raiders
  *   pick Horde. `?member`: you aren't the host, so `/poll` isn't yours.
  *   Votes, closes and new polls are written to `body[data-did]`.
+ *   `&pollfail`: the first poll asked is refused (#524).
  * - `?reactions`: reactions (#485). In #general, five people loved what you
  *   said and two left the server's porch light; you left a 💯 on Eli's "No
  *   plans"; "Count me in" has six different, the most a message holds; and
@@ -136,7 +138,13 @@ function bigRoom(): Message[] {
   return out;
 }
 
-/** `?file`: Sam shares the trail map, a file that isn't a picture, in #general. */
+/**
+ * `?file`: Sam shares the trail map, a file that isn't a picture, in #general.
+ * With `&turned` it's a program whose name has U+202E in it, as one saved
+ * before the server took them out would (#488): "invoiceexe.pdf", unless the
+ * app shows it as it is.
+ */
+const TURNED = query.has("turned");
 function withFile(list: Message[]): Message[] {
   const last = list.at(-1);
   if (!last) return list;
@@ -151,8 +159,8 @@ function withFile(list: Message[]): Message[] {
     attachments: [
       {
         id: "a-map",
-        filename: "river-loop-trail-map.pdf",
-        mime: "application/pdf",
+        filename: TURNED ? "invoice\u{202E}fdp.exe" : "river-loop-trail-map.pdf",
+        mime: TURNED ? "application/octet-stream" : "application/pdf",
         size_bytes: 2_100_000,
         url: "/media/river-loop-trail-map.pdf",
         width: null,
@@ -304,6 +312,7 @@ const note = (what: string) => {
   did.push(what);
   document.body.dataset.did = did.join("|");
 };
+const keys: string[] = [];
 
 interface Held {
   messages: Message[];
@@ -467,6 +476,8 @@ function Fixture() {
     const roomId = find(submission.conversation)?.roomId;
     if (!roomId) throw new Error("That conversation is closed.");
     note(`send:${submission.body}`);
+    keys.push(`${submission.body}=${submission.nonce}`);
+    document.body.dataset.keys = keys.join("|");
     const draft: Message = {
       id: `p${submission.key}`,
       room_id: roomId,
@@ -507,6 +518,9 @@ function Fixture() {
   const onTyping = useCallback(() => undefined, []);
   const startPoll = useCallback(async (request: CreatePollRequest) => {
     note(`poll:${JSON.stringify(request)}`);
+    if (query.has("pollfail") && did.filter((line) => line.startsWith("poll:")).length === 1) {
+      throw new Error("Couldn't post the poll. Couldn't reach the server.");
+    }
   }, []);
   const onJoin = useCallback(() => note("join"), []);
   const onPickDevice = useCallback(() => note("settings:sound"), []);
@@ -551,7 +565,8 @@ function Fixture() {
       serverName: SERVER_NAME,
       me,
       speaking,
-      typing: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []),
+      // Typing until the page says otherwise, never running out.
+      typing: () => ({ people: (typing[activeRoom] ?? []).flatMap((one) => everyone.get(one) ?? []), until: null }),
       // As the window lists them (core/chat/mentions.ts): a DM's people, or the room's first.
       mentionable: (room.kind === "dm"
         ? dmPeople(room)

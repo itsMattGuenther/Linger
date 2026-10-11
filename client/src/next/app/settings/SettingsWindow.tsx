@@ -6,7 +6,7 @@ import type { Invite } from "../../../generated/Invite";
 import type { Room } from "../../../generated/Room";
 import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
-import { displayNameRequest } from "../../../lib/account";
+import { displayNameRequest, lookAlikeIn, type NameSaid } from "../../../lib/account";
 import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../lib/api";
 import { emojiPicture } from "../../../lib/emoji/picture";
 import { uploadFile } from "../../../lib/upload";
@@ -15,7 +15,7 @@ import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
 import { hostsHere, inviteUrl, moveRoom } from "../../../lib/host";
-import { type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
+import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
 import {
@@ -168,6 +168,17 @@ async function said(work: Promise<unknown>, fallback: string): Promise<string | 
   }
 }
 
+/** A name's save, as `said`, except that a name looking like somebody's here (#574) is said on the name field. */
+async function nameSaid(work: Promise<unknown>, fallback: string): Promise<NameSaid> {
+  try {
+    await work;
+    return null;
+  } catch (error: unknown) {
+    const onName = lookAlikeIn(error);
+    return onName === null ? inWords(error, fallback) : { onName };
+  }
+}
+
 /** Settings, wherever it's held (`SettingsHolder`). */
 export function Settings({ holder }: { holder: SettingsHolder }) {
   const { following, phone } = holder;
@@ -296,6 +307,20 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       alive = false;
     };
   }, []);
+
+  // How far the talk key reaches here (#500), with the chosen key named for
+  // Hyprland's bind line: asked again when another key is picked.
+  const [talkReach, setTalkReach] = useState<TalkKeyReach | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true;
+    void talkKeyReach(voice.pushToTalkKey)
+      .then((reach) => alive && setTalkReach(reach))
+      .catch(() => alive && setTalkReach(null));
+    return () => {
+      alive = false;
+    };
+  }, [voice.pushToTalkKey]);
 
   // The server's own details, for its name and the host's settings.
   const [info, setInfo] = useState<ServerInfo | null>(null);
@@ -434,7 +459,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         me,
         plainNames: plain,
         actions: {
-          saveName: (name) => said(saveDisplayName(api, displayNameRequest(name)), "Couldn't save your name."),
+          saveName: (name) => nameSaid(saveDisplayName(api, displayNameRequest(name)), "Couldn't save your name."),
           saveStatus: async (status) => {
             const problem = await said(saveStatus(api, status), "Couldn't save your status.");
             // Going away or coming back is presence too, which the list window keeps.
@@ -525,6 +550,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           }
         },
         devices,
+        talkReach,
         now,
       }}
       notifications={{
@@ -741,6 +767,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 save: async (change) => {
                   try {
                     setInfo(await api.updateServer({ name: change.name, accent_key: change.accent as ServerInfo["accent_key"], icon_key: null }));
+                    // The list shows it now, not at its next hourly ask (#536).
+                    void intend({ kind: "serverinfo", server }).catch(() => undefined);
                     return null;
                   } catch (error: unknown) {
                     return inWords(error, "Couldn't save the server.");

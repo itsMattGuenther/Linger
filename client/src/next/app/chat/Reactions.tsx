@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
@@ -6,10 +6,12 @@ import type { ReactionGroup } from "../../../generated/ReactionGroup";
 import type { User } from "../../../generated/User";
 import { recentEmoji } from "../../../lib/emoji/recent";
 import { customIdOf, customKey, reactedWords } from "../../../lib/reactions";
+import { startHold } from "../../core/hold";
 import { onPhone } from "../../core/phone";
 import { Icon, type MenuAnchor } from "../../kit";
 import { useTooltip } from "../../kit/Tooltip";
 import { EmojiPicker } from "./EmojiPicker";
+import { PeopleCard } from "./PeopleCard";
 import "./Reactions.css";
 
 /**
@@ -46,8 +48,9 @@ function nameOf(key: string, byId: ReadonlyMap<string, CustomEmoji>): string {
 
 /**
  * A message's reactions (SPEC §4.8, #485): a pill per emoji with how many
- * people left it, yours blue, who on hover; then a smiley-plus while there's
- * room for another, shown on hover on a computer and always on a phone.
+ * people left it, yours blue, who on hover, or on a touch screen by holding
+ * it (#573); then a smiley-plus while there's room for another, shown on
+ * hover on a computer and always on a phone.
  */
 export function ReactionPills({
   groups,
@@ -107,21 +110,81 @@ function Pill({
   const id = customIdOf(group.key);
   const words = reactedWords(names, id === null ? null : (kit.byId.get(id)?.name ?? null));
   const tip = useTooltip(words);
+  // Who left it, by name, in a card over the pill: held on a touch screen
+  // (#573), where there's no pointer to hover with.
+  const [who, setWho] = useState(false);
+  const self = useRef<HTMLButtonElement | null>(null);
+  const [press] = useState(() => startHold(() => setWho(true)));
+  useEffect(() => () => press.stop(), [press]);
+  const closeWho = useCallback(() => setWho(false), []);
+  const said = nameOf(group.key, kit.byId);
   return (
     <>
       <button
+        ref={self}
         type="button"
         className="nx-react-pill"
         data-mine={mine ? "yes" : undefined}
         aria-pressed={mine}
-        aria-label={`${nameOf(group.key, kit.byId)} ${group.count}. ${words}.`}
-        onClick={() => onToggle(group.key, !mine)}
+        aria-label={`${said} ${group.count}. ${words}.`}
+        onClick={(event) => {
+          // The click a hold's release can leave behind isn't a tap. One
+          // from the keyboard (no presses, `detail` 0) always is.
+          if (event.detail !== 0 && press.takeClick()) return;
+          // A tap on the pill with its card open closes the card, as the
+          // card's other openers do, rather than taking yours back unseen.
+          if (who) {
+            setWho(false);
+            return;
+          }
+          onToggle(group.key, !mine);
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse") press.stop();
+          else press.down(event.pointerId, event.clientX, event.clientY);
+        }}
+        // Left alone, the made-up mouse-down after a hold would take the
+        // focus back out of the card the hold opened.
+        onMouseDown={(event) => {
+          if (press.afterHold()) event.preventDefault();
+        }}
+        onPointerMove={(event) => press.move(event.pointerId, event.clientX, event.clientY)}
+        onPointerUp={(event) => press.end(event.pointerId)}
+        // The browser took the finger over to scroll the conversation.
+        onPointerCancel={(event) => press.end(event.pointerId)}
+        onContextMenu={(event) => {
+          // The phone's own long-press: our hold, not its menu, nor the
+          // message's sheet that holding the rest of the message opens.
+          // A right-click on a computer is left as it always was.
+          if (!press.now() && !onPhone()) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setWho(true);
+        }}
         {...tip.anchorProps}
+        // A finger is "over" the pill only while it's down: the tooltip
+        // would sit by the card a hold opens.
+        onPointerEnter={(event) => {
+          if (event.pointerType !== "touch") tip.anchorProps.onPointerEnter(event);
+        }}
       >
         <Glyph reactionKey={group.key} byId={kit.byId} />
         <span className="nx-react-count">{group.count}</span>
       </button>
-      {tip.bubble}
+      {who ? null : tip.bubble}
+      {who ? (
+        <PeopleCard
+          heading={
+            <>
+              Reacted with <Glyph reactionKey={group.key} byId={kit.byId} />
+            </>
+          }
+          label={`Everyone who reacted with ${said}`}
+          people={group.user_ids.flatMap((one) => people.get(one) ?? [])}
+          anchor={self}
+          onClose={closeWho}
+        />
+      ) : null}
     </>
   );
 }
