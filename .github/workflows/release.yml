@@ -270,6 +270,19 @@ jobs:
           set -euo pipefail
           node scripts/linux-next-check.mjs client/src-tauri/target/release/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
           node scripts/linux-next-check.mjs package-check/deb/usr/bin/linger-client --output package-check/next-deb
+      - name: The signed Linux app is stripped
+        # client/src-tauri's release profile strips it (#521). The PR package
+        # check builds debug, so this is the first build that should be.
+        # Unstripped, the binary carries 13 MB of symbol names nobody uses.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for binary in package-check/deb/usr/bin/linger-client package-check/rpm/usr/bin/linger-client; do
+            kind="$(file -b "$binary")"
+            echo "$binary: $kind"
+            [[ "$kind" == *", stripped" ]] || { echo "::error::$binary isn't stripped (#521)"; exit 1; }
+          done
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh
