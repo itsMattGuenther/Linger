@@ -94,10 +94,12 @@ the comment together. Dependabot does that once a month
 release at least a week old, and it is merged like any other.
 `dtolnay/rust-toolchain` has no version tags, so Dependabot leaves it alone:
 move it by hand to a commit from its `master` branch, and pass
-`toolchain: stable`. `tauri-apps/tauri-action` gets only its 0.x updates: it
-builds the release and writes `latest.json`, no pull request runs it, and 1.0
-changes both, so that move is its own pull request, tried on a draft release
-first (#597).
+`toolchain: stable`. `tauri-apps/tauri-action` builds the release and writes
+`latest.json`, and no pull request runs it, so a major version of it is worth
+a practice draft release before it's merged, as 1.0 got (#597). Its 1.0 writes
+`latest.json`'s links as GitHub API links; `release.yml`'s `updater-json` job
+puts the normal download links back (`scripts/updater-urls.mjs`, tested in the
+rules job).
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
