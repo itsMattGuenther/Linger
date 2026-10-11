@@ -122,9 +122,18 @@ function isJumbo(blocks: readonly Block[], emojiOf: (name: string) => EmojiFound
 function BlockView({ block, ctx, trailing }: { block: Block; ctx: Ctx; trailing?: ReactNode }) {
   switch (block.kind) {
     case "paragraph":
+      // With "edited" after them, the words are kept to themselves (#488): a
+      // message may hold a character that turns the text after it around,
+      // and it mustn't reach the mark.
       return (
         <p className="nx-text-p">
-          <Inlines nodes={block.children} ctx={ctx} />
+          {trailing ? (
+            <span className="nx-text-words">
+              <Inlines nodes={block.children} ctx={ctx} />
+            </span>
+          ) : (
+            <Inlines nodes={block.children} ctx={ctx} />
+          )}
           {trailing}
         </p>
       );

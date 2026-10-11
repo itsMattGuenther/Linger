@@ -40,10 +40,7 @@ async fn complete(
     validate::username(&req.username)?;
     validate::display_name(&req.display_name)?;
     validate::password(&req.password)?;
-    let server_name = req.server_name.trim();
-    if server_name.is_empty() || server_name.chars().count() > 48 {
-        return Err(ApiError::validation("Server names are 1–48 characters."));
-    }
+    let server_name = validate::server_name(&req.server_name)?;
 
     // Validate everything above *before* burning the one-shot token, so a typo
     // in the form doesn't brick first-run.
@@ -69,7 +66,7 @@ async fn complete(
     .await?;
     crate::repo::colors::assign_starting_color(&mut tx, host_id).await?;
     for (key, value) in [
-        ("name", server_name.to_string()),
+        ("name", server_name.clone()),
         ("created_at", now.to_string()),
     ] {
         sqlx::query("INSERT INTO server_config (key, value) VALUES (?, ?)")

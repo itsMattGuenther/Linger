@@ -530,3 +530,27 @@ async fn a_new_member_shows_up_without_anybody_restarting() {
         }
     }
 }
+
+/// An away message sent over the socket is drawn beside the person's name on
+/// everybody's list, so it loses the characters that turn text around, as a
+/// saved one does (#488).
+#[tokio::test]
+async fn an_away_message_cannot_turn_itself_around() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": "back \u{202E}krow retfa" } }),
+    )
+    .await;
+    loop {
+        let (presence, _) = wait_for(&mut watcher, "presence.update").await;
+        if presence["d"]["state"] == "away" {
+            assert_eq!(presence["d"]["user_id"], member.user.id.to_string());
+            assert_eq!(presence["d"]["away_message"], "back krow retfa");
+            break;
+        }
+    }
+}

@@ -103,3 +103,9 @@ button.k-chip:hover .k-icon {
     background: HighlightText;
   }
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.k-chip-text {
+  unicode-bidi: isolate;
+}

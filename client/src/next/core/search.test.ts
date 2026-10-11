@@ -181,6 +181,11 @@ describe("the words around a search", () => {
     expect(many).toBe("a.png, b.pdf and others");
   });
 
+  // #488: an override in the first name would turn "and b.pdf" around too.
+  it("names files without the characters that turn text around", () => {
+    expect(filesNamed(["invoice\u{202E}fdp.exe", "b.pdf"])).toBe("invoicefdp.exe and b.pdf");
+  });
+
   it("says it's searching, or what went wrong, by server when there are several", () => {
     expect(searchStatus({ searching: false, problems: [] })).toBe("");
     expect(searchStatus({ searching: true, problems: [] })).toBe("Searching…");

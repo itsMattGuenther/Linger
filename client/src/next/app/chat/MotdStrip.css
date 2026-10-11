@@ -55,3 +55,9 @@
   -webkit-line-clamp: 1;
   color: var(--text-secondary);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-motd-words > .nx-text {
+  unicode-bidi: isolate;
+}

@@ -94,6 +94,36 @@ The limits are `MAX_ACCENT_MARKS_PER_LETTER` and `MAX_MARKS_PER_LETTER` in
 `linger-core::limits`. They apply when a name is set or changed: a name saved before
 them is left as it is, and a `PATCH /me` whose `display_name` is the saved name
 unchanged is not held to them.
+
+**Direction controls in other short text** (#488). The direction controls in rule 2
+come in two kinds. The embeddings, overrides and isolates (U+202A–U+202E,
+U+2066–U+2069) turn the text after them around: a file named `invoice` + U+202E +
+`fdp.exe` reads "invoiceexe.pdf", and one left open turns the app's own words beside
+it around too. The three marks (U+200E, U+200F, U+061C) only move the punctuation and
+numbers beside them, and people writing Hebrew or Arabic use them on purpose: "בחוץ!"
+draws its "!" at the start of the line without U+200F after it. A display name
+refuses all of them. Everywhere else the app draws short text beside its own words,
+the server **takes them out** on the way in, before trimming and counting, and stores
+the rest:
+
+- an upload's `filename` (§6) loses all of them, the marks too, and so does the name
+  in a file's `Content-Disposition`, for a name stored before this. A file's name is
+  what the trick is aimed at, and nobody needs a mark in one;
+- every text in a status: `line`, `away_message`, `reading`, `listening`, `working_on`
+  and each field's `label` and `value` (§5), and the `away_message` of a
+  `presence.update` (§8);
+- a room's `name`, `topic` and `motd`, and the server's `name`, at setup too (§3, §2.1);
+- a poll's `question` and `choices` (§4).
+
+All but the file name lose only the embeddings, overrides and isolates, and keep the
+marks. Taken out rather than refused, because nobody can see them: a refusal would ask
+somebody to delete a character they can't find, and they mostly arrive by pasting (a
+song title, a file from somebody's disk). A message's `body` keeps everything:
+somebody writing a paragraph in Hebrew or Arabic may want any of them, and a client
+keeps each message's words to themselves. Text stored before this keeps them, so a
+client draws all of the above isolated from the words around it, and a file's name
+without them (`docs/design/system.md`, principle 10).
+
 `password`: minimum 8 characters. Do not impose composition rules, do not expire
 passwords, and do not ask for a hint. The floor was 12 until 2026-08-21; it came
 down because the client remembers the password in the OS keyring, so the length
@@ -172,7 +202,8 @@ client draws `member_ids` and ignores both. The `dm-` slug prefix is reserved an
 `POST /rooms` refuses it.
 
 **A room's message of the day** (`motd`, SPEC §4.1, #464) is what's happening now; the
-topic is what the room is about. `PATCH /rooms/:id { motd }` sets it, trimmed, up to
+topic is what the room is about. `PATCH /rooms/:id { motd }` sets it, trimmed and
+without the direction controls that turn text around (§2), up to
 `linger-core::limits::MAX_MOTD_CHARS` (300) characters, longer is `VALIDATION_FAILED`;
 `""` clears it, and leaving `motd` out leaves it alone. Setting it also writes a line in
 the room, in the same transaction: a `Message` from whoever set it, with the words as
@@ -352,7 +383,8 @@ type PollClosed = { poll_id: string; question: string; winners: string[] };   //
 ```
 
 - **Asking** is the host or a co-host (`FORBIDDEN` for anybody else), in a room, never a DM
-  (`NOT_FOUND`), and not an archived one. The question is trimmed, 1 to
+  (`NOT_FOUND`), and not an archived one. Question and choices lose the direction
+  controls that turn text around (§2). The question is trimmed, 1 to
   `MAX_POLL_QUESTION_CHARS` (300); `MIN_POLL_CHOICES` to `MAX_POLL_CHOICES` (2 to 10)
   choices, each trimmed, 1 to `MAX_POLL_CHOICE_CHARS` (80), none the same as another
   ignoring case; `closes_in_days` is one of `POLL_DAYS` (1, 3, 7, 14, 28). Anything else is
@@ -564,7 +596,8 @@ any label typed; the server doesn't keep a list. It checks every field: at
 most three (`VALIDATION_FAILED` for a fourth), each label 1–24 characters and
 each value 1–80, counted after trimming, neither holding a control character
 (a tab, a line break), and no label twice, ignoring case. It stores them
-trimmed. An empty value is refused rather than dropped: an app leaves out a
+trimmed, and without the direction controls that turn text around (§2),
+which every text in a status loses. An empty value is refused rather than dropped: an app leaves out a
 field nobody filled in. A web address in a value is the app's to draw as a
 link; on the wire a value is plain text.
 
@@ -818,6 +851,8 @@ type Attachment = {
 `mime`, `filename` and `size_bytes` on a finished attachment describe what the server
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
+The stored `filename` has no folders in it, and no control characters, double quotes,
+backslashes or direction controls (§2).
 
 **Display copies (#382).** An image's `display_url` is the picture to draw where it is
 shown small: in a conversation and on a media tile. An engine that decodes the full

@@ -192,6 +192,32 @@ async fn a_poll_has_a_question_and_two_to_ten_different_choices() {
     }
 }
 
+/// The question and the winners are quoted in the line a room gets when the
+/// poll closes, so neither can turn the words around it (#488): the
+/// characters that turn text around are taken out. A direction mark stays.
+#[tokio::test]
+async fn a_poll_loses_the_characters_that_turn_text_around() {
+    let (server, host, room) = common::server_with_room("wow").await;
+    let resp = ask(
+        &server,
+        &host.access_token,
+        &room,
+        &json!({
+            "question": "Which \u{202E}noitcaf?",
+            "choices": ["\u{2067}Horde\u{2069}", "Alliance\u{200F}"],
+            "multi": false,
+            "closes_in_days": 7,
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), 200, "{}", resp.text().await.unwrap());
+    let poll: Message = resp.json().await.unwrap();
+    let poll = poll.poll.expect("a poll");
+    assert_eq!(poll.question, "Which noitcaf?");
+    let choices: Vec<&str> = poll.choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(choices, ["Horde", "Alliance\u{200F}"]);
+}
+
 #[tokio::test]
 async fn a_dm_has_no_polls() {
     let (server, host, _room) = common::server_with_room("wow").await;

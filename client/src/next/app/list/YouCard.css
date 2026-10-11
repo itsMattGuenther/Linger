@@ -158,3 +158,10 @@
   line-height: var(--line-meta);
   color: var(--text-danger);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-you-away-text,
+.nx-you-line-text {
+  unicode-bidi: isolate;
+}

@@ -249,3 +249,11 @@
   height: var(--marker-slot);
   object-fit: contain;
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.k-row-title,
+.k-row-note,
+.k-row-detail {
+  unicode-bidi: isolate;
+}

@@ -11,6 +11,7 @@ import {
   dayStart,
   durationText,
   expiryText,
+  fileNameToShow,
   fileSize,
   inlineBox,
   itemLabel,
@@ -143,6 +144,36 @@ describe("labels", () => {
     expect(itemLabel(bare)).toBe("example.com");
 
     expect(itemLabel(item({ excerpt: "keep this" }))).toBe("keep this");
+  });
+
+  // #488: one override makes a program read as a document. A name saved
+  // before the server took them out, or from a server that doesn't, still
+  // shows the way it was written.
+  it("shows a file's name without the characters that turn it around", () => {
+    expect(fileNameToShow("invoice\u{202E}fdp.exe")).toBe("invoicefdp.exe");
+    for (const c of ["\u{061C}", "\u{200E}", "\u{200F}", "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}"]) {
+      expect(fileNameToShow(`a${c}b${c}.pdf`)).toBe("ab.pdf");
+    }
+    expect(fileNameToShow("שלום.pdf")).toBe("שלום.pdf");
+    const disguised = item({
+      kind: "file",
+      attachment: {
+        id: "a2",
+        filename: "invoice\u{202E}fdp.exe",
+        mime: "application/octet-stream",
+        size_bytes: 10,
+        url: "/objects/y",
+        width: null,
+        height: null,
+        duration_ms: null,
+        blurhash: null,
+        poster_url: null,
+        starred_at: null,
+        uploader_id: "u1",
+        created_at: 0,
+      },
+    });
+    expect(itemLabel(disguised)).toBe("invoicefdp.exe");
   });
 });
 
