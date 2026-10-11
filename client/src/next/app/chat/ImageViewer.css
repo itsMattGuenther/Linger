@@ -36,3 +36,9 @@
   font-size: var(--text-meta);
   line-height: var(--line-meta);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-viewer-name {
+  unicode-bidi: isolate;
+}

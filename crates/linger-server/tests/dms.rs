@@ -770,3 +770,476 @@ async fn a_removed_member_stops_seeing_a_dm_and_a_restored_one_gets_it_back() {
         "and it is the same DM, not a new one"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Leaving a group DM (SPEC §4.13, PROTOCOL §3.1, #565)
+// ---------------------------------------------------------------------------
+
+async fn leave(server: &common::TestServer, token: &str, room: &str) -> reqwest::Response {
+    reqwest::Client::new()
+        .post(server.url(&format!("/dms/{room}/leave")))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn page(server: &common::TestServer, token: &str, room: &str) -> reqwest::Response {
+    reqwest::Client::new()
+        .get(server.url(&format!("/rooms/{room}/messages")))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn messages(
+    server: &common::TestServer,
+    token: &str,
+    room: &str,
+) -> Vec<linger_core::wire::Message> {
+    let resp = page(server, token, room).await;
+    assert_eq!(resp.status(), 200);
+    resp.json().await.unwrap()
+}
+
+/// The host, Callie and Dave in a group DM, with something said in it.
+async fn a_group(
+    server: &common::TestServer,
+    host: &linger_core::wire::AuthResponse,
+) -> (
+    linger_core::wire::AuthResponse,
+    linger_core::wire::AuthResponse,
+    Room,
+) {
+    let (callie, dave) = three_people(server, host).await;
+    let group = dm_with(
+        server,
+        &host.access_token,
+        &[&callie.user.id.to_string(), &dave.user.id.to_string()],
+    )
+    .await;
+    assert_eq!(
+        say(
+            server,
+            &callie.access_token,
+            &group.id.to_string(),
+            "raid at nine"
+        )
+        .await
+        .status(),
+        200
+    );
+    (callie, dave, group)
+}
+
+#[tokio::test]
+async fn leaving_a_group_takes_it_out_of_your_list_and_keeps_it_for_the_others() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave, group) = a_group(&server, &host).await;
+    let id = group.id.to_string();
+
+    assert_eq!(
+        leave(&server, &callie.access_token, &id).await.status(),
+        204
+    );
+
+    // Gone for Callie: from her list, and from asking by its id, which answers
+    // as for any DM she was never in.
+    assert!(list_dms(&server, &callie.access_token).await.is_empty());
+    assert_eq!(page(&server, &callie.access_token, &id).await.status(), 404);
+    assert_eq!(
+        say(&server, &callie.access_token, &id, "wait, one more thing")
+            .await
+            .status(),
+        404
+    );
+    // And she can't leave it twice.
+    assert_eq!(
+        leave(&server, &callie.access_token, &id).await.status(),
+        404
+    );
+
+    // The others keep it, with what she said, and a line saying she left.
+    let theirs = list_dms(&server, &dave.access_token).await;
+    assert_eq!(theirs.len(), 1);
+    let mut members = theirs[0].member_ids.clone().unwrap();
+    members.sort();
+    let mut expected = vec![host.user.id, dave.user.id];
+    expected.sort();
+    assert_eq!(members, expected);
+    assert_eq!(theirs[0].someone_left, Some(true));
+
+    let said = messages(&server, &dave.access_token, &id).await;
+    assert!(
+        said.iter()
+            .any(|m| m.body == "raid at nine" && m.author_id == callie.user.id),
+        "what somebody said stays when they leave"
+    );
+    let line = said
+        .iter()
+        .find(|m| m.left == Some(true))
+        .expect("the others are told she left");
+    assert_eq!(line.author_id, callie.user.id);
+    assert_eq!(line.body, "left");
+    // A line nobody typed never makes the DM look new, and isn't something
+    // anybody said for search to find.
+    assert_ne!(theirs[0].last_message_id, Some(line.id));
+    let hits: Vec<Value> = reqwest::Client::new()
+        .get(server.url("/search?q=left"))
+        .bearer_auth(&dave.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(hits.is_empty(), "search found the line: {hits:?}");
+
+    // Nobody types it, so nobody edits it or reacts to it.
+    let client = reqwest::Client::new();
+    let status = client
+        .put(server.url(&format!("/messages/{}/reactions/👋", line.id)))
+        .bearer_auth(&dave.access_token)
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, 422);
+}
+
+#[tokio::test]
+async fn a_one_to_one_dm_cannot_be_left() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, _dave) = three_people(&server, &host).await;
+    let dm = dm_with(&server, &host.access_token, &[&callie.user.id.to_string()]).await;
+
+    let resp = leave(&server, &callie.access_token, &dm.id.to_string()).await;
+    assert_eq!(resp.status(), 422);
+    let body: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(body.error.code, ErrorCode::ValidationFailed);
+    assert_eq!(list_dms(&server, &callie.access_token).await.len(), 1);
+}
+
+#[tokio::test]
+async fn leaving_something_you_are_not_in_is_not_found() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let (callie, dave) = three_people(&server, &host).await;
+    let outsider = common::join_member(&server, &host.access_token, "eli").await;
+    let group = dm_with(
+        &server,
+        &host.access_token,
+        &[&callie.user.id.to_string(), &dave.user.id.to_string()],
+    )
+    .await;
+
+    // A group Eli isn't in answers as no room at all, never "forbidden",
+    // which would say it exists.
+    let resp = leave(&server, &outsider.access_token, &group.id.to_string()).await;
+    assert_eq!(resp.status(), 404);
+    // Nor is a room something anybody leaves, and nor is a made-up id.
+    assert_eq!(
+        leave(&server, &outsider.access_token, &room.id.to_string())
+            .await
+            .status(),
+        404
+    );
+    assert_eq!(
+        leave(
+            &server,
+            &outsider.access_token,
+            &linger_core::RoomId::new().to_string()
+        )
+        .await
+        .status(),
+        404
+    );
+    // And nothing changed for the people in it.
+    assert_eq!(
+        list_dms(&server, &dave.access_token).await[0]
+            .member_ids
+            .as_ref()
+            .map(Vec::len),
+        Some(3)
+    );
+}
+
+#[tokio::test]
+async fn the_same_people_asking_again_get_a_new_dm() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave, group) = a_group(&server, &host).await;
+    assert_eq!(
+        leave(&server, &callie.access_token, &group.id.to_string())
+            .await
+            .status(),
+        204
+    );
+
+    // Asking for the three of them again, from either side, is a new
+    // conversation: nobody is pulled back into the one Callie left.
+    let again = dm_with(
+        &server,
+        &dave.access_token,
+        &[&host.user.id.to_string(), &callie.user.id.to_string()],
+    )
+    .await;
+    assert_ne!(again.id, group.id);
+    assert_eq!(again.someone_left, None);
+    assert!(
+        messages(&server, &callie.access_token, &again.id.to_string())
+            .await
+            .is_empty(),
+        "the new one starts empty"
+    );
+    let hers = dm_with(
+        &server,
+        &callie.access_token,
+        &[&host.user.id.to_string(), &dave.user.id.to_string()],
+    )
+    .await;
+    assert_eq!(
+        hers.id, again.id,
+        "and it is found by its people like any other"
+    );
+
+    // The two left in the old group asking for each other get their own DM,
+    // not the group: a group that shrinks to two stays a group.
+    let pair = dm_with(&server, &host.access_token, &[&dave.user.id.to_string()]).await;
+    assert_ne!(pair.id, group.id);
+}
+
+#[tokio::test]
+async fn a_group_down_to_two_is_still_a_group_and_can_still_be_left() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave, group) = a_group(&server, &host).await;
+    let id = group.id.to_string();
+    assert_eq!(
+        leave(&server, &callie.access_token, &id).await.status(),
+        204
+    );
+
+    // Two people in it now, and it is not their one-to-one DM: Dave can leave.
+    assert_eq!(leave(&server, &dave.access_token, &id).await.status(), 204);
+    let hosts = list_dms(&server, &host.access_token).await;
+    assert_eq!(hosts.len(), 1);
+    assert_eq!(hosts[0].member_ids, Some(vec![host.user.id]));
+    let lines = messages(&server, &host.access_token, &id)
+        .await
+        .into_iter()
+        .filter(|m| m.left == Some(true))
+        .count();
+    assert_eq!(lines, 2, "one line for each person who left");
+}
+
+#[tokio::test]
+async fn the_last_one_out_deletes_it() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave, group) = a_group(&server, &host).await;
+    let id = group.id.to_string();
+    for token in [&callie.access_token, &dave.access_token] {
+        assert_eq!(leave(&server, token, &id).await.status(), 204);
+    }
+    // The host still has it, history and all, until they go too.
+    assert!(messages(&server, &host.access_token, &id)
+        .await
+        .iter()
+        .any(|m| m.body == "raid at nine"));
+    assert_eq!(leave(&server, &host.access_token, &id).await.status(), 204);
+
+    // Nobody can be let back in to read it, so nothing of what was said is
+    // kept: every message is a tombstone, and no line was written for nobody.
+    let rows: Vec<(String, Option<i64>)> =
+        sqlx::query_as("SELECT body, deleted_at FROM messages WHERE room_id = ?")
+            .bind(group.id.to_vec())
+            .fetch_all(&server.state.db.read)
+            .await
+            .unwrap();
+    assert!(!rows.is_empty());
+    assert!(
+        rows.iter()
+            .all(|(body, deleted)| body.is_empty() && deleted.is_some()),
+        "a conversation nobody can read kept its words: {rows:?}"
+    );
+    let members: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM room_members WHERE room_id = ?")
+        .bind(group.id.to_vec())
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap();
+    assert_eq!(members, 0);
+    // And it is still a DM with nobody in it, which nobody can see, rather
+    // than a room, which everybody could.
+    for who in [&host, &callie, &dave] {
+        assert_eq!(page(&server, &who.access_token, &id).await.status(), 404);
+    }
+}
+
+#[tokio::test]
+async fn the_last_one_out_takes_its_files_with_it() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave) = three_people(&server, &host).await;
+    let group = dm_with(
+        &server,
+        &host.access_token,
+        &[&callie.user.id.to_string(), &dave.user.id.to_string()],
+    )
+    .await;
+    let id = group.id.to_string();
+
+    let file = upload_text(&server, &callie.access_token, "plans.txt").await;
+    let posted = reqwest::Client::new()
+        .post(server.url(&format!("/rooms/{id}/messages")))
+        .bearer_auth(&callie.access_token)
+        .json(&json!({ "body": "", "attachment_ids": [file] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(posted.status(), 200);
+
+    for token in [&host.access_token, &callie.access_token, &dave.access_token] {
+        assert_eq!(leave(&server, token, &id).await.status(), 204);
+    }
+
+    // The leave starts a sweep straight away rather than waiting hours for
+    // the next one; give it a moment to finish.
+    let mut left = 1;
+    for _ in 0..40 {
+        left = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM attachments WHERE id = ?")
+            .bind(file.to_vec())
+            .fetch_one(&server.state.db.read)
+            .await
+            .unwrap();
+        if left == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(left, 0, "a deleted DM's file is still on the server");
+}
+
+/// A small finished upload, by id.
+async fn upload_text(
+    server: &common::TestServer,
+    token: &str,
+    filename: &str,
+) -> linger_core::AttachmentId {
+    let bytes = b"bring snacks".to_vec();
+    let slot: linger_core::wire::UploadSlot = reqwest::Client::new()
+        .post(server.url("/uploads"))
+        .bearer_auth(token)
+        .json(&json!({ "filename": filename, "size_bytes": bytes.len(), "mime": "text/plain" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let put = reqwest::Client::new()
+        .put(format!("{}{}", server.base, slot.url))
+        .body(bytes)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(put.status(), 200);
+    let done = reqwest::Client::new()
+        .post(server.url(&format!("/uploads/{}/complete", slot.upload_id)))
+        .bearer_auth(token)
+        .json(&json!({ "parts": null }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(done.status(), 200);
+    let attachment: linger_core::wire::Attachment = done.json().await.unwrap();
+    attachment.id
+}
+
+/// The gateway's half: every one of the leaver's sessions is told the DM is
+/// gone, and nothing about it after that; the others get the DM as it is now
+/// and the line. Real sockets, because a filter is only proved by somebody who
+/// should get nothing getting nothing.
+#[tokio::test]
+async fn the_leavers_devices_drop_it_and_the_others_see_the_line() {
+    let (server, host, _room) = common::server_with_room("garage").await;
+    let (callie, dave, group) = a_group(&server, &host).await;
+    let id = group.id.to_string();
+
+    // Callie on two devices; Dave on one.
+    let (mut laptop, _) = connect_ready(&server, &callie.access_token).await;
+    let (mut desktop, _) = connect_ready(&server, &callie.access_token).await;
+    let (mut dave_ws, _) = connect_ready(&server, &dave.access_token).await;
+    for ws in [&mut laptop, &mut desktop, &mut dave_ws] {
+        drain(ws, SETTLE).await;
+    }
+
+    assert_eq!(
+        leave(&server, &callie.access_token, &id).await.status(),
+        204
+    );
+    // Said after she left: it must never reach her.
+    assert_eq!(
+        say(&server, &dave.access_token, &id, "she's gone")
+            .await
+            .status(),
+        200
+    );
+
+    for ws in [&mut laptop, &mut desktop] {
+        let frames = drain(ws, SETTLE).await;
+        let gone: Vec<&Value> = frames.iter().filter(|f| f["op"] == "dm.remove").collect();
+        assert_eq!(
+            gone.len(),
+            1,
+            "each of her devices is told once: {frames:?}"
+        );
+        assert_eq!(gone[0]["d"]["room_id"], json!(id));
+        for frame in frames.iter().filter(|f| f["op"] != "dm.remove") {
+            assert!(
+                !frame.to_string().contains(&id),
+                "a frame about the DM reached somebody who left it: {frame}"
+            );
+        }
+    }
+
+    let his = drain(&mut dave_ws, SETTLE).await;
+    assert!(
+        !his.iter().any(|f| f["op"] == "dm.remove"),
+        "only the leaver is told to drop it"
+    );
+    let update = his
+        .iter()
+        .find(|f| f["op"] == "room.update" && f["d"]["id"] == json!(id))
+        .expect("the others get the DM as it is now");
+    let members = update["d"]["member_ids"].as_array().unwrap();
+    assert_eq!(members.len(), 2);
+    assert!(!members.contains(&json!(callie.user.id.to_string())));
+    assert_eq!(update["d"]["someone_left"], json!(true));
+    let line = his
+        .iter()
+        .find(|f| f["op"] == "message.create" && f["d"]["left"] == json!(true))
+        .expect("and the line");
+    assert_eq!(line["d"]["author_id"], json!(callie.user.id.to_string()));
+    assert_eq!(line["d"]["body"], "left");
+    assert!(his
+        .iter()
+        .any(|f| f["op"] == "message.create" && f["d"]["body"] == "she's gone"));
+
+    // A fresh sign-in on a third device has never heard of it.
+    let (_ws, ready) = connect_ready(&server, &callie.access_token).await;
+    assert!(ready["dms"].as_array().unwrap().is_empty());
+
+    // And she can't stand in it or type in it any more: Dave hears nothing.
+    send_json(
+        &mut laptop,
+        json!({ "op": "room.focus", "d": { "room_id": id } }),
+    )
+    .await;
+    send_json(
+        &mut laptop,
+        json!({ "op": "typing.start", "d": { "room_id": id } }),
+    )
+    .await;
+    let after = drain(&mut dave_ws, SETTLE).await;
+    assert!(
+        !after.iter().any(|f| f["op"] == "typing"),
+        "somebody who left could still type in it: {after:?}"
+    );
+}

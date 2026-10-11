@@ -7,7 +7,7 @@ import type { User } from "../../../generated/User";
 vi.mock("../../../lib/notify", () => ({ considerFrame: () => undefined }));
 vi.mock("../../../lib/sound", () => ({ playKnock: () => false, playSound: () => false }));
 
-const { serverState } = await import("../../../lib/gateway");
+const { serverState, typingRunsOut } = await import("../../../lib/gateway");
 const { conversationIn, micsHere, openingAt, tabModel, typingIn, voiceHere } = await import("./conversation");
 
 const HOME = "https://home.example";
@@ -136,6 +136,16 @@ describe("what the chat window shows about a conversation", () => {
     const state = evening({ typing: { "r-general": { "u-eli": NOW - 1_000, "u-jules": NOW - 60_000 } } });
     expect(typingIn(state, "r-general", NOW)).toEqual([eli]);
     expect(typingIn(state, "d-jules", NOW)).toEqual([]);
+  });
+
+  it("says when the typing line next changes by itself, and never while nobody types (#511)", () => {
+    const state = evening({ typing: { "r-general": { "u-eli": NOW - 1_000, "u-dave": NOW - 3_000, "u-jules": NOW - 60_000, "u-matt": NOW - 5_500 } } });
+    // Dave runs out first, six seconds after he said so; Jules has already, and you never count.
+    expect(typingRunsOut(state, "r-general", NOW)).toBe(NOW + 3_000);
+    expect(typingIn(state, "r-general", NOW + 3_000)).toEqual([eli]);
+    expect(typingRunsOut(state, "r-general", NOW + 3_000)).toBe(NOW + 5_000);
+    expect(typingRunsOut(state, "r-general", NOW + 5_000)).toBeNull();
+    expect(typingRunsOut(state, "d-jules", NOW)).toBeNull();
   });
 
   it("opens on where you left off only when something arrived since", () => {

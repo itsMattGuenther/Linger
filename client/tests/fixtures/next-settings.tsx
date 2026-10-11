@@ -18,6 +18,10 @@
  * - `?fields`: your status has fields with labels of your own (#270);
  *   with `&long`, as long as the server takes.
  * - `?devices=none`: outside the desktop app; `?devices=looking`: still asking.
+ * - `?reach=…`: how far the talk key reaches (#500): `anywhere` (Windows),
+ *   `hyprland` or `hyprland-conf` (the portal, with Hyprland's bind line in
+ *   its Lua or older config), `desktop` (the portal elsewhere), and only with
+ *   Linger in front: `mac`, `nodesktop`, `installed`. Unset, nothing is said.
  * - `?long`: names and topics far too long for their places.
  * - `?nowindows`: nothing to choose in Windows yet, so there's no Windows.
  * - `?nostart`: starting at sign-in isn't offered (a browser, macOS);
@@ -35,6 +39,7 @@ import type { Invite } from "../../src/generated/Invite";
 import type { NotifyRule } from "../../src/generated/NotifyRule";
 import type { Room } from "../../src/generated/Room";
 import type { User } from "../../src/generated/User";
+import type { TalkKeyReach } from "../../src/lib/ipc";
 import { emojiPicture } from "../../src/lib/emoji/picture";
 import { type ExportPhase } from "../../src/lib/export";
 import { inviteUrl } from "../../src/lib/host";
@@ -132,6 +137,17 @@ function Fixture() {
   const [order, setOrder] = useState(["home", "work", "raid"]);
   const [startsAtSignIn, setStartsAtSignIn] = useState(false);
 
+  const reaches: Record<string, TalkKeyReach> = {
+    anywhere: { kind: "anywhere" },
+    hyprland: { kind: "desktop", shortcut: "linger:push-to-talk", hyprland: "lua", bind: "Control_R" },
+    "hyprland-conf": { kind: "desktop", shortcut: "com.linger.desktop:push-to-talk", hyprland: "conf", bind: "mouse:275" },
+    desktop: { kind: "desktop", shortcut: "Linger:push-to-talk", hyprland: null, bind: "Control_R" },
+    mac: { kind: "window", why: "mac" },
+    nodesktop: { kind: "window", why: "desktop" },
+    installed: { kind: "window", why: "installed" },
+  };
+  const talkReach = reaches[query.get("reach") ?? ""] ?? null;
+
   const devicesQuery = query.get("devices");
   const devices =
     devicesQuery === "none"
@@ -195,6 +211,7 @@ function Fixture() {
         voice,
         onVoice: (prefs) => (note(`voice:${JSON.stringify(prefs)}`), setVoice(prefs)),
         devices,
+        talkReach,
         now: NOW,
       }}
       notifications={{
@@ -222,7 +239,8 @@ function Fixture() {
           start: () => {
             note("export");
             setArchive({ kind: "working", progress: 0 });
-            window.setTimeout(() => setArchive(FAIL ? { kind: "waiting", retryAfterMs: 50 * 60_000 } : { kind: "ready", url: `${SERVER}/exports/archive.zip` }), 200);
+            // Kept a week, from the moment it's ready (#504). The line is read against the real clock.
+            window.setTimeout(() => setArchive(FAIL ? { kind: "waiting", retryAfterMs: 50 * 60_000 } : { kind: "ready", url: `${SERVER}/exports/archive.zip`, expiresAt: Date.now() + 7 * 24 * HOUR }), 200);
           },
           download: (url) => note(`download:${url}`),
         },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuthResponse } from "../../generated/AuthResponse";
 import type { User } from "../../generated/User";
+import { ApiError } from "../../lib/api";
 import { type Door, type Entrance, loginReady, problemIn, readPasted, registerReady, setupReady, signInActions, stepFor, usernameOf } from "./signin";
 
 const matt: User = {
@@ -140,6 +141,30 @@ describe("signing in", () => {
     refuse = "That username and password don't match.";
     expect(await actions.login("https://home.example", "matt", "nope")).toBe("That username and password don't match.");
     expect(kept).toHaveLength(3);
+  });
+
+  it("joining with a name that looks like somebody's already there says so on the name, and nothing else does (#574)", async () => {
+    const LOOKS_TAKEN = "Someone here already goes by a name that looks like that. Try something a little different.";
+    let refusal: Error = new ApiError(409, { code: "DISPLAY_NAME_TAKEN", message: LOOKS_TAKEN, retry_after_ms: null });
+    const kept: string[] = [];
+    const actions = signInActions(
+      () => ({
+        ...doorThat({}).doorAt("https://home.example"),
+        login: async () => Promise.reject(refusal),
+        register: async () => Promise.reject(refusal),
+        setup: async () => Promise.reject(refusal),
+      }),
+      async (baseUrl) => {
+        kept.push(baseUrl);
+      },
+    );
+    expect(await actions.register("https://home.example", "ABCD", "callie", "Matt", "12345678")).toEqual({ onName: LOOKS_TAKEN });
+    // Any other refusal is the form's, in the server's words.
+    refusal = new ApiError(409, { code: "CONFLICT", message: "That username is taken.", retry_after_ms: null });
+    expect(await actions.register("https://home.example", "ABCD", "matt", "Callie", "12345678")).toBe("That username is taken.");
+    refusal = new ApiError(422, { code: "INVITE_INVALID", message: "That invite isn't valid.", retry_after_ms: null });
+    expect(await actions.register("https://home.example", "ABCD", "callie", "Callie", "12345678")).toBe("That invite isn't valid.");
+    expect(kept).toEqual([]);
   });
 
   it("a sign-in the computer can't keep says why", async () => {

@@ -11,6 +11,7 @@ import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
+import { LeftLine } from "./LeftLine";
 import { PollClosedLine } from "./PollClosedLine";
 import { onPhone } from "../../core/phone";
 import { type MessageActions, MessageRow } from "./MessageRow";
@@ -452,12 +453,16 @@ function RowView({
   actions: MessageActions;
 }) {
   switch (row.kind) {
-    case "divider":
-      return (
+    case "divider": {
+      // A session that starts at a time that can't be drawn has no words to
+      // say when, so it draws no divider (#509).
+      const label = sessionLabel(row.at, now);
+      return label === "" ? null : (
         <p className="nx-divider">
-          <span className="nx-divider-label">{sessionLabel(row.at, now)}</span>
+          <span className="nx-divider-label">{label}</span>
         </p>
       );
+    }
     case "joins": {
       // Somebody joining voice (#473). Nobody you blocked is in it: their
       // arriving isn't news you asked for (PROTOCOL §5).
@@ -478,6 +483,9 @@ function RowView({
       if (message.poll_closed != null && message.deleted_at === null) {
         return <PollClosedLine message={message} closed={message.poll_closed} onJump={actions.jumpTo} />;
       }
+      // Somebody leaving a group DM (#565): a quiet line saying who. Shown
+      // even for somebody you blocked: it's who can still read what you say.
+      if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} />;
       if (blocked?.has(message.author_id) && message.deleted_at === null && !shown.has(message.id)) {
         return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
       }

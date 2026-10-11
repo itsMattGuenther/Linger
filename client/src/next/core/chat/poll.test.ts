@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Poll } from "../../../generated/Poll";
-import { nextVote, pollCommand, pollOpen, resultWords, typingPoll, votesOf } from "./poll";
+import { nextVote, pollCommand, pollNonce, pollOpen, resultWords, typingPoll, votesOf } from "./poll";
 
 const poll = (multi = false): Poll => ({
   question: "Which faction?",
@@ -62,5 +62,26 @@ describe("a poll's votes (#474)", () => {
     expect(resultWords(["Horde", "Alliance"])).toBe("Horde and Alliance tied.");
     expect(resultWords(["PvP", "PvE", "RP"])).toBe("PvP, PvE and RP tied.");
     expect(resultWords([])).toBe("Nobody voted.");
+  });
+});
+
+describe("an ask's one-time key (PROTOCOL §4, #524)", () => {
+  const ask = { question: "Which night?", choices: ["Tuesday", "Thursday"], multi: false, closes_in_days: 7 };
+  const fresh = () => "new-key";
+
+  it("is new for the first press", () => {
+    expect(pollNonce(null, ask, fresh)).toBe("new-key");
+  });
+
+  it("is the first press's when Post poll is pressed again with the panel as it was", () => {
+    expect(pollNonce({ ask, nonce: "first-press" }, { ...ask, choices: [...ask.choices] }, fresh)).toBe("first-press");
+  });
+
+  it("is new once anything about it changed: it's another poll then", () => {
+    const before = { ask, nonce: "first-press" };
+    expect(pollNonce(before, { ...ask, question: "Which night, really?" }, fresh)).toBe("new-key");
+    expect(pollNonce(before, { ...ask, choices: ["Thursday", "Tuesday"] }, fresh)).toBe("new-key");
+    expect(pollNonce(before, { ...ask, multi: true }, fresh)).toBe("new-key");
+    expect(pollNonce(before, { ...ask, closes_in_days: 14 }, fresh)).toBe("new-key");
   });
 });

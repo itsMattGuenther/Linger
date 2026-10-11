@@ -147,6 +147,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "ashpd"
+version = "0.13.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8421aaa9644a5faf26735f258b669b15f063313ef8f8e2bdb28912a1a6f111"
+dependencies = [
+ "enumflags2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "serde",
+ "zbus 5.19.0",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2850,6 +2863,7 @@ name = "linger-client"
 version = "0.4.10"
 dependencies = [
  "android-native-keyring-store",
+ "ashpd",
  "async-trait",
  "bytes",
  "cpal",
@@ -2880,6 +2894,7 @@ dependencies = [
  "tokio-tungstenite",
  "webkit2gtk-sys",
  "webrtc",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

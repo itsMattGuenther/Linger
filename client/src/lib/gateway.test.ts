@@ -11,7 +11,7 @@
  * events it listens for, and the commands it sends. That is enough to push
  * frames at one server and prove the other never saw them.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CustomEmoji } from "../generated/CustomEmoji";
 import type { Message } from "../generated/Message";
@@ -19,7 +19,7 @@ import type { ReadyData } from "../generated/ReadyData";
 import type { Room } from "../generated/Room";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { User } from "../generated/User";
-import { ApiError, type AuthedApi } from "./api";
+import { ApiError, AuthedApi } from "./api";
 
 /** Every command the store sent down to the core, in order. */
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -1250,6 +1250,52 @@ describe("DMs", () => {
     expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
   });
 
+  it("leaving a group, here or on another device, forgets it and all it held (#565)", async () => {
+    const api = fakeApi(HOME, () => [{ ...message(5), room_id: "d1", author_id: "u-callie" }]);
+    await connect(api);
+    arrive(
+      HOME,
+      ready({
+        user: person("u-matt", "Matt"),
+        dms: [dm("d1", ["u-matt", "u-callie", "u-dave"]), dm("d2", ["u-matt", "u-callie"])],
+      }),
+    );
+    await openRoom(api, "d1");
+    arrive(HOME, { s: 2, op: "typing", d: { room_id: "d1", user_id: "u-callie" } } as ServerFrame);
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(6), room_id: "d1", author_id: "u-callie" } } as ServerFrame);
+    expect(serverState(HOME).streams["d1"]?.messages).toHaveLength(2);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+
+    arrive(HOME, { s: 4, op: "dm.remove", d: { room_id: "d1" } } as ServerFrame);
+    const state = serverState(HOME);
+    // Gone from the list, and nothing left behind that could draw it, light
+    // it or find it again; the one-to-one DM beside it is untouched.
+    expect(state.dms.map((held) => held.id)).toEqual(["d2"]);
+    expect(state.streams["d1"]).toBeUndefined();
+    expect(state.typing["d1"]).toBeUndefined();
+    expect(state.newest["d1"]).toBeUndefined();
+    expect(hasNewActivity(state, "d1")).toBe(false);
+
+    // Told twice (two windows replaying, say), it's still just gone.
+    arrive(HOME, { s: 5, op: "dm.remove", d: { room_id: "d1" } } as ServerFrame);
+    expect(serverState(HOME).dms.map((held) => held.id)).toEqual(["d2"]);
+  });
+
+  it("somebody else leaving keeps the group, with its new people and a line that's nothing new (#565)", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), dms: [dm("d1", ["u-matt", "u-callie", "u-dave"])] }));
+
+    arrive(HOME, { s: 2, op: "room.update", d: { ...dm("d1", ["u-matt", "u-dave"]), someone_left: true } } as ServerFrame);
+    arrive(HOME, { s: 3, op: "message.create", d: { ...message(7), room_id: "d1", author_id: "u-callie", body: "left", left: true } } as ServerFrame);
+
+    const state = serverState(HOME);
+    expect(state.dms).toHaveLength(1);
+    expect(state.dms[0]?.member_ids).toEqual(["u-matt", "u-dave"]);
+    expect(state.dms[0]?.someone_left).toBe(true);
+    // The line is in the history for whoever opens it, and calls nobody over.
+    expect(hasNewActivity(state, "d1")).toBe(false);
+  });
+
   it("a person who is in no DMs has an empty list, not somebody else's", async () => {
     await connect(fakeApi(HOME));
     // `ready` carries the DMs *this person* is in, so a stranger's client has
@@ -1337,7 +1383,7 @@ describe("sending before the server answers", () => {
     expect(serverState(HOME).streams["r-garage"]?.pending[0]?.message.author_id).toBe("u-matt");
     expect(held).toHaveLength(1);
     expect(held[0]?.path).toBe("/rooms/r-garage/messages");
-    expect(held[0]?.body).toEqual({ body: "hello", reply_to: null, attachment_ids: null });
+    expect(held[0]?.body).toEqual({ body: "hello", reply_to: null, attachment_ids: null, nonce: expect.any(String) });
 
     held[0]?.answer(confirmed(1, "hello"));
     await sent;
@@ -1441,6 +1487,30 @@ describe("sending before the server answers", () => {
     await expect(sent).rejects.toThrow("refused");
 
     expect(shown()).toEqual([]);
+  });
+
+  it("sends the one-time key it's given, and a new one with each send given none (#524)", async () => {
+    const { api, held } = await openGarage();
+    const keyOf = (body: unknown) =>
+      typeof body === "object" && body !== null && "nonce" in body && typeof body.nonce === "string" ? body.nonce : null;
+
+    const first = sendMessage(api, "r-garage", "same");
+    const second = sendMessage(api, "r-garage", "same");
+    const retry = sendMessage(api, "r-garage", "same", null, [], "the-first-try");
+
+    const [one, two, three] = held.map((call) => keyOf(call.body));
+    expect(one).not.toBeNull();
+    expect(two).not.toBeNull();
+    expect(two).not.toBe(one);
+    expect(three).toBe("the-first-try");
+
+    held[0]?.answer(confirmed(1, "same"));
+    held[1]?.answer(confirmed(2, "same"));
+    held[2]?.answer(confirmed(1, "same"));
+    await Promise.all([first, second, retry]);
+    // The retry was answered with the message the first try saved: held once.
+    expect(serverState(HOME).streams["r-garage"]?.messages.map((message) => message.id)).toEqual([id(1), id(2)]);
+    expect(stillOpen()).toBe(0);
   });
 });
 
@@ -1703,5 +1773,61 @@ describe("reactions (#485)", () => {
     await expect(reactTo(api, now, "🤣", true)).rejects.toThrow("six different reactions");
     expect(held(2)?.reactions).toEqual([{ key: "👍", count: 1, user_ids: ["u-matt"] }]);
     expect(calls).toEqual([`PUT ${id(2)} 👍`, `PUT ${id(2)} 🤣`]);
+  });
+});
+
+describe("a password change on this device (#496)", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+    invoked.length = 0;
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The server ends every sign-in the moment it takes the change, this
+  // device's connection too, before its answer is back. The core asks for a
+  // token, is handed the one this sign-in holds, is refused, and asks again,
+  // which renews. That renewal has to wait for the pair the answer brings:
+  // spending the refresh token the change just ended is refused, and signs
+  // the device out. An app from before #496 does exactly that when the
+  // answer is slower than its reconnecting.
+  it("hands the core the new pair, and never spends the refresh token the change ended", async () => {
+    const onSignedOut = vi.fn();
+    const api = new AuthedApi(
+      HOME,
+      { accessToken: "old-access", refreshToken: "old-refresh", expiresAt: Date.now() + 600_000 },
+      { onTokens: () => undefined, onSignedOut },
+    );
+    const fetched: string[] = [];
+    let answer: (response: Response) => void = () => {
+      throw new Error("nothing has been asked yet");
+    };
+    vi.stubGlobal("fetch", (input: string | URL) => {
+      fetched.push(String(input));
+      return new Promise<Response>((resolve) => {
+        answer = resolve;
+      });
+    });
+    const handed = () =>
+      invoked.filter((call) => call.cmd === "gateway_connect" || call.cmd === "gateway_token").map((call) => call.args.token);
+
+    await connect(api);
+    statusOf(HOME, { kind: "ready", latency_ms: 1 });
+    const changing = api.changePassword({ current_password: "old-secret", new_password: "new-secret" });
+
+    // Told "unauthenticated": the core asks, and gets the token it had.
+    statusOf(HOME, { kind: "needs_token" });
+    await vi.waitFor(() => expect(handed()).toEqual(["old-access", "old-access"]));
+    // That is refused as well, so it asks again, while the answer is still out.
+    statusOf(HOME, { kind: "needs_token" });
+    await Promise.resolve();
+    expect(fetched).toEqual([`${HOME}/api/v1/me/password`]);
+
+    answer(
+      Response.json({ access_token: "changed-access", refresh_token: "changed-refresh", expires_in: 900, user: person("u-matt", "Matt") }),
+    );
+    await expect(changing).resolves.toBe(true);
+    await vi.waitFor(() => expect(handed().at(-1)).toBe("changed-access"));
+    expect(fetched).toEqual([`${HOME}/api/v1/me/password`]);
+    expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

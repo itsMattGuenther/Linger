@@ -1,0 +1,23 @@
+# Keeps the pinned workflow actions fresh (#491). Every action is pinned to a
+# commit SHA with its version in a comment (scripts/action-pins.test.mjs), so
+# nothing updates by itself. Once a month Dependabot opens one pull request
+# that moves every action with a newer release, changing each SHA and its
+# comment together. It waits a week after a release before proposing it, so a
+# release that turns out to be malicious or broken is usually pulled first.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
+    # Pinned to a commit on its master branch, not a release: it has no
+    # version tags to move to. Move it by hand (docs/testing-strategy.md).
+    ignore:
+      - dependency-name: dtolnay/rust-toolchain

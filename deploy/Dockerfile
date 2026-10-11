@@ -26,6 +26,16 @@ COPY deploy/entrypoint.sh /usr/local/bin/linger-entrypoint
 RUN chmod 755 /usr/local/bin/linger-entrypoint
 
 ENV LINGER_DATA_DIR=/data
+# Memory a password hash used goes back to the system (#523). Each argon2
+# hash borrows about 19 MB at once. glibc gives the first such block back,
+# then raises its own bar for "big" to match and keeps every later one in its
+# pools for reuse, spread over the threads hashing runs on, so the server's
+# memory only ever grows. Measured on this image, 220 sign-ups left it holding
+# 225 MB one at a time and 815 MB four at a time. Fixing the bar at 1 MB makes
+# every block over it a mapping of its own, returned the moment it is freed:
+# 16 MB and 17 MB after the same sign-ups. (MALLOC_ARENA_MAX=2, the usual
+# advice, held 168 MB and 946 MB.) Only glibc reads this; Debian's base is glibc.
+ENV MALLOC_MMAP_THRESHOLD_=1048576
 VOLUME /data
 EXPOSE 8420
 ENTRYPOINT ["linger-entrypoint"]

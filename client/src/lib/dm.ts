@@ -21,6 +21,23 @@ export function others(room: Room, meId: UserId | null): UserId[] {
 }
 
 /**
+ * Whether you can leave this DM (#565): a group, which is a DM made for three
+ * or more people or one somebody has already left. A one-to-one DM is that
+ * friend's row in the list, and the server refuses to let anybody leave it.
+ *
+ * Read from who the server lists, so a group of three that's two because the
+ * host removed somebody doesn't offer it, though the server would take it.
+ */
+export function canLeave(room: Room): boolean {
+  return room.kind === "dm" && (room.someone_left === true || (room.member_ids?.length ?? 0) > 2);
+}
+
+/** Nobody else is in it any more: leaving it deletes it (#565). */
+export function lastOneIn(room: Room, meId: UserId | null): boolean {
+  return others(room, meId).length === 0;
+}
+
+/**
  * The people in a DM, as `User`s, dropping any the client has not been told
  * about.
  *

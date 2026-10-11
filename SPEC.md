@@ -397,6 +397,16 @@ Each user controls the rendering of their own display name:
    fewest active people on that server wear (never slate, which reads as "not chosen"),
    so a big server doesn't start as a room of identical gray names. It is only a start:
    anyone changes it in Profile.
+7. **Nobody takes a name that looks like someone else's** (#574). With no avatars, the
+   name is who somebody is (§5.1), so a look-alike is a way to pretend to be them, in a
+   DM most of all. The server refuses a display name that looks the same as another
+   member's display name or username: the same letters in other capitals, letters from
+   another alphabet that look like ours (a Cyrillic `а`), full-width letters, `rn` for
+   `m`, or only different spaces or invisible characters. Unicode's own list of
+   look-alike letters decides (PROTOCOL §2). Your own name never counts against you,
+   and removed members' names don't count. The sentence goes on the name field, at
+   sign-up and in Settings. Names already saved stay as they are; the rule applies when
+   a name is set or changed.
 
 **Message body styling** gets a much lighter touch, deliberately. The AIM era's
 hot-pink-Comic-Sans-on-black was funny for a week and unreadable forever. Users get:
@@ -474,11 +484,14 @@ keeps a separate unsent message with a retry action when a newer draft exists.
 Neither success nor failure may erase that newer draft. Shift+Enter inserts
 a newline. Requests that never answer time out visibly rather than leaving
 send or knock controls disabled indefinitely; an unconfirmed request is not
-reported as definitely undelivered.
+reported as definitely undelivered. Sending a failed message again, by its
+retry or unchanged from the box, never posts it twice when the first try did
+land: each send carries a one-time key the server remembers (PROTOCOL §4).
 
 **Restrained embeds.** A link renders as a one-line inline card: favicon, title, domain.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
-height, click to expand.
+height, click to expand. One so tall that it would be under 120px wide there (a
+phone's scrolling screenshot) is drawn 120px wide, showing its top (#512).
 
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface
@@ -517,7 +530,12 @@ mockups led here; `docs/decisions.md` has what was tried and why.
 - **Any emoji, the server's own included** (§4.17), from the same picker the message
   box uses. A server's emoji is kept by its id, so renaming it keeps its reactions,
   and **removing it takes them with it**: a pill with no picture would look broken.
-- **Hover a pill for who**: "Jules and Dave reacted with :porch_light:".
+- **Hover a pill for who**: "Jules and Dave reacted with :porch_light:". A phone
+  has no hover, so there you **hold a pill** for half a second instead, as on
+  Discord (Matt, 2026-10-11, #573): a small card over it lists everybody who
+  left that emoji, by name. Holding it doesn't add yours; a tap still does. A
+  finger that moves is scrolling, and opens nothing. A touch screen on a
+  computer works the same way.
 - **Six different emoji on one message at most.** That fits one line on a computer,
   and keeps a message from becoming a wall of stickers. At six, the picker offers only
   those six and says why; anybody can still add theirs to one of them.
@@ -562,11 +580,23 @@ carry sender feedback to a different person.
 
 - 500 MB per file
 - 50 GB per server pool (host-configurable)
+- The pool is everybody's, so nobody can fill it alone, by accident or on purpose
+  (#503). One person can have 1 GB of uploads going up at once; past that, they're
+  told it's their uploads, not that the server is full. An upload that has received
+  nothing for an hour gives its space back, and so does one taken out of the box
+  while it's going up. A file somebody uploads and never sends is deleted after a
+  week (sooner if the host's window is shorter, and even with expiry off). Removing
+  a member deletes their uploads in progress and the files they never sent; what
+  they sent stays.
 - Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- Deleting a message deletes its files with it, at once and starred or not: nothing
+  serves, shows, lists or exports them after (#502)
 - Resumable uploads
 - **EXIF stripped from all images on upload, always, no toggle.** Camera photos carry
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
-  an embarrassing bug.
+  an embarrassing bug. The one thing EXIF says that is kept is which way up the photo
+  goes: a picture is turned the way its Orientation tag says first, then stripped, so a
+  phone photo shows the way it was taken (#569).
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
 - A picture in a conversation or on a media tile is drawn from a copy the server
   makes, 960 px on its longest side; the viewer and downloads open the original.
@@ -590,6 +620,15 @@ files, in one archive. No gatekeeping, no host approval, one export per hour.
 
 This is a trust feature and an anti-lock-in guarantee. It costs a weekend and it is the
 most credible thing in the product.
+
+An archive is something you download, not something the server keeps (#504). Each
+member has one at a time, and the server deletes it **a week** after it's ready, or
+when the host removes that member, whichever comes first. Most people download theirs
+within minutes; a week covers a weekend away or a download that has to be resumed, and
+anybody who misses it asks again. The app says when the link stops working. An export
+the server's disk can't hold is refused before it starts, in words, because a full disk
+stops the whole server. An export cut off by a restart shows as failed, and the person
+can ask again straight away.
 
 ### 4.12 Search
 
@@ -653,6 +692,24 @@ people twice gives you the same DM, so there is no way to end up with four
 conversations with the same three people. Adding somebody later would mean deciding
 whether they can read what was said before they arrived, and that question is a
 permission system in its first disguise: a new set of people is a new DM.
+
+**Leaving a group DM** (Matt, 2026-10-10, #565). Leaving is the one change a DM's
+membership can take, and it only goes one way: nobody can be added, so nobody who left
+can be put back. You leave from the group's ⋯ menu or its header, after one
+confirmation that says what happens. It goes from your list on every device you're
+signed in on, and you can't read it any more: it's gone from your search, Media and
+export, like any DM you were never in. The people still in it see a quiet line,
+"Callie left", which never notifies anybody or makes the DM new; they keep the
+conversation, and what you said stays in it, the way somebody's messages stay in a room.
+**A group somebody has left no longer matches its people:** asking later for a DM with
+the same set starts a new one, so nobody is pulled back into a conversation they left;
+anybody can still start a new one with you. A group that shrinks to two stays a group,
+and never merges into the two people's own DM. **A one-to-one DM can't be left:** it is
+that friend's row in the list (#351). **When the last person leaves,** nobody can ever
+read the conversation again, so it is deleted: every message the way a deleted message
+is, and its files with them. Keeping the artifact (§2, principle 3) is for the people
+who made it; bytes nobody can reach would only take up the server's storage, and the
+only way left to read them would be the database file, which is the host reading DMs.
 
 **Two to eight people.** A DM has no host and its members are fixed when it is made,
 so it stays a conversation on the side; a group that wants to be bigger is a room, where
@@ -781,8 +838,9 @@ end-to-end encryption. A layer that would stop even the host is #200.
 voice address, which works from behind almost any home router; a strict office network
 that blocks UDP goes through the relay (TURN) instead. The host runs one beside the
 server, and it is the host's, not a third party's. What it carries is the encrypted
-stream, which it cannot read, and the server's only part is handing a member a
-short-lived password for it at the moment they join. A host who runs no relay has voice
+stream, which it cannot read, to the server's voice address and nowhere else (#501),
+and the server's only part is handing a member a short-lived password for it at the
+moment they join. A host who runs no relay has voice
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's
@@ -803,6 +861,35 @@ deafen still work on top of it and still show, and the key never undoes them.
 Turning push-to-talk on or off, or picking its key, applies to the call you're
 in at once (#231): off opens the microphone unless you muted yourself, and on
 closes it until the key is held.
+
+**The key works with another app in front** (Matt, 2026-10-10, #500). A game is
+where push-to-talk matters most, so while you're in voice with push-to-talk on,
+holding the key opens the microphone whatever app is in front, with Linger
+minimized or only in the tray, as Discord, TeamSpeak and Ventrilo do, and letting
+go closes it. Linger watches for **that one key and nothing else**, and only
+while you're in voice with push-to-talk on: it never sees another key, records
+and stores nothing, sends nothing about keys anywhere, never asks which app is
+in front, and never keeps the key from that app.
+
+- **Windows:** Linger asks Windows whether that one key is down, 50 times a
+  second. The key can be a mouse's middle or side button too. A game run as
+  administrator hides its keys from apps that aren't, Linger included, as it
+  does from Discord.
+- **Linux:** the desktop's global shortcuts carry it (the `GlobalShortcuts`
+  portal). Linger asks for one shortcut, `push-to-talk`; the person gives it a
+  key in their desktop (KDE and GNOME ask; Hyprland takes a bind line, which
+  Settings shows, with `ignore_mods` so letting go of a modifier key is
+  heard); and the desktop says when it goes down and up, so Linger never sees
+  a key at all. The desktop names apps by their desktop file, so it works for
+  an installed Linger (a package or the AppImage), not a development build.
+- **Elsewhere** (macOS for now, #587; a desktop without the portal, which is
+  most X11 desktops; a development build): the key works while a Linger window
+  is in front, as it always has, and switching away lets go of it.
+
+Settings → Talk key says which applies. A Linger window in front hears the key
+too, and a press heard twice counts once. Whatever watches the key, its
+stopping or failing with the key down closes the microphone, and a key held as
+you join or leave voice opens nothing until it's pressed again.
 
 The room can see each session's self-reported `muted` or `deafened` state,
 filtered by the same membership rule as voice itself; push-to-talk's closed
@@ -955,7 +1042,8 @@ their minds two screens later; a poll is one place that shows where the room lan
   opens a panel over the box: the question, two to ten choices, whether people can pick
   more than one, and how long it runs (a day, three days, a week, two weeks or four; a
   week unless changed). Nothing is posted until Post poll. Rooms only, as a message of
-  the day is.
+  the day is. Post poll pressed again after a failure never asks it twice when the first
+  press did land, as a message sent again never posts twice (§4.7).
 - **Every `/` command is the host's or a co-host's** (Matt, 2026-10-10): `/motd` and
   `/poll` today, and any to come. Anybody else's box says who can, and Enter doesn't send
   the words. Anything else starting with `/` is sent as typed. This isn't a level: a

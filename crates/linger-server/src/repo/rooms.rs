@@ -2,8 +2,9 @@
 //!
 //! `last_message_id` is the newest non-tombstone message — deleting something
 //! must not make a room look newly active — and never a message-of-the-day
-//! line (#464), a line saying somebody joined voice (#473), or the line a
-//! closing poll leaves (#474), which tell nobody to come and look.
+//! line (#464), a line saying somebody joined voice (#473), the line a
+//! closing poll leaves (#474), or one saying somebody left a group DM (#565),
+//! which tell nobody to come and look.
 //!
 //! **Every query here that a member could reach is membership-aware**, and the
 //! ones that are not say so in their name. `all` is the server's public rooms;
@@ -19,10 +20,10 @@ use crate::error::ApiError;
 
 const ROOM_SELECT: &str = "
     SELECT r.id, r.slug, r.name, r.topic, r.kind, r.position, r.archived_at,
-           r.motd, r.motd_set_by, r.motd_set_at, r.reactions_off,
+           r.motd, r.motd_set_by, r.motd_set_at, r.reactions_off, r.member_key,
            (SELECT MAX(m.id) FROM messages m
              WHERE m.room_id = r.id AND m.deleted_at IS NULL
-               AND m.motd = 0 AND m.voice_join = 0
+               AND m.motd = 0 AND m.voice_join = 0 AND m.dm_left = 0
                AND m.poll_closed IS NULL) AS last_message_id
     FROM rooms r";
 
@@ -31,6 +32,11 @@ fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
         "dm" => RoomKind::Dm,
         _ => RoomKind::Room,
     };
+    // A DM's key is cleared when somebody leaves it (#565), and only then: a
+    // room never has one.
+    let someone_left = (kind == RoomKind::Dm
+        && row.get::<Option<String>, _>("member_key").is_none())
+    .then_some(true);
     Ok(Room {
         id: RoomId::from_slice(&row.get::<Vec<u8>, _>("id")).map_err(anyhow::Error::from)?,
         slug: row.get("slug"),
@@ -50,6 +56,7 @@ fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
         motd: motd_of(row)?,
         // Only ever `Some(true)`: "on" is the field left out (#485).
         reactions_off: (row.get::<i64, _>("reactions_off") != 0).then_some(true),
+        someone_left,
     })
 }
 

@@ -163,6 +163,7 @@ export function ServerSection({
             safetyFor={listing.safetyFor}
             onReports={listing.onReports}
             onStartDm={listing.onStartDm}
+            onLeaveDm={listing.onLeaveDm}
             onHost={listing.onHost}
           />
         </div>

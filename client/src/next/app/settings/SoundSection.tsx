@@ -1,9 +1,10 @@
-import type { VoiceDeviceList } from "../../../lib/ipc";
+import type { TalkKeyReach, VoiceDeviceList } from "../../../lib/ipc";
 import { inQuietHours, MAX_SOUND_VOLUME, type SoundCategory, type SoundPrefs } from "../../../lib/sound";
 import { clockTime } from "../../../lib/time";
 import { useEffect, useState } from "react";
 import { type VoicePrefs, volumeLabel } from "../../../lib/voice";
-import { canBeTalkKey, talkKeyName } from "../../core/talkKey";
+import { copyText } from "../../core/copy";
+import { canBeTalkKey, hyprlandBind, talkButton, talkKeyName } from "../../core/talkKey";
 import { CHIMES, deviceOptions, HEADINGS, quietChoices, SYSTEM_DEFAULT } from "../../core/settings";
 import { Button, IconButton, Select, SettingRow, Slider, Switch } from "../../kit";
 import { Block, Fields, Note } from "./parts";
@@ -19,6 +20,8 @@ export interface SoundProps {
   onVoice: (prefs: VoicePrefs) => void;
   /** What's plugged in: null outside the desktop app, "looking" while the core is asked. */
   devices: VoiceDeviceList | null | "looking";
+  /** How far the talk key reaches on this computer (#500): null outside the desktop app, or while the shell is asked. */
+  talkReach?: TalkKeyReach | null;
   /** Now, for saying whether quiet hours are on right now. */
   now: number;
   /** The phone app, which is text only for now (SPEC §4.15): no Voice block. */
@@ -31,13 +34,21 @@ function minuteText(minutes: number): string {
 }
 
 /** Sound & Voice (SND, VOICE-8, VOICE-9). */
-export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, now, phone = false }: SoundProps) {
+export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, talkReach = null, now, phone = false }: SoundProps) {
   // Choosing the push-to-talk key (decision 6): the next key pressed, if it's
-  // one that types nothing. Escape leaves it as it was.
+  // one that types nothing, or the middle or a side mouse button where the
+  // key is heard with any app in front (#500): there a game's mouse is where
+  // it's held. Escape leaves it as it was.
   const [picking, setPicking] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  const mouse = talkReach?.kind === "anywhere" || talkReach?.kind === "desktop";
   useEffect(() => {
     if (!picking) return;
+    const pick = (code: string) => {
+      setPicking(false);
+      setRefused(null);
+      onVoice({ ...voice, pushToTalkKey: code });
+    };
     const onKey = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopPropagation();
@@ -47,16 +58,30 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
         return;
       }
       if (!canBeTalkKey(event.code)) {
-        setRefused("That key types something. Pick Ctrl, Alt, Shift or a function key.");
+        setRefused(`That key types something. Pick Ctrl, Alt, Shift${mouse ? ", a function key or a mouse button" : " or a function key"}.`);
         return;
       }
-      setPicking(false);
-      setRefused(null);
-      onVoice({ ...voice, pushToTalkKey: event.code });
+      pick(event.code);
+    };
+    // The button that asked is pressed with the left one, which never picks.
+    const onButton = (event: MouseEvent) => {
+      const code = talkButton(event.button);
+      if (code === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.type === "mousedown") pick(code);
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [picking, voice, onVoice]);
+    if (mouse) {
+      window.addEventListener("mousedown", onButton, true);
+      window.addEventListener("mouseup", onButton, true);
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousedown", onButton, true);
+      window.removeEventListener("mouseup", onButton, true);
+    };
+  }, [picking, voice, onVoice, mouse]);
   const from = minuteText(sound.quietFrom);
   const until = minuteText(sound.quietUntil);
   const right =
@@ -186,14 +211,65 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
                   {talkKeyName(voice.pushToTalkKey)}
                 </kbd>
                 <Button size="sm" variant="secondary" onClick={() => setPicking((on) => !on)}>
-                  {picking ? "Press a key…" : "Change"}
+                  {picking ? (mouse ? "Press a key or button…" : "Press a key…") : "Change"}
                 </Button>
               </>
             }
           />
           {refused ? <Note tone="problem">{refused}</Note> : null}
+          {talkReach ? <TalkReach reach={talkReach} /> : null}
         </Block>
       )}
+    </>
+  );
+}
+
+/** Why the talk key works only with a Linger window in front (#500). */
+const WINDOW_ONLY: Readonly<Record<Extract<TalkKeyReach, { kind: "window" }>["why"], string>> = {
+  mac: "Works while a Linger window is in front. On a Mac, Linger can't hear it with another app in front yet.",
+  desktop: "Works while a Linger window is in front: this desktop doesn't give apps shortcuts that work everywhere.",
+  installed: "Works while a Linger window is in front: this copy of Linger isn't installed, so your desktop can't give it a shortcut. An installed Linger can.",
+};
+
+/**
+ * Where the talk key works on this computer (SPEC §4.14, #500): with any app
+ * in front, or only with Linger's, and on Hyprland the line that gives it a
+ * key, to copy.
+ */
+function TalkReach({ reach }: { reach: TalkKeyReach }) {
+  const [copied, setCopied] = useState<"yes" | "no" | null>(null);
+  if (reach.kind === "anywhere") {
+    return (
+      <Note>
+        Works with a game or any other app in front: Linger listens for this one key, only while you're in voice, and the game still gets it. A game run as
+        administrator hides its keys from Linger, as it does from Discord.
+      </Note>
+    );
+  }
+  if (reach.kind === "window") return <Note>{WINDOW_ONLY[reach.why]}</Note>;
+  if (reach.hyprland === null || reach.bind === null) {
+    return (
+      <Note>
+        Works with any app in front once your desktop gives Linger a key. KDE and GNOME ask the first time you join voice with push to talk on; their
+        shortcut settings change it. Linger never sees your keys: the desktop tells it when its shortcut goes down and up.
+      </Note>
+    );
+  }
+  const line = hyprlandBind(reach.hyprland, reach.bind, reach.shortcut);
+  const where = reach.hyprland === "lua" ? "your Hyprland config (on Omarchy, ~/.config/hypr/bindings.lua)" : "hyprland.conf";
+  return (
+    <>
+      <Note>
+        Works with any app in front once Hyprland gives Linger the key: add this line to {where}. Linger never sees your keys: Hyprland tells it when this
+        one goes down and up. Until then, it works while a Linger window is in front.
+      </Note>
+      <div className="nx-set-bind">
+        <code className="nx-set-bind-line">{line}</code>
+        <Button size="sm" icon={copied === "yes" ? "check" : undefined} onClick={() => void copyText(line).then((ok) => setCopied(ok ? "yes" : "no"))}>
+          {copied === "yes" ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      {copied === "no" ? <Note tone="problem">Couldn't reach the clipboard. Select the line and copy it yourself.</Note> : null}
     </>
   );
 }

@@ -33,6 +33,8 @@ mod secrets;
 #[cfg(desktop)]
 pub mod sounds;
 #[cfg(desktop)]
+mod talk_key;
+#[cfg(desktop)]
 mod tray;
 #[cfg(desktop)]
 mod updates;
@@ -319,6 +321,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(voice_commands::VoiceEngines::default())
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
         .manage(clip::Clips::default())
+        .manage(talk_key::TalkKeyWatch::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -344,6 +347,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             voice_commands::voice_volume,
             voice_commands::voice_choose_devices,
             voice_commands::voice_devices,
+            talk_key::voice_talk_key,
+            talk_key::voice_talk_key_reach,
             voice_commands::sound_play,
             notifications::show_notification,
             app_version,

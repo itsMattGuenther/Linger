@@ -20,6 +20,9 @@
   background: var(--surface-control);
   color: var(--text-secondary);
   line-height: 1;
+  /* Held on a touch screen, it lists who left it (#573): not the phone's
+     own callout. */
+  -webkit-touch-callout: none;
 }
 
 .nx-react-pill:hover {

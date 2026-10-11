@@ -9,6 +9,7 @@ import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { MODE, type ModeMessage } from "../../core/share";
 import { minimizer } from "../../core/windowControls";
 import { Button, Icon, IconButton, type IconName, Spinner, TitleBar } from "../../kit";
+import { PaneBoundary } from "../Boundary";
 import { useFollowing } from "../useFollowing";
 import { WindowMessage } from "../WindowMessage";
 import "./ToolWindow.css";
@@ -177,7 +178,9 @@ function Frame({
       <TitleBar leading={<Icon name={icon} size="md" />} actions={beside} onMinimize={minimizer()} onClose={isTauri() ? close : undefined}>
         {title}
       </TitleBar>
-      <div className="nx-tool-body">{children(following, shown)}</div>
+      <div className="nx-tool-body">
+        <PaneBoundary what={`${title} couldn't be shown.`}>{children(following, shown)}</PaneBoundary>
+      </div>
     </div>
   );
 }

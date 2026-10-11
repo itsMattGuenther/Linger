@@ -40,6 +40,7 @@ import { answer, type Bus, type Envelope, OWNER, PROTOCOL } from "./bus";
 import { type ConversationsMode, isMode, loadMode, type ModeStore, saveMode } from "./conversations";
 import { prefsFrom, type ServerPrefs } from "./serverPrefs";
 import { blur, close, focus, NOTHING_SHOWN, presenceRoom, show, type Showing, viewing } from "./showing";
+import { heard, held, NOBODY, type TalkEdge, type TalkFrom, type TalkHolders } from "./talkHold";
 
 /**
  * What the conversations beside the list report as, to presence and the
@@ -173,8 +174,12 @@ export type Intent =
    * (VOICE_CONTROL), so the window pressed can play their sound.
    */
   | { kind: "voice.join"; server: string; roomId: RoomId }
-  /** The push-to-talk key went down or up in this window. */
-  | { kind: "voice.talk"; down: boolean }
+  /**
+   * The push-to-talk key went down or up in this window, or (`away`) the
+   * window lost focus and stopped hearing it: that lets go of only this
+   * window's press, not one heard with another app in front (core/talkHold.ts).
+   */
+  | { kind: "voice.talk"; down: boolean; away?: boolean }
   /**
    * Settings turned push-to-talk on or off, or picked its key (`KeyboardEvent.code`):
    * it applies to the call you're in at once (#231), and the voice bar names the key.
@@ -206,7 +211,12 @@ export type Intent =
   /** Add a server, from Settings: the list window shows its sign-in. */
   | { kind: "addserver" }
   /** Settings changed your servers' order or which are Quiet (Settings → Servers). */
-  | { kind: "serverprefs"; order: string[]; quiet: string[] };
+  | { kind: "serverprefs"; order: string[]; quiet: string[] }
+  /**
+   * Settings saved a server's name or color: the list asks the server for
+   * them now, rather than at its next hourly ask (#536).
+   */
+  | { kind: "serverinfo"; server: string };
 
 /** The list window's own choices another window may ask it to make. */
 export interface ListControls {
@@ -214,6 +224,8 @@ export interface ListControls {
   addServer(): void;
   /** Your servers' order and which are Quiet, as Settings last left them. */
   setPrefs(prefs: ServerPrefs): void;
+  /** Ask a server for its name and color again: Settings has just saved them (#536). */
+  serverInfo?(server: string): void;
   /** Whether closing the list keeps Linger in the tray (true) or quits it. */
   closeToTray?(on: boolean): void;
   /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
@@ -276,6 +288,12 @@ export interface Sharing {
    * room you're in.
    */
   signInsChanged(): void;
+  /**
+   * The push-to-talk key, heard by the list window itself (`OWNER`) or by
+   * the desktop shell with any app in front (`ANYWHERE`, #500): counted with
+   * every other window's, so one press opens the microphone once.
+   */
+  talk(from: TalkFrom, edge: TalkEdge): void;
 }
 
 /**
@@ -361,17 +379,23 @@ export async function shareAsOwner(
     looked = key;
     setViewing(now);
   };
-  // The windows holding the push-to-talk key down right now. A window that
+  // Who is holding the push-to-talk key down right now: windows, and the
+  // shell's watcher with any app in front (core/talkHold.ts, #500). Only a
+  // change in whether anybody holds it reaches voice, so a press heard by a
+  // window and the watcher both opens the microphone once. A window that
   // closes with it held (Ctrl+W, with Ctrl being the key) never says it let
-  // go, so its going closes the microphone.
-  const holdingTalk = new Set<string>();
-  const letGoOfTalk = () => {
+  // go, so its going lets go of its press.
+  let talkHolders: TalkHolders = NOBODY;
+  const talk = (from: TalkFrom, edge: TalkEdge) => {
     const server = voiceServer(sessions().keys());
-    if (server !== null) void setVoiceTalking(server, false).catch(() => undefined);
+    const listening = server !== null && serverState(server).myVoice?.pushToTalk === true;
+    const before = held(talkHolders);
+    talkHolders = listening ? heard(talkHolders, from, edge) : NOBODY;
+    if (server !== null && held(talkHolders) !== before) void setVoiceTalking(server, held(talkHolders)).catch(() => undefined);
   };
 
   const gone = (label: string) => {
-    if (holdingTalk.delete(label)) letGoOfTalk();
+    talk(label, "away");
     forgetWindow(label);
     showing = close(showing, label);
     place();
@@ -455,6 +479,9 @@ export async function shareAsOwner(
       case "serverprefs":
         list?.setPrefs(prefsFrom(intent));
         return;
+      case "serverinfo":
+        if (sessions().has(intent.server)) list?.serverInfo?.(intent.server);
+        return;
       case "conversations": {
         if (!isMode(intent.mode)) return;
         saveMode(store, intent.mode);
@@ -469,7 +496,7 @@ export async function shareAsOwner(
         if (typeof intent.on !== "boolean" || typeof intent.key !== "string") return;
         list?.talkKey?.(intent.key);
         // Whoever held the key before doesn't hold it for the new setting.
-        holdingTalk.clear();
+        talkHolders = NOBODY;
         const server = voiceServer(sessions().keys());
         if (server !== null) void setVoicePushToTalk(server, intent.on).catch(() => undefined);
         return;
@@ -493,17 +520,12 @@ export async function shareAsOwner(
         void joinVoice(api, intent.roomId, prefs.devices, prefs.pushToTalk).catch(() => undefined);
         return;
       }
-      case "voice.talk": {
-        const server = voiceServer(sessions().keys());
-        if (server === null) return;
+      case "voice.talk":
         // Push-to-talk only means something when it is on: the key opens
         // the microphone while held and closes it on release, without
         // muting you (#232). The store ignores it otherwise.
-        if (intent.down === true) holdingTalk.add(intent.from);
-        else holdingTalk.delete(intent.from);
-        void setVoiceTalking(server, intent.down === true).catch(() => undefined);
+        talk(intent.from, intent.down === true ? "down" : intent.away === true ? "away" : "up");
         return;
-      }
     }
   };
 
@@ -517,16 +539,18 @@ export async function shareAsOwner(
       return { problem: inWords(error, "Couldn't reach the server.") };
     }
   };
-  // A password change ends every other sign-in for the account (the server
-  // can't tell who else had the old one), so the owner signs straight back
-  // in with the new password rather than leave every window to be signed
-  // out when its token runs out. The passwords are never kept or logged.
+  // A password change ends every sign-in the account has (the server can't
+  // tell who else had the old one), this one too. A server from #496 on hands
+  // this one a fresh pair, and it carries on with it. An older one sends
+  // nothing, so the owner signs straight back in with the new password rather
+  // than leave every window to be signed out when its token runs out. The
+  // passwords are never kept or logged.
   const password = async ({ server, current, next }: PasswordQuestion): Promise<Outcome> => {
     const api = sessions().get(server);
     const username = serverState(server).me?.username;
     if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
     try {
-      await api.changePassword(passwordRequest(current, next));
+      if (await api.changePassword(passwordRequest(current, next))) return { problem: null };
     } catch (error) {
       return { problem: inWords(error, "Couldn't change your password.") };
     }
@@ -589,6 +613,10 @@ export async function shareAsOwner(
   // other window is told the new value whenever one changes.
   const sent = new Map<string, string>();
   const stopWatching = onStateChange(() => {
+    // Out of voice, or push-to-talk off, nobody holds the key: a press that
+    // was never let go (the key held as you left) can't open the next call.
+    const server = voiceServer(sessions().keys());
+    if (server === null || serverState(server).myVoice?.pushToTalk !== true) talkHolders = NOBODY;
     for (const server of sessions().keys()) {
       const shared = sharedLocalOf(server);
       const key = JSON.stringify(shared);
@@ -609,5 +637,6 @@ export async function shareAsOwner(
     localNotify: notify,
     localPassword: password,
     signInsChanged: place,
+    talk,
   };
 }

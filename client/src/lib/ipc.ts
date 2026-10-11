@@ -130,6 +130,45 @@ export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<vo
   await invoke("voice_choose_devices", { input: devices.input, output: devices.output });
 }
 
+// --- the talk key with another app in front (#500, src-tauri/src/talk_key) ---
+
+/** What the shell says it heard: the talk key went `"down"` or `"up"`. To the list window only. */
+export const TALK_KEY_EVENT = "next:talkkey";
+
+/**
+ * How far the talk key reaches on this computer (SPEC §4.14). Mirrors
+ * `talk_key::Reach` by hand: it never leaves the computer, so it isn't a wire
+ * type (AGENTS rule 7), and a Rust test pins the spellings.
+ *
+ * - `anywhere`: whatever app is in front (Windows).
+ * - `desktop`: once the desktop gives Linger's `shortcut` a key (Linux's
+ *   global shortcuts portal); `hyprland` names the config the bind line goes
+ *   in on Hyprland, and `bind` the chosen key's name in it.
+ * - `window`: only with a Linger window in front, because this is a Mac
+ *   (`mac`), the desktop has no global shortcuts for apps (`desktop`), or
+ *   it can't name this copy, a development build (`installed`).
+ */
+export type TalkKeyReach =
+  | { kind: "anywhere" }
+  | { kind: "desktop"; shortcut: string; hyprland: "lua" | "conf" | null; bind: string | null }
+  | { kind: "window"; why: "mac" | "desktop" | "installed" };
+
+/**
+ * Watch for the talk key with any app in front, or stop (null). The list
+ * window asks while you're in voice with push-to-talk on, and only then.
+ */
+export async function watchTalkKey(key: string | null): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("voice_talk_key", { key });
+}
+
+/** How far the talk key reaches here, with `key` named for a Hyprland bind. Null outside the desktop app. */
+export async function talkKeyReach(key: string): Promise<TalkKeyReach | null> {
+  if (!isTauri()) return null;
+  const reach: TalkKeyReach = await invoke("voice_talk_key_reach", { key });
+  return reach;
+}
+
 /** How loud one peer (a session id) plays for you: 1 is as sent, 2 is the ceiling. */
 export async function voiceVolume(baseUrl: string, peer: string, volume: number): Promise<void> {
   if (!isTauri()) return;

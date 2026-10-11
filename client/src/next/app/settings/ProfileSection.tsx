@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { Style } from "../../../generated/Style";
 import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
-import { displayNameProblem, displayNameReady, MAX_DISPLAY_NAME_CHARS } from "../../../lib/account";
+import { displayNameProblem, displayNameReady, MAX_DISPLAY_NAME_CHARS, type NameSaid } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
@@ -14,8 +14,8 @@ import { Actions, Block, ChoiceRow, Fields, Note, useFollowSaved, useSave } from
 
 /** What Profile saves. Each resolves to the problem in words, or null once saved. */
 export interface ProfileActions {
-  /** `PATCH /me` with the display name only. */
-  saveName: (name: string) => Promise<string | null>;
+  /** `PATCH /me` with the display name only. A name that looks like somebody's here (#574) is said on the field. */
+  saveName: (name: string) => Promise<NameSaid>;
   /** The whole status (PROTOCOL §5 replaces it whole). Going away or back follows from its away message. */
   saveStatus: (status: UserStatus) => Promise<string | null>;
   /** Your name's style, whole. */
@@ -43,12 +43,20 @@ export function ProfileSection({ me, plainNames, actions }: ProfileProps) {
 function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveName"] }) {
   const [name, setName] = useState(me.display_name);
   const save = useSave();
+  // The server's word that this name looks like somebody's here (#574), until it's changed.
+  const [onName, setOnName] = useState<string | null>(null);
   const dirty = name.trim() !== me.display_name;
   // Follow a name changed elsewhere, but never under somebody's typing.
   useFollowSaved(me.display_name, setName, (held, saved) => held.trim() !== saved, (saved) => saved);
-  const ready = displayNameReady(name, me.display_name) && save.phase.kind !== "saving";
+  const ready = displayNameReady(name, me.display_name) && onName === null && save.phase.kind !== "saving";
   const submit = () => {
-    if (ready) void save.run(saveName(name.trim()));
+    if (!ready) return;
+    const said = saveName(name.trim()).then((answer) => {
+      if (answer === null || typeof answer === "string") return answer;
+      setOnName(answer.onName);
+      return answer.onName;
+    });
+    void save.run(said);
   };
   return (
     <Block heading={HEADINGS.who}>
@@ -59,16 +67,18 @@ function WhoYouAre({ me, saveName }: { me: User; saveName: ProfileActions["saveN
           maxLength={MAX_DISPLAY_NAME_CHARS}
           hint="How your name reads on this server."
           // Only once it's changed: a name saved before the rules (#296) stays as it is.
-          error={dirty ? (displayNameProblem(name) ?? undefined) : undefined}
+          error={dirty ? (displayNameProblem(name) ?? onName ?? undefined) : undefined}
           onChange={(next) => {
             setName(next);
+            setOnName(null);
             save.reset();
           }}
           onEnter={submit}
         />
         <TextField label="Username" value={me.username} onChange={() => undefined} readOnly mono hint={`People mention you by typing @ and your name, and it goes in as @${me.username}. Your username never changes.`} />
       </Fields>
-      <Actions phase={save.phase}>
+      {/* Said on the field instead, not twice. */}
+      <Actions phase={onName === null ? save.phase : undefined}>
         <Button variant="primary" disabled={!ready} busy={save.phase.kind === "saving"} onClick={submit}>
           Save name
         </Button>

@@ -645,6 +645,97 @@ test("with push-to-talk on, the list losing focus closes the microphone, even wi
   await page.keyboard.up("ControlRight");
 });
 
+test("with push-to-talk on, the talk key heard with a game in front talks just as the key in the list does, muted and deafened included (#500)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await open(page, "?one");
+  const bar = await joinGeneral(page);
+  const closed = async () => (await lastCall(page, "voice_push_to_talk"))?.closed;
+  const gates = async () => (await did(page)).filter((line) => line.startsWith("voice_push_to_talk:")).length;
+  const shell = (edge: "down" | "up") => page.evaluate((heard) => window.core?.talkKey(heard), edge);
+  // In voice with push-to-talk on, the shell is asked to watch for the chosen key.
+  await expect.poll(() => lastCall(page, "voice_talk_key")).toEqual({ key: "ControlRight" });
+  await expect.poll(closed).toBe(true);
+
+  // Heard by the shell: opens and closes the microphone as the key here does, with no mute.
+  await shell("down");
+  await expect.poll(closed).toBe(false);
+  await expect(bar.getByRole("status")).toHaveCount(0);
+  await shell("up");
+  await expect.poll(closed).toBe(true);
+  await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
+  expect(await reported(page)).toEqual({ muted: false, deafened: false });
+
+  // Heard here and by the shell at once: opened once, closed once.
+  const once = await gates();
+  await page.keyboard.down("ControlRight");
+  await shell("down");
+  await expect.poll(closed).toBe(false);
+  await shell("up");
+  await page.keyboard.up("ControlRight");
+  await expect.poll(closed).toBe(true);
+  await page.waitForTimeout(100);
+  expect(await gates()).toBe(once + 2);
+
+  // Alt+Tab to the game with the key down: the shell still hears it held, so you keep talking.
+  await page.keyboard.down("ControlRight");
+  await shell("down");
+  await expect.poll(closed).toBe(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.waitForTimeout(100);
+  expect(await closed()).toBe(false);
+  await shell("up");
+  await expect.poll(closed).toBe(true);
+  await page.keyboard.up("ControlRight");
+
+  // Muted: the room is never told otherwise, as with the key here.
+  await bar.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect.poll(() => reported(page)).toEqual({ muted: true, deafened: false });
+  await shell("down");
+  await page.waitForTimeout(100);
+  expect(await reported(page)).toEqual({ muted: true, deafened: false });
+  await expect(bar.getByRole("button", { name: "Muted", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await shell("up");
+  await bar.getByRole("button", { name: "Muted", exact: true }).click();
+  await expect.poll(() => reported(page)).toEqual({ muted: false, deafened: false });
+  await expect.poll(closed).toBe(true);
+
+  // Deafened: the key opens nothing.
+  await bar.getByRole("button", { name: "Deafen", exact: true }).click();
+  await expect.poll(() => reported(page)).toEqual({ muted: true, deafened: true });
+  const deaf = await gates();
+  await shell("down");
+  await page.waitForTimeout(100);
+  expect(await gates()).toBe(deaf);
+  await shell("up");
+
+  // Leaving voice stops the shell watching.
+  await bar.getByRole("button", { name: "Leave voice", exact: true }).click();
+  await expect.poll(() => lastCall(page, "voice_talk_key")).toEqual({ key: null });
+});
+
+test("the shell watches for the talk key only in voice with push-to-talk on, and for the key Settings picks (#500)", async ({ page }) => {
+  await open(page, "?one");
+  // Not in voice: never asked to watch.
+  await page.waitForTimeout(200);
+  expect((await did(page)).filter((line) => line.startsWith("voice_talk_key:")).every((line) => line === 'voice_talk_key:{"key":null}')).toBe(true);
+  // In voice without push-to-talk: still not.
+  const bar = await joinGeneral(page);
+  await page.waitForTimeout(200);
+  expect(await lastCall(page, "voice_talk_key")).toEqual({ key: null });
+  // Push-to-talk turned on in Settings, then another key picked: watched, then for that key.
+  const pushToTalk = (on: boolean, key: string) => page.evaluate(({ on, key }) => window.core?.ask("next:intent", { kind: "voice.pushtotalk", on, key }), { on, key });
+  await page.evaluate(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
+  await pushToTalk(true, "ControlRight");
+  await expect.poll(() => lastCall(page, "voice_talk_key")).toEqual({ key: "ControlRight" });
+  await page.evaluate(() => localStorage.setItem("linger.voice.pushToTalkKey", "MouseBack"));
+  await pushToTalk(true, "MouseBack");
+  await expect.poll(() => lastCall(page, "voice_talk_key")).toEqual({ key: "MouseBack" });
+  await expect(bar.getByRole("status")).toHaveText("hold Mouse 4 to talk");
+  // Off again: it stops.
+  await pushToTalk(false, "MouseBack");
+  await expect.poll(() => lastCall(page, "voice_talk_key")).toEqual({ key: null });
+});
+
 test("push-to-talk with the key up shows no mute, to you or to anyone else; a mute you choose shows to both (#232)", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("linger.voice.pushToTalk", "true"));
   await open(page, "?one");
@@ -796,6 +887,45 @@ test("with push-to-talk, the key makes no sound, and a Mute you choose does, as 
   await bar.getByRole("button", { name: "Mute", exact: true }).click();
   await expect(bar.getByRole("button", { name: "Muted", exact: true })).toBeVisible();
   await expect.poll(sounds).toEqual(["mute"]);
+});
+
+// Join and Leave redraw the strip's buttons under the pointer: Deafen where
+// Join was, Join where Leave was. A double-click's second click was meant
+// for the button that was there, and does nothing (#510).
+test("a double-click on the strip's Join joins once, neither muted nor deafened; one on Leave leaves without joining again (#510)", async ({ page }) => {
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await open(page, "?one");
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const yours = strip.getByRole("group", { name: "Your voice" });
+  const joins = async () => (await did(page)).filter((line) => line.startsWith("voice_join:"));
+  // Every set of controls the voice engine was told, in order.
+  const told = async () =>
+    (await did(page)).filter((line) => line.startsWith("voice_controls:")).map((line) => (JSON.parse(line.slice("voice_controls:".length)) as { controls: unknown }).controls);
+
+  await strip.getByRole("button", { name: "Join", exact: true }).dblclick();
+  await expect(yours).toBeVisible();
+  // Well past anything the second click could have set off.
+  await page.waitForTimeout(500);
+  expect(await joins()).toHaveLength(1);
+  await expect(yours.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(yours.getByRole("button", { name: "Deafen", exact: true })).toHaveAttribute("aria-pressed", "false");
+  expect(await told()).toEqual([{ muted: false, deafened: false }]);
+
+  // A click a moment later is a click again.
+  await yours.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect(yours.getByRole("button", { name: "Muted", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(told).toEqual([
+    { muted: false, deafened: false },
+    { muted: true, deafened: false },
+  ]);
+
+  await page.waitForTimeout(500);
+  await yours.getByRole("button", { name: "Leave voice", exact: true }).dblclick();
+  await expect(strip.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(yours).toHaveCount(0);
+  expect(await joins()).toHaveLength(1);
 });
 
 // The foot's standing lines (decision 1): said only while true.
