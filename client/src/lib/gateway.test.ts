@@ -11,7 +11,7 @@
  * events it listens for, and the commands it sends. That is enough to push
  * frames at one server and prove the other never saw them.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CustomEmoji } from "../generated/CustomEmoji";
 import type { Message } from "../generated/Message";
@@ -19,7 +19,7 @@ import type { ReadyData } from "../generated/ReadyData";
 import type { Room } from "../generated/Room";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { User } from "../generated/User";
-import { ApiError, type AuthedApi } from "./api";
+import { ApiError, AuthedApi } from "./api";
 
 /** Every command the store sent down to the core, in order. */
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -1703,5 +1703,61 @@ describe("reactions (#485)", () => {
     await expect(reactTo(api, now, "🤣", true)).rejects.toThrow("six different reactions");
     expect(held(2)?.reactions).toEqual([{ key: "👍", count: 1, user_ids: ["u-matt"] }]);
     expect(calls).toEqual([`PUT ${id(2)} 👍`, `PUT ${id(2)} 🤣`]);
+  });
+});
+
+describe("a password change on this device (#496)", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+    invoked.length = 0;
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The server ends every sign-in the moment it takes the change, this
+  // device's connection too, before its answer is back. The core asks for a
+  // token, is handed the one this sign-in holds, is refused, and asks again,
+  // which renews. That renewal has to wait for the pair the answer brings:
+  // spending the refresh token the change just ended is refused, and signs
+  // the device out. An app from before #496 does exactly that when the
+  // answer is slower than its reconnecting.
+  it("hands the core the new pair, and never spends the refresh token the change ended", async () => {
+    const onSignedOut = vi.fn();
+    const api = new AuthedApi(
+      HOME,
+      { accessToken: "old-access", refreshToken: "old-refresh", expiresAt: Date.now() + 600_000 },
+      { onTokens: () => undefined, onSignedOut },
+    );
+    const fetched: string[] = [];
+    let answer: (response: Response) => void = () => {
+      throw new Error("nothing has been asked yet");
+    };
+    vi.stubGlobal("fetch", (input: string | URL) => {
+      fetched.push(String(input));
+      return new Promise<Response>((resolve) => {
+        answer = resolve;
+      });
+    });
+    const handed = () =>
+      invoked.filter((call) => call.cmd === "gateway_connect" || call.cmd === "gateway_token").map((call) => call.args.token);
+
+    await connect(api);
+    statusOf(HOME, { kind: "ready", latency_ms: 1 });
+    const changing = api.changePassword({ current_password: "old-secret", new_password: "new-secret" });
+
+    // Told "unauthenticated": the core asks, and gets the token it had.
+    statusOf(HOME, { kind: "needs_token" });
+    await vi.waitFor(() => expect(handed()).toEqual(["old-access", "old-access"]));
+    // That is refused as well, so it asks again, while the answer is still out.
+    statusOf(HOME, { kind: "needs_token" });
+    await Promise.resolve();
+    expect(fetched).toEqual([`${HOME}/api/v1/me/password`]);
+
+    answer(
+      Response.json({ access_token: "changed-access", refresh_token: "changed-refresh", expires_in: 900, user: person("u-matt", "Matt") }),
+    );
+    await expect(changing).resolves.toBe(true);
+    await vi.waitFor(() => expect(handed().at(-1)).toBe("changed-access"));
+    expect(fetched).toEqual([`${HOME}/api/v1/me/password`]);
+    expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

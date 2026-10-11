@@ -462,9 +462,18 @@ is expected, and a client waits for the answer rather than spend its old refresh
 which is revoked and would sign it out.
 
 A server from before #496 answered 204 with no body, revoked only the refresh tokens,
-and closed nothing. A client that gets 204 signs in again with the new password. An app
-from before #496 ignores the body and does the same, which leaves the fresh family
-unused until it expires.
+and closed nothing. A client that gets 204 signs in again with the new password.
+
+An app from before #496 (0.4.10 and earlier) ignores the body and signs in again with
+the new password, which leaves the fresh family unused until it expires. It doesn't
+wait, though. Its own connection is closed like every other, and its reconnect asks
+for a token, by the second ask at the latest renewing with the refresh token the change
+just revoked. That is refused, and the app signs itself out. Whichever lands last, that or its own sign-in,
+decides whether it stays signed in, so the person may have to sign in again with the
+new password. The server closes that connection too, on purpose. The only thing that
+could pick it out is the access token it identified with, which is usually older than
+the one the change was made with, and a thief holding that same token would be spared
+along with it.
 
 ### Co-host (SPEC §4.16, #424)
 
