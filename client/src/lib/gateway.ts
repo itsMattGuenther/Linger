@@ -26,7 +26,7 @@
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useSyncExternalStore } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 
 import type { ClientFrame } from "../generated/ClientFrame";
 import type { Attachment } from "../generated/Attachment";
@@ -440,6 +440,34 @@ export function useGateway(server: string): GatewayState {
  *  components; this is the same read for anything that is not one. */
 export function serverState(server: string): GatewayState {
   return stateOf(server);
+}
+
+/**
+ * Subscribe to a few servers only, the ones a component shows: it's drawn
+ * again when one of them changes, not when any server does (#533). The
+ * same record comes back for as long as none of them has changed, and a
+ * server not connected to yet isn't in it.
+ */
+export function useServersAmong(servers: readonly string[]): Readonly<Record<string, GatewayState>> {
+  const held = useRef<Readonly<Record<string, GatewayState>>>({});
+  const pick = useCallback(() => {
+    const last = held.current;
+    const wanted = servers.filter((server) => server in states);
+    const same = wanted.length === Object.keys(last).length && wanted.every((server) => last[server] === states[server]);
+    if (!same) held.current = Object.fromEntries(wanted.map((server) => [server, stateOf(server)]));
+    return held.current;
+  }, [servers]);
+  return useSyncExternalStore(subscribe, pick);
+}
+
+/**
+ * One value worked out from every server's state, for a component that needs
+ * only that: drawn again when the value changes, not at every change on every
+ * server (#533). React compares it with `Object.is`, so it's a string or a
+ * number, or an object kept as it was.
+ */
+export function useServersPick<T>(pick: (servers: Readonly<Record<string, GatewayState>>) => T): T {
+  return useSyncExternalStore(subscribe, () => pick(states));
 }
 
 /** Subscribe to every server at once. The rail is the only caller: it draws a
@@ -1058,13 +1086,20 @@ export function positionOf(server: string): Position {
  */
 export type SharedLocal = Pick<GatewayState, "myVoice" | "voiceFailed" | "read" | "readLoaded" | "notifyRules" | "blocked" | "reports">;
 
+/** Every field of `SharedLocal`, for going through them one at a time. */
+export const SHARED_FIELDS = ["myVoice", "voiceFailed", "read", "readLoaded", "notifyRules", "blocked", "reports"] as const satisfies readonly (keyof SharedLocal)[];
+
 export function sharedLocalOf(server: string): SharedLocal {
   const { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports } = stateOf(server);
   return { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports };
 }
 
-/** A viewer takes the owner's copy of those fields. */
-export function adoptShared(server: string, shared: SharedLocal): void {
+/**
+ * A viewer takes the owner's copy of those fields: the ones the owner says
+ * changed, each kept as it was otherwise, so what didn't change isn't drawn
+ * again (#533).
+ */
+export function adoptShared(server: string, shared: Partial<SharedLocal>): void {
   if (!links.has(server)) return;
   publish(server, { ...stateOf(server), ...shared });
 }
