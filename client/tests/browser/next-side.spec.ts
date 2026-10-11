@@ -77,6 +77,52 @@ test("a room clicked in the list opens beside it, in the same window, with the c
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
+/**
+ * When the page's clock starts. The idle tests install Playwright's clock
+ * before the page loads, so they decide which seconds pass (#511).
+ */
+const START = Date.parse("2026-10-10T20:00:00Z");
+/** Longer than the two-second clock the window once kept for nothing (#511). */
+const IDLE_MS = 3_000;
+
+/**
+ * How many times the window draws in three seconds of its own time, once it
+ * has stopped drawing for a whole second (#511; tests/fixtures/next/
+ * commits.tsx counts). The page's clock is held still and those three
+ * seconds are run through, every timer due in them fired, so they're the
+ * same three seconds on a loaded machine as on an idle one. The once-a-minute
+ * clocks first fire a minute after the page opened, after the span watched.
+ */
+async function drawsWhileIdle(page: Page): Promise<number> {
+  const commits = () => page.evaluate(() => window.commits ?? 0);
+  let last = await commits();
+  for (;;) {
+    await page.waitForTimeout(1_000);
+    const now = await commits();
+    if (now === last) break;
+    last = now;
+  }
+  const held = (await page.evaluate(() => Date.now())) + 1_000;
+  await page.clock.pauseAt(held);
+  expect(held + IDLE_MS - START, "the span watched ends before the minute clocks first fire").toBeLessThan(60_000);
+  // Settling the clock may have fired a timer: counted from here.
+  await page.waitForTimeout(250);
+  const before = await commits();
+  await page.clock.runFor(IDLE_MS);
+  // Whatever those seconds asked React to draw, it has drawn.
+  await page.waitForTimeout(250);
+  return (await commits()) - before;
+}
+
+test("with a room beside the list and nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await page.clock.install({ time: START });
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  expect(await drawsWhileIdle(page)).toBe(0);
+});
+
 test("while a room shows beside the list you're in it; folded away, you're around again", async ({ page }) => {
   await open(page);
   await room(page, "general").click();

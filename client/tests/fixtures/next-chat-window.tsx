@@ -22,8 +22,9 @@
  * waiting until `window.owner.finish()`, and `?refuse` has it fail.
  *
  * `window.owner` lets a test act as the owner or the shell; what the window
- * asked for is written to `body[data-did]`, `|`-separated, and every sound it
- * played as `sound:<cue>` (`next/audio.ts`).
+ * asked for is written to `body[data-did]`, `|`-separated, every sound it
+ * played as `sound:<cue>` (`next/audio.ts`), and how many times React has
+ * drawn it in `window.commits` (`next/commits.tsx`).
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,6 +35,7 @@ import { controlCue } from "../../src/lib/sound-events";
 import { ChatWindow } from "../../src/next/app/chat/ChatWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
+import { Counted } from "./next/commits";
 import { fakeDesktop, type Unnumbered } from "./next/desktop";
 import { SERVER, SERVER_NAME, evening, people } from "./next/evening";
 import { GUILD, guild, serverInfo } from "./next/servers";
@@ -183,6 +185,8 @@ const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
-    <ChatWindow />
+    <Counted>
+      <ChatWindow />
+    </Counted>
   </StrictMode>,
 );

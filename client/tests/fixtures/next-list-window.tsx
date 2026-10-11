@@ -55,8 +55,9 @@
  * positions moved meanwhile;
  * `window.core.status(server, status)` its connection's state;
  * `window.core.ask(event, question)` asks the owner something as another
- * window would. What the window asked for is in `body[data-did]`, and every
- * sound it played as `sound:<cue>` (`next/audio.ts`).
+ * window would. What the window asked for is in `body[data-did]`, every
+ * sound it played as `sound:<cue>` (`next/audio.ts`), and how many times
+ * React has drawn it in `window.commits` (`next/commits.tsx`).
  */
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
@@ -66,6 +67,7 @@ import { apply, type GatewayState, type GatewayStatus, serverState } from "../..
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
+import { Counted } from "./next/commits";
 import type { Message } from "../../src/generated/Message";
 import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
@@ -700,6 +702,8 @@ const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
-    <ListWindow />
+    <Counted>
+      <ListWindow />
+    </Counted>
   </StrictMode>,
 );
