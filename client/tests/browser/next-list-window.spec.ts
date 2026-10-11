@@ -177,6 +177,21 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await expect(page.locator("[data-screen='knocks'] [data-kit='Notice']").first()).toContainText("knocked.");
 });
 
+test("a second knock from somebody takes their first card's place, and forty at once show the newest three (#512)", async ({ page }) => {
+  await open(page);
+  const cards = page.locator("[data-screen='knocks'] [data-kit='Notice']");
+  const knock = (server: string, from: string) =>
+    page.evaluate(([to, who]) => window.core?.frame(to, { op: "knock", d: { from_user_id: who } } as never), [server, from] as const);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await expect(cards).toContainText("knocked.");
+  // Forty people on two servers: forty cards covered the whole list for eight seconds.
+  for (let n = 0; n < 40; n += 1) await knock(n % 2 === 0 ? GUILD : HOME, `crowd-${n}`);
+  await expect(cards).toHaveCount(3);
+});
+
 // The list is the window's exact size, so a rock takes it a few pixels past the
 // window's edges. The page grew scroll bars to follow, which Windows draws, on
 // and off with each swing (#251). Nothing past the edge is on screen anyway.

@@ -586,7 +586,9 @@ acknowledges the request, not delivery; it is not knock history. A refused
 knock never shows `knocked`, wherever it was pressed. Somebody offline can't
 be knocked: the control stays where it is, greyed out, and says why ("Can't
 knock while Justin B is offline.") until they're back (#288). The recipient's
-card still disappears after eight seconds. Changing cards or servers must not
+card still disappears after eight seconds. A second knock from the same person takes their card's
+place, its eight seconds starting over, rather than stacking a second card, and
+at most three cards show at once, the newest (#512). Changing cards or servers must not
 carry sender feedback to a different person.
 
 ### 4.10 File sharing

@@ -240,10 +240,12 @@ export interface GatewayState {
    * server is holding: a knock is not stored at either end, so this list is
    * the only place it exists, and it is empty again a few seconds later.
    *
-   * It is a list rather than a set of user ids because two knocks from the same
-   * person are two knocks. Nothing counts them, nothing keeps them, and nothing
-   * shows them after they have gone — SPEC §4.9 is emphatic that a knock which
-   * leaves something sitting there has become a message.
+   * A second knock from the same person takes the first one's place as a
+   * fresh card, with a new id, so it is seen again rather than stacked
+   * (#512); at most `MAX_KNOCK_CARDS` are held, the newest. Nothing counts
+   * them, nothing keeps them, and nothing shows them after they have gone —
+   * SPEC §4.9 is emphatic that a knock which leaves something sitting there
+   * has become a message.
    */
   knocks: Knock[];
   /**
@@ -357,6 +359,13 @@ export interface Knock {
  * button, so this number is the entire lifetime of the thing.
  */
 export const KNOCK_TTL_MS = 8_000;
+
+/**
+ * The most knock cards over the list at once, the newest (#512). Forty
+ * people knocking at once stacked forty cards over the whole list for eight
+ * seconds; a card is a tap on the shoulder, not a queue to work through.
+ */
+export const MAX_KNOCK_CARDS = 3;
 
 /** Ids for knock cards that arrive without a sequence number, which a
  *  knock never should: the ones that do are named by it (see `apply`). */
@@ -894,7 +903,10 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // timer was lost — a window backgrounded so long the timers were
       // throttled, a card unmounted by a re-render — must not come back later
       // as a knock from the past.
-      const fresh = current.knocks.filter((held) => Date.now() - held.at < KNOCK_TTL_MS);
+      //
+      // The same person again replaces their card rather than adding one
+      // (#512), and only the newest few are held.
+      const fresh = current.knocks.filter((held) => Date.now() - held.at < KNOCK_TTL_MS && held.from !== frame.d.from_user_id);
       // Named by the frame's sequence number, which is unique within a
       // connection (a fresh `ready` clears knocks anyway), so every window
       // that folds this frame names it the same: the Buddy list client's
@@ -904,7 +916,7 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       const id = frame.s === undefined ? `knock-local-${knockSeq}` : `knock-${frame.s}`;
       return {
         ...current,
-        knocks: [...fresh, { id, from: frame.d.from_user_id, at: Date.now() }],
+        knocks: [...fresh, { id, from: frame.d.from_user_id, at: Date.now() }].slice(-MAX_KNOCK_CARDS),
       };
     }
     case "typing": {

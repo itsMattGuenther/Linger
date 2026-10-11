@@ -828,7 +828,8 @@ person isn't left this way: it's their row in your list.
 
 **Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
-seconds, then it's gone. Their row in your list gives a little shake. That
+seconds, then it's gone. Knocking again starts their card over; it doesn't add a
+second one. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
 in your system settings, nothing moves; the card still shows. There is no message and nothing for them to
 answer. Three an hour per person, so it stays a tap; after the third, the card
