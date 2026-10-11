@@ -933,12 +933,13 @@ is no relevance ordering and no parameter to ask for one.
 of it and looks for all of them; a run inside double quotes is one phrase, those
 words in that order. Nothing else is syntax: `AND`, `OR`, `NEAR`, `*`, `(` and
 `^` are characters to tokenize like any other, so no input is a parse error and
-none of it can be made to mean something the person typing did not intend.
+none of it can be made to mean something the person typing did not intend. A
+control character (NUL, escape, a C1 code) splits words the way a space does.
 Matching is on whole words with simple English endings folded together, so
 `photo` finds `photos`.
 
-A `q` that holds no searchable characters — empty, blank, or only punctuation —
-is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
+A `q` that holds no searchable characters — empty, blank, or only punctuation
+or control characters — is `VALIDATION_FAILED`, not every message on the server. Terms past the twelfth
 are ignored rather than refused, and a `q` over 200 characters is
 `VALIDATION_FAILED`. `room_id` or `author_id` naming something that is not here
 is `NOT_FOUND`, because "no results" and "no such room" send a reader looking in
