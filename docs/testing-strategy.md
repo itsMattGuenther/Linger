@@ -66,7 +66,7 @@ AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
-`scripts/issue-label.test.mjs`,
+`scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, and `scripts/tidy-branches-test.sh`).
 
@@ -78,6 +78,17 @@ GitHub reports as `abandoned` (#445). A new job joins by being listed in its `ne
 `scripts/ci-gate.test.mjs` fails if one isn't. The package checks run in their
 own workflow and don't block a merge; the nightly run and every release run
 them.
+
+**Every action is pinned.** Each action a workflow takes from another
+repository is named by a full commit SHA with its version in a comment
+(`actions/checkout@<sha> # v4.4.0`), never by a tag or a branch. Whoever owns
+an action can move its tag to new code, and the release job runs actions next
+to the updater's signing key (#491).
+`scripts/action-pins.test.mjs` fails on one that isn't pinned. To move to a
+newer version, look up the commit its tag points at
+(`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and change the SHA and
+the comment together. `dtolnay/rust-toolchain` has no version tags: pin a
+commit from its `master` branch and pass `toolchain: stable`.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
