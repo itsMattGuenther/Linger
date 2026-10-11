@@ -114,15 +114,20 @@ export function sessionLabel(at: number, now: number): string {
   // The first moment a date can hold has no day before it (#509).
   if (!validTime(anchor.getTime())) return "";
 
-  // Clamped because a clock that is behind the server's makes this negative,
-  // and "in 2 days morning" is worse than being slightly wrong for a minute.
   const today = new Date(now);
-  const ago = Math.max(0, daysBetween(anchor, today));
+  const ago = daysBetween(anchor, today);
   const weekday = WEEKDAY().format(anchor);
   const dated =
     anchor.getFullYear() === today.getFullYear()
       ? MONTH_DAY().format(anchor)
       : MONTH_DAY_YEAR().format(anchor);
+
+  // A message dated after today: a server whose clock ran ahead, or a reader's
+  // that is behind. "This evening" was wrong for it, and "in 2 days" no way
+  // to talk about a message (#512), so it's named by its date. A clock a few
+  // minutes out never gets here: past midnight, the small hours still
+  // belong to today's night.
+  if (ago < 0) return `${part === "late night" ? `late ${weekday} night` : `${weekday} ${part}`}, ${dated}`;
 
   // Past a week the weekday alone stops locating anything, so the date joins it.
   const suffix = ago < 7 ? "" : `, ${dated}`;

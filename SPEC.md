@@ -460,7 +460,9 @@ walking into the past. One CSS custom property computed from the timestamp.
 **Sessions, not a stream.** Group consecutive messages by the same author; break the
 group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts real
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
-`Saturday morning`, `yesterday afternoon`.
+`Saturday morning`, `yesterday afternoon`. A gap counts either way: a server clock
+that jumped back still breaks the session. A message dated after today is labeled
+with its date (`Friday evening, October 16`), never `this evening` (#512).
 
 **No avatar column or per-message colored bars.** The styled sender name has a
 line of its own at the start of a run of messages, once per run, with no colon.
