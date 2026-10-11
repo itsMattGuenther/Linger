@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { catchAnimations, stopCatching } from "./caught";
 
 // The real list window, the owner (tests/fixtures/next-list-window.tsx): the
 // sign-ins restored from the keyring, a connection per server, the list with
@@ -149,6 +150,9 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await open(page);
   const list = page.locator("[data-screen='list']");
   await expect(list).not.toHaveAttribute("data-rock");
+  // Each rock held where it starts, to be measured: it's over in under half a
+  // second, often before a busy browser has answered the next question (#528).
+  await catchAnimations(page, "[data-screen='list']", { hold: true });
   const knock = (from: string) =>
     page.evaluate(([server, who]) => window.core?.frame(server, { op: "knock", d: { from_user_id: who } } as never), [GUILD, from] as const);
   await knock("g-rui");
@@ -163,11 +167,13 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
       rock.currentTime = at;
       return new DOMMatrix(getComputedStyle(node).transform).m41;
     }, ms);
-  expect(await leftAt(70)).toBeLessThan(-2);
+  await expect.poll(() => leftAt(70)).toBeLessThan(-2);
   await knock("g-rui");
   await expect(list).toHaveAttribute("data-rock", "b");
   expect(await list.evaluate((node) => getComputedStyle(node).animationName)).toBe("nx-list-rock-b");
 
+  // With less motion it runs as it would, uncaught: over at once.
+  await stopCatching(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await knock("g-rui");
   await expect(list).toHaveAttribute("data-rock", "a");
@@ -183,6 +189,8 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
 test("a rock never gives the page anything to scroll (#251)", async ({ page }) => {
   await open(page);
   const list = page.locator("[data-screen='list']");
+  // Held where it starts: it's over in under half a second (#528).
+  await catchAnimations(page, "[data-screen='list']", { hold: true });
   await page.evaluate((server) => window.core?.frame(server, { op: "knock", d: { from_user_id: "g-rui" } } as never), GUILD);
   await expect(list).toHaveAttribute("data-rock", "a");
   // Held at each swing: left and tilted, right, back.
