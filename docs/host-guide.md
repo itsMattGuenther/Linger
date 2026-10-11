@@ -100,7 +100,9 @@ https://linger.example.com/setup?token=…
 ```
 
 Keep the entire link, including `?token=…`, private. Paste it into the Linger
-desktop app in step 4, **not a browser**. Restarting Linger before you use the
+desktop app in step 4. Opened in a browser, it shows a page saying where to get the
+app and to paste the link there; the account is only made in the app. Restarting
+Linger before you use the
 link creates a new one and invalidates the old one, and
 `docker compose logs linger` prints the new one. If you accidentally share the
 link, restart Linger to replace it.
@@ -199,7 +201,9 @@ change it.
 
 Then **Hosting → Invites → New Invite**. You choose how many people the invite
 is good for and when it expires; the link is copied for you the moment it is
-made. Send it however you normally talk to your friends.
+made. Send it however you normally talk to your friends. A friend who taps it
+before they have Linger gets a page from your server with the server's name,
+where to download the app, and the link to paste into it.
 
 **Hosting → Server** shows which version your server runs, and says when a
 newer one is out, with a link to [updating the server](#updating-the-server).

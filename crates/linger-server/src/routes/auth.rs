@@ -21,7 +21,7 @@ use crate::auth::{self, RefreshOutcome};
 use crate::db::now_ms;
 use crate::error::{wait_in_words, ApiError};
 use crate::state::AppState;
-use crate::{repo, validate};
+use crate::{ratelimit, repo, validate};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -55,7 +55,7 @@ async fn register(
     parts: Parts,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
+    let ip = ratelimit::address_key(&auth::client_ip(&parts, &state.config.trusted_proxies));
     if let Some(per_hour) = state.config.signups_per_hour {
         if let Err(retry) = state
             .limiter
@@ -278,7 +278,7 @@ async fn login(
     parts: Parts,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
+    let ip = ratelimit::address_key(&auth::client_ip(&parts, &state.config.trusted_proxies));
     if let Err(retry) = state
         .limiter
         .check(&format!("login:{ip}"), RATE_LOGIN_PER_IP)

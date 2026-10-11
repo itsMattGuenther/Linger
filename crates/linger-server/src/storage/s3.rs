@@ -305,7 +305,7 @@ impl ObjectStore for S3Store {
     ) -> anyhow::Result<Staged> {
         let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
-            if parts.len() as u32 != expected_parts {
+            if u32::try_from(parts.len()) != Ok(expected_parts) {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
             }
         }
@@ -389,6 +389,10 @@ impl ObjectStore for S3Store {
             .query_mut()
             .insert("response-content-disposition", serve.disposition.clone());
         Ok(Some(ObjectBody::Redirect(action.sign(URL_TTL).to_string())))
+    }
+
+    async fn download(&self, url: &str) -> anyhow::Result<reqwest::Response> {
+        check(self.http.get(url).send().await?, "fetching a stored file").await
     }
 
     async fn delete_object(&self, key: &str) -> anyhow::Result<()> {

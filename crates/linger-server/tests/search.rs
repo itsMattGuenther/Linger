@@ -14,6 +14,7 @@
 mod common;
 
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::time::Instant;
 
 use common::{join_member, server_with_room, TestServer};
@@ -351,7 +352,7 @@ async fn a_maximum_size_message_does_not_slow_an_insert_to_a_crawl() {
     let mut body = String::new();
     let mut word = 0;
     while body.len() + 8 < MAX_MESSAGE_CHARS {
-        body.push_str(&format!("word{word} "));
+        let _ = write!(body, "word{word} ");
         word += 1;
     }
     let body = body.trim().to_string();
