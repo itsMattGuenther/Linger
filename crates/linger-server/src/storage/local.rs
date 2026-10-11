@@ -240,8 +240,11 @@ impl ObjectStore for LocalStore {
         &self,
         upload_id: UploadId,
         parts: Option<&[CompletedPart]>,
-        expected_parts: u32,
+        declared_bytes: u64,
     ) -> anyhow::Result<Staged> {
+        // Every part on this disk was already held to its length as it was
+        // written (`write_part`), so the plan is needed only for the count.
+        let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
             if parts.len() as u32 != expected_parts {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
@@ -375,6 +378,9 @@ mod tests {
             voice_line_after: std::time::Duration::from_millis(
                 linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
             ),
+            trusted_proxies: crate::config::TrustedProxies::default(),
+            signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+            password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         }))
         .unwrap()
     }

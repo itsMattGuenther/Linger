@@ -9,8 +9,8 @@ use linger_core::wire::{ColorKey, ServerInfo, UpdateServerRequest};
 
 use crate::auth::{AuthedUser, HostOrCohost};
 use crate::error::ApiError;
-use crate::repo;
 use crate::state::AppState;
+use crate::{repo, validate};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/server", get(info).patch(update))
@@ -62,12 +62,7 @@ async fn update(
     _host: HostOrCohost,
     Json(req): Json<UpdateServerRequest>,
 ) -> Result<Json<ServerInfo>, ApiError> {
-    if let Some(name) = &req.name {
-        let trimmed = name.trim();
-        if trimmed.is_empty() || trimmed.chars().count() > 48 {
-            return Err(ApiError::validation("Server names are 1–48 characters."));
-        }
-    }
+    let name = req.name.as_deref().map(validate::server_name).transpose()?;
     if let Some(accent) = &req.accent_key {
         if !accent.is_valid() {
             return Err(ApiError::validation(
@@ -78,7 +73,7 @@ async fn update(
 
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
     let pairs = [
-        ("name", req.name.map(|n| n.trim().to_string())),
+        ("name", name),
         ("accent_key", req.accent_key.map(|c| c.0)),
         ("icon_key", req.icon_key),
     ];

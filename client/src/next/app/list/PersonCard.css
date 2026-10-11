@@ -89,3 +89,10 @@
 .nx-person-sentence {
   display: inline-block;
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-person-status,
+.nx-person-note {
+  unicode-bidi: isolate;
+}

@@ -182,6 +182,24 @@ test.describe("what a message says", () => {
     expect(page.url()).toContain("/tests/fixtures/next-chat-parity.html");
   });
 
+  test("a link whose words are another address opens only where it goes, once (#508)", async ({ page }) => {
+    await open(page);
+    const decoy = row(page, await post(page, "[https://good.example/login](https://evil.example/steal)")).locator(".nx-text");
+    const nested = row(page, await post(page, "[[https://a.example](https://b.example)](https://c.example)")).locator(".nx-text");
+    // One click each. Both clicks' opens are asked for in order, so once the
+    // second's has arrived, anything the first set off is in the list too.
+    await decoy.getByRole("link").first().click();
+    await nested.getByRole("link").first().click();
+    await expect
+      .poll(async () => (await did(page)).filter((line) => line.startsWith("open:")))
+      .toEqual(["open:https://evil.example/steal", "open:https://c.example/"]);
+    // One link each, and pointing at it says where it really goes.
+    await expect(decoy.getByRole("link")).toHaveAttribute("title", "https://evil.example/steal");
+    await expect(decoy.getByRole("link")).toHaveText("https://good.example/login");
+    await expect(nested.getByRole("link")).toHaveAttribute("title", "https://c.example/");
+    await expect(nested.getByRole("link")).toHaveText("[https://a.example](https://b.example)");
+  });
+
   test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
     await open(page);
     // Typed as the report did: a line, Shift+Enter, the next line, Enter.

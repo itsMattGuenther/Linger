@@ -1,8 +1,8 @@
 //! Messages, reactions, and read markers (PROTOCOL §4).
 //!
-//! Deletes are tombstones — the row stays so reply chains survive. And per the
-//! AGENTS.md hard rule: nothing here computes or returns an unread count, and
-//! nothing ever will.
+//! Deletes are tombstones — the row stays so reply chains survive, but the
+//! files on it go with the delete (#502). And per the AGENTS.md hard rule:
+//! nothing here computes or returns an unread count, and nothing ever will.
 //!
 //! Files are uploaded first and attached second (PROTOCOL §6): by the time an
 //! `attachment_id` reaches this module the bytes are already stored, checked
@@ -327,8 +327,38 @@ async fn delete(
         id,
         room_id: message.room_id,
     });
+
+    // What it carried goes too, now rather than at the sweeper's next pass
+    // (#502): bytes, poster and display copy, then the rows. The delete has
+    // already happened, so a store that can't delete right now is the
+    // sweeper's to retry, not a failure to report; nothing serves or lists a
+    // file whose message is deleted in the meantime. For the same reason the
+    // wait is bounded: a bucket that stops answering must not hold the answer
+    // past the app's own limit, so a delete that worked looks like one that
+    // failed.
+    match tokio::time::timeout(
+        FILE_REMOVAL_WAIT,
+        crate::expiry::take_from_message(&state, id),
+    )
+    .await
+    {
+        Ok(Ok(_)) => {}
+        Ok(Err(err)) => {
+            tracing::warn!(error = ?err, "could not take a deleted message's files; the sweeper will");
+        }
+        Err(_) => {
+            tracing::warn!(
+                "the store was slow to take a deleted message's files; the sweeper will finish"
+            );
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// How long a delete waits for the store to take the message's files (#502).
+/// Thirty deletes (ten files, each with a poster and a display copy) take a
+/// second or two on a working bucket; the app gives up on an answer at 30.
+const FILE_REMOVAL_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 async fn set_pin(
     state: &AppState,
