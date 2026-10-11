@@ -28,7 +28,7 @@ use linger_core::wire::{CompletedPart, UploadSlot};
 use linger_core::{AttachmentId, UploadId};
 
 pub use local::LocalStore;
-pub use s3::S3Store;
+pub use s3::{BackupBucket, S3Store};
 
 /// An upload's parts, gathered into one local file so the server can verify the
 /// size, sniff the real type and re-encode it. For S3 this is a temp download;

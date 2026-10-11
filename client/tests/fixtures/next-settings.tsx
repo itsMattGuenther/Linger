@@ -58,7 +58,7 @@ import { customEmoji, NOW, SERVER, SERVER_NAME, ownFields, people, rooms as even
 
 const query = new URLSearchParams(location.search);
 
-/** What the server tells its host about the machine, from `?backups=` (#582). */
+/** What the server tells its host about the machine, from `?backups=` (#582, #614). */
 function healthOf(option: string | null): ServerHealth | null {
   const lastNight = new Date(NOW);
   lastNight.setHours(3, 12, 0, 0);
@@ -72,6 +72,11 @@ function healthOf(option: string | null): ServerHealth | null {
       return { ...ok, backups: false, last_backup_at: null };
     case "full":
       return { ...ok, last_backup_at: NOW - 4 * 86_400_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: true };
+    // The copies also go to a bucket (#614): there at 3:14, or not for four days.
+    case "bucket":
+      return { ...ok, bucket: { name: "good-company-backups", last_sent_at: lastNight.getTime() + 2 * 60_000, overdue: false } };
+    case "bucket-late":
+      return { ...ok, bucket: { name: "good-company-backups", last_sent_at: NOW - 4 * 86_400_000, overdue: true } };
     default:
       return null;
   }

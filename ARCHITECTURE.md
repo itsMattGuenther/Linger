@@ -1135,10 +1135,14 @@ bootstrap credentials.
 one copy by itself (#582, `backup.rs`): once a day, `VACUUM INTO` writes the database to
 `data/backups/` through a read-only connection of its own, so it never holds up the one
 writer, then `PRAGMA integrity_check` checks the copy. It keeps 7 daily and 4 weekly
-copies; `LINGER_BACKUPS=off` turns it off. That is the whole feature: copying anything
-off the machine, uploads included, is the host's, and the host guide gives the `rsync`
-and `rclone` lines. No restore button, no backup to S3. The host alone hears, on `GET
-/server`'s `health`, when the copies stop working or the disk is nearly full.
+copies; `LINGER_BACKUPS=off` turns it off. With `LINGER_BACKUP_S3_*` set (#614) it also
+sends the newest daily and weekly copy to that bucket after each one checks out, and
+keeps the same 7 and 4 there, touching only names it made under its prefix; a send that
+fails never costs the copy on disk, and is tried again hourly. That is the whole
+feature: the uploads are the host's to copy off the machine, and the host guide gives
+the `rsync` and `rclone` lines. No restore button. The host alone hears, on `GET
+/server`'s `health`, when the copies stop working, stop reaching the bucket, or the
+disk is nearly full.
 
 **Locked out:** no reset email, no reset link — the setup token only exists while the
 server has no users, so the only remaining proof of ownership is access to the box.

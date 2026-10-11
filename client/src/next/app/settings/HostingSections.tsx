@@ -15,6 +15,7 @@ import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_MOTD_CHARS } from "../../core/chat/motd";
 import {
   backupLine,
+  bucketLine,
   draftSlug,
   HEADINGS,
   INVITE_EXPIRY,
@@ -949,13 +950,19 @@ export function ServerSection({ version, health, name: savedName, accent: savedA
  */
 function MachineBlocks({ health, now, openGuide }: NonNullable<HostServerProps["health"]>) {
   const backup = backupLine(health, now);
+  const bucket = bucketLine(health, now);
   return (
     <>
       <Block
         heading={HEADINGS.backups}
-        lead="Every night the server copies its database into data/backups, and keeps a week of nightly copies and a month of weekly ones. They're on the same disk, so they won't survive it dying: keep a copy somewhere else too."
+        lead={
+          bucket
+            ? "Every night the server copies its database into data/backups, keeps a week of nightly copies and a month of weekly ones, and sends them to your bucket too."
+            : "Every night the server copies its database into data/backups, and keeps a week of nightly copies and a month of weekly ones. They're on the same disk, so they won't survive it dying: keep a copy somewhere else too."
+        }
       >
         <Note tone={backup.problem ? "problem" : "status"}>{backup.words}</Note>
+        {bucket ? <Note tone={bucket.problem ? "problem" : "status"}>{bucket.words}</Note> : null}
         <Actions start>
           <Button variant="quiet" icon="go" onClick={openGuide}>
             How to back up

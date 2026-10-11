@@ -1343,11 +1343,19 @@ one part it can do alone, and no more.
 - **Not the files, and not off the machine.** Uploads never change once they're up,
   so `rsync` or `rclone` copies them better than the server would, and the host guide
   says plainly that copies on the same disk don't survive it dying. A copy to an S3
-  bucket was set aside for an issue of its own. No restore button.
+  bucket was set aside for an issue of its own (#614, built the same day: below).
+  No restore button.
 - **The host alone is told.** A quiet line at the foot of the host's list while the
   disk is nearly full (a tenth left), the file space is 90% used, or three days
   have gone without a good copy; Settings → Hosting → Server says when the last one
   was. Not co-hosts: the machine is whoever runs it (SPEC §4.16).
+- **The copy can go to a bucket too (#614).** Matt asked for it the same day.
+  `LINGER_BACKUP_S3_*`, its own settings rather than the files' bucket, so a host
+  whose files are on the disk can still send the copies away; `_PREFIX` (default
+  `backups/`) lets it share the files' bucket. Off unless the bucket and both keys
+  are set, and a startup error when only some are. The database only, the newest
+  daily and weekly after each copy checks out, the same 7 and 4 kept in the bucket.
+  The host is told when none has reached it for three days.
 
 ## Decided — files stay until the server needs the room
 

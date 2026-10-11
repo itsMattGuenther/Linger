@@ -24,6 +24,7 @@ import { validScale } from "../../lib/interface";
 import { applyNormalize, loadNormalize } from "../../lib/normalize";
 import { PROTOCOL, tauriBus } from "./bus";
 import { onPhone } from "./phone";
+import { pageScreen } from "./screen";
 
 /** Settings changed how things look; every window applies it. */
 export const APPEARANCE = "next:appearance";
@@ -229,17 +230,16 @@ async function applyOnce(): Promise<void> {
  * screen is the window, so it has none. A desktop that ignores it (a tiling
  * one) still gets the zoom and the resize.
  *
- * The screen's size is the page's own (`window.screen`), never the shell's
- * `currentMonitor()`: on Linux, Tauri reads the monitor's details off GTK's
- * thread, and asked for as the window opens, that crashed the packaged app
- * about half the time (#623). An engine that shrinks the screen by the page's
- * zoom only makes the floor smaller, the safe way to be wrong.
+ * The screen's size is the page's own (`core/screen.ts`), never the shell's
+ * `currentMonitor()`, which crashed the packaged Linux app (#623). An engine
+ * that shrinks the screen by the page's zoom only makes the floor smaller,
+ * the safe way to be wrong.
  */
 async function keepMinimum(label: string, scale: number): Promise<void> {
   if (onPhone()) return;
   try {
-    const shown = window.screen as Screen | undefined;
-    const screen = shown && shown.availWidth > 0 && shown.availHeight > 0 ? { width: shown.availWidth, height: shown.availHeight } : null;
+    const shown = pageScreen();
+    const screen = shown ? { width: shown.width, height: shown.height } : null;
     const least = scaledMinimum(WINDOW_MINIMUMS[windowKind(label)], scale, screen);
     await getCurrentWindow().setMinSize(new LogicalSize(least.width, least.height));
   } catch {

@@ -1,4 +1,4 @@
-import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../../lib/clock";
@@ -50,6 +50,7 @@ import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
+import { pageScreen, screenAround } from "../../core/screen";
 import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
@@ -1511,7 +1512,9 @@ function bringForward(): void {
  * Unfolding: the window grows to the right by the conversations' width,
  * leftwards where its screen ends (core/side.ts). A maximized window, or one
  * the desktop sizes itself (a tiling desktop), keeps its size, and the
- * conversations fit what they get.
+ * conversations fit what they get. Where the screen ends is the page's own
+ * view (core/screen.ts), never the shell's monitor, which can crash the
+ * packaged Linux app (#628).
  */
 async function growBeside(side: Side): Promise<void> {
   try {
@@ -1520,8 +1523,9 @@ async function growBeside(side: Side): Promise<void> {
     const factor = await current.scaleFactor();
     const inner = (await current.innerSize()).toLogical(factor);
     const at = (await current.outerPosition()).toLogical(factor);
-    const monitor = await currentMonitor();
-    const screen = monitor ? { x: monitor.position.x / monitor.scaleFactor, width: monitor.size.width / monitor.scaleFactor } : null;
+    const outer = (await current.outerSize()).toLogical(factor);
+    const seen = pageScreen();
+    const screen = seen ? screenAround({ x: at.x, width: outer.width }, seen) : null;
     const target = unfolding({ x: at.x, width: inner.width }, screen, side, loadScale() / 100);
     if (!target) return;
     if (target.x !== null) await current.setPosition(new LogicalPosition(target.x, at.y));

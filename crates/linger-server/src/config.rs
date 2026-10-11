@@ -61,6 +61,22 @@ impl std::fmt::Debug for S3Config {
     }
 }
 
+/// Where the nightly copy of the database also goes, when the host names a
+/// bucket for it (#614): `LINGER_BACKUP_S3_*`, the same settings as
+/// `LINGER_S3_*` under their own names, plus where in the bucket the copies
+/// go. Its own settings, not the files' bucket, so a host whose files stay on
+/// this disk can still send the copies away, and a host on S3 can keep them
+/// apart from the files (or point both at one bucket, and the prefix keeps
+/// them out of the way).
+#[derive(Debug, Clone)]
+pub struct BackupBucketConfig {
+    /// The bucket, its address and the keys to it.
+    pub s3: S3Config,
+    /// `LINGER_BACKUP_S3_PREFIX`: where in the bucket the copies go, default
+    /// `backups/`. Always ends in `/`; empty means the bucket's top level.
+    pub prefix: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     /// `LINGER_DATA_DIR` — holds `linger.db` and `objects/`. Default `./data`.
@@ -120,6 +136,9 @@ pub struct Config {
     /// `data/backups/` once a day (`crate::backup`, #582). On unless set to
     /// `off`.
     pub backups: bool,
+    /// `LINGER_BACKUP_S3_*`: a bucket each nightly copy is also sent to
+    /// (#614). `None`, the default, keeps the copies on this machine.
+    pub backup_bucket: Option<BackupBucketConfig>,
 }
 
 /// What takes a shared file nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS`,
@@ -302,6 +321,21 @@ pub enum ConfigError {
          copy of its database in data/backups, or write `off` if you back it up another way."
     )]
     Backups(String),
+    #[error(
+        "{missing} isn't set, but other LINGER_BACKUP_S3_ settings are. The nightly copy goes \
+         to a bucket only when LINGER_BACKUP_S3_BUCKET, LINGER_BACKUP_S3_ACCESS_KEY_ID and \
+         LINGER_BACKUP_S3_SECRET_ACCESS_KEY are all set. Set the missing one, or remove the \
+         LINGER_BACKUP_S3_ lines to keep the copies on this machine only."
+    )]
+    BackupS3Missing { missing: &'static str },
+    #[error("LINGER_BACKUP_S3_PATH_STYLE must be 'true' or 'false', got {0:?}")]
+    BackupS3PathStyle(String),
+    #[error(
+        "LINGER_BACKUPS is off, but LINGER_BACKUP_S3_BUCKET is set. With backups off there is \
+         no nightly copy to send. Remove LINGER_BACKUPS=off to send the copies to the bucket, \
+         or remove the LINGER_BACKUP_S3_ lines."
+    )]
+    BackupS3WithBackupsOff,
 }
 
 impl Config {
@@ -344,6 +378,8 @@ impl Config {
         )?
         .with_domain(domain.as_deref());
 
+        let backups = backups(std::env::var("LINGER_BACKUPS").ok())?;
+
         Ok(Self {
             data_dir,
             bind,
@@ -362,7 +398,8 @@ impl Config {
             password_checks_at_once: password_checks_at_once(
                 std::env::var("LINGER_PASSWORD_CHECKS_AT_ONCE").ok(),
             )?,
-            backups: backups(std::env::var("LINGER_BACKUPS").ok())?,
+            backups,
+            backup_bucket: backup_bucket(|name| std::env::var(name).ok(), backups)?,
         })
     }
 
@@ -584,6 +621,75 @@ fn backups(configured: Option<String>) -> Result<bool, ConfigError> {
         Ok(true)
     } else {
         Err(ConfigError::Backups(text.to_string()))
+    }
+}
+
+/// Read `LINGER_BACKUP_S3_*` (#614) through `read`, which answers one
+/// variable's value: off unless something is set, then all three of the
+/// bucket and its keys, or a startup error naming the one that's missing.
+/// A setting left blank in `.env` counts as unset (#440).
+fn backup_bucket(
+    read: impl Fn(&str) -> Option<String>,
+    backups: bool,
+) -> Result<Option<BackupBucketConfig>, ConfigError> {
+    const NAMES: [&str; 7] = [
+        "LINGER_BACKUP_S3_BUCKET",
+        "LINGER_BACKUP_S3_ACCESS_KEY_ID",
+        "LINGER_BACKUP_S3_SECRET_ACCESS_KEY",
+        "LINGER_BACKUP_S3_ENDPOINT",
+        "LINGER_BACKUP_S3_REGION",
+        "LINGER_BACKUP_S3_PATH_STYLE",
+        "LINGER_BACKUP_S3_PREFIX",
+    ];
+    let value = |name: &str| {
+        read(name)
+            .map(|raw| raw.trim().to_string())
+            .filter(|text| !text.is_empty())
+    };
+    if NAMES.iter().all(|name| value(name).is_none()) {
+        return Ok(None);
+    }
+    let required =
+        |name: &'static str| value(name).ok_or(ConfigError::BackupS3Missing { missing: name });
+    let bucket = required("LINGER_BACKUP_S3_BUCKET")?;
+    let access_key_id = required("LINGER_BACKUP_S3_ACCESS_KEY_ID")?;
+    let secret_access_key = required("LINGER_BACKUP_S3_SECRET_ACCESS_KEY")?;
+    if !backups {
+        return Err(ConfigError::BackupS3WithBackupsOff);
+    }
+    let region = value("LINGER_BACKUP_S3_REGION").unwrap_or_else(|| "us-east-1".to_string());
+    let endpoint = value("LINGER_BACKUP_S3_ENDPOINT");
+    let path_style = match value("LINGER_BACKUP_S3_PATH_STYLE").as_deref() {
+        Some("true") => true,
+        Some("false") => false,
+        Some(other) => return Err(ConfigError::BackupS3PathStyle(other.to_string())),
+        None => endpoint.is_some(),
+    };
+    Ok(Some(BackupBucketConfig {
+        s3: S3Config {
+            bucket,
+            region: region.clone(),
+            endpoint: endpoint.unwrap_or_else(|| format!("https://s3.{region}.amazonaws.com")),
+            path_style,
+            access_key_id,
+            secret_access_key,
+        },
+        prefix: backup_prefix(value("LINGER_BACKUP_S3_PREFIX").as_deref()),
+    }))
+}
+
+/// `LINGER_BACKUP_S3_PREFIX` as a key prefix: `backups/` when unset, no
+/// leading slash (S3 keys don't start with one), always a trailing one, and
+/// `/` alone for the bucket's top level.
+fn backup_prefix(configured: Option<&str>) -> String {
+    let Some(text) = configured else {
+        return "backups/".to_string();
+    };
+    let inner = text.trim_matches('/');
+    if inner.is_empty() {
+        String::new()
+    } else {
+        format!("{inner}/")
     }
 }
 
@@ -1057,6 +1163,7 @@ mod tests {
             signups_per_hour: Some(DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: DEFAULT_PASSWORD_CHECKS_AT_ONCE,
             backups: true,
+            backup_bucket: None,
         }
     }
 
@@ -1296,6 +1403,129 @@ mod tests {
             backups(Some("nightly".to_string())),
             Err(ConfigError::Backups(_))
         ));
+    }
+
+    /// `backup_bucket` reading from a list instead of the environment.
+    fn bucket_from(
+        pairs: &[(&str, &str)],
+        backups: bool,
+    ) -> Result<Option<BackupBucketConfig>, ConfigError> {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
+            .collect();
+        backup_bucket(
+            |wanted| {
+                pairs
+                    .iter()
+                    .find(|(name, _)| name == wanted)
+                    .map(|(_, value)| value.clone())
+            },
+            backups,
+        )
+    }
+
+    const WHOLE_BUCKET: [(&str, &str); 3] = [
+        ("LINGER_BACKUP_S3_BUCKET", "linger-backups"),
+        ("LINGER_BACKUP_S3_ACCESS_KEY_ID", "key"),
+        ("LINGER_BACKUP_S3_SECRET_ACCESS_KEY", "secret"),
+    ];
+
+    #[test]
+    fn the_backup_bucket_is_off_unless_named() {
+        assert!(bucket_from(&[], true).unwrap().is_none());
+        // Lines left blank in .env are unset (#440).
+        let blank: Vec<(&str, &str)> = WHOLE_BUCKET.iter().map(|(name, _)| (*name, " ")).collect();
+        assert!(bucket_from(&blank, true).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_whole_backup_bucket_gets_the_s3_defaults_and_its_own_prefix() {
+        let bucket = bucket_from(&WHOLE_BUCKET, true).unwrap().unwrap();
+        assert_eq!(bucket.s3.bucket, "linger-backups");
+        assert_eq!(bucket.s3.region, "us-east-1");
+        assert_eq!(bucket.s3.endpoint, "https://s3.us-east-1.amazonaws.com");
+        assert!(!bucket.s3.path_style);
+        assert_eq!(bucket.prefix, "backups/");
+
+        let mut with_endpoint = WHOLE_BUCKET.to_vec();
+        with_endpoint.push((
+            "LINGER_BACKUP_S3_ENDPOINT",
+            "https://abc.r2.cloudflarestorage.com",
+        ));
+        with_endpoint.push(("LINGER_BACKUP_S3_REGION", "auto"));
+        let bucket = bucket_from(&with_endpoint, true).unwrap().unwrap();
+        assert_eq!(bucket.s3.endpoint, "https://abc.r2.cloudflarestorage.com");
+        assert_eq!(bucket.s3.region, "auto");
+        assert!(
+            bucket.s3.path_style,
+            "an endpoint means path style, as for files"
+        );
+    }
+
+    #[test]
+    fn a_half_filled_backup_bucket_is_a_startup_error_naming_what_is_missing() {
+        for missing in WHOLE_BUCKET.map(|(name, _)| name) {
+            let rest: Vec<(&str, &str)> = WHOLE_BUCKET
+                .iter()
+                .copied()
+                .filter(|(name, _)| *name != missing)
+                .collect();
+            let err = bucket_from(&rest, true).unwrap_err();
+            assert!(
+                matches!(err, ConfigError::BackupS3Missing { missing: named } if named == missing),
+                "{err}"
+            );
+            assert!(err.to_string().starts_with(missing), "{err}");
+        }
+        // Even a lone endpoint or prefix means the host meant to set one up.
+        let err = bucket_from(&[("LINGER_BACKUP_S3_PREFIX", "linger/")], true).unwrap_err();
+        assert!(matches!(
+            err,
+            ConfigError::BackupS3Missing {
+                missing: "LINGER_BACKUP_S3_BUCKET"
+            }
+        ));
+    }
+
+    #[test]
+    fn a_backup_bucket_with_backups_off_is_refused() {
+        assert!(matches!(
+            bucket_from(&WHOLE_BUCKET, false),
+            Err(ConfigError::BackupS3WithBackupsOff)
+        ));
+        // With nothing set, backups off is just backups off.
+        assert!(bucket_from(&[], false).unwrap().is_none());
+    }
+
+    #[test]
+    fn the_backup_buckets_secret_never_reaches_a_log_line() {
+        let mut keys = WHOLE_BUCKET.to_vec();
+        keys.retain(|(name, _)| *name != "LINGER_BACKUP_S3_SECRET_ACCESS_KEY");
+        keys.push(("LINGER_BACKUP_S3_SECRET_ACCESS_KEY", SECRET));
+        let mut config = config(None, None);
+        config.backup_bucket = bucket_from(&keys, true).unwrap();
+        let shown = format!("{config:?}");
+        assert!(shown.contains("linger-backups"));
+        assert!(!shown.contains(SECRET));
+    }
+
+    #[test]
+    fn a_backup_bucket_path_style_is_true_or_false() {
+        let mut odd = WHOLE_BUCKET.to_vec();
+        odd.push(("LINGER_BACKUP_S3_PATH_STYLE", "yes"));
+        assert!(matches!(
+            bucket_from(&odd, true),
+            Err(ConfigError::BackupS3PathStyle(_))
+        ));
+    }
+
+    #[test]
+    fn the_backup_prefix_is_a_folder_in_the_bucket() {
+        assert_eq!(backup_prefix(None), "backups/");
+        assert_eq!(backup_prefix(Some("linger")), "linger/");
+        assert_eq!(backup_prefix(Some("/linger/db/")), "linger/db/");
+        assert_eq!(backup_prefix(Some("/")), "");
     }
 
     #[test]

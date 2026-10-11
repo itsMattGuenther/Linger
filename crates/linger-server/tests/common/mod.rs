@@ -74,6 +74,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
+        backup_bucket: None,
     }
 }
 
@@ -100,6 +101,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
+        backup_bucket: None,
     };
     spawn_with(dir, config).await
 }
@@ -115,21 +117,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
 /// never be able to write into somebody's actual bucket by inheriting its
 /// environment.
 pub async fn spawn_s3_server() -> Option<TestServer> {
-    let endpoint = std::env::var("LINGER_TEST_S3_ENDPOINT")
-        .ok()
-        .filter(|value| !value.trim().is_empty())?;
-    let s3 = S3Config {
-        bucket: std::env::var("LINGER_TEST_S3_BUCKET")
-            .unwrap_or_else(|_| "linger-test".to_string()),
-        region: std::env::var("LINGER_TEST_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-        endpoint,
-        path_style: true,
-        access_key_id: std::env::var("LINGER_TEST_S3_ACCESS_KEY_ID")
-            .expect("LINGER_TEST_S3_ACCESS_KEY_ID"),
-        secret_access_key: std::env::var("LINGER_TEST_S3_SECRET_ACCESS_KEY")
-            .expect("LINGER_TEST_S3_SECRET_ACCESS_KEY"),
-    };
-    ensure_bucket(&s3).await;
+    let s3 = test_s3_config().await?;
 
     let dir = tempfile::tempdir().expect("tempdir");
     let config = Config {
@@ -151,8 +139,30 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
+        backup_bucket: None,
     };
     Some(spawn_with(dir, config).await)
+}
+
+/// The test bucket's settings, made if it isn't there yet, or `None` with no
+/// `LINGER_TEST_S3_ENDPOINT` (see [`spawn_s3_server`]).
+pub async fn test_s3_config() -> Option<S3Config> {
+    let endpoint = std::env::var("LINGER_TEST_S3_ENDPOINT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())?;
+    let s3 = S3Config {
+        bucket: std::env::var("LINGER_TEST_S3_BUCKET")
+            .unwrap_or_else(|_| "linger-test".to_string()),
+        region: std::env::var("LINGER_TEST_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+        endpoint,
+        path_style: true,
+        access_key_id: std::env::var("LINGER_TEST_S3_ACCESS_KEY_ID")
+            .expect("LINGER_TEST_S3_ACCESS_KEY_ID"),
+        secret_access_key: std::env::var("LINGER_TEST_S3_SECRET_ACCESS_KEY")
+            .expect("LINGER_TEST_S3_SECRET_ACCESS_KEY"),
+    };
+    ensure_bucket(&s3).await;
+    Some(s3)
 }
 
 /// Create the test bucket if this is the first run against a fresh MinIO.

@@ -412,7 +412,10 @@ one.
   left). Opening a conversation adds a tab or shows it, and unfolds the
   window: it grows to the right by the conversations' width, and moves left
   where its screen ends (`core/side.ts`, `growBeside` in `ListWindow.tsx`).
-  Folding shrinks it back to the list's width. A maximized window keeps its
+  Where the screen ends is the page's own `window.screen` (`core/screen.ts`),
+  never the shell's `currentMonitor()`: on Linux, Tauri reads the GTK monitor
+  off its thread, which can end the app (#623, #628). A test keeps every
+  monitor call out of the app. Folding shrinks it back to the list's width. A maximized window keeps its
   size, and so does one a tiling desktop sizes: Linger asks, and the desktop
   may say no. Too narrow for both, the conversation takes the window
   (`beside`), and a narrower window squeezes the list before that. The line

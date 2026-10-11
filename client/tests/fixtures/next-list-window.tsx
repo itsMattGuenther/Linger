@@ -167,8 +167,18 @@ function ready(server: string, again = ""): ServerFrame {
 
 // --- the shell -------------------------------------------------------------
 
-/** The list window's box on the screen, in the desktop's pixels. */
-const box = { x: 100, y: 40, width: 340, height: 820 };
+/** The list window's box on the screen, in the desktop's pixels: `?x=` moves it along. */
+const box = { x: Number(query.get("x") ?? 100), y: 40, width: 340, height: 820 };
+
+// The page's own view of its screen (core/screen.ts, #628), as the engine
+// gives it: a 1920 px screen with a 40 px panel, `?second` a second one to the
+// right of it, and the window where the shell has it.
+const screenLeft = query.has("second") ? 1920 : 0;
+Object.defineProperty(window.screen, "availLeft", { configurable: true, get: () => screenLeft });
+Object.defineProperty(window.screen, "availWidth", { configurable: true, get: () => 1920 });
+Object.defineProperty(window.screen, "availHeight", { configurable: true, get: () => 1040 });
+Object.defineProperty(window, "screenX", { configurable: true, get: () => box.x });
+Object.defineProperty(window, "outerWidth", { configurable: true, get: () => box.width });
 /** A size or position as the window API sends it: `{ Logical: {…} }`, or bare. */
 function logical(value: unknown): { width: number; height: number; x: number; y: number } | null {
   if (typeof value !== "object" || value === null) return null;
@@ -284,8 +294,12 @@ mockIPC((cmd, args) => {
       return { width: box.width, height: box.height };
     case "plugin:window|outer_position":
       return { x: box.x, y: box.y };
+    case "plugin:window|outer_size":
+      return { width: box.width, height: box.height };
+    // Never asked for (#628): on Linux it reads GTK off its thread.
     case "plugin:window|current_monitor":
-      return { name: "screen", scaleFactor: 1, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, workArea: { position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 } } };
+      note("current_monitor");
+      return null;
     case "plugin:window|set_size": {
       const size = logical(a.value);
       if (size) {
@@ -764,6 +778,20 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       // backup for four days (#582). Said to the host alone, as a server does.
       ...(query.has("hostissues") && server === SERVER && state.me?.is_host
         ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
+        : {}),
+      // `?hostbucket`: last night's copy is fine, but none has reached the
+      // host's bucket for four days (#614).
+      ...(query.has("hostbucket") && server === SERVER && state.me?.is_host
+        ? {
+            health: {
+              backups: true,
+              last_backup_at: Date.now() - 6 * 60 * 60 * 1000,
+              backup_overdue: false,
+              disk_nearly_full: false,
+              file_space_nearly_full: false,
+              bucket: { name: "good-company-backups", last_sent_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, overdue: true },
+            },
+          }
         : {}),
     });
   }

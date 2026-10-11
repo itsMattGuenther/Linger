@@ -35,8 +35,8 @@ export type ListNote =
   | { kind: "keyring"; words: string; detail: string }
   /**
    * The host's server needs them (#582): its disk nearly full, its file
-   * space nearly used up, or no backup for days. The host's alone; the
-   * server tells nobody else.
+   * space nearly used up, no backup for days, or none reaching the host's
+   * bucket for days (#614). The host's alone; the server tells nobody else.
    */
   | { kind: "host"; server: string; what: HostTrouble; words: string; detail: string }
   /** A new version, ready to install from Settings. */
@@ -67,7 +67,7 @@ export function connectionNote(connection: Connection, now: number): ListNote | 
 }
 
 /** What a host line is about. */
-export type HostTrouble = "disk" | "files" | "backup";
+export type HostTrouble = "disk" | "files" | "backup" | "bucket";
 
 /** A server you host, and what it says about its machine (`GET /server`'s `health`). */
 export interface Hosted {
@@ -112,6 +112,23 @@ export function hostNotes({ server, name, health }: Hosted, now: number): ListNo
       what: "backup",
       words: last === null || days < 1 ? `${name} hasn't been backed up yet.` : `${name} hasn't been backed up for ${days} ${days === 1 ? "day" : "days"}.`,
       detail: "The server copies its database into data/backups every night. Its log says why it couldn't.",
+    });
+  }
+  // The bucket (#614) only once the copy itself is fine: with no copy there
+  // is nothing to send, and the line above already says so.
+  const bucket = health.bucket;
+  if (health.backups && !health.backup_overdue && bucket?.overdue) {
+    const last = bucket.last_sent_at;
+    const days = last === null ? 0 : Math.floor((now - last) / DAY_MS);
+    notes.push({
+      kind: "host",
+      server,
+      what: "bucket",
+      words:
+        last === null || days < 1
+          ? `${name}'s backups haven't reached its bucket yet.`
+          : `${name}'s backups haven't reached its bucket for ${days} ${days === 1 ? "day" : "days"}.`,
+      detail: `The server sends each night's copy to the bucket ${bucket.name} as well. Its log says why it couldn't.`,
     });
   }
   return notes;

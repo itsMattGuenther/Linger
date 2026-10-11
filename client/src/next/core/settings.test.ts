@@ -4,6 +4,7 @@ import type { NotifyRule } from "../../generated/NotifyRule";
 import type { Room } from "../../generated/Room";
 import {
   backupLine,
+  bucketLine,
   CHIMES,
   deviceOptions,
   draftSlug,
@@ -309,5 +310,27 @@ describe("the host's backups line (#582)", () => {
 
   it("says the copy is off when the host turned it off", () => {
     expect(backupLine({ ...health, backups: false }, now).words).toContain("LINGER_BACKUPS=off");
+  });
+});
+
+describe("the host's bucket line (#614)", () => {
+  const now = new Date(2026, 9, 11, 15, 0).getTime();
+  const health = { backups: true, last_backup_at: new Date(2026, 9, 11, 3, 12).getTime(), backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+  const bucket = (sent: number | null, overdue: boolean) => ({ ...health, bucket: { name: "pine-backups", last_sent_at: sent, overdue } });
+
+  it("is nothing without a bucket", () => {
+    expect(bucketLine(health, now)).toBeNull();
+  });
+
+  it("names the bucket and says when the newest copy got there", () => {
+    const line = bucketLine(bucket(new Date(2026, 9, 11, 3, 14).getTime(), false), now);
+    expect(line?.problem).toBe(false);
+    expect(line?.words).toMatch(/^Each copy also goes to the bucket pine-backups\. The newest got there at 3:14\sAM\.$/);
+    expect(bucketLine(bucket(null, false), now)).toEqual({ words: "Each copy also goes to the bucket pine-backups. The server looks at it a few minutes after it starts.", problem: false });
+  });
+
+  it("calls three days without a copy reaching it a problem", () => {
+    expect(bucketLine(bucket(new Date(2026, 9, 7, 3, 14).getTime(), true), now)?.problem).toBe(true);
+    expect(bucketLine(bucket(null, true), now)).toEqual({ words: "Each copy also goes to the bucket pine-backups. None has reached it yet. The server's log says why.", problem: true });
   });
 });
