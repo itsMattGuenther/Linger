@@ -141,6 +141,22 @@ fn png(width: u32, height: u32) -> Vec<u8> {
     out
 }
 
+/// A GIF of 35 bytes that claims a 65535 × 65535 canvas, 17 GB as pixels, and
+/// draws one black pixel in its corner (#487). Written by hand: no encoder
+/// would make one.
+fn gif_bomb() -> Vec<u8> {
+    let mut gif = b"GIF89a".to_vec();
+    gif.extend_from_slice(&u16::MAX.to_le_bytes());
+    gif.extend_from_slice(&u16::MAX.to_le_bytes());
+    // A global colour table of two colours, black and white.
+    gif.extend_from_slice(&[0x80, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff]);
+    // One frame at (0, 0), one pixel by one: colour 0, LZW-coded.
+    gif.extend_from_slice(&[0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0]);
+    gif.extend_from_slice(&[0x02, 0x02, 0x44, 0x01, 0x00]);
+    gif.push(0x3b);
+    gif
+}
+
 /// The string planted in the EXIF block. If this survives an upload, somebody's
 /// home address does too.
 const EXIF_MARKER: &str = "LINGER_EXIF_MARKER_51.5074N_0.1278W";
@@ -747,6 +763,43 @@ async fn a_file_that_lies_about_its_type_is_refused() {
     // And the failed slot is spent: it cannot be retried into something else.
     let (status, _) = put_part(&server, &slot.url, png(4, 4)).await;
     assert_eq!(status, 409);
+}
+
+/// Before #487, decoding this GIF asked for 17 GB and stopped the whole
+/// server. It is refused like any picture that can't be read, and the server
+/// goes on taking pictures.
+#[tokio::test]
+async fn a_gif_that_claims_a_huge_canvas_is_refused_and_the_server_carries_on() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+
+    let bomb = gif_bomb();
+    let slot = slot(
+        &server,
+        &host.access_token,
+        "bomb.gif",
+        bomb.len() as u64,
+        "image/gif",
+    )
+    .await;
+    let (status, _) = put_part(&server, &slot.url, bomb).await;
+    assert_eq!(status, 200);
+
+    let resp = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(resp.status(), 415);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "UNSUPPORTED_MEDIA");
+    assert_eq!(body["error"]["message"], "That image can't be read.");
+
+    let fine = upload(
+        &server,
+        &host.access_token,
+        "fine.png",
+        "image/png",
+        png(8, 8),
+    )
+    .await;
+    assert_eq!(fine.mime, "image/png");
 }
 
 // ---------------------------------------------------------------------------

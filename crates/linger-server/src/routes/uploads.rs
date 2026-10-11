@@ -9,8 +9,10 @@
 //!
 //! Completing can fail in two different ways, and they are not the same thing.
 //! If parts are missing the upload is still alive: send them and ask again.
-//! If what arrived is not an acceptable file, the slot is finished — resending
-//! the same bytes into the same declaration cannot make them acceptable.
+//! So it is when the server is too busy with other pictures to start on this
+//! one (#487): ask again later. If what arrived is not an acceptable file, the
+//! slot is finished — resending the same bytes into the same declaration
+//! cannot make them acceptable.
 //!
 //! The upload and the attachment it will become share one id. There is nothing
 //! to remember about an upload that the attachment row does not already hold,
@@ -23,7 +25,9 @@ use axum::routing::post;
 use axum::{Json, Router};
 use linger_core::limits::{MAX_FILE_BYTES, RATE_UPLOAD_SLOTS};
 use linger_core::media;
-use linger_core::wire::{Attachment, CompleteUploadRequest, CreateUploadRequest, UploadSlot};
+use linger_core::wire::{
+    Attachment, CompleteUploadRequest, CreateUploadRequest, ErrorCode, UploadSlot,
+};
 use linger_core::{AttachmentId, UploadId};
 
 use crate::auth::AuthedUser;
@@ -162,9 +166,13 @@ async fn complete(
         })?;
 
     // Past that point a refusal is about the bytes themselves, and re-sending
-    // them cannot help: the slot is spent, and the parts go with it.
+    // them cannot help: the slot is spent, and the parts go with it. All but
+    // one: the server being busy with other pictures.
     match finish(&state, &record, &staged).await {
         Ok(attachment) => Ok(Json(attachment)),
+        // Busy with other pictures says nothing about these bytes: the slot
+        // stays, and completing again once there is room can still work.
+        Err(err) if err.code == ErrorCode::RateLimited => Err(err),
         Err(err) => {
             let _ = state.storage.discard(upload_id).await;
             sqlx::query("UPDATE attachments SET state = 'failed' WHERE id = ?")
