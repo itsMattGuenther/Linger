@@ -9,6 +9,12 @@ import type { MessageId } from "../../../generated/MessageId";
 export interface Submission {
   /** Unique in this composer, so a retry can't be fired twice. */
   key: number;
+  /**
+   * The send's one-time key (PROTOCOL §4, #524), the same on every retry of
+   * it. A post the server saved, whose answer was lost on the way back, is
+   * then answered with that message instead of posted a second time.
+   */
+  nonce: string;
   /** The conversation (tab) it was typed in. */
   conversation: string;
   body: string;
@@ -45,6 +51,28 @@ export function keepUnsent(unsent: readonly Submission[], submission: Submission
 /** A submission went through (first time or on retry). */
 export function dropUnsent(unsent: readonly Submission[], key: number): Submission[] {
   return unsent.filter((one) => one.key !== key);
+}
+
+/**
+ * The one-time key for what Enter sends now (#524). A failed send that went
+ * back into the box (`afterFailure` "restore") and is sent again as it was is
+ * the same send, retried, so it keeps its key; changed in any way, it's a new
+ * message and gets a new one. `restored` is that failed send, if the box
+ * holds one.
+ */
+export function nonceFor(
+  next: Omit<Submission, "key" | "nonce">,
+  restored: Submission | null,
+  fresh: () => string,
+): string {
+  if (restored === null) return fresh();
+  const files = (keys: readonly string[]) => JSON.stringify([...keys].sort());
+  const same =
+    restored.conversation === next.conversation &&
+    restored.body === next.body &&
+    restored.replyTo === next.replyTo &&
+    files(restored.fileKeys) === files(next.fileKeys);
+  return same ? restored.nonce : fresh();
 }
 
 /**

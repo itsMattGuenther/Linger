@@ -400,6 +400,19 @@ CREATE TABLE read_markers (
   PRIMARY KEY (user_id, room_id)
 );
 
+-- A post's one-time key (PROTOCOL §4, #524): a retry whose key is here is
+-- answered with the message it posted rather than posting it twice. Written
+-- in the post's own transaction; kept a week (`limits::NONCE_KEPT_MS`), and
+-- each keyed post first clears out the older ones.
+CREATE TABLE message_nonces (
+  author_id       BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nonce           TEXT NOT NULL,
+  message_id      BLOB NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (author_id, nonce)
+) WITHOUT ROWID;
+CREATE INDEX idx_message_nonces_created ON message_nonces(created_at);
+
 CREATE TABLE notify_rules (
   user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   target_user_id  BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,

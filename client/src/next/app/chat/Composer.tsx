@@ -13,7 +13,7 @@ import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
 import { MAX_POLL_QUESTION_CHARS, pollCommand, typingPoll } from "../../core/chat/poll";
-import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
+import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, nonceFor, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
@@ -135,6 +135,8 @@ export interface ComposerProps {
  *   message. Shift+Enter adds a line. Several sends can be in flight.
  * - A send that fails goes back in the box only if the box is untouched;
  *   otherwise it waits apart with a retry. A newer draft is never touched.
+ *   Sent again either way, unchanged, it carries its first try's one-time
+ *   key, so a send that did land isn't posted twice (#524).
  * - It grows with its text by measuring a hidden copy, never the page, so
  *   typing never lays out the conversation (L-12). Its state is its own, so
  *   a keystroke redraws only the box.
@@ -183,6 +185,9 @@ export const Composer = memo(function Composer({
   // The poll being asked (#474), in the conversation it's for.
   const [asking, setAsking] = useState<{ conversation: string; question: string } | null>(null);
   const serial = useRef(0);
+  // A failed send put back in its box, per conversation: sent again as it
+  // was, it's the same send and keeps its one-time key (#524).
+  const restoredSend = useRef<Map<string, Submission>>(new Map());
   const box = useRef<HTMLTextAreaElement | null>(null);
   const boxRow = useRef<HTMLDivElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
@@ -337,6 +342,7 @@ export const Composer = memo(function Composer({
     } catch (error) {
       say(error instanceof Error ? error.message : "Couldn't send the message.", submission.conversation);
       if (afterFailure(submission, now.current) === "restore") {
+        restoredSend.current.set(submission.conversation, submission);
         change(submission.body, submission.conversation);
         if (submission.replyTo !== null) onRestoreReply(submission.replyTo);
         if (submission.fileKeys.length > 0) onRestoreFiles(submission.fileKeys);
@@ -419,13 +425,15 @@ export const Composer = memo(function Composer({
       return;
     }
     serial.current += 1;
-    const submission: Submission = {
-      key: serial.current,
+    const what = {
       conversation,
       body: draft.trim(),
       replyTo: replyTo?.message.id ?? null,
       fileKeys: ready.map((file) => file.key),
     };
+    const restored = restoredSend.current.get(conversation) ?? null;
+    restoredSend.current.delete(conversation);
+    const submission: Submission = { key: serial.current, nonce: nonceFor(what, restored, () => crypto.randomUUID()), ...what };
     // Committed on Enter: from here on, keystrokes belong to the next message.
     change("");
     onClearReply();

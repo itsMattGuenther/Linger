@@ -474,7 +474,9 @@ keeps a separate unsent message with a retry action when a newer draft exists.
 Neither success nor failure may erase that newer draft. Shift+Enter inserts
 a newline. Requests that never answer time out visibly rather than leaving
 send or knock controls disabled indefinitely; an unconfirmed request is not
-reported as definitely undelivered.
+reported as definitely undelivered. Sending a failed message again, by its
+retry or unchanged from the box, never posts it twice when the first try did
+land: each send carries a one-time key the server remembers (PROTOCOL §4).
 
 **Restrained embeds.** A link renders as a one-line inline card: favicon, title, domain.
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px

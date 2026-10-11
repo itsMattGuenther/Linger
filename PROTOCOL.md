@@ -237,7 +237,7 @@ that distinguishes "a DM you are not in" from "no such room".
 ```
 GET  /rooms/:id/messages?before=<id>&after=<id>&limit=<1..100>   → Message[]
 GET  /rooms/:id/messages?around=<id>&limit=<1..100>              → Message[]
-POST /rooms/:id/messages   { body, reply_to?, attachment_ids? }  → Message
+POST /rooms/:id/messages   { body, reply_to?, attachment_ids?, nonce? }  → Message
 PATCH  /messages/:id       { body }                              → Message
 DELETE /messages/:id                                             → 204
 POST   /messages/:id/pin                                         → Message
@@ -280,9 +280,29 @@ posted is `CONFLICT`.
 A post is all or nothing: the message, the links it holds, its files and the
 sender's read marker are saved in one transaction (#524). A post that fails
 left nothing behind, so sending it again doesn't post it twice, and its files
-are still free to send. There is no idempotency key, though: if the answer is
-lost on the way back after the server saved the message, a retry does post it
-twice. The `message.create` frame is how a client can tell it landed.
+are still free to send.
+
+`nonce` is what makes sending again safe when the post did land and only its
+answer was lost on the way back (#524). It is a one-time key the client makes
+up for each send (the app uses a UUID) and sends again, unchanged, with every
+retry of that send: 1–64 letters, digits, `-` or `_`
+(`linger-core::limits::MAX_NONCE_CHARS`), or `VALIDATION_FAILED`. When the same
+person already posted with the same key in the last week
+(`linger-core::limits::NONCE_KEPT_MS`), the answer is that message as it is
+now, edited or deleted since or not, with a success status, and nothing else
+happens: no second message, no second `message.create`, the read marker isn't
+moved, and the files named in the retry aren't looked at (they're on that
+message already). A deleted message's key stays spent, so a retry answers
+with its tombstone and can't bring it back. The key is checked before whether
+the room is archived, since it was posted while it wasn't. The same key from
+two people is two messages. The same person's key used in another room is
+`CONFLICT`: one send lands in one room.
+
+Keys are remembered for a week, not for the message's life: a retry only comes
+from a client still holding the unsent message. Each post that carries a key
+clears out the keys older than that. A post without `nonce` is always a new
+message, which is what a client from before the field gets; a server from
+before it ignores the field, so a new client there is as it always was.
 
 `reply_to` must reference a message in the same room. Pin/unpin is any member;
 there is no pin hierarchy.

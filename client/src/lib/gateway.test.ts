@@ -1337,7 +1337,7 @@ describe("sending before the server answers", () => {
     expect(serverState(HOME).streams["r-garage"]?.pending[0]?.message.author_id).toBe("u-matt");
     expect(held).toHaveLength(1);
     expect(held[0]?.path).toBe("/rooms/r-garage/messages");
-    expect(held[0]?.body).toEqual({ body: "hello", reply_to: null, attachment_ids: null });
+    expect(held[0]?.body).toEqual({ body: "hello", reply_to: null, attachment_ids: null, nonce: expect.any(String) });
 
     held[0]?.answer(confirmed(1, "hello"));
     await sent;
@@ -1441,6 +1441,30 @@ describe("sending before the server answers", () => {
     await expect(sent).rejects.toThrow("refused");
 
     expect(shown()).toEqual([]);
+  });
+
+  it("sends the one-time key it's given, and a new one with each send given none (#524)", async () => {
+    const { api, held } = await openGarage();
+    const keyOf = (body: unknown) =>
+      typeof body === "object" && body !== null && "nonce" in body && typeof body.nonce === "string" ? body.nonce : null;
+
+    const first = sendMessage(api, "r-garage", "same");
+    const second = sendMessage(api, "r-garage", "same");
+    const retry = sendMessage(api, "r-garage", "same", null, [], "the-first-try");
+
+    const [one, two, three] = held.map((call) => keyOf(call.body));
+    expect(one).not.toBeNull();
+    expect(two).not.toBeNull();
+    expect(two).not.toBe(one);
+    expect(three).toBe("the-first-try");
+
+    held[0]?.answer(confirmed(1, "same"));
+    held[1]?.answer(confirmed(2, "same"));
+    held[2]?.answer(confirmed(1, "same"));
+    await Promise.all([first, second, retry]);
+    // The retry was answered with the message the first try saved: held once.
+    expect(serverState(HOME).streams["r-garage"]?.messages.map((message) => message.id)).toEqual([id(1), id(2)]);
+    expect(stillOpen()).toBe(0);
   });
 });
 

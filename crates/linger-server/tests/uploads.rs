@@ -352,6 +352,61 @@ async fn a_post_that_fails_partway_leaves_its_file_for_the_retry() {
     );
 }
 
+/// #524: a photo post that was saved, sent again with its one-time key, is
+/// answered with that post. Without the key the retry was refused with "That
+/// file is already on a message", because the first try had already put it
+/// on one; in real life that's a post whose answer was lost on the way back.
+#[tokio::test]
+async fn a_photo_post_sent_again_with_its_nonce_is_answered_not_refused() {
+    let (server, host, room) = server_with_room("general").await;
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "holiday.png",
+        "image/png",
+        png(64, 48),
+    )
+    .await;
+    let post = || async {
+        client()
+            .post(server.url(&format!("/rooms/{}/messages", room.id)))
+            .bearer_auth(&host.access_token)
+            .json(&serde_json::json!({
+                "body": "",
+                "attachment_ids": [attachment.id],
+                "nonce": "5d6e7f80-1a2b-4c3d-9e8f-a0b1c2d3e4f5",
+            }))
+            .send()
+            .await
+            .unwrap()
+    };
+
+    let first: Message = post().await.json().await.unwrap();
+    let resp = post().await;
+    assert_eq!(
+        resp.status(),
+        200,
+        "the retry was refused: {}",
+        resp.text().await.unwrap()
+    );
+    let again: Message = resp.json().await.unwrap();
+    assert_eq!(again.id, first.id);
+    assert_eq!(again.attachments[0].id, attachment.id);
+    let page: Vec<Message> = client()
+        .get(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        page.iter().map(|m| m.id).collect::<Vec<_>>(),
+        vec![first.id]
+    );
+}
+
 /// A voice message (#401): Opus in WebM, as the app records it. The sniffer
 /// calls any WebM a video, so this is the case that proves one declared as
 /// sound goes up as sound and is played in place.

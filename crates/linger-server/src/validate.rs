@@ -5,7 +5,7 @@
 
 use linger_core::limits::{
     MAX_ACCENT_MARKS_PER_LETTER, MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MARKS_PER_LETTER,
-    MAX_MESSAGE_CHARS, MAX_MOTD_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS,
+    MAX_MESSAGE_CHARS, MAX_MOTD_CHARS, MAX_NONCE_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS,
     MAX_STATUS_LABEL_CHARS, MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
 };
 use linger_core::wire::{Fill, StatusField, Style, UserStatus};
@@ -399,6 +399,23 @@ pub fn caption(s: &str) -> Result<String, ApiError> {
     Ok(trimmed.to_string())
 }
 
+/// A post's one-time key (PROTOCOL §4, #524): 1–64 letters, digits, `-` or
+/// `_`. The app sends a UUID. Nobody ever reads one, so there is no reason
+/// for it to hold anything else: a key that does is a broken app, refused
+/// rather than stored.
+pub fn nonce(s: &str) -> Result<&str, ApiError> {
+    let ok = (1..=MAX_NONCE_CHARS).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if ok {
+        Ok(s)
+    } else {
+        Err(ApiError::validation(format!(
+            "A send's key is 1–{MAX_NONCE_CHARS} letters, digits, - or _."
+        )))
+    }
+}
+
 /// A room's message of the day, trimmed (PROTOCOL §3, #464). Empty is allowed:
 /// it's how one is cleared.
 pub fn motd(s: &str) -> Result<String, ApiError> {
@@ -606,6 +623,35 @@ mod tests {
             "👍a",
         ] {
             assert!(reaction_emoji(not).is_err(), "{not:?} was allowed");
+        }
+    }
+
+    /// A send's key is short and plain (#524): a UUID, or anything else made
+    /// of letters, digits, `-` and `_`, up to 64.
+    #[test]
+    fn a_nonce_is_short_and_plain() {
+        for one in [
+            "0b7e3c1a-58f4-4c9e-9d2a-6f1e2b3c4d5e",
+            "a",
+            "send_17",
+            &"x".repeat(MAX_NONCE_CHARS),
+        ] {
+            assert_eq!(nonce(one).ok(), Some(one), "{one:?} was refused");
+        }
+        for not in [
+            "",
+            " ",
+            "two words",
+            "line\nbreak",
+            "../etc",
+            "a/b",
+            "it's",
+            "é",
+            "😀",
+            "\u{200B}",
+            &"x".repeat(MAX_NONCE_CHARS + 1),
+        ] {
+            assert!(nonce(not).is_err(), "{not:?} was allowed");
         }
     }
 

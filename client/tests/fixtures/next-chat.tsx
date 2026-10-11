@@ -15,7 +15,8 @@
  *   150 at a time from the newest, as the store pages them.
  * - `?fail`: every send is refused, 120 ms after it's sent. `?fail=held`:
  *   each refusal waits until the test calls `window.chat.refuse()`, so a
- *   test decides what happens first (#341).
+ *   test decides what happens first (#341). Every send's words and one-time
+ *   key go on `data-keys`, so a test can tell a retry from a new send (#524).
  * - `?file`: Sam shares a PDF in #general; `&downloadfail` has the desktop
  *   fail to open a browser for it.
  * - `?long`: Eli has a name far too long for its place.
@@ -304,6 +305,7 @@ const note = (what: string) => {
   did.push(what);
   document.body.dataset.did = did.join("|");
 };
+const keys: string[] = [];
 
 interface Held {
   messages: Message[];
@@ -467,6 +469,8 @@ function Fixture() {
     const roomId = find(submission.conversation)?.roomId;
     if (!roomId) throw new Error("That conversation is closed.");
     note(`send:${submission.body}`);
+    keys.push(`${submission.body}=${submission.nonce}`);
+    document.body.dataset.keys = keys.join("|");
     const draft: Message = {
       id: `p${submission.key}`,
       room_id: roomId,

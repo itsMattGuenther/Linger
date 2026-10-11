@@ -530,3 +530,65 @@ async fn a_new_member_shows_up_without_anybody_restarting() {
         }
     }
 }
+
+/// #524: a post sent again with its one-time key is answered with the message
+/// the first try saved, and nothing else happens: one message in the room,
+/// one `message.create` for everybody, and the sender's read marker left
+/// where the first try put it. In real life it's the first answer that gets
+/// lost on the way back; here the post is simply sent twice.
+#[tokio::test]
+async fn a_post_sent_again_with_its_nonce_is_saved_and_announced_once() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let (mut watcher, _) = connect_ready(&server, &member.access_token).await;
+    drain_for(&mut watcher, Duration::from_millis(200)).await;
+
+    let post = || async {
+        let resp = reqwest::Client::new()
+            .post(server.url(&format!("/rooms/{}/messages", room.id)))
+            .bearer_auth(&host.access_token)
+            .json(&json!({ "body": "on my way", "nonce": "9f1c2a7e-3d4b-4c5a-8e6f-0a1b2c3d4e5f" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        resp.json::<Value>().await.unwrap()
+    };
+    let first = post().await;
+    let second = post().await;
+    assert_eq!(second["id"], first["id"]);
+    assert_eq!(second["body"], "on my way");
+
+    let frames = drain_for(&mut watcher, Duration::from_millis(500)).await;
+    let created: Vec<&Value> = frames
+        .iter()
+        .filter(|frame| frame["op"] == "message.create")
+        .collect();
+    assert_eq!(created.len(), 1, "announced more than once: {frames:?}");
+    assert_eq!(created[0]["d"]["id"], first["id"]);
+
+    let page: Vec<Value> = reqwest::Client::new()
+        .get(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page.len(), 1);
+    let marker: Vec<u8> = sqlx::query_scalar(
+        "SELECT last_read_id FROM read_markers WHERE user_id = ? AND room_id = ?",
+    )
+    .bind(host.user.id.to_vec())
+    .bind(room.id.to_vec())
+    .fetch_one(&server.state.db.read)
+    .await
+    .unwrap();
+    assert_eq!(
+        linger_core::MessageId::from_slice(&marker)
+            .unwrap()
+            .to_string(),
+        first["id"].as_str().unwrap()
+    );
+}

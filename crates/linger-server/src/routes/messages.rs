@@ -111,7 +111,18 @@ async fn create(
         return Err(ApiError::rate_limited(retry));
     }
 
+    let nonce = req.nonce.as_deref().map(validate::nonce).transpose()?;
+
     let room = repo::rooms::visible_to(&state.db.read, room_id, auth.id).await?;
+    // A retry of a post that was saved, whose answer was lost on the way back
+    // (#524): the message saved then, and nothing new. Asked before the files
+    // are checked, because a retry's files are on that message already, and
+    // before the room's archived check, because it was posted while it wasn't.
+    if let Some(nonce) = nonce {
+        if let Some(saved) = repo::nonces::posted(&state.db.read, auth.id, nonce, now_ms()).await? {
+            return already_posted(&state, room_id, saved).await.map(Json);
+        }
+    }
     if room.archived_at.is_some() {
         return Err(ApiError::validation("That room is archived."));
     }
@@ -131,11 +142,24 @@ async fn create(
 
     let id = MessageId::new();
     let links = crate::links::extract(&body);
+    let now = now_ms();
     // Everything posting writes is one transaction (#524): a failure partway
     // leaves nothing behind, rather than a saved message the sender was told
     // didn't send, and posts again when they press Retry. It is also one
     // commit instead of one per write. Nothing slow happens inside it.
     let mut tx = state.db.write.begin().await?;
+    if let Some(nonce) = nonce {
+        // Asked again in here, where this post has the one writer to itself
+        // (`db.rs`): a retry sent while the first try was still being saved
+        // waited for it, and finds it now. Clearing out the old keys comes
+        // first, as it's a write, so the transaction holds the writer from
+        // its first statement.
+        repo::nonces::forget_old(&mut *tx, now).await?;
+        if let Some(saved) = repo::nonces::posted(&mut *tx, auth.id, nonce, now).await? {
+            tx.rollback().await?;
+            return already_posted(&state, room_id, saved).await.map(Json);
+        }
+    }
     sqlx::query(
         "INSERT INTO messages (id, room_id, author_id, body, reply_to, created_at)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -145,9 +169,12 @@ async fn create(
     .bind(auth.id.to_vec())
     .bind(&body)
     .bind(req.reply_to.map(|r| r.to_vec()))
-    .bind(now_ms())
+    .bind(now)
     .execute(&mut *tx)
     .await?;
+    if let Some(nonce) = nonce {
+        repo::nonces::remember(&mut *tx, auth.id, nonce, id, now).await?;
+    }
 
     // What the message links to, recorded as it is posted so the media grid's
     // links are a table read rather than a scan of every body ever written
@@ -178,6 +205,30 @@ async fn create(
         .gateway
         .publish(ServerEvent::MessageCreate(message.clone()));
     Ok(Json(message))
+}
+
+/// The answer to a retry of a post that was saved (#524): that message as it
+/// is now, and nothing else happens. No second `message.create`, no read
+/// marker moved, no files taken: the first try did all of that.
+///
+/// Edited since, it's the edited message. Deleted since, it's the tombstone,
+/// and the retry posts nothing: the key stays spent, so a retry can't bring
+/// back what its author or a host took down.
+async fn already_posted(
+    state: &AppState,
+    room_id: RoomId,
+    id: MessageId,
+) -> Result<Message, ApiError> {
+    let message = repo::messages::expect(&state.db.read, &state.config, id).await?;
+    // The same send can't land in two rooms. An app that reuses a key for a
+    // post somewhere else is broken, and the message from the other room is
+    // not the answer to this one.
+    if message.room_id != room_id {
+        return Err(ApiError::conflict(
+            "That send was already posted in another conversation.",
+        ));
+    }
+    Ok(message)
 }
 
 /// A message may only carry uploads that finished, that this person uploaded,

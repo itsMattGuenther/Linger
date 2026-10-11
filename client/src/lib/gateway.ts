@@ -1711,6 +1711,11 @@ export async function loadNewer(api: AuthedApi, roomId: RoomId): Promise<void> {
  * `RoomStream`. Sending never waits on the round trip, and several of these
  * can be in flight at once; the composer no longer has to refuse a second
  * Enter while one is still open.
+ *
+ * `nonce` is the send's one-time key (PROTOCOL §4, #524). A retry passes the
+ * key its first try had, so a post the server saved, whose answer was lost on
+ * the way back, is answered with that message instead of posted twice. Left
+ * out, the send gets a fresh one and is a new message.
  */
 export async function sendMessage(
   api: AuthedApi,
@@ -1718,6 +1723,7 @@ export async function sendMessage(
   body: string,
   replyTo: MessageId | null = null,
   attachments: Attachment[] = [],
+  nonce: string = crypto.randomUUID(),
 ): Promise<void> {
   const server = api.baseUrl;
   const request: CreateMessageRequest = {
@@ -1726,6 +1732,7 @@ export async function sendMessage(
     // The files went up first and are already stored, checked and re-encoded;
     // this is the moment they become part of the conversation (PROTOCOL §6).
     attachment_ids: attachments.length === 0 ? null : attachments.map((one) => one.id),
+    nonce,
   };
 
   const key = ++pendingSeq;

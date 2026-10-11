@@ -74,6 +74,11 @@ async function did(page: Page): Promise<string[]> {
   return ((await page.locator("body").getAttribute("data-did")) ?? "").split("|").filter(Boolean);
 }
 
+/** Each send so far, as its words and its one-time key (#524). */
+async function sends(page: Page): Promise<string[]> {
+  return ((await page.locator("body").getAttribute("data-keys")) ?? "").split("|").filter(Boolean);
+}
+
 /** Where a message's row sits inside the log, so a test can tell whether it moved. */
 async function offsetIn(page: Page, id: string): Promise<number> {
   return page.evaluate((messageId) => {
@@ -627,6 +632,41 @@ test.describe("a send the server refuses", () => {
     await expect(box(page)).toHaveValue("second, still typing");
     await unsent.getByRole("button", { name: "Retry" }).click();
     await expect.poll(async () => (await did(page)).filter((one) => one === "send:first").length).toBe(2);
+  });
+
+  // #524: a send that did land, whose answer was lost, must not post twice
+  // when it's sent again. The server tells a retry by its one-time key.
+  test("Retry sends it again with the key its first try had", async ({ page }) => {
+    await open(page, "?fail=held");
+    await box(page).click();
+    await page.keyboard.type("first");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("second, still typing");
+    await page.evaluate(() => window.chat?.refuse());
+    const unsent = page.getByRole("group", { name: "Unsent message" });
+    await unsent.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(async () => (await sends(page)).length).toBe(2);
+    const [first, retry] = await sends(page);
+    expect(first).toMatch(/^first=[0-9a-f-]{36}$/);
+    expect(retry).toBe(first);
+  });
+
+  test("words put back and sent again as they were keep their key; changed, they're a new send", async ({ page }) => {
+    await open(page, "?fail");
+    await box(page).click();
+    await page.keyboard.type("hello?");
+    await page.keyboard.press("Enter");
+    await expect(box(page)).toHaveValue("hello?");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await sends(page)).length).toBe(2);
+    await expect(box(page)).toHaveValue("hello?");
+    await page.keyboard.type("!");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await sends(page)).length).toBe(3);
+    const [first, again, changed] = await sends(page);
+    expect(again).toBe(first);
+    expect(changed).toMatch(/^hello\?!=[0-9a-f-]{36}$/);
+    expect(changed?.split("=")[1]).not.toBe(first?.split("=")[1]);
   });
 });
 

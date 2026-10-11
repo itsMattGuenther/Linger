@@ -99,7 +99,7 @@ export function useFileDrafts(
       setDrafts(taking.drafts);
       draftsNow.current = taking.drafts;
       try {
-        await sendMessage(sendApi, tab.roomId, submission.body, submission.replyTo, taking.attachments);
+        await sendMessage(sendApi, tab.roomId, submission.body, submission.replyTo, taking.attachments, submission.nonce);
       } catch (error: unknown) {
         // The server's own words, or, for a send nobody answered, that it
         // wasn't confirmed, never that it was lost (#118). Anything else is

@@ -1559,6 +1559,29 @@ test.describe("voice messages (#401)", () => {
     expect(await asked(page, "clip_cancel")).toEqual([]);
   });
 
+  // #524: a voice message the server saved, whose answer was lost on the way
+  // back, is sent again as the same send: the file that already went up, and
+  // the same one-time key, so the server answers with the message it posted.
+  test("sent again after its answer was lost, it's the same send, and shows once", async ({ page }) => {
+    await open(page, "room=r-general&dropanswer");
+    const cards = log(page).locator(".nx-att-card[data-kind='audio']");
+    const before = await cards.count();
+    await recording(page);
+    await panel(page).getByRole("button", { name: "Stop" }).click();
+    await panel(page).getByRole("button", { name: "Send voice message" }).click();
+    await expect(panel(page).getByRole("alert")).toHaveText("Couldn't reach the server. The voice message is kept here.");
+
+    await panel(page).getByRole("button", { name: "Send voice message" }).click();
+    await expect(panel(page)).toHaveCount(0);
+    const said = `sent:${JSON.stringify({ body: "", reply_to: null, attachment_ids: ["f-1"] })}`;
+    expect(await asked(page, "sent:")).toEqual([said, said]);
+    const [first, again] = await asked(page, "key:");
+    expect(first).toMatch(/^key:[0-9a-f-]{36}$/);
+    expect(again).toBe(first);
+    expect((await did(page)).filter((line) => /^POST \/uploads( |$)/.test(line))).toHaveLength(1);
+    await expect(cards).toHaveCount(before + 1);
+  });
+
   test("discard throws it away, and the box is as it was", async ({ page }) => {
     await open(page);
     await box(page).fill("half a thought");

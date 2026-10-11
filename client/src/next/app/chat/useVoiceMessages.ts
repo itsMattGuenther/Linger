@@ -73,7 +73,7 @@ export function useVoiceMessages(
           return;
         }
         const file = new File([opusWebm(clip.packets, clip.preSkip)], VOICE_MESSAGE_NAME, { type: "audio/webm" });
-        put(conversation, { kind: "kept", url: URL.createObjectURL(file), file, ms, note, sending: false, problem: null });
+        put(conversation, { kind: "kept", url: URL.createObjectURL(file), file, ms, note, sending: false, problem: null, nonce: crypto.randomUUID(), attachment: null });
       } catch {
         put(conversation, { kind: "ready", problem: "The recording couldn't be kept. Try again." });
       }
@@ -173,14 +173,18 @@ export function useVoiceMessages(
     }
     put(conversation, { ...now, sending: true, problem: null });
     void (async () => {
+      // Sent again after a failure, it's the same send (#524): the file that
+      // already went up, and the same one-time key, so a send that did land
+      // is answered with its message rather than posted twice.
+      let attachment = now.attachment;
       try {
-        const attachment = await uploadFile(api, now.file, {});
-        await sendMessage(api, tab.roomId, "", null, [attachment]);
+        attachment ??= await uploadFile(api, now.file, {});
+        await sendMessage(api, tab.roomId, "", null, [attachment], now.nonce);
         URL.revokeObjectURL(now.url);
         put(conversation, null);
       } catch (error: unknown) {
         const words = error instanceof ApiError || error instanceof UnconfirmedError ? error.message : "Couldn't reach the server. The voice message is kept here.";
-        put(conversation, { ...now, sending: false, problem: words });
+        put(conversation, { ...now, attachment, sending: false, problem: words });
       }
     })();
   }, [paneId, apis, find, put]);

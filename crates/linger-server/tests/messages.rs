@@ -499,6 +499,191 @@ async fn a_post_that_fails_partway_leaves_nothing_behind() {
     assert_eq!(count(&server, "message_links").await, links + 1);
 }
 
+/// Post with a send's one-time key (PROTOCOL §4, #524).
+async fn post_keyed(
+    server: &common::TestServer,
+    token: &str,
+    room: &str,
+    body: &str,
+    nonce: &str,
+) -> reqwest::Response {
+    reqwest::Client::new()
+        .post(server.url(&format!("/rooms/{room}/messages")))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "body": body, "nonce": nonce }))
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn send_keyed(
+    server: &common::TestServer,
+    token: &str,
+    room: &str,
+    body: &str,
+    nonce: &str,
+) -> Message {
+    let resp = post_keyed(server, token, room, body, nonce).await;
+    assert_eq!(
+        resp.status(),
+        200,
+        "send failed: {}",
+        resp.text().await.unwrap()
+    );
+    resp.json().await.unwrap()
+}
+
+const NONCE: &str = "0b7e3c1a-58f4-4c9e-9d2a-6f1e2b3c4d5e";
+
+/// #524: a key means one message from one person. Two people who happen to
+/// send the same key are two messages, and each one's retry is answered with
+/// their own.
+#[tokio::test]
+async fn two_people_with_the_same_nonce_post_two_messages() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room = room.id.to_string();
+
+    let hosts = send_keyed(&server, &host.access_token, &room, "pizza?", NONCE).await;
+    let theirs = send_keyed(&server, &member.access_token, &room, "pizza!", NONCE).await;
+    assert_ne!(hosts.id, theirs.id);
+    assert_eq!(theirs.author_id, member.user.id);
+
+    let again = send_keyed(&server, &host.access_token, &room, "pizza?", NONCE).await;
+    assert_eq!(again.id, hosts.id);
+    let again = send_keyed(&server, &member.access_token, &room, "pizza!", NONCE).await;
+    assert_eq!(again.id, theirs.id);
+    let page = fetch(&server, &host.access_token, &room, "").await;
+    assert_eq!(
+        page.iter().map(|m| m.id).collect::<Vec<_>>(),
+        vec![theirs.id, hosts.id]
+    );
+}
+
+/// #524: a send's key is 1–64 letters, digits, `-` or `_`. Anything else is
+/// refused, and nothing is posted.
+#[tokio::test]
+async fn a_nonce_that_is_not_short_and_plain_is_refused() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let room = room.id.to_string();
+
+    for bad in ["", "two words", "../a/b", "café", "😀", &"x".repeat(65)] {
+        let resp = post_keyed(&server, &host.access_token, &room, "hello", bad).await;
+        assert_eq!(resp.status(), 422, "{bad:?} was let through");
+        let env: ErrorEnvelope = resp.json().await.unwrap();
+        assert_eq!(env.error.code, ErrorCode::ValidationFailed);
+    }
+    assert!(fetch(&server, &host.access_token, &room, "")
+        .await
+        .is_empty());
+    send_keyed(&server, &host.access_token, &room, "hello", &"x".repeat(64)).await;
+}
+
+/// #524: a deleted message's key stays spent. Its retry is answered with the
+/// tombstone and posts nothing, so a retry can't bring back what its author
+/// or a host took down.
+#[tokio::test]
+async fn a_retry_of_a_deleted_message_posts_nothing() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let room = room.id.to_string();
+    let posted = send_keyed(&server, &host.access_token, &room, "oops", NONCE).await;
+    let resp = reqwest::Client::new()
+        .delete(server.url(&format!("/messages/{}", posted.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+
+    let again = send_keyed(&server, &host.access_token, &room, "oops", NONCE).await;
+    assert_eq!(again.id, posted.id);
+    assert!(again.deleted_at.is_some());
+    assert_eq!(again.body, "");
+    let page = fetch(&server, &host.access_token, &room, "").await;
+    assert_eq!(
+        page.iter().map(|m| m.id).collect::<Vec<_>>(),
+        vec![posted.id]
+    );
+}
+
+/// #524: one send lands in one room. Its key used again in another room is
+/// refused, rather than answered with a message from somewhere else.
+#[tokio::test]
+async fn a_nonce_used_again_in_another_room_is_refused() {
+    let (server, host, room_a) = common::server_with_room("garage").await;
+    let room_b: linger_core::wire::Room = reqwest::Client::new()
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "slug": "porch", "name": "#porch" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let (room_a, room_b) = (room_a.id.to_string(), room_b.id.to_string());
+
+    send_keyed(&server, &host.access_token, &room_a, "hi", NONCE).await;
+    let resp = post_keyed(&server, &host.access_token, &room_b, "hi", NONCE).await;
+    assert_eq!(resp.status(), 409);
+    let env: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(env.error.code, ErrorCode::Conflict);
+    assert!(fetch(&server, &host.access_token, &room_b, "")
+        .await
+        .is_empty());
+}
+
+/// #524: a key is saved with its post or not at all. A post that fails
+/// partway leaves no key behind, so its retry posts it.
+#[tokio::test]
+async fn a_post_that_fails_partway_leaves_its_nonce_unused() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let room = room.id.to_string();
+
+    refuse_read_markers(&server, true).await;
+    let resp = post_keyed(&server, &host.access_token, &room, "hello?", NONCE).await;
+    assert_eq!(resp.status(), 500);
+    assert_eq!(count(&server, "message_nonces").await, 0);
+
+    refuse_read_markers(&server, false).await;
+    let sent = send_keyed(&server, &host.access_token, &room, "hello?", NONCE).await;
+    let page = fetch(&server, &host.access_token, &room, "").await;
+    assert_eq!(page.iter().map(|m| m.id).collect::<Vec<_>>(), vec![sent.id]);
+}
+
+/// #524: a key is remembered for a week (`NONCE_KEPT_MS`), then forgotten,
+/// and the old ones are cleared out as new ones come in rather than kept for
+/// as long as the server runs.
+#[tokio::test]
+async fn a_nonce_is_forgotten_after_a_week() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let room = room.id.to_string();
+    let first = send_keyed(&server, &host.access_token, &room, "monday", NONCE).await;
+
+    // A week and a moment go by.
+    sqlx::query("UPDATE message_nonces SET created_at = created_at - ?")
+        .bind(linger_core::limits::NONCE_KEPT_MS + 1)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    send_keyed(
+        &server,
+        &host.access_token,
+        &room,
+        "tuesday",
+        "another-send",
+    )
+    .await;
+    assert_eq!(
+        count(&server, "message_nonces").await,
+        1,
+        "the week-old key stayed"
+    );
+
+    let late = send_keyed(&server, &host.access_token, &room, "monday", NONCE).await;
+    assert_ne!(late.id, first.id);
+}
+
 #[tokio::test]
 async fn message_send_is_rate_limited() {
     let (server, host, room) = common::server_with_room("garage").await;

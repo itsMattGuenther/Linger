@@ -32,6 +32,17 @@ pub const MAX_STATUS_FIELDS: usize = 3;
 /// Message body cap, chars after trim (PROTOCOL §4).
 pub const MAX_MESSAGE_CHARS: usize = 8_000;
 
+/// A post's one-time key (`wire::CreateMessageRequest::nonce`, PROTOCOL §4,
+/// #524): at most this many letters, digits, `-` or `_`. The app sends a
+/// UUID, which is 36.
+pub const MAX_NONCE_CHARS: usize = 64;
+/// How long the server remembers a post's one-time key (PROTOCOL §4, #524).
+/// A retry only comes from an app still showing the unsent message, and the
+/// app forgets that when it closes, so this only has to outlast a laptop
+/// asleep over a weekend with Retry on its screen. A week does, and a week of
+/// keys is a small table where every key ever sent would not be.
+pub const NONCE_KEPT_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
 /// A room's message of the day, chars after trim (PROTOCOL §3, #464). It sits
 /// whole under the room's header, so it is a few sentences, not a page.
 pub const MAX_MOTD_CHARS: usize = 300;

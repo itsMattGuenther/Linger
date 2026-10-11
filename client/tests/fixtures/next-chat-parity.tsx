@@ -11,6 +11,8 @@
  * - `?ptt`: you're in voice in #general, with push-to-talk on.
  * - `?refuse`: every edit and delete is refused, in the server's words.
  * - `?hang`: a send is never answered; `?offline`: a send can't reach the server.
+ * - `?dropanswer`: the first send reaches the server and is saved, and its
+ *   answer is lost on the way back (#524).
  * - `?uploadrefuse`: the server refuses every file before it goes up.
  * - `?holdparts`: a file's bytes wait at the file store until
  *   `window.parity.release()`, so it shows as going up.
@@ -34,8 +36,9 @@
  * bytes to the store (`PUT /api/v1/store/…`), then `complete`. A send that
  * names finished files carries them on the message. `window.parity` lets a
  * test act as the owner and the server; what the window asked for is in
- * `body[data-did]`, `|`-separated (`sent:` is a send's JSON, `open:` a link
- * or file handed to the browser).
+ * `body[data-did]`, `|`-separated (`sent:` is a send's JSON, less its
+ * one-time key, which is `key:`; `open:` is a link or file handed to the
+ * browser).
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -57,6 +60,8 @@ const night = evening(serverState(SERVER));
 const finished = new Map<string, Attachment>();
 const slots = new Map<string, { filename: string; mime: string; size: number }>();
 let uploads = 0;
+/** What each send's one-time key posted (#524), as the server remembers it. */
+const posted = new Map<string, Message>();
 /** What the recorder hands back when it's stopped: the real recording, until a test says otherwise. */
 let recorded: Uint8Array | null = null;
 const recordingLoaded = fetch("/tests/fixtures/next/voice-clip.bin")
@@ -167,14 +172,21 @@ const desktop = fakeDesktop({
     if (/^\/uploads\/[^/]+$/.test(path) && method === "DELETE") return new Response(null, { status: 204 });
     const messagesOf = /^\/rooms\/([^/]+)\/messages$/.exec(path);
     if (messagesOf && method === "POST") {
-      desktop.note(`sent:${JSON.stringify(body)}`);
+      const { nonce, ...said } = body;
+      desktop.note(`sent:${JSON.stringify(said)}`);
+      if (typeof nonce === "string") desktop.note(`key:${nonce}`);
       const ids = Array.isArray(body.attachment_ids) ? body.attachment_ids.map(String) : [];
       if (ids.length === 0) return null;
+      // Sent again with its key, a send that was saved is answered with the
+      // message it posted, as the server does (#524).
+      const saved = typeof nonce === "string" ? posted.get(nonce) : undefined;
+      if (saved) return json(saved);
       const files = ids.flatMap((id) => {
         const file = finished.get(id);
         return file ? [file] : [];
       });
       const message = desktop.newMessage(decodeURIComponent(messagesOf[1] ?? ""), people.matt.id, String(body.body ?? ""), { attachments: files });
+      if (typeof nonce === "string") posted.set(nonce, message);
       return json(message, 201);
     }
     const one = /^\/messages\/[^/]+$/.exec(path);
@@ -196,6 +208,7 @@ let reading = 0;
 // which can't wait: they're answered here, before the fake server sees them.
 const fakeFetch = window.fetch;
 const refusedOnce = new Set<string>();
+let answerDropped = false;
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const method = init?.method ?? "GET";
@@ -219,6 +232,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return new Response(null, { status: 200, headers: { ETag: `"etag-${url.pathname.split("/").at(-2) ?? ""}"` } });
   }
   if (query.has("offline") && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "POST") {
+    throw new TypeError("Failed to fetch");
+  }
+  if (query.has("dropanswer") && !answerDropped && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "POST") {
+    answerDropped = true;
+    await fakeFetch(input, init);
     throw new TypeError("Failed to fetch");
   }
   if (query.has("hang") && url.origin === SERVER && /\/rooms\/[^/]+\/messages$/.test(url.pathname) && method === "POST") {
