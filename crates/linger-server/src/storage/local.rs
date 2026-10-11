@@ -371,7 +371,7 @@ mod tests {
             storage: Storage::Local,
             s3: None,
             pool_bytes: linger_core::limits::DEFAULT_POOL_BYTES,
-            file_expiry_days: Some(linger_core::limits::DEFAULT_FILE_EXPIRY_DAYS),
+            file_expiry: crate::config::FileExpiry::WhenFull,
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
@@ -382,6 +382,7 @@ mod tests {
             signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
             backups: true,
+            backup_bucket: None,
         }))
         .unwrap()
     }

@@ -106,6 +106,18 @@ describe("a server you host, when it needs you (#582)", () => {
     expect(hostNotes(pinecone({ backups: false, backup_overdue: true }), at)).toEqual([]);
   });
 
+  it("says when the copies haven't reached the host's bucket, in words (#614)", () => {
+    const bucket = (sent: number | null, overdue: boolean) => ({ name: "pine-backups", last_sent_at: sent, overdue });
+    expect(hostNotes(pinecone({ bucket: bucket(at - DAY, false) }), at)).toEqual([]);
+    const late = hostNotes(pinecone({ bucket: bucket(at - 3 * DAY - 60_000, true) }), at);
+    expect(late.map((note) => note.words)).toEqual(["Pinecone's backups haven't reached its bucket for 3 days."]);
+    expect(late[0]).toMatchObject({ kind: "host", what: "bucket", detail: expect.stringContaining("pine-backups") });
+    expect(hostNotes(pinecone({ bucket: bucket(null, true) }), at)[0]?.words).toBe("Pinecone's backups haven't reached its bucket yet.");
+    // No copy at all is the one line: with nothing made, there's nothing to send.
+    const neither = hostNotes(pinecone({ backup_overdue: true, bucket: bucket(null, true) }), at);
+    expect(neither.map((note) => note.words)).toEqual(["Pinecone hasn't been backed up for 1 day."]);
+  });
+
   it("comes after the keyring and before an update, one line for each thing", () => {
     const notes = listNotes([], "no keyring", { kind: "ready", version: "0.4.1", notes: null }, at, [], "this computer", [pinecone({ disk_nearly_full: true, backup_overdue: true })]);
     expect(notes.map((note) => note.kind)).toEqual(["keyring", "host", "host", "update"]);

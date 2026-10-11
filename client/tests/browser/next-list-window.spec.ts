@@ -183,6 +183,21 @@ test("a knock on your door rocks the whole list, a second starts it over, and re
   await expect(page.locator("[data-screen='knocks'] [data-kit='Notice']").first()).toContainText("knocked.");
 });
 
+test("a second knock from somebody takes their first card's place, and forty at once show the newest three (#512)", async ({ page }) => {
+  await open(page);
+  const cards = page.locator("[data-screen='knocks'] [data-kit='Notice']");
+  const knock = (server: string, from: string) =>
+    page.evaluate(([to, who]) => window.core?.frame(to, { op: "knock", d: { from_user_id: who } } as never), [server, from] as const);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await knock(GUILD, "g-rui");
+  await expect(cards).toHaveCount(1);
+  await expect(cards).toContainText("knocked.");
+  // Forty people on two servers: forty cards covered the whole list for eight seconds.
+  for (let n = 0; n < 40; n += 1) await knock(n % 2 === 0 ? GUILD : HOME, `crowd-${n}`);
+  await expect(cards).toHaveCount(3);
+});
+
 // The list is the window's exact size, so a rock takes it a few pixels past the
 // window's edges. The page grew scroll bars to follow, which Windows draws, on
 // and off with each swing (#251). Nothing past the edge is on screen anyway.
@@ -981,6 +996,13 @@ test("a new version gets one quiet line, and Update… opens Settings where it's
 test("a server you host says when its disk is nearly full or it hasn't been backed up, and Hosting… opens its Settings (#582)", async ({ page }) => {
   await open(page, "?one&hostissues");
   await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
+  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+});
+
+test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
+  await open(page, "?one&hostbucket");
+  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
   await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
 });

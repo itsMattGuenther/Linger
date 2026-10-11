@@ -750,6 +750,24 @@ test.describe("hosting", () => {
     await expect(backups).toHaveCount(0);
   });
 
+  test("says the copies also go to the host's bucket, and when none has got there for days (#614)", async ({ page }) => {
+    const backups = page.getByRole("region", { name: "Backups" });
+    const notes = backups.locator(".nx-set-note");
+    await open(page, "?section=server&backups=bucket");
+    await expect(backups).toContainText("and sends them to your bucket too");
+    await expect(backups).not.toContainText("won't survive it dying");
+    await expect(notes).toHaveCount(2);
+    await expect(notes.nth(1)).toHaveText(/^Each copy also goes to the bucket good-company-backups\. The newest got there at 3:14\sAM\.$/);
+
+    await open(page, "?section=server&backups=bucket-late");
+    await expect(notes.nth(0)).toHaveText(/^The last copy was made at 3:12\sAM\.$/);
+    await expect(notes.nth(1)).toContainText("and none has since. The server's log says why.");
+
+    // Without a bucket there's one line, as before.
+    await open(page, "?section=server&backups=ok");
+    await expect(notes).toHaveCount(1);
+  });
+
   test("a save that lands while you're choosing again doesn't undo your new choice", async ({ page }) => {
     // Installed alone, the page's clock still runs, and the fixture's save
     // lands 120 ms after it starts: one WebKit run in 25 chose again just

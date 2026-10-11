@@ -189,6 +189,26 @@ export function backupLine(health: ServerHealth, now: number): { words: string; 
     : { words: `The last copy was made ${when}.`, problem: false };
 }
 
+/**
+ * What Settings → Hosting → Server says about the bucket the nightly copies
+ * also go to (#614), or null when the host hasn't named one.
+ */
+export function bucketLine(health: ServerHealth, now: number): { words: string; problem: boolean } | null {
+  const bucket = health.bucket;
+  if (!bucket) return null;
+  const sends = `Each copy also goes to the bucket ${bucket.name}.`;
+  const last = bucket.last_sent_at;
+  if (last === null) {
+    return bucket.overdue
+      ? { words: `${sends} None has reached it yet. The server's log says why.`, problem: true }
+      : { words: `${sends} The server looks at it a few minutes after it starts.`, problem: false };
+  }
+  const when = setWhen(last, now);
+  return bucket.overdue
+    ? { words: `${sends} The newest got there ${when}, and none has since. The server's log says why.`, problem: true }
+    : { words: `${sends} The newest got there ${when}.`, problem: false };
+}
+
 /** The small words a title leaves lower case unless they start it. */
 const MINOR = new Set(["a", "an", "and", "at", "for", "in", "of", "on", "or", "the", "to", "with"]);
 

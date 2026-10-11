@@ -7,8 +7,12 @@ pub const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024;
 pub const DEFAULT_POOL_BYTES: u64 = 50 * 1024 * 1024 * 1024;
 /// Files over this use multipart upload, which is what makes uploads resumable.
 pub const MULTIPART_THRESHOLD_BYTES: u64 = 8 * 1024 * 1024;
-/// Non-starred, non-pinned files expire after this many days by default.
-pub const DEFAULT_FILE_EXPIRY_DAYS: u32 = 365;
+/// When the pool is this full, the sweeper starts taking the oldest files
+/// nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS=when-full`, #583), in
+/// percent of `LINGER_POOL_BYTES`.
+pub const WHEN_FULL_START_PERCENT: u64 = 90;
+/// ...and keeps taking them until it is down to this.
+pub const WHEN_FULL_TARGET_PERCENT: u64 = 80;
 /// How many finished uploads one message may carry.
 pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 10;
 /// Filenames are stored and echoed in a download header, so they are bounded.

@@ -60,7 +60,10 @@ function sameHealth(a: ServerHealth | undefined, b: ServerHealth | undefined): b
     a.last_backup_at === b.last_backup_at &&
     a.backup_overdue === b.backup_overdue &&
     a.disk_nearly_full === b.disk_nearly_full &&
-    a.file_space_nearly_full === b.file_space_nearly_full
+    a.file_space_nearly_full === b.file_space_nearly_full &&
+    a.bucket?.name === b.bucket?.name &&
+    a.bucket?.last_sent_at === b.bucket?.last_sent_at &&
+    a.bucket?.overdue === b.bucket?.overdue
   );
 }
 

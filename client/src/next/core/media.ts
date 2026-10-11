@@ -23,12 +23,14 @@ export interface MediaFilters {
   author: UserId | null;
   from: string;
   to: string;
+  /** Only what would go next (#583). */
+  leaving: boolean;
 }
 
-export const NO_FILTERS: MediaFilters = { kind: null, author: null, from: "", to: "" };
+export const NO_FILTERS: MediaFilters = { kind: null, author: null, from: "", to: "", leaving: false };
 
 export function isFiltered(filters: MediaFilters): boolean {
-  return filters.kind !== null || filters.author !== null || filters.from !== "" || filters.to !== "";
+  return filters.kind !== null || filters.author !== null || filters.from !== "" || filters.to !== "" || filters.leaving;
 }
 
 /** The kinds, in `lib/media`'s order, as a button says them. */
@@ -41,9 +43,11 @@ export const KINDS: readonly { key: MediaKind | null; label: string }[] = KIND_F
  * What to ask a server for, or why not to ask. A range that ends before it
  * starts is refused by the server; saying so here spends no request.
  */
-export function mediaAsk(filters: MediaFilters): { kind: MediaKind | null; author: UserId | null; since: number | null; until: number | null } | string {
+export function mediaAsk(
+  filters: MediaFilters,
+): { kind: MediaKind | null; author: UserId | null; since: number | null; until: number | null; leaving: boolean } | string {
   if (filters.from !== "" && filters.to !== "" && filters.from > filters.to) return "The dates are the wrong way round: the first is after the second.";
-  return { kind: filters.kind, author: filters.author, since: dayStart(filters.from), until: dayEnd(filters.to) };
+  return { kind: filters.kind, author: filters.author, since: dayStart(filters.from), until: dayEnd(filters.to), leaving: filters.leaving };
 }
 
 /** Starred first, then newest: the servers' own order (PROTOCOL §6), for merging several. */
@@ -145,7 +149,8 @@ export function tileLine(item: MediaItem, names: Directory, serverName: string |
 }
 
 /** What the grid says when it has nothing to show. */
-export function mediaEmpty(filtered: boolean): { title: string; line: string } {
+export function mediaEmpty(filtered: boolean, leaving = false): { title: string; line: string } {
+  if (leaving) return { title: "Nothing is leaving soon.", line: "When files are about to go, they show here first." };
   return filtered
     ? { title: "Nothing here matches those filters.", line: "Try another kind, person or range of dates." }
     : { title: "Good things collect here.", line: "Photos, files and links from your conversations will appear here." };
@@ -156,10 +161,22 @@ export function mediaEmpty(filtered: boolean): { title: string; line: string } {
  * With one server it says how long that server keeps files; `undefined` is a
  * server that hasn't said yet.
  */
-export function keepLine(expiryDays: number | null | undefined): string {
+export function keepLine(expiryDays: number | null | undefined, whenFull = false): string {
+  if (whenFull) return "Files stay until the server needs the room. Starred ones stay for good.";
   if (expiryDays === undefined) return "Starred files don’t expire.";
   if (expiryDays === null) return "This server keeps files for good.";
   return `Files go after ${expiryText(expiryDays)} here. Starred ones stay.`;
+}
+
+/**
+ * The one quiet sentence over "Leaving soon" (#583): what these are and what
+ * keeps one. No count and no alarm; anybody who cares stars what matters.
+ * `whenFull` is the one server's setting, or undefined for several.
+ */
+export function leavingLine(whenFull: boolean | undefined): string {
+  if (whenFull === true) return "These go first when the server needs room. A star keeps one.";
+  if (whenFull === false) return "These go within a month. A star keeps one.";
+  return "These go next. A star keeps one.";
 }
 
 /**

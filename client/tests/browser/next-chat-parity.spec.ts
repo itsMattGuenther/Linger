@@ -924,6 +924,47 @@ test.describe("files in the conversation", () => {
     expect(await rowHeight()).toBe(heightBefore);
   });
 
+  test("a picture that can't be loaded says so in a card with Load again, never the broken-picture icon (#512)", async ({ page }) => {
+    await open(page);
+    let gone = true;
+    await page.route(`${SERVER}/media/pic-gone`, (route) =>
+      gone
+        ? route.fulfill({ status: 404, body: "" })
+        : route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#445"/></svg>` }),
+    );
+    const id = await post(page, "the lake", "u-eli", { attachments: [attachment("pic-gone", "lake.jpg", "image/jpeg", { width: 320, height: 180 })] });
+    const card = row(page, id).locator(".nx-att-card[data-picture='failed']");
+    await expect(card).toBeVisible();
+    await expect(card.locator(".nx-att-failed-note")).toHaveText("Couldn't load this picture.");
+    // Not announced: with the server out of reach, every picture in view would interrupt at once.
+    await expect(card.getByRole("alert")).toHaveCount(0);
+    await expect(card).toContainText("lake.jpg");
+    await expect(row(page, id).locator("img")).toHaveCount(0);
+
+    // It's back: one more go, right here, and the keyboard lands on the picture.
+    gone = false;
+    await card.getByRole("button", { name: "Load again" }).click();
+    const picture = row(page, id).getByRole("button", { name: "Open lake.jpg" });
+    await expect(picture).toBeFocused();
+    await expect.poll(() => picture.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(320);
+  });
+
+  test("the viewer says so when the original can't be loaded, rather than a broken-picture icon (#512)", async ({ page }) => {
+    await open(page);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#445"/></svg>`;
+    await page.route(`${SERVER}/media/pic-copy`, (route) => route.fulfill({ contentType: "image/svg+xml", body: svg }));
+    await page.route(`${SERVER}/media/pic-original`, (route) => route.fulfill({ status: 404, body: "" }));
+    const id = await post(page, "the lake", "u-eli", {
+      attachments: [attachment("pic-original", "lake.jpg", "image/jpeg", { width: 320, height: 180, display_url: "/media/pic-copy" })],
+    });
+    await row(page, id).getByRole("button", { name: "Open lake.jpg" }).click();
+    const viewer = page.getByRole("dialog", { name: "lake.jpg" });
+    await expect(viewer.getByRole("alert")).toHaveText("Couldn't load this picture.");
+    await expect(viewer.locator("img")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+  });
+
   test("video gets its poster and its player, audio Linger's player, anything else one line and a download button (FILE-5)", async ({ page }) => {
     await open(page);
     const id = await post(page, "three files", "u-eli", {

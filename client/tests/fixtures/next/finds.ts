@@ -220,9 +220,19 @@ export function manyItems(): MediaItem[] {
 /** What `GET /media` answers on a server: starred first, then newest, a page after `before`. */
 export function fakeMedia(
   all: readonly MediaItem[],
-  ask: { kind: MediaKind | null; author: string | null; since: number | null; until: number | null; before: string | null; limit: number },
+  ask: { kind: MediaKind | null; author: string | null; since: number | null; until: number | null; before: string | null; limit: number; leaving?: boolean },
 ): MediaItem[] {
+  // "Leaving soon" (#583): this fake server's next to go are its two oldest
+  // files nobody starred, as a server under `when-full` past 80% would say.
+  const leaving = new Set(
+    all
+      .filter((one) => one.attachment !== null && one.starred_at === null)
+      .sort((a, b) => a.created_at - b.created_at)
+      .slice(0, 2)
+      .map((one) => one.cursor),
+  );
   const matching = all
+    .filter((one) => !ask.leaving || leaving.has(one.cursor))
     .filter((one) => (ask.kind === null || one.kind === ask.kind) && (ask.author === null || one.author_id === ask.author))
     .filter((one) => (ask.since === null || one.created_at >= ask.since) && (ask.until === null || one.created_at <= ask.until))
     .sort((a, b) => Number(b.starred_at !== null) - Number(a.starred_at !== null) || b.created_at - a.created_at);

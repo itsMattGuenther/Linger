@@ -6,6 +6,10 @@
 //! server reads the parts back out of it, and a download is a redirect to the
 //! bucket rather than bytes through this process.
 //!
+//! The nightly backup's bucket (#614) is proven here too, since it needs the
+//! same real S3 API: a copy reaches the bucket whole, goes once, and the
+//! bucket keeps a week and a month of them like the folder does.
+//!
 //! **They skip when there is no bucket.** CI runs MinIO in a service container;
 //! locally, `scripts/minio-test.sh` starts one and runs these. Without
 //! `LINGER_TEST_S3_ENDPOINT` set, `cargo test --workspace` skips them and stays
@@ -14,9 +18,10 @@
 
 mod common;
 
-use common::{bootstrap_host, spawn_s3_server, TestServer};
+use common::{bootstrap_host, spawn_s3_server, spawn_tuned, test_s3_config, TestServer};
 use linger_core::wire::{Attachment, CompletedPart, ServerInfo, UploadSlot};
 use reqwest::StatusCode;
+use sqlx::Connection;
 
 /// Start a server on the test bucket, or say why not and stop.
 ///
@@ -1088,4 +1093,228 @@ async fn a_deleted_messages_file_leaves_the_bucket_at_once() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 404);
+}
+
+/// A server keeping its files on disk and sending its nightly copies to the
+/// test bucket under a prefix of its own, so runs never meet. `secret`
+/// replaces the bucket's key, for a bucket that refuses. `None` without a
+/// bucket, as for the other tests here.
+async fn backup_server(secret: Option<&str>) -> Option<(TestServer, String)> {
+    let mut s3 = test_s3_config().await?;
+    if let Some(secret) = secret {
+        s3.secret_access_key = secret.to_string();
+    }
+    let prefix = format!("backups-test-{}/", uuid::Uuid::now_v7());
+    let config = linger_server::config::BackupBucketConfig {
+        s3,
+        prefix: prefix.clone(),
+    };
+    let server = spawn_tuned(|tuned| tuned.backup_bucket = Some(config)).await;
+    Some((server, prefix))
+}
+
+/// What's in the bucket under a prefix, by name.
+async fn bucket_names(prefix: &str) -> Vec<String> {
+    use rusty_s3::S3Action;
+
+    let (bucket, credentials) = test_bucket();
+    let mut action = bucket.list_objects_v2(Some(&credentials));
+    action.with_prefix(prefix.to_string());
+    let body = client()
+        .get(action.sign(std::time::Duration::from_secs(60)))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let mut names: Vec<String> = rusty_s3::actions::ListObjectsV2::parse_response(&body)
+        .unwrap()
+        .contents
+        .into_iter()
+        .map(|object| object.key.strip_prefix(prefix).unwrap().to_string())
+        .collect();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn a_backup_reaches_the_bucket_whole_and_once() {
+    let Some((server, prefix)) = backup_server(None).await else {
+        println!("skipping a_backup_reaches_the_bucket_whole_and_once: LINGER_TEST_S3_ENDPOINT is not set");
+        return;
+    };
+    let host = bootstrap_host(&server).await;
+    let porch: linger_core::wire::Room = client()
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "slug": "porch", "name": "#porch" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let resp = client()
+        .post(server.url(&format!("/rooms/{}/messages", porch.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "body": "the lake photos are up" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Before any copy: the host is told there's a bucket, and nothing has
+    // reached it yet, which isn't a problem on a server that just started.
+    let before = server_info(&server, &host.access_token).await;
+    let bucket = before
+        .health
+        .unwrap()
+        .bucket
+        .expect("the host hears about the bucket");
+    assert_eq!(bucket.last_sent_at, None);
+    assert!(!bucket.overdue);
+
+    let made = linger_server::backup::make(&server.state).await.unwrap();
+    let daily = made
+        .path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let weekly = daily.replace("daily", "weekly");
+    let sent = linger_server::backup::send(&server.state).await.unwrap();
+    assert_eq!(sent, [daily.clone(), weekly.clone()]);
+    assert_eq!(bucket_names(&prefix).await, [daily.clone(), weekly.clone()]);
+
+    // What arrived is the whole database, message and all.
+    let bytes = bucket_get(&format!("{prefix}{daily}"))
+        .await
+        .bytes()
+        .await
+        .unwrap();
+    let copy = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(copy.path(), &bytes).unwrap();
+    let mut db = sqlx::sqlite::SqliteConnection::connect(&format!(
+        "sqlite://{}?mode=ro",
+        copy.path().display()
+    ))
+    .await
+    .unwrap();
+    let (body,): (String,) =
+        sqlx::query_as("SELECT body FROM messages WHERE body LIKE 'the lake%'")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+    assert_eq!(body, "the lake photos are up");
+
+    // Sending again sends nothing: the bucket has both already.
+    assert!(linger_server::backup::send(&server.state)
+        .await
+        .unwrap()
+        .is_empty());
+
+    // And the host hears when it got there.
+    let after = server_info(&server, &host.access_token).await;
+    let bucket = after.health.unwrap().bucket.unwrap();
+    assert!(bucket.last_sent_at.is_some());
+    assert!(!bucket.overdue);
+}
+
+#[tokio::test]
+async fn the_bucket_keeps_a_week_and_a_month_and_nothing_else_is_touched() {
+    let Some((server, prefix)) = backup_server(None).await else {
+        println!("skipping the_bucket_keeps_a_week_and_a_month_and_nothing_else_is_touched: LINGER_TEST_S3_ENDPOINT is not set");
+        return;
+    };
+    // Older nights already in the bucket: eight dailies and five weeklies,
+    // from before this month. And things that aren't copies.
+    for day in 1..=8 {
+        bucket_put(
+            &format!("{prefix}linger-daily-2026-01-{day:02}.db"),
+            b"older".to_vec(),
+        )
+        .await;
+    }
+    for month in 1..=5 {
+        bucket_put(
+            &format!("{prefix}linger-weekly-2026-0{month}-01.db"),
+            b"older".to_vec(),
+        )
+        .await;
+    }
+    bucket_put(&format!("{prefix}notes.txt"), b"the host's own".to_vec()).await;
+    bucket_put(
+        &format!("{prefix}old/linger-daily-2025-01-01.db"),
+        b"a folder of theirs".to_vec(),
+    )
+    .await;
+
+    let made = linger_server::backup::make(&server.state).await.unwrap();
+    let daily = made
+        .path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    linger_server::backup::send(&server.state).await.unwrap();
+
+    let names = bucket_names(&prefix).await;
+    let dailies: Vec<&String> = names
+        .iter()
+        .filter(|name| name.starts_with("linger-daily-"))
+        .collect();
+    let weeklies: Vec<&String> = names
+        .iter()
+        .filter(|name| name.starts_with("linger-weekly-"))
+        .collect();
+    assert_eq!(dailies.len(), 7, "{names:?}");
+    assert_eq!(weeklies.len(), 4, "{names:?}");
+    assert!(names.contains(&daily), "today's copy stays: {names:?}");
+    assert!(
+        !names.contains(&"linger-daily-2026-01-01.db".to_string()),
+        "{names:?}"
+    );
+    assert!(
+        !names.contains(&"linger-daily-2026-01-02.db".to_string()),
+        "{names:?}"
+    );
+    assert!(names.contains(&"notes.txt".to_string()), "{names:?}");
+    assert!(
+        names.contains(&"old/linger-daily-2025-01-01.db".to_string()),
+        "a folder further down isn't ours: {names:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_bucket_that_refuses_never_costs_the_copy_on_disk() {
+    let Some((server, prefix)) = backup_server(Some("not-the-secret")).await else {
+        println!("skipping a_bucket_that_refuses_never_costs_the_copy_on_disk: LINGER_TEST_S3_ENDPOINT is not set");
+        return;
+    };
+    let made = linger_server::backup::make(&server.state).await.unwrap();
+    assert!(made.path.exists());
+    let err = linger_server::backup::send(&server.state)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("403"), "{err}");
+
+    assert!(
+        server.state.backups.last().is_some(),
+        "the copy on disk counts"
+    );
+    assert_eq!(server.state.backups.sent(), None);
+    assert!(bucket_names(&prefix).await.is_empty());
+}
+
+async fn server_info(server: &TestServer, token: &str) -> ServerInfo {
+    client()
+        .get(server.url("/server"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
 }

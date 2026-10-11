@@ -4,7 +4,7 @@ import type { MediaItem } from "../../generated/MediaItem";
 import type { Room } from "../../generated/Room";
 import type { User } from "../../generated/User";
 import { dayEnd, dayStart } from "../../lib/media";
-import { isFiltered, keepLine, KINDS, mediaAsk, mediaEmpty, mediaOrder, NO_FILTERS, starLine, tileLine } from "./media";
+import { isFiltered, keepLine, KINDS, leavingLine, mediaAsk, mediaEmpty, mediaOrder, NO_FILTERS, starLine, tileLine } from "./media";
 import { directory } from "./search";
 
 function person(id: string, name: string): User {
@@ -72,16 +72,19 @@ describe("the media filters", () => {
     expect(isFiltered({ ...NO_FILTERS, author: "u-jules" })).toBe(true);
     expect(isFiltered({ ...NO_FILTERS, from: "2026-09-01" })).toBe(true);
     expect(isFiltered({ ...NO_FILTERS, to: "2026-09-01" })).toBe(true);
+    expect(isFiltered({ ...NO_FILTERS, leaving: true })).toBe(true);
   });
 
   it("ask for whole days where you are", () => {
-    expect(mediaAsk({ kind: "image", author: "u-jules", from: "2026-09-01", to: "2026-09-25" })).toEqual({
+    expect(mediaAsk({ kind: "image", author: "u-jules", from: "2026-09-01", to: "2026-09-25", leaving: false })).toEqual({
       kind: "image",
       author: "u-jules",
       since: dayStart("2026-09-01"),
       until: dayEnd("2026-09-25"),
+      leaving: false,
     });
-    expect(mediaAsk(NO_FILTERS)).toEqual({ kind: null, author: null, since: null, until: null });
+    expect(mediaAsk(NO_FILTERS)).toEqual({ kind: null, author: null, since: null, until: null, leaving: false });
+    expect(mediaAsk({ ...NO_FILTERS, leaving: true })).toMatchObject({ leaving: true });
     // One day is a range too.
     expect(typeof mediaAsk({ ...NO_FILTERS, from: "2026-09-25", to: "2026-09-25" })).toBe("object");
   });
@@ -192,12 +195,21 @@ describe("the words around the grid", () => {
   it("tell an empty collection from filters that match nothing", () => {
     expect(mediaEmpty(false).title).toBe("Good things collect here.");
     expect(mediaEmpty(true).title).toBe("Nothing here matches those filters.");
+    expect(mediaEmpty(true, true).title).toBe("Nothing is leaving soon.");
   });
 
   it("say how long files are kept, and what a star does", () => {
     expect(keepLine(undefined)).toBe("Starred files don’t expire.");
     expect(keepLine(null)).toBe("This server keeps files for good.");
     expect(keepLine(365)).toBe("Files go after a year here. Starred ones stay.");
+    expect(keepLine(null, true)).toBe("Files stay until the server needs the room. Starred ones stay for good.");
+  });
+
+  it("say what's leaving soon in one quiet sentence, with no count (#583)", () => {
+    expect(leavingLine(true)).toBe("These go first when the server needs room. A star keeps one.");
+    expect(leavingLine(false)).toBe("These go within a month. A star keeps one.");
+    expect(leavingLine(undefined)).toBe("These go next. A star keeps one.");
+    for (const line of [leavingLine(true), leavingLine(false), leavingLine(undefined)]) expect(line).not.toMatch(/\d/);
   });
 
   it("say a star is being asked for, then that it's taken", () => {

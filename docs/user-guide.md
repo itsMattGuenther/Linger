@@ -417,9 +417,10 @@ color).
 
 Type and press **Enter**. **Shift+Enter** starts a new line instead of sending.
 Something half-typed stays in its conversation's box, even if you close the
-tab or quit Linger, until you send it. A message can be up to 8,000 characters.
-One longer than twenty lines shows its first twenty with **Show all** under
-them, so a long paste doesn't fill everybody's screen.
+tab or quit Linger, until you send it. A message can be up to 8,000 characters;
+paste more than that and the box keeps the start, and says so. One longer
+than twenty lines shows its first twenty with **Show all** under them, so a
+long paste doesn't fill everybody's screen.
 
 A little formatting works, the kind you already type:
 
@@ -837,7 +838,8 @@ person isn't left this way: it's their row in your list.
 
 **Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
-seconds, then it's gone. Their row in your list gives a little shake. That
+seconds, then it's gone. Knocking again starts their card over; it doesn't add a
+second one. Their row in your list gives a little shake. That
 confirms the knock went, not that they saw it. With reduced motion turned on
 in your system settings, nothing moves; the card still shows. There is no message and nothing for them to
 answer. Three an hour per person, so it stays a tap; after the third, the card
@@ -862,6 +864,11 @@ conversations you can see (pictures, video, audio, files and links), filterable
 by type, person and date. Every item links back to the moment it was posted,
 and the line above the grid says how long the server keeps files and how full
 it is.
+
+Most servers keep files until they need the room: nothing goes while there's
+space, and when the server runs short, the oldest files nobody starred go
+first. **Leaving soon** shows what would go next, so you can star anything you
+want to keep. It shows nothing while there's plenty of room.
 
 The star does two jobs: it sorts things to the top, and it stops a file from
 expiring automatically. Choose **Star** to keep a file; Linger confirms when
