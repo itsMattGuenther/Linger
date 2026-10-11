@@ -176,6 +176,57 @@ async fn body_validation_and_reply_room_checks() {
     assert_eq!(resp.status(), 422);
 }
 
+/// What a refused send or edit said, after checking it was refused as invalid.
+async fn refusal(resp: reqwest::Response) -> String {
+    assert_eq!(resp.status(), 422);
+    let env: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(env.error.code, ErrorCode::ValidationFailed);
+    env.error.message
+}
+
+/// A message of letters that draw nothing (#512) — the empty braille cell, the
+/// Hangul filler, a zero-width space — was taken and drew as an empty row. It
+/// gets the answer a message of spaces gets, sending or editing; the same
+/// letters beside words are fine.
+#[tokio::test]
+async fn a_message_nobody_can_see_is_refused_like_a_blank_one() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let client = reqwest::Client::new();
+    let room = room.id.to_string();
+    let post = |body: &str| {
+        client
+            .post(server.url(&format!("/rooms/{room}/messages")))
+            .bearer_auth(&host.access_token)
+            .json(&serde_json::json!({ "body": body }))
+            .send()
+    };
+
+    let blank = refusal(post("   ").await.unwrap()).await;
+    for unseen in [
+        "\u{2800}",
+        "\u{3164}",
+        "\u{200B}",
+        "\u{115F}\u{1160}\u{FFA0}\u{1D159}",
+        "\u{FEFF}\u{2060}",
+        " \u{2800}\n\u{200B} \u{3164} ",
+    ] {
+        let said = refusal(post(unseen).await.unwrap()).await;
+        assert_eq!(said, blank, "{unseen:?}");
+    }
+
+    let kept = send(&server, &host.access_token, &room, "hi\u{200B} \u{2800}").await;
+    assert_eq!(kept.body, "hi\u{200B} \u{2800}");
+
+    let edit = client
+        .patch(server.url(&format!("/messages/{}", kept.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "body": "\u{3164}\u{200B}" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refusal(edit).await, blank);
+}
+
 #[tokio::test]
 async fn edit_delete_permission_matrix_and_tombstones() {
     let (server, host, room) = common::server_with_room("garage").await;

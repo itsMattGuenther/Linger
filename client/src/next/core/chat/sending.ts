@@ -48,11 +48,30 @@ export function dropUnsent(unsent: readonly Submission[], key: number): Submissi
 }
 
 /**
+ * A character that draws something by itself, as the server judges it
+ * (`validate::is_seen`): not a space, a control or format character such as a
+ * zero-width space, a mark with no letter under it, or one of the letters that
+ * are blank on purpose (the Hangul fillers, the empty braille cell, the
+ * musical null notehead). An unassigned code point counts as seen: it is most
+ * likely an emoji newer than this engine's tables.
+ */
+const SEEN = /[^\s\p{Cc}\p{Cf}\p{Z}\p{M}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}\u{1D159}]/u;
+
+/**
+ * Whether a draft is as empty as one of spaces (#512). A message of only
+ * blank letters would draw as an empty row, and the server refuses it with
+ * the answer a blank one gets.
+ */
+export function saysNothing(draft: string): boolean {
+  return !SEEN.test(draft);
+}
+
+/**
  * What Enter does with the box: send when there is something to send and no
  * file is still uploading. `blocked` says why not, in words, when it can't.
  */
 export function canSend(draft: string, readyFiles: number, uploading: boolean): { ok: true } | { ok: false; blocked: string | null } {
-  if (draft.trim().length === 0 && readyFiles === 0) return { ok: false, blocked: null };
+  if (saysNothing(draft) && readyFiles === 0) return { ok: false, blocked: null };
   if (uploading) return { ok: false, blocked: "The file is still uploading. Your draft is kept here." };
   return { ok: true };
 }

@@ -13,7 +13,7 @@ import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
 import { MAX_POLL_QUESTION_CHARS, pollCommand, typingPoll } from "../../core/chat/poll";
-import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, type Submission } from "../../core/chat/sending";
+import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, saysNothing, type Submission } from "../../core/chat/sending";
 import { planPaste } from "../../core/chat/paste";
 import { excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Name } from "../../kit";
@@ -422,7 +422,8 @@ export const Composer = memo(function Composer({
     const submission: Submission = {
       key: serial.current,
       conversation,
-      body: draft.trim(),
+      // Letters that draw nothing are as empty as spaces: files go without them (#512).
+      body: saysNothing(draft) ? "" : draft.trim(),
       replyTo: replyTo?.message.id ?? null,
       fileKeys: ready.map((file) => file.key),
     };
@@ -708,7 +709,7 @@ export const Composer = memo(function Composer({
             />
           ) : null}
         </span>
-        <IconButton icon="send" label="Send" tone="accent" disabled={draft.trim().length === 0 && ready.length === 0} onClick={submit} />
+        <IconButton icon="send" label="Send" tone="accent" disabled={saysNothing(draft) && ready.length === 0} onClick={submit} />
         <input
           ref={picker}
           type="file"
