@@ -10,6 +10,7 @@
 .nx-people-card-head {
   display: flex;
   align-items: center;
+  gap: var(--space-1-5);
   height: var(--control-sm);
   margin: 0;
   padding-right: var(--space-6);

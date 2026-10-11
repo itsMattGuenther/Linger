@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use linger_core::limits::{LINK_PREVIEW_RETRY_MS, LINK_PREVIEW_TTL_MS};
 use linger_core::wire::LinkPreview;
 use linger_core::MessageId;
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, SqliteConnection, SqlitePool};
 
 use crate::error::ApiError;
 use crate::links;
@@ -71,14 +71,18 @@ impl Cached {
 
 /// Replace a message's recorded links. Called on create and on every edit, so
 /// the archive follows what the message currently says.
+///
+/// Takes a connection rather than the pool so the links can be part of a
+/// bigger write: posting a message records them in the same transaction as
+/// the message itself (#524).
 pub async fn replace_for_message(
-    db: &SqlitePool,
+    conn: &mut SqliteConnection,
     message_id: MessageId,
     urls: &[String],
 ) -> Result<(), ApiError> {
     sqlx::query("DELETE FROM message_links WHERE message_id = ?")
         .bind(message_id.to_vec())
-        .execute(db)
+        .execute(&mut *conn)
         .await?;
     for (position, url) in urls.iter().enumerate() {
         #[allow(clippy::cast_possible_wrap)]
@@ -86,7 +90,7 @@ pub async fn replace_for_message(
             .bind(message_id.to_vec())
             .bind(position as i64)
             .bind(url)
-            .execute(db)
+            .execute(&mut *conn)
             .await?;
     }
     Ok(())

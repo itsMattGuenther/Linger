@@ -50,6 +50,14 @@ describe("the new-message picker", () => {
     expect(existingDm(dms, matt.id, [])).toBeNull();
   });
 
+  it("never offers a group somebody left as the DM with those people, as the server won't find it (#565)", () => {
+    const left = { ...dm("d-left", ["u-matt", "u-jules"]), someone_left: true };
+    // Down to Jules and you, it isn't your DM with Jules…
+    expect(existingDm([left], matt.id, ["u-jules"])).toBeNull();
+    // …and with your own DM with Jules beside it, that's the one.
+    expect(existingDm([left, dm("d-jules", ["u-matt", "u-jules"])], matt.id, ["u-jules"])?.id).toBe("d-jules");
+  });
+
   it("names the chosen people the way a DM is named", () => {
     expect(pickedLabel([eli])).toBe("Eli");
     expect(pickedLabel([eli, jules])).toBe("Eli and Jules");

@@ -302,12 +302,15 @@ check through `tauri-driver` (T-1820).
   and formatters cached.
 - **Rule:**
   - Rows and the composer are memoized, and the props they take are stable.
-  - Formatters are built once.
+  - Formatters are built once, the first time they're used, never when a file
+    loads. The first one a window builds loads the engine's date data, 12-55 ms
+    in WebKitGTK, and a window that shows no date shouldn't pay for it (#535).
   - Lists are virtualized (AGENTS).
 - **Check:**
   - The CPU-throttled Chromium scroll measurement becomes a budgeted test.
   - A desktop scroll check in WebKitGTK.
-  - A unit test that formatters are cached.
+  - A unit test that formatters are cached, and that loading `time.ts`,
+    `search.ts` or `media.ts` builds none (#535).
 
 ### L-15 · History grew without bound
 

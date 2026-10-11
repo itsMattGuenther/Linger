@@ -68,7 +68,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 ## ✨ What it does
 
 - **The buddy list.** One tall window of places and people: you, the rooms
-  with who's in each (your group DMs with them), and everyone on the server,
+  with who's in each (your group DMs with them, which you can leave), and everyone on the server,
   here, away (with their away message) or offline. A DM lives on its person:
   their row lights up when they write, the people you're talking to stay at
   the top, and clicking someone opens them beside the list. Closing it keeps Linger running in the tray, and it can start when
@@ -173,9 +173,9 @@ curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/s
 bash setup.sh   # asks for your name, checks it, starts the server, prints a setup link
 ```
 
-The script fetches the server's files, writes your settings into `.env` (the
-one file you'd ever edit), opens the firewall ports and prints a one-time setup
-link. Paste that link into the app. It makes your account, makes you the host
+The script fetches the newest release's server files, writes your settings
+into `.env` (the one file you'd ever edit), opens the firewall ports and prints
+a one-time setup link. Paste that link into the app. It makes your account, makes you the host
 and names the server. Voice needs UDP 3479 open, and nothing else. To update later, run `./update.sh` in the same folder: it
 backs up the database, updates and restarts, and prints the version it's on.
 

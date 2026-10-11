@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
-import { displayNameProblem, loginReady, MIN_PASSWORD_CHARS, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
+import { displayNameProblem, loginReady, MIN_PASSWORD_CHARS, type NameSaid, registerReady, type SignInActions, type SignInStep, setupReady } from "../../core/signin";
 import { minimizer } from "../../core/windowControls";
 import { Button, TextField, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
@@ -60,21 +60,27 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
   );
 }
 
-/** A form's send: busy while it runs, and the problem in words if it comes back with one. */
+/**
+ * A form's send: busy while it runs, and the problem in words if it comes back
+ * with one. A display name that looks like somebody's already here (#574) is
+ * kept apart, for the name field to say, until the name is changed.
+ */
 function useSend() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const send = async (work: () => Promise<string | null>) => {
+  const [onName, setOnName] = useState<string | null>(null);
+  const send = async (work: () => Promise<NameSaid>) => {
     setBusy(true);
     setProblem(null);
+    setOnName(null);
     const said = await work();
     // Signed in: this screen is about to go, so there's nothing to reset.
-    if (said !== null) {
-      setProblem(said);
-      setBusy(false);
-    }
+    if (said === null) return;
+    if (typeof said === "string") setProblem(said);
+    else setOnName(said.onName);
+    setBusy(false);
   };
-  return { busy, problem, send, setProblem };
+  return { busy, problem, onName, nameChanged: () => setOnName(null), send, setProblem };
 }
 
 function Paste({
@@ -182,8 +188,9 @@ function Register({
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const { busy, problem, send } = useSend();
-  const ready = registerReady(username, displayName, password) && !busy;
+  const { busy, problem, onName, nameChanged, send } = useSend();
+  // A name the server said looks like somebody's here waits for a new one.
+  const ready = registerReady(username, displayName, password) && onName === null && !busy;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (ready) void send(() => register(step.baseUrl, step.code, username, displayName, password));
@@ -195,7 +202,15 @@ function Register({
         You're joining {step.serverName ?? hostOf(step.baseUrl)}. Pick a username people can mention you by, and the name they'll see in their lists.
       </p>
       <TextField label="Username" value={username} onChange={setUsername} hint="Lowercase letters, numbers and underscores. It can't change later." autoFocus literal />
-      <TextField label="Display name" value={displayName} onChange={setDisplayName} error={displayNameProblem(displayName) ?? undefined} />
+      <TextField
+        label="Display name"
+        value={displayName}
+        onChange={(next) => {
+          setDisplayName(next);
+          nameChanged();
+        }}
+        error={displayNameProblem(displayName) ?? onName ?? undefined}
+      />
       <TextField
         label="Password"
         type="password"

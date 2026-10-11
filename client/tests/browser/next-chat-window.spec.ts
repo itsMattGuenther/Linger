@@ -100,6 +100,60 @@ test("typing is said through the list window's connection", async ({ page }) => 
   await expect.poll(() => did(page)).toContain('gateway:{"op":"typing.start","d":{"room_id":"r-general"}}');
 });
 
+/**
+ * When the page's clock starts. The idle tests install Playwright's clock
+ * before the page loads, so they decide which seconds pass (#511).
+ */
+const START = Date.parse("2026-10-10T20:00:00Z");
+/** Longer than the two-second clock the window once kept for nothing (#511). */
+const IDLE_MS = 3_000;
+
+/**
+ * How many times the window draws in three seconds of its own time, once it
+ * has stopped drawing for a whole second (#511; tests/fixtures/next/
+ * commits.tsx counts). The page's clock is held still and those three
+ * seconds are run through, every timer due in them fired, so they're the
+ * same three seconds on a loaded machine as on an idle one. The once-a-minute
+ * clocks first fire a minute after the page opened, after the span watched.
+ */
+async function drawsWhileIdle(page: Page): Promise<number> {
+  const commits = () => page.evaluate(() => window.commits ?? 0);
+  let last = await commits();
+  for (;;) {
+    await page.waitForTimeout(1_000);
+    const now = await commits();
+    if (now === last) break;
+    last = now;
+  }
+  const held = (await page.evaluate(() => Date.now())) + 1_000;
+  await page.clock.pauseAt(held);
+  expect(held + IDLE_MS - START, "the span watched ends before the minute clocks first fire").toBeLessThan(60_000);
+  // Settling the clock may have fired a timer: counted from here.
+  await page.waitForTimeout(250);
+  const before = await commits();
+  await page.clock.runFor(IDLE_MS);
+  // Whatever those seconds asked React to draw, it has drawn.
+  await page.waitForTimeout(250);
+  return (await commits()) - before;
+}
+
+test("with nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await page.clock.install({ time: START });
+  await open(page);
+  await expect(log(page)).toContainText("Putting it on now.");
+  expect(await drawsWhileIdle(page)).toBe(0);
+});
+
+test("somebody's 'is typing' goes by itself once it runs out (#511)", async ({ page }) => {
+  await open(page);
+  await expect(log(page)).toContainText("Putting it on now.");
+  await page.evaluate(() => window.owner?.frame({ op: "typing", d: { room_id: "r-general", user_id: "u-eli" } }));
+  const line = page.locator(".nx-typing");
+  await expect(line).toHaveText(/Eli\s*is typing/);
+  // Nobody says they've stopped: it runs out six seconds after the last word that they're typing.
+  await expect(line).toHaveText("", { timeout: 10_000 });
+});
+
 test("a send the server refuses says why and keeps the words", async ({ page }) => {
   await open(page, "room=r-general&fail");
   await box(page).click();
@@ -654,6 +708,18 @@ test("Join asks the list window to join voice here", async ({ page }) => {
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "voice.join", server: SERVER, roomId: "r-general" });
 });
 
+test("a double-click on Join asks the list window once (#510)", async ({ page }) => {
+  await open(page);
+  const joins = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.join");
+  // The list window hasn't answered yet, so Join is still under the pointer for the second click.
+  await page.getByRole("button", { name: "Join" }).dblclick();
+  await page.waitForTimeout(500);
+  expect(await joins()).toEqual([{ kind: "voice.join", server: SERVER, roomId: "r-general" }]);
+  // A click a moment later asks again: the join could have failed.
+  await page.getByRole("button", { name: "Join" }).click();
+  await expect.poll(joins).toHaveLength(2);
+});
+
 // A start that failed in the list window reaches this window with the
 // devices it asked for, which decide what the strip says (#261, #273).
 test("a failed start shared by the list window says what fixes it, and Pick yours opens Settings on Sound & Voice", async ({ page }) => {
@@ -802,4 +868,15 @@ test("select-all in a conversation carries who wrote each message, though a name
   await page.keyboard.press("ControlOrMeta+a");
   const selected = await page.evaluate(() => String(getSelection()));
   expect(selected).toMatch(new RegExp(`Eli\\s+${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+});
+
+test("a group left from its own window's ⋯ closes the window, calmly (#565)", async ({ page }) => {
+  await open(page, "room=d-eli-sam");
+  await expect(page.getByRole("region", { name: "Eli and Sam" })).toBeVisible();
+  // The header is the title bar here, and its ⋯ is in it.
+  await page.locator(".k-titlebar").getByRole("button", { name: "More for Eli and Sam" }).click();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+  await page.getByRole("dialog", { name: "Leave Eli and Sam" }).getByRole("button", { name: "Leave", exact: true }).click();
+  await expect.poll(() => did(page)).toContain("POST /dms/d-eli-sam/leave as token-1");
+  await expect.poll(() => did(page)).toContain("window:close");
 });

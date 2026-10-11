@@ -211,7 +211,12 @@ export type Intent =
   /** Add a server, from Settings: the list window shows its sign-in. */
   | { kind: "addserver" }
   /** Settings changed your servers' order or which are Quiet (Settings → Servers). */
-  | { kind: "serverprefs"; order: string[]; quiet: string[] };
+  | { kind: "serverprefs"; order: string[]; quiet: string[] }
+  /**
+   * Settings saved a server's name or color: the list asks the server for
+   * them now, rather than at its next hourly ask (#536).
+   */
+  | { kind: "serverinfo"; server: string };
 
 /** The list window's own choices another window may ask it to make. */
 export interface ListControls {
@@ -219,6 +224,8 @@ export interface ListControls {
   addServer(): void;
   /** Your servers' order and which are Quiet, as Settings last left them. */
   setPrefs(prefs: ServerPrefs): void;
+  /** Ask a server for its name and color again: Settings has just saved them (#536). */
+  serverInfo?(server: string): void;
   /** Whether closing the list keeps Linger in the tray (true) or quits it. */
   closeToTray?(on: boolean): void;
   /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
@@ -472,6 +479,9 @@ export async function shareAsOwner(
       case "serverprefs":
         list?.setPrefs(prefsFrom(intent));
         return;
+      case "serverinfo":
+        if (sessions().has(intent.server)) list?.serverInfo?.(intent.server);
+        return;
       case "conversations": {
         if (!isMode(intent.mode)) return;
         saveMode(store, intent.mode);
@@ -529,16 +539,18 @@ export async function shareAsOwner(
       return { problem: inWords(error, "Couldn't reach the server.") };
     }
   };
-  // A password change ends every other sign-in for the account (the server
-  // can't tell who else had the old one), so the owner signs straight back
-  // in with the new password rather than leave every window to be signed
-  // out when its token runs out. The passwords are never kept or logged.
+  // A password change ends every sign-in the account has (the server can't
+  // tell who else had the old one), this one too. A server from #496 on hands
+  // this one a fresh pair, and it carries on with it. An older one sends
+  // nothing, so the owner signs straight back in with the new password rather
+  // than leave every window to be signed out when its token runs out. The
+  // passwords are never kept or logged.
   const password = async ({ server, current, next }: PasswordQuestion): Promise<Outcome> => {
     const api = sessions().get(server);
     const username = serverState(server).me?.username;
     if (!api || username === undefined) return { problem: "You're not signed in to that server any more." };
     try {
-      await api.changePassword(passwordRequest(current, next));
+      if (await api.changePassword(passwordRequest(current, next))) return { problem: null };
     } catch (error) {
       return { problem: inWords(error, "Couldn't change your password.") };
     }

@@ -20,7 +20,7 @@ use std::time::Duration;
 use linger_core::AttachmentId;
 
 use crate::error::ApiError;
-use crate::media::{display_copy_of, MAX_IMAGE_BYTES};
+use crate::media::{display_copy_of, ImageLane, MAX_IMAGE_BYTES};
 use crate::state::AppState;
 use crate::storage::{display_key, ObjectBody, ServeAs};
 
@@ -92,6 +92,9 @@ async fn copy(
     filename: &str,
 ) -> Result<String, ApiError> {
     let serve = ServeAs::for_object(mime, filename);
+    // A place in the image queue first, so the original is read into memory
+    // only once its turn has come (#487).
+    let lane = ImageLane::wait().await?;
     let bytes = match state.storage.read_object(object_key, &serve).await? {
         None => return Ok(object_key.to_string()),
         Some(ObjectBody::File(path, _)) => {
@@ -110,9 +113,9 @@ async fn copy(
         return Ok(object_key.to_string());
     }
     let owned_mime = mime.to_string();
-    let made = tokio::task::spawn_blocking(move || display_copy_of(&bytes, &owned_mime))
-        .await
-        .map_err(|_| ApiError::internal())?;
+    let made = lane
+        .run(move || display_copy_of(&bytes, &owned_mime))
+        .await?;
     match made {
         Ok(Some(copy)) => {
             let key = display_key(id, mime);

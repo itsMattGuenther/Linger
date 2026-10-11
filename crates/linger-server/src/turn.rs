@@ -5,8 +5,10 @@
 //! where the username is `<unix expiry>:<who>`. coturn recomputes the HMAC
 //! and checks the clock; nothing is stored on either side and nothing is
 //! looked up. A member asks on every join and gets a password that dies on
-//! its own — a leaked one is a day of somebody else's relay bandwidth, not a
-//! key.
+//! its own. The relay carries voice to this server's voice address and
+//! nowhere else (deploy/compose.yaml, #501), so a leaked one is a day of
+//! sending to this server's voice port, a few relay ports at a time, not a
+//! key to anything.
 //!
 //! SHA-1 is what coturn speaks and nothing here depends on it being a good
 //! hash: the secret is long and random and the message is public, so this is
@@ -35,6 +37,20 @@ pub fn password(secret: &str, username: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(tag.as_ref())
 }
 
+/// How often a member's relay username changes (#501). Every ask within the
+/// same hour gets the same username, and so the same password, which is what
+/// lets coturn's `--user-quota` (deploy/compose.yaml) count a person rather
+/// than a request: asking again doesn't buy more relay ports.
+pub const NAME_STEP_SECS: u64 = 60 * 60;
+
+/// When a password asked for at `now_unix` stops working: at least `ttl_secs`
+/// from now, rounded up to the next [`NAME_STEP_SECS`], so that it's the same
+/// moment, and the same username, for every ask within one step.
+#[must_use]
+pub fn expiry(now_unix: u64, ttl_secs: u64) -> u64 {
+    now_unix.saturating_add(ttl_secs).div_ceil(NAME_STEP_SECS) * NAME_STEP_SECS
+}
+
 /// Everything a client puts in its peer connections right now.
 ///
 /// One entry carrying every URI, with the credentials on it. STUN ignores
@@ -42,7 +58,7 @@ pub fn password(secret: &str, username: &str) -> String {
 /// them on as one list.
 #[must_use]
 pub fn ice_servers(turn: &TurnConfig, user: UserId, now_unix: u64) -> IceServers {
-    let expires_at = now_unix + turn.ttl_secs;
+    let expires_at = expiry(now_unix, turn.ttl_secs);
     let username = username(expires_at, user);
     let credential = password(&turn.secret, &username);
     IceServers {
@@ -51,7 +67,7 @@ pub fn ice_servers(turn: &TurnConfig, user: UserId, now_unix: u64) -> IceServers
             username: Some(username),
             credential: Some(credential),
         }],
-        ttl_secs: turn.ttl_secs,
+        ttl_secs: expires_at - now_unix,
     }
 }
 
@@ -90,13 +106,15 @@ mod tests {
         };
         let user = UserId::new();
         let ice = ice_servers(&turn, user, 1_700_000_000);
-        assert_eq!(ice.ttl_secs, 3600);
+        // An hour from now is 1_700_003_600, and the hour after that starts
+        // at 1_700_006_400: the password lasts until then.
+        assert_eq!(ice.ttl_secs, 6400);
         assert_eq!(ice.servers.len(), 1);
         let server = &ice.servers[0];
         assert_eq!(server.urls, turn.urls);
         assert_eq!(
             server.username.as_deref(),
-            Some(format!("1700003600:{user}").as_str())
+            Some(format!("1700006400:{user}").as_str())
         );
         let credential = server.credential.as_deref().expect("a credential");
         assert_eq!(
@@ -106,5 +124,35 @@ mod tests {
         // Two members never share a password, because the name is in it.
         let other = ice_servers(&turn, UserId::new(), 1_700_000_000);
         assert_ne!(other.servers[0].credential, server.credential);
+    }
+
+    /// The relay's per-person limit only means something if a person has
+    /// one name (#501): asking again an instant later, or ten minutes later,
+    /// must not mint a fresh username with a fresh allowance of relay ports.
+    #[test]
+    fn asking_again_within_the_hour_gets_the_same_password() {
+        let turn = TurnConfig {
+            secret: SECRET.into(),
+            urls: vec!["turn:r:3478?transport=udp".into()],
+            ttl_secs: 24 * 60 * 60,
+        };
+        let user = UserId::new();
+        // 1_699_999_200 is on the hour.
+        let first = ice_servers(&turn, user, 1_699_999_200 + 60);
+        let again = ice_servers(&turn, user, 1_699_999_200 + 59 * 60);
+        assert_eq!(first.servers, again.servers);
+        let next_hour = ice_servers(&turn, user, 1_699_999_200 + 60 * 60 + 1);
+        assert_ne!(first.servers, next_hour.servers);
+    }
+
+    #[test]
+    fn a_password_always_lasts_at_least_its_ttl_and_less_than_an_hour_more() {
+        let ttl = 24 * 60 * 60;
+        for now in [1_699_999_200, 1_699_999_201, 1_700_000_000, 1_700_002_799] {
+            let expires = expiry(now, ttl);
+            assert!(expires >= now + ttl, "{now}");
+            assert!(expires < now + ttl + NAME_STEP_SECS, "{now}");
+            assert_eq!(expires % NAME_STEP_SECS, 0, "{now}");
+        }
     }
 }

@@ -162,6 +162,7 @@ export function ListView(props: ListViewProps) {
               safetyFor={only.safetyFor}
               onReports={only.onReports}
               onStartDm={only.onStartDm}
+              onLeaveDm={only.onLeaveDm}
               onHost={only.onHost}
             />
           ) : null}

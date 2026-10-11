@@ -171,6 +171,66 @@ describe("links", () => {
   it("does not find an address in the middle of a word", () => {
     expect(inlineKinds("nothttps://linger.example")).toEqual(["text"]);
   });
+
+  /** Every link in a body, each with the links inside it (#508). */
+  function linksIn(source: string): { href: string; inside: number }[] {
+    const found: { href: string; inside: number }[] = [];
+    const count = (nodes: readonly Inline[]): number =>
+      nodes.reduce((total, node) => {
+        if (node.kind === "link") return total + 1 + count(node.children);
+        if (node.kind === "strong" || node.kind === "em" || node.kind === "strike") return total + count(node.children);
+        return total;
+      }, 0);
+    const walk = (nodes: readonly Inline[]): void => {
+      for (const node of nodes) {
+        if (node.kind === "link") found.push({ href: node.href, inside: count(node.children) });
+        if (node.kind === "link" || node.kind === "strong" || node.kind === "em" || node.kind === "strike") walk(node.children);
+      }
+    };
+    for (const block of parseMarkdown(source)) if (block.kind === "paragraph") walk(block.children);
+    return found;
+  }
+
+  it("never puts a link inside a link: an address in a link's words is words (#508)", () => {
+    // The decoy: what you read is good.example, where it goes is evil.example.
+    // As two links, one click opened both and pointing at it showed the decoy.
+    expect(linksIn("[https://good.example/login](https://evil.example/steal)")).toEqual([
+      { href: "https://evil.example/steal", inside: 0 },
+    ]);
+    expect(plainText("[https://good.example/login](https://evil.example/steal)")).toBe("https://good.example/login");
+    // A link written inside a link's words stays the characters typed.
+    expect(linksIn("[[https://a.example](https://b.example)](https://c.example)")).toEqual([
+      { href: "https://c.example/", inside: 0 },
+    ]);
+    expect(plainText("[[https://a.example](https://b.example)](https://c.example)")).toBe("[https://a.example](https://b.example)");
+    // Formatting in a link's words is still formatting, but no way in.
+    expect(linksIn("[**https://a.example** and [b](https://b.example)](https://c.example)")).toEqual([
+      { href: "https://c.example/", inside: 0 },
+    ]);
+    // What gets a card is what draws as a link: the real destination only.
+    expect(linkTargets("[https://good.example/login](https://evil.example/steal)")).toEqual(["https://evil.example/steal"]);
+  });
+
+  it("keeps formatting, code, mentions and emoji in a link's words", () => {
+    const block = firstBlock("[**bold** `code` @callie :fire:](https://linger.example)");
+    if (block?.kind !== "paragraph") throw new Error("expected a paragraph");
+    const link = block.children[0];
+    if (link?.kind !== "link") throw new Error("expected a link");
+    expect(link.children.map((node) => node.kind)).toEqual(["strong", "text", "code", "text", "mention", "text", "shortcode"]);
+  });
+
+  it("takes a link's title off its address rather than reading it as part of it (#508)", () => {
+    // `[text](https://x "title")` became `https://x%20"title"/`.
+    for (const title of [`"the trail"`, `'the trail'`, `(the trail)`, `"say \\"hi\\""`]) {
+      expect(linksIn(`[text](https://linger.example/porch ${title})`)).toEqual([
+        { href: "https://linger.example/porch", inside: 0 },
+      ]);
+      expect(linksIn(`[text](https://linger.example ${title})`)).toEqual([{ href: "https://linger.example/", inside: 0 }]);
+    }
+    expect(plainText(`[text](https://linger.example/porch "the trail")`)).toBe("text");
+    // The title is dropped, not checked: a scheme that executes is still refused.
+    expect(inlineKinds(`[text](javascript:alert(1) "title")`)).toEqual(["text"]);
+  });
 });
 
 describe("blocks", () => {

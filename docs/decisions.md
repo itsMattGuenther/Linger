@@ -1022,7 +1022,11 @@ purpose nobody could guess: every one a place a first-time host went wrong.
 - **The deploy files on `main` still work with the image that's out.** The host
   guide downloads them from `main`, so they can't wait for a release:
   `setup.sh` writes the voice address and runs the old `chown` itself on a
-  server image from before 0.4.9.
+  server image from before 0.4.9. *Since #507 (2026-10-10)* `setup.sh`, and
+  the host guide's steps by hand, fetch `compose.yaml`, the Caddyfile,
+  `update.sh` and `.env.example` from the newest release instead, so they
+  never run ahead of the image. The rule still holds for `setup.sh` itself, which comes from
+  `main` and has to work with the newest release's files.
 
 ## Decided — every emoji, Discord's shortcodes, and a server's own emoji
 
@@ -1216,6 +1220,35 @@ mockups (https://claude.ai/artifact/9mKcjUTn472rd26WesGBnW, private).
   makes a room look new.
 - **It calls nobody.** A new poll makes the room bold like anything said, with no
   notification or sound; votes and the closed line make nothing bold.
+
+## Decided — leaving a group DM
+
+**Matt, 2026-10-10 (#565).** Once you're in five or nine group DMs there was no way to
+leave one, so they sat in your list for good. SPEC §4.13 had fixed a DM's people when
+it's made and said nothing about leaving.
+
+- **You can leave a group DM, and nobody can put you back.** Leave is in the group's ⋯
+  menu in the list and in its header, with one calm confirmation. It goes from your list
+  on every device, and from your search, Media and export, like any DM you're not in.
+- **The others keep it, history included**, with a quiet grey line, "Callie left", like
+  the voice join line (#473). It never notifies anybody or makes the DM new. What you
+  said stays, the way somebody's messages stay in a room.
+- **A group somebody left no longer matches its people.** The same people asking again
+  get a new DM, so nobody is pulled back into one they left; anybody can still start a
+  new one with you. A group that shrinks to two stays a group and never merges into the
+  two people's own DM.
+- **A one-to-one DM can't be left**: it's that friend's row in the list (#351).
+- **The last person to leave deletes it**, messages and files. Decided in the pull
+  request, since the issue left it open. Keeping the artifact (SPEC §2) is for the people
+  who made it, and once the last of them has gone nobody can ever be let back in to read
+  it: the bytes would only take up the server's shared storage, where the host can't even
+  see them to free them, and the one way left to read them is opening the database,
+  which is the host reading DMs (SPEC §4.13). Anybody who wants to keep it exports first.
+- **Older apps.** One that's signed in elsewhere as the person leaving keeps showing the
+  DM until it next signs in afresh, and can't open anything in it. One belonging to
+  somebody still in it shows the line as them saying "left", and may ring for it like any
+  message; a group shrunk to two may show on that friend's row there. All of it goes once
+  they update.
 
 ## Decided — the talk key works with another app in front
 

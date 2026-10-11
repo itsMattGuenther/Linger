@@ -39,6 +39,7 @@ import { isSearchKey, isSettingsKey } from "../../core/keys";
 import { listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
 import { moveServer, seatsWords, serverHeader } from "../../core/servers";
+import { keepAsking, type ListedInfo, withInfo } from "../../core/serverInfo";
 import { talkingNow, voiceModel } from "../../core/voice";
 import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
@@ -89,11 +90,8 @@ import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadA
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
-import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 
-/** How often the server's name is asked for again. It changes about once ever. */
-const INFO_REFRESH_MS = 120_000;
 /** The tabs beside the list and their order, on this computer (docs/design/architecture.md, "Remembering"). */
 const TABS_KEY = "linger.next.tabs";
 
@@ -206,7 +204,18 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
  * UI of its own. Owning it here is what keeps a StrictMode remount from
  * leaving a socket nobody follows.
  */
-function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInfo: (server: string, info: ServerInfo) => void; paused: boolean }) {
+function ServerLink({
+  session,
+  onInfo,
+  again,
+  paused,
+}: {
+  session: ServerSession;
+  onInfo: (server: string, info: ListedInfo) => void;
+  /** Counts up when Settings has just saved this server's name or color: ask for them now. */
+  again: number;
+  paused: boolean;
+}) {
   const { api, baseUrl } = session;
   const gateway = useGateway(baseUrl);
   const status = gateway.status.kind;
@@ -249,16 +258,15 @@ function ServerLink({ session, onInfo, paused }: { session: ServerSession; onInf
     setPresenceLive(baseUrl, status === "ready");
   }, [baseUrl, status]);
 
-  // Its name and color. They change about once ever.
-  const asOf = useNow(INFO_REFRESH_MS);
+  // Its name and color, which change about once ever: asked when the
+  // connection comes up or comes back, then hourly while it stays up, and at
+  // once when Settings has just saved them (core/serverInfo.ts, #536). A
+  // heartbeat's "ready" leaves `up` as it was, so it asks nothing.
+  const up = status === "ready";
   useEffect(() => {
-    const abort = new AbortController();
-    void api
-      .serverInfo(abort.signal)
-      .then((info) => onInfo(baseUrl, info))
-      .catch(() => undefined);
-    return () => abort.abort();
-  }, [api, baseUrl, asOf, onInfo]);
+    if (!up) return;
+    return keepAsking((signal) => api.serverInfo(signal).then((info) => onInfo(baseUrl, info)));
+  }, [api, baseUrl, up, again, onInfo]);
 
   return null;
 }
@@ -287,8 +295,12 @@ function Servers({
   useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);
   const ordered = useMemo(() => inOrder(signedIn, prefs.order), [signedIn, prefs.order]);
   const quiet = useMemo(() => new Set(prefs.quiet), [prefs.quiet]);
-  const [infos, setInfos] = useState<Readonly<Record<string, ServerInfo>>>({});
-  const onInfo = useCallback((server: string, info: ServerInfo) => setInfos((held) => ({ ...held, [server]: info })), []);
+  // Each server's name and color. The same answer again keeps the same
+  // object, so the list isn't drawn again for nothing (#536).
+  const [infos, setInfos] = useState<Readonly<Record<string, ListedInfo>>>({});
+  const onInfo = useCallback((server: string, info: ListedInfo) => setInfos((held) => withInfo(held, server, info)), []);
+  // Settings saved a server's name or color: its link asks again (`again`).
+  const [infoAsks, setInfoAsks] = useState<Readonly<Record<string, number>>>({});
   const several = ordered.length > 1;
 
   const changePrefs = (next: ServerPrefs) => {
@@ -366,6 +378,7 @@ function Servers({
       }
     },
     setPrefs: changePrefs,
+    serverInfo: (server) => setInfoAsks((held) => ({ ...held, [server]: (held[server] ?? 0) + 1 })),
     // Conversations open each in a window of its own now: every tab goes to
     // one, the showing one last so it lands on top, its draft with it.
     conversations: (mode) => {
@@ -427,6 +440,7 @@ function Servers({
     const list: ListControls = {
       addServer: () => listNow.current.addServer(),
       setPrefs: (next) => listNow.current.setPrefs(next),
+      serverInfo: (server) => listNow.current.serverInfo?.(server),
       conversations: (mode) => listNow.current.conversations?.(mode),
       closeToTray: (on) => closeToTray(on),
       talkKey: (code) => setTalkKey(code),
@@ -850,6 +864,7 @@ function Servers({
             // The host, with a report open (T-1605): Settings, People, where they are.
             onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
             onStartDm: (people) => startDm(api, people),
+            onLeaveDm: (room) => leaveDm(api, room),
             onHost: (section) => shell.settings(section),
             showing: besideTab?.server === baseUrl ? besideTab.roomId : null,
             saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
@@ -1052,7 +1067,7 @@ function Servers({
   return (
     <>
       {signedIn.map((session) => (
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} paused={backgrounded || offline} />
+        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={backgrounded || offline} />
       ))}
       <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
         <div className="nx-app-list">
@@ -1202,6 +1217,19 @@ async function startDm(api: ServerSession["api"], people: User[]): Promise<strin
     return null;
   } catch (error: unknown) {
     return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't open the DM.";
+  }
+}
+
+/**
+ * Leave a group DM (#565). The server tells every window it's gone, so its
+ * row, tab and window go by themselves; this only asks.
+ */
+async function leaveDm(api: ServerSession["api"], roomId: RoomId): Promise<string | null> {
+  try {
+    await api.leaveDm(roomId);
+    return null;
+  } catch (error: unknown) {
+    return error instanceof ApiError || error instanceof TransportError ? error.message : "Couldn't leave the group.";
   }
 }
 

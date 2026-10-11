@@ -12,6 +12,7 @@ import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
 import { knockOfflineLine, type KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
+import { LeaveGroup } from "../LeaveGroup";
 
 /** How long a knocked row rests before it can knock again (SPEC §4.9). */
 const KNOCKED_MS = 3_000;
@@ -39,6 +40,8 @@ export interface ServerBodyActions {
   onReports?: () => void;
   /** From the picker the + on Rooms opens: open the DM with exactly these people; resolves to a problem in words, or null. */
   onStartDm?: (people: User[]) => Promise<string | null>;
+  /** From a group's ⋯ menu: leave it (#565); resolves to a problem in words, or null. */
+  onLeaveDm?: (id: RoomId) => Promise<string | null>;
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
   onHost?: (section: "rooms" | "invites") => void;
   /** The conversation showing beside the list, on this server: its row, or its person's, is marked (#351). */
@@ -78,6 +81,7 @@ export function ServerBody({
   safetyFor,
   onReports,
   onStartDm,
+  onLeaveDm,
   onHost,
   showing = null,
 }: ServerBodyActions & {
@@ -229,6 +233,9 @@ export function ServerBody({
       // Addressed to you: unread, it's lit, not only bold (#291).
       lit={dm.fresh}
       selected={dm.id === showing}
+      // Its ⋯ menu, with Leave (#565). Never on a one-to-one DM, which has
+      // no row of its own.
+      actions={onLeaveDm && dm.leavable ? [<LeaveGroup key="more" label={dm.label} last={dm.last} onLeave={() => onLeaveDm(dm.id)} />] : undefined}
       onActivate={onOpenDm ? () => onOpenDm(dm.id) : undefined}
     />
   );
