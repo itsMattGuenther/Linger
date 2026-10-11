@@ -45,9 +45,9 @@ additional services or browser engines:
 - `bash scripts/coturn-test.sh` needs Docker Engine and Compose. It checks
   that the shipped voice relay starts, carries packets to the voice address
   and refuses any other (#501), carries nothing when it has no voice address,
-  and refuses an empty secret, without opening host ports or using your
-  server data. CI runs this too; it does not replace the voice checks on
-  separate networks.
+  stops when DNS never answers (so Docker starts it again), and refuses an
+  empty secret, without opening host ports or using your server data. CI
+  runs this too; it does not replace the voice checks on separate networks.
 - `bash scripts/update-docker-test.sh` needs Docker and network access to
   ghcr.io. It runs `deploy/update.sh` on a real 0.4.2 server, checks it comes
   back as 0.4.3 with a database backup, then runs it again with nothing new.

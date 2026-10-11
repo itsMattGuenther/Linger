@@ -100,10 +100,25 @@ services:
         # sits on, a cloud's metadata service, the internet as this machine),
         # and voice only ever needs the one address. That's
         # LINGER_VOICE_ADDRESS without its port or, with it unset, the public
-        # addresses LINGER_DOMAIN points at, looked up once, now, as the
-        # server does. dig asks DNS, like the server; getent, the fallback,
-        # reads this machine's /etc/hosts first. Voice off, a name with no
-        # public address, or no answer, and the relay carries nothing.
+        # addresses LINGER_DOMAIN points at, looked up now, as the server
+        # does. dig asks DNS, like the server; getent, the fallback, reads
+        # this machine's /etc/hosts first. Voice off, or a name DNS answers
+        # for with no public address, and the relay carries nothing.
+        #
+        # DNS gets a minute to answer, since at boot it can start after the
+        # relay. A name it never answers for stops the relay instead, so
+        # Docker (restart: unless-stopped) starts it again to ask again,
+        # rather than leaving it carrying nothing until somebody notices
+        # that people on strict networks can't get into voice.
+        # LINGER_RELAY_LOOKUP_WAIT shortens the minute, for the tests.
+        ask() { # name, type: the addresses DNS answers with, or fail when it doesn't answer
+          reply="$$(dig +noall +comments +answer +time=2 +tries=1 "$$1" "$$2" 2>&1)" || return 1
+          case "$$reply" in
+            *"status: NOERROR"* | *"status: NXDOMAIN"*) ;;
+            *) return 1 ;;
+          esac
+          printf '%s\n' "$$reply" | awk '$$3 == "IN" && ($$4 == "A" || $$4 == "AAAA") { print $$5 }'
+        }
         address() { # an IP address, by its look
           case "$$1" in
             *:*) case "$$1" in *[!0-9a-fA-F:.]*) return 1 ;; esac ;;
@@ -134,12 +149,28 @@ services:
         case "$$voice" in
           "")
             found=""
-            if [ -z "$$LINGER_DOMAIN" ]; then
-              :
-            elif command -v dig >/dev/null 2>&1; then
-              found="$$(dig +short +time=2 +tries=2 "$$LINGER_DOMAIN" A "$$LINGER_DOMAIN" AAAA)"
-            else
-              found="$$(getent ahosts "$$LINGER_DOMAIN" | awk '{ print $$1 }')"
+            answered=""
+            patience="$${LINGER_RELAY_LOOKUP_WAIT:-60}"
+            deadline=$$(( $$(date +%s) + patience ))
+            while [ -n "$$LINGER_DOMAIN" ]; do
+              if command -v dig >/dev/null 2>&1; then
+                if v4="$$(ask "$$LINGER_DOMAIN" A)"; then
+                  v6="$$(ask "$$LINGER_DOMAIN" AAAA)" || v6=""
+                  found="$$v4 $$v6"
+                  answered=yes
+                fi
+              # getent can't tell a name that doesn't exist from no answer,
+              # so with it, both count as no answer.
+              elif found="$$(getent ahosts "$$LINGER_DOMAIN")"; then
+                found="$$(printf '%s\n' "$$found" | awk '{ print $$1 }')"
+                answered=yes
+              fi
+              [ -z "$$answered" ] && [ "$$(date +%s)" -lt "$$deadline" ] || break
+              sleep 3
+            done
+            if [ -n "$$LINGER_DOMAIN" ] && [ -z "$$answered" ]; then
+              echo "coturn: DNS gave no answer for $$LINGER_DOMAIN in $$patience seconds, so there's no knowing where voice goes. Stopping, so Docker starts the relay again and it asks again." >&2
+              exit 1
             fi
             for ip in $$found; do
               if public "$$ip"; then allow "$$ip"; fi

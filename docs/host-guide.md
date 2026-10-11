@@ -383,7 +383,9 @@ points at, looked up when the relay starts. It also caps each member at ten
 relay ports and each port at 3 Mbit/s, which is three times what the busiest
 call needs. If it has no address to go on (`LINGER_VOICE_ADDRESS=off`, or a
 name that doesn't point at a public address), it carries nothing at all and
-says so in `docker compose --profile voice logs coturn`.
+says so in `docker compose --profile voice logs coturn`. If DNS doesn't answer
+at all for a minute (at boot, say), the relay stops and Docker starts it again
+to ask again.
 
 Said yes to the relay in the setup script? It's set up and running: skip to
 step 4 to check it. Otherwise, run these steps **on the server**, inside the
@@ -539,11 +541,14 @@ on its old version.
 script, or by hand from 0.4.9, keeps every setting in `.env`, so a newer copy
 of either file can replace the old one as it is:
 `curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml`
-(and the same for `Caddyfile`), then `./update.sh`. `update.sh` never replaces
-them itself, since `compose.yaml` can hold a version you chose, but it says
-when you run the relay with a `compose.yaml` from before the relay was kept
-to voice (#501): get the new one then. If you had changed its `image:` line
-to stay on a version, change the new file's line the same way.
+(and the same for `Caddyfile`), then `./update.sh`.
+
+`update.sh` never replaces either file itself, since `compose.yaml` can hold a
+version you chose. But when you run the relay with a `compose.yaml` from before
+the relay was kept to voice (#501), it says so at the end and prints the
+command that gets the one from the release your server now runs. If you had
+changed the `image:` line to stay on a version, change the new file's line the
+same way.
 
 **Moving an older server's settings into `.env`.** A server set up before
 0.4.9 has its settings written into `compose.yaml` and its name into the
@@ -617,7 +622,9 @@ For people on a network that blocks voice, the relay has to be running. Run
   `compose.yaml` produces `unrecognized option '--no-dtls'`, remove only the
   `--no-dtls` line from that file. Current coturn leaves DTLS listeners off
   by default. Run `docker compose --profile voice up -d` after either fix
-  and check that coturn stays Up.
+  and check that coturn stays Up. `DNS gave no answer` means the server
+  can't look your name up: the relay keeps trying, a minute at a time, and
+  `LINGER_VOICE_ADDRESS` in `.env` with your public IP saves it the lookup.
 - **Stays Up, but voice says `can't reach`:** check inbound TCP/UDP 3478 and
   UDP 49160–49200 in both firewalls (and router forwarding at home). After
   changing `.env`, run `docker compose --profile voice up -d` to apply the

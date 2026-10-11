@@ -656,7 +656,8 @@ and the internet as the host. Voice only ever needs the server's voice address, 
 lets through only that one (`--allowed-peer-ip`, which coturn checks first): the IP in
 `LINGER_VOICE_ADDRESS`, or with it unset the public addresses `LINGER_DOMAIN` points at,
 looked up when the relay starts, as the server does. No address, or `off`, and it relays
-nothing. It relays UDP only (`--no-tcp-relay`), holds one password to ten relay ports
+nothing; a name DNS doesn't answer for within a minute stops it, so Docker restarts it to
+ask again rather than leaving it relaying nothing. It relays UDP only (`--no-tcp-relay`), holds one password to ten relay ports
 (`--user-quota`) and one port to 3 Mbit/s (`--max-bps`). The server gives a member the
 same password all hour (`turn.rs`), so the quota counts a person, and hands out at most
 20 a minute per member.

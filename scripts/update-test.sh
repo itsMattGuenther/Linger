@@ -19,11 +19,12 @@ mkdir -p "$work/bin"
 cat >"$work/bin/docker" <<'FAKE'
 #!/usr/bin/env bash
 # Answers from $FAKE: config, relay, running, running_image, tag_image,
-# remote_image, broken. Image ids sha256:old and sha256:new are 0.4.3 and 0.4.4.
+# remote_image, broken. Image ids sha256:old, sha256:new and sha256:next are
+# 0.4.3, 0.4.4 and 0.4.11.
 set -euo pipefail
 S="$FAKE"
 echo "docker $*" >>"$S/log"
-version_of() { case "$1" in sha256:old) echo 0.4.3 ;; sha256:new) echo 0.4.4 ;; esac; }
+version_of() { case "$1" in sha256:old) echo 0.4.3 ;; sha256:new) echo 0.4.4 ;; sha256:next) echo 0.4.11 ;; esac; }
 args=("$@")
 if [[ "${args[0]}" == compose ]]; then
   args=("${args[@]:1}")
@@ -196,22 +197,35 @@ cp "$repo/deploy/compose.yaml" "$dir/compose.yaml"
 run
 check "the shipped compose.yaml's relay gets no warning" lacks "#501"
 
+# The compose.yaml to get is the one from the release the server now runs
+# (#507): 0.4.11 here, the first that can have the rule.
 setup relayold
 touch "$FAKE/relay"
 grep -v -- '--denied-peer-ip' "$repo/deploy/compose.yaml" >"$dir/compose.yaml"
+echo sha256:next >"$FAKE/remote_image"
 run
 check "a relay without the peer rule updates" test "$code" -eq 0
 check "it warns about the relay" has "not just to voice (#501)"
-check "it says how to get the new compose.yaml" \
-  has "curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml"
+check "it says how to get the release's compose.yaml" \
+  has "curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/v0.4.11/deploy/compose.yaml"
+check "never main's, which can be ahead of the release" lacks "Linger/main/deploy"
+
+setup relayolder
+touch "$FAKE/relay"
+grep -v -- '--denied-peer-ip' "$repo/deploy/compose.yaml" >"$dir/compose.yaml"
+run
+check "a server from before the rule gets no file to fetch" lacks "curl -fLO"
+check "it says which releases have it" has "It comes with the releases after 0.4.10, and this server runs 0.4.4."
 
 setup relaypinned
 touch "$FAKE/relay"
 grep -v -- '--denied-peer-ip' "$repo/deploy/compose.yaml" >"$dir/compose.yaml"
-config "$VOICE" ghcr.io/itsmattguenther/linger:0.4.3 >"$FAKE/config"
-echo sha256:old >"$FAKE/remote_image"
+config "$VOICE" ghcr.io/itsmattguenther/linger:0.4.11 >"$FAKE/config"
+echo sha256:next >"$FAKE/remote_image"
 run
-check "a pinned version is kept in the advice" has "to stay on ghcr.io/itsmattguenther/linger:0.4.3, change it back first"
+check "a pinned server gets its own release's file" \
+  has "curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/v0.4.11/deploy/compose.yaml"
+check "a pinned version is kept in the advice" has "to stay on ghcr.io/itsmattguenther/linger:0.4.11, change it back first"
 
 # --- The new server never answers -----------------------------------------------
 

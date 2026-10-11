@@ -15,13 +15,15 @@ export LINGER_DOMAIN=relay.test
 dir="$(mktemp -d)"
 cp deploy/compose.yaml "$dir/"
 : >"$dir/.env"
+# Isolate the test from the host network and publish no ports: Docker's own
+# network, or (for the case DNS never answers) none at all.
+network=bridge
 compose() {
   timeout 120s docker compose --env-file /dev/null --project-name "$project" \
-    -f "$dir/compose.yaml" -f - --profile voice "$@" <<'YAML'
+    -f "$dir/compose.yaml" -f - --profile voice "$@" <<YAML
 services:
   coturn:
-    # Isolate the test from the host network; publish no ports.
-    network_mode: bridge
+    network_mode: $network
     restart: "no"
 YAML
 }
@@ -105,8 +107,9 @@ if ! grep -q 'error 403' <<<"$output" || grep -qE 'tot_recv_msgs=[1-9]' <<<"$out
 fi
 echo "coturn refused another address (403)"
 
-# With no address to go on (the name doesn't point anywhere, as relay.test
-# doesn't), the relay carries nothing at all rather than anything at all.
+# With no address to go on (DNS answers that the name doesn't exist, as it
+# does for relay.test), the relay carries nothing at all rather than anything
+# at all.
 spare="$(compose run -d --no-deps -e LINGER_VOICE_ADDRESS= coturn)"
 # It looks the name up first, then starts: wait for it to be listening.
 logs=""
@@ -125,6 +128,22 @@ if ! grep -q 'error 403' <<<"$output" || grep -qE 'tot_recv_msgs=[1-9]' <<<"$out
   exit 1
 fi
 echo "coturn with no voice address refused everything (403)"
+
+# A name DNS never answers for, as at a boot where the relay starts before
+# DNS does: the relay stops, rather than carry nothing all day, so Docker
+# starts it again to ask again. No network at all here, and five seconds'
+# patience instead of the minute.
+network=none
+if output="$(compose run --rm --no-deps -e LINGER_VOICE_ADDRESS= -e LINGER_RELAY_LOOKUP_WAIT=5 coturn 2>&1)"; then
+  printf 'coturn kept going without an answer from DNS:\n%s\n' "$output" >&2
+  exit 1
+fi
+network=bridge
+if [[ "$output" != *"coturn: DNS gave no answer for relay.test"* ]]; then
+  printf 'unexpected failure with no answer from DNS:\n%s\n' "$output" >&2
+  exit 1
+fi
+echo "coturn stopped when DNS never answered, for Docker to start it again"
 
 # The same entrypoint must still reject a missing shared secret.
 if output="$(compose run --rm --no-deps -e LINGER_TURN_SECRET= coturn 2>&1)"; then
