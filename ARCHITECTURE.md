@@ -633,9 +633,13 @@ door.
 this server sits on a home LAN next to a router admin page. `links.rs` fetches them, and
 the rules are: `http(s)` on default ports only; the hostname is resolved by the server and
 the whole name refused if **any** address it answers with is private, loopback,
-link-local (which is where cloud metadata services live), CGNAT or reserved; the
-connection is then pinned to the address that was checked, so the name cannot resolve to
-something else in between; redirects are followed by hand, three at most, every hop
+link-local (which is where cloud metadata services live), CGNAT or reserved, however
+the address is written. An IPv6 address that carries an IPv4 one in a fixed place
+(v4-mapped `::ffff:a.b.c.d`, v4-compatible `::a.b.c.d`, NAT64 `64:ff9b::/96`, 6to4
+`2002::/16`) is judged by the IPv4 address inside; Teredo `2001::/32`, local-use NAT64
+`64:ff9b:1::/48`, site-local `fec0::/10` and anything else outside global unicast
+`2000::/3` are refused outright. The connection is then pinned to the address that was
+checked, so the name cannot resolve to something else in between; redirects are followed by hand, three at most, every hop
 re-checked; time and bytes are both capped and the body is read in chunks. Nothing the
 response says is trusted either — the HTML is scanned for a title and an icon href by a
 small tag reader and never rendered, and an icon is kept only if its *bytes* sniff as a
