@@ -431,6 +431,74 @@ async fn a_read_marker_never_moves_backwards() {
     );
 }
 
+/// Make every new read marker fail, or stop doing so. The sender's read
+/// marker is the last thing a post writes, so this fails a post at its very
+/// end, after the message, its links and its files are written.
+async fn refuse_read_markers(server: &common::TestServer, refuse: bool) {
+    let sql = if refuse {
+        "CREATE TRIGGER refuse_read_markers BEFORE INSERT ON read_markers
+         BEGIN SELECT RAISE(ABORT, 'refused by the test'); END"
+    } else {
+        "DROP TRIGGER refuse_read_markers"
+    };
+    sqlx::query(sql)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+}
+
+async fn count(server: &common::TestServer, table: &str) -> i64 {
+    sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap()
+}
+
+/// #524: a post that fails partway leaves nothing behind. Each of a post's
+/// writes used to be saved on its own, so one that failed at the read marker
+/// left the message in the room while the sender was told it hadn't sent,
+/// and pressing Retry posted it twice.
+#[tokio::test]
+async fn a_post_that_fails_partway_leaves_nothing_behind() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let room_id = room.id.to_string();
+    let (messages, links) = (
+        count(&server, "messages").await,
+        count(&server, "message_links").await,
+    );
+
+    refuse_read_markers(&server, true).await;
+    let body = "the parts list: https://example.com/parts";
+    let resp = reqwest::Client::new()
+        .post(server.url(&format!("/rooms/{room_id}/messages")))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "body": body }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 500);
+    assert_eq!(
+        count(&server, "messages").await,
+        messages,
+        "the message stayed"
+    );
+    assert_eq!(
+        count(&server, "message_links").await,
+        links,
+        "its link stayed"
+    );
+    assert!(fetch(&server, &host.access_token, &room_id, "")
+        .await
+        .is_empty());
+
+    // Retry, once whatever failed has passed, posts it once.
+    refuse_read_markers(&server, false).await;
+    let sent = send(&server, &host.access_token, &room_id, body).await;
+    let page = fetch(&server, &host.access_token, &room_id, "").await;
+    assert_eq!(page.iter().map(|m| m.id).collect::<Vec<_>>(), vec![sent.id]);
+    assert_eq!(count(&server, "message_links").await, links + 1);
+}
+
 #[tokio::test]
 async fn message_send_is_rate_limited() {
     let (server, host, room) = common::server_with_room("garage").await;

@@ -290,6 +290,68 @@ async fn an_image_goes_up_gets_described_and_lands_on_a_message() {
     assert_eq!(page[0].attachments.len(), 1);
 }
 
+/// #524: a post that fails partway doesn't keep the file it carried. The
+/// file used to be tied to a message that was saved anyway, so Retry was
+/// told the file was already on a message, and the photo turned up later on
+/// a post its sender had been told didn't send.
+#[tokio::test]
+async fn a_post_that_fails_partway_leaves_its_file_for_the_retry() {
+    let (server, host, room) = server_with_room("general").await;
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "holiday.png",
+        "image/png",
+        png(64, 48),
+    )
+    .await;
+    let post = || {
+        client()
+            .post(server.url(&format!("/rooms/{}/messages", room.id)))
+            .bearer_auth(&host.access_token)
+            .json(&serde_json::json!({ "body": "", "attachment_ids": [attachment.id] }))
+            .send()
+    };
+
+    // The sender's read marker is the last thing a post writes: refusing it
+    // fails the post after the file has been tied to the message.
+    sqlx::query(
+        "CREATE TRIGGER refuse_read_markers BEFORE INSERT ON read_markers
+         BEGIN SELECT RAISE(ABORT, 'refused by the test'); END",
+    )
+    .execute(&server.state.db.write)
+    .await
+    .unwrap();
+    assert_eq!(post().await.unwrap().status(), 500);
+    sqlx::query("DROP TRIGGER refuse_read_markers")
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+
+    let resp = post().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        200,
+        "the retry was refused: {}",
+        resp.text().await.unwrap()
+    );
+    let posted: Message = resp.json().await.unwrap();
+    assert_eq!(posted.attachments[0].id, attachment.id);
+    let page: Vec<Message> = client()
+        .get(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        page.iter().map(|m| m.id).collect::<Vec<_>>(),
+        vec![posted.id]
+    );
+}
+
 /// A voice message (#401): Opus in WebM, as the app records it. The sniffer
 /// calls any WebM a video, so this is the case that proves one declared as
 /// sound goes up as sound and is played in place.

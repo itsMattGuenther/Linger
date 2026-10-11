@@ -130,6 +130,12 @@ async fn create(
     }
 
     let id = MessageId::new();
+    let links = crate::links::extract(&body);
+    // Everything posting writes is one transaction (#524): a failure partway
+    // leaves nothing behind, rather than a saved message the sender was told
+    // didn't send, and posts again when they press Retry. It is also one
+    // commit instead of one per write. Nothing slow happens inside it.
+    let mut tx = state.db.write.begin().await?;
     sqlx::query(
         "INSERT INTO messages (id, room_id, author_id, body, reply_to, created_at)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -140,14 +146,14 @@ async fn create(
     .bind(&body)
     .bind(req.reply_to.map(|r| r.to_vec()))
     .bind(now_ms())
-    .execute(&state.db.write)
+    .execute(&mut *tx)
     .await?;
 
     // What the message links to, recorded as it is posted so the media grid's
     // links are a table read rather than a scan of every body ever written
     // (SPEC §4.4). The cards themselves are filled in later, on demand, by
     // `POST /links/preview` — nothing here touches the network.
-    repo::links::replace_for_message(&state.db.write, id, &crate::links::extract(&body)).await?;
+    repo::links::replace_for_message(&mut tx, id, &links).await?;
 
     // Attaching is the last step of the upload pipeline (ARCHITECTURE §8): the
     // file has been stored and checked for a while by now, and this is the
@@ -156,7 +162,7 @@ async fn create(
         sqlx::query("UPDATE attachments SET message_id = ? WHERE id = ? AND message_id IS NULL")
             .bind(id.to_vec())
             .bind(attachment_id.to_vec())
-            .execute(&state.db.write)
+            .execute(&mut *tx)
             .await?;
     }
 
@@ -164,7 +170,8 @@ async fn create(
     // look new on any of your devices (#454). Moved here rather than left to
     // the sending device, whose debounced write is lost when a phone is put
     // away straight after sending.
-    advance_read_marker(&state, auth.id, room_id, id).await?;
+    advance_read_marker(&mut *tx, auth.id, room_id, id).await?;
+    tx.commit().await?;
 
     let message = repo::messages::expect(&state.db.read, &state.config, id).await?;
     state
@@ -278,7 +285,12 @@ async fn edit(
 
     // An edit that takes a link out takes its card out of the collection too.
     // The archive follows what the message says now, not what it once said.
-    repo::links::replace_for_message(&state.db.write, id, &crate::links::extract(&body)).await?;
+    repo::links::replace_for_message(
+        &mut *state.db.write.acquire().await?,
+        id,
+        &crate::links::extract(&body),
+    )
+    .await?;
 
     let message = repo::messages::expect(&state.db.read, &state.config, id).await?;
     state
@@ -512,7 +524,7 @@ async fn put_read_marker(
     if message.room_id != room_id {
         return Err(ApiError::validation("That message isn't in that room."));
     }
-    advance_read_marker(&state, auth.id, room_id, req.last_read_id).await?;
+    advance_read_marker(&state.db.write, auth.id, room_id, req.last_read_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -523,8 +535,11 @@ async fn put_read_marker(
 /// back with an older position must not pull back what the desktop has
 /// already read (#454). Message ids are UUIDv7, and SQLite compares blobs
 /// byte by byte, so `>` on the column is "posted later".
-pub(crate) async fn advance_read_marker(
-    state: &AppState,
+///
+/// Takes the write pool, or the transaction a post is written in, so a
+/// message and its sender's marker are saved together (#524).
+pub(crate) async fn advance_read_marker<'e>(
+    db: impl sqlx::SqliteExecutor<'e>,
     user_id: UserId,
     room_id: RoomId,
     message_id: MessageId,
@@ -540,7 +555,7 @@ pub(crate) async fn advance_read_marker(
     .bind(room_id.to_vec())
     .bind(message_id.to_vec())
     .bind(now_ms())
-    .execute(&state.db.write)
+    .execute(db)
     .await?;
     Ok(())
 }

@@ -277,6 +277,13 @@ in the `complete` state, and not already be on another message; at most
 somebody else's attachment id is `FORBIDDEN`, and reusing one that is already
 posted is `CONFLICT`.
 
+A post is all or nothing: the message, the links it holds, its files and the
+sender's read marker are saved in one transaction (#524). A post that fails
+left nothing behind, so sending it again doesn't post it twice, and its files
+are still free to send. There is no idempotency key, though: if the answer is
+lost on the way back after the server saved the message, a retry does post it
+twice. The `message.create` frame is how a client can tell it landed.
+
 `reply_to` must reference a message in the same room. Pin/unpin is any member;
 there is no pin hierarchy.
 
