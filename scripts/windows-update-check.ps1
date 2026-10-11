@@ -260,3 +260,40 @@ foreach ($kind in @('msi', 'nsis')) {
         Write-Output "PASS $kind ${scenario}: desktop choice, executable version and uninstall"
     }
 }
+
+# Windows opens a program for a moment now and then: Explorer to read its
+# icon, the compatibility scanner after an install. An NSIS update that met
+# that stopped on "Error opening file for writing" and waited for a click,
+# and an uninstall left the program behind (#568). The installer hooks
+# (client/src-tauri/windows/installer-hooks.nsh) wait for it instead. Hold
+# the program open the way an icon is read, for two seconds, as an update
+# and then an uninstall start.
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class BusyProgram {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr LoadLibraryEx(string path, IntPtr file, uint flags);
+  [DllImport("kernel32.dll")] static extern bool FreeLibrary(IntPtr module);
+  public static void HoldFor(string path, int milliseconds) {
+    // LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE
+    IntPtr module = LoadLibraryEx(path, IntPtr.Zero, 0x22);
+    if (module == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
+    new Thread(() => { Thread.Sleep(milliseconds); FreeLibrary(module); }) { IsBackground = true }.Start();
+  }
+}
+'@
+Write-Output 'nsis busy: installing'
+$nsisOld = Join-Path $Output 'Linger_0.3.0_x64-setup.exe'
+$nsisNew = @(Get-ChildItem (Join-Path $Bundle 'nsis') -Filter '*-setup.exe')[0].FullName
+$prefix = Join-Path $Output 'nsis-busy'
+Install-Package nsis $nsisOld "$prefix-install.log"
+$exe = @(Get-LingerShortcuts)[0].Target
+[BusyProgram]::HoldFor($exe, 2000)
+Install-Package nsis $nsisNew "$prefix-update.log" -Update
+if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne $version) { throw 'nsis busy: the update did not replace the program' }
+[BusyProgram]::HoldFor($exe, 2000)
+Uninstall-Package nsis $nsisNew $exe "$prefix-uninstall.log"
+if (Test-Path -LiteralPath (Split-Path $exe)) { throw 'nsis busy: the uninstall left the program folder' }
+if (@(Get-LingerShortcuts).Count -ne 0) { throw 'nsis busy: the uninstall left a desktop shortcut' }
+Write-Output 'PASS nsis busy: an update and an uninstall wait for a program something has open'

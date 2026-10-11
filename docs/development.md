@@ -294,7 +294,12 @@ only when it is still present.
 
 The MSI uses `client/src-tauri/windows/main.wxs`, based on the pinned Tauri
 CLI's template with a desktop-shortcut preservation condition. When updating
-Tauri, compare it with the upstream template named in its header. Windows
+Tauri, compare it with the upstream template named in its header. The NSIS
+installer keeps Tauri's template and adds hooks,
+`client/src-tauri/windows/installer-hooks.nsh`: an update waits up to ten
+seconds for a program file something else has open, instead of asking
+([#568](windows-update-checks.md#a-busy-program-during-an-update-568-2026-10-11)).
+Check the hooks against the template when updating Tauri too. Windows
 package checks install the published 0.3.0 MSI, upgrade to the newly built
 package, and check original, renamed, moved and deleted desktop shortcuts,
 including uninstall cleanup. See [the update check](windows-update-checks.md).
