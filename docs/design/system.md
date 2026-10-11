@@ -821,7 +821,10 @@ A video keeps the engine's own controls, which are tall enough to have
 their volume slider. A video
 that can't load says so over its own frame, which keeps its size, with a
 **Load again** button that brings the player back in place and picks up where
-it had got to (#222). Mono type appears only in metadata (times, a link card's
+it had got to (#222). A picture that can't load becomes a file's card: its name, **Load
+again**, and "Couldn't load this picture." under them, never the engine's
+broken-picture icon in an empty frame; in the viewer, the same sentence stands
+in for the original (#512). Mono type appears only in metadata (times, a link card's
 domain), never in words.
 
 **Lines between messages.** Session dividers and "you left off here" use the

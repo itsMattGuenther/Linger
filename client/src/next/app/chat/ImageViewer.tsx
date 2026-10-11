@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Attachment } from "../../../generated/Attachment";
 import { fileNameToShow } from "../../../lib/media";
@@ -14,6 +14,8 @@ import { useBackButton } from "../useBackButton";
 export function ImageViewer({ file, url, onClose }: { file: Attachment; url: string; onClose: () => void }) {
   const close = useRef<HTMLDivElement | null>(null);
   const name = fileNameToShow(file.filename);
+  // The original that can't be loaded says so, not the engine's broken-picture icon (#512).
+  const [failed, setFailed] = useState(false);
   // Android's Back closes the picture first (SPEC §4.15).
   useBackButton(true, onClose);
   useEffect(() => {
@@ -46,7 +48,13 @@ export function ImageViewer({ file, url, onClose }: { file: Attachment; url: str
       <div className="nx-viewer-close" ref={close}>
         <IconButton icon="close" label="Close the picture" shortcut="Esc" tone="filled" onClick={onClose} />
       </div>
-      <img className="nx-viewer-image" src={url} alt={name} />
+      {failed ? (
+        <p className="nx-viewer-failed" role="alert">
+          Couldn't load this picture.
+        </p>
+      ) : (
+        <img className="nx-viewer-image" src={url} alt={name} onError={() => setFailed(true)} />
+      )}
       <p className="nx-viewer-name">{name}</p>
     </div>,
     document.body,

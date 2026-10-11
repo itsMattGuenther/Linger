@@ -51,12 +51,8 @@ function One({
   const name = fileNameToShow(file.filename);
   switch (renderAs(file.mime)) {
     case "image":
-      return (
-        <button type="button" className="nx-att-image" aria-label={`Open ${name}`} onClick={() => onOpenImage(file)}>
-          {/* The smaller copy, where the server made one (#382): the original opens in the viewer. */}
-          <img src={mediaUrl(file.display_url ?? file.url)} alt={name} width={box?.width} height={box?.height} loading="lazy" decoding="async" />
-        </button>
-      );
+      // The smaller copy, where the server made one (#382): the original opens in the viewer.
+      return <Picture name={name} src={mediaUrl(file.display_url ?? file.url)} box={box} onOpen={() => onOpenImage(file)} />;
     case "video":
       return (
         <Video
@@ -78,6 +74,59 @@ function One({
     case "file":
       return <FileCard file={file} url={mediaUrl(file.url)} onDownload={onDownload} />;
   }
+}
+
+/**
+ * A shared picture, in a frame sized before its bytes arrive. One that can't
+ * be loaded (gone from the server, or the connection dropped) says so in a
+ * card, with a way to try again here, rather than the engine's broken-picture
+ * icon in an empty frame (#512).
+ */
+function Picture({
+  name,
+  src,
+  box,
+  onOpen,
+}: {
+  name: string;
+  src: string;
+  box: { width: number; height: number } | null;
+  onOpen: () => void;
+}) {
+  // Each go is a new element, so the engine asks for the picture again.
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const frame = useRef<HTMLButtonElement>(null);
+  // The button that was just pressed goes away; the keyboard lands on the picture.
+  useEffect(() => {
+    if (attempt > 0) frame.current?.focus();
+  }, [attempt]);
+  if (failed) {
+    return (
+      <div className="nx-att-card" data-picture="failed">
+        <Icon name="media" size="md" />
+        <span className="nx-att-name">{name}</span>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            setFailed(false);
+            setAttempt((count) => count + 1);
+          }}
+        >
+          Load again
+        </Button>
+        <p className="nx-att-failed-note" role="alert">
+          Couldn't load this picture.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <button ref={frame} type="button" className="nx-att-image" aria-label={`Open ${name}`} onClick={onOpen}>
+      <img key={attempt} src={src} alt={name} width={box?.width} height={box?.height} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+    </button>
+  );
 }
 
 /**
