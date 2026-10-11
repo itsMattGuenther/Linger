@@ -534,7 +534,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
 7. **Tauri capabilities:** the WebView gets the minimum permission set. Every
    native capability it has is one narrow command in `client/src-tauri/src/`, and
    it has no others — not the updater plugin's own commands, not the keyring, not
-   the socket.
+   the socket. Of the notification plugin, the list window may only ask whether
+   it may notify (`is_permission_granted`, `request_permission`); every banner
+   goes through the app's own `show_notification`, never the plugin's `notify`,
+   which would let a page show any banner it liked (#548, `src/acl.rs`).
 8. **Signed auto-updates.** Tauri's updater, with one minisign key whose public half
    is committed in `client/src-tauri/tauri.conf.json` and whose private half is
    **generated once by `scripts/updater-key.sh` and backed up offline** (T-701).

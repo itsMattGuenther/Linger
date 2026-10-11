@@ -262,6 +262,68 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
     }
 }
 
+/// The notification plugin's permissions a capability file names, plain or
+/// with a scope, as written (`notification:…`).
+fn notification_permissions(text: &str) -> BTreeSet<String> {
+    let capability: serde_json::Value = serde_json::from_str(text).expect("a capability is JSON");
+    capability["permissions"]
+        .as_array()
+        .expect("permissions")
+        .iter()
+        .filter_map(|permission| {
+            permission
+                .as_str()
+                .or_else(|| permission["identifier"].as_str())
+        })
+        .filter(|permission| permission.starts_with("notification:"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn the_list_window_can_ask_about_notifications_but_never_show_one_itself() {
+    // Every banner goes through the app's own show_notification
+    // (src/notifications.rs), which escapes Linux markup (#489) and plays no
+    // second chime. The plugin's own `notify`, which `notification:default`
+    // includes, would let a page show any banner it liked (#548). What's left
+    // is the two questions `isPermissionGranted` and `requestPermission` ask
+    // (the plugin's start-up script asks the first one too), and only the
+    // list window, which alone notifies, asks them.
+    const ASKING: &[&str] = &[
+        "notification:allow-is-permission-granted",
+        "notification:allow-request-permission",
+    ];
+    for (file, text) in CAPABILITIES {
+        let notification = notification_permissions(text);
+        if notification.is_empty() {
+            continue;
+        }
+        for permission in &notification {
+            assert!(
+                ASKING.contains(&permission.as_str()),
+                "{file} grants {permission}; a page may only ask whether it may notify"
+            );
+        }
+        let capability: serde_json::Value =
+            serde_json::from_str(text).expect("a capability is JSON");
+        assert!(
+            platforms(text) == DESKTOP && capability["windows"] == serde_json::json!(["main"]),
+            "{file} grants {notification:?} to a window other than the desktop list window"
+        );
+    }
+    let main: BTreeSet<String> = CAPABILITIES
+        .iter()
+        .filter(|(_, text)| platforms(text) == DESKTOP)
+        .flat_map(|(_, text)| notification_permissions(text))
+        .collect();
+    for permission in ASKING {
+        assert!(
+            main.contains(*permission),
+            "the list window can't ask about notifications without {permission}"
+        );
+    }
+}
+
 #[test]
 fn a_capability_for_main_names_no_other_window() {
     // Granting the owner's commands in a file that also names a viewer would
