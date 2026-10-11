@@ -787,7 +787,10 @@ replaces an unread count.
   (Join, Move voice here, Start talking, Talk here instead). In the room
   you're in voice in, it ends with your Mute, Deafen and Leave voice as small
   plain `IconButton`s (#216), the same symbols, sizes and spacing as the
-  list's voice bar (#230); the word is each one's name and tooltip. Chips
+  list's voice bar (#230); the word is each one's name and tooltip. Join and
+  Leave redraw the buttons under the pointer (Deafen where Join was, Join
+  where Leave was), so a double-click on the strip is one click, and for
+  400 ms after either a click there doesn't count (#510). Chips
   that don't fit are cut at the end of the list of people. The list cuts on
   every side and a chip is as tall as it, so a glowing name's light stays
   inside its chip's border; across the chip it fades out as in the list's

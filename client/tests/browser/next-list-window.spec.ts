@@ -798,6 +798,45 @@ test("with push-to-talk, the key makes no sound, and a Mute you choose does, as 
   await expect.poll(sounds).toEqual(["mute"]);
 });
 
+// Join and Leave redraw the strip's buttons under the pointer: Deafen where
+// Join was, Join where Leave was. A double-click's second click was meant
+// for the button that was there, and does nothing (#510).
+test("a double-click on the strip's Join joins once, neither muted nor deafened; one on Leave leaves without joining again (#510)", async ({ page }) => {
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await open(page, "?one");
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const yours = strip.getByRole("group", { name: "Your voice" });
+  const joins = async () => (await did(page)).filter((line) => line.startsWith("voice_join:"));
+  // Every set of controls the voice engine was told, in order.
+  const told = async () =>
+    (await did(page)).filter((line) => line.startsWith("voice_controls:")).map((line) => (JSON.parse(line.slice("voice_controls:".length)) as { controls: unknown }).controls);
+
+  await strip.getByRole("button", { name: "Join", exact: true }).dblclick();
+  await expect(yours).toBeVisible();
+  // Well past anything the second click could have set off.
+  await page.waitForTimeout(500);
+  expect(await joins()).toHaveLength(1);
+  await expect(yours.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(yours.getByRole("button", { name: "Deafen", exact: true })).toHaveAttribute("aria-pressed", "false");
+  expect(await told()).toEqual([{ muted: false, deafened: false }]);
+
+  // A click a moment later is a click again.
+  await yours.getByRole("button", { name: "Mute", exact: true }).click();
+  await expect(yours.getByRole("button", { name: "Muted", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(told).toEqual([
+    { muted: false, deafened: false },
+    { muted: true, deafened: false },
+  ]);
+
+  await page.waitForTimeout(500);
+  await yours.getByRole("button", { name: "Leave voice", exact: true }).dblclick();
+  await expect(strip.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(yours).toHaveCount(0);
+  expect(await joins()).toHaveLength(1);
+});
+
 // The foot's standing lines (decision 1): said only while true.
 const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
 
