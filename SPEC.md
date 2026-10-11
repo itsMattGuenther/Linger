@@ -504,6 +504,20 @@ nothing about where they go and are left alone. Names are compared as the comput
 reads them, so words in look-alike letters (a Cyrillic `а`) show the real name in
 its `xn--` form. No warning, no dialog, no list of bad sites.
 
+**A written time reads in your clock.** A time written with a zone in a message, a
+room's message of the day or a poll ("8PM CDT", "20:00 UTC", "9pm Eastern") is
+faintly underlined, and pointing at it, focusing it or tapping it says what it is
+for the reader: "9:00 PM for you", with "the next day" or "the day before" when it
+falls on another date (#584). It has to be a clock time (`8PM`, `8:30`, `20:00`; a
+bare `8` is not one) followed by a zone that means one place: abbreviations that mean
+several (CST, IST, BST) are left alone rather than guessed. The time is placed on the
+day the words were written, in the writer's zone, so summer time is the summer's.
+US abbreviations read as the place they name (EST in July is New York's clock, as
+nearly everybody who writes it means), except MST and HST, which Arizona and Hawaii
+keep all year. The app reads the words already on screen: nothing is stored, nothing
+crosses the wire, and old messages get it too. Nobody's own zone is shared; showing
+your local time on your card is a separate, off-by-default idea (#604).
+
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface
 scale is an optional reading preference, not a requirement for a usable layout.

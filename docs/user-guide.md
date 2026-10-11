@@ -431,6 +431,12 @@ link's words look like one web address and it goes somewhere else, the real site
 shows beside the words in grey, like **www.paypal.com** (evil.example), so you can
 tell without pointing at it.
 
+A time written with a zone, like "8PM CDT" or "20:00 UTC", has a faint dotted
+underline. Point at it, or tap it on a phone, to see it in your own clock: "9:00
+PM for you", or "3:00 AM for you, the next day". It works in messages, a room's
+message of the day and polls. Zones that could mean more than one place, like CST
+(US Central or China) or IST, are left alone.
+
 To mention somebody, type `@` and start their name or their username. A list
 of people opens by the box: **Up** and **Down** move through it, **Enter** or
 **Tab** (or a click) puts them in, and **Escape** closes it and keeps what you

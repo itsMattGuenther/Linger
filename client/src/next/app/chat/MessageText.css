@@ -85,6 +85,14 @@
   color: var(--text-secondary);
 }
 
+/* A time written with a zone (#584): faintly underlined, and pointing at it
+   says what it is in the reader's clock. */
+.nx-text-time {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--text-muted);
+  text-underline-offset: var(--space-0-5);
+}
+
 .nx-mention {
   color: var(--text-secondary);
   font-weight: 600;

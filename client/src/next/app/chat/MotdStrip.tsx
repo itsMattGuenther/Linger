@@ -56,7 +56,7 @@ export const MotdStrip = memo(function MotdStrip({
     <div className="nx-motd" role="note" aria-label="Message of the day" data-folded={folded ? "yes" : undefined}>
       <Icon name="pin" size="sm" />
       <div className="nx-motd-words">
-        <MessageText source={motd.text} mentions={mentions} emoji={emoji} onOpenLink={onOpenLink} />
+        <MessageText source={motd.text} mentions={mentions} emoji={emoji} onOpenLink={onOpenLink} writtenAt={motd.set_at} />
         {folded ? null : (
           <p className="nx-motd-by">
             Message of the day, set by {by ? <Name person={by} size="inline" /> : "someone"}

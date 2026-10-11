@@ -1,7 +1,9 @@
-import { type MouseEvent, type ReactNode, memo, useMemo } from "react";
+import { type MouseEvent, type ReactNode, memo, useMemo, useState } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import { disguisedHost } from "../../../lib/linkHost";
 import { type Block, type Inline, flattenInline, parseMarkdown } from "../../../lib/markdown";
+import { type FoundTime, findTimes, forYou } from "../../../lib/writtenTime";
+import { TooltipBubble } from "../../kit";
 import "./MessageText.css";
 import { useEmojiIndex } from "./useEmojiIndex";
 
@@ -35,6 +37,9 @@ const EMOJI_RUN =
  * Links never open in the app: a click is handed to `onOpenLink`, which sends
  * it to the system browser. `trailing` rides inside the last paragraph, so a
  * small "edited" stays on the words' last line.
+ *
+ * With `writtenAt`, a time written with a zone ("8PM CDT") is read in the
+ * reader's own clock, placed on the day the words were written (#584).
  */
 export const MessageText = memo(function MessageText({
   source,
@@ -42,6 +47,7 @@ export const MessageText = memo(function MessageText({
   emoji: custom = NO_EMOJI,
   onOpenLink,
   trailing,
+  writtenAt,
 }: {
   source: string;
   mentions: MentionLookup;
@@ -49,6 +55,8 @@ export const MessageText = memo(function MessageText({
   emoji?: CustomEmojiByName;
   onOpenLink: (href: string) => void;
   trailing?: ReactNode;
+  /** When the words were written, in milliseconds: the day their times fall on. */
+  writtenAt?: number;
 }) {
   const blocks = useMemo(() => parseMarkdown(source), [source]);
   // The emoji list loads only for a message that names one it might hold.
@@ -63,7 +71,7 @@ export const MessageText = memo(function MessageText({
   const jumbo = isJumbo(blocks, emojiOf);
   const last = blocks.length - 1;
   const inline = trailing !== undefined && blocks[last]?.kind === "paragraph";
-  const ctx: Ctx = { mentions, emojiOf, onOpenLink };
+  const ctx: Ctx = { mentions, emojiOf, onOpenLink, writtenAt };
   return (
     <div className="nx-text" data-jumbo={jumbo ? "yes" : undefined}>
       {blocks.map((block, index) => (
@@ -78,6 +86,8 @@ interface Ctx {
   mentions: MentionLookup;
   emojiOf: (name: string) => EmojiFound;
   onOpenLink: (href: string) => void;
+  /** When the words were written; times are read only when it's known, and never in a link's words. */
+  writtenAt: number | undefined;
 }
 
 /** Every `:name:` in the message, outside code. */
@@ -182,7 +192,7 @@ function Inlines({ nodes, ctx }: { nodes: readonly Inline[]; ctx: Ctx }) {
 function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
   switch (node.kind) {
     case "text":
-      return <>{node.text}</>;
+      return ctx.writtenAt === undefined ? <>{node.text}</> : <WrittenTimes text={node.text} writtenAt={ctx.writtenAt} />;
     case "mention": {
       // Read by the name people know (#267): "@Justin B", in the mention's
       // own highlight rather than their name's style, with the handle that
@@ -244,7 +254,7 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
             ctx.onOpenLink(node.href);
           }}
         >
-          <Inlines nodes={node.children} ctx={ctx} />
+          <Inlines nodes={node.children} ctx={{ ...ctx, writtenAt: undefined }} />
         </a>
       );
       if (real === null) return link;
@@ -258,4 +268,83 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
       );
     }
   }
+}
+
+/**
+ * Words with the times written in them marked (#584), or just the words.
+ * Also for a poll's words. `still` is for words inside a control (a poll's
+ * choice): pointing still says the time, but it takes no focus or click of
+ * its own, since the control's click is what that place is for.
+ */
+export function WrittenTimes({ text, writtenAt, still = false }: { text: string; writtenAt: number; still?: boolean }) {
+  const times = findTimes(text, writtenAt);
+  if (times.length === 0) return <>{text}</>;
+  const pieces: ReactNode[] = [];
+  let from = 0;
+  for (const [index, time] of times.entries()) {
+    if (time.start > from) pieces.push(text.slice(from, time.start));
+    pieces.push(<WrittenTime key={index} words={text.slice(time.start, time.end)} time={time} still={still} />);
+    from = time.end;
+  }
+  if (from < text.length) pieces.push(text.slice(from));
+  return <>{pieces}</>;
+}
+
+/**
+ * A written time, faintly underlined (#584). Pointing at it or focusing it
+ * says what it is in the reader's clock; a click or a tap keeps that open
+ * until the next one, or until it loses focus, since a phone can't point. A
+ * screen reader hears it after the words.
+ */
+function WrittenTime({ words, time, still }: { words: string; time: FoundTime; still: boolean }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [kept, setKept] = useState(false);
+  const said = forYou(time);
+  if (still) {
+    return (
+      <>
+        <time className="nx-text-time" dateTime={new Date(time.at).toISOString()} onPointerEnter={(event) => setAnchor(event.currentTarget)} onPointerLeave={() => setAnchor(null)}>
+          {words}
+          <span className="k-sr-only"> ({said})</span>
+        </time>
+        {anchor ? <TooltipBubble anchor={anchor}>{said}</TooltipBubble> : null}
+      </>
+    );
+  }
+  return (
+    <>
+      <time
+        className="nx-text-time"
+        dateTime={new Date(time.at).toISOString()}
+        tabIndex={0}
+        onPointerEnter={(event) => setAnchor(event.currentTarget)}
+        onPointerLeave={() => {
+          if (!kept) setAnchor(null);
+        }}
+        onFocus={(event) => {
+          if (event.currentTarget.matches(":focus-visible")) setAnchor(event.currentTarget);
+        }}
+        onBlur={() => {
+          setKept(false);
+          setAnchor(null);
+        }}
+        onClick={(event) => {
+          setKept(!kept);
+          setAnchor(kept ? null : event.currentTarget);
+        }}
+        onKeyDown={(event) => {
+          // Escape puts away an open time first, and only that.
+          if (event.key === "Escape" && anchor !== null) {
+            event.stopPropagation();
+            setKept(false);
+            setAnchor(null);
+          }
+        }}
+      >
+        {words}
+        <span className="k-sr-only"> ({said})</span>
+      </time>
+      {anchor ? <TooltipBubble anchor={anchor}>{said}</TooltipBubble> : null}
+    </>
+  );
 }

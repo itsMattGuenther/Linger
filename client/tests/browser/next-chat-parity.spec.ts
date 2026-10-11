@@ -213,6 +213,33 @@ test.describe("what a message says", () => {
     await expect(honest.locator(".nx-text-link-real")).toHaveCount(0);
   });
 
+  test.describe("a time written with a zone, read in your clock (#584)", () => {
+    // Somewhere with no summer time, so the answer doesn't move with the date.
+    test.use({ timezoneId: "Asia/Kolkata", locale: "en-US" });
+
+    test("is underlined, and pointing at it or tapping it says it in your clock", async ({ page }) => {
+      await open(page);
+      const text = row(page, await post(page, "Raid starts 20:00 UTC, dungeon at 1:00 PM UTC. Not at 8 PT, and `9pm UTC` is code.")).locator(".nx-text");
+      const times = text.locator("time.nx-text-time");
+      // The two clock times with a zone; a bare number and code are words.
+      await expect(times).toHaveCount(2);
+      await expect(times.first()).toContainText("20:00 UTC");
+      // A screen reader hears it after the words.
+      await expect(times.first().locator(".k-sr-only")).toHaveText(" (1:30 AM for you, the next day)");
+      const tip = page.locator(".k-tooltip");
+      await times.first().hover();
+      await expect(tip).toHaveText("1:30 AM for you, the next day");
+      await page.mouse.move(0, 0);
+      await expect(tip).toHaveCount(0);
+      // A click keeps it open after the pointer leaves, as a tap does on a phone.
+      await times.nth(1).click();
+      await page.mouse.move(0, 0);
+      await expect(tip).toHaveText("6:30 PM for you");
+      await page.keyboard.press("Escape");
+      await expect(tip).toHaveCount(0);
+    });
+  });
+
   test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
     await open(page);
     // Typed as the report did: a line, Shift+Enter, the next line, Enter.
