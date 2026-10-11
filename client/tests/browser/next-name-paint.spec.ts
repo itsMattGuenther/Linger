@@ -396,12 +396,14 @@ test.describe("a name reads the same in a message and on its card (#272)", () =>
 });
 
 // For people to look at, not asserted on: each look in a message and on the
-// card, at 100% and 200%.
+// card, at 100% and 200%. One sheet a test: all seven in one opened the page
+// seven times and took up to 15 seconds on CI, and under load ran out of its
+// 30 (#528).
 for (const scale of [1, 2]) {
   test.describe(`at ${scale * 100}%`, () => {
     test.use({ deviceScaleFactor: scale });
-    test("review sheet", async ({ page }) => {
-      for (const [label, look, face] of LOOKS) {
+    for (const [label, look, face] of LOOKS) {
+      test(`review sheet: ${label}`, async ({ page }) => {
         await open(page, eliIn(look, face));
         await openCard(page);
         const [from, to] = [await inChat(page).boundingBox(), await card(page).boundingBox()];
@@ -414,7 +416,7 @@ for (const scale of [1, 2]) {
           clip: { x, y, width: Math.max(from.x + from.width, to.x + to.width) + 16 - x, height: Math.max(from.y + from.height, to.y + to.height) + 16 - y },
           animations: "disabled",
         });
-      }
-    });
+      });
+    }
   });
 }

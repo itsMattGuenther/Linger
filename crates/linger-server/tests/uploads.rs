@@ -353,6 +353,39 @@ async fn a_plain_file_is_handed_over_as_a_download() {
         .starts_with("attachment;"));
 }
 
+/// A program can't come in dressed as a document (#488). `invoice`, U+202E
+/// and `fdp.exe` would read "invoiceexe.pdf" on its card, in Media and in
+/// Search, and in the browser's downloads. The name is stored, shown and
+/// downloaded without it.
+#[tokio::test]
+async fn a_file_name_cannot_turn_itself_around() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "invoice\u{202E}fdp.exe",
+        "text/plain",
+        b"not a document\n".to_vec(),
+    )
+    .await;
+    assert_eq!(attachment.filename, "invoicefdp.exe");
+
+    let served = client()
+        .get(absolute(&server, &attachment.url))
+        .send()
+        .await
+        .unwrap();
+    let disposition = served.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        disposition.ends_with("UTF-8''invoicefdp.exe"),
+        "{disposition}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Serving part of a file (#222)
 // ---------------------------------------------------------------------------

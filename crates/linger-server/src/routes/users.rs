@@ -5,7 +5,9 @@ use axum::http::StatusCode;
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::wire::{ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User};
+use linger_core::wire::{
+    AuthResponse, ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User,
+};
 use linger_core::UserId;
 
 use crate::auth::{self, AuthedUser, HostOrCohost, HostUser, Standing};
@@ -104,13 +106,9 @@ async fn remove_user(
     .bind(id.to_vec())
     .execute(&mut *tx)
     .await?;
-    sqlx::query(
-        "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
-    )
-    .bind(now)
-    .bind(id.to_vec())
-    .execute(&mut *tx)
-    .await?;
+    // Every sign-in, access tokens included, so that a restore lets them back
+    // in through the front door only and not with a token from before (#496).
+    auth::end_sign_ins(&mut tx, id, now).await?;
     sqlx::query("UPDATE invites SET revoked_at = ? WHERE created_by = ? AND revoked_at IS NULL")
         .bind(now)
         .bind(id.to_vec())
@@ -248,9 +246,9 @@ async fn patch_me(
     // A status has no picture any more (#269). An older app still sends
     // `image_id`, so it is accepted and ignored: nothing is checked or stored
     // for it, and saving the rest of the status is never refused over it.
-    if let Some(status) = &req.status {
-        validate::status(status)?;
-    }
+    // What comes back is the status to save, without the characters that
+    // turn text around (#488).
+    let status = req.status.as_ref().map(validate::status).transpose()?;
     if let Some(sound) = &req.entrance_sound {
         if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {
             return Err(ApiError::validation(
@@ -302,7 +300,7 @@ async fn patch_me(
         .await?;
     }
 
-    if let Some(status) = &req.status {
+    if let Some(status) = &status {
         // `away_since` is server-owned: stamped when an away message appears or
         // changes, cleared with it.
         let prev_away: Option<(Option<String>, Option<i64>)> =
@@ -380,11 +378,20 @@ async fn patch_me(
     Ok(Json(user))
 }
 
+/// `PATCH /me/password` (PROTOCOL §5): a new password, and the end of every
+/// sign-in the account had (#496). Refresh tokens, access tokens and open
+/// gateway sessions all go, this device's too. The usual reason to change a
+/// password is that somebody else might have it, and anything that outlived the
+/// change would be theirs to keep.
+///
+/// The device that asked gets a fresh pair in the answer, as a login would
+/// give it, so the person carries on there without typing the new password
+/// again. An app from before this ignores the answer and signs in again.
 async fn change_password(
     State(state): State<AppState>,
     auth: AuthedUser,
     Json(req): Json<ChangePasswordRequest>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Json<AuthResponse>, ApiError> {
     validate::password(&req.new_password)?;
 
     let hash: Option<String> = sqlx::query_scalar(
@@ -402,15 +409,19 @@ async fn change_password(
     }
 
     let new_hash = state.passwords.hash(req.new_password).await?;
+    let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
     sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
         .bind(new_hash)
         .bind(auth.id.to_vec())
-        .execute(&state.db.write)
+        .execute(&mut *tx)
         .await?;
+    auth::end_sign_ins(&mut tx, auth.id, now_ms()).await?;
+    tx.commit().await.map_err(ApiError::from)?;
 
-    // Anyone holding an old refresh token (including a thief) re-logs-in.
-    auth::revoke_all_for_user(&state.db.write, auth.id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    // Written first, then enforced, as removal does: a session closed before
+    // the commit could identify again with a token that still worked.
+    state.gateway.close_sessions_for(auth.id).await;
+    super::auth::auth_response(&state, auth.id).await.map(Json)
 }
 
 async fn list_notify_rules(

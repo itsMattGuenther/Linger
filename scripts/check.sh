@@ -41,7 +41,7 @@ scripts/lint-rules.sh "$base"
 
 echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
-node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs
+node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs
 python3 scripts/linux-audio-check.test.py -q
 bash scripts/android-signing-test.sh >/dev/null

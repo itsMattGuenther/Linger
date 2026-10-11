@@ -573,3 +573,56 @@ fn silence_is_never_passed_on() {
         "silence was passed on"
     );
 }
+
+/// A room that emptied and filled again (#522). With nobody in voice the
+/// forwarding server stops reading its socket and waits for a join, so what
+/// the old connections still send in the meantime sits there until it wakes.
+/// None of it is for the new connections, which still connect and hear each
+/// other.
+#[test]
+fn people_joining_a_room_that_emptied_still_hear_each_other() {
+    let (sfu, offers) = start();
+    let mut a = Client::new();
+    let mut b = Client::new();
+    sfu.join("a", "room");
+    sfu.join("b", "room");
+    assert!(
+        drive(
+            &sfu,
+            &offers,
+            &mut [("a", &mut a), ("b", &mut b)],
+            |clients| clients.iter().all(|(_, client)| client.heard.len() > 5),
+        ),
+        "the first two never heard each other"
+    );
+
+    // Everybody leaves, and their old connections, not yet told, keep
+    // talking at a server with nobody in voice.
+    sfu.leave("a");
+    sfu.leave("b");
+    for _ in 0..40 {
+        a.turn();
+        a.speak();
+        b.turn();
+        b.speak();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    // Two more join, on new connections. (Not as a and b again: the offer b
+    // was sent when a left may still be waiting, and it was for the old one.)
+    let mut c = Client::new();
+    let mut d = Client::new();
+    sfu.join("c", "room");
+    sfu.join("d", "room");
+    let heard = drive(
+        &sfu,
+        &offers,
+        &mut [("c", &mut c), ("d", &mut d)],
+        |clients| {
+            clients
+                .iter()
+                .all(|(name, client)| client.heard.iter().any(|from| from != name))
+        },
+    );
+    assert!(heard, "c heard {:?}, d heard {:?}", c.heard, d.heard);
+}
