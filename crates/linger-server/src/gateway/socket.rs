@@ -25,8 +25,24 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Reader liveness: 2.5× the heartbeat interval with no traffic ⇒ dead peer.
 const LIVENESS_TIMEOUT: Duration = Duration::from_millis(HEARTBEAT_INTERVAL_MS * 5 / 2);
 
+/// How much of the network the socket reads at a time. The library's default,
+/// 128 KiB, is set aside for every connection, signed in or not, and every
+/// frame an app sends but `voice.answer` is a few hundred bytes.
+const READ_BUFFER_BYTES: usize = 4 * 1024;
+
+/// The socket's limits are set here, before anybody has identified (#517), so
+/// a connection that hasn't signed in can't make the server hold more than the
+/// biggest frame an app really sends. A frame that says it is bigger than
+/// `MAX_CLIENT_FRAME_BYTES` ends the connection as soon as its header is read,
+/// and so does a message pieced together from smaller frames once it passes
+/// the same size. The write side keeps the library's settings: it sets nothing
+/// aside until there is something to send, and the writer task flushes each
+/// frame as it goes.
 pub async fn ws_route(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.read_buffer_size(READ_BUFFER_BYTES)
+        .max_frame_size(linger_core::limits::MAX_CLIENT_FRAME_BYTES)
+        .max_message_size(linger_core::limits::MAX_CLIENT_FRAME_BYTES)
+        .on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 async fn send_control(sink: &mpsc::Sender<String>, event: ServerEvent) {
