@@ -216,7 +216,9 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
     case "link":
       // `href` makes it read as a link to the browser and a screen reader,
       // and `title` is always the real destination, since a link's text is
-      // whatever the sender wrote. The click is taken and handed on.
+      // whatever the sender wrote. The click is taken and handed on, and
+      // goes no further: the parser never puts a link inside a link (#508),
+      // but if one ever got here, one click must still open one address.
       return (
         <a
           className="nx-text-link"
@@ -225,6 +227,7 @@ function InlineView({ node, ctx }: { node: Inline; ctx: Ctx }) {
           rel="noreferrer noopener"
           onClick={(event: MouseEvent<HTMLAnchorElement>) => {
             event.preventDefault();
+            event.stopPropagation();
             ctx.onOpenLink(node.href);
           }}
         >
