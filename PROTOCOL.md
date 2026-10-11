@@ -104,6 +104,10 @@ Refresh-token reuse (presenting an already-rotated token) revokes the token's wh
 family — every token descended from the same login — and forces re-login on that
 device chain. Logout likewise revokes the presented token's family.
 
+The server keeps a rotated token only until its own 30 days are up, then deletes it
+(#520). Reuse is caught for those 30 days. A token presented after them is refused
+as expired, the same `UNAUTHENTICATED`, and no longer revokes its family.
+
 When renewal fails, a client ends its saved sign-in only if refresh is rejected with
 `UNAUTHENTICATED` or `FORBIDDEN`. A temporary server error, rate limit, or transport
 failure leaves the saved token in place and reports the failure to the caller. A
