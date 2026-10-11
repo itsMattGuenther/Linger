@@ -146,6 +146,8 @@ export function evening(empty: GatewayState): GatewayState {
   return {
     ...empty,
     status: { kind: "ready", latency_ms: 24 },
+    // A server that takes any emoji as a reaction (#485).
+    reactions: true,
     me: people.matt,
     users: Object.values(people),
     rooms: Object.values(rooms),

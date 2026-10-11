@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { type Anchor, placeBeside } from "./place";
@@ -52,9 +52,11 @@ export function Menu({
    * On a phone (SPEC §4.15): the whole width, risen from the bottom over the
    * page dimmed, with rows a thumb can hit, instead of floating by a button
    * a finger can't hover. `head` is a quiet line on top saying what it's for:
-   * the message it acts on.
+   * the message it acts on. `top` goes under it, before the items: the
+   * emoji a message can be reacted with (#485). Its own buttons are
+   * `menuitem`s, so the keyboard moves through them with the rest.
    */
-  sheet?: { head?: string };
+  sheet?: { head?: string; top?: ReactNode };
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState<{ top: number; left: number; maxHeight?: number } | null>(null);
@@ -131,6 +133,7 @@ export function Menu({
           {sheet.head}
         </p>
       ) : null}
+      {sheet?.top ?? null}
       {items.map((item) => (
         <button
           key={item.id}

@@ -29,10 +29,15 @@ export interface AppearanceProps {
    * rows are sized for a thumb.
    */
   oneLine?: Live<boolean>;
+  /**
+   * Show reactions (#485), true unless somebody hid them on this computer.
+   * Everybody else still sees theirs.
+   */
+  reactions?: Live<boolean>;
 }
 
 /** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197). */
-export function AppearanceSection({ scale, warmth, plainNames, oneLine }: AppearanceProps) {
+export function AppearanceSection({ scale, warmth, plainNames, oneLine, reactions }: AppearanceProps) {
   return (
     <>
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
@@ -70,6 +75,16 @@ export function AppearanceSection({ scale, warmth, plainNames, oneLine }: Appear
           control={<Switch label="Use plain names and message fonts" checked={plainNames.value} onChange={plainNames.onChange} />}
         />
       </Plain>
+      {reactions ? (
+        <Plain>
+          <h3 className="nx-set-heading">{HEADINGS.reactions}</h3>
+          <SettingRow
+            title="Show reactions"
+            description="Turned off, you see no reactions and no buttons for leaving one. Everyone else still sees theirs."
+            control={<Switch label="Show reactions" checked={reactions.value} onChange={reactions.onChange} />}
+          />
+        </Plain>
+      ) : null}
       {oneLine ? (
         <Plain>
           <h3 className="nx-set-heading">{HEADINGS.list}</h3>

@@ -136,6 +136,7 @@ export const HEADINGS = {
   size: "Interface Size",
   names: "Names",
   list: "Your List",
+  reactions: "Reactions",
   conversations: "Conversations Open",
   closing: "When You Close Your List",
   chimes: "A Familiar Little Sound",

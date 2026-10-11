@@ -1,0 +1,173 @@
+/* Reactions (SPEC §4.8, #485): a pill per emoji under a message's words,
+   with how many people left it. Filled, so a pill never reads as words the
+   author typed; yours blue and outlined. Every size and color is a token. */
+.nx-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1-5);
+}
+
+.nx-react-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: var(--control-sm);
+  padding: 0 var(--space-2) 0 var(--space-1-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface-control);
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.nx-react-pill:hover {
+  background: var(--surface-control-hover);
+}
+
+.nx-react-pill[data-mine="yes"] {
+  border-color: var(--react-mine-edge);
+  background: var(--react-mine-wash);
+  color: var(--text-primary);
+}
+
+.nx-react-glyph {
+  font-size: var(--text-body);
+}
+
+.nx-react-custom {
+  display: block;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  object-fit: contain;
+}
+
+.nx-react-count {
+  font: 600 var(--text-meta) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Another one: on a computer only while you're at the message, as its ···
+   is; on a phone, always, since there's no hovering. */
+.nx-react-add {
+  padding: 0 var(--space-2);
+  border-color: var(--hairline-strong);
+  background: transparent;
+  color: var(--icon-muted);
+  opacity: 0;
+}
+
+.nx-react-add:hover {
+  background: var(--surface-control);
+  color: var(--icon-default);
+}
+
+.nx-msg:is(:hover, :focus-within, [data-menu="yes"]) .nx-react-add,
+:root[data-shell="phone"] .nx-react-add {
+  opacity: 1;
+}
+
+/* The picker, floating by what opened it (ReactionPicker). */
+.nx-react-picker {
+  position: fixed;
+  z-index: var(--z-popover);
+}
+
+/* Not seen until it's placed, but still able to take the keyboard: the
+   picker's search is focused as it opens, before it's measured. */
+.nx-react-picker[data-placed="no"] {
+  opacity: 0;
+}
+
+.nx-react-picker[data-phone="yes"] {
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--space-2);
+}
+
+/* At six: the six already there, and why. */
+.nx-react-full {
+  width: calc(6 * var(--emoji-cell) + 2 * var(--space-2));
+  padding: var(--space-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-popover);
+}
+
+.nx-react-picker[data-phone="yes"] .nx-react-full {
+  width: auto;
+}
+
+.nx-react-full-row,
+.nx-react-quick {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-0-5);
+}
+
+.nx-react-quick {
+  grid-template-columns: repeat(7, 1fr);
+  padding: var(--space-1) var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--space-1);
+}
+
+.nx-react-cell {
+  display: grid;
+  place-items: center;
+  height: var(--emoji-cell);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-emoji-cell);
+  line-height: 1;
+}
+
+.nx-react-cell:hover {
+  background: var(--surface-hover);
+}
+
+.nx-react-cell[data-mine="yes"] {
+  border-color: var(--react-mine-edge);
+  background: var(--react-mine-wash);
+}
+
+.nx-react-cell .nx-react-custom {
+  width: var(--text-emoji-cell);
+  height: var(--text-emoji-cell);
+}
+
+.nx-react-cell .nx-react-glyph {
+  font-size: var(--text-emoji-cell);
+}
+
+.nx-react-more {
+  border-color: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--icon-muted);
+}
+
+.nx-react-full-note {
+  margin: var(--space-2) var(--space-0-5) 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+}
+
+/* High contrast: a pill keeps an edge, and yours is lit in the system's
+   highlight. */
+@media (forced-colors: active) {
+  .nx-react-pill,
+  .nx-react-cell {
+    border-color: ButtonText;
+  }
+
+  .nx-react-pill[data-mine="yes"],
+  .nx-react-cell[data-mine="yes"] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

@@ -182,6 +182,14 @@ pub fn emoji_name_ok(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
+/// The most different reactions one message holds (SPEC §4.8, #485). Past
+/// it, anybody can still add theirs to one that's there.
+pub const MAX_REACTIONS_PER_MESSAGE: usize = 6;
+/// A reaction is the emoji itself, or this and the id of one of the server's
+/// own emoji (`emoji:<32 hex>`): by id, so renaming it keeps its reactions
+/// and removing it takes them.
+pub const CUSTOM_REACTION_PREFIX: &str = "emoji:";
+
 pub const RATE_LOGIN_PER_IP: (u32, u64) = (5, 60);
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);

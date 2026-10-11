@@ -5,4 +5,9 @@ export type UpdateRoomRequest = { name: string | null, topic: string | null, pos
  * A new message of the day, or `""` to clear it (#464). Left out, it stays
  * as it is. Setting it also puts a line in the room (`Message::motd`).
  */
-motd?: string, };
+motd?: string, 
+/**
+ * Turn the room's reactions off (`true`) or back on (`false`) (#485).
+ * Left out, they stay as they are. Hidden, not deleted.
+ */
+reactions_off?: boolean, };

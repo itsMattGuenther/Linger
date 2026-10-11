@@ -136,6 +136,8 @@ function ready(server: string, again = ""): ServerFrame {
       voice: Object.entries(state.voice).map(([room_id, peers]) => ({ room_id, peers })),
       // The home server's own emoji (#359); `?noemoji` has none.
       emoji: server === SERVER && !query.has("noemoji") ? customEmoji : [],
+      // Reactions (#485): the home server's; `?oldreactions` is one from before them.
+      ...(server === SERVER && !query.has("oldreactions") ? { reactions: true } : {}),
     },
   } as ServerFrame;
 }
@@ -523,7 +525,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (text !== null && text.length > 300) return refuse(422, "VALIDATION_FAILED", "A message of the day is at most 300 characters.");
     const at = Date.now();
     const { motd: _old, ...rest } = found;
-    const room = text === null ? found : text === "" ? rest : { ...found, motd: { text, set_by: state.me.id, set_at: at } };
+    const motdNow = text === null ? found : text === "" ? rest : { ...found, motd: { text, set_by: state.me.id, set_at: at } };
+    // Reactions on or off (#485): "on" is the field left out.
+    const { reactions_off: _was, ...reacting } = motdNow;
+    const room = typeof body.reactions_off !== "boolean" ? motdNow : body.reactions_off ? { ...motdNow, reactions_off: true } : reacting;
     states[SERVER] = { ...state, rooms: state.rooms.map((one) => (one.id === id ? room : one)) };
     window.setTimeout(() => {
       window.core?.frame(SERVER, { op: "room.update", d: room } as Omit<ServerFrame, "s">);
@@ -584,6 +589,31 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       held ?? { id: `d-${wanted.filter((id) => id !== me).join("-")}`, slug: "", name: "", topic: null, kind: "dm", member_ids: wanted, position: 0, archived_at: null, last_message_id: null },
       held ? 200 : 201,
     );
+  }
+  // A reaction (#485): kept as the server keeps it, and told to everybody as
+  // `reaction.update`, yours included.
+  const reactOf = server === SERVER ? /^\/messages\/([^/]+)\/reactions\/([^/]+)$/.exec(path) : null;
+  if (reactOf && (method === "PUT" || method === "DELETE")) {
+    const id = decodeURIComponent(reactOf[1] ?? "");
+    const key = decodeURIComponent(reactOf[2] ?? "");
+    const on = method === "PUT";
+    note(`react ${id} ${key} ${on ? "on" : "off"}`);
+    for (const list of Object.values(history)) {
+      const at = list.findIndex((message) => message.id === id);
+      const found = list[at];
+      if (!found) continue;
+      const held = found.reactions.find((group) => group.key === key);
+      const others = (held?.user_ids ?? []).filter((one) => one !== state.me?.id);
+      const user_ids = on && state.me ? [...others, state.me.id] : others;
+      const rest = found.reactions.filter((group) => group.key !== key);
+      list[at] = { ...found, reactions: user_ids.length === 0 ? rest : [...rest, { key, count: user_ids.length, user_ids }] };
+      window.setTimeout(
+        () => window.core?.frame(SERVER, { op: "reaction.update", d: { message_id: id, key, count: user_ids.length, user_ids } } as Omit<ServerFrame, "s">),
+        10,
+      );
+      return new Response(null, { status: 204 });
+    }
+    return refuse(404, "NOT_FOUND", "That message is gone.");
   }
   if (path === "/me/notify-rules") return json([]);
   // Report and block (PROTOCOL §5): The Good Company's; the others predate them.

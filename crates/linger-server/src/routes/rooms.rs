@@ -165,6 +165,14 @@ async fn update(
             .execute(&mut *tx)
             .await?;
     }
+    if let Some(off) = req.reactions_off {
+        // Hidden, not deleted (#485): turning them back on shows them again.
+        sqlx::query("UPDATE rooms SET reactions_off = ? WHERE id = ?")
+            .bind(i64::from(off))
+            .bind(id.to_vec())
+            .execute(&mut *tx)
+            .await?;
+    }
     if let Some(position) = req.position {
         sqlx::query("UPDATE rooms SET position = ? WHERE id = ?")
             .bind(i64::from(position))

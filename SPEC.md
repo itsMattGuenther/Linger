@@ -499,38 +499,44 @@ Not in the Buddy list client yet: it waits for an evening version of its colors.
 
 ### 4.8 Reactions
 
-**Taken out of the app, as a trial (Matt, 2026-09-24, #168).** The client shows
-no reactions and offers no way to add one. People answer a message by saying
-something — a reply or a new message — and the composer's emoji picker puts
-emoji into that text (§4.17). Marks collecting under messages
-cluttered the conversation; the trial is whether it reads better without them,
-and whether people miss them. This goes against the original design on
-purpose. See `docs/decisions.md`.
+**Back, the way Discord and Slack do them** (Matt, 2026-10-10, #485). They were
+taken out on 2026-09-24 as a trial (#168) because marks piling up under messages
+cluttered the conversation. What brought them back: a quick "saw this" without
+writing a reply, and above all the person who reads a message a week late and
+leaves a 😂, so the person who wrote it knows it landed. Most people here come from
+Discord and Slack, and Teams and phone texts work the same way now. Three rounds of
+mockups led here; `docs/decisions.md` has what was tried and why.
 
-The server side is unchanged while the trial runs: the fixed palette of 12
-(`linger-core::REACTIONS`), the endpoints, stored reactions, export and the
-`reaction.update` frame all remain (PROTOCOL §4, §5). An older client still
-shows and adds them, and nothing stored is lost. Removing the server side is a
-protocol change and gets its own decision if the trial sticks.
-
-If reactions return, they return as designed below.
-
-Fixed palette of 12. Reactions are those twelve keys — there is no picker of
-arbitrary marks, and a server's own emoji (§4.17) are for message text, never
-reactions. Putting emoji into a message body from the picker is typing, not a
-reaction.
-
-Reactions accumulate **visibly by weight, not by number**. Six people hitting the same
-reaction produces a denser, larger mark, not `👍 6`. Hover reveals who.
-
-Rationale: numbers invite comparison. Weight carries the same information without
-inviting anyone to count.
-
-Local reaction feedback is brief and silent: a pressed treatment acknowledges
-input, and a one-shot emphasis confirms a successful request. Initial history,
-remote reactions and replay never trigger that emphasis. A refusal restores
-the mark and shows an error; it must not claim success. A check distinguishes
-your reactions without relying on color. No counters or confetti.
+- **A pill per emoji, with how many people left it** (`👍 3`), just under the
+  message's words, so it never reads as part of them. Other people's are a quiet
+  grey; **yours are blue** with an outline, so you can see at a glance which you
+  left, without relying on color alone. Blue, not the lamp's amber: amber means
+  something new (§5). Clicking a pill adds yours to it; clicking yours takes it back.
+  This is the one place Linger shows a number for people: a reaction is a tally
+  by nature, and everywhere else stays weight, not number (polls keep their dots).
+- **Any emoji, the server's own included** (§4.17), from the same picker the message
+  box uses. A server's emoji is kept by its id, so renaming it keeps its reactions,
+  and **removing it takes them with it**: a pill with no picture would look broken.
+- **Hover a pill for who**: "Jules and Dave reacted with :porch_light:".
+- **Six different emoji on one message at most.** That fits one line on a computer,
+  and keeps a message from becoming a wall of stickers. At six, the picker offers only
+  those six and says why; anybody can still add theirs to one of them.
+- **Adding one.** On a computer, hovering a message shows a smiley to the left of its
+  ···, and a smiley-plus at the end of its reactions; both open the picker. On a phone
+  there is no hover, so the smiley-plus is always at the end of a message's
+  reactions, and holding a message shows the six emoji you use most and a
+  smiley-plus for the rest.
+- **Reactions never notify.** No banner, no card, no sound, no lit row, no weight on
+  a room, whether the message is from today or from last month. You see them when
+  you look at the message.
+- **Rooms and DMs both.** A host can turn reactions off for a room (Settings →
+  Rooms): it then shows none and offers no way to add one, but nothing is deleted,
+  so turning them back on shows them again. A DM has no host and always has them.
+- **Anybody can hide them for themselves**, in Settings → Appearance, kept on this
+  computer: no pills and no smileys anywhere. Other people still react; you just
+  don't see it.
+- Nobody reacts to a line the server writes about somebody joining voice or a poll
+  closing (§4.18); those aren't things anybody said.
 
 ### 4.9 Knock
 
@@ -935,8 +941,8 @@ People wanted the emoji they're used to from Discord, and the picker had 66.
   message. A message keeps the text `:name:`, which that server's apps draw as
   the picture: search and export see the name, and an emoji that's removed
   reads as its name. A message of a few emoji and nothing else is drawn big.
-- **Not reactions**, while reactions are out (§4.8), and **never for sale**
-  (AGENTS rule 13): no packs, no paid slots, nothing held back.
+- **Reactions too** (§4.8): any emoji, the server's own included. And **never
+  for sale** (AGENTS rule 13): no packs, no paid slots, nothing held back.
 
 ### 4.18 Polls
 
@@ -1097,7 +1103,7 @@ first two are the system defaults.
 | 7 | Roster-forward layout | §3 |
 | 9 | Name styling + optional message font | §4.5 |
 | 10 | Statuses and away messages | §4.6 |
-| 11 | Reactions by weight — taken out of the client as a trial (#168) | §4.8 |
+| 11 | Reactions — taken out as a trial (#168), back the Discord and Slack way (#485) | §4.8 |
 | 12 | File upload 500 MB, EXIF stripped | §4.10 |
 | 13 | Media collection | §4.4 |
 | 14 | Readable, responsive message layout | §4.7 |

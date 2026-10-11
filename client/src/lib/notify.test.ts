@@ -193,3 +193,13 @@ it("the phone app raises no banner and asks for no attention, mention or DM (SPE
   expect(banners).toEqual([]);
   expect(asked.filter((call) => call.cmd === "next_request_attention")).toEqual([]);
 });
+
+it("never says anything about a reaction, on a message from today or from last month (#485)", async () => {
+  for (const [s, at] of [[1, 0], [2, -30 * 86_400_000]] as const) {
+    considerFrame(server, { op: "reaction.update", s, d: { message_id: `${message.id}-${at}`, key: "😂", count: 1, user_ids: ["friend"] } }, snapshot);
+  }
+  await vi.runAllTimersAsync();
+  expect(played).toEqual([]);
+  expect(banners).toEqual([]);
+  expect(asked).toEqual([]);
+});

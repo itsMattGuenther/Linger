@@ -262,7 +262,8 @@ CREATE TABLE rooms (
   created_at      INTEGER NOT NULL,
   motd            TEXT,                        -- message of the day (#464); the three
   motd_set_by     BLOB REFERENCES users(id),   -- are null together, and always so
-  motd_set_at     INTEGER                      -- for a DM
+  motd_set_at     INTEGER,                     -- for a DM
+  reactions_off   INTEGER NOT NULL DEFAULT 0   -- host turned reactions off (#485); never a DM
 );
 
 -- Who is in a DM (SPEC §4.13). Rooms have no rows here: their members are
@@ -361,7 +362,7 @@ CREATE VIRTUAL TABLE message_fts USING fts5(
 CREATE TABLE reactions (
   message_id      BLOB NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  key             TEXT NOT NULL,               -- one of 12 fixed keys
+  key             TEXT NOT NULL,               -- one emoji, or emoji:<id> for a server's own (#485)
   created_at      INTEGER NOT NULL,
   PRIMARY KEY (message_id, user_id, key)
 );

@@ -173,6 +173,12 @@ pub struct ReadyData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub emoji: Option<Vec<CustomEmoji>>,
+    /// `true` from a server that takes any emoji as a reaction (#485).
+    /// Servers from before omit it, and an app offers no reactions there:
+    /// they'd refuse anything but the twelve names reactions used to have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reactions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -202,7 +208,8 @@ pub enum ServerEvent {
         id: MessageId,
         room_id: RoomId,
     },
-    /// `count` is present for accessibility labels; the client renders weight.
+    /// One emoji's reactions on a message, as they now are (`ReactionGroup`);
+    /// `count` 0 means nobody's is left. It never notifies anybody (#485).
     #[serde(rename = "reaction.update")]
     ReactionUpdate {
         message_id: MessageId,

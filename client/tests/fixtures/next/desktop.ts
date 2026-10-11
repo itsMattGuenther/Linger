@@ -319,6 +319,25 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       }
       return refuse(404, "NOT_FOUND", "That message is gone.");
     }
+    // A reaction (#485): left or taken back, as the server keeps it.
+    const reactOf = /^\/messages\/([^/]+)\/reactions\/([^/]+)$/.exec(path);
+    if (reactOf && (method === "PUT" || method === "DELETE")) {
+      const id = decodeURIComponent(reactOf[1] ?? "");
+      const key = decodeURIComponent(reactOf[2] ?? "");
+      for (const list of Object.values(store)) {
+        const at = list.findIndex((message) => message.id === id);
+        const found = list[at];
+        if (found) {
+          const held = found.reactions.find((group) => group.key === key);
+          const others = (held?.user_ids ?? []).filter((one) => one !== people.matt.id);
+          const user_ids = method === "PUT" ? [...others, people.matt.id] : others;
+          const rest = found.reactions.filter((group) => group.key !== key);
+          list[at] = { ...found, reactions: user_ids.length === 0 ? rest : [...rest, { key, count: user_ids.length, user_ids }] };
+          return new Response(null, { status: 204 });
+        }
+      }
+      return refuse(404, "NOT_FOUND", "That message is gone.");
+    }
     if (path === "/dms" && method === "POST") {
       // The DM you already have with exactly these people, or a new one.
       const wanted = [people.matt.id, ...(Array.isArray(body.user_ids) ? body.user_ids.map(String) : [])].sort();

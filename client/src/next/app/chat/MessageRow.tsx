@@ -1,11 +1,13 @@
-import { type CSSProperties, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
+import type { ReactionGroup } from "../../../generated/ReactionGroup";
 import type { User } from "../../../generated/User";
 import { messageFontVar } from "../../../lib/fonts";
 import { linkTargets, mentionHandles } from "../../../lib/markdown";
+import { hasRoom, shownGroups } from "../../../lib/reactions";
 import { ageOpacity, clockTime, fullTime } from "../../../lib/time";
 import { cardOnly, excerpt } from "../../core/chat/words";
 import { Button, Icon, IconButton, Menu, type MenuAnchor, type MenuItem, Name } from "../../kit";
@@ -16,6 +18,7 @@ import { PollCard, type PollActions } from "./PollCard";
 import { onPhone } from "../../core/phone";
 import { FloatingForm, ReportForm } from "./ReportBlock";
 import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
+import { QuickReactions, quickKeys, type ReactionKit, ReactionPicker, ReactionPills } from "./Reactions";
 import "./MessageRow.css";
 
 /** What a message row can ask for. Stable, so a scroll doesn't redraw rows (L-14). */
@@ -47,9 +50,16 @@ export interface MessageActions {
   /** Vote in a poll, and close one you asked (#474). Left out where there's no server to ask. */
   vote?: PollActions["vote"];
   closePoll?: PollActions["closePoll"];
+  /**
+   * Reactions (#485): leaving one, and what the picker needs. Left out where
+   * they're off (a room the host turned them off in, or hidden on this
+   * computer), which hides them too.
+   */
+  react?: ReactionKit;
 }
 
 const NO_PEOPLE: ReadonlyMap<string, User> = new Map();
+const NO_GROUPS: readonly ReactionGroup[] = [];
 
 /** Where a poll can't be answered, it says so rather than doing nothing. */
 const NO_POLL: PollActions = {
@@ -111,6 +121,9 @@ export const MessageRow = memo(function MessageRow({
   const [reporting, setReporting] = useState<MenuAnchor | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
+  // Picking a reaction (#485): where the picker floats from.
+  const [picking, setPicking] = useState<MenuAnchor | null>(null);
+  const smiley = useRef<HTMLElement | null>(null);
 
   const deleted = message.deleted_at !== null;
   const mine = me !== null && message.author_id === me.id;
@@ -167,6 +180,22 @@ export const MessageRow = memo(function MessageRow({
     setMenu(null);
     if (refocus) trigger.current?.focus();
   };
+
+  // Reactions (SPEC §4.8, #485). None on a message that's gone or not sent
+  // yet; a server emoji that's been removed isn't drawn.
+  const kit = actions.react;
+  const canReact = kit !== undefined && !deleted && !pending;
+  const groups = kit === undefined || deleted ? NO_GROUPS : shownGroups(message.reactions, kit.byId);
+  const roomForMore = hasRoom(groups);
+  const meId = me?.id ?? null;
+  const mineKeys = new Set(groups.filter((group) => meId !== null && group.user_ids.includes(meId)).map((group) => group.key));
+  const toggle = (key: string, on: boolean) => {
+    if (kit) run(kit.toggle(message, key, on));
+  };
+  const closePicker = useCallback((refocus: boolean) => {
+    setPicking(null);
+    if (refocus) smiley.current?.focus();
+  }, []);
 
   // On the phone a message is held for its actions (SPEC §4.15): there's no
   // hovering for the ··· button, and holding can't select its words, so
@@ -276,7 +305,7 @@ export const MessageRow = memo(function MessageRow({
       data-names-me={namesMe ? "yes" : undefined}
       data-motd={motd ? "yes" : undefined}
       data-flash={flashing ? "yes" : undefined}
-      data-menu={menu ? "yes" : undefined}
+      data-menu={menu || picking ? "yes" : undefined}
       data-message={message.id}
     >
       {reply ? <Quote target={quoted} author={quotedAuthor} onJump={actions.jumpTo} /> : null}
@@ -336,6 +365,16 @@ export const MessageRow = memo(function MessageRow({
         ) : (
           shown
         )}
+        {canReact && kit && !editing ? (
+          <ReactionPills
+            groups={groups}
+            meId={meId}
+            people={people ?? NO_PEOPLE}
+            kit={kit}
+            onToggle={toggle}
+            onAdd={roomForMore ? setPicking : undefined}
+          />
+        ) : null}
         {problem ? (
           <p className="nx-msg-problem" role="alert">
             {problem}
@@ -348,6 +387,24 @@ export const MessageRow = memo(function MessageRow({
       </time>
 
       <span className="nx-msg-actions">
+        {canReact && !editing && !phone ? (
+          <span
+            ref={(node) => {
+              smiley.current = node?.querySelector("button") ?? null;
+            }}
+          >
+            <IconButton
+              icon="react"
+              label={`React to ${who}'s message`}
+              size="sm"
+              expanded={picking !== null}
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setPicking((open) => (open ? null : { top: box.top, left: box.left, right: box.right, bottom: box.bottom }));
+              }}
+            />
+          </span>
+        ) : null}
         {deleted || editing || pending ? null : (
           <span
             ref={(node) => {
@@ -374,7 +431,48 @@ export const MessageRow = memo(function MessageRow({
           items={items}
           anchor={menu.anchor}
           onClose={(reason) => closeMenu(reason === "escape" || reason === "tab")}
-          sheet={phone ? { head: `${who}: ${excerpt(message.body) || "a file"}` } : undefined}
+          sheet={
+            phone
+              ? {
+                  head: `${who}: ${excerpt(message.body) || "a file"}`,
+                  top:
+                    canReact && kit && !menu.confirming ? (
+                      <QuickReactions
+                        kit={kit}
+                        keys={roomForMore ? quickKeys(kit) : groups.map((group) => group.key)}
+                        mine={mineKeys}
+                        onPick={(key) => {
+                          closeMenu(false);
+                          toggle(key, !mineKeys.has(key));
+                        }}
+                        onMore={
+                          roomForMore
+                            ? () => {
+                                const anchor = menu.anchor;
+                                closeMenu(false);
+                                setPicking(anchor);
+                              }
+                            : undefined
+                        }
+                      />
+                    ) : undefined,
+                }
+              : undefined
+          }
+        />
+      ) : null}
+      {picking && kit ? (
+        <ReactionPicker
+          anchor={picking}
+          who={who}
+          kit={kit}
+          full={roomForMore ? null : groups}
+          meId={meId}
+          onPick={(key) => {
+            closePicker(true);
+            toggle(key, !mineKeys.has(key));
+          }}
+          onClose={closePicker}
         />
       ) : null}
       {reporting && actions.report ? (

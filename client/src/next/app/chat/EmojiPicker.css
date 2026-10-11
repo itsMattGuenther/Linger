@@ -17,6 +17,11 @@
   overflow: hidden;
 }
 
+/* A reaction's picker (#485) is placed by its own holder (Reactions.css). */
+.nx-emoji-picker[data-floating="yes"] {
+  position: static;
+}
+
 .nx-emoji-top {
   display: flex;
   align-items: center;

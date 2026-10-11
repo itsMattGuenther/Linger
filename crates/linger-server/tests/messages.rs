@@ -1,4 +1,4 @@
-//! Messages, reactions, read markers (PROTOCOL §4): pagination edges,
+//! Messages and read markers (PROTOCOL §4; reactions are reactions.rs): pagination edges,
 //! tombstones, the permission matrix, and — by its absence — the unread count.
 
 mod common;
@@ -281,62 +281,6 @@ async fn any_member_pins_and_unpins() {
         .await
         .unwrap();
     assert!(unpinned.pinned_at.is_none());
-}
-
-#[tokio::test]
-async fn reactions_validate_keys_group_and_are_idempotent() {
-    let (server, host, room) = common::server_with_room("garage").await;
-    let member = common::join_member(&server, &host.access_token, "callie").await;
-    let client = reqwest::Client::new();
-    let msg = send(
-        &server,
-        &host.access_token,
-        &room.id.to_string(),
-        "react to me",
-    )
-    .await;
-
-    // Off-list key: rejected.
-    let resp = client
-        .put(server.url(&format!("/messages/{}/reactions/custom-emoji", msg.id)))
-        .bearer_auth(&host.access_token)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 422);
-    let env: ErrorEnvelope = resp.json().await.unwrap();
-    assert_eq!(env.error.code, ErrorCode::ValidationFailed);
-
-    // Both react with "fire"; host double-taps (idempotent).
-    for token in [&host.access_token, &host.access_token, &member.access_token] {
-        let resp = client
-            .put(server.url(&format!("/messages/{}/reactions/fire", msg.id)))
-            .bearer_auth(token)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), 204);
-    }
-
-    let page = fetch(&server, &host.access_token, &room.id.to_string(), "").await;
-    let reactions = &page.iter().find(|m| m.id == msg.id).unwrap().reactions;
-    assert_eq!(reactions.len(), 1);
-    assert_eq!(reactions[0].key, "fire");
-    assert_eq!(reactions[0].count, 2);
-    assert_eq!(reactions[0].user_ids.len(), 2);
-
-    // Removal shrinks the group.
-    client
-        .delete(server.url(&format!("/messages/{}/reactions/fire", msg.id)))
-        .bearer_auth(&member.access_token)
-        .send()
-        .await
-        .unwrap();
-    let page = fetch(&server, &host.access_token, &room.id.to_string(), "").await;
-    assert_eq!(
-        page.iter().find(|m| m.id == msg.id).unwrap().reactions[0].count,
-        1
-    );
 }
 
 #[tokio::test]

@@ -2,7 +2,12 @@
 import type { UserId } from "./UserId";
 
 /**
- * One reaction key's accumulation on a message. `count` exists for accessibility
- * labels and hover — the client renders *weight*, never the number (SPEC §4.8).
+ * One emoji's reactions on a message (SPEC §4.8, #485): drawn as the emoji and
+ * `count`, the way Discord and Slack do. A message carries at most
+ * `MAX_REACTIONS_PER_MESSAGE` of these, in the order each was first left.
+ *
+ * `key` is the emoji itself (`"👍"`), or `emoji:<id>` for one of the
+ * server's own (`CustomEmoji::id`). `user_ids` is in the order people
+ * reacted, for the names a pill shows on hover.
  */
 export type ReactionGroup = { key: string, count: number, user_ids: Array<UserId>, };

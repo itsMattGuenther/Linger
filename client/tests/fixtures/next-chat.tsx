@@ -34,6 +34,13 @@
  *   asked which faction, open, with votes. With `?raid` too, thirty raiders
  *   pick Horde. `?member`: you aren't the host, so `/poll` isn't yours.
  *   Votes, closes and new polls are written to `body[data-did]`.
+ * - `?reactions`: reactions (#485). In #general, five people loved what you
+ *   said and two left the server's porch light; you left a 💯 on Eli's "No
+ *   plans"; "Count me in" has six different, the most a message holds; and
+ *   Jules's fire on the playlist sits beside a server emoji that's since been
+ *   removed, which isn't drawn. Each reaction asked for is written to
+ *   `body[data-did]` as `react:<id>:<key>:on|off`, and put in place as the
+ *   server would. `&reactfail`: the server refuses them.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -53,6 +60,8 @@ import { voiceStrip } from "../../src/next/core/chat/voice";
 import { voiceStartProblem } from "../../src/lib/voice";
 import { closeTab, keyOf, openTab, selectTab, type TabKey, type Tabs } from "../../src/next/core/tabs";
 import { markerOf, type TabItem } from "../../src/next/kit";
+import { customKey, toggled, withGroup } from "../../src/lib/reactions";
+import type { ReactionKit } from "../../src/next/app/chat/Reactions";
 import "../../src/next/styles/app.css";
 import { customEmoji, NOW, SERVER, SERVER_NAME, dms, leftOff, messages as evening, people, previews, rooms } from "./next/evening";
 import { RAIDERS } from "./next/raid";
@@ -165,6 +174,35 @@ const ALL: Record<string, Message[]> = {
   ...(BIG ? { "r-general": bigRoom() } : query.has("file") ? { "r-general": withFile(evening["r-general"] ?? []) } : {}),
 };
 if (query.has("polls")) ALL["r-general"] = withPolls(ALL["r-general"] ?? [], RAID);
+const REACTIONS = query.has("reactions");
+if (REACTIONS) ALL["r-general"] = withReactions(ALL["r-general"] ?? []);
+
+/** `?reactions`: who reacted with what, on the evening's last few messages (#485). */
+function withReactions(list: Message[]): Message[] {
+  const porch = customEmoji.find((one) => one.name === "porch_light");
+  const on: [string, Message["reactions"]][] = [
+    [
+      "This is exactly what I wanted",
+      [
+        { key: "❤️", count: 5, user_ids: [people.eli.id, people.jules.id, people.dave.id, people.callie.id, people.sam.id] },
+        ...(porch ? [{ key: customKey(porch), count: 2, user_ids: [people.jules.id, people.dave.id] }] : []),
+      ],
+    ],
+    ["No plans, no agenda", [{ key: "💯", count: 1, user_ids: [me.id] }]],
+    ["Count me in", ["😀", "😃", "😄", "😁", "😆", "😅"].map((key) => ({ key, count: 1, user_ids: [people.eli.id] }))],
+    [
+      "Found the playlist",
+      [
+        { key: "🔥", count: 1, user_ids: [people.jules.id] },
+        { key: "emoji:e-gone", count: 1, user_ids: [people.dave.id] },
+      ],
+    ],
+  ];
+  return list.map((message) => {
+    const found = on.find(([words]) => message.body.startsWith(words));
+    return found ? { ...message, reactions: found[1] } : message;
+  });
+}
 if (query.has("joins")) {
   ALL["r-general"] = withJoins(ALL["r-general"] ?? [], RAID);
   ALL["d-jules"] = [...(ALL["d-jules"] ?? []), joinLine("d-jules", "m000027a", people.jules.id, NOW - 60_000)];
@@ -383,7 +421,22 @@ function Fixture() {
     note(`download:${file.filename}`);
     if (query.has("downloadfail")) throw new Error("no browser to hand it to");
   }, []);
-  const actions = useMemo(() => ({ save, remove, openLink, download, vote, closePoll }), [save, remove, openLink, download, vote, closePoll]);
+  // Reactions (#485): written down, and put in place as the server would.
+  const react = useMemo<ReactionKit | undefined>(() => {
+    if (!REACTIONS) return undefined;
+    const custom = query.has("noemoji") ? [] : customEmoji;
+    return {
+      toggle: async (message: Message, key: string, on: boolean) => {
+        note(`react:${message.id}:${key}:${on ? "on" : "off"}`);
+        if (query.has("reactfail")) throw new Error("Couldn't add your reaction. Try again.");
+        setHeld((all) => edit(all, message, { reactions: withGroup(message.reactions, toggled(message.reactions, key, me.id, on)) }));
+      },
+      custom,
+      byId: new Map(custom.map((one) => [one.id, one])),
+      serverName: SERVER_NAME,
+    };
+  }, []);
+  const actions = useMemo(() => ({ save, remove, openLink, download, vote, closePoll, react }), [save, remove, openLink, download, vote, closePoll, react]);
 
   const onNearStart = useCallback(() => {
     const roomId = activeRef.current;

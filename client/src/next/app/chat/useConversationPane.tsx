@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
 import type { CreatePollRequest } from "../../../generated/CreatePollRequest";
+import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
@@ -20,6 +21,7 @@ import {
   noteDm,
   openAround,
   pinMessage,
+  reactTo,
   askPoll,
   closePoll,
   votePoll,
@@ -49,8 +51,10 @@ import { talkingNow } from "../../core/voice";
 import { pressVoiceControl } from "../../core/voiceControl";
 import { markerOf, type TabItem } from "../../kit";
 import { PersonCard } from "../list/PersonCard";
+import { useHideReactions } from "../useHideReactions";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import type { ChatPane } from "./ChatView";
+import type { ReactionKit } from "./Reactions";
 import { useFileDrafts } from "./useFileDrafts";
 import { useVoiceMessages } from "./useVoiceMessages";
 import { useLanding, useReading } from "./visit";
@@ -360,9 +364,29 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         : undefined,
     [api, host, cohosts],
   );
+  // Reactions (#485): none in a room the host turned them off in, and none
+  // for somebody who hid them on this computer. A DM is never off.
+  const hideReactions = useHideReactions();
+  // A server from before them would refuse all but twelve names (#485).
+  const reactionsOff = state?.reactions !== true || (room?.kind === "room" && room.reactions_off === true);
+  const custom = state?.emoji ?? NO_EMOJI;
+  const serverName = active ? serverTag(active.server).name : "";
+  const react = useMemo<ReactionKit | undefined>(
+    () =>
+      api && !hideReactions && !reactionsOff
+        ? {
+            toggle: (message: Message, key: string, on: boolean) =>
+              reactTo(api, message, key, on).catch(rethrowInWords(on ? "Couldn't add your reaction. Try again." : "Couldn't take your reaction back. Try again.")),
+            custom,
+            byId: new Map(custom.map((one) => [one.id, one])),
+            serverName,
+          }
+        : undefined,
+    [api, hideReactions, reactionsOff, custom, serverName],
+  );
   const actions = useMemo(
-    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report, vote, closePoll: closeAsked }),
-    [save, remove, pin, download, wantCards, openPerson, report, vote, closeAsked],
+    () => ({ save, remove, pin, openLink: openExternal, download, wantCards, openPerson, report, vote, closePoll: closeAsked, react }),
+    [save, remove, pin, download, wantCards, openPerson, report, vote, closeAsked, react],
   );
 
   // A room's message of the day (#464): `/motd` sets it, for the host or a
@@ -596,6 +620,8 @@ function askTheList(press: VoiceControlQuestion): void {
 }
 
 /** A store or network failure, as a sentence for the message it was about. */
+const NO_EMOJI: readonly CustomEmoji[] = [];
+
 function rethrowInWords(fallback: string): (error: unknown) => never {
   return (error: unknown) => {
     throw new Error(error instanceof ApiError || error instanceof TransportError ? error.message : fallback);

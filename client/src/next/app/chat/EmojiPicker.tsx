@@ -45,6 +45,9 @@ export function EmojiPicker({
   serverName,
   onPick,
   onClose,
+  label = "Emoji",
+  hint = "Type :name: in a message to skip the picker",
+  floating = false,
 }: {
   /** The conversation's server's own emoji. */
   custom: readonly CustomEmoji[];
@@ -52,6 +55,12 @@ export function EmojiPicker({
   serverName: string;
   onPick: (picked: PickedEmoji) => void;
   onClose: () => void;
+  /** What it's for, to a screen reader: the message box's emoji, or a reaction (#485). */
+  label?: string;
+  /** The footer's line while nothing is pointed at. */
+  hint?: string;
+  /** Placed by whoever opened it (a reaction's, #485), not above the message box's button. */
+  floating?: boolean;
 }) {
   const index = useEmojiIndex(true);
   const [query, setQuery] = useState("");
@@ -148,7 +157,8 @@ export function EmojiPicker({
     <div
       className="nx-emoji-picker"
       role="dialog"
-      aria-label="Emoji"
+      aria-label={label}
+      data-floating={floating ? "yes" : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
@@ -249,7 +259,7 @@ export function EmojiPicker({
 
       <footer className="nx-emoji-foot" aria-live="polite">
         {named === null ? (
-          <span className="nx-emoji-foot-note">Type :name: in a message to skip the picker</span>
+          <span className="nx-emoji-foot-note">{hint}</span>
         ) : (
           <>
             <span className="nx-emoji-foot-glyph" aria-hidden="true">

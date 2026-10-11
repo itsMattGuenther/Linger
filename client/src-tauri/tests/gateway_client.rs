@@ -148,6 +148,7 @@ fn ready_frame(session_id: &str) -> Value {
         presence: Vec::new(),
         voice: None,
         emoji: None,
+        reactions: None,
     };
     json!({ "op": "ready", "d": data, "s": 0 })
 }

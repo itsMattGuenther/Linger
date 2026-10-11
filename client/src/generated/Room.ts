@@ -33,4 +33,10 @@ last_message_id: MessageId | null,
  * Left out when it has none, and by a server from before it, which a
  * client reads the same way. A DM never has one.
  */
-motd?: Motd, };
+motd?: Motd, 
+/**
+ * `true` when the host turned reactions off here (#485): the room shows
+ * none and takes no new ones. Left out when they're on, by a server from
+ * before the switch, and on every DM, which has no host and is never off.
+ */
+reactions_off?: boolean, };

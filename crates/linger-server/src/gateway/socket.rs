@@ -224,6 +224,7 @@ async fn handshake(
                 presence: state.gateway.presence_snapshot(user_id),
                 voice: Some(state.gateway.voice_snapshot(user_id)),
                 emoji: Some(emoji),
+                reactions: Some(true),
             };
             let frame = ServerFrame::sequenced(ServerEvent::Ready(ready), 0);
             sink.send(serde_json::to_string(&frame).ok()?).await.ok()?;

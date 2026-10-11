@@ -7,7 +7,7 @@
  */
 .nx-quiet {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content var(--control-sm);
+  grid-template-columns: minmax(0, 1fr) max-content var(--msg-actions-w);
   grid-template-areas: "body time actions";
   column-gap: var(--space-2);
   align-items: center;

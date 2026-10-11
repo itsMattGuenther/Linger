@@ -16,7 +16,7 @@
 .nx-msg {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content var(--control-sm);
+  grid-template-columns: minmax(0, 1fr) max-content var(--msg-actions-w);
   grid-template-areas: "body time actions";
   column-gap: var(--space-2);
   align-items: start;
@@ -211,9 +211,10 @@
 
 .nx-msg-actions {
   grid-area: actions;
-  display: grid;
-  place-items: center;
-  width: var(--control-sm);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-0-5);
+  width: var(--msg-actions-w);
   height: var(--control-sm);
   opacity: 0;
 }

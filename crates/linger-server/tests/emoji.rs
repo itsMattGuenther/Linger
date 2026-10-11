@@ -731,6 +731,8 @@ async fn ready_carries_the_set_and_every_change_reaches_everybody() {
     added(&server, &host.access_token, "cat", &first).await;
 
     let (mut ws, ready) = connect_ready(&server, &member.access_token).await;
+    // And says it takes any emoji as a reaction, the server's own included (#485).
+    assert_eq!(ready["d"]["reactions"], json!(true));
     assert_eq!(names(&ready), vec!["cat"]);
 
     let second = upload(

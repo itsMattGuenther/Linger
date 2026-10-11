@@ -1002,3 +1002,164 @@ test.describe("what can be selected", () => {
     expect(await box(page).evaluate((node) => (node instanceof HTMLTextAreaElement ? [node.selectionStart, node.selectionEnd] : null))).toEqual([0, 17]);
   });
 });
+
+// Reactions (#485, SPEC §4.8): a pill per emoji with how many left it, yours
+// blue, who on hover; the smiley beside a message's ··· and the smiley-plus
+// after its reactions open the picker; at six, only those six.
+test.describe("reactions", () => {
+  test.beforeEach(async ({ page }) => open(page, "?reactions"));
+
+  const pills = (row: Locator) => row.locator(".nx-react-pill:not(.nx-react-add)");
+  const counts = (row: Locator) => row.locator(".nx-react-count");
+  const idOf = async (row: Locator) => (await row.getAttribute("data-message")) ?? "";
+
+  test("each is a pill with how many left it, yours pressed, and a removed server emoji isn't drawn", async ({ page }) => {
+    const loved = message(page, "This is exactly what I wanted").last();
+    await expect(counts(loved)).toHaveText(["5", "2"]);
+    await expect(pills(loved).first()).toHaveAttribute("aria-label", "❤️ 5. Eli, Jules, Dave, Callie and Sam reacted.");
+    // A server's own emoji is its picture, and says its name.
+    await expect(pills(loved).nth(1).locator("img")).toHaveCount(1);
+    await expect(pills(loved).nth(1)).toHaveAttribute("aria-label", ":porch_light: 2. Jules and Dave reacted with :porch_light:.");
+    await expect(pills(loved).first()).toHaveAttribute("aria-pressed", "false");
+    const yours = pills(message(page, "No plans, no agenda").last());
+    await expect(yours).toHaveAttribute("aria-pressed", "true");
+    await expect(yours).toHaveAttribute("aria-label", "💯 1. You reacted.");
+    // Jules's fire, and nothing for the emoji the host removed.
+    await expect(pills(message(page, "Found the playlist").last())).toHaveCount(1);
+  });
+
+  test("yours is blue and outlined, not the lamp; anybody else's is grey", async ({ page }) => {
+    // Each color drawn into a pixel, so it reads as red, green and blue
+    // whatever form the engine writes a mixed color in.
+    const look = (pill: Locator) =>
+      pill.evaluate((node) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const paint = canvas.getContext("2d");
+        const pixel = (color: string) => {
+          if (!paint) return [0, 0, 0, 0];
+          paint.clearRect(0, 0, 1, 1);
+          paint.fillStyle = color;
+          paint.fillRect(0, 0, 1, 1);
+          return [...paint.getImageData(0, 0, 1, 1).data];
+        };
+        const style = getComputedStyle(node);
+        return { border: pixel(style.borderTopColor), fill: pixel(style.backgroundColor) };
+      });
+    const yours = await look(pills(message(page, "No plans, no agenda").last()));
+    const theirs = await look(pills(message(page, "This is exactly what I wanted").last()).first());
+    expect(yours.fill).not.toEqual(theirs.fill);
+    expect(theirs.border[3]).toBe(0);
+    const [red = 0, , blue = 0, alpha = 0] = yours.border;
+    expect(alpha).toBeGreaterThan(0);
+    // Blue: more blue than red, where the lamp is the other way round.
+    expect(blue).toBeGreaterThan(red);
+  });
+
+  test("hovering a pill says who left it", async ({ page }) => {
+    await pills(message(page, "This is exactly what I wanted").last()).nth(1).hover();
+    await expect(page.locator("[data-kit='Tooltip']")).toHaveText("Jules and Dave reacted with :porch_light:");
+  });
+
+  test("clicking a pill adds yours, and clicking yours takes it back", async ({ page }) => {
+    const loved = message(page, "This is exactly what I wanted").last();
+    const id = await idOf(loved);
+    await pills(loved).first().click();
+    await expect(counts(loved).first()).toHaveText("6");
+    await expect(pills(loved).first()).toHaveAttribute("aria-pressed", "true");
+    const plans = message(page, "No plans, no agenda").last();
+    const plansId = await idOf(plans);
+    await pills(plans).click();
+    await expect(pills(plans)).toHaveCount(0);
+    expect(await did(page)).toEqual(expect.arrayContaining([`react:${id}:❤️:on`, `react:${plansId}:💯:off`]));
+  });
+
+  test("hovering a message shows a smiley left of its ··· and a smiley-plus after its reactions", async ({ page }) => {
+    const row = message(page, "Found the playlist").last();
+    const add = row.getByRole("button", { name: "Add a reaction" });
+    await expect(add).toHaveCSS("opacity", "0");
+    await row.hover();
+    const smiley = row.getByRole("button", { name: "React to Eli's message" });
+    const more = row.getByRole("button", { name: "Actions for Eli's message" });
+    await expect(smiley).toBeVisible();
+    await expect(add).toHaveCSS("opacity", "1");
+    const [a, b] = [await rect(smiley), await rect(more)];
+    expect(a.x + a.width).toBeLessThanOrEqual(b.x);
+    expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+  });
+
+  test("the smiley opens the message box's picker, and a pick reacts with it", async ({ page }) => {
+    const row = message(page, "Found the playlist").last();
+    const id = await idOf(row);
+    await row.hover();
+    await row.getByRole("button", { name: "React to Eli's message" }).click();
+    const picker = page.getByRole("dialog", { name: "React to Eli's message" });
+    await expect(picker).toBeVisible();
+    const find = picker.getByRole("searchbox", { name: "Find an emoji" });
+    await expect(find).toBeFocused();
+    await expect(picker).toContainText("Pick one to react to Eli's message");
+    // The server's own emoji are there, and found by name.
+    await find.fill("party");
+    await picker.getByRole("button", { name: ":party_parrot:" }).click();
+    await expect(picker).toHaveCount(0);
+    expect(await did(page)).toContain(`react:${id}:emoji:e-party_parrot:on`);
+    await expect(pills(row)).toHaveCount(2);
+    await expect(pills(row).nth(1)).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("the smiley-plus opens the same picker; Escape closes it and gives the smiley the keyboard back", async ({ page }) => {
+    const row = message(page, "This is exactly what I wanted").last();
+    await row.hover();
+    await row.getByRole("button", { name: "Add a reaction" }).click();
+    const picker = page.getByRole("dialog", { name: /^React to Matt's message/ });
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(picker).toHaveCount(0);
+    await row.hover();
+    await row.getByRole("button", { name: "React to Matt's message" }).click();
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(row.getByRole("button", { name: "React to Matt's message" })).toBeFocused();
+  });
+
+  test("at six different, the smiley offers only those six and says why, and there's no smiley-plus", async ({ page }) => {
+    const row = message(page, "Count me in").last();
+    const id = await idOf(row);
+    await expect(pills(row)).toHaveCount(6);
+    await row.hover();
+    await expect(row.getByRole("button", { name: "Add a reaction" })).toHaveCount(0);
+    await row.getByRole("button", { name: "React to Matt's message" }).click();
+    const full = page.getByRole("dialog", { name: "React to Matt's message" });
+    await expect(full.getByRole("button")).toHaveCount(6);
+    await expect(full).toContainText("This message has six different reactions, the most it can hold.");
+    await full.getByRole("button", { name: "😁" }).click();
+    expect(await did(page)).toContain(`react:${id}:😁:on`);
+  });
+
+  test("with reactions and quiet lines both, every time still lines up", async ({ page }) => {
+    await open(page, "?reactions&joins");
+    const times = await page.locator(".nx-msg[data-head='yes'] .nx-msg-time, .nx-quiet .nx-msg-time, .nx-quiet time").evaluateAll((nodes) =>
+      nodes.map((node) => Math.round(node.getBoundingClientRect().right)),
+    );
+    expect(times.length).toBeGreaterThan(2);
+    expect(new Set(times).size).toBe(1);
+  });
+});
+
+test.describe("reactions refused or off", () => {
+  test("a refusal says so on the message, and nothing changes", async ({ page }) => {
+    await open(page, "?reactions&reactfail");
+    const loved = message(page, "This is exactly what I wanted").last();
+    await loved.locator(".nx-react-pill").first().click();
+    await expect(loved.getByRole("alert")).toHaveText("Couldn't add your reaction. Try again.");
+    await expect(loved.locator(".nx-react-count").first()).toHaveText("5");
+  });
+
+  test("where reactions are off there are no pills and no smileys", async ({ page }) => {
+    await open(page);
+    const row = message(page, "Found the playlist").last();
+    await row.hover();
+    await expect(page.locator(".nx-reactions")).toHaveCount(0);
+    await expect(row.getByRole("button", { name: /^React to/ })).toHaveCount(0);
+  });
+});

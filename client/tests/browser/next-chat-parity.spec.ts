@@ -270,20 +270,21 @@ test.describe("what a message says", () => {
     expect(looks[0]).not.toBe(looks[1]);
   });
 
-  test("reactions the server stores are never drawn or offered (CONV-24)", async ({ page }) => {
+  // #168's trial drew none; #485 brought them back, the Discord and Slack way.
+  test("reactions the server stores are drawn as a pill each, offered by the smiley, and the menu is as it was (CONV-24)", async ({ page }) => {
     await open(page);
     const id = await post(page, "this deserves a heart", "u-eli", {
       reactions: [{ key: "❤️", user_ids: ["u-jules", "u-dave"], count: 2 }],
     });
-    await expect(row(page, id)).not.toContainText("❤️");
-    // The count isn't drawn: in the message itself, not the time beside it.
-    await expect(row(page, id).locator(".nx-msg-body")).toHaveText("this deserves a heart");
+    const pill = row(page, id).locator(".nx-react-pill").first();
+    await expect(pill).toHaveAttribute("aria-label", "❤️ 2. Jules and Dave reacted.");
+    await expect(pill.locator(".nx-react-count")).toHaveText("2");
     await row(page, id).hover();
+    await expect(row(page, id).getByRole("button", { name: "React to Eli's message" })).toBeVisible();
     await row(page, id).getByRole("button", { name: /^Actions for/ }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     const offered = await page.getByRole("menuitem").allTextContents();
     expect(offered.map((label) => label.trim())).toEqual(["Reply", "Pin", "Delete"]);
-    expect(offered.join(" ")).not.toMatch(/react/i);
   });
 
   test("hovering a message shows its button and moves nothing (CONV-21)", async ({ page }) => {

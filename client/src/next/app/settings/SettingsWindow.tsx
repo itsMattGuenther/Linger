@@ -44,7 +44,7 @@ import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuest
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
-import { announceAppearance, loadOneLine, loadScale, saveNormalize, saveOneLine, saveScale } from "../../core/appearance";
+import { announceAppearance, loadHideReactions, loadOneLine, loadScale, saveHideReactions, saveNormalize, saveOneLine, saveScale } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
@@ -279,6 +279,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [voice, setVoice] = useState<VoicePrefs>(loadVoicePrefs);
   const [plain, setPlain] = useState<boolean>(loadNormalize);
   const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
+  const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
   const [scale, setScale] = useState<number>(loadScale);
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
@@ -462,6 +463,14 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             announceAppearance();
           },
         },
+        reactions: {
+          value: !hideReactions,
+          onChange: (shown) => {
+            setHideReactions(!shown);
+            saveHideReactions(!shown);
+            announceAppearance();
+          },
+        },
         // The phone's rows are sized for a thumb (SPEC §4.15).
         oneLine: phone
           ? undefined
@@ -621,7 +630,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 create: (room) => said(api.createRoom({ slug: room.slug, name: room.name, topic: room.topic }), "Couldn't make the room."),
                 update: (id, change) =>
                   said(
-                    api.updateRoom(id, { name: change.name, topic: change.topic, position: null, ...(change.motd === undefined ? {} : { motd: change.motd }) }),
+                    api.updateRoom(id, {
+                      name: change.name,
+                      topic: change.topic,
+                      position: null,
+                      ...(change.motd === undefined ? {} : { motd: change.motd }),
+                      ...(change.reactions_off === undefined ? {} : { reactions_off: change.reactions_off }),
+                    }),
                     "Couldn't save the room.",
                   ),
                 move: (id, delta) =>

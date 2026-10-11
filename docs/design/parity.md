@@ -300,7 +300,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | CONV-21 | Hovering a message shows its action button and changes nothing else (#139). | `stream.css`, `Stream.tsx` | Same | G (no box changes) | ✅ (next-chat-parity.spec.ts) |
 | CONV-22 | Message menu: reply, edit (your own), delete (your own, or any if host) with a "delete for good" confirmation. A refusal is shown on that message. | `Stream.tsx` `MessageRow` | Same actions | F | ✅ (next-chat.spec.ts, next-chat-parity.spec.ts) |
 | CONV-23 | Edit in place: Enter saves, Escape cancels, the text survives a refusal, and the cursor goes to the end. | `Stream.tsx` `EditBox` | Same | F | ✅ (next-chat.spec.ts, next-chat-parity.spec.ts) |
-| CONV-24 | No reactions are drawn or offered (trial, #168). The server still stores them. | `Stream.tsx`, SPEC §4.8 | Same | F | ✅ (next-chat-parity.spec.ts) |
+| CONV-24 | Reactions: none drawn or offered during #168's trial; back as a pill per emoji with its count, any emoji, six at most (#485). | `Stream.tsx`, SPEC §4.8 | Pills under the message, yours blue; a smiley beside the ··· and after the pills opens the picker; the menu itself is unchanged | F | ✅ (next-chat-parity.spec.ts, next-chat.spec.ts "reactions", next-reactions.spec.ts) |
 | CONV-25 | Links open in the system browser, never in the app. Only http(s) hrefs survive `safeHref`. | `lib/external.ts`, capabilities | Same, in every window's capabilities | U + D | 🟡 opens in the browser (lib/external.test.ts); needs a desktop check |
 
 ## COMP — writing
