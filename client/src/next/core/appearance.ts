@@ -69,6 +69,26 @@ export function saveOneLine(on: boolean): void {
   }
 }
 
+/** Reactions hidden on this computer (#485): shown unless turned off. */
+const HIDE_REACTIONS_KEY = "linger.next.hideReactions";
+
+export function loadHideReactions(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_REACTIONS_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Save hiding reactions; announce it with `announceAppearance`. */
+export function saveHideReactions(hidden: boolean): void {
+  try {
+    window.localStorage.setItem(HIDE_REACTIONS_KEY, String(hidden));
+  } catch {
+    // Storage refused: this window still gets it, until it's opened again.
+  }
+}
+
 /** Plain names: applied to this window, and saved for the others. */
 export function saveNormalize(on: boolean): void {
   applyNormalize(on);

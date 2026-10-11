@@ -4,6 +4,14 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  /* The column at a message's right: its ···, and with reactions on (#485)
+     the smiley beside it, so every time sits one button further in. Quiet
+     lines share it, so their times line up. */
+  --msg-actions-w: var(--control-sm);
+}
+
+.nx-conv[data-react="yes"] {
+  --msg-actions-w: calc(var(--control-sm) * 2 + var(--space-0-5));
 }
 
 /* The log. Focusable, so history is reachable with the keyboard. */

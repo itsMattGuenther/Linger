@@ -138,7 +138,7 @@ PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   #
 
 GET  /rooms              → Room[]                       # public rooms only
 POST /rooms              (host or co-host) { slug, name, topic? }         → Room
-PATCH /rooms/:id         (host or co-host) { name?, topic?, position?, motd? }   → Room
+PATCH /rooms/:id         (host or co-host) { name?, topic?, position?, motd?, reactions_off? }   → Room
 POST /rooms/:id/archive  (host or co-host)                                → Room
 
 GET  /dms                → Room[]                       # the DMs you are in
@@ -154,6 +154,7 @@ type Room = {
   position: number; archived_at: number | null;
   last_message_id: string | null;   // client compares to read marker; never a motd line
   motd?: { text: string; set_by: string; set_at: number };   // left out when none
+  reactions_off?: true;             // the host turned reactions off here (§4); left out when on
 }
 ```
 
@@ -297,14 +298,29 @@ type Message = {
 }
 ```
 
-Reaction `key` is one of 12 fixed values defined in `linger-core::REACTIONS`. The server
-rejects anything else. `count` is sent but the client renders weight, not the number
-(SPEC §4.8) — it is present for accessibility labels and hover.
+**Reactions** (SPEC §4.8, #485). A reaction's `key` is one emoji, as the picker gives it
+(`"👍"`, `"👍🏽"`, `"👩🏽‍💻"`, `"🇨🇦"`), or `emoji:<id>` for one of the server's own (§5
+"Custom emoji"), its id written as 32 hex digits. It goes in the path escaped, as any
+path segment is. Each group is one emoji, in the order each was first left, with
+`user_ids` in the order people reacted; a client draws the emoji and `count`. Adding
+your own twice is one, and taking back one you never left is `204` too.
 
-The current client uses none of this: reactions are out of the app as a trial (SPEC
-§4.8, #168). It neither calls the reaction endpoints nor applies `reaction.update`, and
-it ignores the `reactions` field. The server keeps all of it, unchanged, so older clients
-still work and the trial can end either way without a migration.
+| Refusal | When |
+|---|---|
+| `422 VALIDATION_FAILED` "A reaction is one emoji." | the key is words, two emoji, a lone skin tone or joiner (the twelve names reactions had before #485 included) |
+| `404 NOT_FOUND` "That emoji isn't on this server." | `emoji:<id>` names no emoji this server has, or writes the id another way |
+| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice |
+| `403 FORBIDDEN` "Reactions are off in this room." | the host turned them off (§3); taking one back is still allowed |
+| `409 CONFLICT` "This message has six different reactions, the most it can hold. Add yours to one of them." | it has `MAX_REACTIONS_PER_MESSAGE` (6) different emoji already, and this isn't one of them |
+
+Removing one of the server's emoji removes every reaction with it, and no frame is sent
+per message: an app stops drawing a reaction whose emoji isn't in the set (`emoji.update`,
+§8). A room whose `reactions_off` is set shows no reactions and no way to add one, but
+keeps them: turning it back on shows them again. A DM is never off. Reactions never
+notify, sound, or make a room look new (`reaction.update`, §8).
+
+Reactions left before the trial (#168) were stored under twelve names; migration 0015
+made each the emoji it drew.
 
 Edits are only permitted by the author, and never on a message-of-the-day line
 (`VALIDATION_FAILED`): it says what the message was set to, then (§3). An app from
@@ -689,7 +705,8 @@ sale (AGENTS rule 13).
 `:name:`, a renamed emoji leaves older messages saying the old name, and a removed one
 reads as its name. An app draws `:name:` as the picture only when it is one of the
 message's own server's emoji, never inside code, and reads it as `:name:` to a screen
-reader. Reactions stay off while #168's trial runs: emoji are for message text.
+reader. A reaction with one is kept by its id instead (§4), so a rename keeps it and a
+removal takes it.
 
 **The picture is the emoji's.** It never expires (§3), `DELETE /uploads/:id` on it is
 `409 CONFLICT` "That picture is one of the server's emoji. Remove the emoji instead.",
@@ -1062,12 +1079,17 @@ S→C  { "op": "ready",  "d": { "session_id", "user", "users": User[],
                               "rooms": Room[], "dms": Room[],
                               "presence": PresenceEntry[],
                               "voice"?: VoiceRoomState[],
-                              "emoji"?: CustomEmoji[] },
+                              "emoji"?: CustomEmoji[],
+                              "reactions"?: true },
                               "s": 0 }
 ```
 
 `ready.emoji` is the server's own emoji, the whole set (§5, "Custom emoji"); a server
 from before them leaves it out, which a client reads as none.
+
+`ready.reactions` is `true` from a server that takes any emoji as a reaction (§4,
+#485). A server from before leaves it out, and a client offers no reactions there: it
+would refuse anything but the twelve names reactions used to have.
 
 `VoiceRoomState` is `{ room_id, peers: VoicePeer[] }`. New servers include
 `ready.voice` for occupied rooms visible to this member, including their DMs.
@@ -1112,7 +1134,7 @@ Beyond that, the client must re-identify and refetch.
 | `message.create` | `Message` |
 | `message.update` | `Message` |
 | `message.delete` | `{ id, room_id }` |
-| `reaction.update` | `{ message_id, key, count, user_ids }` |
+| `reaction.update` | `{ message_id, key, count, user_ids }` — one emoji's reactions on a message as they now are; `count` 0 means none are left. It never notifies, sounds, or makes a room look new (#485) |
 | `presence.update` | `PresenceEntry` |
 | `room.occupancy` | `{ room_id, user_ids }` |
 | `room.enter` | `{ room_id, user_id, entrance_sound }` — triggers the sound |

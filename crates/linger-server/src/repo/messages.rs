@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use linger_core::wire::{Message, PollClosed, ReactionGroup};
-use linger_core::{MessageId, RoomId, UserId, REACTIONS};
+use linger_core::{MessageId, RoomId, UserId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
 
@@ -48,8 +48,8 @@ fn row_to_message(row: &SqliteRow) -> Result<Message, ApiError> {
     })
 }
 
-/// Attach reaction groups to a batch of messages. Groups are emitted in the
-/// canonical `REACTIONS` order; user_ids in first-reacted order (for hover).
+/// Attach reaction groups to a batch of messages: one per emoji, in the order
+/// each was first left, and its people in the order they reacted (for hover).
 async fn hydrate_reactions(db: &SqlitePool, messages: &mut [Message]) -> Result<(), ApiError> {
     if messages.is_empty() {
         return Ok(());
@@ -65,28 +65,31 @@ async fn hydrate_reactions(db: &SqlitePool, messages: &mut [Message]) -> Result<
     }
     let rows = query.fetch_all(db).await?;
 
-    let mut grouped: HashMap<(MessageId, String), Vec<UserId>> = HashMap::new();
+    // The rows come oldest first, so a message's groups are made in the order
+    // its emoji were first left.
+    let mut grouped: HashMap<MessageId, Vec<ReactionGroup>> = HashMap::new();
     for row in &rows {
         let mid = MessageId::from_slice(&row.get::<Vec<u8>, _>("message_id"))
             .map_err(anyhow::Error::from)?;
         let uid =
             UserId::from_slice(&row.get::<Vec<u8>, _>("user_id")).map_err(anyhow::Error::from)?;
-        grouped.entry((mid, row.get("key"))).or_default().push(uid);
+        let key: String = row.get("key");
+        let groups = grouped.entry(mid).or_default();
+        match groups.iter_mut().find(|group| group.key == key) {
+            Some(group) => {
+                group.user_ids.push(uid);
+                group.count += 1;
+            }
+            None => groups.push(ReactionGroup {
+                key,
+                count: 1,
+                user_ids: vec![uid],
+            }),
+        }
     }
 
     for m in messages.iter_mut() {
-        m.reactions = REACTIONS
-            .iter()
-            .filter_map(|key| {
-                grouped
-                    .remove(&(m.id, (*key).to_string()))
-                    .map(|user_ids| ReactionGroup {
-                        key: (*key).to_string(),
-                        count: user_ids.len() as u32,
-                        user_ids,
-                    })
-            })
-            .collect();
+        m.reactions = grouped.remove(&m.id).unwrap_or_default();
     }
     Ok(())
 }

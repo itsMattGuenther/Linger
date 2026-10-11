@@ -5,7 +5,7 @@
 //! `client/src/generated/`). The frontend never hand-writes a wire type.
 //!
 //! This crate also owns the closed vocabularies the server validates against:
-//! the 16-color name palette, the curated font set, and the fixed reaction set.
+//! the 16-color name palette and the curated font set.
 
 pub mod gateway;
 pub mod id;
@@ -33,19 +33,6 @@ pub const FONTS: [&str; 12] = [
     "instrument-serif",
     "departure-mono",
     "silkscreen",
-];
-
-/// The fixed reaction palette (SPEC §4.8): exactly 12, no custom emoji in V1.
-/// Keys are stable wire identifiers; the glyph shown for each is a client concern.
-///
-/// **Confirmed by Matt on 2026-08-20**, when T-304 shipped reactions. These keys
-/// are now written into every `reactions` row on every server, so changing one
-/// is a migration, not an edit: existing rows would keep a key no client draws.
-/// Adding a thirteenth is safe — an older client skips a key it does not know
-/// rather than guessing at it.
-pub const REACTIONS: [&str; 12] = [
-    "heart", "laugh", "wow", "cry", "fire", "skull", "up", "down", "eyes", "clap", "hundred",
-    "sparkles",
 ];
 
 /// Bundled entrance-sound keys (SPEC §4.1). Provisional until T-903 curates the
@@ -77,11 +64,6 @@ pub fn is_valid_entrance_sound_key(key: &str) -> bool {
     ENTRANCE_SOUNDS.contains(&key)
 }
 
-/// Whether `key` names one of the 12 fixed reactions.
-pub fn is_valid_reaction_key(key: &str) -> bool {
-    REACTIONS.contains(&key)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,10 +71,7 @@ mod tests {
     #[test]
     fn vocabularies_are_closed_and_sized() {
         assert_eq!(FONTS.len(), 12);
-        assert_eq!(REACTIONS.len(), 12);
         assert!(is_valid_font_key("geist-sans"));
         assert!(!is_valid_font_key("comic-sans"));
-        assert!(is_valid_reaction_key("heart"));
-        assert!(!is_valid_reaction_key("custom"));
     }
 }

@@ -92,6 +92,10 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   send it or throw it away. Up to five minutes.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
   host can add its own emoji too, animated GIFs included.
+- **Reactions**, as on Discord and Slack: any emoji, the server's own
+  included, with how many people left it, and yours in blue. Up to six
+  different on a message. They never notify anybody. A host can turn them off
+  for a room, and anybody can hide them for themselves.
 - **Polls**: the host or a co-host types `/poll`, and everybody votes with a
   click. Who picked what shows as dots, never a tally, and every poll closes on
   its own, leaving a line saying how it came out.

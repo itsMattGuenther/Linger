@@ -68,6 +68,7 @@ const {
   markRead,
   openAround,
   openRoom,
+  reactTo,
   releaseOtherRooms,
   send,
   sendMessage,
@@ -1639,5 +1640,68 @@ describe("a server's own emoji (#359)", () => {
     arrive(HOME, ready({ user: person("u-matt", "Matt") }));
     expect(serverState(HOME).emoji).toEqual([]);
     expect(serverState(HOME).ownEmoji).toBe(false);
+  });
+});
+
+describe("reactions (#485)", () => {
+  beforeEach(async () => {
+    await disconnect(HOME);
+  });
+
+  /** A room of three messages, opened, with you signed in as Matt. */
+  async function opened(react?: (id: string, key: string, on: boolean) => Promise<void>): Promise<AuthedApi> {
+    const api = fakeApi(HOME, () => pageOf(1, 3));
+    if (react) Object.assign(api, { react });
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), rooms: [room("r-garage", "garage", id(3))] }));
+    await openRoom(api, "r-garage");
+    return api;
+  }
+
+  const held = (at: number) => serverState(HOME).streams["r-garage"]?.messages.find((one) => one.id === id(at));
+
+  it("a server says it takes them; one from before doesn't, and gets none", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: person("u-matt", "Matt"), reactions: true }));
+    expect(serverState(HOME).reactions).toBe(true);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    expect(serverState(HOME).reactions).toBe(false);
+  });
+
+  it("a reaction changes its message and nothing else: nothing new, nothing read", async () => {
+    await opened();
+    const newest = serverState(HOME).newest["r-garage"];
+    const read = serverState(HOME).read["r-garage"];
+    arrive(HOME, { s: 2, op: "reaction.update", d: { message_id: id(1), key: "🔥", count: 1, user_ids: ["u-callie"] } });
+    expect(held(1)?.reactions).toEqual([{ key: "🔥", count: 1, user_ids: ["u-callie"] }]);
+    expect(serverState(HOME).newest["r-garage"]).toBe(newest);
+    expect(serverState(HOME).read["r-garage"]).toBe(read);
+
+    arrive(HOME, { s: 3, op: "reaction.update", d: { message_id: id(1), key: "🔥", count: 0, user_ids: [] } });
+    expect(held(1)?.reactions).toEqual([]);
+    // One for a message nobody has loaded changes nothing at all.
+    const before = serverState(HOME);
+    arrive(HOME, { s: 4, op: "reaction.update", d: { message_id: id(99), key: "🔥", count: 1, user_ids: ["u-callie"] } });
+    expect(serverState(HOME).streams).toBe(before.streams);
+  });
+
+  it("yours shows at once, and a refusal puts it back as it was", async () => {
+    const calls: string[] = [];
+    let refuse = false;
+    const api = await opened(async (messageId, key, on) => {
+      calls.push(`${on ? "PUT" : "DELETE"} ${messageId} ${key}`);
+      if (refuse) throw new ApiError(409, { code: "CONFLICT", message: "This message has six different reactions, the most it can hold. Add yours to one of them.", retry_after_ms: null });
+    });
+    const first = held(2);
+    if (!first) throw new Error("not loaded");
+    await reactTo(api, first, "👍", true);
+    expect(held(2)?.reactions).toEqual([{ key: "👍", count: 1, user_ids: ["u-matt"] }]);
+
+    refuse = true;
+    const now = held(2);
+    if (!now) throw new Error("not loaded");
+    await expect(reactTo(api, now, "🤣", true)).rejects.toThrow("six different reactions");
+    expect(held(2)?.reactions).toEqual([{ key: "👍", count: 1, user_ids: ["u-matt"] }]);
+    expect(calls).toEqual([`PUT ${id(2)} 👍`, `PUT ${id(2)} 🤣`]);
   });
 });

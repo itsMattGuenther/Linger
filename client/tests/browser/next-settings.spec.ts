@@ -440,6 +440,30 @@ test.describe("hosting", () => {
     await expect(rooms.first()).toContainText("Pull up a chair.");
   });
 
+  test("a room's reactions are turned off and on beside its topic, and go only when switched (#485)", async ({ page }) => {
+    await open(page, "?section=rooms");
+    const rooms = page.getByRole("list", { name: "Rooms" }).locator(":scope > li");
+    const editing = page.getByRole("group", { name: "Editing #general" });
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    const reactions = editing.getByRole("switch", { name: "Reactions" });
+    await expect(reactions).toBeChecked();
+    await expect(editing).toContainText("Nothing is deleted: turn them back on and they're all there.");
+    await editing.getByRole("textbox", { name: "Topic" }).fill("Raid talk.");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editing).toHaveCount(0);
+    // Untouched, it isn't sent.
+    expect((await did(page)).filter((line) => line.startsWith("update:r-general"))).toEqual(["update:r-general:general:Raid talk."]);
+
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    await reactions.click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(editing).toHaveCount(0);
+    expect(await did(page)).toContain("update:r-general:general:Raid talk.:reactions_off=true");
+    // It opens again as it was left.
+    await rooms.first().getByRole("button", { name: "Edit" }).click();
+    await expect(reactions).not.toBeChecked();
+  });
+
   test("a room's message of the day is set beside its topic, and goes only when it changed (#464)", async ({ page }) => {
     await open(page, "?section=rooms");
     const rooms = page.getByRole("list", { name: "Rooms" }).locator(":scope > li");
@@ -804,3 +828,13 @@ for (const [width, height] of [
     });
   });
 }
+
+test("anybody can hide reactions on this computer, under Appearance (#485)", async ({ page }) => {
+  await open(page, "?section=appearance");
+  const show = page.getByRole("switch", { name: "Show reactions" });
+  await expect(show).toBeChecked();
+  await expect(page.getByText("Turned off, you see no reactions and no buttons for leaving one. Everyone else still sees theirs.")).toBeVisible();
+  await show.click();
+  await expect(show).not.toBeChecked();
+  expect(await did(page)).toContain("reactions:false");
+});

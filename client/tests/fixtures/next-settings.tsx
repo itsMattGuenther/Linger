@@ -107,6 +107,7 @@ const removedPeople: User[] = [{ ...people.jen, id: "u-rory", username: "rory", 
 function Fixture() {
   const [me, setMe] = useState<User>(matt);
   const [plain, setPlain] = useState(false);
+  const [reactions, setReactions] = useState(true);
   const [scale, setScale] = useState(100);
   const [warmth, setWarmth] = useState(true);
   const [mode, setMode] = useState<ConversationMode>("tabs");
@@ -177,6 +178,7 @@ function Fixture() {
         scale: { value: scale, onChange: (value) => (note(`scale:${value}`), setScale(value)) },
         warmth: { value: warmth, onChange: (value) => (note(`warmth:${value}`), setWarmth(value)) },
         plainNames: { value: plain, onChange: (value) => (note(`plain:${value}`), setPlain(value)) },
+        reactions: { value: reactions, onChange: (value) => (note(`reactions:${value}`), setReactions(value)) },
       }}
       windows={
         query.has("nowindows")
@@ -298,12 +300,16 @@ function Fixture() {
                 update: async (id, change) => {
                   // A message of the day goes only when it changed (#464).
                   const motd = change.motd === undefined ? "" : `:motd=${change.motd}`;
-                  const problem = await saving(`update:${id}:${change.name}:${change.topic}${motd}`);
+                  // So do reactions on or off (#485).
+                  const reactionsOff = change.reactions_off === undefined ? "" : `:reactions_off=${change.reactions_off}`;
+                  const problem = await saving(`update:${id}:${change.name}:${change.topic}${motd}${reactionsOff}`);
                   if (problem === null) {
                     setRooms((held) =>
                       held.map((room) => {
                         if (room.id !== id) return room;
-                        const changed = { ...room, name: change.name, topic: change.topic === "" ? null : change.topic };
+                        const named = { ...room, name: change.name, topic: change.topic === "" ? null : change.topic };
+                        const { reactions_off: _was, ...on } = named;
+                        const changed = change.reactions_off === undefined ? named : change.reactions_off ? { ...named, reactions_off: true } : on;
                         if (change.motd === undefined) return changed;
                         const { motd: _old, ...rest } = changed;
                         return change.motd === "" ? rest : { ...changed, motd: { text: change.motd, set_by: "u-matt", set_at: Date.now() } };

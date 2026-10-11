@@ -371,6 +371,11 @@ pub struct UpdateRoomRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub motd: Option<String>,
+    /// Turn the room's reactions off (`true`) or back on (`false`) (#485).
+    /// Left out, they stay as they are. Hidden, not deleted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reactions_off: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -427,6 +432,12 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub motd: Option<Motd>,
+    /// `true` when the host turned reactions off here (#485): the room shows
+    /// none and takes no new ones. Left out when they're on, by a server from
+    /// before the switch, and on every DM, which has no host and is never off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reactions_off: Option<bool>,
 }
 
 /// A room's message of the day (SPEC §4.1, #464): what's happening now, set by
@@ -458,8 +469,13 @@ pub struct CreateDmRequest {
 // Messages (PROTOCOL §4)
 // ---------------------------------------------------------------------------
 
-/// One reaction key's accumulation on a message. `count` exists for accessibility
-/// labels and hover — the client renders *weight*, never the number (SPEC §4.8).
+/// One emoji's reactions on a message (SPEC §4.8, #485): drawn as the emoji and
+/// `count`, the way Discord and Slack do. A message carries at most
+/// `MAX_REACTIONS_PER_MESSAGE` of these, in the order each was first left.
+///
+/// `key` is the emoji itself (`"👍"`), or `emoji:<id>` for one of the
+/// server's own (`CustomEmoji::id`). `user_ids` is in the order people
+/// reacted, for the names a pill shows on hover.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ReactionGroup {

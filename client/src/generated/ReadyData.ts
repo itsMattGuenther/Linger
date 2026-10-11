@@ -28,4 +28,10 @@ voice?: Array<VoiceRoomState>,
  * The server's own emoji (#359), the whole set. Servers from before
  * custom emoji omit it, which an app reads as none.
  */
-emoji?: Array<CustomEmoji>, };
+emoji?: Array<CustomEmoji>, 
+/**
+ * `true` from a server that takes any emoji as a reaction (#485).
+ * Servers from before omit it, and an app offers no reactions there:
+ * they'd refuse anything but the twelve names reactions used to have.
+ */
+reactions?: boolean, };

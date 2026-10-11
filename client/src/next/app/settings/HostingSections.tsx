@@ -25,7 +25,7 @@ import {
   slugNeeded,
   slugTyped,
 } from "../../core/settings";
-import { Button, HashMark, Icon, IconButton, Marker, markerOf, Name, Swatch, TextField } from "../../kit";
+import { Button, HashMark, Icon, IconButton, Marker, markerOf, Name, SettingRow, Swatch, Switch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useFollowSaved, useSave } from "./parts";
 import "../chat/ReportBlock.css";
 
@@ -54,7 +54,7 @@ export interface HostRoomsProps {
   rooms: readonly Room[];
   create: (room: { slug: string; name: string; topic: string | null }) => Promise<string | null>;
   /** `motd` only when it changed: setting one puts a line in the room (#464). */
-  update: (id: RoomId, change: { name: string; topic: string; motd?: string }) => Promise<string | null>;
+  update: (id: RoomId, change: { name: string; topic: string; motd?: string; reactions_off?: boolean }) => Promise<string | null>;
   move: (id: RoomId, delta: -1 | 1) => Promise<string | null>;
   archive: (id: RoomId) => Promise<string | null>;
 }
@@ -210,6 +210,7 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
   const [name, setName] = useState(room.name);
   const [topic, setTopic] = useState(room.topic ?? "");
   const [motd, setMotd] = useState(room.motd?.text ?? "");
+  const [reactions, setReactions] = useState(room.reactions_off !== true);
   const save = useSave();
   const busy = save.phase.kind === "saving";
   const submit = async () => {
@@ -218,7 +219,9 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
     // The message of the day goes only when it changed: setting it puts a
     // line in the room, and "" clears it (#464).
     const changedMotd = motd.trim() === (room.motd?.text ?? "") ? {} : { motd: motd.trim() };
-    if (await save.run(update(room.id, { name: name.trim(), topic: topic.trim(), ...changedMotd }))) onDone();
+    // Reactions only when switched (#485): hidden, not deleted.
+    const changedReactions = reactions === (room.reactions_off !== true) ? {} : { reactions_off: !reactions };
+    if (await save.run(update(room.id, { name: name.trim(), topic: topic.trim(), ...changedMotd, ...changedReactions }))) onDone();
   };
   const onKeyDown = useBackOut(onDone, () => null);
   return (
@@ -235,6 +238,11 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
         maxLength={MAX_MOTD_CHARS}
         onChange={setMotd}
         onEnter={() => void submit()}
+      />
+      <SettingRow
+        title="Reactions"
+        description="People can react to messages here. Turned off, the room shows none and offers no way to add one. Nothing is deleted: turn them back on and they're all there."
+        control={<Switch label="Reactions" checked={reactions} onChange={setReactions} />}
       />
       <Actions phase={save.phase}>
         <Button variant="quiet" size="sm" disabled={busy} onClick={onDone}>

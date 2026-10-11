@@ -67,6 +67,7 @@ export const ICON_NAMES = [
   "go",
   "intoTabs",
   "smile",
+  "react",
   "download",
   "pin",
 ] as const;
@@ -383,6 +384,16 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   intoTabs: (
     <>
       <path d="M1.8 5.5h12.4M1.8 5.5V13a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V5.5M1.8 5.5V3a1 1 0 0 1 1-1h3.4a1 1 0 0 1 .9.6l.6 1.3" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinejoin="round" /><path d="M8 7.8v4M6.2 10.2L8 12l1.8-1.8" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Add a reaction (#485): a smaller face with a plus at its shoulder.
+  react: (
+    <>
+      <circle cx="7" cy="9" r="5.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+      <path d="M4.9 10.3c.5.8 1.2 1.3 2.1 1.3s1.6-.5 2.1-1.3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <circle cx="5.3" cy="8" r=".8" fill="currentColor" />
+      <circle cx="8.7" cy="8" r=".8" fill="currentColor" />
+      <path d="M13 1.5v4M11 3.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </>
   ),
   smile: (

@@ -19,7 +19,7 @@ use crate::error::ApiError;
 
 const ROOM_SELECT: &str = "
     SELECT r.id, r.slug, r.name, r.topic, r.kind, r.position, r.archived_at,
-           r.motd, r.motd_set_by, r.motd_set_at,
+           r.motd, r.motd_set_by, r.motd_set_at, r.reactions_off,
            (SELECT MAX(m.id) FROM messages m
              WHERE m.room_id = r.id AND m.deleted_at IS NULL
                AND m.motd = 0 AND m.voice_join = 0
@@ -48,6 +48,8 @@ fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
             .transpose()
             .map_err(anyhow::Error::from)?,
         motd: motd_of(row)?,
+        // Only ever `Some(true)`: "on" is the field left out (#485).
+        reactions_off: (row.get::<i64, _>("reactions_off") != 0).then_some(true),
     })
 }
 

@@ -42,7 +42,7 @@ export type ChatStream = Pick<
 >;
 
 /** What the window does for a message. Reply, edit and pictures the view handles itself. */
-export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards" | "openPerson" | "report">;
+export type ChatMessageActions = Pick<MessageActions, "save" | "remove" | "openLink" | "download" | "wantCards" | "openPerson" | "report" | "react">;
 
 /** What the window does for the box: uploads and sending. */
 export type ChatComposer = Pick<
@@ -187,6 +187,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
     parentActions?.wantCards,
     parentActions?.openPerson,
     parentActions?.report,
+    parentActions?.react,
     setReply,
   ]);
 

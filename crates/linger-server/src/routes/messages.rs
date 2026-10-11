@@ -13,11 +13,14 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::limits::{MAX_ATTACHMENTS_PER_MESSAGE, RATE_MESSAGE_SEND};
+use linger_core::limits::{
+    CUSTOM_REACTION_PREFIX, MAX_ATTACHMENTS_PER_MESSAGE, MAX_REACTIONS_PER_MESSAGE,
+    RATE_MESSAGE_SEND,
+};
 use linger_core::wire::{
     CreateMessageRequest, EditMessageRequest, Message, UpdateReadMarkerRequest,
 };
-use linger_core::{MessageId, RoomId, UserId};
+use linger_core::{EmojiId, MessageId, RoomId, UserId};
 use serde::Deserialize;
 
 use crate::auth::{self, AuthedUser, Standing};
@@ -365,58 +368,113 @@ async fn unpin(
     set_pin(&state, id, auth.id, false).await
 }
 
+/// A reaction's key is one emoji, or `emoji:<id>` for one of the server's own
+/// that still exists (SPEC §4.8, #485). The id is written the one way the
+/// server writes ids, so a key is the same string everywhere it's compared.
+async fn check_reaction_key(state: &AppState, key: &str) -> Result<(), ApiError> {
+    let Some(id) = key.strip_prefix(CUSTOM_REACTION_PREFIX) else {
+        return validate::reaction_emoji(key);
+    };
+    let known = match id.parse::<EmojiId>() {
+        Ok(emoji) if emoji.to_string() == id => repo::emoji::picture_of(&state.db.read, emoji)
+            .await?
+            .is_some(),
+        _ => false,
+    };
+    if known {
+        Ok(())
+    } else {
+        Err(ApiError::not_found("That emoji isn't on this server."))
+    }
+}
+
 async fn add_reaction(
     State(state): State<AppState>,
     auth: AuthedUser,
     Path((id, key)): Path<(MessageId, String)>,
 ) -> Result<StatusCode, ApiError> {
-    if !linger_core::is_valid_reaction_key(&key) {
-        return Err(ApiError::validation(
-            "Reactions come from the fixed set of 12.",
-        ));
-    }
+    check_reaction_key(&state, &key).await?;
     let message = reachable(&state, id, auth.id).await?;
     if message.deleted_at.is_some() {
         return Err(ApiError::not_found("That message is gone."));
     }
+    // A line the server wrote about somebody joining voice or a poll closing
+    // isn't something anybody said (#473, #474).
+    if message.voice_join == Some(true) || message.poll_closed.is_some() {
+        return Err(ApiError::validation("Nobody can react to that line."));
+    }
+    let off: Option<i64> = sqlx::query_scalar("SELECT reactions_off FROM rooms WHERE id = ?")
+        .bind(message.room_id.to_vec())
+        .fetch_optional(&state.db.read)
+        .await?;
+    if off.unwrap_or(0) != 0 {
+        return Err(ApiError::forbidden("Reactions are off in this room."));
+    }
 
-    sqlx::query(
+    // At most six different emoji on a message (#485). The check and the write
+    // are one statement, so two people adding a seventh at once can't both
+    // get in: SQLite runs one write at a time.
+    let wrote = sqlx::query(
         "INSERT OR IGNORE INTO reactions (message_id, user_id, key, created_at)
-         VALUES (?, ?, ?, ?)",
+         SELECT ?1, ?2, ?3, ?4
+         WHERE EXISTS (SELECT 1 FROM reactions WHERE message_id = ?1 AND key = ?3)
+            OR (SELECT COUNT(DISTINCT key) FROM reactions WHERE message_id = ?1) < ?5",
     )
     .bind(id.to_vec())
     .bind(auth.id.to_vec())
     .bind(&key)
     .bind(now_ms())
+    .bind(MAX_REACTIONS_PER_MESSAGE as i64)
     .execute(&state.db.write)
-    .await?;
+    .await?
+    .rows_affected();
+    if wrote == 0 {
+        // Nothing written: either theirs was already there, which is fine, or
+        // the message is full.
+        let had: Option<i64> = sqlx::query_scalar(
+            "SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND key = ?",
+        )
+        .bind(id.to_vec())
+        .bind(auth.id.to_vec())
+        .bind(&key)
+        .fetch_optional(&state.db.read)
+        .await?;
+        if had.is_none() {
+            return Err(ApiError::conflict(
+                "This message has six different reactions, the most it can hold. Add yours to one of them.",
+            ));
+        }
+        return Ok(StatusCode::NO_CONTENT);
+    }
 
     publish_reaction(&state, id, message.room_id, &key).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Taking one back is always allowed, even in a room whose reactions are off
+/// now, and needs no check that the emoji still exists: there's only ever
+/// one's own to remove.
 async fn remove_reaction(
     State(state): State<AppState>,
     auth: AuthedUser,
     Path((id, key)): Path<(MessageId, String)>,
 ) -> Result<StatusCode, ApiError> {
-    if !linger_core::is_valid_reaction_key(&key) {
-        return Err(ApiError::validation(
-            "Reactions come from the fixed set of 12.",
-        ));
-    }
     // Taking a reaction back needs the same check putting one on does: without
     // it, a non-member with an id could still make the server fan out a
     // `reaction.update` for a DM's message.
     let message = reachable(&state, id, auth.id).await?;
-    sqlx::query("DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND key = ?")
-        .bind(id.to_vec())
-        .bind(auth.id.to_vec())
-        .bind(&key)
-        .execute(&state.db.write)
-        .await?;
+    let removed =
+        sqlx::query("DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND key = ?")
+            .bind(id.to_vec())
+            .bind(auth.id.to_vec())
+            .bind(&key)
+            .execute(&state.db.write)
+            .await?
+            .rows_affected();
 
-    publish_reaction(&state, id, message.room_id, &key).await?;
+    if removed > 0 {
+        publish_reaction(&state, id, message.room_id, &key).await?;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -68,6 +68,7 @@ import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 import { hostsHere } from "./host";
 import { isQuietLine } from "./quietLines";
+import { toggled, withGroup } from "./reactions";
 
 /**
  * Mirrors `Status` in `src-tauri/src/gateway.rs`. Allowed to be hand-written:
@@ -270,6 +271,12 @@ export interface GatewayState {
    */
   ownEmoji: boolean;
   /**
+   * Whether this server takes any emoji as a reaction (#485): false on one
+   * from before (0.4.10 and older), whose `ready` doesn't say so. The app
+   * offers no reactions there, rather than buttons the server would refuse.
+   */
+  reactions: boolean;
+  /**
    * Our own seat, while we have one. Local state: the server knows we are
    * in voice and our self-reported controls. Device health, speaking levels
    * and per-person volume remain local (SPEC §4.14).
@@ -381,6 +388,7 @@ const EMPTY: GatewayState = {
   voice: {},
   emoji: [],
   ownEmoji: false,
+  reactions: false,
   myVoice: null,
   voiceFailed: null,
   voiceTakenOut: null,
@@ -604,6 +612,24 @@ function withStream(
   return { ...current, streams: { ...current.streams, [roomId]: next } };
 }
 
+/**
+ * Rewrite one message's reactions wherever it's loaded. Unchanged reactions
+ * return the snapshot unchanged, so nothing redraws.
+ */
+function withReactions(current: GatewayState, messageId: MessageId, change: (groups: Message["reactions"]) => Message["reactions"]): GatewayState {
+  for (const [roomId, stream] of Object.entries(current.streams)) {
+    const held = stream.messages.find((one) => one.id === messageId);
+    if (!held) continue;
+    const reactions = change(held.reactions);
+    if (reactions === held.reactions) return current;
+    return withStream(current, roomId, (room) => ({
+      ...room,
+      messages: room.messages.map((one) => (one.id === messageId ? { ...one, reactions } : one)),
+    }));
+  }
+  return current;
+}
+
 /** Forget that somebody was typing in a room. */
 function stoppedTyping(current: GatewayState, roomId: RoomId, userId: UserId): GatewayState {
   const room = current.typing[roomId];
@@ -648,6 +674,7 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         voice: Object.fromEntries((frame.d.voice ?? []).map((room) => [room.room_id, room.peers])),
         emoji: frame.d.emoji ?? [],
         ownEmoji: Array.isArray(frame.d.emoji),
+        reactions: frame.d.reactions === true,
         myVoice: null,
         // `read` and `leftOff` survive: one is a copy of something the server
         // is holding for us, and the other is where this session started, which
@@ -860,9 +887,14 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       return { ...current, emoji: frame.d.emoji, ownEmoji: true };
     // `reports.changed` only says to ask again, which isn't the fold's to do:
     // the listener below asks.
-    // `reaction.update` is still sent, and deliberately not applied: the app
-    // shows no reactions during the trial (#168), and a frame that changes
-    // nothing on screen should not re-render anything.
+    case "reaction.update": {
+      // One emoji's reactions on a message, as they now are (#485). The frame
+      // names the message, not its room, so it goes to whichever loaded room
+      // holds it. It changes the message and nothing else: no newest, no
+      // read marker, no notification. A reaction never calls anybody over.
+      const { message_id, key, count, user_ids } = frame.d;
+      return withReactions(current, message_id, (groups) => withGroup(groups, { key, count, user_ids }));
+    }
     default:
       return current;
   }
@@ -1787,6 +1819,30 @@ export async function pinMessage(api: AuthedApi, message: Message, pinned: boole
     ...stream,
     messages: mergeMessage(stream.messages, changed),
   });
+}
+
+/**
+ * Leave a reaction, or take yours back (#485). It shows at once; the
+ * server's `reaction.update` then says how it really is, and a refusal puts
+ * the message's reactions back as they were and rejects with the server's
+ * words.
+ */
+export async function reactTo(api: AuthedApi, message: Message, key: string, on: boolean): Promise<void> {
+  const meId = stateOf(api.baseUrl).me?.id;
+  const before = message.reactions.find((one) => one.key === key) ?? { key, count: 0, user_ids: [] };
+  const put = (change: (groups: Message["reactions"]) => Message["reactions"]) => {
+    if (linkFor(api) === null) return;
+    const next = withReactions(stateOf(api.baseUrl), message.id, change);
+    const stream = next.streams[message.room_id];
+    if (stream && stream !== stateOf(api.baseUrl).streams[message.room_id]) putStream(api.baseUrl, message.room_id, stream);
+  };
+  if (meId !== undefined) put((groups) => withGroup(groups, toggled(groups, key, meId, on)));
+  try {
+    await api.react(message.id, key, on);
+  } catch (error) {
+    put((groups) => withGroup(groups, before));
+    throw error;
+  }
 }
 
 /**

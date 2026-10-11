@@ -158,6 +158,68 @@ fn joins_here(chars: &[char], at: usize) -> bool {
     }
 }
 
+/// One emoji, as a reaction is (SPEC §4.8, #485): what the picker gives, and
+/// never a word, two emoji, or a stray joiner. A server's own emoji is not this
+/// shape; it's `emoji:<id>` and checked against the set instead.
+pub fn reaction_emoji(key: &str) -> Result<(), ApiError> {
+    if is_one_emoji(key) {
+        Ok(())
+    } else {
+        Err(ApiError::validation("A reaction is one emoji."))
+    }
+}
+
+/// Unicode's shapes for one emoji (UTS #51), by hand rather than from a list,
+/// so an emoji newer than this server is still one: a flag (two regional
+/// indicators), a keycap (1️⃣), a tag flag (🏴 and its tags, England's), or one
+/// or more emoji joined by U+200D, each with an optional U+FE0F and skin tone
+/// (👍🏽, 👩🏽‍💻, 🏳️‍🌈).
+fn is_one_emoji(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    // The longest in Unicode 16 (a family with skin tones) is 10.
+    if chars.is_empty() || chars.len() > 16 {
+        return false;
+    }
+    let regional = |c: char| ('\u{1F1E6}'..='\u{1F1FF}').contains(&c);
+    if chars.len() == 2 && chars.iter().all(|&c| regional(c)) {
+        return true;
+    }
+    if let [c, rest @ ..] = chars.as_slice() {
+        let keycap = c.is_ascii_digit() || *c == '#' || *c == '*';
+        if keycap && matches!(rest, ['\u{20E3}'] | ['\u{FE0F}', '\u{20E3}']) {
+            return true;
+        }
+    }
+    if let [first, tags @ .., last] = chars.as_slice() {
+        if *first == '\u{1F3F4}'
+            && *last == '\u{E007F}'
+            && !tags.is_empty()
+            && tags.iter().all(|c| ('\u{E0020}'..='\u{E007E}').contains(c))
+        {
+            return true;
+        }
+    }
+    let skin = |c: char| ('\u{1F3FB}'..='\u{1F3FF}').contains(&c);
+    let mut at = 0;
+    loop {
+        match chars.get(at) {
+            Some(&c) if is_emoji(c) && !skin(c) && !regional(c) => at += 1,
+            _ => return false,
+        }
+        if chars.get(at) == Some(&'\u{FE0F}') {
+            at += 1;
+        }
+        if chars.get(at).is_some_and(|&c| skin(c)) {
+            at += 1;
+        }
+        match chars.get(at) {
+            None => return true,
+            Some('\u{200D}') => at += 1,
+            Some(_) => return false,
+        }
+    }
+}
+
 /// An emoji, skin tones included. The ASCII digits, `#` and `*` are emoji to
 /// Unicode too, as the start of a keycap (1️⃣), but a joiner between two of
 /// them joins nothing: it only hides in the middle of a number.
@@ -502,6 +564,50 @@ mod tests {
     use linger_core::wire::ColorKey;
 
     use super::*;
+
+    /// Every shape an emoji takes is one reaction; words, two emoji and stray
+    /// parts aren't (#485).
+    #[test]
+    fn a_reaction_is_one_emoji_of_any_shape() {
+        for one in [
+            "👍",
+            "❤️",
+            "❤",
+            "👍🏽",
+            "👩🏽‍💻",
+            "🏳️‍🌈",
+            "👨‍👩‍👧‍👦",
+            "🧑🏿‍🤝‍🧑🏻",
+            "🇨🇦",
+            "1️⃣",
+            "#⃣",
+            "🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+            "🫠",
+        ] {
+            assert!(reaction_emoji(one).is_ok(), "{one:?} was refused");
+        }
+        for not in [
+            "",
+            "a",
+            "heart",
+            ":gg:",
+            "emoji:0123",
+            "😀😀",
+            "👍 ",
+            " 👍",
+            "🏽",
+            "\u{200D}",
+            "👍\u{200D}",
+            "\u{200D}👍",
+            "🇨",
+            "🇨🇦🇨🇦",
+            "1",
+            "12⃣",
+            "👍a",
+        ] {
+            assert!(reaction_emoji(not).is_err(), "{not:?} was allowed");
+        }
+    }
 
     #[test]
     fn username_shapes() {

@@ -577,6 +577,16 @@ export class AuthedApi {
     return this.#withAuth((accessToken) => requestJson<Message>(this.baseUrl, pinned ? "POST" : "DELETE", path, { accessToken }));
   }
 
+  /**
+   * Leave a reaction on a message, or take yours back (PROTOCOL §4, #485).
+   * `key` is one emoji, or `emoji:<id>` for one of the server's own; it goes
+   * in the path escaped. What it changed comes back as `reaction.update`.
+   */
+  react(id: string, key: string, on: boolean): Promise<void> {
+    const path = `/messages/${encodeURIComponent(id)}/reactions/${encodeURIComponent(key)}`;
+    return this.#withAuth((accessToken) => requestVoid(this.baseUrl, on ? "PUT" : "DELETE", path, { accessToken }));
+  }
+
   /** Ask a room a question (PROTOCOL §4, #474): the host or a co-host. The poll's message. */
   createPoll(roomId: RoomId, request: CreatePollRequest): Promise<Message> {
     return this.post<Message>(`/rooms/${encodeURIComponent(roomId)}/polls`, request);

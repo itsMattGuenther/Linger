@@ -12,6 +12,7 @@ import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { PollClosedLine } from "./PollClosedLine";
+import { onPhone } from "../../core/phone";
 import { type MessageActions, MessageRow } from "./MessageRow";
 import type { CustomEmojiByName, MentionLookup } from "./MessageText";
 import "./Conversation.css";
@@ -355,7 +356,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
 
   const items = virtualizer.getVirtualItems();
   return (
-    <div className="nx-conv">
+    <div className="nx-conv" data-react={props.actions.react && !onPhone() ? "yes" : undefined}>
       <div
         ref={scroller}
         className="nx-conv-scroll"

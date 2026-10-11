@@ -144,6 +144,10 @@
   --accent-wash-strong: var(--lamp-a12);
   --accent-wash-stronger: var(--lamp-a16);
   --accent-edge: var(--lamp-a45);
+  /* Your own reaction (#485): blue, as on Discord, so you can tell at a
+     glance which you left. Never the lamp, which means something new. */
+  --react-mine-wash: color-mix(in oklab, var(--name-azure) 22%, var(--surface-control));
+  --react-mine-edge: color-mix(in oklab, var(--name-azure) 70%, transparent);
   /* Something new addressed to you, a DM (#291): lit in the lamp, a soft
      fill and a thin edge on top of bold. Never a count. */
   --lit-wash: var(--accent-wash-strong);

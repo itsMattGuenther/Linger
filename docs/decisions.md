@@ -218,6 +218,42 @@ stored reaction.
 
 ---
 
+## Decided — reactions come back, the Discord and Slack way
+
+**Matt, 2026-10-10 (#485).** The trial above ends: reactions return. What decided
+it was the late reader. Somebody catches up on a week of a room, laughs at
+something, and leaves a 😂, and the person who wrote it learns it landed, which a
+reply three screens down doesn't do. Most of the people here come from Discord and
+Slack, and Teams and phone texts work the same way now.
+
+Three rounds of mockups, shown to the group:
+
+1. Four looks under the twelve old marks: bigger by weight (the original §4.8),
+   coloured dots per person like a poll's, a grey line of names, and tiny marks by
+   the time. Matt liked a background behind each mark, so it can't read as
+   something the author typed, and a different colour for your own.
+2. Filled pills, yours blue, names on hover, with dots, with numbers, and by the
+   time. No notifications at all, in rooms and DMs, and a host switch per room.
+3. Matt chose numbers, `👍 3`: "It just works", and the language is universal now.
+   Any emoji, the server's own included; six different on a message at most; a
+   smiley beside the ···, not a floating bar over the message above.
+
+What that changes:
+
+- **A number, on purpose.** "Weight, not number" stays the rule everywhere else;
+  a reaction is a tally by nature, and the familiar pill reads at a glance.
+- **Any emoji, so the twelve keys go.** A key is the emoji itself, or
+  `emoji:<id>` for a server's own, by id so a rename keeps it. Migration 0015
+  turned the twelve stored names into their emoji. That breaks an app from 0.3.4
+  or earlier drawing reactions, which nobody runs: voice already needs 0.4.1.
+- **Removing a server emoji removes its reactions.** Matt: a pill with no picture
+  would look broken.
+- **Never a notification**, for new or old messages; the late-reaction card that
+  was mocked in round one was turned down.
+- **Off switches.** A host can turn them off per room, hidden rather than deleted.
+  Anybody can hide them for themselves (Settings → Appearance), which Matt asked
+  for while it was being built.
+
 ## Decided — the client is rebuilt around the Buddy list design
 
 **Matt, 2026-09-25 (#198).** Out of the #101 design exploration, Matt chose the

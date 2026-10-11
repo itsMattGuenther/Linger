@@ -299,7 +299,8 @@ test("holding a message opens its actions from the bottom, Report to host… las
   await expect(page.getByRole("log")).toContainText("Putting it on now.");
   await page.locator(".nx-msg", { hasText: "No plans, no agenda" }).last().dispatchEvent("contextmenu");
   const sheet = page.getByRole("menu");
-  await expect(sheet.getByRole("menuitem")).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
+  // Its actions; the emoji above them are #485's, tested below.
+  await expect(sheet.locator("[data-kit='MenuItem']")).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
   expect(await sticksOut(page), "the actions").toEqual([]);
 
   await sheet.getByRole("menuitem", { name: "Report to host…" }).click();
@@ -388,4 +389,41 @@ test("the emoji picker spans the message box, its emoji a finger's size, and lea
 
   await first.click();
   await expect(page.getByRole("combobox", { name: /^Message/ })).toHaveValue(/^\p{Extended_Pictographic}/u);
+});
+
+// Reactions on the phone (#485): no hovering, so holding a message offers the
+// six emoji you use most and every emoji, and the smiley-plus after a
+// message's reactions is always there.
+test("holding a message reacts with one of six, or any emoji from the picker at the bottom", async ({ page }) => {
+  await open(page, "?one&guest&shell=phone");
+  await settled(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  const row = page.locator(".nx-msg", { hasText: "No plans, no agenda" }).last();
+  const id = (await row.getAttribute("data-message")) ?? "";
+  await row.dispatchEvent("contextmenu");
+  const quick = page.getByRole("menu").getByRole("group", { name: "React" });
+  await expect(quick.getByRole("menuitem")).toHaveCount(7);
+  await expect(quick.getByRole("menuitem").last()).toHaveAttribute("aria-label", "Every emoji");
+  expect(await sticksOut(page), "the sheet").toEqual([]);
+  await quick.getByRole("menuitem", { name: "❤️" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  // The server's word comes back as a frame, and the pill is yours.
+  const pill = row.locator(".nx-react-pill").first();
+  await expect(pill.locator(".nx-react-count")).toHaveText("1");
+  await expect(pill).toHaveAttribute("aria-pressed", "true");
+  expect(await did(page)).toContain(`react ${id} ❤️ on`);
+
+  // The smiley-plus is there without hovering, and opens every emoji.
+  const add = row.getByRole("button", { name: "Add a reaction" });
+  await expect(add).toHaveCSS("opacity", "1");
+  await add.click();
+  const picker = page.getByRole("dialog", { name: "React to Eli's message" });
+  await expect(picker).toBeVisible();
+  // The phone's keyboard waits for a tap, so it doesn't cover the picker.
+  await expect(picker.getByRole("searchbox", { name: "Find an emoji" })).not.toBeFocused();
+  expect(await sticksOut(page), "the picker").toEqual([]);
+  const box = await picker.boundingBox();
+  const view = page.viewportSize();
+  expect(box && view && box.y + box.height).toBeGreaterThan((view?.height ?? 0) - 40);
 });

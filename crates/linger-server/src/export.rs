@@ -35,6 +35,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use linger_core::limits::CUSTOM_REACTION_PREFIX;
 use linger_core::wire::{ExportJob, ExportState, Message, Room, RoomKind, User};
 use linger_core::{ExportId, MessageId, RoomId, UserId};
 use sqlx::Row;
@@ -611,6 +612,18 @@ async fn room_markdown(
     // transcript, and this is the whole cost of fixing it: a short string per
     // message, in a room this loop is already walking.
     let mut said: HashMap<MessageId, String> = HashMap::new();
+    // A reaction with one of the server's own emoji is kept by its id; the
+    // transcript says its name, as a message would (#485).
+    let emoji: HashMap<String, String> = crate::repo::emoji::all(&state.db.read, &state.config)
+        .await?
+        .into_iter()
+        .map(|one| {
+            (
+                format!("{CUSTOM_REACTION_PREFIX}{}", one.id),
+                format!(":{}:", one.name),
+            )
+        })
+        .collect();
 
     loop {
         let batch = crate::repo::messages::batch_ascending(
@@ -639,7 +652,7 @@ async fn room_markdown(
                 out.push_str(&format!("\n---\n\n## {y:04}-{m:02}-{d:02}\n\n"));
                 day = Some(today);
             }
-            out.push_str(&message_markdown(message, users, names, &said));
+            out.push_str(&message_markdown(message, users, names, &emoji, &said));
             said.insert(message.id, excerpt(message, users));
             wrote_any = true;
         }
@@ -656,6 +669,7 @@ fn message_markdown(
     message: &Message,
     users: &HashMap<UserId, User>,
     names: &HashMap<String, String>,
+    emoji: &HashMap<String, String>,
     said: &HashMap<MessageId, String>,
 ) -> String {
     let mut out = String::new();
@@ -737,7 +751,10 @@ fn message_markdown(
         let summary: Vec<String> = message
             .reactions
             .iter()
-            .map(|group| format!("{} {}", group.key, group.count))
+            .map(|group| {
+                let shown = emoji.get(&group.key).unwrap_or(&group.key);
+                format!("{shown} {}", group.count)
+            })
             .collect();
         out.push_str(&format!("\n`{}`\n", summary.join("  ")));
     }
@@ -1057,7 +1074,13 @@ mod tests {
             poll: None,
             poll_closed: None,
         };
-        let written = message_markdown(&line, &HashMap::new(), &HashMap::new(), &HashMap::new());
+        let written = message_markdown(
+            &line,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         assert_eq!(written, "**20:50** — somebody who is gone joined voice\n\n");
     }
 
@@ -1099,7 +1122,13 @@ mod tests {
             }),
             poll_closed: None,
         };
-        let written = message_markdown(&asked, &HashMap::new(), &HashMap::new(), &HashMap::new());
+        let written = message_markdown(
+            &asked,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         assert_eq!(
             written,
             "**20:00** — somebody who is gone asked a poll\n\n**Horde or Alliance?**\n\n\

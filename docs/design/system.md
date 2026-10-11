@@ -705,6 +705,21 @@ height before they load (at most 320 by 400), so a row is measured once. A
 message that is nothing but one link shows only its link card. Files that
 aren't pictures, video or sound are a card with a Download button.
 
+**Reactions** (#485, SPEC §4.8, `app/chat/Reactions.tsx`). A pill per emoji
+just under what a message shows: `--control-sm` tall, `--radius-pill`, the
+emoji and then its count in the UI face at `--text-meta`, tabular. Other
+people's are `--surface-control`; yours are `--react-mine-wash` with a
+`--react-mine-edge` outline, the palette's azure as Discord's blue, never the
+lamp. Hovering a pill names who left it. With reactions on, a message's right
+column holds a smiley to the left of its ···, so `--msg-actions-w` is two
+small buttons there, and quiet lines share it so every time lines up. The
+smiley-plus after the pills shows on hover (always on a phone) while a message
+has room for another. Both open the message box's own `EmojiPicker`
+(`floating`), above the opener when it fits; at six reactions it offers only
+those six and says why. On a phone, the hold sheet's `top` is the six emoji
+you use most and a smiley-plus. In high contrast a pill keeps a `ButtonText`
+edge, and yours is lit in `Highlight`.
+
 **Shared audio** has Linger's own player, not the engine's (#247):
 WebKitGTK's controls drop their volume slider on anything under 136px
 tall, which a one-line player always is, so on Linux there was no way to

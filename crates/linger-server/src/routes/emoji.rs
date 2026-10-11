@@ -9,7 +9,8 @@ use axum::routing::{get, patch};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
 use linger_core::limits::{
-    emoji_name_ok, EMOJI_MIMES, MAX_CUSTOM_EMOJI, MAX_EMOJI_BYTES, MAX_EMOJI_EDGE,
+    emoji_name_ok, CUSTOM_REACTION_PREFIX, EMOJI_MIMES, MAX_CUSTOM_EMOJI, MAX_EMOJI_BYTES,
+    MAX_EMOJI_EDGE,
 };
 use linger_core::wire::{CreateEmojiRequest, CustomEmoji, RenameEmojiRequest};
 use linger_core::EmojiId;
@@ -178,7 +179,10 @@ async fn rename(
 }
 
 /// `DELETE /emoji/:id` — gone, picture and all. Messages that used it keep
-/// the text `:name:`, which is what they then show.
+/// the text `:name:`, which is what they then show. Reactions with it go
+/// with it (#485): a reaction with no picture would look broken. Nobody gets
+/// a frame per message for that; `emoji.update` without it is how an app
+/// knows to stop drawing them.
 async fn remove(
     State(state): State<AppState>,
     _auth: HostOrCohost,
@@ -187,10 +191,16 @@ async fn remove(
     let picture = repo::emoji::picture_of(&state.db.read, id)
         .await?
         .ok_or_else(|| ApiError::not_found("No such emoji."))?;
+    let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
     sqlx::query("DELETE FROM custom_emoji WHERE id = ?")
         .bind(id.to_vec())
-        .execute(&state.db.write)
+        .execute(&mut *tx)
         .await?;
+    sqlx::query("DELETE FROM reactions WHERE key = ?")
+        .bind(format!("{CUSTOM_REACTION_PREFIX}{id}"))
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await.map_err(ApiError::from)?;
 
     // The picture goes with it, as a thrown-away upload does. A store that
     // can't delete right now leaves an unposted upload, which the expiry

@@ -388,11 +388,11 @@ async fn a_non_member_cannot_touch_a_dms_messages_by_id() {
         ),
         (
             "react",
-            client.put(server.url(&format!("/messages/{message_id}/reactions/heart"))),
+            client.put(server.url(&format!("/messages/{message_id}/reactions/❤️"))),
         ),
         (
             "unreact",
-            client.delete(server.url(&format!("/messages/{message_id}/reactions/heart"))),
+            client.delete(server.url(&format!("/messages/{message_id}/reactions/❤️"))),
         ),
         (
             "delete",
@@ -456,7 +456,7 @@ async fn a_non_members_socket_never_receives_a_dm_frame() {
         .unwrap();
     let message_id = posted["id"].as_str().unwrap().to_string();
     reqwest::Client::new()
-        .put(server.url(&format!("/messages/{message_id}/reactions/heart")))
+        .put(server.url(&format!("/messages/{message_id}/reactions/❤️")))
         .bearer_auth(&host.access_token)
         .send()
         .await
