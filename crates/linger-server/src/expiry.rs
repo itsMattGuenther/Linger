@@ -1,4 +1,5 @@
-//! The file sweeper: what SPEC §4.10 means by "files expire after 365 days".
+//! The sweeper: what SPEC §4.10 means by "files expire after 365 days", and
+//! the used sign-in tokens nothing else ever deleted (#520).
 //!
 //! A shared server fills up. Left alone it fills up forever, because nobody
 //! goes back and tidies a year of screenshots, and the day it is full is the
@@ -35,6 +36,15 @@
 //! nothing left pointing at it — a file nobody can see and nobody can remove.
 //! Doing it this way, a crash in between leaves a row whose bytes are gone,
 //! which the next pass tries again and finishes.
+//!
+//! **Sign-in tokens** are the other thing a pass takes. Renewing a sign-in
+//! (`auth::rotate_refresh`) marks the refresh token it used up and makes a new
+//! one, and an app left open renews all day: about a hundred rows a day for
+//! every device, which nothing deleted. A pass deletes each token once its own
+//! 30 days are up. It is refused by then anyway, and a used one inside its 30
+//! days stays, so presenting it again still ends the sign-in it came from
+//! (PROTOCOL §2). This is not about files, so turning file expiry off leaves
+//! it running.
 
 use std::time::Duration;
 
@@ -67,6 +77,8 @@ type Expired = (Vec<u8>, String, Option<String>, Option<String>, i64);
 pub struct Swept {
     pub files: u64,
     pub bytes: u64,
+    /// Sign-in tokens past their 30 days (#520).
+    pub tokens: u64,
 }
 
 /// Run the sweeper for as long as the process lives.
@@ -92,15 +104,19 @@ pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
 async fn drain(state: &AppState) {
     loop {
         match sweep(state).await {
-            Ok(swept) if swept.files == 0 => return,
             Ok(swept) => {
-                tracing::info!(
-                    files = swept.files,
-                    bytes = swept.bytes,
-                    "swept expired files"
-                );
+                if swept.files > 0 {
+                    tracing::info!(
+                        files = swept.files,
+                        bytes = swept.bytes,
+                        "swept expired files"
+                    );
+                }
+                if swept.tokens > 0 {
+                    tracing::info!(tokens = swept.tokens, "swept expired sign-in tokens");
+                }
                 #[allow(clippy::cast_sign_loss)]
-                if swept.files < SWEEP_BATCH as u64 {
+                if swept.files < SWEEP_BATCH as u64 && swept.tokens < SWEEP_BATCH as u64 {
                     return;
                 }
                 tokio::time::sleep(BATCH_PAUSE).await;
@@ -176,5 +192,19 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
             swept.bytes += size_bytes.max(0) as u64;
         }
     }
+
+    // Sign-in tokens past their 30 days (#520), a batch at a time like the
+    // files: a server that has never swept them has a row for every renewal
+    // since it started. `rotate_refresh` refuses one at `expires_at <= now`,
+    // so that is the line here too.
+    swept.tokens = sqlx::query(
+        "DELETE FROM refresh_tokens WHERE id IN (
+           SELECT id FROM refresh_tokens WHERE expires_at <= ? LIMIT ?)",
+    )
+    .bind(now_ms())
+    .bind(SWEEP_BATCH)
+    .execute(&state.db.write)
+    .await?
+    .rows_affected();
     Ok(swept)
 }

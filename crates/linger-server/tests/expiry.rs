@@ -9,10 +9,13 @@
 
 mod common;
 
+use common::spawn_server;
 use common::{bootstrap_host, spawn_tuned, TestServer};
-use linger_core::wire::{Attachment, Message, Room, ServerInfo, UploadSlot};
+use linger_core::wire::{Attachment, Message, RefreshResponse, Room, ServerInfo, UploadSlot};
 use linger_server::config::Config;
+use linger_server::db::now_ms;
 use linger_server::expiry;
+use sha2::{Digest, Sha256};
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -156,6 +159,30 @@ async fn media_ids(server: &TestServer, token: &str) -> Vec<String> {
 
 fn filler(len: usize) -> Vec<u8> {
     vec![b'x'; len]
+}
+
+/// Renew a sign-in, as the app does every fifteen minutes or so: the token
+/// presented is used up, and the reply carries the next one.
+async fn renew(server: &TestServer, refresh_token: &str) -> reqwest::Response {
+    client()
+        .post(server.url("/auth/refresh"))
+        .json(&serde_json::json!({ "refresh_token": refresh_token }))
+        .send()
+        .await
+        .unwrap()
+}
+
+/// The row a refresh token is kept as, by its hash, as `auth` stores it.
+fn token_hash(refresh_token: &str) -> String {
+    hex::encode(Sha256::digest(refresh_token.as_bytes()))
+}
+
+/// Every refresh token row's hash, sorted.
+async fn token_rows(server: &TestServer) -> Vec<String> {
+    sqlx::query_scalar("SELECT token_hash FROM refresh_tokens ORDER BY token_hash")
+        .fetch_all(&server.state.db.read)
+        .await
+        .unwrap()
 }
 
 // ---------------------------------------------------------------------------
@@ -358,4 +385,53 @@ async fn the_server_reports_what_storage_is_used() {
 async fn expiry_being_off_is_reported_as_off() {
     let (server, token, _room) = fixture(|config| config.file_expiry_days = None).await;
     assert_eq!(info(&server, &token).await.file_expiry_days, None);
+}
+
+/// Used sign-in tokens are deleted once their 30 days are up (#520). An app
+/// left open renews its sign-in all day, and each renewal kept the token it
+/// used up: about a hundred rows a day for every device, forever. Past its 30
+/// days a token is refused anyway. One still inside them stays, so presenting
+/// it again still ends the sign-in it came from (PROTOCOL §2), and the live
+/// one keeps working.
+#[tokio::test]
+async fn used_sign_in_tokens_go_once_their_thirty_days_are_up() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let first = host.refresh_token;
+    let second: RefreshResponse = renew(&server, &first).await.json().await.unwrap();
+    let second = second.refresh_token;
+    let third: RefreshResponse = renew(&server, &second).await.json().await.unwrap();
+    let third = third.refresh_token;
+    assert_eq!(token_rows(&server).await.len(), 3);
+
+    // The first one's 30 days ran out yesterday.
+    sqlx::query("UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?")
+        .bind(now_ms() - DAY_MS)
+        .bind(token_hash(&first))
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().tokens, 1);
+    let mut kept = vec![token_hash(&second), token_hash(&third)];
+    kept.sort();
+    assert_eq!(
+        token_rows(&server).await,
+        kept,
+        "the used token past its 30 days is gone, the rest kept"
+    );
+
+    // The live one still renews.
+    let fourth = renew(&server, &third).await;
+    assert_eq!(fourth.status(), 200);
+    let fourth: RefreshResponse = fourth.json().await.unwrap();
+
+    // A used one inside its 30 days is still caught: presenting it again
+    // ends the whole sign-in, the newest token with it.
+    assert_eq!(renew(&server, &second).await.status(), 401);
+    assert_eq!(
+        renew(&server, &fourth.refresh_token).await.status(),
+        401,
+        "reusing a used token still ends the sign-in"
+    );
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().tokens, 0);
 }

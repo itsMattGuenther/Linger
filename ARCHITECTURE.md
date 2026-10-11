@@ -448,10 +448,13 @@ CREATE TABLE refresh_tokens (
                                                -- reuse of a rotated token revokes it
   token_hash      TEXT NOT NULL,               -- sha256 of the token
   device_label    TEXT,
-  expires_at      INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,            -- 30 days on; then the sweeper deletes it
   revoked_at      INTEGER,
   created_at      INTEGER NOT NULL
 );
+CREATE INDEX idx_refresh_hash ON refresh_tokens(token_hash);
+CREATE INDEX idx_refresh_family ON refresh_tokens(family_id);   -- logout, reuse (#520)
+CREATE INDEX idx_refresh_user ON refresh_tokens(user_id);       -- revoke everything a person holds
 
 CREATE TABLE server_config (
   key             TEXT PRIMARY KEY,
@@ -511,7 +514,9 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt.
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
-   hashed. Reuse of a rotated refresh token revokes the whole family.
+   hashed. Reuse of a rotated refresh token revokes the whole family. A token's row
+   is deleted by the sweeper once its 30 days are up (#520), so reuse is caught for
+   those 30 days; after them the token is refused as expired.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
@@ -739,7 +744,8 @@ not by `AppState`, so building the state in a test never starts a loop nobody as
 The other closes polls whose time is up (`polls.rs`, #474): at startup, for any that ran
 out while the server was down, then every thirty seconds, each in one transaction with the
 line it leaves in the room.
-It runs at startup and every six hours, in batches, and takes three kinds of object:
+It runs at startup and every six hours, in batches, and takes three kinds of file, and
+used sign-in tokens:
 
 - files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
   pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
@@ -749,6 +755,10 @@ It runs at startup and every six hours, in batches, and takes three kinds of obj
   one of these: a star stops a file ageing out, and this is not ageing out.
 - **finished uploads that never became a message**, once they are past the same window.
   The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
+- **refresh tokens past their 30 days** (#520). Every renewal marks the token it used
+  up and makes a new one, so an app left open adds about a hundred rows a day, and
+  nothing else deletes them. A used one inside its 30 days stays, for reuse detection
+  (§7). File expiry being off doesn't stop this one.
 
 A file a status picture pointed at used to be kept at any age. Status pictures are
 gone (#269), so such a file is now an upload that never became a message, and the
