@@ -1,4 +1,4 @@
-import { type CSSProperties, useRef, useState } from "react";
+import { type CSSProperties, memo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import type { ListModel } from "../../core/list";
 import { type FoldedLine, foldedText, type OpenLine, openText, type ServerHeader } from "../../core/servers";
@@ -40,7 +40,7 @@ export function serverColor(accent: string | null): CSSProperties {
  * plain line. Open, the line is who you are there, and the section holds the
  * server's rooms, DMs and people. The menu holds Quiet and the order.
  */
-export function ServerSection({
+export const ServerSection = memo(function ServerSection({
   listing,
   index,
   folded,
@@ -56,11 +56,15 @@ export function ServerSection({
   folded: boolean;
   first: boolean;
   last: boolean;
-  onToggle: () => void;
-  onQuiet?: (quiet: boolean) => void;
-  onMove?: (by: -1 | 1) => void;
+  /**
+   * Each takes the server, so the list hands every section the same ones:
+   * a section is drawn again only when its own server changes (#533).
+   */
+  onToggle: (server: string, index: number) => void;
+  onQuiet?: (server: string, quiet: boolean) => void;
+  onMove?: (server: string, by: -1 | 1) => void;
 }) {
-  const { name, header, quiet } = listing;
+  const { id, name, header, quiet } = listing;
   const bodyId = `nx-srv-${index}-body`;
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
   // The menu's button, for focus to come back to when the menu closes.
@@ -68,9 +72,9 @@ export function ServerSection({
   const backToMenuButton = () => menuSlot.current?.querySelector("button")?.focus();
 
   const items: MenuItem[] = [];
-  if (onQuiet) items.push({ id: "quiet", label: "Quiet", icon: "quiet", checked: quiet, onSelect: () => onQuiet(!quiet) });
-  if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(-1) });
-  if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(1) });
+  if (onQuiet) items.push({ id: "quiet", label: "Quiet", icon: "quiet", checked: quiet, onSelect: () => onQuiet(id, !quiet) });
+  if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(id, -1) });
+  if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(id, 1) });
 
   // Folded over a DM you haven't read, the header is lit (#291) and says so.
   const lit = folded && header.lit;
@@ -93,7 +97,7 @@ export function ServerSection({
           aria-expanded={!folded}
           aria-controls={bodyId}
           aria-label={toggleLabel}
-          onClick={onToggle}
+          onClick={() => onToggle(id, index)}
         >
           <span className="nx-srv-caret" aria-hidden="true">
             <Icon name="caret" size="sm" />
@@ -189,7 +193,7 @@ export function ServerSection({
       ) : null}
     </section>
   );
-}
+});
 
 function isTalking(line: FoldedLine, speaking: ReadonlySet<string> | undefined): boolean {
   return line.kind === "voice" && speaking !== undefined && line.people.some((user) => speaking.has(user.id));

@@ -147,9 +147,25 @@ order give the same state, so no window needs to be told what another knows.
 
 The few values that change without a frame (read positions, your voice seat,
 notification rules; `sharedLocalOf` in `lib/gateway.ts`) come from the owner
-as `next:shared` whenever one changes. A viewer still catching up keeps the
-newest of those per server and applies it over the snapshot. The owner sends
-one on every change, so the newest is never older than the snapshot.
+as `next:shared` whenever one changes. Each message carries only the fields
+that changed (#533): somebody starting to talk sends your voice seat, not
+every read position with it, and a viewer keeps every other field as the
+very object it was, so nothing drawn from those is drawn again. A viewer
+still catching up keeps the newest of each field per server and applies them
+over the snapshot. The owner sends a field on every change to it, so the
+newest is never older than the snapshot.
+
+**Drawing only what changed (#533).** Every window holds every server's
+state, but a part of the screen follows only the servers it shows: the
+conversations follow the servers their tabs are on (`useServersAmong`), and
+something worked out across every server (where your voice seat is) is a
+plain value that changes only when it does (`useServersPick`). The list
+makes each server's part again only when that server changes, keeps every
+row that reads the same as the very same object (`keepSame` in
+`core/list.ts`), and draws a row again only when its row changed. A
+conversation draws a message row again only when the row itself changed
+(`sameRow` in `core/chat/rows.ts`). `tests/browser/next-renders.spec.ts`
+counts what React draws for one event and holds these to it.
 
 **What is not shared through frames:**
 

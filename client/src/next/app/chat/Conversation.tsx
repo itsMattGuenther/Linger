@@ -8,7 +8,7 @@ import type { User } from "../../../generated/User";
 import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
-import { type ChatRow, chatRows, rowIndex } from "../../core/chat/rows";
+import { type ChatRow, chatRows, rowIndex, sameRow } from "../../core/chat/rows";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
@@ -387,14 +387,14 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                   <RowView
                     row={row}
                     people={people}
-                    byId={byId}
+                    quoted={row.kind === "message" && row.message.reply_to !== null ? byId.get(row.message.reply_to) : undefined}
                     me={me}
                     blocked={props.blocked}
-                    shown={shown}
+                    shown={row.kind === "message" && shown.has(row.message.id)}
                     onShow={show}
                     now={now}
-                    editing={props.editing}
-                    flash={flash}
+                    editing={row.kind === "message" && props.editing === row.message.id}
+                    flash={row.kind === "message" && flash === row.message.id}
                     previews={props.previews}
                     mentions={mentions}
                     emoji={emojiByName}
@@ -418,10 +418,39 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   );
 });
 
-function RowView({
+interface RowViewProps {
+  row: ChatRow;
+  people: ReadonlyMap<string, User>;
+  /** The message a reply quotes, when it's held. */
+  quoted: Message | undefined;
+  me: User | null;
+  blocked: ReadonlySet<string> | undefined;
+  /** A message from somebody blocked that was opened anyway. */
+  shown: boolean;
+  onShow: (id: MessageId) => void;
+  now: number;
+  /** This row's message is being edited in place. */
+  editing: boolean;
+  /** This row's message was just jumped to, and is marked. */
+  flash: boolean;
+  previews: Readonly<Record<string, LinkPreview>>;
+  mentions: MentionLookup;
+  emoji: CustomEmojiByName;
+  mediaUrl: (path: string) => string;
+  actions: MessageActions;
+}
+
+function sameRowView(a: RowViewProps, b: RowViewProps): boolean {
+  for (const key of Object.keys(a) as (keyof RowViewProps)[]) {
+    if (key === "row" ? !sameRow(a.row, b.row) : a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+const RowView = memo(function RowView({
   row,
   people,
-  byId,
+  quoted,
   me,
   blocked,
   shown,
@@ -434,24 +463,7 @@ function RowView({
   emoji,
   mediaUrl,
   actions,
-}: {
-  row: ChatRow;
-  people: ReadonlyMap<string, User>;
-  byId: ReadonlyMap<MessageId, Message>;
-  me: User | null;
-  blocked: ReadonlySet<string> | undefined;
-  /** Messages from somebody blocked that were opened anyway. */
-  shown: ReadonlySet<MessageId>;
-  onShow: (id: MessageId) => void;
-  now: number;
-  editing: MessageId | null;
-  flash: MessageId | null;
-  previews: Readonly<Record<string, LinkPreview>>;
-  mentions: MentionLookup;
-  emoji: CustomEmojiByName;
-  mediaUrl: (path: string) => string;
-  actions: MessageActions;
-}) {
+}: RowViewProps) {
   switch (row.kind) {
     case "divider": {
       // A session that starts at a time that can't be drawn has no words to
@@ -486,10 +498,9 @@ function RowView({
       // Somebody leaving a group DM (#565): a quiet line saying who. Shown
       // even for somebody you blocked: it's who can still read what you say.
       if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} />;
-      if (blocked?.has(message.author_id) && message.deleted_at === null && !shown.has(message.id)) {
+      if (blocked?.has(message.author_id) && message.deleted_at === null && !shown) {
         return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
       }
-      const quoted = message.reply_to === null ? undefined : byId.get(message.reply_to);
       return (
         <MessageRow
           message={message}
@@ -501,8 +512,8 @@ function RowView({
           me={me}
           canDelete={me !== null && (message.author_id === me.id || mayActOn(me, people.get(message.author_id)))}
           now={now}
-          editing={editing === message.id}
-          flashing={flash === message.id}
+          editing={editing}
+          flashing={flash}
           previews={previews}
           mentions={mentions}
           emoji={emoji}
@@ -513,7 +524,7 @@ function RowView({
       );
     }
   }
-}
+}, sameRowView);
 
 /**
  * A message from somebody you blocked (PROTOCOL §5, SPEC §4.15): one grey

@@ -9,6 +9,10 @@
 //! it answers on `cdn.<domain>` and nowhere else, and every other route answers
 //! everywhere else. See [`media_origin_gate`].
 //!
+//! Two more answer outside it for a browser rather than the app: a shared
+//! invite or setup link opens a page saying what to do with it (PROTOCOL
+//! §2.2) — see [`pages`].
+//!
 //! Unknown paths get the PROTOCOL §1 envelope, not axum's plain-text 404, so
 //! the client can always switch on `error.code`.
 
@@ -24,6 +28,7 @@ mod links;
 mod media;
 mod messages;
 mod objects;
+mod pages;
 mod polls;
 mod reports;
 mod rooms;
@@ -117,6 +122,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .nest("/api/v1", api)
         .merge(objects::router())
+        .merge(pages::router())
         .layer(cors())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

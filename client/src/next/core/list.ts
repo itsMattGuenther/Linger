@@ -190,6 +190,87 @@ export function listModel(state: GatewayState, now: number): ListModel {
 }
 
 /**
+ * The model, with every row that reads the same as last time kept as the very
+ * same object, and every list whose rows all are (#533). The model is made
+ * afresh from the whole server's state at every change there, and the list
+ * draws a row again only when its row is a different object: so one person
+ * coming online draws their row, not everybody's.
+ */
+export function keepSame(before: ListModel | null, next: ListModel): ListModel {
+  if (before === null) return next;
+  const me = before.me !== null && next.me !== null && samePerson(before.me, next.me) ? before.me : next.me;
+  const was = [before.people.here, before.people.away, before.people.offline];
+  const people: PeopleGroups = {
+    here: keepRows(was, next.people.here, samePerson),
+    away: keepRows(was, next.people.away, samePerson),
+    offline: keepRows(was, next.people.offline, samePerson),
+  };
+  return {
+    me,
+    rooms: keepRows([before.rooms], next.rooms, sameRoom),
+    groups: keepRows([before.groups], next.groups, sameGroup),
+    dmMembers: next.dmMembers,
+    people:
+      people.here === before.people.here && people.away === before.people.away && people.offline === before.people.offline ? before.people : people,
+  };
+}
+
+/**
+ * `next`, with each row equal to one of `before`'s (looked for by id, in any
+ * of its lists: a person moves from Here to Away) swapped for that one, and
+ * `before`'s own list back when it's the same rows in the same order.
+ */
+function keepRows<T extends { id: string } | PersonRow>(before: readonly T[][], next: T[], same: (a: T, b: T) => boolean): T[] {
+  const held = new Map<string, T>();
+  for (const rows of before) for (const row of rows) held.set(rowId(row), row);
+  const kept = next.map((row) => {
+    const old = held.get(rowId(row));
+    return old !== undefined && same(old, row) ? old : row;
+  });
+  for (const rows of before) {
+    if (rows.length === kept.length && rows.every((row, at) => row === kept[at])) return rows;
+  }
+  return kept;
+}
+
+function rowId(row: { id: string } | PersonRow): string {
+  return "user" in row ? row.user.id : row.id;
+}
+
+function samePerson(a: PersonRow, b: PersonRow): boolean {
+  return (
+    a.user === b.user &&
+    a.state === b.state &&
+    a.note === b.note &&
+    a.line === b.line &&
+    a.inVoice === b.inVoice &&
+    a.dm === b.dm &&
+    a.fresh === b.fresh &&
+    a.talked === b.talked
+  );
+}
+
+function sameRoom(a: RoomRow, b: RoomRow): boolean {
+  return a.name === b.name && a.fresh === b.fresh && a.voice === b.voice && sameItems(a.people, b.people);
+}
+
+function sameGroup(a: DmRow, b: DmRow): boolean {
+  return (
+    a.label === b.label &&
+    a.fresh === b.fresh &&
+    a.leavable === b.leavable &&
+    a.last === b.last &&
+    sameItems(a.memberIds, b.memberIds) &&
+    a.people.length === b.people.length &&
+    a.people.every((one, at) => one.user === b.people[at]?.user && one.state === b.people[at]?.state)
+  );
+}
+
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((one, at) => one === b[at]);
+}
+
+/**
  * One group of people with the ones you're talking to first (#351): whoever
  * wrote something you haven't read, then whoever you've talked with, newest
  * first, then everyone else in the order they came. So on a big server the

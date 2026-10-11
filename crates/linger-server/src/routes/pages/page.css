@@ -1,0 +1,201 @@
+/* The pages a shared link opens in a browser (PROTOCOL §2.2). Linger's own
+   colors (docs/design/system.md), dark like the app, and the system's fonts:
+   nothing is fetched from anywhere. This file is hashed into the page's
+   Content-Security-Policy, so it is the only style the page may use. */
+:root {
+  color-scheme: dark;
+  --surface-backdrop: #0a101d;
+  --surface-sunken: #0f1522;
+  --surface-window: #131a28;
+  --surface-control: #2a3550;
+  --surface-control-hover: #364465;
+  --text-primary: #f1ebe0;
+  --text-secondary: #c0c6d2;
+  --text-muted: #8d96a9;
+  --accent: #f3b55c;
+  --accent-hover: #f6c47c;
+  --text-on-accent: #1c1206;
+  --danger: #f06e6e;
+  --hairline: #222d44;
+  --hairline-strong: #2e3b54;
+  --edge-hover: #43527a;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Cantarell, sans-serif;
+  --font-title: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", "Noto Sans Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { background: var(--surface-backdrop); }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 48px 16px;
+  background: var(--surface-backdrop);
+  color: var(--text-secondary);
+  font: 15px/1.55 var(--font-ui);
+  -webkit-text-size-adjust: 100%;
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px;
+  background: var(--surface-window);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+}
+
+main > :last-child { margin-bottom: 0; }
+
+.logo { display: block; margin: 0 0 28px; }
+.logo svg { display: block; height: 30px; width: auto; }
+
+h1 {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font: 600 28px/1.2 var(--font-title);
+  overflow-wrap: anywhere;
+}
+
+/* Somebody else's words keep their direction to themselves
+   (docs/design/system.md, principle 10). */
+bdi { unicode-bidi: isolate; }
+
+.lede { margin: 0 0 28px; }
+
+.warning {
+  margin: 0 0 28px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+.warning strong { color: var(--danger); }
+
+ol.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+}
+ol.steps > li {
+  position: relative;
+  counter-increment: step;
+  padding: 0 0 24px 44px;
+}
+ol.steps > li:last-child { padding-bottom: 0; }
+ol.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font: 600 14px/28px var(--font-ui);
+  text-align: center;
+}
+
+h2 {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font: 600 16px/1.4 var(--font-ui);
+}
+.steps p { margin: 0 0 12px; }
+.steps p:last-child { margin-bottom: 0; }
+
+.downloads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.downloads a {
+  display: block;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.downloads a:hover { border-color: var(--edge-hover); background: var(--surface-sunken); }
+.downloads strong { display: block; font-weight: 600; }
+.downloads span { display: block; color: var(--text-muted); font-size: 13px; line-height: 1.4; }
+
+.copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+/* The link wraps rather than scrolling inside a box, so all of it can be
+   read on a phone, and one tap selects all of it. */
+.copy .link {
+  flex: 1 1 240px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: 14px/20px var(--font-mono);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+.copy button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font: 600 14px var(--font-ui);
+  cursor: pointer;
+}
+.copy button:hover { background: var(--accent-hover); }
+
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.muted { color: var(--text-muted); font-size: 14px; }
+
+footer {
+  max-width: 560px;
+  margin: 16px auto 0;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+code {
+  font: 13.5px var(--font-mono);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  body { padding: 16px; }
+  main { padding: 24px 20px; }
+  h1 { font-size: 24px; }
+  .downloads { grid-template-columns: 1fr; }
+  ol.steps > li { padding-left: 40px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .downloads a, .copy button { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+}

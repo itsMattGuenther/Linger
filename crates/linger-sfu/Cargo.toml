@@ -9,8 +9,12 @@ repository.workspace = true
 
 [dependencies]
 # WebRTC in sans-IO style: it never touches a socket, so this crate owns the
-# one UDP socket every voice connection shares. The pure-Rust crypto backend
-# keeps the server image free of OpenSSL and C toolchains.
+# one UDP socket every voice connection shares. The rust-crypto backend keeps
+# OpenSSL out of the server image, but not all C (#524): str0m-rust-crypto
+# turns on dimpl's `rcgen` feature for its DTLS certificate, and rcgen brings
+# aws-lc-rs and with it aws-lc-sys, a C library (about 1.3 MiB of code, built
+# with a C compiler). Features only add, so nothing here can switch it off; it
+# needs str0m-rust-crypto to make rcgen optional upstream.
 str0m = { version = "0.24", default-features = false, features = ["rust-crypto"] }
 tracing = { workspace = true }
 

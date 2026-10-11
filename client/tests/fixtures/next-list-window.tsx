@@ -125,6 +125,15 @@ const blocks = new Set<string>(query.has("blocked") ? [people.jules.id] : []);
 const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
 const NO_KEYRING = "No usable keyring on this computer (no secret service).";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
+// `?servers=30`: that many servers signed in at once (#512), the three and
+// more like Casa da Ribeira, each its own.
+const extra = Math.max(0, Number(query.get("servers") ?? "0") - saved.length);
+for (let at = 1; at <= extra; at += 1) {
+  const server = `https://extra-${at}.example`;
+  states[server] = lisbon(serverState(server));
+  saved.push(server);
+  names[server] = { name: `Extra ${at}`, accent: "teal" };
+}
 
 /** How many times a session has started over (`window.core.restart`). */
 let restarts = 0;

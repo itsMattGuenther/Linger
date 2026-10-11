@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { catchAnimations, caughtAnimations } from "./caught";
 import { still } from "./still";
 
 // The buddy list window on the prototype's Friday evening
@@ -797,14 +798,15 @@ test.describe("a person's row", () => {
     await page.clock.install({ time: opened });
     await page.reload();
     await page.clock.pauseAt(new Date(opened.getTime() + 600_000));
+    // Caught as it starts: half a second can be over before a busy browser answers (#528).
+    await catchAnimations(page, ".k-row-main");
     const sam = rows(page, "Away").first();
     await sam.hover();
     await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
     await expect(page.locator("body")).toHaveAttribute("data-opened", "knock:u-sam");
     await expect(sam).toHaveAttribute("data-knocked", "yes");
     // One shake, about half a second long.
-    const shakes = await sam.locator(".k-row-main").evaluate((node) => node.getAnimations().map((running) => Number(running.effect?.getComputedTiming().duration)));
-    expect(shakes).toEqual([520]);
+    await expect.poll(async () => (await caughtAnimations(page)).map((shake) => shake.duration)).toEqual([520]);
     await expect(sam.getByRole("button", { name: "Knocked on Sam's door" })).toBeDisabled();
     await page.clock.fastForward(3_100);
     await expect(sam).not.toHaveAttribute("data-knocked", "yes");
@@ -847,12 +849,14 @@ test.describe("a person's row", () => {
   test("the shake doesn't move for somebody who asked for less motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
+    await catchAnimations(page, ".k-row-main");
     const sam = rows(page, "Away").first();
     await sam.hover();
     await sam.getByRole("button", { name: "Knock on Sam's door" }).click();
     await expect(sam).toHaveAttribute("data-knocked", "yes");
-    const lasts = await sam.locator(".k-row-main").evaluate((node) => node.getAnimations().map((running) => running.effect?.getComputedTiming().duration));
-    for (const duration of lasts) expect(Number(duration)).toBeLessThanOrEqual(2);
+    // The shake still happens, over before it can be seen.
+    await expect.poll(async () => (await caughtAnimations(page)).length).toBe(1);
+    for (const { duration } of await caughtAnimations(page)) expect(duration).toBeLessThanOrEqual(2);
   });
 });
 

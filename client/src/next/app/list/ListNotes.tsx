@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Button, Icon, Spinner } from "../../kit";
 import type { ListNote } from "../../core/notes";
 import "./ListNotes.css";
@@ -8,7 +9,7 @@ import "./ListNotes.css";
  * computer that can't keep sign-ins, a new version. Only
  * while there is something to say; otherwise nothing is drawn at all.
  */
-export function ListNotes({ notes, onUpdate, onRetry }: { notes: readonly ListNote[]; onUpdate: () => void; onRetry?: (server: string) => void }) {
+export const ListNotes = memo(function ListNotes({ notes, onUpdate, onRetry }: { notes: readonly ListNote[]; onUpdate: () => void; onRetry?: (server: string) => void }) {
   if (notes.length === 0) return null;
   return (
     <div className="nx-notes" aria-live="polite" data-screen="list-notes">
@@ -32,4 +33,4 @@ export function ListNotes({ notes, onUpdate, onRetry }: { notes: readonly ListNo
       ))}
     </div>
   );
-}
+});
