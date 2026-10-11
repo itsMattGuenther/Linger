@@ -6,8 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use linger_core::limits::{
-    DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES,
-    VOICE_JOIN_LINE_AFTER_MS,
+    DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, VOICE_JOIN_LINE_AFTER_MS,
 };
 
 use crate::auth::{DEFAULT_PASSWORD_CHECKS_AT_ONCE, MAX_PASSWORD_CHECKS_AT_ONCE};
@@ -97,10 +96,11 @@ pub struct Config {
     /// `LINGER_POOL_BYTES` — the storage ceiling for the whole server, default
     /// 50 GB (SPEC §4.10). Accepts a plain byte count or a size like `250GB`.
     pub pool_bytes: u64,
-    /// `LINGER_FILE_EXPIRY_DAYS` — how long a file stands before the sweeper
-    /// takes it, default 365 (SPEC §4.10). `off` (or `0`) means never, and a
-    /// starred or pinned file never expires whatever this says.
-    pub file_expiry_days: Option<u32>,
+    /// `LINGER_FILE_EXPIRY_DAYS` — what takes a file nobody starred or
+    /// pinned (SPEC §4.10, #583): the server needing the room (`when-full`,
+    /// the default), an age in days, or nothing (`off`). A starred or pinned
+    /// file never goes whatever this says.
+    pub file_expiry: FileExpiry,
     /// `LINGER_TURN_SECRET` (+ `LINGER_TURN_URLS`) — the voice relay. `None`
     /// means no relay: somebody on a network that blocks the voice port can't
     /// join a call, and the server says so at startup (SPEC §4.14, T-1403).
@@ -139,6 +139,32 @@ pub struct Config {
     /// `LINGER_BACKUP_S3_*`: a bucket each nightly copy is also sent to
     /// (#614). `None`, the default, keeps the copies on this machine.
     pub backup_bucket: Option<BackupBucketConfig>,
+}
+
+/// What takes a shared file nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS`,
+/// SPEC §4.10). The sweeper (`crate::expiry`) does the taking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileExpiry {
+    /// `when-full`, the default (#583): nothing goes while the pool has room.
+    /// Past 90% of `LINGER_POOL_BYTES`, the oldest go until it's under 80%.
+    /// A year-old photo on a half-empty server stays.
+    WhenFull,
+    /// A number of days: a file goes that long after it was shared, however
+    /// much room there is. The rule before #583, kept for a host who wants it.
+    After(u32),
+    /// `off`: nothing goes. A full pool refuses new uploads instead.
+    Off,
+}
+
+impl FileExpiry {
+    /// The age rule's days, when there is one.
+    #[must_use]
+    pub fn days(self) -> Option<u32> {
+        match self {
+            Self::After(days) => Some(days),
+            Self::WhenFull | Self::Off => None,
+        }
+    }
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -238,8 +264,9 @@ pub enum ConfigError {
     )]
     PoolBytes(String),
     #[error(
-        "LINGER_FILE_EXPIRY_DAYS is {0:?}. It wants a whole number of days, or `off` \
-         to keep every file forever."
+        "LINGER_FILE_EXPIRY_DAYS is {0:?}. It wants `when-full` (the default: old files go \
+         only when the server needs the room), a whole number of days, or `off` to keep \
+         every file forever."
     )]
     FileExpiryDays(String),
     #[error(
@@ -361,7 +388,7 @@ impl Config {
             storage,
             s3,
             pool_bytes: pool_bytes(std::env::var("LINGER_POOL_BYTES").ok())?,
-            file_expiry_days: file_expiry_days(std::env::var("LINGER_FILE_EXPIRY_DAYS").ok())?,
+            file_expiry: file_expiry(std::env::var("LINGER_FILE_EXPIRY_DAYS").ok())?,
             turn,
             voice_forwarding,
             voice_from_domain,
@@ -558,22 +585,27 @@ fn pool_bytes(configured: Option<String>) -> Result<u64, ConfigError> {
     Ok(bytes)
 }
 
-/// Read `LINGER_FILE_EXPIRY_DAYS`: a whole number of days, or off.
+/// Read `LINGER_FILE_EXPIRY_DAYS`: `when-full` (the default), a whole number
+/// of days, or off.
 ///
 /// `off` and `0` are the same answer and both are spelled out, because a host
 /// turning expiry off should not have to guess which one this build wants.
-fn file_expiry_days(configured: Option<String>) -> Result<Option<u32>, ConfigError> {
+/// `when-full` is taken with an underscore or none too, since it is typed
+/// from memory.
+fn file_expiry(configured: Option<String>) -> Result<FileExpiry, ConfigError> {
     let Some(raw) = configured.filter(|value| !value.trim().is_empty()) else {
-        return Ok(Some(DEFAULT_FILE_EXPIRY_DAYS));
+        return Ok(FileExpiry::WhenFull);
     };
-    let text = raw.trim();
-    if text.eq_ignore_ascii_case("off") || text.eq_ignore_ascii_case("never") {
-        return Ok(None);
+    let text = raw.trim().to_ascii_lowercase();
+    match text.as_str() {
+        "off" | "never" => return Ok(FileExpiry::Off),
+        "when-full" | "when_full" | "whenfull" => return Ok(FileExpiry::WhenFull),
+        _ => {}
     }
     match text.parse::<u32>() {
-        Ok(0) => Ok(None),
-        Ok(days) => Ok(Some(days)),
-        Err(_) => Err(ConfigError::FileExpiryDays(text.to_string())),
+        Ok(0) => Ok(FileExpiry::Off),
+        Ok(days) => Ok(FileExpiry::After(days)),
+        Err(_) => Err(ConfigError::FileExpiryDays(raw.trim().to_string())),
     }
 }
 
@@ -1122,7 +1154,7 @@ mod tests {
             storage: Storage::Local,
             s3: None,
             pool_bytes: DEFAULT_POOL_BYTES,
-            file_expiry_days: Some(DEFAULT_FILE_EXPIRY_DAYS),
+            file_expiry: FileExpiry::WhenFull,
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
@@ -1497,21 +1529,32 @@ mod tests {
     }
 
     #[test]
-    fn expiry_defaults_to_a_year_and_can_be_turned_off() {
+    fn expiry_defaults_to_when_full_and_takes_days_or_off() {
+        assert_eq!(file_expiry(None).unwrap(), FileExpiry::WhenFull);
         assert_eq!(
-            file_expiry_days(None).unwrap(),
-            Some(DEFAULT_FILE_EXPIRY_DAYS)
+            file_expiry(Some(" ".to_string())).unwrap(),
+            FileExpiry::WhenFull
         );
-        assert_eq!(file_expiry_days(Some("30".to_string())).unwrap(), Some(30));
+        for full in ["when-full", "WHEN-FULL", "when_full", "whenfull"] {
+            assert_eq!(
+                file_expiry(Some(full.to_string())).unwrap(),
+                FileExpiry::WhenFull,
+                "{full}"
+            );
+        }
+        assert_eq!(
+            file_expiry(Some("365".to_string())).unwrap(),
+            FileExpiry::After(365)
+        );
         for off in ["off", "OFF", "never", "0"] {
             assert_eq!(
-                file_expiry_days(Some(off.to_string())).unwrap(),
-                None,
+                file_expiry(Some(off.to_string())).unwrap(),
+                FileExpiry::Off,
                 "{off}"
             );
         }
         assert!(matches!(
-            file_expiry_days(Some("a year".to_string())),
+            file_expiry(Some("a year".to_string())),
             Err(ConfigError::FileExpiryDays(_))
         ));
     }

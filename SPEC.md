@@ -360,6 +360,10 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
+- **Leaving soon** (#583) shows what would go next, in date order: under `when-full`
+  (§4.10), once the file space is past 80%, the oldest that one pass would take; under
+  an age rule, what is within a month of its date. One quiet sentence and the grid: no
+  notification, no count, no lit row. Anybody who cares stars what matters.
 - Opened from the foot of the list, not a search result: a tab beside the list, like a
   conversation, or a window of its own when everything opens in its own (#337).
 
@@ -460,7 +464,9 @@ walking into the past. One CSS custom property computed from the timestamp.
 **Sessions, not a stream.** Group consecutive messages by the same author; break the
 group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts real
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
-`Saturday morning`, `yesterday afternoon`.
+`Saturday morning`, `yesterday afternoon`. A gap counts either way: a server clock
+that jumped back still breaks the session. A message dated after today is labeled
+with its date (`Friday evening, October 16`), never `this evening` (#512).
 
 **No avatar column or per-message colored bars.** The styled sender name has a
 line of its own at the start of a run of messages, once per run, with no colon.
@@ -598,7 +604,9 @@ acknowledges the request, not delivery; it is not knock history. A refused
 knock never shows `knocked`, wherever it was pressed. Somebody offline can't
 be knocked: the control stays where it is, greyed out, and says why ("Can't
 knock while Justin B is offline.") until they're back (#288). The recipient's
-card still disappears after eight seconds. Changing cards or servers must not
+card still disappears after eight seconds. A second knock from the same person takes their card's
+place, its eight seconds starting over, rather than stacking a second card, and
+at most three cards show at once, the newest (#512). Changing cards or servers must not
 carry sender feedback to a different person.
 
 ### 4.10 File sharing
@@ -613,7 +621,13 @@ carry sender feedback to a different person.
   week (sooner if the host's window is shorter, and even with expiry off). Removing
   a member deletes their uploads in progress and the files they never sent; what
   they sent stays.
-- Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- **Files stay until the server needs the room** (#583). By default nothing goes while
+  the pool has room. Past 90% of it, the oldest files that aren't starred and aren't on
+  a pinned message go first, until it is back under 80%. An upload that wouldn't fit
+  makes its room the same way before anybody is told the server is full. A host can
+  choose an age instead (a number of days, the rule before #583) or `off` (nothing
+  goes, and a full pool refuses uploads). A year-old photo on a half-empty server is
+  never deleted for its age alone.
 - Deleting a message deletes its files with it, at once and starred or not: nothing
   serves, shows, lists or exports them after (#502)
 - Resumable uploads

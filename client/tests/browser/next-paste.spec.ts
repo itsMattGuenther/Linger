@@ -135,6 +135,17 @@ test.describe("on Windows, where the paste carries the picture (#276)", () => {
       await expect(box(page)).toHaveValue("ok, see you at eight");
       await expect(page.getByRole("list", { name: "Files for this message" })).toHaveCount(0);
     });
+
+    test("words too long for the box are cut short, and the box says so (#512)", async ({ page }) => {
+      await open(page);
+      await page.evaluate(() => navigator.clipboard.writeText("x".repeat(8100)));
+      await box(page).fill("ok, ");
+      await expect(page.locator(".nx-composer").getByRole("alert")).toHaveCount(0);
+      await page.keyboard.press("ControlOrMeta+V");
+      // The engine keeps what fits; "0 characters left" was the only sign it had cut the rest.
+      await expect.poll(async () => (await box(page).inputValue()).length).toBe(8000);
+      await expect(page.locator(".nx-composer").getByRole("alert")).toHaveText("Only the start of that paste fit. A message can be at most 8000 characters.");
+    });
   });
 });
 
@@ -173,6 +184,14 @@ test.describe("on Linux, where the desktop shell has the picture (#276)", () => 
     expect(await box(page).evaluate((field: HTMLTextAreaElement) => field.selectionStart)).toBe("ok, see you at eight\nand ".length);
     await expect(page.getByRole("list", { name: "Files for this message" })).toHaveCount(0);
     expect(await asked(page)).toBe(1);
+  });
+
+  test("words too long for the box, put in through the shell, are cut short and the box says so (#512)", async ({ page }) => {
+    await open(page);
+    await box(page).fill("ok, ");
+    expect(await paste(page, { words: { "text/plain": "x".repeat(8100) } })).toBe(true);
+    await expect.poll(async () => (await box(page).inputValue()).length).toBe(8000);
+    await expect(page.locator(".nx-composer").getByRole("alert")).toHaveText("Only the start of that paste fit. A message can be at most 8000 characters.");
   });
 
   test("a paste with no picture and no words attaches nothing and leaves the box as it was", async ({ page }) => {

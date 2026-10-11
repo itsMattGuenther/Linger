@@ -938,8 +938,15 @@ line it leaves in the room.
 It runs at startup and every six hours, in batches, and takes three kinds of file, and
 used sign-in tokens:
 
-- files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
-  pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
+- files that are neither starred nor on a pinned message, by `LINGER_FILE_EXPIRY_DAYS`
+  (`config::FileExpiry`) — the rule in SPEC §4.10. The default, `when-full` (#583),
+  takes nothing while the pool has room; once it is 90% full, `expiry::keep_room` takes
+  the oldest, oldest first, until it is under 80%. It looks four times an hour, on the
+  reservations' clock, and `POST /uploads` makes the room an upload needs
+  (`expiry::make_room_for`) before refusing it, then starts the rest in the background.
+  One pass at a time (`AppState::making_room`). Both read Media's own index from its
+  unstarred end, so finding the oldest few sorts nothing. A number of days is the age
+  rule from before; `off` takes nothing.
 - files on a **deleted** message, whatever their age, as the retry. The delete itself
   takes them there and then (#502, below); this rule finishes any the store refused at
   that moment, and any a server from before #502 left behind. A star does not hold
@@ -1012,10 +1019,12 @@ server on the disk, or in the bucket, for good. Now:
 - A job whose row was deleted while it built (the member asked again, or was removed)
   deletes the archive it stored instead of leaving it with nothing pointing at it.
 
-**The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
+**The pool and the expiry rule are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not
 rows a host edits from inside the app (`docs/decisions.md`). `GET /server` reports the
-used figure, the ceiling and the window, and the status bar draws the first two.
+used figure, the ceiling and the rule, and the status bar draws the first two. The pool
+is the file space in every storage mode: on S3 the bucket has no ceiling of its own, so
+`when-full` measures against `LINGER_POOL_BYTES` there too.
 
 ---
 

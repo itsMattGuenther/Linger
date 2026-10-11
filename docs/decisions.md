@@ -1357,3 +1357,24 @@ one part it can do alone, and no more.
   daily and weekly after each copy checks out, the same 7 and 4 kept in the bucket.
   The host is told when none has reached it for three days.
 
+## Decided — files stay until the server needs the room
+
+**Matt asked for it to be tracked on 2026-10-11, and for it to be built the same
+day (#583).** File expiry was by age only: a file nobody starred went on day 365,
+however empty the disk. A year-old photo on a server using 6 GB of its 50 GB was
+deleted for nothing.
+
+- **`when-full` is the default.** Nothing goes while the pool has room. Past 90% of
+  `LINGER_POOL_BYTES`, the oldest files nobody starred or pinned go first, until it
+  is under 80% (the issue's numbers, kept). An upload that wouldn't fit makes its room
+  that way before anybody is told the server is full.
+- **The age rule and `off` stay** for a host who wants them: `LINGER_FILE_EXPIRY_DAYS`
+  still takes a number of days or `off`.
+- **"Leaving soon" in Media**, in date order: what would go next, one quiet sentence,
+  no count, no notification. Under `when-full` it is empty until the file space is
+  past 80%, so nobody stars things for nothing.
+- **Servers already running change on update**: their files now stay longer, which
+  is the safe direction to be wrong in. The release notes say so.
+- **On S3 the pool is the limit too.** The bucket has none of its own, so a host on S3
+  pays for a fuller bucket, up to `LINGER_POOL_BYTES`.
+

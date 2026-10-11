@@ -126,7 +126,8 @@ pub async fn going_up<'e>(
 #[must_use]
 pub fn unposted_cutoff(config: &Config, now: i64) -> i64 {
     let days = config
-        .file_expiry_days
+        .file_expiry
+        .days()
         .map_or(UNPOSTED_DAYS, |days| days.min(UNPOSTED_DAYS));
     now - i64::from(days) * DAY_MS
 }

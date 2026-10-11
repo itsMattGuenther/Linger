@@ -11,6 +11,7 @@ use linger_core::wire::{
 use linger_core::UserId;
 
 use crate::auth::{AuthedUser, HostOrCohost, Standing};
+use crate::config::FileExpiry;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -51,7 +52,8 @@ async fn build_info(state: &AppState, viewer: UserId) -> Result<ServerInfo, ApiE
         // there is nothing here to edit — only a figure to read.
         storage_used_bytes: used,
         storage_limit_bytes: state.config.pool_bytes,
-        file_expiry_days: state.config.file_expiry_days,
+        file_expiry_days: state.config.file_expiry.days(),
+        file_expiry_when_full: Some(state.config.file_expiry == FileExpiry::WhenFull),
         voice: Some(state.gateway.forwards_voice()),
         health,
     })
@@ -75,7 +77,7 @@ async fn health(
         last_backup_at: state.backups.last(),
         backup_overdue: backups && state.backups.overdue(now_ms()),
         disk_nearly_full: disk.is_some_and(crate::disk::Room::nearly_full),
-        file_space_nearly_full: nearly_used_up(used, state.config.pool_bytes),
+        file_space_nearly_full: nearly_used_up(state, used).await?,
         bucket: state.backups.bucket_name().map(|name| BackupBucketHealth {
             name: name.to_string(),
             last_sent_at: state.backups.sent(),
@@ -84,10 +86,19 @@ async fn health(
     }))
 }
 
-/// Uploads at 90% or more of the pool (#582).
-#[allow(clippy::cast_precision_loss)]
-fn nearly_used_up(used: u64, limit: u64) -> bool {
-    limit > 0 && used as f64 >= limit as f64 * 0.9
+/// Uploads at 90% or more of the pool (#582). Under `when-full` that's where
+/// the oldest files start going (#583), which is the setting working, not a
+/// problem: the host only needs to hear when there's nothing left it can
+/// take, every file starred, pinned or waiting for its message.
+async fn nearly_used_up(state: &AppState, used: u64) -> Result<bool, ApiError> {
+    let (start, _) = crate::expiry::when_full_marks(state.config.pool_bytes);
+    if used < start {
+        return Ok(false);
+    }
+    if state.config.file_expiry != FileExpiry::WhenFull {
+        return Ok(true);
+    }
+    Ok(!crate::expiry::anything_to_take(state).await?)
 }
 
 async fn info(

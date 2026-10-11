@@ -264,6 +264,8 @@ export interface MediaQuery {
   until?: number | null;
   /** The last item's `cursor` from the previous page. Opaque. */
   before?: string | null;
+  /** Only what would go next, "Leaving soon" (#583). A server from before ignores it. */
+  leaving?: boolean;
   limit?: number;
 }
 
@@ -275,6 +277,7 @@ export function mediaQuery(query: MediaQuery): string {
   if (query.since !== null && query.since !== undefined) parts.set("since", String(query.since));
   if (query.until !== null && query.until !== undefined) parts.set("until", String(query.until));
   if (query.before) parts.set("before", query.before);
+  if (query.leaving) parts.set("leaving", "true");
   if (query.limit !== undefined) parts.set("limit", String(query.limit));
   const text = parts.toString();
   return text === "" ? "" : `?${text}`;

@@ -586,7 +586,7 @@ mod tests {
                 secret_access_key: "secret".to_string(),
             }),
             pool_bytes: linger_core::limits::DEFAULT_POOL_BYTES,
-            file_expiry_days: Some(linger_core::limits::DEFAULT_FILE_EXPIRY_DAYS),
+            file_expiry: crate::config::FileExpiry::WhenFull,
             turn: None,
             voice_forwarding: None,
             voice_from_domain: None,
