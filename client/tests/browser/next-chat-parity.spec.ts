@@ -786,7 +786,7 @@ test.describe("files in the conversation", () => {
     };
   }
 
-  test("a picture has its true shape before its bytes arrive, a tall one is capped at 400, and neither moves its row (FILE-3)", async ({ page }) => {
+  test("a picture has its true shape before its bytes arrive, a tall one is capped at 400, a very tall one is kept wide enough to see, and none moves its row (FILE-3, #512)", async ({ page }) => {
     await open(page);
     // The pictures' bytes wait until the test lets them go. (Routed after
     // opening: the newest route that matches is the one that answers.)
@@ -796,15 +796,20 @@ test.describe("files in the conversation", () => {
     });
     await page.route(`${SERVER}/media/pic-*`, async (route) => {
       await waiting;
-      const tall = route.request().url().endsWith("pic-tall");
-      const [w, h] = tall ? [600, 2400] : [320, 180];
+      const shapes: Record<string, [number, number]> = { "pic-tall": [900, 2400], "pic-strip": [1080, 8000] };
+      const [w, h] = shapes[route.request().url().split("/").pop() ?? ""] ?? [320, 180];
       await route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#445"/></svg>` });
     });
-    const id = await post(page, "two pictures", "u-eli", {
-      attachments: [attachment("pic-wide", "wide.svg", "image/svg+xml", { width: 320, height: 180 }), attachment("pic-tall", "tall.svg", "image/svg+xml", { width: 600, height: 2400 })],
+    const id = await post(page, "three pictures", "u-eli", {
+      attachments: [
+        attachment("pic-wide", "wide.svg", "image/svg+xml", { width: 320, height: 180 }),
+        attachment("pic-tall", "tall.svg", "image/svg+xml", { width: 900, height: 2400 }),
+        // A phone's scrolling screenshot: its own shape at 400 tall is a 54 px strip.
+        attachment("pic-strip", "scroll.svg", "image/svg+xml", { width: 1080, height: 8000 }),
+      ],
     });
     const pictures = row(page, id).locator(".nx-att-image img");
-    await expect(pictures).toHaveCount(2);
+    await expect(pictures).toHaveCount(3);
     await expect(pictures.first()).toHaveAttribute("loading", "lazy");
     const sizes = () =>
       pictures.evaluateAll((images) =>
@@ -815,7 +820,7 @@ test.describe("files in the conversation", () => {
       );
     const rowHeight = () => row(page, id).evaluate((node) => node.getBoundingClientRect().height);
     // Nothing has arrived yet.
-    expect(await pictures.evaluateAll((images) => images.map((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toEqual([false, false]);
+    expect(await pictures.evaluateAll((images) => images.map((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toEqual([false, false, false]);
     const before = await sizes();
     const [wideW = 0, wideH = 0] = before[0] ?? [];
     const [tallW = 0, tallH = 0] = before[1] ?? [];
@@ -824,11 +829,20 @@ test.describe("files in the conversation", () => {
     expect(wideW).toBeLessThanOrEqual(320);
     expect(Math.abs(wideW / wideH - 320 / 180)).toBeLessThan(0.03);
     expect(tallH).toBe(400);
-    expect(Math.abs(tallW / tallH - 600 / 2400)).toBeLessThan(0.01);
+    expect(Math.abs(tallW / tallH - 900 / 2400)).toBeLessThan(0.01);
+    // Kept 120 wide rather than a sliver (#512).
+    expect(before[2]).toEqual([120, 400]);
     const heightBefore = await rowHeight();
 
     letGo();
-    await expect.poll(() => pictures.evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    // Pictures load as they come into view, and the three together are taller
+    // than the conversation: bring each one in until all have arrived.
+    await expect
+      .poll(async () => {
+        for (const picture of await pictures.all()) await picture.scrollIntoViewIfNeeded();
+        return pictures.evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0));
+      })
+      .toBe(true);
     expect(await sizes()).toEqual(before);
     expect(await rowHeight()).toBe(heightBefore);
   });

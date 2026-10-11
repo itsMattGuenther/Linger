@@ -17,13 +17,17 @@
 
 /* The width comes from the file's own size (set on the element, so the box
    is right before the bytes arrive); height follows the shape. A file that
-   didn't say its size is capped and fitted instead. */
+   didn't say its size is capped and fitted instead. A very tall picture's
+   box is wider than its shape (`inlineBox`, #512), so it fills the box from
+   its top, where a scrolling screenshot starts; any other picture's box is
+   its own shape, and nothing is cut. */
 .nx-att-image img {
   display: block;
   max-width: 100%;
   max-height: var(--media-max-h);
   height: auto;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: top;
 }
 
 /* A video's frame: the player, and over it, when it stops loading, the way
