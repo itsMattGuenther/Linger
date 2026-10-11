@@ -781,7 +781,10 @@ server on the disk, or in the bucket, for good. Now:
   256 MB of headroom for the transcripts and for SQLite. On `local`, the member's own
   archive, which a new one replaces, counts as free. The check runs again when a queued
   job gets its turn, because members asking at once all pass it at the door. A server
-  that can't measure free space (anything but Unix) skips it.
+  that can't measure free space (anything but Unix) skips it. The route takes the
+  hour's token before it starts and gives it back when the export is refused
+  (`RateLimiter::refund`), so the limit stays race-free and a refusal for room doesn't
+  spend the member's hour.
 - At startup, before anything is served, `main` runs `export::recover`: jobs left
   `queued` or `running` are marked failed, and everything in `staging/` is deleted.
   Nothing can be using it yet, and an export killed mid-zip otherwise left up to a whole

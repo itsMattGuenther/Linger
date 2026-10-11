@@ -910,3 +910,49 @@ async fn an_export_that_waited_is_checked_for_room_again_when_its_turn_comes() {
     }
     panic!("the export never finished");
 }
+
+#[tokio::test]
+async fn a_refusal_for_room_does_not_spend_the_hour() {
+    // Nothing was built, so the member hasn't had their export this hour.
+    // Before, a "no room" refusal used the hour up, and asking again once the
+    // host had made room got "you already asked for one recently".
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    share(&server, &host.access_token, &room, "photo.png", "a photo").await;
+    let real: i64 = sqlx::query_scalar("SELECT size_bytes FROM attachments")
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap();
+
+    sqlx::query("UPDATE attachments SET size_bytes = ?")
+        .bind(1_i64 << 60)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let refused = client()
+        .post(server.url("/export"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 507);
+
+    // The host makes room.
+    sqlx::query("UPDATE attachments SET size_bytes = ?")
+        .bind(real)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let job = export_now(&server, &host.access_token).await;
+    assert!(job.url.is_some());
+
+    // And having had it, the hour now counts.
+    let again = client()
+        .post(server.url("/export"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(again.status(), 429);
+}

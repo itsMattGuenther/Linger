@@ -1049,7 +1049,8 @@ restart is `failed` from the next start, and the member can ask again.
 
 `POST /export` is refused with `QUOTA_EXCEEDED` (HTTP 507) when the server's
 disk can't hold the archive, with a `message` that says so in words; nothing is
-started and the member's current archive is kept. A job that passed that check
+started, the member's current archive is kept, and the refusal doesn't count as
+their export for the hour, so they can ask again once there's room. A job that passed that check
 and waited in `queued` is checked again when its turn comes, and is `failed` if
 the room has gone. Like a rate-limit refusal, this is not permission: it keeps a
 full disk from stopping the server.

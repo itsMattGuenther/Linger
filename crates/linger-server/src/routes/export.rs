@@ -5,7 +5,9 @@
 //! and a promise somebody else can refuse is not one.
 //!
 //! The rate limit is the only gate, and it is about the host's disk and CPU
-//! rather than about permission — one archive an hour, per member.
+//! rather than about permission — one archive an hour, per member. The other
+//! refusal, a disk with no room for the archive (#504), is about the disk too,
+//! and doesn't count as the member's export for the hour.
 
 use axum::extract::{Path, State};
 use axum::routing::{get, post};
@@ -32,14 +34,20 @@ async fn start(
     // Keyed by member, not by address: two people on one connection are two
     // people, and one person on two machines is still one person asking a
     // server to zip itself.
-    if let Err(retry_after_ms) = state
-        .limiter
-        .check(&format!("export:{}", auth.id), RATE_EXPORT)
-    {
+    let key = format!("export:{}", auth.id);
+    if let Err(retry_after_ms) = state.limiter.check(&key, RATE_EXPORT) {
         return Err(ApiError::rate_limited(retry_after_ms));
     }
-    let job_id = crate::export::start(&state, auth.id).await?;
-    Ok(Json(ExportStarted { job_id }))
+    match crate::export::start(&state, auth.id).await {
+        Ok(job_id) => Ok(Json(ExportStarted { job_id })),
+        Err(refused) => {
+            // Nothing started, so the hour isn't spent: somebody refused
+            // because the disk was full can ask again as soon as the host
+            // makes room (#504).
+            state.limiter.refund(&key, RATE_EXPORT);
+            Err(refused)
+        }
+    }
 }
 
 /// `GET /export/:job_id` — how far along, and where to get it.
