@@ -136,7 +136,13 @@ function bigRoom(): Message[] {
   return out;
 }
 
-/** `?file`: Sam shares the trail map, a file that isn't a picture, in #general. */
+/**
+ * `?file`: Sam shares the trail map, a file that isn't a picture, in #general.
+ * With `&turned` it's a program whose name has U+202E in it, as one saved
+ * before the server took them out would (#488): "invoiceexe.pdf", unless the
+ * app shows it as it is.
+ */
+const TURNED = query.has("turned");
 function withFile(list: Message[]): Message[] {
   const last = list.at(-1);
   if (!last) return list;
@@ -151,8 +157,8 @@ function withFile(list: Message[]): Message[] {
     attachments: [
       {
         id: "a-map",
-        filename: "river-loop-trail-map.pdf",
-        mime: "application/pdf",
+        filename: TURNED ? "invoice\u{202E}fdp.exe" : "river-loop-trail-map.pdf",
+        mime: TURNED ? "application/octet-stream" : "application/pdf",
         size_bytes: 2_100_000,
         url: "/media/river-loop-trail-map.pdf",
         width: null,

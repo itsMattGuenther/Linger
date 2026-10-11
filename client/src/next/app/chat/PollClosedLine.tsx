@@ -9,7 +9,7 @@ import { memo } from "react";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { PollClosed } from "../../../generated/PollClosed";
-import { clockTime, fullTime } from "../../../lib/time";
+import { clockTime, fullTime, isoTime } from "../../../lib/time";
 import { resultWords } from "../../core/chat/poll";
 import { Icon } from "../../kit";
 import "./QuietLine.css";
@@ -30,13 +30,13 @@ export const PollClosedLine = memo(function PollClosedLine({
           <Icon name="check" size="sm" />
         </span>
         <span className="nx-quiet-text">
-          Poll closed: “{closed.question}” {resultWords(closed.winners)}{" "}
+          Poll closed: “<span className="nx-quiet-said">{closed.question}</span>” {resultWords(closed.winners)}{" "}
           <button type="button" className="nx-quiet-link" onClick={() => onJump(closed.poll_id)}>
             See results
           </button>
         </span>
       </p>
-      <time className="nx-msg-time" dateTime={new Date(message.created_at).toISOString()} title={fullTime(message.created_at)}>
+      <time className="nx-msg-time" dateTime={isoTime(message.created_at)} title={fullTime(message.created_at)}>
         {clockTime(message.created_at)}
       </time>
     </div>

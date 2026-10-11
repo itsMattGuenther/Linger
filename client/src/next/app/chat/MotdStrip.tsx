@@ -49,6 +49,8 @@ export const MotdStrip = memo(function MotdStrip({
   );
   const emoji = useMemo<CustomEmojiByName>(() => new Map(customEmoji.map((one) => [one.name, one])), [customEmoji]);
   const by = people.get(motd.set_by);
+  // Nothing, for a time that can't be drawn (#509).
+  const when = setWhen(motd.set_at, now);
 
   return (
     <div className="nx-motd" role="note" aria-label="Message of the day" data-folded={folded ? "yes" : undefined}>
@@ -57,7 +59,8 @@ export const MotdStrip = memo(function MotdStrip({
         <MessageText source={motd.text} mentions={mentions} emoji={emoji} onOpenLink={onOpenLink} />
         {folded ? null : (
           <p className="nx-motd-by">
-            Message of the day, set by {by ? <Name person={by} size="inline" /> : "someone"} {setWhen(motd.set_at, now)}
+            Message of the day, set by {by ? <Name person={by} size="inline" /> : "someone"}
+            {when === "" ? null : ` ${when}`}
           </p>
         )}
       </div>

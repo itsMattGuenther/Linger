@@ -5,8 +5,7 @@
  * confirms it (#241, docs/design/architecture.md, "Viewer → owner").
  *
  * Why here and not in the list window: a sound is the click's answer, and
- * this window's audio has just been woken by that click (`src/next/main.tsx`
- * opens it on the first pointer or key). The list window may be hidden or
+ * this is the window that was clicked. The list window may be hidden or
  * behind, and on Linux its sound for a click made here was heard seconds late.
  */
 import { playSound, type SoundCue } from "../../lib/sound";

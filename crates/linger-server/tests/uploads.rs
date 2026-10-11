@@ -10,7 +10,8 @@ mod common;
 use common::{
     bootstrap_host, join_member, server_with_room, spawn_server, spawn_tuned, TestServer,
 };
-use linger_core::wire::{Attachment, AuthResponse, CompletedPart, Message, UploadSlot};
+use linger_core::wire::{Attachment, AuthResponse, CompletedPart, Message, ServerInfo, UploadSlot};
+use linger_server::{expiry, unsent};
 use reqwest::StatusCode;
 
 const PART: u64 = 8 * 1024 * 1024;
@@ -139,6 +140,22 @@ fn png(width: u32, height: u32) -> Vec<u8> {
         .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .unwrap();
     out
+}
+
+/// A GIF of 35 bytes that claims a 65535 × 65535 canvas, 17 GB as pixels, and
+/// draws one black pixel in its corner (#487). Written by hand: no encoder
+/// would make one.
+fn gif_bomb() -> Vec<u8> {
+    let mut gif = b"GIF89a".to_vec();
+    gif.extend_from_slice(&u16::MAX.to_le_bytes());
+    gif.extend_from_slice(&u16::MAX.to_le_bytes());
+    // A global colour table of two colours, black and white.
+    gif.extend_from_slice(&[0x80, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff]);
+    // One frame at (0, 0), one pixel by one: colour 0, LZW-coded.
+    gif.extend_from_slice(&[0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0]);
+    gif.extend_from_slice(&[0x02, 0x02, 0x44, 0x01, 0x00]);
+    gif.push(0x3b);
+    gif
 }
 
 /// The string planted in the EXIF block. If this survives an upload, somebody's
@@ -353,6 +370,39 @@ async fn a_plain_file_is_handed_over_as_a_download() {
         .starts_with("attachment;"));
 }
 
+/// A program can't come in dressed as a document (#488). `invoice`, U+202E
+/// and `fdp.exe` would read "invoiceexe.pdf" on its card, in Media and in
+/// Search, and in the browser's downloads. The name is stored, shown and
+/// downloaded without it.
+#[tokio::test]
+async fn a_file_name_cannot_turn_itself_around() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "invoice\u{202E}fdp.exe",
+        "text/plain",
+        b"not a document\n".to_vec(),
+    )
+    .await;
+    assert_eq!(attachment.filename, "invoicefdp.exe");
+
+    let served = client()
+        .get(absolute(&server, &attachment.url))
+        .send()
+        .await
+        .unwrap();
+    let disposition = served.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        disposition.ends_with("UTF-8''invoicefdp.exe"),
+        "{disposition}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Serving part of a file (#222)
 // ---------------------------------------------------------------------------
@@ -488,9 +538,11 @@ async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
         part.headers()["content-security-policy"],
         "default-src 'none'; sandbox"
     );
+    // The app's own cache keeps a file; one shared by everybody behind a
+    // proxy must not, or it outlives a delete (#502).
     assert_eq!(
         part.headers()["cache-control"],
-        "public, max-age=31536000, immutable"
+        "private, max-age=31536000, immutable"
     );
 
     let part = fetch(&download_url, Some("bytes=10-19")).await;
@@ -747,6 +799,43 @@ async fn a_file_that_lies_about_its_type_is_refused() {
     // And the failed slot is spent: it cannot be retried into something else.
     let (status, _) = put_part(&server, &slot.url, png(4, 4)).await;
     assert_eq!(status, 409);
+}
+
+/// Before #487, decoding this GIF asked for 17 GB and stopped the whole
+/// server. It is refused like any picture that can't be read, and the server
+/// goes on taking pictures.
+#[tokio::test]
+async fn a_gif_that_claims_a_huge_canvas_is_refused_and_the_server_carries_on() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+
+    let bomb = gif_bomb();
+    let slot = slot(
+        &server,
+        &host.access_token,
+        "bomb.gif",
+        bomb.len() as u64,
+        "image/gif",
+    )
+    .await;
+    let (status, _) = put_part(&server, &slot.url, bomb).await;
+    assert_eq!(status, 200);
+
+    let resp = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(resp.status(), 415);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "UNSUPPORTED_MEDIA");
+    assert_eq!(body["error"]["message"], "That image can't be read.");
+
+    let fine = upload(
+        &server,
+        &host.access_token,
+        "fine.png",
+        "image/png",
+        png(8, 8),
+    )
+    .await;
+    assert_eq!(fine.mime, "image/png");
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,4 +1117,337 @@ fn sample_video() -> Option<Vec<u8>> {
         .status()
         .ok()?;
     status.success().then(|| std::fs::read(&path).ok())?
+}
+
+// ---------------------------------------------------------------------------
+// The pool is everybody's (#503)
+// ---------------------------------------------------------------------------
+
+const MB: u64 = 1024 * 1024;
+const HOUR_MS: i64 = 60 * 60 * 1000;
+const DAY_MS: i64 = 24 * HOUR_MS;
+
+/// The storage figure everybody sees: stored files plus reservations.
+async fn pool_used(server: &TestServer, token: &str) -> u64 {
+    let info: ServerInfo = client()
+        .get(server.url("/server"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    info.storage_used_bytes
+}
+
+/// Make one upload as old as a test needs it to be, the only honest way to
+/// test a window of hours or days inside a test that has to finish.
+async fn backdate(server: &TestServer, id: Vec<u8>, by_ms: i64) {
+    sqlx::query("UPDATE attachments SET created_at = created_at - ? WHERE id = ?")
+        .bind(by_ms)
+        .bind(id)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+}
+
+async fn served(server: &TestServer, attachment: &Attachment) -> StatusCode {
+    client()
+        .get(absolute(server, &attachment.url))
+        .send()
+        .await
+        .unwrap()
+        .status()
+}
+
+/// Asking for a slot reserves the file's size before a byte moves. One person
+/// asking again and again, sending nothing, used to be able to hold the whole
+/// pool; now what one person can have going up at once is capped, the refusal
+/// says it is theirs and not the server's, and everybody else still gets in.
+#[tokio::test]
+async fn one_member_cannot_hold_more_than_their_share_going_up() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let jo = join_member(&server, &host.access_token, "jo").await;
+
+    let first = slot(&server, &host.access_token, "a.mp4", 500 * MB, "video/mp4").await;
+    let _second = slot(&server, &host.access_token, "b.mp4", 500 * MB, "video/mp4").await;
+
+    let resp = ask_for_slot(&server, &host.access_token, "c.mp4", 500 * MB, "video/mp4").await;
+    assert_eq!(resp.status(), 507);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "QUOTA_EXCEEDED");
+    let words = body["error"]["message"].as_str().unwrap();
+    assert!(
+        words.starts_with("You have 1000 MB of uploads still going up"),
+        "{words}"
+    );
+
+    // Somebody else's upload is theirs to make.
+    let theirs = ask_for_slot(&server, &jo.access_token, "d.mp4", 500 * MB, "video/mp4").await;
+    assert_eq!(theirs.status(), 200, "{}", theirs.text().await.unwrap());
+
+    // Giving one up makes room again.
+    let gone = client()
+        .delete(server.url(&format!("/uploads/{}", first.upload_id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(gone.status(), 204);
+    let _third = slot(&server, &host.access_token, "c.mp4", 500 * MB, "video/mp4").await;
+}
+
+/// A slot that has heard nothing for an hour is a failed upload, a closed
+/// laptop, or nobody sending at all, and it gives its space back. The next
+/// person to ask for a slot sees to it, and so does the sweeper's timer.
+#[tokio::test]
+async fn a_reservation_that_hears_nothing_for_an_hour_is_given_back() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let jo = join_member(&server, &host.access_token, "jo").await;
+
+    let quiet = slot(
+        &server,
+        &jo.access_token,
+        "quiet.mp4",
+        400 * MB,
+        "video/mp4",
+    )
+    .await;
+    assert_eq!(pool_used(&server, &host.access_token).await, 400 * MB);
+    backdate(&server, quiet.upload_id.to_vec(), 2 * HOUR_MS).await;
+
+    // Somebody else asks for a slot, and the quiet one goes on the way in.
+    let _note = upload(
+        &server,
+        &host.access_token,
+        "note.txt",
+        "text/plain",
+        filler(10),
+    )
+    .await;
+    assert_eq!(pool_used(&server, &host.access_token).await, 10);
+    assert_eq!(
+        finish(&server, &jo.access_token, &quiet, None)
+            .await
+            .status(),
+        404
+    );
+}
+
+/// The sweeper's half, driven directly with the clock moved forward rather
+/// than waited for. A slow upload that is still receiving parts is not quiet,
+/// however old the slot is.
+#[tokio::test]
+async fn the_sweeper_gives_back_quiet_reservations_and_keeps_slow_ones() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let now = linger_server::db::now_ms();
+
+    let silent = slot(
+        &server,
+        &host.access_token,
+        "silent.mp4",
+        300 * MB,
+        "video/mp4",
+    )
+    .await;
+    let slow = slot(
+        &server,
+        &host.access_token,
+        "slow.bin",
+        2 * PART + 100,
+        "application/octet-stream",
+    )
+    .await;
+    let first_part = slow.parts.as_ref().unwrap()[0].url.clone();
+    let (status, _) = put_part(&server, &first_part, filler(usize::try_from(PART).unwrap())).await;
+    assert_eq!(status, 200);
+    // Both slots are two hours old; only the slow one has heard anything,
+    // and it heard just now.
+    backdate(&server, silent.upload_id.to_vec(), 2 * HOUR_MS).await;
+    backdate(&server, slow.upload_id.to_vec(), 2 * HOUR_MS).await;
+
+    // Under an hour since anything arrived: the silent one goes, the slow
+    // one stays.
+    let released = unsent::release_idle(&server.state, now + HOUR_MS / 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        released,
+        unsent::Released {
+            uploads: 1,
+            bytes: 300 * MB
+        }
+    );
+    assert_eq!(pool_used(&server, &host.access_token).await, 2 * PART + 100);
+
+    // An hour after its last part, the slow one has stopped too.
+    let released = unsent::release_idle(&server.state, now + HOUR_MS + 60_000)
+        .await
+        .unwrap();
+    assert_eq!(
+        released,
+        unsent::Released {
+            uploads: 1,
+            bytes: 2 * PART + 100
+        }
+    );
+    assert_eq!(pool_used(&server, &host.access_token).await, 0);
+    let (status, _) = put_part(&server, &slow.parts.as_ref().unwrap()[1].url, filler(10)).await;
+    assert_eq!(status, 404, "a released slot takes no more parts");
+    assert_eq!(
+        finish(&server, &host.access_token, &slow, None)
+            .await
+            .status(),
+        404
+    );
+
+    // Released is not forgotten: the rows stay, counting for nothing, until
+    // every link they handed out has expired (a bucket would still take a
+    // part, tests/s3.rs), and then they go.
+    assert_eq!(
+        attachment_state(&server, silent.upload_id.to_vec())
+            .await
+            .as_deref(),
+        Some("released")
+    );
+    assert_eq!(
+        attachment_state(&server, slow.upload_id.to_vec())
+            .await
+            .as_deref(),
+        Some("released")
+    );
+    let released = unsent::release_idle(&server.state, now + unsent::CEILING_MS)
+        .await
+        .unwrap();
+    assert_eq!(
+        released,
+        unsent::Released::default(),
+        "their space came back already"
+    );
+    assert_eq!(
+        attachment_state(&server, silent.upload_id.to_vec()).await,
+        None
+    );
+    assert_eq!(
+        attachment_state(&server, slow.upload_id.to_vec()).await,
+        None
+    );
+}
+
+async fn attachment_state(server: &TestServer, id: Vec<u8>) -> Option<String> {
+    sqlx::query_scalar("SELECT state FROM attachments WHERE id = ?")
+        .bind(id)
+        .fetch_optional(&server.state.db.read)
+        .await
+        .unwrap()
+}
+
+/// A file somebody finished uploading and never posted gets a week, not the
+/// year a shared file gets, and not forever when the host turns expiry off.
+#[tokio::test]
+async fn a_finished_file_nobody_posts_goes_after_a_week() {
+    let server = spawn_tuned(|config| config.file_expiry_days = None).await;
+    let host = bootstrap_host(&server).await;
+    let old = upload(
+        &server,
+        &host.access_token,
+        "old.txt",
+        "text/plain",
+        filler(100),
+    )
+    .await;
+    let recent = upload(
+        &server,
+        &host.access_token,
+        "recent.txt",
+        "text/plain",
+        filler(100),
+    )
+    .await;
+    backdate(&server, old.id.to_vec(), 8 * DAY_MS).await;
+    backdate(&server, recent.id.to_vec(), 6 * DAY_MS).await;
+
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 1);
+    assert_eq!(served(&server, &old).await, 404);
+    assert_eq!(served(&server, &recent).await, 200);
+}
+
+/// Removing somebody takes what they had on its way into a message: their
+/// reservations and the files they never posted. What they posted stays, as
+/// their messages do, and so does an emoji they made, which is the server's.
+#[tokio::test]
+async fn removing_a_member_gives_their_space_back() {
+    let (server, host, room) = server_with_room("general").await;
+    let jo = join_member(&server, &host.access_token, "jo").await;
+    let cohost = client()
+        .put(server.url(&format!("/users/{}/cohost", jo.user.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert!(cohost.status().is_success());
+
+    let posted = upload(
+        &server,
+        &jo.access_token,
+        "posted.txt",
+        "text/plain",
+        filler(300),
+    )
+    .await;
+    let message = client()
+        .post(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&jo.access_token)
+        .json(&serde_json::json!({ "body": "look", "attachment_ids": [posted.id] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(message.status(), 200);
+    let picture = upload(
+        &server,
+        &jo.access_token,
+        "wave.png",
+        "image/png",
+        png(32, 32),
+    )
+    .await;
+    let emoji = client()
+        .post(server.url("/emoji"))
+        .bearer_auth(&jo.access_token)
+        .json(&serde_json::json!({ "name": "wave", "attachment_id": picture.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(emoji.status(), 200, "{}", emoji.text().await.unwrap());
+    let unposted = upload(
+        &server,
+        &jo.access_token,
+        "draft.txt",
+        "text/plain",
+        filler(700),
+    )
+    .await;
+    let _reserved = slot(&server, &jo.access_token, "big.mp4", 400 * MB, "video/mp4").await;
+    let kept = posted.size_bytes + picture.size_bytes;
+    assert_eq!(
+        pool_used(&server, &host.access_token).await,
+        kept + 700 + 400 * MB
+    );
+
+    let removed = client()
+        .post(server.url(&format!("/users/{}/remove", jo.user.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), 204);
+
+    assert_eq!(pool_used(&server, &host.access_token).await, kept);
+    assert_eq!(served(&server, &unposted).await, 404);
+    assert_eq!(served(&server, &posted).await, 200);
+    assert_eq!(served(&server, &picture).await, 200);
 }

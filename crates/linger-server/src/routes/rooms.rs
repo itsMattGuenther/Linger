@@ -35,10 +35,11 @@ async fn create(
     Json(req): Json<CreateRoomRequest>,
 ) -> Result<Json<Room>, ApiError> {
     validate::room_slug(&req.slug)?;
-    let name = req.name.trim();
-    if name.is_empty() || name.chars().count() > 48 {
-        return Err(ApiError::validation("Room names are 1–48 characters."));
-    }
+    let name = validate::room_name(&req.name)?;
+    let topic = req
+        .topic
+        .as_deref()
+        .map(validate::without_direction_overrides);
 
     let id = RoomId::new();
     let position: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(position), -1) + 1 FROM rooms")
@@ -51,8 +52,8 @@ async fn create(
     )
     .bind(id.to_vec())
     .bind(&req.slug)
-    .bind(name)
-    .bind(&req.topic)
+    .bind(&name)
+    .bind(&topic)
     .bind(position)
     .bind(now_ms())
     .execute(&state.db.write)
@@ -96,12 +97,11 @@ async fn update(
 ) -> Result<Json<Room>, ApiError> {
     let before = repo::rooms::expect(&state.db.read, id).await?;
     only_a_room(&before)?;
-    if let Some(name) = &req.name {
-        let trimmed = name.trim();
-        if trimmed.is_empty() || trimmed.chars().count() > 48 {
-            return Err(ApiError::validation("Room names are 1–48 characters."));
-        }
-    }
+    let name = req.name.as_deref().map(validate::room_name).transpose()?;
+    let topic = req
+        .topic
+        .as_deref()
+        .map(validate::without_direction_overrides);
     let motd = match req.motd.as_deref().map(validate::motd).transpose()? {
         // The same words again, or clearing nothing, changes nothing: no second
         // line in the room, and nobody's folded strip opens again (#464).
@@ -151,14 +151,14 @@ async fn update(
             line = Some(message_id);
         }
     }
-    if let Some(name) = &req.name {
+    if let Some(name) = &name {
         sqlx::query("UPDATE rooms SET name = ? WHERE id = ?")
-            .bind(name.trim())
+            .bind(name)
             .bind(id.to_vec())
             .execute(&mut *tx)
             .await?;
     }
-    if let Some(topic) = &req.topic {
+    if let Some(topic) = &topic {
         sqlx::query("UPDATE rooms SET topic = ? WHERE id = ?")
             .bind(topic)
             .bind(id.to_vec())

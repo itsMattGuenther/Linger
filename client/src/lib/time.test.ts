@@ -9,7 +9,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { ageOpacity, closesWhen, clockTime, fullTime, hitTime, sessionLabel, setWhen } from "./time";
+import { ageOpacity, closesWhen, clockTime, fullTime, hitTime, isoTime, sessionLabel, setWhen, validTime } from "./time";
 
 /** Local-time helper: `at(2026, 8, 15, 9, 14)` is 15 August 2026, 9:14am. */
 function at(year: number, month: number, day: number, hour: number, minute = 0): number {
@@ -159,5 +159,40 @@ describe("closesWhen (#474)", () => {
     const withYear = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
     expect(closesWhen(at(2026, 10, 15, 22, 52), now)).toBe(`on ${monthDay(at(2026, 10, 15, 22, 52))}`);
     expect(closesWhen(at(2027, 1, 2, 12, 0), now)).toBe(`on ${withYear(at(2027, 1, 2, 12, 0))}`);
+  });
+});
+
+describe("a time no date can hold (#509)", () => {
+  // Every time drawn comes from a server. One past what a `Date` can hold
+  // (8.64e15 ms either side of 1970), or not a number at all, made the
+  // formatters throw, and the throw blanked the whole list window. Such a
+  // time draws as no time instead.
+  const now = at(2026, 10, 8, 22, 52);
+  const broken = [9e15, -9e15, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+  it("is told apart from one that can be drawn", () => {
+    for (const time of broken) expect(validTime(time)).toBe(false);
+    for (const time of [0, now, 8.64e15, -8.64e15]) expect(validTime(time)).toBe(true);
+  });
+
+  it("draws as no time in every formatter, rather than throwing", () => {
+    for (const time of broken) {
+      expect(clockTime(time)).toBe("");
+      expect(fullTime(time)).toBe("");
+      expect(hitTime(time)).toBe("");
+      expect(sessionLabel(time, now)).toBe("");
+      expect(setWhen(time, now)).toBe("");
+      expect(closesWhen(time, now)).toBe("");
+      expect(isoTime(time)).toBeUndefined();
+    }
+  });
+
+  it("still draws the furthest times a date can hold", () => {
+    expect(isoTime(0)).toBe("1970-01-01T00:00:00.000Z");
+    expect(isoTime(8.64e15)).toBe("+275760-09-13T00:00:00.000Z");
+    expect(clockTime(8.64e15)).not.toBe("");
+    // The small hours hang on the day before, which the very first moment a
+    // date can hold doesn't have: no label, rather than a throw.
+    expect(() => sessionLabel(-8.64e15, now)).not.toThrow();
   });
 });

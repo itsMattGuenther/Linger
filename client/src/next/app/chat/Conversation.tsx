@@ -452,12 +452,16 @@ function RowView({
   actions: MessageActions;
 }) {
   switch (row.kind) {
-    case "divider":
-      return (
+    case "divider": {
+      // A session that starts at a time that can't be drawn has no words to
+      // say when, so it draws no divider (#509).
+      const label = sessionLabel(row.at, now);
+      return label === "" ? null : (
         <p className="nx-divider">
-          <span className="nx-divider-label">{sessionLabel(row.at, now)}</span>
+          <span className="nx-divider-label">{label}</span>
         </p>
       );
+    }
     case "joins": {
       // Somebody joining voice (#473). Nobody you blocked is in it: their
       // arriving isn't news you asked for (PROTOCOL §5).

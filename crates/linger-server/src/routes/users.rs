@@ -5,7 +5,9 @@ use axum::http::StatusCode;
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::wire::{ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User};
+use linger_core::wire::{
+    AuthResponse, ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User,
+};
 use linger_core::UserId;
 
 use crate::auth::{self, AuthedUser, HostOrCohost, HostUser, Standing};
@@ -66,10 +68,14 @@ async fn list_removed(
 /// being in the room*, and there are three other doors: their refresh families
 /// keep minting access tokens for 30 days, their live gateway socket keeps
 /// receiving fan-out forever, and the invites they made are a way back in. All
-/// four are shut here, the first three in one transaction.
+/// four are shut here, the first three in one transaction. Their export
+/// archive, if they have one, is deleted too (#504).
 ///
 /// Their messages are untouched. Removing a person is not deleting what they
-/// wrote (SPEC principle 3).
+/// wrote (SPEC principle 3). What they had on its way into a message is a
+/// different thing: their uploads still going up and the files they never
+/// posted go (#503), because nobody else can see them, delete them or ever
+/// send them, and they hold the pool everybody shares.
 ///
 /// The host or a co-host may remove anybody but themselves, and a co-host
 /// may not remove the host (#424). Removing a co-host ends their being one:
@@ -104,13 +110,9 @@ async fn remove_user(
     .bind(id.to_vec())
     .execute(&mut *tx)
     .await?;
-    sqlx::query(
-        "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
-    )
-    .bind(now)
-    .bind(id.to_vec())
-    .execute(&mut *tx)
-    .await?;
+    // Every sign-in, access tokens included, so that a restore lets them back
+    // in through the front door only and not with a token from before (#496).
+    auth::end_sign_ins(&mut tx, id, now).await?;
     sqlx::query("UPDATE invites SET revoked_at = ? WHERE created_by = ? AND revoked_at IS NULL")
         .bind(now)
         .bind(id.to_vec())
@@ -130,6 +132,17 @@ async fn remove_user(
     state
         .gateway
         .publish(ServerEvent::UserRemove { user_id: id });
+    // After the door is shut, so nothing new can be reserved behind it. The
+    // removal has happened whatever this says: a file that will not go now
+    // is the sweeper's within a week.
+    if let Err(err) = crate::unsent::release_for(&state, id).await {
+        tracing::warn!(error = ?err, "could not release a removed member's uploads");
+    }
+    // Their export goes too (#504). An archive is a copy of the whole server
+    // behind a link that needs no sign-in, and somebody who can no longer
+    // sign in must not keep one that works. Removing somebody twice is
+    // harmless, so a failure here is put right by removing them again.
+    crate::export::forget(&state, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -248,9 +261,9 @@ async fn patch_me(
     // A status has no picture any more (#269). An older app still sends
     // `image_id`, so it is accepted and ignored: nothing is checked or stored
     // for it, and saving the rest of the status is never refused over it.
-    if let Some(status) = &req.status {
-        validate::status(status)?;
-    }
+    // What comes back is the status to save, without the characters that
+    // turn text around (#488).
+    let status = req.status.as_ref().map(validate::status).transpose()?;
     if let Some(sound) = &req.entrance_sound {
         if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {
             return Err(ApiError::validation(
@@ -302,7 +315,7 @@ async fn patch_me(
         .await?;
     }
 
-    if let Some(status) = &req.status {
+    if let Some(status) = &status {
         // `away_since` is server-owned: stamped when an away message appears or
         // changes, cleared with it.
         let prev_away: Option<(Option<String>, Option<i64>)> =
@@ -380,11 +393,20 @@ async fn patch_me(
     Ok(Json(user))
 }
 
+/// `PATCH /me/password` (PROTOCOL §5): a new password, and the end of every
+/// sign-in the account had (#496). Refresh tokens, access tokens and open
+/// gateway sessions all go, this device's too. The usual reason to change a
+/// password is that somebody else might have it, and anything that outlived the
+/// change would be theirs to keep.
+///
+/// The device that asked gets a fresh pair in the answer, as a login would
+/// give it, so the person carries on there without typing the new password
+/// again. An app from before this ignores the answer and signs in again.
 async fn change_password(
     State(state): State<AppState>,
     auth: AuthedUser,
     Json(req): Json<ChangePasswordRequest>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Json<AuthResponse>, ApiError> {
     validate::password(&req.new_password)?;
 
     let hash: Option<String> = sqlx::query_scalar(
@@ -397,20 +419,24 @@ async fn change_password(
         return Err(ApiError::unauthenticated());
     };
 
-    if !auth::verify_password(req.current_password, hash).await? {
+    if !state.passwords.verify(req.current_password, hash).await? {
         return Err(ApiError::forbidden("Current password doesn't match."));
     }
 
-    let new_hash = auth::hash_password(req.new_password).await?;
+    let new_hash = state.passwords.hash(req.new_password).await?;
+    let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
     sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
         .bind(new_hash)
         .bind(auth.id.to_vec())
-        .execute(&state.db.write)
+        .execute(&mut *tx)
         .await?;
+    auth::end_sign_ins(&mut tx, auth.id, now_ms()).await?;
+    tx.commit().await.map_err(ApiError::from)?;
 
-    // Anyone holding an old refresh token (including a thief) re-logs-in.
-    auth::revoke_all_for_user(&state.db.write, auth.id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    // Written first, then enforced, as removal does: a session closed before
+    // the commit could identify again with a token that still worked.
+    state.gateway.close_sessions_for(auth.id).await;
+    super::auth::auth_response(&state, auth.id).await.map(Json)
 }
 
 async fn list_notify_rules(

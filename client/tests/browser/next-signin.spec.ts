@@ -161,6 +161,37 @@ test("a setup link leads to setting the server up, and Change goes back to the b
   ]);
 });
 
+test("a limit on the way in says what's happening and how long to wait, each in its own words (#538)", async ({ page }) => {
+  await open(page);
+  await paste(page, `${HOME}/invite/ABCD-1234`);
+  const join = page.getByRole("form", { name: "Join" });
+  await join.getByRole("textbox", { name: "Username" }).fill("crowd");
+  await join.getByRole("textbox", { name: "Display name" }).fill("Crowd");
+  await join.getByLabel("Password").fill("12345678");
+  await join.getByRole("button", { name: "Join" }).click();
+  const said = join.getByRole("alert");
+  await expect(said).toHaveText(
+    "Lots of people have joined from your network in the last hour, so this server is pausing new sign-ups from it. Try again in about 10 minutes. If your group is joining together, the host can raise this limit.",
+  );
+  // All of it, wrapped inside the window rather than cut off at its edge.
+  expect(await said.evaluate((element) => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  // Still here with what was typed, to try again.
+  await expect(join.getByRole("textbox", { name: "Username" })).toHaveValue("crowd");
+
+  // A server that's only busy says that instead: nothing about anybody's network.
+  await join.getByRole("textbox", { name: "Username" }).fill("busy");
+  await join.getByRole("button", { name: "Join" }).click();
+  await expect(said).toHaveText("The server is busy letting other people in. Try again in a moment.");
+
+  await join.getByRole("button", { name: "Sign in" }).click();
+  const signIn = page.getByRole("form", { name: "Sign in" });
+  await signIn.getByRole("textbox", { name: "Username" }).fill("guesser");
+  await signIn.getByLabel("Password").fill("porch light");
+  await signIn.getByRole("button", { name: "Sign in" }).click();
+  await expect(signIn.getByRole("alert")).toHaveText("Too many sign-in tries from your network in the last minute. Try again in 12 seconds.");
+  await expect(page.locator("[data-screen='signin']")).toBeVisible();
+});
+
 test("while it checks, it says so and a second Enter asks nothing more", async ({ page }) => {
   await open(page, "?one&signedout&hold");
   await pasteBox(page).fill("good-company.example");

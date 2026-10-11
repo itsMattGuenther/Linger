@@ -1,0 +1,23 @@
+/* A pane that couldn't be drawn (#509): a calm line or two and Try again,
+   in the pane's own place, laid out as a window with nothing to show is
+   (WindowMessage.css). Tokens only. */
+.nx-unshown {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--text-secondary);
+}
+
+.nx-unshown-hint {
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}

@@ -259,9 +259,12 @@ that server's share and replays what the snapshot lacks.
 
 Two things Settings needs an answer to go through the owner as questions
 (`ask`), not intents: turning a notification rule on or off (`next:notify`),
-and changing your password (`next:password`), which the owner follows by
-signing straight back in with the new password, since a change ends every
-other sign-in.
+and changing your password (`next:password`). A change ends every sign-in
+the account has, the owner's too, and the server answers with a fresh pair,
+which the owner's sign-in carries on with (#496). A renewal asked for while
+the answer is on its way waits for it rather than spend the refresh token the
+change just ended. From a server older than that, which answers with nothing,
+the owner signs straight back in with the new password.
 
 **A voice control's sound plays where it was pressed (#241).** Mute, Deafen
 and Leave on the voice line of a conversation in its own window are questions too
@@ -514,6 +517,26 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   shows the running copy's list (`tauri-plugin-single-instance`). Hiding it
   tells the list (`next:hidden`), which the first time ever on that computer
   shows a notification saying where Linger went (#400).
+
+## When something can't be drawn
+
+A throw while React draws takes the whole page down unless something
+catches it, and in the list window that's every server's connection, voice
+and the conversations beside it. So it's caught twice (#509,
+`app/Boundary.tsx`):
+
+- **Each pane** (a conversation, Media or Search, beside the list or in a
+  window of its own, and each section of Settings) says it couldn't be
+  shown, in its own place, with Try again. Everything around it goes on.
+  A conversation's tab showing another conversation draws again by itself.
+- **Each window's root** (`main.tsx`) is the last place: the title bar, a
+  line saying so, and Reload, which starts the window over. In the list
+  window that means signing back in from the keyring and connecting again.
+
+What broke is written to this computer's console, as React writes any error
+a boundary catches, and sent nowhere (AGENTS.md hard rule 4). Every time on
+screen comes from a server, and one past what a date can hold made the
+formatters throw; it now draws as no time (`validTime` in `lib/time.ts`).
 
 ## Testing strategy
 
