@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::Semaphore;
 
-use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_AT_ONCE, PASSWORD_WORK_WAIT};
+use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_WAIT};
 use crate::config::{Config, Storage};
 use crate::db::Db;
 use crate::gateway::Gateway;
@@ -81,6 +81,10 @@ impl AppState {
             tracing::info!(%address, "voice forwarding is on: clients send voice to this address");
         }
 
+        let passwords = Arc::new(PasswordWork::new(
+            config.password_checks_at_once,
+            PASSWORD_WORK_WAIT,
+        ));
         Ok(Self {
             db,
             config,
@@ -91,7 +95,7 @@ impl AppState {
             storage,
             local,
             exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
-            passwords: Arc::new(PasswordWork::new(PASSWORD_WORK_AT_ONCE, PASSWORD_WORK_WAIT)),
+            passwords,
         })
     }
 }

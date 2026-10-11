@@ -1,7 +1,8 @@
 //! Authentication (ARCHITECTURE §7, PROTOCOL §2).
 //!
 //! - Passwords: argon2id `m=19456, t=2, p=1` — hashing runs on the blocking pool,
-//!   [`PASSWORD_WORK_AT_ONCE`] at a time across the whole server ([`PasswordWork`]).
+//!   a few at a time across the whole server ([`PasswordWork`],
+//!   `LINGER_PASSWORD_CHECKS_AT_ONCE`).
 //! - Access tokens: EdDSA JWTs, 15 min. The Ed25519 key is generated at first
 //!   boot into the data dir; losing it only invalidates outstanding access
 //!   tokens (15 min of pain), unlike the update-signing key.
@@ -71,7 +72,7 @@ fn verify_password_sync(password: &str, hash: &str) -> anyhow::Result<bool> {
 }
 
 /// How many argon2id hashes and checks run at the same time, across the
-/// whole server (#495).
+/// whole server (#495), unless the host sets `LINGER_PASSWORD_CHECKS_AT_ONCE`.
 ///
 /// Each one holds about 19 MB (`m=19456`) and one core (`p=1`) for as long as
 /// it runs, and they run on tokio's blocking pool, which would start hundreds
@@ -80,7 +81,14 @@ fn verify_password_sync(password: &str, hash: &str) -> anyhow::Result<bool> {
 /// the small machines Linger runs on, where more at once would finish no
 /// sooner and only hold more memory; on a bigger machine four still get
 /// through dozens of sign-ins a second, more than a server of friends sends.
-pub const PASSWORD_WORK_AT_ONCE: usize = 4;
+/// A host with cores and memory to spare can raise it for a crowd.
+pub const DEFAULT_PASSWORD_CHECKS_AT_ONCE: usize = 4;
+
+/// The most `LINGER_PASSWORD_CHECKS_AT_ONCE` may be: about 4.9 GB of
+/// passwords at once. Half of tokio's blocking pool (512 threads), which the
+/// server's file work also runs on, so a typo can't hand the whole pool to
+/// sign-ins or ask for more memory than any machine it runs on has.
+pub const MAX_PASSWORD_CHECKS_AT_ONCE: usize = 256;
 
 /// How long a sign-in or sign-up waits for a turn before it is refused with
 /// `RATE_LIMITED`. Waiting rather than refusing straight away means a real
@@ -93,8 +101,8 @@ pub const PASSWORD_WORK_WAIT: Duration = Duration::from_secs(5);
 /// The turns password work takes (#495). Every argon2id hash and check a
 /// request makes goes through here: sign-in, sign-up, first-run setup and
 /// changing a password. A stranger hammering sign-in can make the server
-/// queue, never make it hold more than [`PASSWORD_WORK_AT_ONCE`] hashes'
-/// worth of memory.
+/// queue, never make it hold more than `LINGER_PASSWORD_CHECKS_AT_ONCE`
+/// hashes' worth of memory ([`DEFAULT_PASSWORD_CHECKS_AT_ONCE`] by default).
 pub struct PasswordWork {
     /// One permit per hash or check running. Public so a test can take them
     /// all, the way tests take `AppState::exports`.
@@ -190,14 +198,18 @@ impl Drop for Waiting<'_> {
     }
 }
 
-/// No turn came free in time. Honest about why, unlike the per-address limits'
-/// "Slow down a little.": this person may have done nothing but arrive at a
-/// busy moment.
+/// What somebody is told when no turn came free in time (#538). Honest about
+/// why: this person may have done nothing but arrive at a busy moment, and
+/// it isn't about them or their network, so it says the server is busy and
+/// with what, and that waiting is all it takes.
+pub const SERVER_BUSY: &str = "The server is busy letting other people in. Try again in a moment.";
+
+/// No turn came free in time.
 fn busy(wait: Duration) -> ApiError {
     ApiError {
         status: StatusCode::TOO_MANY_REQUESTS,
         code: ErrorCode::RateLimited,
-        message: "The server is busy. Try again in a moment.".into(),
+        message: SERVER_BUSY.into(),
         retry_after_ms: Some(u64::try_from(wait.as_millis()).unwrap_or(u64::MAX)),
     }
 }

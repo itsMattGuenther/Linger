@@ -4,9 +4,9 @@
 
 mod common;
 
-use linger_core::limits::{RATE_LOGIN_PER_IP, RATE_REGISTER_PER_IP};
+use linger_core::limits::{DEFAULT_SIGNUPS_PER_HOUR, RATE_LOGIN_PER_IP};
 use linger_core::wire::{AuthResponse, ErrorCode, ErrorEnvelope, Invite, RefreshResponse};
-use linger_server::auth::PASSWORD_WORK_AT_ONCE;
+use linger_server::auth::SERVER_BUSY;
 
 #[tokio::test]
 async fn register_login_and_wrong_password() {
@@ -311,20 +311,85 @@ async fn sign_up_is_rate_limited_per_address() {
 
     // Made-up invites are the cheap way to spend the allowance, now that
     // they cost no hashing.
-    let (allowed, _) = RATE_REGISTER_PER_IP;
-    for n in 0..allowed {
+    for n in 0..DEFAULT_SIGNUPS_PER_HOUR {
         let resp = sign_up_from(&server, "203.0.113.20", "madeupcode12", &format!("p{n}")).await;
         assert_eq!(resp.status(), 422, "attempt {n} was limited early");
     }
     let resp = sign_up_from(&server, "203.0.113.20", "madeupcode12", "one_more").await;
     assert_eq!(resp.status(), 429);
+    // Sixty an hour comes back at one a minute: the wait, in HTTP's header
+    // and in the body, and in the words the person reads (#538). A minute
+    // less however long the sixty took, so not exactly a minute.
+    let header = resp.headers()["retry-after"].to_str().unwrap().to_string();
     let env: ErrorEnvelope = resp.json().await.unwrap();
     assert_eq!(env.error.code, ErrorCode::RateLimited);
-    assert!(env.error.retry_after_ms.is_some_and(|ms| ms > 0));
+    let wait = env.error.retry_after_ms.unwrap();
+    assert!((30_000..=60_000).contains(&wait), "{wait}");
+    assert_eq!(header, wait.div_ceil(1_000).to_string());
+    assert_eq!(
+        env.error.message,
+        "Lots of people have joined from your network in the last hour, so this server is \
+         pausing new sign-ups from it. Try again in about a minute. If your group is joining \
+         together, the host can raise this limit."
+    );
 
     // Somebody else's allowance is their own.
     let resp = sign_up_from(&server, "203.0.113.21", "madeupcode12", "neighbour").await;
     assert_eq!(resp.status(), 422);
+}
+
+/// #538: a community that sends one invite to a crowd can have more than
+/// sixty people arrive from one address (a school, a phone network). The host
+/// raises `LINGER_SIGNUPS_PER_HOUR`, or turns it off, and the 61st gets in.
+#[tokio::test]
+async fn a_host_who_raises_the_sign_up_limit_lets_the_sixty_first_through() {
+    for (setting, last) in [(Some(200), 200), (None, 250)] {
+        let server = common::spawn_tuned(|config| config.signups_per_hour = setting).await;
+        let _host = common::bootstrap_host(&server).await;
+        for n in 0..last {
+            let resp =
+                sign_up_from(&server, "203.0.113.22", "madeupcode12", &format!("p{n}")).await;
+            assert_eq!(resp.status(), 422, "{setting:?}: attempt {n} was limited");
+        }
+        let resp = sign_up_from(&server, "203.0.113.22", "madeupcode12", "one_more").await;
+        let limited = setting.is_some();
+        assert_eq!(resp.status() == 429, limited, "{setting:?}");
+    }
+}
+
+/// A host who lowers the limit gets a longer wait between sign-ups, and the
+/// person told to wait is told how long in minutes.
+#[tokio::test]
+async fn a_lower_sign_up_limit_says_the_wait_in_minutes() {
+    let server = common::spawn_tuned(|config| config.signups_per_hour = Some(6)).await;
+    let _host = common::bootstrap_host(&server).await;
+    for n in 0..6 {
+        let resp = sign_up_from(&server, "203.0.113.23", "madeupcode12", &format!("p{n}")).await;
+        assert_eq!(resp.status(), 422, "attempt {n} was limited early");
+    }
+    let resp = sign_up_from(&server, "203.0.113.23", "madeupcode12", "one_more").await;
+    assert_eq!(resp.status(), 429);
+    let header: u64 = resp.headers()["retry-after"]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((570..=600).contains(&header), "{header}");
+    let env: ErrorEnvelope = resp.json().await.unwrap();
+    assert!(
+        env.error.message.contains("Try again in about 10 minutes."),
+        "{}",
+        env.error.message
+    );
+}
+
+/// `LINGER_PASSWORD_CHECKS_AT_ONCE` sets how many turns there are.
+#[tokio::test]
+async fn a_host_can_give_password_checks_more_turns() {
+    let server = common::spawn_tuned(|config| config.password_checks_at_once = 7).await;
+    assert_eq!(server.state.passwords.turns.available_permits(), 7);
+    let server = common::spawn_server().await;
+    assert_eq!(server.state.passwords.turns.available_permits(), 4);
 }
 
 /// #495: the address used to be the first `X-Forwarded-For` entry, which is
@@ -343,7 +408,19 @@ async fn a_made_up_first_forwarded_entry_does_not_dodge_the_sign_in_limit() {
     }
     let resp = sign_in_from(&server, "10.0.99.1, 203.0.113.9", "correct horse battery").await;
     assert_eq!(resp.status(), 429);
-    assert_eq!(code_of(resp).await, ErrorCode::RateLimited);
+    // One try comes back every 12 seconds, and the person is told when (#538).
+    let env: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(env.error.code, ErrorCode::RateLimited);
+    let wait = env.error.retry_after_ms.unwrap();
+    assert!((1..=12_000).contains(&wait), "{wait}");
+    assert_eq!(
+        env.error.message,
+        format!(
+            "Too many sign-in tries from your network in the last minute. Try again in {} \
+             seconds.",
+            wait.div_ceil(1_000)
+        )
+    );
 }
 
 /// `LINGER_TRUSTED_PROXIES` reaches the limits: told to trust only a range
@@ -377,7 +454,7 @@ async fn sign_in_and_sign_up_wait_for_a_turn_and_a_refused_one_keeps_its_invite(
     let invite = make_invite(&server, &host.access_token, serde_json::json!({})).await;
 
     // Somebody else's hashing has every turn.
-    let turns = u32::try_from(PASSWORD_WORK_AT_ONCE).unwrap();
+    let turns = u32::try_from(server.state.config.password_checks_at_once).unwrap();
     let taken = server
         .state
         .passwords
@@ -396,10 +473,7 @@ async fn sign_in_and_sign_up_wait_for_a_turn_and_a_refused_one_keeps_its_invite(
         assert_eq!(resp.status(), 429);
         let env: ErrorEnvelope = resp.json().await.unwrap();
         assert_eq!(env.error.code, ErrorCode::RateLimited);
-        assert_eq!(
-            env.error.message,
-            "The server is busy. Try again in a moment."
-        );
+        assert_eq!(env.error.message, SERVER_BUSY);
     }
     assert_eq!(server.state.passwords.started(), before);
     assert_eq!(server.state.passwords.waiting(), 0);

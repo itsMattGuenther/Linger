@@ -124,7 +124,7 @@ async fn a_busy_server_does_not_burn_the_setup_link() {
     assert_eq!(server.state.passwords.started(), 0, "a wrong token hashed");
 
     // Somebody else's hashing has every turn, for longer than setup waits.
-    let turns = u32::try_from(linger_server::auth::PASSWORD_WORK_AT_ONCE).unwrap();
+    let turns = u32::try_from(server.state.config.password_checks_at_once).unwrap();
     let taken = server
         .state
         .passwords
@@ -135,6 +135,8 @@ async fn a_busy_server_does_not_burn_the_setup_link() {
         .unwrap();
     let busy = setup(token.clone()).await.unwrap();
     assert_eq!(busy.status(), 429);
+    let said: linger_core::wire::ErrorEnvelope = busy.json().await.unwrap();
+    assert_eq!(said.error.message, linger_server::auth::SERVER_BUSY);
     assert_eq!(server.state.setup.peek().as_deref(), Some(token.as_str()));
 
     drop(taken);

@@ -23,8 +23,9 @@
 //! silence every 20 ms instead of nothing. The server's CPU is read on the
 //! server (`top`, `docker stats`) while this runs; nothing here can see it.
 //! Everybody but the host signs up from this one address, and a server takes
-//! 60 sign-ups from one address at once (`RATE_REGISTER_PER_IP`), so a room
-//! of up to 61 fits; a bigger one needs a second machine.
+//! 60 sign-ups from one address at once (`DEFAULT_SIGNUPS_PER_HOUR`), so a
+//! room of up to 61 fits; a bigger one needs `LINGER_SIGNUPS_PER_HOUR` raised
+//! on the server, or a second machine.
 //!
 //! This machine has to keep up too: fifty people's worth of decrypting runs
 //! here. A run whose numbers look wrong on a small machine is worth repeating

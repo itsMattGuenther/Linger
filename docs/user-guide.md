@@ -180,6 +180,12 @@ entered only the server address. Go back and paste an invite link. There is
 no public sign-up. If the invite has expired or run out of uses, ask the host
 for a new one.
 
+**Told to try again in a few minutes?** When lots of people join from one
+network at once (a school, an office, a LAN party), the server takes the rest a
+little at a time, and the app says how long to wait. If your whole group is
+joining together, the host can raise that limit. "The server is busy" means it
+is letting other people in right now: try again in a moment.
+
 The app remembers you. On most computers your sign-in is kept in the system's
 password store — the same place your browser keeps passwords — so you do not
 type it again. If your computer has no password store, the app says so and asks

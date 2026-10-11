@@ -187,6 +187,8 @@ newer one is out, with a link to [updating the server](#updating-the-server).
 Only you see it.
 
 An invite link is the only way to get an account. There is no public sign-up.
+Inviting a big group at once? Read [A big group joining at once](#a-big-group-joining-at-once)
+first.
 Text chat is ready, and so is voice once UDP 3479 is open ([Voice](#voice)). For
 friends on networks that block voice (some offices, some public wifi), also set
 up [the voice relay](#the-voice-relay) below.
@@ -310,6 +312,8 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
 | `LINGER_TURN_SECRET` | Shared key for Linger and the relay; you must also start the relay below. | unset — no relay |
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
+| `LINGER_SIGNUPS_PER_HOUR` | How many people may sign up from one network in an hour, all at once if need be. Raise it, or set `off`, when a big group is joining together from one place. See [A big group joining at once](#a-big-group-joining-at-once). | `60` |
+| `LINGER_PASSWORD_CHECKS_AT_ONCE` | How many passwords the server checks at the same time, from 1 to 256. Each check holds about 19 MB of memory and a CPU core for a moment, so N at once can take N × 19 MB (4 is 76 MB, 16 is about 300 MB). Raise it only if people are told the server is busy and the machine has the cores and memory. | `4` |
 | `LINGER_TRUSTED_PROXIES` | Which proxies the server believes about who's connecting, for the limits on signing in and signing up. Only needed for a proxy that isn't on this machine or a private network, such as Caddy on another machine reaching this one over Tailscale: `private,100.64.0.0/10`. Comma-separated addresses and ranges; `private` is this machine and private networks, and leaving it out stops trusting them. See [Other problems](#other-problems). | `private` |
 
 One file can be up to 500 MB.
@@ -319,6 +323,40 @@ and fill in the five `LINGER_S3_*` lines already written in `.env` as
 comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
+
+### A big group joining at once
+
+If you send one invite to a big group, a few limits decide how fast they get in.
+Anyone who meets one is told what's happening and when to try again, so nobody is
+left with an error and no explanation.
+
+- **Sign-ups from one network: 60 an hour.** Sixty people can join from one place
+  in one go; after that the server takes one more a minute from there. People at
+  home each have their own address, so this only matters when many people share
+  one: a school, an office, a LAN party, or a phone network that puts lots of
+  customers behind one address. The person who meets it sees *"Lots of people have
+  joined from your network in the last hour, so this server is pausing new sign-ups
+  from it. Try again in about a minute. If your group is joining together, the host
+  can raise this limit."* Linger's log says it happened, without anybody's address,
+  at most once every 5 minutes. **To let more in, set `LINGER_SIGNUPS_PER_HOUR` in
+  `.env`**, to 500 say, or `off` for no limit per network, then run
+  `docker compose up -d`. The invite still decides who can join: an invite for 50
+  people lets in 50, whatever this says. The setting exists so that somebody with
+  an invite can't make the server do unlimited work, so put it back afterwards if
+  your invite is good for a lot of people or never runs out.
+- **Password checks at once: 4.** Checking a password is slow and memory-hungry on
+  purpose, which is what makes guessing passwords slow. The server does four at
+  once and the rest wait their turn, up to 5 seconds. Four gets through several
+  sign-ins a second even on a small machine, so this rarely matters. If people are
+  told *"The server is busy letting other people in. Try again in a moment."*,
+  and your machine has more cores and memory than Linger is using, **raise
+  `LINGER_PASSWORD_CHECKS_AT_ONCE`**: each one can take about 19 MB, so 8 can take
+  about 150 MB and 16 about 300 MB. More than the machine's number of cores makes
+  nobody faster.
+- **Sign-in tries from one network: 5 a minute.** This one isn't a setting: it's
+  what stops somebody guessing passwords. It only counts sign-ins, so people who
+  joined stay signed in and don't meet it. Somebody who does is told *"Too many
+  sign-in tries from your network in the last minute. Try again in 12 seconds."*
 
 ## Voice
 
@@ -627,8 +665,9 @@ Do not share your `.env` or setup token when asking for help.
   account, it is gone for good — that is deliberate. If no account was made
   but the link was exposed or lost, `docker compose restart linger` prints a
   new one and invalidates the old one.
-- **People are told to slow down when they've barely tried.** Each address
-  gets 5 sign-in tries a minute and 60 sign-ups an hour. The server takes the
+- **People are told to wait when they've barely tried.** Each address gets 5
+  sign-in tries a minute and 60 sign-ups an hour (`LINGER_SIGNUPS_PER_HOUR`; see
+  [A big group joining at once](#a-big-group-joining-at-once)). The server takes the
   address from the connection. It believes the `X-Forwarded-For` header only
   when the connection comes from a proxy it trusts, and then only the header's
   last entry, the one that proxy wrote. By default it trusts this machine and

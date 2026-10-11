@@ -364,6 +364,12 @@ describe("a viewer window sharing the owner's connection", () => {
       const user = { ...owner.gateway.serverState(HOME).me };
       return new Response(JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 600, user }), { status: 200 });
     });
+    // A server busy checking other people's passwords says so, in its own words (#538).
+    api.changePassword.mockRejectedValueOnce(
+      new owner.api.ApiError(429, { code: "RATE_LIMITED", message: "The server is busy letting other people in. Try again in a moment.", retry_after_ms: 5_000 }),
+    );
+    const busy = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "old-secret", next: "new-secret-1" });
+    expect(busy).toEqual({ problem: "The server is busy letting other people in. Try again in a moment." });
     const wrong = await ask<Outcome>(viewer.bus, "main", PASSWORD, { server: HOME, current: "nope", next: "new-secret-1" });
     expect(wrong).toEqual({ problem: "That isn't your current password." });
     expect(fetched).toEqual([]);

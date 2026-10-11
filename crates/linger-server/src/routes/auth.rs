@@ -1,13 +1,15 @@
 //! Auth endpoints (PROTOCOL §2): register through an invite, login, rotating
 //! refresh, logout, and the unauthenticated invite preview.
 
+use std::sync::atomic::{AtomicI64, Ordering};
+
 use axum::extract::{Path, State};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP, RATE_REGISTER_PER_IP};
+use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP};
 use linger_core::wire::{
     AuthResponse, ErrorCode, InvitePreview, LoginRequest, RefreshRequest, RefreshResponse,
     RegisterRequest,
@@ -17,7 +19,7 @@ use sqlx::SqliteExecutor;
 
 use crate::auth::{self, RefreshOutcome};
 use crate::db::now_ms;
-use crate::error::ApiError;
+use crate::error::{wait_in_words, ApiError};
 use crate::state::AppState;
 use crate::{repo, validate};
 
@@ -49,11 +51,16 @@ async fn register(
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
     let ip = auth::client_ip(&parts, &state.config.trusted_proxies);
-    if let Err(retry) = state
-        .limiter
-        .check(&format!("register:{ip}"), RATE_REGISTER_PER_IP)
-    {
-        return Err(ApiError::rate_limited(retry));
+    if let Some(per_hour) = state.config.signups_per_hour {
+        if let Err(retry) = state
+            .limiter
+            .check(&format!("register:{ip}"), (per_hour, 3_600))
+        {
+            if TELL_HOST_SIGNUPS_PAUSED.due(now_ms()) {
+                tracing::warn!("{}", signups_paused_for_the_host(per_hour));
+            }
+            return Err(signups_paused(retry));
+        }
     }
 
     validate::username(&req.username)?;
@@ -138,6 +145,80 @@ async fn register(
     Ok(Json(response))
 }
 
+/// What somebody is told when their network has used up its sign-ups for
+/// now (#538). It isn't anything they did: a crowd joining from one school,
+/// office or phone network looks like this. So it says what is happening, when
+/// to come back, and who can change it.
+fn signups_paused(retry_after_ms: u64) -> ApiError {
+    ApiError::rate_limited_with(
+        retry_after_ms,
+        format!(
+            "Lots of people have joined from your network in the last hour, so this server \
+             is pausing new sign-ups from it. Try again in {}. If your group is joining \
+             together, the host can raise this limit.",
+            wait_in_words(retry_after_ms)
+        ),
+    )
+}
+
+/// The host's half of [`signups_paused`]: the log line that says people
+/// were turned away and which setting lets more in. Never the address.
+fn signups_paused_for_the_host(per_hour: u32) -> String {
+    format!(
+        "Sign-ups from one network reached this server's limit of {per_hour} an hour \
+         (LINGER_SIGNUPS_PER_HOUR), so somebody was told to try again later. If a group is \
+         joining together from one place, raise LINGER_SIGNUPS_PER_HOUR in .env, or set it \
+         to off, and run `docker compose up -d` (docs/host-guide.md, \"A big group joining \
+         at once\"). The address isn't logged, and this is said at most once every 5 minutes."
+    )
+}
+
+/// [`signups_paused_for_the_host`] is said at most this often. A crowd
+/// turned away all evening is one fact for the host, not a line a minute.
+const TELL_HOST_EVERY_MS: i64 = 5 * 60 * 1_000;
+
+/// When the host was last told that sign-ups were paused.
+static TELL_HOST_SIGNUPS_PAUSED: Sometimes = Sometimes::new(TELL_HOST_EVERY_MS);
+
+/// Says yes at most once every `every_ms`, however many ask at once.
+struct Sometimes {
+    last: AtomicI64,
+    every_ms: i64,
+}
+
+impl Sometimes {
+    const fn new(every_ms: i64) -> Self {
+        Self {
+            last: AtomicI64::new(i64::MIN),
+            every_ms,
+        }
+    }
+
+    /// Whether it's time again at `now` (unix ms). Only one of several
+    /// asking at the same moment is told yes.
+    fn due(&self, now: i64) -> bool {
+        let last = self.last.load(Ordering::SeqCst);
+        now.saturating_sub(last) >= self.every_ms
+            && self
+                .last
+                .compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+    }
+}
+
+/// What somebody is told when their network has had its sign-in tries for
+/// the minute: the brake on guessing passwords (ARCHITECTURE §7), not
+/// something a host can raise, so it doesn't say anybody can.
+fn sign_ins_paused(retry_after_ms: u64) -> ApiError {
+    ApiError::rate_limited_with(
+        retry_after_ms,
+        format!(
+            "Too many sign-in tries from your network in the last minute. Try again in {}.",
+            wait_in_words(retry_after_ms)
+        ),
+    )
+}
+
 /// Why `code` can't let anybody in at `now`, as the refusal to send, or
 /// `None` when it can. An expired invite is said to be expired whatever else
 /// is wrong with it, unless it was revoked; every other reason, a made-up
@@ -193,7 +274,7 @@ async fn login(
         .limiter
         .check(&format!("login:{ip}"), RATE_LOGIN_PER_IP)
     {
-        return Err(ApiError::rate_limited(retry));
+        return Err(sign_ins_paused(retry));
     }
 
     let row: Option<(Vec<u8>, String)> = sqlx::query_as(
@@ -289,4 +370,49 @@ async fn invite_preview(
         server_name,
         expires_at,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_host_is_told_once_then_not_again_for_five_minutes() {
+        let told = Sometimes::new(TELL_HOST_EVERY_MS);
+        let start = 1_760_000_000_000;
+        assert!(told.due(start));
+        assert!(!told.due(start));
+        assert!(!told.due(start + TELL_HOST_EVERY_MS - 1));
+        assert!(told.due(start + TELL_HOST_EVERY_MS));
+        assert!(!told.due(start + TELL_HOST_EVERY_MS + 1));
+    }
+
+    #[test]
+    fn the_host_is_told_which_setting_raises_it() {
+        // It's given no address, so it can't log one.
+        let line = signups_paused_for_the_host(60);
+        assert!(line.contains("60 an hour"), "{line}");
+        assert!(line.contains("LINGER_SIGNUPS_PER_HOUR"), "{line}");
+        assert!(line.contains("docs/host-guide.md"), "{line}");
+    }
+
+    #[test]
+    fn each_limit_says_its_own_sentence_with_the_wait() {
+        let paused = signups_paused(599_990);
+        assert_eq!(paused.code, ErrorCode::RateLimited);
+        assert_eq!(paused.retry_after_ms, Some(599_990));
+        assert_eq!(
+            paused.message,
+            "Lots of people have joined from your network in the last hour, so this server is \
+             pausing new sign-ups from it. Try again in about 10 minutes. If your group is \
+             joining together, the host can raise this limit."
+        );
+        let paused = sign_ins_paused(11_250);
+        assert_eq!(paused.code, ErrorCode::RateLimited);
+        assert_eq!(
+            paused.message,
+            "Too many sign-in tries from your network in the last minute. Try again in 12 \
+             seconds."
+        );
+    }
 }

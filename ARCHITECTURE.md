@@ -511,10 +511,13 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt. Each hash
    or check holds about 19 MB and a core while it runs, so the server runs at most four
-   at once (`PASSWORD_WORK_AT_ONCE`, `auth.rs`): about 76 MB, whatever arrives. A
-   request that can't get a turn within 5 seconds is refused with `RATE_LIMITED`.
-   Sign-up checks the invite before it hashes anything, so a request without a good
-   invite costs one read (#495).
+   at once by default (`DEFAULT_PASSWORD_CHECKS_AT_ONCE`, `auth.rs`): about 76 MB,
+   whatever arrives. A host with cores and memory to spare raises it with
+   `LINGER_PASSWORD_CHECKS_AT_ONCE` (1 to 256; N at once is N × 19 MB at peak). There
+   is no `off`: no ceiling is what let strangers fill the memory. A request that can't
+   get a turn within 5 seconds is refused with `RATE_LIMITED`, saying the server is
+   busy. Sign-up checks the invite before it hashes anything, so a request without a
+   good invite costs one read (#495).
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
    hashed. Reuse of a rotated refresh token revokes the whole family.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
@@ -528,9 +531,16 @@ E2EE launders a false promise, which is worse than an honest limitation.
    iPhone yet.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
-5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP (all sixty at once, then one a
-   minute), message send 10/10s/user, upload slot 20/hour/user, invite creation
-   10/day/user, knock 3/hour/target, search 30/min/user. The IP is the connection's
+5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,
+   then one a minute), message send 10/10s/user, upload slot 20/hour/user, invite
+   creation 10/day/user, knock 3/hour/target, search 30/min/user. The sign-up figure is
+   the host's: `LINGER_SIGNUPS_PER_HOUR` raises it for a crowd that arrives from one
+   address (a school, a phone network), or `off` removes it, since the invite still
+   decides who gets in and the password-check ceiling still bounds what sign-ups cost.
+   When it turns somebody away the server logs one line naming the setting, at most
+   every 5 minutes and never with the address (#538). The login figure is the brake on
+   guessing passwords and isn't a setting. Each limit's refusal says what is happening
+   and when to try again (PROTOCOL §2). The IP is the connection's
    own. `X-Forwarded-For` is believed only from a peer `LINGER_TRUSTED_PROXIES` lists,
    by default loopback and private networks (the Caddy container, over Docker's
    network), and then only its last entry, the one that proxy wrote; earlier entries

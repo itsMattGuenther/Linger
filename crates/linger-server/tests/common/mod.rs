@@ -71,6 +71,8 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
+        signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+        password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
     }
 }
 
@@ -94,6 +96,8 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
+        signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+        password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
     };
     spawn_with(dir, config).await
 }
@@ -142,6 +146,8 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
+        signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
+        password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
     };
     Some(spawn_with(dir, config).await)
 }

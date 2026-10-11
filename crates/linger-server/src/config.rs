@@ -6,8 +6,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use linger_core::limits::{
-    DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, MAX_FILE_BYTES, VOICE_JOIN_LINE_AFTER_MS,
+    DEFAULT_FILE_EXPIRY_DAYS, DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES,
+    VOICE_JOIN_LINE_AFTER_MS,
 };
+
+use crate::auth::{DEFAULT_PASSWORD_CHECKS_AT_ONCE, MAX_PASSWORD_CHECKS_AT_ONCE};
 
 /// Where uploaded objects live (ARCHITECTURE §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +108,14 @@ pub struct Config {
     /// `LINGER_TRUSTED_PROXIES`: whose `X-Forwarded-For` the per-address
     /// limits believe (#495). Default: loopback and private networks.
     pub trusted_proxies: TrustedProxies,
+    /// `LINGER_SIGNUPS_PER_HOUR`: how many sign-ups one address may make in
+    /// an hour, all at once if need be (#495). Default
+    /// [`DEFAULT_SIGNUPS_PER_HOUR`]; `None` (`off`) is no limit per address.
+    pub signups_per_hour: Option<u32>,
+    /// `LINGER_PASSWORD_CHECKS_AT_ONCE`: how many passwords the server
+    /// hashes or checks at the same time (#495). Default
+    /// [`DEFAULT_PASSWORD_CHECKS_AT_ONCE`]; each one holds about 19 MB.
+    pub password_checks_at_once: usize,
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -235,6 +246,19 @@ pub enum ConfigError {
          separated by commas."
     )]
     TrustedProxies(String),
+    #[error(
+        "LINGER_SIGNUPS_PER_HOUR is {0:?}. It wants how many people may sign up from one \
+         address in an hour, a whole number from 1 up (the default is \
+         {DEFAULT_SIGNUPS_PER_HOUR}), or `off` for no \
+         limit per address. 0 is refused because it reads both ways: nobody, or no limit."
+    )]
+    SignupsPerHour(String),
+    #[error(
+        "LINGER_PASSWORD_CHECKS_AT_ONCE is {0:?}. It wants a whole number from 1 to \
+         {MAX_PASSWORD_CHECKS_AT_ONCE} (the default is {DEFAULT_PASSWORD_CHECKS_AT_ONCE}). Each password check holds about \
+         19 MB of memory and a CPU core while it runs, so 16 at once can take about 300 MB."
+    )]
+    PasswordChecksAtOnce(String),
 }
 
 impl Config {
@@ -291,6 +315,10 @@ impl Config {
             voice_from_domain,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
             trusted_proxies: trusted_proxies(std::env::var("LINGER_TRUSTED_PROXIES").ok())?,
+            signups_per_hour: signups_per_hour(std::env::var("LINGER_SIGNUPS_PER_HOUR").ok())?,
+            password_checks_at_once: password_checks_at_once(
+                std::env::var("LINGER_PASSWORD_CHECKS_AT_ONCE").ok(),
+            )?,
         })
     }
 
@@ -493,6 +521,50 @@ fn file_expiry_days(configured: Option<String>) -> Result<Option<u32>, ConfigErr
         Ok(days) => Ok(Some(days)),
         Err(_) => Err(ConfigError::FileExpiryDays(text.to_string())),
     }
+}
+
+/// Read `LINGER_SIGNUPS_PER_HOUR`: a whole number of sign-ups, or off.
+///
+/// A community that sends one invite to a crowd can have hundreds of people
+/// arrive from one address: a school, an office, or a phone network that puts
+/// many customers behind one (#538). The host knows whether that's coming, so
+/// the host can raise it, as far as `off`.
+///
+/// Unlike `LINGER_FILE_EXPIRY_DAYS`, `0` isn't another way to write `off`.
+/// Zero days of keeping a file can only mean "don't sweep"; zero sign-ups an
+/// hour reads just as well as "nobody", which is the opposite. The server
+/// refuses it and says which word to use, rather than guess.
+fn signups_per_hour(configured: Option<String>) -> Result<Option<u32>, ConfigError> {
+    let Some(raw) = configured.filter(|value| !value.trim().is_empty()) else {
+        return Ok(Some(DEFAULT_SIGNUPS_PER_HOUR));
+    };
+    let text = raw.trim();
+    if text.eq_ignore_ascii_case("off") {
+        return Ok(None);
+    }
+    match text.parse::<u32>() {
+        Ok(0) | Err(_) => Err(ConfigError::SignupsPerHour(text.to_string())),
+        Ok(count) => Ok(Some(count)),
+    }
+}
+
+/// Read `LINGER_PASSWORD_CHECKS_AT_ONCE`: how many argon2id hashes and
+/// checks may run at once (`auth::PasswordWork`).
+///
+/// This is the knob for the machine, not for the crowd: each one holds about
+/// 19 MB and a core while it runs, so the most passwords can cost is this
+/// times 19 MB. More than the machine has cores finishes none of them
+/// sooner. There is no `off`: no ceiling is what let anybody fill the memory
+/// with sign-in attempts (#495). [`MAX_PASSWORD_CHECKS_AT_ONCE`] bounds a typo.
+fn password_checks_at_once(configured: Option<String>) -> Result<usize, ConfigError> {
+    let Some(raw) = configured.filter(|value| !value.trim().is_empty()) else {
+        return Ok(DEFAULT_PASSWORD_CHECKS_AT_ONCE);
+    };
+    let text = raw.trim();
+    text.parse::<usize>()
+        .ok()
+        .filter(|count| (1..=MAX_PASSWORD_CHECKS_AT_ONCE).contains(count))
+        .ok_or_else(|| ConfigError::PasswordChecksAtOnce(text.to_string()))
 }
 
 /// `LINGER_TRUSTED_PROXIES`: the connections whose `X-Forwarded-For` the
@@ -918,6 +990,8 @@ mod tests {
             voice_from_domain: None,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
             trusted_proxies: TrustedProxies::default(),
+            signups_per_hour: Some(DEFAULT_SIGNUPS_PER_HOUR),
+            password_checks_at_once: DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         }
     }
 
@@ -1237,6 +1311,57 @@ mod tests {
             let refused = trusted_proxies(Some(bad.into())).unwrap_err();
             assert!(matches!(refused, ConfigError::TrustedProxies(_)), "{bad}");
             assert!(refused.to_string().contains("LINGER_TRUSTED_PROXIES"));
+        }
+    }
+
+    #[test]
+    fn signups_per_hour_default_to_sixty_and_take_a_number_or_off() {
+        for unset in [None, Some(String::new()), Some("  ".to_string())] {
+            assert_eq!(signups_per_hour(unset).unwrap(), Some(60));
+        }
+        assert_eq!(signups_per_hour(Some("500".into())).unwrap(), Some(500));
+        assert_eq!(signups_per_hour(Some(" 1 ".into())).unwrap(), Some(1));
+        for off in ["off", "OFF", " Off "] {
+            assert_eq!(signups_per_hour(Some(off.into())).unwrap(), None, "{off}");
+        }
+    }
+
+    #[test]
+    fn signups_per_hour_refuse_zero_and_anything_not_a_count() {
+        for bad in ["0", "-5", "60/hour", "lots", "never", "1.5", "99999999999"] {
+            let refused = signups_per_hour(Some(bad.into())).unwrap_err();
+            assert!(matches!(refused, ConfigError::SignupsPerHour(_)), "{bad}");
+            let said = refused.to_string();
+            assert!(said.contains("LINGER_SIGNUPS_PER_HOUR"), "{said}");
+            assert!(said.contains("`off`"), "{said}");
+        }
+    }
+
+    #[test]
+    fn password_checks_at_once_default_to_four_and_take_one_to_the_most() {
+        for unset in [None, Some(String::new())] {
+            assert_eq!(password_checks_at_once(unset).unwrap(), 4);
+        }
+        assert_eq!(password_checks_at_once(Some("1".into())).unwrap(), 1);
+        assert_eq!(password_checks_at_once(Some(" 16 ".into())).unwrap(), 16);
+        assert_eq!(
+            password_checks_at_once(Some(MAX_PASSWORD_CHECKS_AT_ONCE.to_string())).unwrap(),
+            MAX_PASSWORD_CHECKS_AT_ONCE
+        );
+    }
+
+    #[test]
+    fn password_checks_at_once_refuse_zero_off_and_too_many() {
+        let too_many = (MAX_PASSWORD_CHECKS_AT_ONCE + 1).to_string();
+        for bad in ["0", "off", "-1", "four", "2.5", too_many.as_str()] {
+            let refused = password_checks_at_once(Some(bad.into())).unwrap_err();
+            assert!(
+                matches!(refused, ConfigError::PasswordChecksAtOnce(_)),
+                "{bad}"
+            );
+            let said = refused.to_string();
+            assert!(said.contains("LINGER_PASSWORD_CHECKS_AT_ONCE"), "{said}");
+            assert!(said.contains("19 MB"), "{said}");
         }
     }
 }

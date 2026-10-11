@@ -21,6 +21,11 @@ Every non-2xx response:
 `code` is a stable SCREAMING_SNAKE identifier the client switches on. `message` is
 human-readable and safe to display. Never leak internals in `message`.
 
+`retry_after_ms` is set when waiting is the answer, which is every `RATE_LIMITED`:
+how long until the same request would be taken. A response that sets it also
+carries HTTP's own `Retry-After` header, the same wait in whole seconds rounded up,
+for tools other than the app. The app reads `retry_after_ms`.
+
 Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`,
 `VALIDATION_FAILED`, `INVITE_INVALID`, `INVITE_EXPIRED`, `QUOTA_EXCEEDED`,
 `FILE_TOO_LARGE`, `UNSUPPORTED_MEDIA`, `CONFLICT`, `INTERNAL`.
@@ -111,16 +116,32 @@ later request can try again; clients must not loop on refresh or infer token
 revocation from `INTERNAL`. This applies both at startup and during normal use.
 
 Sign-in and sign-up are limited per address (#495): `POST /auth/login` 5 a minute
-(`RATE_LOGIN_PER_IP`), `POST /auth/register` 60 an hour, all at once if need be
-(`RATE_REGISTER_PER_IP`). Past either, the answer is `RATE_LIMITED` with
-`retry_after_ms`. The address is the connection's own; from a proxy the server
-trusts (`LINGER_TRUSTED_PROXIES`, by default the same machine or a private network),
-it is the last `X-Forwarded-For` entry, never an earlier one. Checking a password is slow on purpose and the server does only a few
-at once, so a sign-in, sign-up, first-run setup or password change that can't get a
-turn within 5 seconds is also `RATE_LIMITED`, saying the server is busy.
-`POST /auth/register` checks the invite before it touches the password: a bad
-invite is refused straight away, and a sign-up refused for any reason has not used
-up its invite.
+(`RATE_LOGIN_PER_IP`), `POST /auth/register` 60 an hour by default, all at once if
+need be. The host sets the sign-up figure with `LINGER_SIGNUPS_PER_HOUR`, or turns
+it off; the sign-in figure is the brake on guessing passwords and isn't a setting.
+Past either, the answer is `RATE_LIMITED` with `retry_after_ms`. The address is the
+connection's own; from a proxy the server trusts (`LINGER_TRUSTED_PROXIES`, by
+default the same machine or a private network), it is the last `X-Forwarded-For`
+entry, never an earlier one. Checking a password is slow on purpose and the server
+does only a few at once (`LINGER_PASSWORD_CHECKS_AT_ONCE`, default 4), so a sign-in,
+sign-up, first-run setup or password change that can't get a turn within 5 seconds
+is also `RATE_LIMITED`. `POST /auth/register` checks the invite before it touches
+the password: a bad invite is refused straight away, and a sign-up refused for any
+reason has not used up its invite.
+
+The three share a code, and each has its own `message`, which says what is
+happening and, with the wait from `retry_after_ms` in words, when to try again
+(#538). The app shows `message` as it comes, so an app from before a new sentence
+shows it too:
+
+- sign-ups from the address used up: *"Lots of people have joined from your network
+  in the last hour, so this server is pausing new sign-ups from it. Try again in
+  about 10 minutes. If your group is joining together, the host can raise this
+  limit."*
+- sign-in tries from the address used up: *"Too many sign-in tries from your network
+  in the last minute. Try again in 12 seconds."*
+- no turn to check a password: *"The server is busy letting other people in. Try
+  again in a moment."*
 
 ### 2.1 First-run setup
 
