@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Style } from "../../src/generated/Style";
 import type { User } from "../../src/generated/User";
 import { people } from "../fixtures/next/evening";
+import { type Shot, shoot } from "./pixels";
 
 // One person's styled name, in a message and on their card, should read as
 // the same name (SPEC §4.5, #272). Both are the kit's `Name`, so its own
@@ -91,26 +92,6 @@ async function openCard(page: Page) {
 
 type Lab = [number, number, number];
 type Rgb = [number, number, number];
-
-interface Shot {
-  w: number;
-  h: number;
-  data: Uint8Array;
-}
-
-/** A region of the page as RGBA pixels, decoded by the page's own canvas. */
-async function shoot(page: Page, clip: { x: number; y: number; width: number; height: number }, animations: "disabled" | "allow"): Promise<Shot> {
-  const png = await page.screenshot({ clip, animations });
-  const decoded = await page.evaluate(async (b64) => {
-    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("no canvas");
-    context.drawImage(bitmap, 0, 0);
-    return { w: bitmap.width, h: bitmap.height, data: Array.from(context.getImageData(0, 0, bitmap.width, bitmap.height).data) };
-  }, png.toString("base64"));
-  return { w: decoded.w, h: decoded.h, data: Uint8Array.from(decoded.data) };
-}
 
 const linear = (c: number) => {
   const v = c / 255;
