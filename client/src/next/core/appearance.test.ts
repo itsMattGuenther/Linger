@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The desktop shell: a window that remembers its zoom and size.
-const shell = vi.hoisted(() => ({ zoom: 1, size: { width: 340, height: 820 }, broadcast: [] as unknown[] }));
+// The desktop shell: a window that remembers its zoom, size and smallest size, on a 1920 by 1080 screen with a 40 px panel.
+const shell = vi.hoisted(() => ({
+  zoom: 1,
+  size: { width: 340, height: 820 },
+  least: null as { width: number; height: number } | null,
+  label: "main",
+  broadcast: [] as unknown[],
+}));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async () => undefined }));
 vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({
@@ -18,11 +25,14 @@ vi.mock("@tauri-apps/api/window", () => ({
     ) {}
   },
   getCurrentWindow: () => ({
-    label: "main",
+    label: shell.label,
     scaleFactor: async () => 2,
     innerSize: async () => ({ toLogical: () => ({ ...shell.size }) }),
     setSize: async (size: { width: number; height: number }) => {
       shell.size = { width: size.width, height: size.height };
+    },
+    setMinSize: async (size: { width: number; height: number }) => {
+      shell.least = { width: size.width, height: size.height };
     },
   }),
 }));
@@ -36,8 +46,12 @@ beforeEach(() => {
   storage.clear();
   shell.zoom = 1;
   shell.size = { width: 340, height: 820 };
+  shell.least = null;
+  shell.label = "main";
   shell.broadcast = [];
   vi.stubGlobal("window", {
+    location: { search: "" },
+    screen: { availWidth: 1920, availHeight: 1040 },
     localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => void storage.set(key, value) },
   });
   vi.stubGlobal("document", { documentElement: { dataset: {} as Record<string, string> } });
@@ -103,6 +117,52 @@ describe("how the new client looks, in every window", () => {
     await Promise.all([first, applyAppearance()]);
     expect(shell.size).toEqual({ width: 680, height: 1640 });
     expect(shell.zoom).toBe(2);
+  });
+
+  it("grows a window's smallest size with the interface size, so the page is never squeezed below its design (#512)", async () => {
+    vi.resetModules();
+    const { applyAppearance, saveScale, scaledMinimum, WINDOW_MINIMUMS } = await import("./appearance");
+    // At 150% the list's 300 was 200 of the page's pixels: the message box over it got 8.
+    saveScale(150);
+    await applyAppearance();
+    expect(shell.least).toEqual({ width: 450, height: 720 });
+    saveScale(100);
+    await applyAppearance();
+    expect(shell.least).toEqual({ width: 300, height: 480 });
+
+    // Each window by its own floor: Settings cut its fields off at 150%.
+    shell.label = "settings";
+    saveScale(150);
+    await applyAppearance();
+    expect(shell.least).toEqual({ width: 840, height: 720 });
+    shell.label = "chat-00ff00ff00ff00ff";
+    await applyAppearance();
+    expect(shell.least).toEqual({ width: 540, height: 540 });
+    shell.label = "media";
+    await applyAppearance();
+    expect(shell.least).toEqual({ width: 540, height: 630 });
+
+    // Never more than nine tenths of a small screen.
+    expect(scaledMinimum(WINDOW_MINIMUMS.settings, 200, { width: 1366, height: 768 })).toEqual({ width: 1120, height: 691 });
+    expect(scaledMinimum(WINDOW_MINIMUMS.list, 200, null)).toEqual({ width: 600, height: 960 });
+  });
+
+  it("knows the floors the desktop shell builds each window with", async () => {
+    const { WINDOW_MINIMUMS } = await import("./appearance");
+    const config = JSON.parse(readFileSync(new URL("../../../src-tauri/tauri.conf.json", import.meta.url), "utf8")) as {
+      app: { windows: Array<{ minWidth: number; minHeight: number }> };
+    };
+    expect({ width: config.app.windows[0]?.minWidth, height: config.app.windows[0]?.minHeight }).toEqual(WINDOW_MINIMUMS.list);
+    const rust = readFileSync(new URL("../../../src-tauri/src/window.rs", import.meta.url), "utf8");
+    const floors = [...rust.matchAll(/\.title\("([^"]+)"\)[\s\S]*?\.min_inner_size\(([\d.]+), ([\d.]+)\)/g)].map(
+      ([, title, width, height]) => [title, { width: Number(width), height: Number(height) }],
+    );
+    // window.rs titles a conversation's window "Linger", Settings "Linger Settings", and Search and Media by a variable.
+    expect(floors).toEqual([
+      ["Linger", WINDOW_MINIMUMS.chat],
+      ["Linger Settings", WINDOW_MINIMUMS.settings],
+    ]);
+    expect(rust).toMatch(new RegExp(`\\.title\\(title\\)\\s*\\.inner_size\\(width, height\\)\\s*\\.min_inner_size\\(${WINDOW_MINIMUMS.tool.width}\\.0, ${WINDOW_MINIMUMS.tool.height}\\.0\\)`));
   });
 
   it("saves only sizes on the list, and 100 for anything else", async () => {

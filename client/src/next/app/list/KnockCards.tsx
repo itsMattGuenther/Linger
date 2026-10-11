@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { memo, useEffect } from "react";
 import type { User } from "../../../generated/User";
 import { KNOCK_TTL_MS } from "../../../lib/gateway";
 import { ARRIVAL_TTL_MS } from "../../core/arrivals";
@@ -38,7 +38,7 @@ export interface ArrivalCard {
  * Arrivals ("Callie came into #general", decision 13) land in the same band,
  * above the knocks, and behave the same way.
  */
-export function KnockCards({
+export const KnockCards = memo(function KnockCards({
   cards,
   onGone,
   arrivals = [],
@@ -60,7 +60,7 @@ export function KnockCards({
       ))}
     </div>
   );
-}
+});
 
 function OneArrival({ card, onGone }: { card: ArrivalCard; onGone?: (id: string) => void }) {
   const { id, at } = card;

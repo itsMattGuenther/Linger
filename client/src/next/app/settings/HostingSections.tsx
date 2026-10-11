@@ -6,6 +6,7 @@ import type { PresenceState } from "../../../generated/PresenceState";
 import type { Report } from "../../../generated/Report";
 import type { Room } from "../../../generated/Room";
 import type { RoomId } from "../../../generated/RoomId";
+import type { ServerHealth } from "../../../generated/ServerHealth";
 import type { User } from "../../../generated/User";
 import { EMOJI_NAME_RULE, emojiNameFrom, emojiNameOk, MAX_CUSTOM_EMOJI } from "../../../lib/emoji/names";
 import { deadWords, expiryWords, useWords } from "../../../lib/host";
@@ -13,6 +14,8 @@ import { fullTime, isoTime } from "../../../lib/time";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_MOTD_CHARS } from "../../core/chat/motd";
 import {
+  backupLine,
+  bucketLine,
   draftSlug,
   HEADINGS,
   INVITE_EXPIRY,
@@ -863,13 +866,23 @@ export interface HostServerProps {
     /** The host guide's "Updating the server". */
     openGuide: () => void;
   };
+  /**
+   * The nightly copies and the disk (#582), from `GET /server`'s `health`.
+   * The server tells only the host, so a co-host has none.
+   */
+  health?: {
+    health: ServerHealth;
+    now: number;
+    /** The host guide's "Backups". */
+    openGuide: () => void;
+  };
   name: string;
   /** A palette key, or null for none (HOST-9). */
   accent: string | null;
   save: (change: { name: string; accent: string | null }) => Promise<string | null>;
 }
 
-export function ServerSection({ version, name: savedName, accent: savedAccent, save: saveServer }: HostServerProps) {
+export function ServerSection({ version, health, name: savedName, accent: savedAccent, save: saveServer }: HostServerProps) {
   const [name, setName] = useState(savedName);
   const [accent, setAccent] = useState<string | null>(savedAccent);
   const save = useSave();
@@ -905,6 +918,7 @@ export function ServerSection({ version, name: savedName, accent: savedAccent, s
           ) : null}
         </Block>
       ) : null}
+      {health ? <MachineBlocks {...health} /> : null}
       <Block heading={HEADINGS.serverName}>
         <TextField label="Server name" hideLabel value={name} hint="What the list says, and what an invite link tells a stranger." onChange={(value) => change({ name: value })} onEnter={submit} />
       </Block>
@@ -926,6 +940,45 @@ export function ServerSection({ version, name: savedName, accent: savedAccent, s
           </Button>
         </Actions>
       </Block>
+    </>
+  );
+}
+
+/**
+ * The host's machine (#582): when the server last copied its database, and
+ * the disk, said only while it's nearly full.
+ */
+function MachineBlocks({ health, now, openGuide }: NonNullable<HostServerProps["health"]>) {
+  const backup = backupLine(health, now);
+  const bucket = bucketLine(health, now);
+  return (
+    <>
+      <Block
+        heading={HEADINGS.backups}
+        lead={
+          bucket
+            ? "Every night the server copies its database into data/backups, keeps a week of nightly copies and a month of weekly ones, and sends them to your bucket too."
+            : "Every night the server copies its database into data/backups, and keeps a week of nightly copies and a month of weekly ones. They're on the same disk, so they won't survive it dying: keep a copy somewhere else too."
+        }
+      >
+        <Note tone={backup.problem ? "problem" : "status"}>{backup.words}</Note>
+        {bucket ? <Note tone={bucket.problem ? "problem" : "status"}>{bucket.words}</Note> : null}
+        <Actions start>
+          <Button variant="quiet" icon="go" onClick={openGuide}>
+            How to back up
+          </Button>
+        </Actions>
+      </Block>
+      {health.disk_nearly_full || health.file_space_nearly_full ? (
+        <Block heading={HEADINGS.disk}>
+          {health.disk_nearly_full ? (
+            <Note tone="problem">The disk this server runs on has less than a tenth free. When it's full the server stops for everybody, so free some up or move it to a bigger disk.</Note>
+          ) : null}
+          {health.file_space_nearly_full ? (
+            <Note tone="problem">Files take nearly all the room this server allows them (LINGER_POOL_BYTES). If the disk has room, raise it in .env.</Note>
+          ) : null}
+        </Block>
+      ) : null}
     </>
   );
 }

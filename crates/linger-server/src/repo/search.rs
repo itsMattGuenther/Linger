@@ -38,6 +38,8 @@
 //! is an empty page, the same as a cursor naming nothing: the answer cannot
 //! say the message exists.
 
+use std::fmt::Write as _;
+
 use linger_core::limits::{MAX_SEARCH_TERMS, SEARCH_SNIPPET_TOKENS};
 use linger_core::wire::{SearchHit, SearchSnippetPart};
 use linger_core::{MessageId, RoomId, UserId};
@@ -168,7 +170,7 @@ pub(crate) fn page_sql(query: &Query) -> String {
     // only thing standing between a search box and somebody else's private
     // conversation, and it goes in before any of the optional filters so that
     // an unfiltered search is still a filtered one.
-    sql.push_str(&format!(" AND {}", crate::repo::rooms::visible_rooms("m")));
+    let _ = write!(sql, " AND {}", crate::repo::rooms::visible_rooms("m"));
     if query.room_id.is_some() {
         sql.push_str(" AND m.room_id = ?");
     }
@@ -176,10 +178,11 @@ pub(crate) fn page_sql(query: &Query) -> String {
         sql.push_str(" AND m.author_id = ?");
     }
     if query.before.is_some() {
-        sql.push_str(&format!(
+        let _ = write!(
+            sql,
             " AND message_fts.rowid < (SELECT c.rowid FROM messages c WHERE c.id = ? AND {})",
             crate::repo::rooms::visible_rooms("c")
-        ));
+        );
     }
     // Newest first, in the order the rows were written: see the module notes.
     sql.push_str(" ORDER BY message_fts.rowid DESC LIMIT ?");

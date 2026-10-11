@@ -1,12 +1,14 @@
-import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
   disconnect,
   dismissKnock,
   type GatewayState,
+  KNOCK_TTL_MS,
+  MAX_KNOCK_CARDS,
   leaveVoice,
   loadBlocks,
   loadNotifyRules,
@@ -36,7 +38,7 @@ import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { isSearchKey, isSettingsKey } from "../../core/keys";
-import { listModel } from "../../core/list";
+import { keepSame, type ListModel, listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
 import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { keepAsking, type ListedInfo, withInfo } from "../../core/serverInfo";
@@ -48,6 +50,7 @@ import { conversationIn } from "../../core/chat/conversation";
 import { loadMode } from "../../core/conversations";
 import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
+import { pageScreen, screenAround } from "../../core/screen";
 import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
@@ -77,9 +80,11 @@ import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
 import { ListNotes } from "./ListNotes";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
+import { numbering, type Offered, watchOfferedLinks } from "../../core/offeredLink";
 import { Button, Spinner, Splitter } from "../../kit";
 import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
+import type { AwayNudge } from "./AwayNudge";
 import { ListView } from "./ListView";
 import "./ListWindow.css";
 import type { ServerListing } from "./ServerSection";
@@ -107,6 +112,30 @@ export function ListWindow() {
   // somewhere now than wait (T-907).
   const [signInAnyway, setSignInAnyway] = useState(false);
   const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
+
+  // "Open in Linger" on an invite page (#607): the link the shell was handed
+  // goes in a paste box, here when nothing is signed in, and in the sign-in
+  // for another server when something is. It waits while the sign-ins are
+  // still being restored, for the link that started Linger.
+  const [arrived, setArrived] = useState<Offered | null>(null);
+  const [prefill, setPrefill] = useState<Offered | null>(null);
+  const [offer, setOffer] = useState<Offered | null>(null);
+  useEffect(() => (isTauri() ? watchOfferedLinks(tauriBus(), takeOfferedLink, numbering(setArrived)) : undefined), []);
+  const restoring = sessions.state.status === "restoring";
+  const anySignedIn = sessions.state.status === "ready" && sessions.state.servers.length > 0;
+  useEffect(() => {
+    if (arrived === null || restoring) return;
+    if (anySignedIn) setOffer(arrived);
+    else {
+      setPrefill(arrived);
+      setSignInAnyway(true);
+    }
+    setArrived(null);
+  }, [arrived, restoring, anySignedIn]);
+  // Once signed in, a link already used doesn't come back after signing out.
+  useEffect(() => {
+    if (anySignedIn) setPrefill(null);
+  }, [anySignedIn]);
 
   // Every window hears when a server is signed out of, however it happened
   // (Settings, a sign-in that ran out, all of them at once), so none goes on
@@ -150,10 +179,12 @@ export function ListWindow() {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
       <SignInView
+        key={prefill?.n ?? 0}
         actions={signIn}
         notice={sessions.notice}
         keyringNotice={sessions.keyringNotice}
         onClose={isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined}
+        offered={prefill?.link}
       />
     );
   }
@@ -169,6 +200,8 @@ export function ListWindow() {
       onRetry={sessions.retry}
       accounts={accounts}
       keyringNotice={sessions.keyringNotice}
+      offer={offer}
+      offerTaken={setOffer}
     />
   );
 }
@@ -204,7 +237,7 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
  * UI of its own. Owning it here is what keeps a StrictMode remount from
  * leaving a socket nobody follows.
  */
-function ServerLink({
+const ServerLink = memo(function ServerLink({
   session,
   onInfo,
   again,
@@ -269,7 +302,7 @@ function ServerLink({
   }, [api, baseUrl, up, again, onInfo]);
 
   return null;
-}
+});
 
 function Servers({
   signedIn,
@@ -277,12 +310,17 @@ function Servers({
   onRetry,
   accounts,
   keyringNotice,
+  offer,
+  offerTaken,
 }: {
   signedIn: ServerSession[];
   waiting: readonly WaitingServer[];
   onRetry: (server: string) => void;
   accounts: Accounts;
   keyringNotice: string | null;
+  /** A link an invite page sent (#607), for the sign-in for another server. */
+  offer: Offered | null;
+  offerTaken: (none: null) => void;
 }) {
   const states = useServers();
   const now = useNow();
@@ -303,10 +341,29 @@ function Servers({
   const [infoAsks, setInfoAsks] = useState<Readonly<Record<string, number>>>({});
   const several = ordered.length > 1;
 
-  const changePrefs = (next: ServerPrefs) => {
+  const changePrefs = useCallback((next: ServerPrefs) => {
     setPrefs(next);
     saveServerPrefs(localStore(), next);
-  };
+  }, []);
+  // A server's Quiet and its place in your order, from its menu: the same
+  // two for every section, so a section is drawn again only for its own
+  // server's changes (#533).
+  const prefsNow = useRef(prefs);
+  prefsNow.current = prefs;
+  const orderedNow = useRef(ordered);
+  orderedNow.current = ordered;
+  const onQuiet = useCallback(
+    (server: string, on: boolean) => {
+      const held = prefsNow.current;
+      const others = held.quiet.filter((one) => one !== server);
+      changePrefs({ ...held, quiet: on ? [...others, server] : others });
+    },
+    [changePrefs],
+  );
+  const onMove = useCallback(
+    (server: string, by: -1 | 1) => changePrefs({ ...prefsNow.current, order: moveServer(orderedNow.current.map((one) => one.baseUrl), server, by) }),
+    [changePrefs],
+  );
 
   // Settings shows your servers' order and Quiet, whichever window changed them.
   useEffect(() => {
@@ -323,23 +380,7 @@ function Servers({
   const alreadyOn = useRef<(baseUrl: string) => string | null>(() => null);
   alreadyOn.current = (baseUrl) =>
     signedIn.some((session) => session.baseUrl === baseUrl) ? `You're already signed in to ${infos[baseUrl]?.name ?? hostOf(baseUrl)}.` : null;
-  const addingActions = useMemo((): SignInActions => {
-    const actions = signInActions(
-      (baseUrl) => new PublicApi(baseUrl),
-      async (baseUrl, auth) => {
-        await accounts.reauthenticate(baseUrl, auth);
-        setAdding(false);
-      },
-    );
-    return {
-      ...actions,
-      check: async (pasted) => {
-        const read = readPasted(pasted);
-        const problem = "link" in read ? alreadyOn.current(read.link.baseUrl) : null;
-        return problem === null ? actions.check(pasted) : { problem };
-      },
-    };
-  }, [accounts]);
+  const addingActions = useMemo(() => addingWith(accounts, setAdding, alreadyOn), [accounts]);
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
   // Conversations beside the list (#337): the tabs, kept here so they
   // outlast folding, and whether the window is unfolded to show them.
@@ -398,6 +439,19 @@ function Servers({
     },
   };
 
+  // A link from an invite page (#607) opens the sign-in for another server,
+  // with the link in its box. Taken once; going back to the list drops it.
+  const [addingFrom, setAddingFrom] = useState<Offered | null>(null);
+  useEffect(() => {
+    if (offer === null) return;
+    setAddingFrom(offer);
+    listNow.current.addServer();
+    offerTaken(null);
+  }, [offer, offerTaken]);
+  useEffect(() => {
+    if (!adding) setAddingFrom(null);
+  }, [adding]);
+
   // The push-to-talk key the voice bar says to hold. Settings tells this
   // window the moment it's picked (the `voice.pushtotalk` intent, #231).
   const [talkKey, setTalkKey] = useState(() => loadVoicePrefs().pushToTalkKey);
@@ -426,7 +480,9 @@ function Servers({
   // (docs/design/architecture.md): snapshots, lent tokens, intents. It reads
   // the signed-in servers when asked, so signing in or out needs no restart.
   const apisRef = useRef(new Map<string, ServerSession["api"]>());
-  apisRef.current = new Map(signedIn.map((session) => [session.baseUrl, session.api]));
+  // The same map until the sign-ins change, so what's handed it isn't drawn again for nothing (#533).
+  const apis = useMemo(() => new Map(signedIn.map((session) => [session.baseUrl, session.api])), [signedIn]);
+  apisRef.current = apis;
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
   useEffect(() => {
@@ -483,6 +539,7 @@ function Servers({
 
   // Folding keeps how wide the conversations were, and unfolding how wide
   // the list was, so each comes back the size it was left.
+  const widenList = useCallback((list: number) => setSide((held) => ({ ...held, list })), []);
   const fold = useCallback(() => {
     setFirst(null);
     setSide((held) => {
@@ -495,6 +552,7 @@ function Servers({
     setFirst(opening);
     setSide((held) => (held.unfolded ? held : { ...held, unfolded: true, list: listWidth(window.innerWidth) }));
   }, []);
+  const unfoldAgain = useCallback(() => unfold(null), [unfold]);
   // The last tab closed: back to the list.
   useEffect(() => {
     if (side.unfolded && tabs.open.length === 0) fold();
@@ -513,18 +571,21 @@ function Servers({
   // what exists. One still on its way keeps its tab until it has been seen.
   useEffect(() => {
     const servers = new Set(signedIn.map((session) => session.baseUrl));
-    setTabs((held) =>
-      keepOnly(held, (tab) => {
-        // Media and Search look through every server, as long as there's one.
-        if (isTool(tab)) return servers.size > 0;
-        if (!servers.has(tab.server)) return false;
-        const state = states[tab.server];
-        if (state === undefined || state.me === null) return true;
-        if (conversationIn(state, tab.roomId) === null) return unseen.current.has(keyOf(tab));
-        unseen.current.delete(keyOf(tab));
-        return true;
-      }),
-    );
+    const exists = (tab: SideTab) => {
+      // Media and Search look through every server, as long as there's one.
+      if (isTool(tab)) return servers.size > 0;
+      if (!servers.has(tab.server)) return false;
+      const state = states[tab.server];
+      if (state === undefined || state.me === null) return true;
+      if (conversationIn(state, tab.roomId) === null) return unseen.current.has(keyOf(tab));
+      unseen.current.delete(keyOf(tab));
+      return true;
+    };
+    // Asked of React only when a tab goes. Asked after every change on
+    // every server, the list was drawn again after each one for nothing,
+    // and thirty servers starting at once kept React from ever finishing
+    // ("too many updates", #512).
+    if (keepOnly(tabsNow.current, exists) !== tabsNow.current) setTabs((held) => keepOnly(held, exists));
   }, [states, signedIn]);
 
   // The window grows to show the conversations and shrinks back to the
@@ -837,39 +898,25 @@ function Servers({
 
   // The conversation showing beside the list: its row in the list is marked (#351).
   const besideTab = unfolded && tabs.active !== null && !isTool(tabs.active) ? tabs.active : null;
+  // Each server's listing is made again only when something it's made from
+  // changes, so an event on one server draws that server's section and no
+  // other (#533).
+  const listed = useRef(new Map<string, { from: readonly unknown[]; listing: ServerListing }>());
   const listings = useMemo(
     () =>
       ordered.flatMap((session): ServerListing[] => {
         const state = states[session.baseUrl];
         if (!state) return [];
         const { api, baseUrl } = session;
-        const model = listModel(state, now);
         const isQuiet = quiet.has(baseUrl);
-        const me = state.me;
-        return [
-          {
-            id: baseUrl,
-            name: infos[baseUrl]?.name ?? hostOf(baseUrl),
-            accent: infos[baseUrl]?.accent_key ?? null,
-            model,
-            header: serverHeader(state, model, isQuiet),
-            quiet: isQuiet,
-            speaking: talkingNow(state),
-            onOpenRoom: (room) => openChat(baseUrl, room),
-            onOpenDm: (room) => openChat(baseUrl, room),
-            onOpenPerson: (user, dm) => void openPerson(api, user, dm),
-            onMessage: (user) => void messageWith(api, user),
-            onKnock: (user) => knockOn(api, user.id),
-            safetyFor: (user) => cardSafety(api, state, user),
-            // The host, with a report open (T-1605): Settings, People, where they are.
-            onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
-            onStartDm: (people) => startDm(api, people),
-            onLeaveDm: (room) => leaveDm(api, room),
-            onHost: (section) => shell.settings(section),
-            showing: besideTab?.server === baseUrl ? besideTab.roomId : null,
-            saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
-          },
-        ];
+        const showingHere = besideTab?.server === baseUrl ? besideTab.roomId : null;
+        const from = [api, state, now, isQuiet, infos[baseUrl], showingHere];
+        const held = listed.current.get(baseUrl);
+        if (held && held.from.every((one, at) => one === from[at])) return [held.listing];
+        const model = keepSame(held?.listing.model ?? null, listModel(state, now));
+        const listing = listingOf(api, baseUrl, state, model, isQuiet, infos[baseUrl], showingHere);
+        listed.current.set(baseUrl, { from, listing });
+        return [listing];
       }),
     [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId],
   );
@@ -877,54 +924,10 @@ function Servers({
   // One server: your status and away from the top card, as before.
   const only = ordered.length === 1 ? ordered[0] : undefined;
   const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
-  const you = useMemo<YouActions | undefined>(() => {
-    if (!only || onlyMe === null) return undefined;
-    const { api, baseUrl } = only;
-    return {
-      awayChoices: awayChoices(loadRecentAway()),
-      saveLine: (line) => said(saveStatus(api, withLine(onlyMe.status, line))),
-      goAway: async (message) => {
-        const problem = await said(saveStatus(api, withAway(onlyMe.status, message)));
-        if (problem === null) {
-          setAway(baseUrl, message);
-          saveRecentAway(rememberAway(loadRecentAway(), message));
-        }
-        return problem;
-      },
-      comeBack: async () => {
-        const problem = await said(saveStatus(api, withAway(onlyMe.status, null)));
-        if (problem === null) setAway(baseUrl, null);
-        return problem;
-      },
-    };
-  }, [only, onlyMe]);
+  const you = useMemo(() => (only && onlyMe !== null ? youOn(only, onlyMe) : undefined), [only, onlyMe]);
 
   // Several servers: away on the ones you tick, each answering for itself.
-  const everywhere = useMemo<AwayEverywhere | undefined>(() => {
-    if (!several) return undefined;
-    const each = async (servers: string[], message: string | null): Promise<Record<string, string | null>> => {
-      const answers = await Promise.all(
-        servers.map(async (server): Promise<[string, string | null]> => {
-          const session = signedIn.find((one) => one.baseUrl === server);
-          const me = states[server]?.me;
-          if (!session || !me) return [server, "You're not signed in there any more."];
-          const problem = await said(saveStatus(session.api, withAway(me.status, message)));
-          if (problem === null) setAway(server, message);
-          return [server, problem];
-        }),
-      );
-      return Object.fromEntries(answers);
-    };
-    return {
-      awayChoices: awayChoices(loadRecentAway()),
-      goAway: async (message, servers) => {
-        const answers = await each(servers, message);
-        if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
-        return answers;
-      },
-      comeBack: (servers) => each(servers, null),
-    };
-  }, [several, signedIn, states]);
+  const everywhere = useMemo(() => (several ? awayEverywhere(signedIn) : undefined), [several, signedIn]);
 
   // Back at the computer while still away (#392): the top card says so once,
   // with I'm back right there. Away is something you choose (SPEC §4.6), so
@@ -935,7 +938,7 @@ function Servers({
   useEffect(() => {
     if (!awayAnywhere) setBackWhileAway(false);
   }, [awayAnywhere]);
-  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? { onDismiss: () => setBackWhileAway(false) } : undefined), [backWhileAway, awayAnywhere]);
+  const nudge = useMemo(() => (backWhileAway && awayAnywhere ? nudgeWith(setBackWhileAway) : undefined), [backWhileAway, awayAnywhere]);
 
   // The foot's standing lines (decision 1): a server that isn't connected
   // after a few seconds, a keyring that can't keep sign-ins, a new version.
@@ -962,7 +965,7 @@ function Servers({
   const trouble = useRef<ReadonlyMap<string, number>>(new Map());
   const drawnAt = Date.now();
   trouble.current = troubleSince(trouble.current, new Map(ordered.map((session) => [session.baseUrl, states[session.baseUrl]?.status.kind ?? "offline"])), drawnAt);
-  const notes = listNotes(
+  const notesNow = listNotes(
     ordered.map((session) => ({
       server: session.baseUrl,
       name: infos[session.baseUrl]?.name ?? hostOf(session.baseUrl),
@@ -974,7 +977,16 @@ function Servers({
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
     thisDevice(onPhone()),
+    // Only the host's own servers say how their machine is (#582).
+    ordered.flatMap((session) => {
+      const info = infos[session.baseUrl];
+      return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health }] : [];
+    }),
   );
+  // The same lines as last time are the same list, so they aren't drawn again for nothing (#533).
+  const notesHeld = useRef(notesNow);
+  if (JSON.stringify(notesHeld.current) !== JSON.stringify(notesNow)) notesHeld.current = notesNow;
+  const notes = notesHeld.current;
   // Nothing else draws the list when a connection's grace runs out, so a
   // timer does, once, at the first one due.
   const [, wake] = useState(0);
@@ -1034,10 +1046,14 @@ function Servers({
   }, [states, ordered, quiet, several, infos]);
   const arrivalGone = useCallback((id: string) => setArrivals((held) => held.filter((card) => card.id !== id)), []);
 
-  // Knocks on your door (SPEC §4.9), from every server, even a quiet one's.
-  const knocks = useMemo(
-    (): KnockCard[] =>
-      ordered.flatMap((session) => {
+  // Knocks on your door (SPEC §4.9), from every server, even a quiet one's:
+  // the newest few, however many servers they came from (#512). One left
+  // out has had its eight seconds by the time the others go, so it never
+  // comes back.
+  const knocksHeld = useRef<KnockCard[]>([]);
+  const knocks = useMemo((): KnockCard[] => {
+    const now = ordered
+      .flatMap((session): KnockCard[] => {
         const state = states[session.baseUrl];
         if (!state) return [];
         return state.knocks.map((one) => ({
@@ -1047,9 +1063,21 @@ function Servers({
           from: state.users.find((user) => user.id === one.from) ?? null,
           serverName: several ? (infos[session.baseUrl]?.name ?? hostOf(session.baseUrl)) : null,
         }));
-      }),
-    [ordered, states, several, infos],
-  );
+      })
+      .filter((card) => Date.now() - card.at < KNOCK_TTL_MS)
+      .sort((a, b) => a.at - b.at)
+      .slice(-MAX_KNOCK_CARDS);
+    // The same cards as last time, nothing new: the same list, so they aren't drawn again (#533).
+    const held = knocksHeld.current;
+    const same =
+      now.length === held.length &&
+      now.every((card, at) => {
+        const was = held[at];
+        return was !== undefined && card.server === was.server && card.id === was.id && card.at === was.at && card.from === was.from && card.serverName === was.serverName;
+      });
+    if (!same) knocksHeld.current = now;
+    return knocksHeld.current;
+  }, [ordered, states, several, infos]);
 
   // Each knock that arrives while the list is open rocks it once (#211). The
   // ones already here when it opened are old news.
@@ -1063,7 +1091,7 @@ function Servers({
   }, [knocks]);
 
   // A phone's app is closed the phone's way, never with a button of ours (SPEC §4.15).
-  const closeList = isTauri() && !onPhone() ? () => void getCurrentWindow().close() : undefined;
+  const closeList = isTauri() && !onPhone() ? closeListWindow : undefined;
   return (
     <>
       {signedIn.map((session) => (
@@ -1073,8 +1101,10 @@ function Servers({
         <div className="nx-app-list">
           {adding ? (
             <SignInView
+              key={addingFrom?.n ?? 0}
               actions={addingActions}
               keyringNotice={keyringNotice}
+              offered={addingFrom?.link}
               adding
               below={voice ? <VoiceDock {...voice} /> : undefined}
               onCancel={() => setAdding(false)}
@@ -1085,18 +1115,18 @@ function Servers({
               servers={listings}
               voice={voice}
               you={you}
-              onEditProfile={() => shell.settings("profile")}
+              onEditProfile={editProfile}
               everywhere={everywhere}
               nudge={nudge}
-              onQuiet={(server, on) => changePrefs({ ...prefs, quiet: on ? [...prefs.quiet.filter((one) => one !== server), server] : prefs.quiet.filter((one) => one !== server) })}
-              onMove={(server, by) => changePrefs({ ...prefs, order: moveServer(ordered.map((one) => one.baseUrl), server, by) })}
-              onSettings={() => shell.settings()}
-              onMedia={() => shell.tool("media")}
-              onSearch={() => shell.tool("search")}
+              onQuiet={onQuiet}
+              onMove={onMove}
+              onSettings={openSettings}
+              onMedia={openMedia}
+              onSearch={openSearch}
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
-              notes={<ListNotes notes={notes} onUpdate={() => shell.settings("account")} onRetry={onRetry} />}
-              onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? () => unfold(null) : undefined}
+              notes={<ListNotes notes={notes} onUpdate={openAccount} onRetry={onRetry} onHost={openServerSettings} />}
+              onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? unfoldAgain : undefined}
               onClose={unfolded ? undefined : closeList}
             />
           )}
@@ -1111,18 +1141,18 @@ function Servers({
             min={LIST_MIN}
             max={widestList(width)}
             reset={LIST_WIDTH}
-            onChange={(list) => setSide((held) => ({ ...held, list }))}
+            onChange={widenList}
           />
         ) : null}
         {unfolded ? (
           <SidePane
-            apis={apisRef.current}
+            apis={apis}
             intend={intendHere}
             tabs={tabs}
             setTabs={setTabs}
             first={first}
             bind={bind}
-            show={(server, roomId, messageId) => openChat(server, roomId, messageId)}
+            show={showChat}
             searchAsk={searchAsk}
             onPopOutTool={openToolWindow}
             voiceControl={voiceControl}
@@ -1266,6 +1296,158 @@ const shell: WindowOpener = {
 };
 
 /** Media or Search in a window of its own (decision 15): popped out, or every conversation in its own window. */
+/**
+ * One server's part of the list. Made out here rather than inside the list
+ * window, so its functions hold only what they're made from: a listing is
+ * kept for as long as its server doesn't change, and one made in there would
+ * keep that whole drawing of the window alive with it (#533, #534).
+ */
+function listingOf(
+  api: ServerSession["api"],
+  baseUrl: string,
+  state: GatewayState,
+  model: ListModel,
+  isQuiet: boolean,
+  info: ListedInfo | undefined,
+  showingHere: RoomId | null,
+): ServerListing {
+  const me = state.me;
+  return {
+    id: baseUrl,
+    name: info?.name ?? hostOf(baseUrl),
+    accent: info?.accent_key ?? null,
+    model,
+    header: serverHeader(state, model, isQuiet),
+    quiet: isQuiet,
+    speaking: talkingNow(state),
+    onOpenRoom: (room) => openChat(baseUrl, room),
+    onOpenDm: (room) => openChat(baseUrl, room),
+    onOpenPerson: (user, dm) => void openPerson(api, user, dm),
+    onMessage: (user) => void messageWith(api, user),
+    onKnock: (user) => knockOn(api, user.id),
+    safetyFor: (user) => cardSafety(api, state, user),
+    // The host, with a report open (T-1605): Settings, People, where they are.
+    onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
+    onStartDm: (people) => startDm(api, people),
+    onLeaveDm: (room) => leaveDm(api, room),
+    onHost: (section) => shell.settings(section),
+    showing: showingHere,
+    saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
+  };
+}
+
+// What the list hands its parts, made out here so each holds only what it's
+// handed: one made inside the list window, and kept, keeps that whole
+// drawing of the window alive with it (#534).
+
+/** The link the shell is holding for the paste box, once (#607, src-tauri/src/deep_link.rs). */
+function takeOfferedLink(): Promise<string | null> {
+  return invoke<string | null>("link_offered");
+}
+
+/** Adding a server: the sign-in, checked first against the servers you're already on. */
+function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, alreadyOn: { current: (baseUrl: string) => string | null }): SignInActions {
+  const actions = signInActions(
+    (baseUrl) => new PublicApi(baseUrl),
+    async (baseUrl, auth) => {
+      await accounts.reauthenticate(baseUrl, auth);
+      setAdding(false);
+    },
+  );
+  return {
+    ...actions,
+    check: async (pasted) => {
+      const read = readPasted(pasted);
+      const problem = "link" in read ? alreadyOn.current(read.link.baseUrl) : null;
+      return problem === null ? actions.check(pasted) : { problem };
+    },
+  };
+}
+
+/** One server: your status and away from the top card. */
+function youOn({ api, baseUrl }: ServerSession, me: User): YouActions {
+  return {
+    awayChoices: awayChoices(loadRecentAway()),
+    saveLine: (line) => said(saveStatus(api, withLine(me.status, line))),
+    goAway: async (message) => {
+      const problem = await said(saveStatus(api, withAway(me.status, message)));
+      if (problem === null) {
+        setAway(baseUrl, message);
+        saveRecentAway(rememberAway(loadRecentAway(), message));
+      }
+      return problem;
+    },
+    comeBack: async () => {
+      const problem = await said(saveStatus(api, withAway(me.status, null)));
+      if (problem === null) setAway(baseUrl, null);
+      return problem;
+    },
+  };
+}
+
+/** Several servers: away on the ones you tick, each answering for itself, from what it holds when you do. */
+function awayEverywhere(signedIn: readonly ServerSession[]): AwayEverywhere {
+  const each = async (servers: string[], message: string | null): Promise<Record<string, string | null>> => {
+    const answers = await Promise.all(
+      servers.map(async (server): Promise<[string, string | null]> => {
+        const session = signedIn.find((one) => one.baseUrl === server);
+        const me = serverState(server).me;
+        if (!session || !me) return [server, "You're not signed in there any more."];
+        const problem = await said(saveStatus(session.api, withAway(me.status, message)));
+        if (problem === null) setAway(server, message);
+        return [server, problem];
+      }),
+    );
+    return Object.fromEntries(answers);
+  };
+  return {
+    awayChoices: awayChoices(loadRecentAway()),
+    goAway: async (message, servers) => {
+      const answers = await each(servers, message);
+      if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
+      return answers;
+    },
+    comeBack: (servers) => each(servers, null),
+  };
+}
+
+/** Back at the computer while still away (#392): waving the line off. */
+function nudgeWith(setBackWhileAway: (back: boolean) => void): AwayNudge {
+  return { onDismiss: () => setBackWhileAway(false) };
+}
+
+// The list's buttons into Settings, Media and Search: the same functions
+// every time, so the parts handed them aren't drawn again for them (#533).
+function editProfile(): void {
+  shell.settings("profile");
+}
+function openSettings(): void {
+  shell.settings();
+}
+function openAccount(): void {
+  shell.settings("account");
+}
+/** A server you host needs you (#582): Hosting → Server. */
+function openServerSettings(): void {
+  shell.settings("server");
+}
+function openMedia(): void {
+  shell.tool("media");
+}
+function openSearch(): void {
+  shell.tool("search");
+}
+
+/** Close the list window, as its close button does. */
+function closeListWindow(): void {
+  void getCurrentWindow().close();
+}
+
+/** A conversation, from the side: shown where conversations open, at a message if one is named. */
+function showChat(server: string, roomId: RoomId, messageId?: MessageId): void {
+  openChat(server, roomId, messageId);
+}
+
 function openToolWindow(which: "media" | "search"): void {
   if (!isTauri()) return;
   void invoke("next_open_tool", { which }).catch((error: unknown) => console.error(`could not open ${which}`, error));
@@ -1326,7 +1508,9 @@ function bringForward(): void {
  * Unfolding: the window grows to the right by the conversations' width,
  * leftwards where its screen ends (core/side.ts). A maximized window, or one
  * the desktop sizes itself (a tiling desktop), keeps its size, and the
- * conversations fit what they get.
+ * conversations fit what they get. Where the screen ends is the page's own
+ * view (core/screen.ts), never the shell's monitor, which can crash the
+ * packaged Linux app (#628).
  */
 async function growBeside(side: Side): Promise<void> {
   try {
@@ -1335,8 +1519,9 @@ async function growBeside(side: Side): Promise<void> {
     const factor = await current.scaleFactor();
     const inner = (await current.innerSize()).toLogical(factor);
     const at = (await current.outerPosition()).toLogical(factor);
-    const monitor = await currentMonitor();
-    const screen = monitor ? { x: monitor.position.x / monitor.scaleFactor, width: monitor.size.width / monitor.scaleFactor } : null;
+    const outer = (await current.outerSize()).toLogical(factor);
+    const seen = pageScreen();
+    const screen = seen ? screenAround({ x: at.x, width: outer.width }, seen) : null;
     const target = unfolding({ x: at.x, width: inner.width }, screen, side, loadScale() / 100);
     if (!target) return;
     if (target.x !== null) await current.setPosition(new LogicalPosition(target.x, at.y));

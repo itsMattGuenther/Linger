@@ -17,6 +17,7 @@ mod clip;
 #[cfg(desktop)]
 mod clipboard;
 pub mod cue;
+pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
 pub mod gateway;
@@ -297,9 +298,13 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         // First, so a second launch is caught before anything else starts:
         // it brings the running Linger's list forward instead (tray.rs).
+        // A `linger://` link in its arguments reaches `deep_link.rs` through
+        // the deep-link plugin (the `deep-link` feature) before this runs.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_list(app);
         }))
+        // "Open in Linger" on an invite page (#607, `deep_link.rs`).
+        .plugin(tauri_plugin_deep_link::init())
         // Links in a message go to the system browser, never to this window.
         // The capability file narrows the plugin to http and https.
         .plugin(tauri_plugin_opener::init())
@@ -316,6 +321,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         // before `setup` so the windows built there are restored too.
         .plugin(window::remembered_windows())
         .manage(Connections::default())
+        .manage(deep_link::Offered::default())
         .manage(tray::Closing::default())
         .manage(tray::VoiceItems::default())
         .manage(voice_commands::VoiceEngines::default())
@@ -328,6 +334,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             window::create(app)?;
             // Linger keeps running in the tray when its list closes.
             tray::install(app);
+            deep_link::install(app);
             Ok(())
         })
         .on_window_event(window::on_event)
@@ -352,6 +359,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             voice_commands::sound_play,
             notifications::show_notification,
             app_version,
+            deep_link::link_offered,
             updates::update_check,
             updates::newest_version,
             updates::update_install,
@@ -382,7 +390,15 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
 fn phone_app() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // An invite page's "Open in Linger" (#607): Android's intent filter
+        // hands the `linger://` link to the app (`deep_link.rs`).
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Connections::default())
+        .manage(deep_link::Offered::default())
+        .setup(|app| {
+            deep_link::install(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             sessions_load,
             session_save,
@@ -393,6 +409,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             gateway_send,
             gateway_retry,
             app_version,
+            deep_link::link_offered,
             graphics::graphics_started,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,

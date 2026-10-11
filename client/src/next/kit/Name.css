@@ -106,6 +106,16 @@
     -webkit-text-fill-color: transparent;
   }
 
+  /* An emoji in a name is a picture, not a letter (#512): painted through
+     with the gradient or the shimmer's paint, it drew as a flat block of
+     it. Drawn in an opaque color, it draws in its own colors over that. */
+  .name[data-name-fill="gradient"] .k-name-emoji,
+  :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] .k-name-emoji,
+  :root .name.name-raw .k-name-emoji {
+    color: var(--text-primary);
+    -webkit-text-fill-color: var(--text-primary);
+  }
+
   /* Shimmer (#532): a band of `--name-shimmer` crossing the letters from
      left to right every 4s, a quarter of the name wide (24% of its box),
      its middle travelling from half a name before the box to half a name

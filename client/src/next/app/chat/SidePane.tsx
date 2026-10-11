@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, memo, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import type { AuthedApi } from "../../../lib/api";
@@ -73,7 +73,7 @@ export interface SidePaneProps {
  * it counts towards where you are, and holds back the chime for what you're
  * looking at, only while it's there to be seen.
  */
-export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose, onBack }: SidePaneProps) {
+export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose, onBack }: SidePaneProps) {
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
   const findTab = useCallback((id: string): SideTab | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
@@ -103,7 +103,10 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
     },
     [setTabs],
   );
-  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl, onTyped });
+  // The servers with a tab here: only their changes draw the side (#533).
+  const tabServers = tabs.open.flatMap((tab) => (isTool(tab) ? [] : [tab.server])).join(" ");
+  const among = useMemo(() => (tabServers === "" ? [] : [...new Set(tabServers.split(" "))]), [tabServers]);
+  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl, onTyped, among });
   const { goToMessage, askFocus, seedDraft, draftOf, tabItem } = view;
 
   // A conversation opened while the side is out: to the message first, so
@@ -229,4 +232,4 @@ export function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searc
       {view.card}
     </div>
   );
-}
+});

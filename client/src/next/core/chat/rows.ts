@@ -100,6 +100,26 @@ export function chatRows(
   return rows;
 }
 
+/**
+ * Two rows that draw the same. The rows are made afresh whenever the
+ * conversation changes, so a row is compared by what it holds: a message
+ * arriving draws its own row, not every row on screen (#533).
+ */
+export function sameRow(a: ChatRow, b: ChatRow): boolean {
+  if (a === b) return true;
+  if (a.kind !== b.kind || a.key !== b.key) return false;
+  switch (a.kind) {
+    case "divider":
+      return b.kind === "divider" && a.at === b.at;
+    case "left-off":
+      return true;
+    case "message":
+      return b.kind === "message" && a.message === b.message && a.head === b.head && a.pending === b.pending;
+    case "joins":
+      return b.kind === "joins" && a.messages.length === b.messages.length && a.messages.every((message, at) => message === b.messages[at]);
+  }
+}
+
 /** Where each message sits in the rows, for jumping to one. */
 export function rowIndex(rows: readonly ChatRow[]): Map<MessageId, number> {
   const index = new Map<MessageId, number>();

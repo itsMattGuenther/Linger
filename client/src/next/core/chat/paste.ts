@@ -80,6 +80,18 @@ export function pastedFiles(data: PastedData, at: Date): File[] {
     });
 }
 
+/**
+ * Whether pasted words fit in the box in place of what's selected (#512).
+ * Past the box's limit the engine cuts a paste short without a word, and
+ * "0 characters left" was the only sign, so the box says so when it won't.
+ * The box keeps a line break as one character, however the clipboard wrote it.
+ */
+export function pasteFits(draft: string, start: number, end: number, words: string, max: number): boolean {
+  const from = Math.max(0, Math.min(start, draft.length));
+  const to = Math.max(from, Math.min(end, draft.length));
+  return draft.length - (to - from) + words.replace(/\r\n?/g, "\n").length <= max;
+}
+
 /** What the box does with a paste (see the top of this file). */
 export function planPaste(data: PastedData | null, context: PasteContext): PastePlan {
   const files = data ? pastedFiles(data, context.at) : [];

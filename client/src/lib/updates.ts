@@ -112,6 +112,9 @@ export async function newestVersion(): Promise<string | null> {
 /** Where the host guide says how to update a server (#314). */
 export const HOST_UPDATE_GUIDE_URL = "https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server";
 
+/** Where the host guide says how to back a server up, and why its own copies aren't enough (#582). */
+export const HOST_BACKUP_GUIDE_URL = "https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#backups";
+
 /** `1.2.3` (or `v1.2.3`) as three numbers, or `null` for anything else. */
 function versionParts(version: string): [number, number, number] | null {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());

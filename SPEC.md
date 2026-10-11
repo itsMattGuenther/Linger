@@ -360,6 +360,10 @@ audio, links, files, and pinned messages.
 - Grid view, filterable by person, type, and date range.
 - Each item links back to the message and moment it was posted in.
 - Anyone can star an item; starred items sort first and never expire.
+- **Leaving soon** (#583) shows what would go next, in date order: under `when-full`
+  (§4.10), once the file space is past 80%, the oldest that one pass would take; under
+  an age rule, what is within a month of its date. One quiet sentence and the grid: no
+  notification, no count, no lit row. Anybody who cares stars what matters.
 - Opened from the foot of the list, not a search result: a tab beside the list, like a
   conversation, or a window of its own when everything opens in its own (#337).
 
@@ -460,7 +464,9 @@ walking into the past. One CSS custom property computed from the timestamp.
 **Sessions, not a stream.** Group consecutive messages by the same author; break the
 group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts real
 whitespace and a soft divider labeled in natural language: `late Tuesday night`,
-`Saturday morning`, `yesterday afternoon`.
+`Saturday morning`, `yesterday afternoon`. A gap counts either way: a server clock
+that jumped back still breaks the session. A message dated after today is labeled
+with its date (`Friday evening, October 16`), never `this evening` (#512).
 
 **No avatar column or per-message colored bars.** The styled sender name has a
 line of its own at the start of a run of messages, once per run, with no colon.
@@ -492,6 +498,31 @@ land: each send carries a one-time key the server remembers (PROTOCOL §4).
 Not a 400px billboard. Images render inline at true aspect ratio, capped at 400px
 height, click to expand. One so tall that it would be under 120px wide there (a
 phone's scrolling screenshot) is drawn 120px wide, showing its top (#512).
+
+**A link says where it goes.** A link's words are whatever its sender wrote, and
+pointing at it always shows the real address. When the words are themselves an
+address or a domain (`www.paypal.com`, `https://paypal.com/login`) and the link
+goes to a different site, the real site is drawn beside them, quietly:
+**www.paypal.com** (evil.example). It reads without pointing, which a phone can't do
+(#580). The same site, once a leading `www.` is dropped or one name sits inside the
+other (`login.paypal.com`), counts as the same; ordinary words ("the menu") say
+nothing about where they go and are left alone. Names are compared as the computer
+reads them, so words in look-alike letters (a Cyrillic `а`) show the real name in
+its `xn--` form. No warning, no dialog, no list of bad sites.
+
+**A written time reads in your clock.** A time written with a zone in a message, a
+room's message of the day or a poll ("8PM CDT", "20:00 UTC", "9pm Eastern") is
+faintly underlined, and pointing at it, focusing it or tapping it says what it is
+for the reader: "9:00 PM for you", with "the next day" or "the day before" when it
+falls on another date (#584). It has to be a clock time (`8PM`, `8:30`, `20:00`; a
+bare `8` is not one) followed by a zone that means one place: abbreviations that mean
+several (CST, IST, BST) are left alone rather than guessed. The time is placed on the
+day the words were written, in the writer's zone, so summer time is the summer's.
+US abbreviations read as the place they name (EST in July is New York's clock, as
+nearly everybody who writes it means), except MST and HST, which Arizona and Hawaii
+keep all year. The app reads the words already on screen: nothing is stored, nothing
+crosses the wire, and old messages get it too. Nobody's own zone is shared; showing
+your local time on your card is a separate, off-by-default idea (#604).
 
 **One comfortable layout.** Readable text and grouped messages are the default,
 not a mode to discover. The layout adapts to the available window space. Interface
@@ -573,7 +604,9 @@ acknowledges the request, not delivery; it is not knock history. A refused
 knock never shows `knocked`, wherever it was pressed. Somebody offline can't
 be knocked: the control stays where it is, greyed out, and says why ("Can't
 knock while Justin B is offline.") until they're back (#288). The recipient's
-card still disappears after eight seconds. Changing cards or servers must not
+card still disappears after eight seconds. A second knock from the same person takes their card's
+place, its eight seconds starting over, rather than stacking a second card, and
+at most three cards show at once, the newest (#512). Changing cards or servers must not
 carry sender feedback to a different person.
 
 ### 4.10 File sharing
@@ -588,7 +621,13 @@ carry sender feedback to a different person.
   week (sooner if the host's window is shorter, and even with expiry off). Removing
   a member deletes their uploads in progress and the files they never sent; what
   they sent stays.
-- Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- **Files stay until the server needs the room** (#583). By default nothing goes while
+  the pool has room. Past 90% of it, the oldest files that aren't starred and aren't on
+  a pinned message go first, until it is back under 80%. An upload that wouldn't fit
+  makes its room the same way before anybody is told the server is full. A host can
+  choose an age instead (a number of days, the rule before #583) or `off` (nothing
+  goes, and a full pool refuses uploads). A year-old photo on a half-empty server is
+  never deleted for its age alone.
 - Deleting a message deletes its files with it, at once and starred or not: nothing
   serves, shows, lists or exports them after (#502)
 - Resumable uploads
@@ -615,8 +654,17 @@ carry sender feedback to a different person.
 
 ### 4.11 Export
 
-Any member can export the entire server at any time: messages as markdown, media as
-files, in one archive. No gatekeeping, no host approval, one export per hour.
+Any member can export the entire server at any time: every conversation as a page any
+web browser opens, as markdown and as data (JSON), and media as files, in one archive.
+No gatekeeping, no host approval, one export per hour.
+
+The archive opens with a double-click (#585). `Open me.html` lists every room and DM,
+and each conversation's page is laid out the way the app lays it out: names in their
+colors, replies with their quote, reactions, polls, pictures in place, and video and
+sound that play. The pages have no scripts, use the system's fonts, and load nothing
+from anywhere else, so they open offline on any computer for as long as browsers read
+HTML. The same rules as ever decide what goes in: what you can see, and your own DMs,
+never anybody else's.
 
 This is a trust feature and an anti-lock-in guarantee. It costs a weekend and it is the
 most credible thing in the product.
@@ -1156,6 +1204,11 @@ holds. The values are tokens (`system.md`, "Scales"); the geometry tests measure
 - **Connection trouble** is said in words at the foot of the list, only while it is
   true and only after a few seconds: "Can't reach Pinecone. Still trying." Never
   protocol text, never a permanent status bar.
+- **A server you host needing you** is said the same way, to the host alone, only
+  while it is true (#582): "The disk Pinecone runs on is nearly full.", "Pinecone is
+  nearly out of room for files.", "Pinecone hasn't been backed up for 3 days." Each
+  opens Settings → Hosting → Server, which says when the server last copied its
+  database. Words, never a disk figure.
 - **Motion:** short and ease-out, no spring or bounce. Reduced motion stops anything
   that moves or loops, without hiding a state or a confirmation.
 - **Reader controls:** interface scale 100–200%, in Settings → Appearance, applied

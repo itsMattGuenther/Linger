@@ -92,6 +92,63 @@ test("folds to one line, and stays folded after the app is closed and opened aga
   await expect(fold(page)).toBeVisible();
 });
 
+test("a link in it whose words name another site shows where it really goes (#580)", async ({ page }) => {
+  await open(page, "&motd");
+  await openGeneral(page);
+  await page.evaluate(
+    ([server, text]) =>
+      window.core?.frame(server, {
+        op: "room.update",
+        d: {
+          id: "r-general",
+          slug: "general",
+          name: "general",
+          topic: "Good company. No hurry.",
+          kind: "room",
+          member_ids: null,
+          position: 0,
+          archived_at: null,
+          last_message_id: "m000016",
+          motd: { text, set_by: "u-eli", set_at: Date.now() },
+        },
+      } as never),
+    [HOME, "Sign up at [raidhelper.example](https://evil.example/form)"] as const,
+  );
+  await expect(strip(page)).toContainText("Sign up at raidhelper.example (evil.example)");
+});
+
+test.describe("a time in it", () => {
+  test.use({ timezoneId: "Asia/Tokyo", locale: "en-US" });
+
+  test("reads in your own clock, from the day it was set (#584)", async ({ page }) => {
+    await open(page, "&motd");
+    await openGeneral(page);
+    await page.evaluate(
+      ([server, text]) =>
+        window.core?.frame(server, {
+          op: "room.update",
+          d: {
+            id: "r-general",
+            slug: "general",
+            name: "general",
+            topic: "Good company. No hurry.",
+            kind: "room",
+            member_ids: null,
+            position: 0,
+            archived_at: null,
+            last_message_id: "m000016",
+            motd: { text, set_by: "u-eli", set_at: Date.now() },
+          },
+        } as never),
+      [HOME, "Raid night Friday at 20:00 UTC."] as const,
+    );
+    const time = strip(page).locator("time.nx-text-time");
+    await expect(time).toContainText("20:00 UTC");
+    await time.hover();
+    await expect(page.locator(".k-tooltip")).toHaveText("5:00 AM for you, the next day");
+  });
+});
+
 test("a new message of the day opens again for everybody who folded the last", async ({ page }) => {
   await open(page, "&motd");
   await openGeneral(page);

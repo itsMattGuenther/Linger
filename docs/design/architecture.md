@@ -147,9 +147,25 @@ order give the same state, so no window needs to be told what another knows.
 
 The few values that change without a frame (read positions, your voice seat,
 notification rules; `sharedLocalOf` in `lib/gateway.ts`) come from the owner
-as `next:shared` whenever one changes. A viewer still catching up keeps the
-newest of those per server and applies it over the snapshot. The owner sends
-one on every change, so the newest is never older than the snapshot.
+as `next:shared` whenever one changes. Each message carries only the fields
+that changed (#533): somebody starting to talk sends your voice seat, not
+every read position with it, and a viewer keeps every other field as the
+very object it was, so nothing drawn from those is drawn again. A viewer
+still catching up keeps the newest of each field per server and applies them
+over the snapshot. The owner sends a field on every change to it, so the
+newest is never older than the snapshot.
+
+**Drawing only what changed (#533).** Every window holds every server's
+state, but a part of the screen follows only the servers it shows: the
+conversations follow the servers their tabs are on (`useServersAmong`), and
+something worked out across every server (where your voice seat is) is a
+plain value that changes only when it does (`useServersPick`). The list
+makes each server's part again only when that server changes, keeps every
+row that reads the same as the very same object (`keepSame` in
+`core/list.ts`), and draws a row again only when its row changed. A
+conversation draws a message row again only when the row itself changed
+(`sameRow` in `core/chat/rows.ts`). `tests/browser/next-renders.spec.ts`
+counts what React draws for one event and holds these to it.
 
 **What is not shared through frames:**
 
@@ -304,7 +320,10 @@ are kept on this computer; Settings saves a change and announces it
 (`next:appearance`), and every window applies it (`core/appearance.ts`).
 Interface size zooms the page and grows the window by the same ratio, because
 the new client's sizes are fixed pixels and a larger base font would grow
-nothing.
+nothing. A window's smallest size grows by the same ratio (#512), so the
+page is never narrower than the layout was made for: at 150%, the list's
+smallest window was 200 of the page's pixels, and the message box over it 8.
+It never asks for more than nine tenths of the screen.
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
@@ -393,7 +412,10 @@ one.
   left). Opening a conversation adds a tab or shows it, and unfolds the
   window: it grows to the right by the conversations' width, and moves left
   where its screen ends (`core/side.ts`, `growBeside` in `ListWindow.tsx`).
-  Folding shrinks it back to the list's width. A maximized window keeps its
+  Where the screen ends is the page's own `window.screen` (`core/screen.ts`),
+  never the shell's `currentMonitor()`: on Linux, Tauri reads the GTK monitor
+  off its thread, which can end the app (#623, #628). A test keeps every
+  monitor call out of the app. Folding shrinks it back to the list's width. A maximized window keeps its
   size, and so does one a tiling desktop sizes: Linger asks, and the desktop
   may say no. Too narrow for both, the conversation takes the window
   (`beside`), and a narrower window squeezes the list before that. The line
@@ -525,6 +547,15 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   shows the running copy's list (`tauri-plugin-single-instance`). Hiding it
   tells the list (`next:hidden`), which the first time ever on that computer
   shows a notification saying where Linger went (#400).
+- **A `linger://` link** ("Open in Linger" on an invite page, #607) reaches
+  the shell however it comes: a second launch on Windows and Linux (handed
+  over by the single-instance plugin), the running app on macOS and Android,
+  or the launch it started. `src-tauri/src/deep_link.rs` reads it strictly,
+  keeps only the newest as the link a person would paste, brings the list
+  forward and says `next:link`; the list window takes it with `link_offered`
+  (`core/offeredLink.ts`) and puts it in a paste box: the sign-in when
+  nothing is signed in, otherwise the sign-in for another server. It waits
+  while the sign-ins are restored. Nothing is contacted until Continue.
 
 ## A page nobody can see
 

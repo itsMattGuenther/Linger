@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../../../generated/Message";
-import { chatRows, lastEditable, rowIndex } from "./rows";
+import { chatRows, lastEditable, rowIndex, sameRow } from "./rows";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-09-25T22:00:00Z");
@@ -171,5 +171,35 @@ describe("somebody joining voice (#473)", () => {
     const rows = chatRows([join(1, "dave", T0), { ...join(2, "callie", T0 + MIN), deleted_at: T0 + 2 * MIN }], [], { atStart: false, leftOff: null });
     expect(drawn(rows)).toEqual(["joins:dave"]);
     expect(lastEditable([message(1, "matt", T0), join(2, "matt", T0 + MIN)], "matt", true)?.id).toBe("m000001");
+  });
+});
+
+describe("telling whether a row draws the same (#533)", () => {
+  it("a message arriving leaves every row before it the same, and only the new one differs", () => {
+    const said = [message(1, "eli", T0), message(2, "eli", T0 + MIN), message(3, "jules", T0 + 2 * MIN)];
+    const before = chatRows(said, [], { atStart: true, leftOff: null });
+    const after = chatRows([...said, message(4, "jules", T0 + 3 * MIN)], [], { atStart: true, leftOff: null });
+    expect(after.slice(0, before.length).every((row, at) => before[at] !== undefined && sameRow(before[at], row))).toBe(true);
+    expect(after.slice(0, before.length).some((row, at) => row === before[at])).toBe(false);
+    expect(after).toHaveLength(before.length + 1);
+  });
+
+  it("an edit, a row becoming a group's first, or a send being confirmed is a different row", () => {
+    const one = message(1, "eli", T0);
+    const [row] = chatRows([one], [], { atStart: false, leftOff: null });
+    if (row?.kind !== "message") throw new Error("expected a message row");
+    expect(sameRow(row, { ...row, message: { ...one, body: "edited", edited_at: T0 + MIN } })).toBe(false);
+    expect(sameRow(row, { ...row, head: !row.head })).toBe(false);
+    expect(sameRow(row, { ...row, pending: !row.pending })).toBe(false);
+    expect(sameRow(row, { ...row })).toBe(true);
+  });
+
+  it("a voice join line with somebody more is a different row", () => {
+    const join = (n: number, author: string, at: number) => message(n, author, at, { voice_join: true });
+    const [before] = chatRows([join(1, "eli", T0)], [], { atStart: false, leftOff: null });
+    const [after] = chatRows([join(1, "eli", T0), join(2, "jules", T0 + MIN)], [], { atStart: false, leftOff: null });
+    if (before === undefined || after === undefined) throw new Error("expected join rows");
+    expect(sameRow(before, after)).toBe(false);
+    expect(sameRow(before, { ...before })).toBe(true);
   });
 });

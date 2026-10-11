@@ -964,3 +964,112 @@ async fn a_post_sent_again_with_its_nonce_is_saved_and_announced_once() {
         first["id"].as_str().unwrap()
     );
 }
+
+/// The next text frame, as the bytes that came over the socket.
+async fn recv_raw(ws: &mut Ws) -> String {
+    loop {
+        let msg = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("gateway frame within 5s")
+            .expect("socket still open")
+            .expect("clean frame");
+        if let WsMessage::Text(text) = msg {
+            return text.as_str().to_string();
+        }
+    }
+}
+
+/// Read raw frames until a `message.create` with this body; returns its bytes
+/// and its `s`.
+async fn raw_message(ws: &mut Ws, body: &str) -> (String, u64) {
+    loop {
+        let raw = recv_raw(ws).await;
+        let frame: Value = serde_json::from_str(&raw).expect("valid frame json");
+        if frame["op"] == "message.create" && frame["d"]["body"] == body {
+            return (raw, frame["s"].as_u64().expect("a sequenced frame"));
+        }
+    }
+}
+
+/// One event, many people (#519): the gateway turns it into JSON once and
+/// every session numbers its own copy. Two people who connected at different
+/// times count differently; each gets the same bytes under their own number,
+/// and a frame missed while a socket was down is replayed under the number it
+/// was given then, with the same bytes again.
+#[tokio::test]
+async fn everybody_gets_one_event_under_their_own_numbers_live_and_on_resume() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    // The host hears three messages before callie connects, so the host's
+    // numbers run ahead of hers.
+    let (mut host_ws, _) = connect_ready(&server, &host.access_token).await;
+    for i in 0..3 {
+        let body = format!("early {i}");
+        rest_send(&server, &host.access_token, &room_id, &body).await;
+        raw_message(&mut host_ws, &body).await;
+    }
+    let (mut member_ws, member_session) = connect_ready(&server, &member.access_token).await;
+
+    let shared = |raw: &str, s: u64| {
+        raw.strip_suffix(&format!(",\"s\":{s}}}"))
+            .unwrap_or_else(|| panic!("`s` is not where a frame ends it: {raw}"))
+            .to_string()
+    };
+
+    let body = "said once, \"heard\" twice 🦆";
+    rest_send(&server, &host.access_token, &room_id, body).await;
+    let (host_raw, host_s) = raw_message(&mut host_ws, body).await;
+    let (member_raw, member_s) = raw_message(&mut member_ws, body).await;
+    assert!(
+        host_s > member_s,
+        "the host connected first and should be counting ahead: {host_s} vs {member_s}"
+    );
+    assert_eq!(shared(&host_raw, host_s), shared(&member_raw, member_s));
+
+    // Callie's socket dies without a word, and she misses a message.
+    drop(member_ws);
+    let missed = "sent while callie was gone";
+    rest_send(&server, &host.access_token, &room_id, missed).await;
+    let (host_missed, host_missed_s) = raw_message(&mut host_ws, missed).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let (mut member_ws, _) = connect_async(server.gateway_url())
+        .await
+        .expect("reconnect");
+    assert_eq!(recv_json(&mut member_ws).await["op"], "hello");
+    send_json(
+        &mut member_ws,
+        json!({ "op": "resume", "d": {
+            "session_id": member_session,
+            "token": member.access_token,
+            "s": member_s,
+        }}),
+    )
+    .await;
+    let resumed: Value = serde_json::from_str(&recv_raw(&mut member_ws).await).expect("json");
+    assert_eq!(resumed["op"], "resumed");
+    assert!(resumed.get("s").is_none(), "resumed is a control frame");
+
+    // Every replayed frame carries the next number, none skipped or repeated,
+    // and the missed message is the host's bytes under callie's number.
+    let mut expected_s = member_s;
+    loop {
+        let raw = recv_raw(&mut member_ws).await;
+        let frame: Value = serde_json::from_str(&raw).expect("valid frame json");
+        expected_s += 1;
+        assert_eq!(
+            frame["s"].as_u64(),
+            Some(expected_s),
+            "replayed out of order: {raw}"
+        );
+        if frame["op"] == "message.create" && frame["d"]["body"] == missed {
+            assert_eq!(
+                shared(&raw, expected_s),
+                shared(&host_missed, host_missed_s)
+            );
+            break;
+        }
+    }
+}
