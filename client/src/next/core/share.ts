@@ -206,7 +206,12 @@ export type Intent =
   /** Add a server, from Settings: the list window shows its sign-in. */
   | { kind: "addserver" }
   /** Settings changed your servers' order or which are Quiet (Settings → Servers). */
-  | { kind: "serverprefs"; order: string[]; quiet: string[] };
+  | { kind: "serverprefs"; order: string[]; quiet: string[] }
+  /**
+   * Settings saved a server's name or color: the list asks the server for
+   * them now, rather than at its next hourly ask (#536).
+   */
+  | { kind: "serverinfo"; server: string };
 
 /** The list window's own choices another window may ask it to make. */
 export interface ListControls {
@@ -214,6 +219,8 @@ export interface ListControls {
   addServer(): void;
   /** Your servers' order and which are Quiet, as Settings last left them. */
   setPrefs(prefs: ServerPrefs): void;
+  /** Ask a server for its name and color again: Settings has just saved them (#536). */
+  serverInfo?(server: string): void;
   /** Whether closing the list keeps Linger in the tray (true) or quits it. */
   closeToTray?(on: boolean): void;
   /** The push-to-talk key picked in Settings, as a `KeyboardEvent.code`: the voice bar says to hold it. */
@@ -454,6 +461,9 @@ export async function shareAsOwner(
         return;
       case "serverprefs":
         list?.setPrefs(prefsFrom(intent));
+        return;
+      case "serverinfo":
+        if (sessions().has(intent.server)) list?.serverInfo?.(intent.server);
         return;
       case "conversations": {
         if (!isMode(intent.mode)) return;

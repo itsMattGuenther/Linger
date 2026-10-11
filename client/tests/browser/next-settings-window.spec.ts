@@ -161,6 +161,15 @@ test("how conversations open goes to the list window, which moves what's open", 
   await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "conversations", mode: "windows" });
 });
 
+test("the server's name or color saved here has the list window ask the server again, not an hour later (#536)", async ({ page }) => {
+  await open(page, "?section=server");
+  const told = async () => intents(await did(page)).filter((intent) => intent.kind === "serverinfo");
+  expect(await told()).toEqual([]);
+  await page.getByRole("group", { name: "Accent color" }).getByRole("button", { name: "teal" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(told).toEqual([{ kind: "serverinfo", server: SERVER }]);
+});
+
 test("interface size and plain names are saved here and take effect at once", async ({ page }) => {
   await open(page, "?section=appearance");
   // No theme or warmth to choose while the new client has one set of colors.
