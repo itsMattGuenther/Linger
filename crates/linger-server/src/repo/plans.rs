@@ -13,7 +13,7 @@ use sqlx::{Row, SqlitePool};
 use tempfile::TempDir;
 
 use crate::db::{self, Db};
-use crate::repo::media;
+use crate::repo::{media, search};
 
 /// A year of a small server at a fifth of the size the audit measured (#518):
 /// twelve rooms and a DM, twenty people, 20,000 messages, a file on every
@@ -193,4 +193,51 @@ async fn media_links_start_from_the_links() {
         !plan.contains("SCAN m"),
         "the links page reads every message: {plan}"
     );
+}
+
+/// Every shape of a search: alone, from a cursor, and narrowed to a room and
+/// a person.
+fn search_queries() -> Vec<(&'static str, search::Query)> {
+    let base = search::Query {
+        terms: search::Terms::parse("message number").unwrap(),
+        viewer: UserId::from_slice(&[0; 16]).unwrap(),
+        room_id: None,
+        author_id: None,
+        before: None,
+        limit: 20,
+    };
+    vec![
+        ("the first page", base.clone()),
+        (
+            "a later page",
+            search::Query {
+                before: Some(linger_core::MessageId::new()),
+                ..base.clone()
+            },
+        ),
+        (
+            "a room and a person",
+            search::Query {
+                room_id: Some(linger_core::RoomId::new()),
+                author_id: Some(UserId::new()),
+                ..base
+            },
+        ),
+    ]
+}
+
+#[tokio::test]
+async fn search_stops_at_the_end_of_the_page() {
+    let (_dir, db) = grown_server().await;
+    for (shape, query) in search_queries() {
+        let plan = plan(&db.read, &search::page_sql(&query)).await;
+        assert!(
+            plan.starts_with("SCAN message_fts VIRTUAL TABLE"),
+            "{shape}: search does not start from the index: {plan}"
+        );
+        assert!(
+            !plan.contains("TEMP B-TREE"),
+            "{shape}: search finds and sorts every match to hand back one page: {plan}"
+        );
+    }
 }
