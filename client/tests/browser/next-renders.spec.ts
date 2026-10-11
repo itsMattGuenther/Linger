@@ -99,18 +99,28 @@ async function did(page: Page): Promise<string[]> {
 /**
  * The list window, with every connection's `ready` in. In development React
  * starts the list twice, so each server is connected twice (#355).
+ *
+ * The wait grows with the number of servers. Three servers are in within
+ * about 0.4 s; thirty make ten times the requests (some 270) and take one to
+ * two seconds on an idle machine, which a loaded one stretched past the
+ * usual 5 s (#528). Nothing in the app waits on anything there: every
+ * server connects within 0.13 s of the list starting.
  */
 async function open(page: Page, query = "") {
+  const servers = Number(new URLSearchParams(query).get("servers") ?? "3");
   await page.addInitScript(countRenders);
   await page.clock.install();
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect
-    .poll(async () => {
-      const lines = await did(page);
-      const connects = lines.filter((line) => line.startsWith("connect ")).length;
-      return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
-    })
+    .poll(
+      async () => {
+        const lines = await did(page);
+        const connects = lines.filter((line) => line.startsWith("connect ")).length;
+        return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
+      },
+      { timeout: Math.max(5_000, servers * 700) },
+    )
     .toBe(true);
 }
 
@@ -205,6 +215,8 @@ test("somebody's presence changing on the open conversation's server draws their
 });
 
 test("thirty servers starting together all draw, with no complaint from React about too many updates (#512)", async ({ page }) => {
+  // Ten times the servers of the tests above, so three times their time (#528).
+  test.slow();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
