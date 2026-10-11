@@ -90,7 +90,7 @@ pub async fn all(db: &SqlitePool) -> Result<Vec<Room>, ApiError> {
 /// One room by id, whatever kind it is and whoever is asking.
 ///
 /// **This one does not check membership**, so it is not the function a route
-/// should reach for. Use [`visible_to`], which is this plus the check.
+/// should reach for. Ask [`visible_to`] first.
 pub async fn by_id(db: &SqlitePool, id: RoomId) -> Result<Option<Room>, ApiError> {
     let row = sqlx::query(&format!("{ROOM_SELECT} WHERE r.id = ?"))
         .bind(id.to_vec())
@@ -110,28 +110,43 @@ pub async fn expect(db: &SqlitePool, id: RoomId) -> Result<Room, ApiError> {
         .ok_or_else(|| ApiError::not_found("No such room on this server."))
 }
 
-/// The room, if this person is allowed to see it at all.
+/// What a room-scoped action needs to know once [`visible_to`] has let it in.
+#[derive(Debug, Clone, Copy)]
+pub struct Visible {
+    /// Archived rooms are read-only: no new messages, nobody typing (#497).
+    pub archived: bool,
+}
+
+/// Whether this person is allowed to see the room at all.
 ///
-/// **This is the function routes should call**, and the refusal is deliberately
+/// **This is the check routes should make**, and the refusal is deliberately
 /// `NOT_FOUND` rather than `FORBIDDEN`: telling somebody "you may not see this
 /// DM" tells them the DM exists, who it is between if they guessed the id, and
 /// that there is something to be curious about. There is nothing a non-member
 /// can ask that distinguishes a DM they are not in from a room that was never
 /// there (PROTOCOL §3.1).
-pub async fn visible_to(db: &SqlitePool, id: RoomId, user_id: UserId) -> Result<Room, ApiError> {
-    let room = expect(db, id).await?;
-    if room.kind == RoomKind::Room {
-        return Ok(room);
-    }
-    let is_member = room
-        .member_ids
-        .as_ref()
-        .is_some_and(|ids| ids.contains(&user_id));
-    if is_member {
-        Ok(room)
-    } else {
-        Err(ApiError::not_found("No such room on this server."))
-    }
+///
+/// One indexed lookup, not the room itself (#524). It runs on every post,
+/// typing signal and room focus, and assembling the whole room, newest
+/// message and all, cost about 130 µs each time for an answer nobody read.
+/// Membership means what [`members`] says it does: a deactivated account
+/// is in no DM.
+pub async fn visible_to(db: &SqlitePool, id: RoomId, user_id: UserId) -> Result<Visible, ApiError> {
+    let archived: Option<bool> = sqlx::query_scalar(
+        "SELECT r.archived_at IS NOT NULL FROM rooms r
+         WHERE r.id = ?
+           AND (r.kind = 'room' OR EXISTS (
+                SELECT 1 FROM room_members rm
+                JOIN users u ON u.id = rm.user_id AND u.deactivated_at IS NULL
+                WHERE rm.room_id = r.id AND rm.user_id = ?))",
+    )
+    .bind(id.to_vec())
+    .bind(user_id.to_vec())
+    .fetch_optional(db)
+    .await?;
+    archived
+        .map(|archived| Visible { archived })
+        .ok_or_else(|| ApiError::not_found("No such room on this server."))
 }
 
 /// The DMs one person is in, newest conversation first.
