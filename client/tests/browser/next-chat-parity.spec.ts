@@ -719,6 +719,23 @@ test.describe("files", () => {
     await expect(box(page)).toHaveValue("keep me");
   });
 
+  // A slot holds its file's size against the pool everybody shares (#503):
+  // a file taken out mid-upload stops sending and gives it back at once,
+  // rather than finishing into a file nothing will ever post.
+  test("a file taken out while it's still going up stops going up, and its space is given back (#503)", async ({ page }) => {
+    await open(page, "room=r-general&holdparts");
+    await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "long-video.mov", mimeType: "video/quicktime", buffer: Buffer.from("big") });
+    const listed = page.getByRole("list", { name: "Files for this message" });
+    await expect(listed.getByRole("progressbar", { name: "Uploading long-video.mov" })).toBeVisible();
+    await expect.poll(async () => did(page)).toContain("PUT /store/f-1/1");
+
+    await page.getByRole("button", { name: "Don't send long-video.mov" }).click();
+    await expect(listed).toHaveCount(0);
+    await expect.poll(async () => did(page)).toContain("stopped PUT /store/f-1/1");
+    await expect.poll(async () => did(page)).toContain("DELETE /uploads/f-1 as token-1");
+    expect(await did(page)).not.toContain("POST /uploads/f-1/complete as token-1");
+  });
+
   test("a file can be taken out before sending, and one already up is withdrawn from the server (FILE-2)", async ({ page }) => {
     await open(page);
     await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "wrong-photo.txt", mimeType: "text/plain", buffer: Buffer.from("oops") });

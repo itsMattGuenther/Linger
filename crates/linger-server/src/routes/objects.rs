@@ -97,6 +97,7 @@ async fn put_part(
 
     let record = crate::repo::attachments::record(&state.db.read, AttachmentId(upload_id.0))
         .await?
+        .filter(|record| record.state != "released")
         .ok_or_else(|| ApiError::not_found("No such upload."))?;
     if record.state != "pending" {
         return Err(ApiError::conflict("That upload is already finished."));

@@ -69,7 +69,10 @@ async fn list_removed(
 /// four are shut here, the first three in one transaction.
 ///
 /// Their messages are untouched. Removing a person is not deleting what they
-/// wrote (SPEC principle 3).
+/// wrote (SPEC principle 3). What they had on its way into a message is a
+/// different thing: their uploads still going up and the files they never
+/// posted go (#503), because nobody else can see them, delete them or ever
+/// send them, and they hold the pool everybody shares.
 ///
 /// The host or a co-host may remove anybody but themselves, and a co-host
 /// may not remove the host (#424). Removing a co-host ends their being one:
@@ -130,6 +133,12 @@ async fn remove_user(
     state
         .gateway
         .publish(ServerEvent::UserRemove { user_id: id });
+    // After the door is shut, so nothing new can be reserved behind it. The
+    // removal has happened whatever this says: a file that will not go now
+    // is the sweeper's within a week.
+    if let Err(err) = crate::unsent::release_for(&state, id).await {
+        tracing::warn!(error = ?err, "could not release a removed member's uploads");
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

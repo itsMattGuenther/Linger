@@ -28,6 +28,9 @@ hex = { workspace = true }
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 # Magic-byte sniffing: what a file actually is, as opposed to what it claimed.
 infer = "0.22"
+# S3's `LastModified` times, read to tell an idle upload from a slow one
+# (#503). Already in the build: `rusty-s3` is built on it.
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 jsonwebtoken = { workspace = true }
 rand = { workspace = true }
 # The S3 backend talks to the bucket over HTTP; `rusty-s3` only signs the URLs.

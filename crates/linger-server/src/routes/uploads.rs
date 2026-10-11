@@ -31,12 +31,10 @@ use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
 use crate::storage::{display_key, object_key, part_plan, poster_key, ServeAs};
+use crate::unsent::{self, MAX_GOING_UP_BYTES};
 use crate::{repo, validate};
 
-/// Parts of an upload that never completed are swept once they are this old.
-/// Long enough to outlive any resumable upload (the signed URLs last a day),
-/// short enough that an abandoned 400 MB video does not sit on the disk.
-const STALE_UPLOAD_MS: i64 = 48 * 60 * 60 * 1000;
+const MB: u64 = 1024 * 1024;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -48,8 +46,9 @@ pub fn router() -> Router<AppState> {
 /// `POST /uploads` — reserve a slot and hand back where to PUT the bytes.
 ///
 /// Everything refusable is refused here, before a single byte moves: too big
-/// for one file, too big for what is left of the pool, or a type this server
-/// does not store. Sending 400 MB and *then* being told no is the rude version.
+/// for one file, more than one person may have going up at once (#503), too
+/// big for what is left of the pool, or a type this server does not store.
+/// Sending 400 MB and *then* being told no is the rude version.
 async fn create(
     State(state): State<AppState>,
     auth: AuthedUser,
@@ -79,9 +78,23 @@ async fn create(
     }
     let mime = media::canonical_mime(&req.mime).to_string();
 
-    sweep_stale_uploads(&state).await?;
+    // Reservations that have gone quiet go first, so one that stopped a
+    // minute ago is not what refuses this one.
+    unsent::release_idle(&state, now_ms()).await?;
 
-    let used = repo::attachments::pool_used(&state.db.read).await?;
+    // Counted and reserved in one transaction on the one writer, so twenty
+    // requests sent at once are checked one after another rather than all
+    // against the same total.
+    let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
+    let going_up = unsent::going_up(&mut *tx, auth.id).await?;
+    if going_up.saturating_add(req.size_bytes) > MAX_GOING_UP_BYTES {
+        return Err(ApiError::quota_exceeded(format!(
+            "You have {} MB of uploads still going up, and one person can have {} GB going up at once. Let those finish, or take some out, and try again.",
+            going_up.div_ceil(MB),
+            MAX_GOING_UP_BYTES / (1024 * MB)
+        )));
+    }
+    let used = repo::attachments::pool_used(&mut *tx).await?;
     if used.saturating_add(req.size_bytes) > state.config.pool_bytes {
         return Err(ApiError::quota_exceeded(
             "This server's storage is full. The host can free some up or raise the limit.",
@@ -103,8 +116,9 @@ async fn create(
     .bind(&mime)
     .bind(req.size_bytes as i64)
     .bind(now_ms())
-    .execute(&state.db.write)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await.map_err(ApiError::from)?;
 
     let slot = state
         .storage
@@ -133,6 +147,11 @@ async fn complete(
             .await?
             .map(Json)
             .ok_or_else(ApiError::internal);
+    }
+    // Given up on, by the client or after an hour of silence (#503). The row
+    // is only kept so late parts can be found and discarded (`unsent`).
+    if record.state == "released" {
+        return Err(ApiError::not_found("No such upload."));
     }
     if record.state != "pending" {
         return Err(ApiError::conflict("That upload already failed."));
@@ -273,6 +292,11 @@ async fn finish(
 
 /// `DELETE /uploads/:id` — give up on an upload, or throw away a finished one
 /// that was never posted. A file already on a message is a message's problem.
+///
+/// An upload that never finished is released rather than forgotten (#503):
+/// its space comes back now, and its row stays until every link it handed out
+/// has expired, so a part that still reaches a bucket is found and discarded
+/// (`unsent::release_slot`).
 async fn cancel(
     State(state): State<AppState>,
     auth: AuthedUser,
@@ -296,6 +320,11 @@ async fn cancel(
         ));
     }
 
+    if record.state != "complete" {
+        unsent::release_slot(&state, attachment_id).await?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
     let _ = state.storage.discard(upload_id).await;
     let _ = state.storage.delete_object(&record.object_key).await;
     if let Some(key) = &record.poster_key {
@@ -313,31 +342,4 @@ async fn cancel(
         .execute(&state.db.write)
         .await?;
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// Drop uploads nobody ever finished, and the part files behind them.
-///
-/// Done here, on the way in, rather than from a background task: slot creation
-/// is the only moment the answer matters, since pending uploads count against
-/// the pool. It is rate-limited to twenty an hour per person, so it is nowhere
-/// near a hot path.
-async fn sweep_stale_uploads(state: &AppState) -> Result<(), ApiError> {
-    let cutoff = now_ms() - STALE_UPLOAD_MS;
-    let rows: Vec<(Vec<u8>,)> =
-        sqlx::query_as("SELECT id FROM attachments WHERE state != 'complete' AND created_at < ?")
-            .bind(cutoff)
-            .fetch_all(&state.db.read)
-            .await?;
-
-    for (id,) in rows {
-        let Ok(id) = AttachmentId::from_slice(&id) else {
-            continue;
-        };
-        let _ = state.storage.discard(UploadId(id.0)).await;
-        sqlx::query("DELETE FROM attachments WHERE id = ?")
-            .bind(id.to_vec())
-            .execute(&state.db.write)
-            .await?;
-    }
-    Ok(())
 }

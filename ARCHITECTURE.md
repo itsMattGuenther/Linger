@@ -314,7 +314,7 @@ CREATE TABLE attachments (
   poster_key      TEXT,                        -- video poster frame
   display_key     TEXT,                        -- an image as drawn small: its copy, or itself (#382)
   starred_at      INTEGER,                     -- starred => never expires
-  state           TEXT NOT NULL,               -- pending | complete | failed
+  state           TEXT NOT NULL,               -- pending | complete | failed | released (§8)
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
@@ -655,8 +655,9 @@ Never proxy bytes through the app server.
 
 ```
 1. Client  → POST /uploads          { filename, size, mime }
-2. Server  → validates quota, creates attachment(state=pending),
-             returns { upload_id, url, method, headers, part_size }
+2. Server  → validates the member's cap and the pool, creates
+             attachment(state=pending), returns { upload_id, url, method,
+             headers, part_size }
 3. Client  → PUT direct to object store (multipart if > 8 MB, resumable)
 4. Client  → POST /uploads/{id}/complete
 5. Server  → verifies size, sniffs real MIME, re-encodes image (strips EXIF),
@@ -670,9 +671,11 @@ Never proxy bytes through the app server.
 - `s3` — any S3-compatible endpoint.
 
 Both sit behind one `ObjectStore` trait (`crates/linger-server/src/storage/`). It has
-four jobs: hand out a slot, gather an upload's parts into one local file the server can
-inspect, store/read/delete a finished object, and throw away the parts of an upload that
-died. Everything that decides *whether* bytes are acceptable is in `media`, not storage.
+five jobs: hand out a slot, gather an upload's parts into one local file the server can
+inspect, store/read/delete a finished object, throw away the parts of an upload that
+died, and say when an upload last received anything (the newest part's time on disk or
+in the bucket, which is how an idle reservation is told from a slow one; see below).
+Everything that decides *whether* bytes are acceptable is in `media`, not storage.
 
 **The S3 backend does not use S3's own multipart upload.** Each part is presigned to its
 own key, `uploads/{upload_id}/{part}`, and `assemble` streams those down into one local
@@ -714,6 +717,42 @@ dropped connection: the slot stays pending and the client sends what is missing.
 else — wrong size, a file that is not the type it claimed, an image that will not decode
 — is final, and the parts go.
 
+**What's on its way into a message** (`unsent.rs`, #503). A slot reserves its declared
+size against the pool at step 2, before a byte moves, and a finished upload that never
+reaches step 6 is on no message: neither is in the media collection or the host's to
+delete. One member asking for slot after slot without sending anything could hold the
+whole pool. So they keep rules of their own:
+
+- **A cap per member.** One member's pending slots can add up to 1 GB
+  (`MAX_GOING_UP_BYTES`, a little over two of the biggest files). Past it the slot is
+  refused with `QUOTA_EXCEEDED`, worded as *your* uploads. It is a fixed figure, not a
+  share of the pool: a share small enough to matter on a small pool would leave no
+  room for one 500 MB file. The cap and the pool are counted and the slot inserted in
+  one transaction on the single writer, so twenty requests at once are checked one
+  after another.
+- **An hour of silence releases a slot.** A pending upload whose newest part (or, with
+  none, whose slot) is over an hour old is released. On disk that is the newest file
+  time in its part directory, where a part still streaming in is a file whose time
+  moves with every write; on S3 it is the newest part's `LastModified`. This runs on
+  every `POST /uploads`, before the cap is counted, and every fifteen minutes on a clock
+  of its own in the sweeper's task (`expiry::spawn`, below).
+- **A week for a finished upload nobody posts**, the sweeper's third rule below.
+- **A removed member's go with them**: their pending slots are released and their
+  unposted files deleted, but not an emoji's picture, which is the server's.
+
+**Released is not forgotten.** Releasing a slot (after an hour of silence, on
+`DELETE /uploads/:id`, or on removing its member) gives its space back at once and
+discards the parts that arrived, but keeps the row, as state `released`, until the slot
+is two days old. On S3 the client PUTs straight at the bucket with links signed for a
+day, and the bucket takes a part from anybody holding one whatever the server has
+decided since: a laptop that wakes after an hour, or somebody doing it on purpose, can
+still land bytes. Forgetting the row at once would leave those in the bucket forever,
+counted nowhere. At two days every link has expired, so the parts are discarded once
+more and only then does the row go; a failed upload's row goes the same way. A
+`released` row counts against nothing (the pool and the cap count `pending` and
+`complete` only), the local part listener refuses it, and `complete` on it is
+`NOT_FOUND`.
+
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
 simply has no poster. The published image installs them. The file they read is an
@@ -747,8 +786,11 @@ It runs at startup and every six hours, in batches, and takes three kinds of obj
   and neither the stream nor the media collection will ever draw what it carried again,
   so the bytes are unreachable and still counted against the pool. A star does not hold
   one of these: a star stops a file ageing out, and this is not ageing out.
-- **finished uploads that never became a message**, once they are past the same window.
-  The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
+- **finished uploads that never became a message**, once they are a week old
+  (`unsent::UNPOSTED_DAYS`), or past the file window if that is shorter. Like the
+  deleted-message rule, this is not ageing out and `off` does not stop it: nothing will
+  ever show such a file. Uploads that never *completed* are released after an hour of
+  silence (above).
 
 A file a status picture pointed at used to be kept at any age. Status pictures are
 gone (#269), so such a file is now an upload that never became a message, and the

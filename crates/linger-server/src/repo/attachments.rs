@@ -137,8 +137,10 @@ pub async fn hydrate(
 ///
 /// In-flight uploads count. Otherwise a full server would hand out slots for
 /// another fifty files and only notice when the last byte of each arrived.
+/// Any executor, so a new slot can be counted and reserved in one transaction
+/// (`routes::uploads`).
 #[allow(clippy::cast_sign_loss)]
-pub async fn pool_used(db: &SqlitePool) -> Result<u64, ApiError> {
+pub async fn pool_used<'e>(db: impl sqlx::SqliteExecutor<'e>) -> Result<u64, ApiError> {
     let (used,): (i64,) = sqlx::query_as(
         "SELECT COALESCE(SUM(size_bytes), 0) FROM attachments WHERE state IN ('pending','complete')",
     )

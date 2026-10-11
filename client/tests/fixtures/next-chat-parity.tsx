@@ -13,7 +13,8 @@
  * - `?hang`: a send is never answered; `?offline`: a send can't reach the server.
  * - `?uploadrefuse`: the server refuses every file before it goes up.
  * - `?holdparts`: a file's bytes wait at the file store until
- *   `window.parity.release()`, so it shows as going up.
+ *   `window.parity.release()`, so it shows as going up; bytes the window
+ *   stops sending are written down as `stopped PUT …`.
  * - `?flakystore`: the file store refuses each part the first time it's sent.
  *
  * `window.parity.clipboard(bytes)` puts a picture on the desktop shell's
@@ -210,8 +211,18 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     }
   }
   if (url.origin === SERVER && url.pathname.startsWith("/api/v1/store/") && method === "PUT") {
-    desktop.note(`PUT ${url.pathname.slice("/api/v1".length)}`);
-    if (query.has("holdparts")) await parts;
+    const where = url.pathname.slice("/api/v1".length);
+    desktop.note(`PUT ${where}`);
+    if (query.has("holdparts")) {
+      // Held bytes let go when the window stops sending them, as a real
+      // request does (#503).
+      try {
+        await Promise.race([parts, unanswered(init?.signal)]);
+      } catch (error) {
+        desktop.note(`stopped PUT ${where}`);
+        throw error;
+      }
+    }
     if (query.has("flakystore") && !refusedOnce.has(url.pathname)) {
       refusedOnce.add(url.pathname);
       return new Response("the store hiccuped", { status: 500 });

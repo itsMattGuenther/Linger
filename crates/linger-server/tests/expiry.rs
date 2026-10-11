@@ -287,7 +287,8 @@ async fn a_deleted_message_takes_its_file_with_it() {
 }
 
 /// A file somebody uploaded and never posted has nobody waiting for it either.
-/// The 48-hour sweep in `routes::uploads` only takes *unfinished* ones.
+/// Its own window, a week, is in `uploads.rs` (#503); unfinished ones are
+/// `unsent`'s.
 #[tokio::test]
 async fn a_finished_upload_that_never_became_a_message_ages_out_too() {
     let (server, token, _room) = fixture(|_| {}).await;
