@@ -754,7 +754,7 @@ A file a status picture pointed at used to be kept at any age. Status pictures a
 gone (#269), so such a file is now an upload that never became a message, and the
 third rule takes it. Deletion is bytes first, row second — the other order can lose
 an object with nothing left pointing at it, and a crash between the two leaves a row the
-next pass finishes.
+next pass finishes. Each pass also takes export archives a week old (below).
 
 **Exports are the one path that brings bytes back to the app host.** An archive
 (`export.rs`, SPEC §4.11) is built in scratch under `{data_dir}/staging` and then stored
@@ -766,6 +766,34 @@ member's visible data on local disk while it builds, and costs a full download o
 data in egress (free on R2, billed on plain S3). The scratch is deleted when the job ends
 and the finished zip lives in the bucket, but a host sizing an S3-backed box should size
 the staging disk for the largest export, not only for the uploads in flight.
+
+**An archive lasts a week** (#504, SPEC §4.11). Before, nothing removed one but the same
+member exporting again, so each member who had ever exported kept a copy of the whole
+server on the disk, or in the bucket, for good. Now:
+
+- The sweeper takes an archive `export::KEPT_FOR_MS` (seven days) after `finished_at`,
+  bytes first, on either backend, and failed jobs as old with it. This is not
+  `LINGER_FILE_EXPIRY_DAYS` and is not turned off with it. `GET /export/:job_id` says
+  when (`expires_at`), and the app shows it.
+- Removing a member deletes their archive and its job.
+- `POST /export` is refused with `QUOTA_EXCEEDED` (507) when the disk under `staging/`
+  has less free than the archive needs: the files it carries, twice that on `s3`, plus
+  256 MB of headroom for the transcripts and for SQLite. On `local`, the member's own
+  archive, which a new one replaces, counts as free. The check runs again when a queued
+  job gets its turn, because members asking at once all pass it at the door. A server
+  that can't measure free space (anything but Unix) skips it. The route takes the
+  hour's token before it starts and gives it back when the export is refused
+  (`RateLimiter::refund`), so the limit stays race-free and a refusal for room doesn't
+  spend the member's hour.
+- At startup, before anything is served, `main` runs `export::recover`: jobs left
+  `queued` or `running` are marked failed, and everything in `staging/` is deleted.
+  Nothing can be using it yet, and an export killed mid-zip otherwise left up to a whole
+  archive's worth of scratch there. A job writes its `object_key` when it starts
+  building, so a process stopped between storing an archive and marking it complete
+  leaves a row that says where the bytes are; the sweeper and the member's next export
+  delete by that column.
+- A job whose row was deleted while it built (the member asked again, or was removed)
+  deletes the archive it stored instead of leaving it with nothing pointing at it.
 
 **The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not

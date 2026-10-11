@@ -3,7 +3,7 @@
 
 use std::io::BufRead;
 
-use linger_server::{db, display, expiry, reset};
+use linger_server::{db, display, expiry, export, reset};
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "\
@@ -193,13 +193,28 @@ async fn serve() -> anyhow::Result<()> {
         println!("  └─────────────────────────────────────────────────\n");
     }
 
+    // Exports cut off by the last stop are marked failed and their scratch is
+    // cleared (#504). Before anything is served: `staging/` is also where an
+    // S3 upload is gathered while somebody waits on it.
+    match export::recover(&state).await {
+        Ok(recovered) if recovered == export::Recovered::default() => {}
+        Ok(recovered) => tracing::info!(
+            jobs = recovered.jobs,
+            scratch = recovered.scratch,
+            "cleared up exports the last run left unfinished"
+        ),
+        // Not worth refusing to start over: the cost is disk, not data.
+        Err(err) => tracing::warn!(error = %err, "could not clear up unfinished exports"),
+    }
+
     // A *scheduled* background job (ARCHITECTURE §1): files age out
     // at LINGER_FILE_EXPIRY_DAYS unless they are starred or on a pinned
-    // message. It sweeps once now and then every few hours, and it lives here
-    // rather than in `AppState` so that building the state — which every
-    // integration test does — never starts a task nobody asked for. Exports
-    // (T-801) are background work too, but one is spawned per request rather
-    // than running on a clock.
+    // message, and export archives go a week after they finish (#504). It
+    // sweeps once now and then every few hours, and it lives here rather than
+    // in `AppState` so that building the state — which every integration test
+    // does — never starts a task nobody asked for. Building an export (T-801)
+    // is background work too, but one is spawned per request rather than
+    // running on a clock.
     let _sweeper = expiry::spawn(state.clone());
     // Polls close on their own when their time is up (#474): once now, for
     // any that ran out while the server was down, then every half minute.

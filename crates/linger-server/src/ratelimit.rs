@@ -52,6 +52,18 @@ impl RateLimiter {
             Err((missing / rate_per_sec * 1000.0).ceil() as u64)
         }
     }
+
+    /// Give back the token a [`check`](Self::check) just took, for an action
+    /// that turned out not to happen.
+    ///
+    /// Taking first and refunding on refusal, rather than asking first and
+    /// taking later, keeps the limit race-free: two requests at once can't
+    /// both see a token and both go ahead. Never above the bucket's capacity.
+    pub fn refund(&self, key: &str, limit: (u32, u64)) {
+        if let Some(mut bucket) = self.buckets.get_mut(key) {
+            bucket.tokens = (bucket.tokens + 1.0).min(f64::from(limit.0));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -80,6 +92,25 @@ mod tests {
         }
         assert!(rl.check("login:a", (5, 60)).is_err());
         assert!(rl.check("login:b", (5, 60)).is_ok());
+    }
+
+    #[test]
+    fn a_refund_gives_back_one_token_and_no_more() {
+        let rl = RateLimiter::new();
+        assert!(rl.check("k", (1, 3_600)).is_ok());
+        assert!(rl.check("k", (1, 3_600)).is_err());
+        rl.refund("k", (1, 3_600));
+        assert!(rl.check("k", (1, 3_600)).is_ok());
+        assert!(rl.check("k", (1, 3_600)).is_err());
+        // A full bucket stays full: refunding twice is not a second token.
+        let full = RateLimiter::new();
+        assert!(full.check("k", (1, 3_600)).is_ok());
+        full.refund("k", (1, 3_600));
+        full.refund("k", (1, 3_600));
+        assert!(full.check("k", (1, 3_600)).is_ok());
+        assert!(full.check("k", (1, 3_600)).is_err());
+        // A key it never took from is left alone.
+        rl.refund("never", (1, 3_600));
     }
 
     #[test]

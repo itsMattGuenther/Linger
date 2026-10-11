@@ -1039,6 +1039,13 @@ pub struct ExportJob {
     /// 0.0–1.0.
     pub progress: f32,
     pub url: Option<String>,
+    /// When the server deletes the archive and `url` stops working (unix
+    /// ms). Set alongside `url`: an archive is something to download, not
+    /// something the server keeps (SPEC §4.11, #504). A server from before
+    /// archives expired leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub expires_at: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------

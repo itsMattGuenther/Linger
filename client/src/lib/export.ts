@@ -17,6 +17,7 @@
  */
 import type { ExportJob } from "../generated/ExportJob";
 import { ApiError, type AuthedApi, TransportError } from "./api";
+import { closesWhen } from "./time";
 import { absoluteUrl } from "./url";
 
 /** How often to ask. Slow enough to be polite, fast enough to feel alive. */
@@ -26,7 +27,8 @@ export const POLL_MS = 1500;
 export type ExportPhase =
   | { kind: "idle" }
   | { kind: "working"; progress: number }
-  | { kind: "ready"; url: string }
+  /** `expiresAt` is when the server deletes it, or null from a server that keeps it (#504). */
+  | { kind: "ready"; url: string; expiresAt: number | null }
   | { kind: "waiting"; retryAfterMs: number }
   | { kind: "failed"; reason: string };
 
@@ -43,8 +45,11 @@ export function comeBackIn(retryAfterMs: number): string {
   return "in about an hour";
 }
 
-/** The line under the button. */
-export function exportLine(phase: ExportPhase): string {
+/**
+ * The line under the button. `now` is for saying when a ready archive's link
+ * stops working: the server keeps it a week, then deletes it (#504).
+ */
+export function exportLine(phase: ExportPhase, now: number = Date.now()): string {
   switch (phase.kind) {
     case "idle":
       return "";
@@ -53,7 +58,9 @@ export function exportLine(phase: ExportPhase): string {
         ? `Building your archive… ${Math.round(phase.progress * 100)}%`
         : "Building your archive…";
     case "ready":
-      return "Your archive is ready.";
+      return phase.expiresAt === null
+        ? "Your archive is ready."
+        : `Your archive is ready. The link stops working ${closesWhen(phase.expiresAt, now)}.`;
     case "waiting":
       return `You already asked for one recently. You can ask again ${comeBackIn(
         phase.retryAfterMs,
@@ -69,7 +76,7 @@ export function phaseOf(job: ExportJob): ExportPhase {
     case "complete":
       return job.url === null
         ? { kind: "failed", reason: "The server finished but sent nowhere to get it." }
-        : { kind: "ready", url: job.url };
+        : { kind: "ready", url: job.url, expiresAt: job.expires_at ?? null };
     case "failed":
       return { kind: "failed", reason: "The server couldn't build the archive." };
     case "queued":

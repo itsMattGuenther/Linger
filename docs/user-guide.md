@@ -988,6 +988,9 @@ server to still exist**, which is the entire point.
 everything**, wait (it takes a moment on a busy server), then download it. The file opens in your
 normal browser's downloads, like anything else you download.
 
+The server keeps your archive for a week, then deletes it. The app says when the
+link stops working, so download it before then. If you miss it, export again.
+
 You can ask for one an hour. If you ask again too soon the app tells you when
 you can come back.
 

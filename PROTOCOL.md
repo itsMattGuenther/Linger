@@ -985,7 +985,7 @@ POST   /invites          { expires_in_hours?, max_uses? }   → Invite
 DELETE /invites/:code                                       → 204
 
 POST /export             → { job_id }                        # any member, 1/hour
-GET  /export/:job_id     → { job_id, state, progress, url? } # the asker's own only
+GET  /export/:job_id     → { job_id, state, progress, url?, expires_at? } # the asker's own only
 POST /knock              { target_user_id }                 → 204   # 3/hour per target
 GET  /voice/ice          → { servers: IceServer[], ttl_secs } # the voice relay, for you
 DELETE /rooms/:id/voice/:user_id → 204   # host or co-host: take them out of that room's voice (#423)
@@ -1039,6 +1039,21 @@ there is no host approval anywhere in this flow and there must never be one.
 For the same reason, one archive builds at a time across the whole server: a
 job waits in `queued` (progress `0.0`) until the one ahead of it finishes, so a
 client must not treat a long `queued` as a failure.
+
+**An archive lasts a week** (#504). `expires_at` (unix ms) comes with `url`:
+when the server deletes the archive, a week after it finished. After that the
+`url` is a `404`, and so is asking about the job. Removing a member deletes
+their archive and job at once. A server from before archives expired leaves
+`expires_at` out, and a client must not invent one. A job cut off by a server
+restart is `failed` from the next start, and the member can ask again.
+
+`POST /export` is refused with `QUOTA_EXCEEDED` (HTTP 507) when the server's
+disk can't hold the archive, with a `message` that says so in words; nothing is
+started, the member's current archive is kept, and the refusal doesn't count as
+their export for the hour, so they can ask again once there's room. A job that passed that check
+and waited in `queued` is checked again when its turn comes, and is `failed` if
+the room has gone. Like a rate-limit refusal, this is not permission: it keeps a
+full disk from stopping the server.
 
 **Knock** (SPEC §4.9, T-1101). One member nudges one member. The target has to
 be a member of this server — a stranger and somebody the host removed are both

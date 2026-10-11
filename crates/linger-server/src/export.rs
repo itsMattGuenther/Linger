@@ -11,13 +11,15 @@
 //! - **A background job, not a request.** A server with a year of photos cannot
 //!   answer inside one HTTP request, so `POST /export` writes a row, spawns a
 //!   task and hands back an id. The row *is* the job: progress lives in the
-//!   database, not in memory, so a job interrupted by a restart is a stalled
-//!   row somebody can see rather than a client polling a job that no longer
-//!   exists.
-//! - **One archive per member.** Asking again deletes the previous archive's
-//!   bytes first. Otherwise a server accumulates a complete copy of itself per
-//!   member per request, and the feature that is supposed to protect a host
-//!   fills their disk instead.
+//!   database, not in memory, so a job interrupted by a restart is a row the
+//!   next start marks failed (`recover`) rather than a client polling a job
+//!   that no longer exists.
+//! - **One archive per member, for a week.** Asking again deletes the previous
+//!   archive's bytes first, removing the member deletes it, and the sweeper
+//!   takes it a week after it finished (#504). Otherwise a server accumulates
+//!   a complete copy of itself per member, and the feature that is supposed to
+//!   protect a host fills their disk instead. For the same reason an export the
+//!   disk can't hold is refused before it starts.
 //! - **One archive builds at a time, server-wide.** The per-member limits do
 //!   not stop twenty members asking in the same minute, and every archive being
 //!   built holds a copy of what it carries in scratch — twice over on S3, where
@@ -40,6 +42,7 @@ use linger_core::wire::{ExportJob, ExportState, Message, Room, RoomKind, User};
 use linger_core::{ExportId, MessageId, RoomId, UserId};
 use sqlx::Row;
 
+use crate::config::Storage;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -60,6 +63,24 @@ const BATCH: u32 = 500;
 /// the peak scratch an export can take is then one member's archive, whatever
 /// everybody else does, and nobody is waiting on anything but time.
 pub const BUILDING_AT_ONCE: usize = 1;
+
+/// How long a finished archive is kept before the sweeper deletes it: a week
+/// (#504).
+///
+/// An archive is something to download, not something the server keeps. Most
+/// people download theirs within minutes of asking. A week still covers
+/// somebody who asks on a Friday and gets to it on Monday, or whose download
+/// broke off and needs resuming, without every member's copy of the whole
+/// server sitting on the host's disk for good. Anybody who misses it asks
+/// again; the limit on that is an hour.
+pub const KEPT_FOR_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// Free space an export leaves the disk on top of the archive itself.
+///
+/// The estimate counts the files and not the transcripts, which compress to
+/// little; this covers them, and leaves SQLite room to keep writing while the
+/// archive builds. A full disk stops the database, and the server with it.
+const HEADROOM_BYTES: u64 = 256 * 1024 * 1024;
 
 /// Where an archive's bytes live. Not an `attachments` key: an export is not
 /// part of the media collection, does not count against `LINGER_POOL_BYTES`,
@@ -87,8 +108,14 @@ fn serve_as(filename: &str) -> ServeAs {
 /// The previous one goes first, bytes and row both. A member has one archive,
 /// which is the whole server; keeping every archive they ever asked for would
 /// be a way to fill a host's disk by pressing a button repeatedly.
+///
+/// Refused, before anything is written or deleted, when the disk can't hold
+/// the archive (#504). A refusal must not cost the member the archive they
+/// already have.
 pub async fn start(state: &AppState, user_id: UserId) -> Result<ExportId, ApiError> {
-    forget_previous(state, user_id).await?;
+    let media = media_rows(state, user_id).await?;
+    check_room(state, &media, replaced_bytes(state, user_id).await?).await?;
+    forget(state, user_id).await?;
 
     let id = ExportId::new();
     sqlx::query(
@@ -125,10 +152,15 @@ pub async fn start(state: &AppState, user_id: UserId) -> Result<ExportId, ApiErr
     Ok(id)
 }
 
-/// Delete this member's previous archive, bytes before row — the same order the
+/// Delete this member's archive and job, bytes before row — the same order the
 /// expiry sweeper uses, and for the same reason: the other way round can leave
 /// an object with nothing pointing at it.
-async fn forget_previous(state: &AppState, user_id: UserId) -> Result<(), ApiError> {
+///
+/// Asking again does this, and so does removing the member (#504): somebody
+/// who can no longer sign in must not keep a working link to the whole server.
+/// A job still building when its row goes notices at the end and deletes what
+/// it stored (`run`).
+pub async fn forget(state: &AppState, user_id: UserId) -> Result<(), ApiError> {
     let keys: Vec<String> = sqlx::query_scalar(
         "SELECT object_key FROM exports WHERE user_id = ? AND object_key IS NOT NULL",
     )
@@ -151,6 +183,180 @@ async fn forget_previous(state: &AppState, user_id: UserId) -> Result<(), ApiErr
     Ok(())
 }
 
+/// One pass of the archive half of the sweeper (`expiry.rs`): every archive
+/// past its week goes, bytes before row, and so does every failed job as old,
+/// which has nobody left asking about it. Returns how many archives went.
+///
+/// Not the host's to turn off, unlike file expiry: an archive is a copy of
+/// files the server already keeps, so taking it loses nothing.
+pub async fn sweep(state: &AppState) -> Result<u64, ApiError> {
+    let rows: Vec<(Vec<u8>, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, object_key, state FROM exports
+          WHERE state IN ('complete', 'failed') AND finished_at < ?",
+    )
+    .bind(now_ms() - KEPT_FOR_MS)
+    .fetch_all(&state.db.read)
+    .await?;
+
+    let mut archives = 0;
+    for (id, key, job_state) in rows {
+        if let Some(key) = &key {
+            // A store that can't delete right now keeps the row, so the next
+            // pass knows what to try again.
+            if let Err(err) = state.storage.delete_object(key).await {
+                tracing::warn!(%key, error = %err, "could not delete an expired export");
+                continue;
+            }
+        }
+        sqlx::query("DELETE FROM exports WHERE id = ?")
+            .bind(id)
+            .execute(&state.db.write)
+            .await?;
+        if job_state == "complete" {
+            archives += 1;
+        }
+    }
+    Ok(archives)
+}
+
+/// What a restart left behind and [`recover`] put right, for the log.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Recovered {
+    /// Jobs that were waiting or building, now failed.
+    pub jobs: u64,
+    /// Entries cleared out of `staging/`.
+    pub scratch: u64,
+}
+
+/// Put right what the last run of the server left behind. `main` calls this
+/// once, before the server answers anybody (#504).
+///
+/// A job's worker is a task in the server process, so a job that was waiting
+/// or building when the process stopped has nobody working on it. Left alone
+/// it says `running` forever, and the person asking waits forever. It is marked
+/// failed, which the app shows as a failure the person can try again; an
+/// archive it stored before it could say so is under the `object_key` it
+/// claimed, which the sweeper and the member's next export both delete.
+///
+/// Everything in `staging/` is scratch for a job or for an S3 upload being
+/// gathered, and at startup there are neither, so all of it goes. Left there,
+/// an export killed mid-zip keeps up to a whole archive's worth of disk for
+/// good.
+pub async fn recover(state: &AppState) -> anyhow::Result<Recovered> {
+    let failed = sqlx::query(
+        "UPDATE exports SET state = 'failed', error = ?, finished_at = ?
+          WHERE state IN ('queued', 'running')",
+    )
+    .bind("the server restarted before it finished")
+    .bind(now_ms())
+    .execute(&state.db.write)
+    .await?;
+
+    let mut scratch = 0;
+    let staging = state.config.staging_dir();
+    match tokio::fs::read_dir(&staging).await {
+        Ok(mut entries) => {
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                // The folder itself stays: on a host that mounted it from
+                // another disk, it is a mount point.
+                if entry.file_type().await?.is_dir() {
+                    tokio::fs::remove_dir_all(&path).await?;
+                } else {
+                    tokio::fs::remove_file(&path).await?;
+                }
+                scratch += 1;
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    Ok(Recovered {
+        jobs: failed.rows_affected(),
+        scratch,
+    })
+}
+
+/// The bytes this member's current archive holds on this machine's disk,
+/// which starting a new export frees before it builds. Nothing on S3, where
+/// the archive is in the bucket.
+async fn replaced_bytes(state: &AppState, user_id: UserId) -> Result<u64, ApiError> {
+    if state.config.storage == Storage::S3 {
+        return Ok(0);
+    }
+    let bytes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(size_bytes), 0) FROM exports
+          WHERE user_id = ? AND state = 'complete'",
+    )
+    .bind(user_id.to_vec())
+    .fetch_one(&state.db.read)
+    .await?;
+    Ok(u64::try_from(bytes).unwrap_or(0))
+}
+
+/// How much free disk building an archive of these files takes, headroom
+/// included. On `local` the files are read where they are, so it is about the
+/// finished zip; on `s3` every file is downloaded into scratch first and then
+/// zipped beside itself, so twice that (ARCHITECTURE §8).
+fn room_needed(media: &[MediaRow], on_s3: bool) -> u64 {
+    let files = media.iter().fold(0_u64, |sum, item| {
+        sum.saturating_add(u64::try_from(item.size_bytes).unwrap_or(0))
+    });
+    let copies = if on_s3 { 2 } else { 1 };
+    files.saturating_mul(copies).saturating_add(HEADROOM_BYTES)
+}
+
+/// Refuse, in words, an archive the disk can't hold (#504).
+///
+/// `freed` is what starting it deletes first. A server that can't tell how
+/// much space it has refuses nobody: the check is there to keep a full disk
+/// from stopping the server, not to stand between a member and their archive.
+async fn check_room(state: &AppState, media: &[MediaRow], freed: u64) -> Result<(), ApiError> {
+    let needed = room_needed(media, state.config.storage == Storage::S3);
+    let staging = state.config.staging_dir();
+    let at = if tokio::fs::try_exists(&staging).await.unwrap_or(false) {
+        staging
+    } else {
+        state.config.data_dir.clone()
+    };
+    let Some(free) = free_bytes(at).await else {
+        return Ok(());
+    };
+    if free.saturating_add(freed) >= needed {
+        return Ok(());
+    }
+    Err(ApiError::quota_exceeded(format!(
+        "The server doesn't have room to build your archive right now. It needs \
+         about {} of free disk space. Try again later, or ask the host to free \
+         some up.",
+        human_size(i64::try_from(needed).unwrap_or(i64::MAX))
+    )))
+}
+
+/// Free bytes on the disk under `path` that this process may use, or `None`
+/// where the platform can't say. Asked on a blocking thread, since it is a
+/// filesystem call.
+async fn free_bytes(path: PathBuf) -> Option<u64> {
+    tokio::task::spawn_blocking(move || available_bytes(&path))
+        .await
+        .ok()
+        .flatten()
+}
+
+#[cfg(unix)]
+fn available_bytes(path: &Path) -> Option<u64> {
+    let disk = rustix::fs::statvfs(path).ok()?;
+    Some(disk.f_bavail.saturating_mul(disk.f_frsize))
+}
+
+/// The published server is Linux only; elsewhere it builds for development
+/// and does without the check.
+#[cfg(not(unix))]
+fn available_bytes(_path: &Path) -> Option<u64> {
+    None
+}
+
 /// One member's view of one job. `None` covers both "no such job" and
 /// "somebody else's job" on purpose — an archive of the whole server is a
 /// private thing to be building, and which of the two it was is not the
@@ -160,27 +366,37 @@ pub async fn job(
     id: ExportId,
     user_id: UserId,
 ) -> Result<Option<ExportJob>, ApiError> {
-    let row =
-        sqlx::query("SELECT state, progress, object_key FROM exports WHERE id = ? AND user_id = ?")
-            .bind(id.to_vec())
-            .bind(user_id.to_vec())
-            .fetch_optional(&state.db.read)
-            .await?;
+    let row = sqlx::query(
+        "SELECT state, progress, object_key, finished_at FROM exports
+          WHERE id = ? AND user_id = ?",
+    )
+    .bind(id.to_vec())
+    .bind(user_id.to_vec())
+    .fetch_optional(&state.db.read)
+    .await?;
 
     let Some(row) = row else { return Ok(None) };
     let state_text: String = row.get("state");
-    let key: Option<String> = row.get("object_key");
+    let job_state = match state_text.as_str() {
+        "queued" => ExportState::Queued,
+        "running" => ExportState::Running,
+        "complete" => ExportState::Complete,
+        _ => ExportState::Failed,
+    };
+    // A job knows its key from the moment it starts building, so the key
+    // alone doesn't mean there is anything to download.
+    let done = job_state == ExportState::Complete;
+    let key: Option<String> = row.get::<Option<String>, _>("object_key").filter(|_| done);
+    let finished_at: Option<i64> = row.get("finished_at");
     Ok(Some(ExportJob {
         job_id: id,
-        state: match state_text.as_str() {
-            "queued" => ExportState::Queued,
-            "running" => ExportState::Running,
-            "complete" => ExportState::Complete,
-            _ => ExportState::Failed,
-        },
+        state: job_state,
         #[allow(clippy::cast_possible_truncation)]
         progress: row.get::<f64, _>("progress") as f32,
         url: key.map(|key| format!("{}/objects/{key}", state.config.media_origin())),
+        expires_at: finished_at
+            .filter(|_| done)
+            .map(|finished| finished + KEPT_FOR_MS),
     }))
 }
 
@@ -196,15 +412,31 @@ async fn set_progress(state: &AppState, id: ExportId, progress: f64) {
 async fn run(state: &AppState, id: ExportId, asker: UserId) -> anyhow::Result<()> {
     // While this job waited its turn, the member may have asked again, and
     // asking again deletes this row. Building it anyway would store an archive
-    // nothing points at — the leak `forget_previous` exists to prevent.
-    let claimed =
-        sqlx::query("UPDATE exports SET state = 'running' WHERE id = ? AND state = 'queued'")
-            .bind(id.to_vec())
-            .execute(&state.db.write)
-            .await?;
+    // nothing points at — the leak `forget` exists to prevent.
+    //
+    // The key is written now rather than at the end, so a process stopped
+    // between storing the archive and saying so leaves a row that knows where
+    // the bytes are (`recover`).
+    let key = object_key(id);
+    let claimed = sqlx::query(
+        "UPDATE exports SET state = 'running', object_key = ?
+          WHERE id = ? AND state = 'queued'",
+    )
+    .bind(&key)
+    .bind(id.to_vec())
+    .execute(&state.db.write)
+    .await?;
     if claimed.rows_affected() == 0 {
         tracing::info!(export = %id, "export was replaced while it waited; not building it");
         return Ok(());
+    }
+
+    // Checked again now, not only at the door: members asking at once all
+    // pass there, since nothing is built yet, and each archive that finishes
+    // takes the room the next one was counting on.
+    let media = media_rows(state, asker).await?;
+    if let Err(refused) = check_room(state, &media, 0).await {
+        anyhow::bail!(refused.message);
     }
 
     // Scratch, not the data directory: everything here is thrown away, and
@@ -212,7 +444,7 @@ async fn run(state: &AppState, id: ExportId, asker: UserId) -> anyhow::Result<()
     tokio::fs::create_dir_all(state.config.staging_dir()).await?;
     let scratch = tempfile::tempdir_in(state.config.staging_dir())?;
 
-    let plan = assemble(state, id, asker, scratch.path()).await?;
+    let plan = assemble(state, id, asker, media, scratch.path()).await?;
     let filename = archive_name(state).await;
 
     // The zip itself is synchronous work on a lot of bytes, so it happens on a
@@ -224,26 +456,31 @@ async fn run(state: &AppState, id: ExportId, asker: UserId) -> anyhow::Result<()
     set_progress(state, id, 0.95).await;
 
     let size = tokio::fs::metadata(&zip_path).await?.len();
-    let key = object_key(id);
     state
         .storage
         .put_object(&key, &zip_path, &serve_as(&filename))
         .await?;
 
     #[allow(clippy::cast_possible_wrap)]
-    sqlx::query(
+    let finished = sqlx::query(
         "UPDATE exports
-         SET state = 'complete', progress = 1.0, object_key = ?, size_bytes = ?,
-             filename = ?, finished_at = ?
+         SET state = 'complete', progress = 1.0, size_bytes = ?, filename = ?,
+             finished_at = ?
          WHERE id = ?",
     )
-    .bind(&key)
     .bind(size as i64)
     .bind(&filename)
     .bind(now_ms())
     .bind(id.to_vec())
     .execute(&state.db.write)
     .await?;
+    if finished.rows_affected() == 0 {
+        // The row went while this built: the member asked again, or was
+        // removed (`forget`). Nothing points at what was just stored.
+        state.storage.delete_object(&key).await?;
+        tracing::info!(export = %id, "export was forgotten while it built; deleted it");
+        return Ok(());
+    }
 
     tracing::info!(export = %id, size_bytes = size, "export ready");
     Ok(())
@@ -300,7 +537,8 @@ struct Entry {
 /// Write every room, the media index and the read-me into `scratch`, and work
 /// out where each media file's bytes are.
 /// `asker` is who the archive is for, and every row that goes into it is
-/// chosen with them in mind (SPEC §4.13).
+/// chosen with them in mind (SPEC §4.13). `media` is [`media_rows`] for them,
+/// already read to check there is room for it.
 ///
 /// An export is the promise that leaving is possible, and it has to carry a
 /// person's whole conversation — including the DMs they were in, because those
@@ -312,6 +550,7 @@ async fn assemble(
     state: &AppState,
     id: ExportId,
     asker: UserId,
+    media: Vec<MediaRow>,
     scratch: &Path,
 ) -> anyhow::Result<Vec<Entry>> {
     let users = crate::repo::users::all(&state.db.read)
@@ -330,7 +569,6 @@ async fn assemble(
             .await
             .map_err(anyhowed)?,
     );
-    let media = media_rows(state, asker).await?;
 
     // Every attachment gets its name inside the archive up front, so a message
     // can link to a file the loop has not reached yet.
@@ -1219,5 +1457,35 @@ mod tests {
         let key = object_key(ExportId::new());
         assert!(key.starts_with("exports/"));
         assert!(key.ends_with(".zip"));
+    }
+
+    /// One file of `size` bytes, as `media_rows` hands it over.
+    fn file(size_bytes: i64) -> MediaRow {
+        MediaRow {
+            object_key: "objects/x".to_string(),
+            filename: "x.png".to_string(),
+            mime: "image/png".to_string(),
+            size_bytes,
+            uploader_id: UserId::new(),
+            room_id: None,
+            starred: false,
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn an_archive_needs_its_files_once_here_and_twice_on_s3() {
+        // Local reads the files where they are; S3 downloads them into
+        // scratch and zips them beside themselves (#504, ARCHITECTURE §8).
+        let media = [file(1000), file(500)];
+        assert_eq!(room_needed(&media, false), 1500 + HEADROOM_BYTES);
+        assert_eq!(room_needed(&media, true), 3000 + HEADROOM_BYTES);
+        assert_eq!(room_needed(&[], false), HEADROOM_BYTES);
+        // A size that makes no sense can't wrap round into "plenty of room".
+        assert_eq!(
+            room_needed(&[file(i64::MAX), file(i64::MAX)], true),
+            u64::MAX
+        );
+        assert_eq!(room_needed(&[file(-5)], false), HEADROOM_BYTES);
     }
 }

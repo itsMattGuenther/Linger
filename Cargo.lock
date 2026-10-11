@@ -1690,6 +1690,7 @@ dependencies = [
  "rand 0.8.7",
  "reqwest",
  "ring",
+ "rustix",
  "rusty-s3",
  "serde",
  "serde_json",
