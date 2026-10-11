@@ -14,7 +14,7 @@ import { uploadFile } from "../../../lib/upload";
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
-import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, setBlocked, useServers } from "../../../lib/gateway";
+import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, saveTimeZone, setBlocked, useServers } from "../../../lib/gateway";
 import { hostsHere, inviteUrl, moveRoom, signInLinkProblem, signInLinkWords, signInUrl } from "../../../lib/host";
 import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { loadNormalize } from "../../../lib/normalize";
@@ -482,6 +482,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             return problem;
           },
           saveStyle: (style) => said(saveStyle(api, { display_name: null, style, status: null, entrance_sound: null }), "Couldn't save your look."),
+          saveTimeZone: (zone) => said(saveTimeZone(api, zone), zone === "" ? "Couldn't turn off your local time." : "Couldn't show your local time."),
         },
       }}
       appearance={{

@@ -12,7 +12,7 @@ use crate::error::ApiError;
 use crate::{names, status_fields};
 
 const USER_SELECT: &str = "
-    SELECT u.id, u.username, u.display_name, u.is_host, u.is_cohost, u.last_seen_at,
+    SELECT u.id, u.username, u.display_name, u.is_host, u.is_cohost, u.last_seen_at, u.time_zone,
            s.font_key, s.weight, s.italic, s.fill_kind, s.fill_from, s.fill_to,
            s.effect, s.msg_font_key,
            g.user_id AS status_user, g.line, g.away_message, g.away_since,
@@ -90,6 +90,7 @@ fn row_to_user(row: &SqliteRow) -> Result<User, ApiError> {
         status,
         entrance_sound: row.get("sound_key"),
         last_seen_at: row.get("last_seen_at"),
+        time_zone: row.get("time_zone"),
     })
 }
 

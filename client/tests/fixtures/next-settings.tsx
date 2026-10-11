@@ -33,6 +33,9 @@
  *   database (#582); `overdue` is three days without one, `off` is a host who
  *   turned them off, and `full` adds a nearly full disk and file space.
  *
+ * - `?clock=America/Chicago` (any zone): "Show my local time" is on already,
+ *   with that zone (#604). Unset, it's off.
+ *
  * What the page was asked to do is written to `body[data-did]`, `|`-separated.
  */
 import { StrictMode, useState } from "react";
@@ -109,9 +112,11 @@ const fielded: User = query.has("fields") ? withFields(people.matt, ownFields(LO
 const pictured: User = query.has("picture")
   ? { ...fielded, status: fielded.status && { ...fielded.status, image_id: "img-porch", image_url: "/objects/im/g-/img-porch" } }
   : fielded;
-const matt: User = query.has("away")
+const awayOrNot: User = query.has("away")
   ? { ...pictured, status: pictured.status && { ...pictured.status, away_message: "walking the dog 🐕", away_since: NOW - HOUR } }
   : pictured;
+const clock = query.get("clock");
+const matt: User = clock === null ? awayOrNot : { ...awayOrNot, time_zone: clock };
 const cast: User[] = [people.eli, people.jules, people.dave, people.callie, people.sam, people.jen].map((person) =>
   LONG && person.id === "u-eli" ? { ...person, display_name: "Eli Bartholomew-Maximilian the Considerably Long" } : person,
 );
@@ -215,6 +220,12 @@ function Fixture() {
           saveStyle: async (style) => {
             const problem = await saving(`style:${JSON.stringify(style)}`);
             if (problem === null) setMe((held) => ({ ...held, style }));
+            return problem;
+          },
+          saveTimeZone: async (zone) => {
+            const problem = await saving(`clock:${zone}`);
+            if (problem === null)
+              setMe(({ time_zone: _, ...held }) => (zone === "" ? held : { ...held, time_zone: zone }));
             return problem;
           },
         },

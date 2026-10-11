@@ -6,4 +6,10 @@ import type { UserStatus } from "./UserStatus";
  * `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects;
  * `entrance_sound: ""` clears the sound (PROTOCOL §5).
  */
-export type UpdateMeRequest = { display_name: string | null, style: Style | null, status: UserStatus | null, entrance_sound: string | null, };
+export type UpdateMeRequest = { display_name: string | null, style: Style | null, status: UserStatus | null, entrance_sound: string | null, 
+/**
+ * "Show my local time" (#604): a time-zone name turns it on or moves
+ * it, `""` turns it off. Absent or null leaves it as it is, so an app
+ * from before it never turns it off by saving something else.
+ */
+time_zone?: string, };
