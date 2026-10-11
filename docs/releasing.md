@@ -74,6 +74,8 @@ tag, after its own full CI run, publishes the server image to
 `ghcr.io/itsmattguenther/linger` as `0.3.6`, `0.3` and `latest`, for x86-64
 only (ARM64 went after 0.4.4, `docs/decisions.md`). Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.
+A pre-release tag (`v0.4.11-1`, a practice run of the release build) publishes
+no image, so it can't move `latest` (#597).
 
 **3. Check the draft.** All ten files are there (the `.exe`, `.msi`, AppImage,
 `.deb` and `.rpm`, each with its `.sig`), plus
