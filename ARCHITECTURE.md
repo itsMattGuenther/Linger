@@ -562,7 +562,8 @@ E2EE launders a false promise, which is worse than an honest limitation.
 - Force `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` on
   anything not on the image/video/audio allowlist.
 - Re-encode images server-side. This strips EXIF (spec §4.10) and neutralizes polyglot
-  files in one step.
+  files in one step. The picture is first turned the way its EXIF Orientation says
+  (#569): rotation applied, then stripped.
 - CSP on the app origin: no remote scripts or remote fonts. The shipped policy
   permits HTTPS and WSS origins generally, so members can connect to multiple
   self-hosted servers and fetch their media. It is not an allowlist of the
@@ -659,7 +660,8 @@ Never proxy bytes through the app server.
              returns { upload_id, url, method, headers, part_size }
 3. Client  → PUT direct to object store (multipart if > 8 MB, resumable)
 4. Client  → POST /uploads/{id}/complete
-5. Server  → verifies size, sniffs real MIME, re-encodes image (strips EXIF),
+5. Server  → verifies size, sniffs real MIME, re-encodes image (turns it as its EXIF
+             says, then strips EXIF),
              generates blurhash + poster frame + an image's display copy,
              sets state=complete
 6. Server  → attaches to message, fans out over gateway
@@ -725,7 +727,9 @@ px either.
 - **A still picture** counts the file, the decoded picture, the decoder's own working
   memory, the one full-size copy re-encoding makes (none when it already decodes as RGB
   for a JPEG, or RGBA for anything else), and the working memory of resizing it for its
-  display copy. `image` limits what the PNG decoder allocates but gives the JPEG and
+  display copy. A photo whose EXIF says to turn it a quarter (#569) is turned into a new
+  picture, so that counts as one more copy, and everything after is measured at the
+  turned size. `image` limits what the PNG decoder allocates but gives the JPEG and
   WebP decoders no limit, so what those hold was measured and is counted per pixel: a
   copy of the file for both; for a progressive JPEG, its coefficients, two bytes a pixel
   for each channel (a baseline JPEG, what cameras and phones write, needs none); for

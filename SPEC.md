@@ -566,7 +566,9 @@ carry sender feedback to a different person.
 - Resumable uploads
 - **EXIF stripped from all images on upload, always, no toggle.** Camera photos carry
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
-  an embarrassing bug.
+  an embarrassing bug. The one thing EXIF says that is kept is which way up the photo
+  goes: a picture is turned the way its Orientation tag says first, then stripped, so a
+  phone photo shows the way it was taken (#569).
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
 - A picture in a conversation or on a media tile is drawn from a copy the server
   makes, 960 px on its longest side; the viewer and downloads open the original.

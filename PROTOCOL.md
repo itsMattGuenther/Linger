@@ -823,6 +823,8 @@ type Attachment = {
 `mime`, `filename` and `size_bytes` on a finished attachment describe what the server
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
+A photo is turned the way its EXIF Orientation says before that, so `width` and `height`
+are as it is seen, and a client draws the stored picture as it is (#569).
 
 **Display copies (#382).** An image's `display_url` is the picture to draw where it is
 shown small: in a conversation and on a media tile. An engine that decodes the full

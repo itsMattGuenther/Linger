@@ -9,6 +9,8 @@
 //!    carries the GPS coordinates of the room the photo was taken in (SPEC
 //!    §4.10) — and destroys polyglots, files that are a valid image and a valid
 //!    something-else at the same time, in the same step. There is no toggle.
+//!    The one thing EXIF says that survives is which way up the photo goes: it
+//!    is turned that way first (#569).
 //! 3. **Describe it.** Dimensions, a blurhash to show while the real thing
 //!    loads, a poster frame and duration for video, and a display copy of a
 //!    large image to draw where it is shown small (#382). No transcoding in V1.
@@ -387,13 +389,20 @@ fn decode_limited(
 
 /// Decode a still picture inside `budget`, counting with it the file, what
 /// its decoder holds that `image` doesn't count, and the full-size copies the
-/// caller will make from it.
+/// caller will make from it. It comes back turned the way it is meant to be
+/// seen.
 ///
-/// `copies` is told the picture's size and the type it decodes as, read from
-/// its header alone, and answers how many bytes of copies will follow. Only
-/// what is left goes to the decoder, which counts the picture itself and what
-/// it allocates through `image`'s limits against that. A picture that would
-/// fit, but not with all the rest, is refused before any of it is decoded.
+/// `copies` is told the picture's size as it will be seen and the type it
+/// decodes as, read from its header alone, and answers how many bytes of
+/// copies will follow. Only what is left goes to the decoder, which counts the
+/// picture itself and what it allocates through `image`'s limits against
+/// that. A picture that would fit, but not with all the rest, is refused
+/// before any of it is decoded.
+///
+/// Many phones save a photo as the sensor saw it and add an EXIF Orientation
+/// tag saying how to turn it (#569). Re-encoding drops the EXIF, so the turn
+/// is made here, before anything is measured or drawn from the picture, or
+/// the photo would be stored on its side for good.
 fn decode_within(
     bytes: &[u8],
     budget: u64,
@@ -408,17 +417,42 @@ fn decode_within(
     };
     let first = reader()?;
     let format = first.format();
-    let header = first.into_decoder().map_err(|_| unreadable())?;
+    let mut header = first.into_decoder().map_err(|_| unreadable())?;
     let (width, height) = header.dimensions();
+    // A tag that can't be read is a picture shown as it was saved, as any
+    // viewer would show it, not a picture refused.
+    let orientation = header
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    // A quarter turn is made into a new picture beside the decoded one; a
+    // half turn or a flip is made in place.
+    let (seen_width, seen_height, turned) = if quarter_turn(orientation) {
+        (height, width, header.total_bytes())
+    } else {
+        (width, height, 0)
+    };
     let held = bytes.len() as u64
         + decoder_scratch(format, bytes, width, height)?
-        + copies(width, height, header.color_type());
+        + turned
+        + copies(seen_width, seen_height, header.color_type());
     drop(header);
     let left = budget.checked_sub(held).ok_or_else(unreadable)?;
 
     let mut reader = reader()?;
     reader.limits(limits(left));
-    reader.decode().map_err(|_| unreadable())
+    let mut picture = reader.decode().map_err(|_| unreadable())?;
+    picture.apply_orientation(orientation);
+    Ok(picture)
+}
+
+/// Whether showing a picture as it is meant to be seen turns it a quarter,
+/// swapping its width and height.
+fn quarter_turn(orientation: image::metadata::Orientation) -> bool {
+    use image::metadata::Orientation::{Rotate270, Rotate270FlipH, Rotate90, Rotate90FlipH};
+    matches!(
+        orientation,
+        Rotate90 | Rotate270 | Rotate90FlipH | Rotate270FlipH
+    )
 }
 
 /// What a decoder holds besides the picture it makes, where `image` gives it
@@ -885,6 +919,113 @@ mod tests {
         );
         let display = image::load_from_memory(&clean.display.unwrap()).unwrap();
         assert_eq!((display.width(), display.height()), (960, 720));
+    }
+
+    /// A phone photo as many phones save one (#569): 32 × 16 pixels in four
+    /// coloured quarters, red, green / blue, white, and an EXIF block whose
+    /// Orientation tag says how to turn it to show it the way it was taken.
+    fn photo_turned(orientation: u16) -> Vec<u8> {
+        use image::ImageEncoder;
+
+        let pixels = image::RgbImage::from_fn(32, 16, |x, y| match (x < 16, y < 8) {
+            (true, true) => image::Rgb([255, 0, 0]),
+            (false, true) => image::Rgb([0, 255, 0]),
+            (true, false) => image::Rgb([0, 0, 255]),
+            (false, false) => image::Rgb([255, 255, 255]),
+        });
+        // A little-endian TIFF header and one directory of one entry:
+        // Orientation (0x0112), a SHORT, one of it.
+        let mut exif = b"II*\0".to_vec();
+        exif.extend_from_slice(&8u32.to_le_bytes());
+        exif.extend_from_slice(&1u16.to_le_bytes());
+        exif.extend_from_slice(&0x0112u16.to_le_bytes());
+        exif.extend_from_slice(&3u16.to_le_bytes());
+        exif.extend_from_slice(&1u32.to_le_bytes());
+        exif.extend_from_slice(&orientation.to_le_bytes());
+        exif.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+
+        let mut out = Vec::new();
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 95);
+        encoder.set_exif_metadata(exif).unwrap();
+        encoder
+            .write_image(pixels.as_raw(), 32, 16, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        out
+    }
+
+    /// The colours at a picture's four corners, a few pixels in from each,
+    /// named for what they were: red, green, blue or white.
+    fn corners(picture: &image::DynamicImage) -> [&'static str; 4] {
+        let rgb = picture.to_rgb8();
+        let (w, h) = rgb.dimensions();
+        let name = |x: u32, y: u32| match rgb.get_pixel(x, y).0 {
+            [r, g, b] if r > 200 && g > 200 && b > 200 => "white",
+            [r, _, _] if r > 200 => "red",
+            [_, g, _] if g > 200 => "green",
+            [_, _, b] if b > 200 => "blue",
+            other => panic!("no clear colour at {x},{y}: {other:?}"),
+        };
+        [
+            name(3, 3),
+            name(w - 4, 3),
+            name(3, h - 4),
+            name(w - 4, h - 4),
+        ]
+    }
+
+    /// The photo is turned the way its EXIF says before anything else is
+    /// done to it, and the EXIF goes. 6 is a quarter turn clockwise, 8 a
+    /// quarter turn back, 3 a half turn. Corners are read top-left,
+    /// top-right, bottom-left, bottom-right.
+    #[test]
+    fn a_photo_is_turned_the_way_it_was_taken_and_keeps_no_exif() {
+        for (orientation, size, expected) in [
+            (1, (32, 16), ["red", "green", "blue", "white"]),
+            (6, (16, 32), ["blue", "red", "white", "green"]),
+            (8, (16, 32), ["green", "white", "red", "blue"]),
+            (3, (32, 16), ["white", "blue", "green", "red"]),
+        ] {
+            let (clean, bytes) = reencoded(&photo_turned(orientation), "image/jpeg").unwrap();
+            assert_eq!(
+                (clean.width, clean.height),
+                size,
+                "orientation {orientation}"
+            );
+            let stored = image::load_from_memory(&bytes).unwrap();
+            assert_eq!(
+                (stored.width(), stored.height()),
+                size,
+                "orientation {orientation}"
+            );
+            assert_eq!(corners(&stored), expected, "orientation {orientation}");
+
+            let mut decoder =
+                image::codecs::jpeg::JpegDecoder::new(std::io::Cursor::new(&bytes)).unwrap();
+            assert_eq!(
+                image::ImageDecoder::exif_metadata(&mut decoder).unwrap(),
+                None
+            );
+            assert!(!bytes.windows(6).any(|w| w == b"Exif\0\0"));
+        }
+    }
+
+    /// A quarter turn is made into a new picture beside the old one, so it
+    /// counts against the budget like any full-size copy (#487, #569). The
+    /// same photo upright fits in a budget of its file twice and its 1536
+    /// bytes of pixels; turned, it needs those 1536 again.
+    #[test]
+    fn turning_a_photo_counts_the_copy_it_takes() {
+        let upright = photo_turned(1);
+        let turned = photo_turned(6);
+        assert_eq!(upright.len(), turned.len());
+        let budget = 2 * upright.len() as u64 + 1536 + 768;
+        assert!(decode_within(&upright, budget, |_, _, _| 0).is_ok());
+        match decode_within(&turned, budget, |_, _, _| 0) {
+            Ok(_) => panic!("the turned copy wasn't counted"),
+            Err(refused) => assert_eq!(refused.message, "That image can't be read."),
+        }
+        let decoded = decode_within(&turned, budget + 1536, |_, _, _| 0).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (16, 32));
     }
 
     /// A picture that needs a copy made of it is still taken when the copy
