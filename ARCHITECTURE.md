@@ -321,6 +321,8 @@ CREATE TABLE attachments (
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
 CREATE INDEX idx_attachments_message ON attachments(message_id);   -- a message's files (#518)
+CREATE INDEX idx_attachments_media_order                           -- Media's order (#518)
+  ON attachments((starred_at IS NOT NULL), created_at, id) WHERE state = 'complete';
 
 -- One row per URL in a message body, re-extracted on every edit. This is what
 -- the media grid pages over for `kind=link`; the stream re-extracts client-side

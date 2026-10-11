@@ -7,38 +7,40 @@
 //! server, opened the way the server opens it. A change that quietly turns a
 //! lookup back into a read of a whole table fails here.
 
+use linger_core::wire::MediaKind;
+use linger_core::UserId;
 use sqlx::{Row, SqlitePool};
 use tempfile::TempDir;
 
 use crate::db::{self, Db};
+use crate::repo::media;
 
-/// A year of a small server at a fifth of the size the audit measured: four
-/// rooms and a DM, 20,000 messages, a file on every twentieth (a few of them
-/// starred), a link on every hundredth and a pin on every thousandth. The ids
-/// are UUIDv7-shaped — the millisecond first — so they sort by time the way
-/// real ones do.
+/// A year of a small server at a fifth of the size the audit measured (#518):
+/// twelve rooms and a DM, twenty people, 20,000 messages, a file on every
+/// twentieth (a few of them starred), a link on every hundredth and a pin on
+/// every thousandth. The ids are UUIDv7-shaped — the millisecond first — so
+/// they sort by time the way real ones do.
 const FILL: &str = "
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20)
 INSERT INTO users (id, username, display_name, password_hash, created_at)
-SELECT unhex(printf('%032X', n)), 'person' || n, 'Person ' || n, 'x', 0
-FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3);
+SELECT unhex(printf('%032X', i)), 'person' || i, 'Person ' || i, 'x', 0 FROM n;
 
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 13)
 INSERT INTO rooms (id, slug, name, position, created_at, kind, member_key)
-SELECT unhex(printf('%032X', n)),
-       'room-' || n, 'Room ' || n, n, 0,
-       CASE WHEN n = 5 THEN 'dm' ELSE 'room' END,
-       CASE WHEN n = 5 THEN 'dm-1-2' END
-FROM (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
-      UNION ALL SELECT 5);
+SELECT unhex(printf('%032X', i)), 'room-' || i, 'Room ' || i, i, 0,
+       CASE WHEN i = 13 THEN 'dm' ELSE 'room' END,
+       CASE WHEN i = 13 THEN 'dm-1-2' END
+FROM n;
 
 INSERT INTO room_members (room_id, user_id, created_at)
-VALUES (unhex(printf('%032X', 5)), unhex(printf('%032X', 1)), 0),
-       (unhex(printf('%032X', 5)), unhex(printf('%032X', 2)), 0);
+VALUES (unhex(printf('%032X', 13)), unhex(printf('%032X', 1)), 0),
+       (unhex(printf('%032X', 13)), unhex(printf('%032X', 2)), 0);
 
 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20000)
 INSERT INTO messages (id, room_id, author_id, body, pinned_at, created_at)
 SELECT unhex(printf('%012X7000%016X', 1700000000000 + i * 1000, i)),
-       unhex(printf('%032X', i % 5 + 1)),
-       unhex(printf('%032X', i % 3 + 1)),
+       unhex(printf('%032X', i % 13 + 1)),
+       unhex(printf('%032X', i % 20 + 1)),
        'message number ' || i || CASE WHEN i % 100 = 0 THEN ' https://example.com/' || i ELSE '' END,
        CASE WHEN i % 1000 = 0 THEN 1700000000000 + i * 1000 END,
        1700000000000 + i * 1000
@@ -99,5 +101,96 @@ async fn a_media_cursor_finds_its_file_by_its_id() {
     assert!(
         plan.starts_with("SEARCH attachments USING INDEX") && plan.contains("(id=?)"),
         "the starred check reads every file to find one: {plan}"
+    );
+}
+
+/// Every shape of Media's uploads query: the first page, a page partway
+/// through the starred files and one past them, and each filter.
+fn media_queries() -> Vec<(&'static str, media::Query, bool)> {
+    let base = media::Query {
+        viewer: UserId::from_slice(&[0; 16]).unwrap(),
+        kind: None,
+        author: None,
+        before: None,
+        since: None,
+        until: None,
+        limit: 60,
+    };
+    let cursor = Some(media::Cursor::parse(&format!("1700000500000:{}", "0".repeat(32))).unwrap());
+    vec![
+        ("the first page", base.clone(), false),
+        (
+            "a page among the starred",
+            media::Query {
+                before: cursor.clone(),
+                ..base.clone()
+            },
+            false,
+        ),
+        (
+            "a page past the starred",
+            media::Query {
+                before: cursor,
+                ..base.clone()
+            },
+            true,
+        ),
+        (
+            "photos only",
+            media::Query {
+                kind: Some(MediaKind::Image),
+                ..base.clone()
+            },
+            false,
+        ),
+        (
+            "one person's",
+            media::Query {
+                author: Some(UserId::new()),
+                ..base.clone()
+            },
+            false,
+        ),
+        (
+            "a date range",
+            media::Query {
+                since: Some(1),
+                until: Some(2),
+                ..base
+            },
+            false,
+        ),
+    ]
+}
+
+#[tokio::test]
+async fn media_reads_files_in_its_own_order_and_sorts_nothing() {
+    let (_dir, db) = grown_server().await;
+    for (shape, query, past_starred) in media_queries() {
+        let plan = plan(&db.read, &media::attachment_sql(&query, past_starred)).await;
+        assert!(
+            plan.starts_with("SCAN a USING INDEX idx_attachments_media_order")
+                || plan.starts_with("SEARCH a USING INDEX idx_attachments_media_order"),
+            "{shape}: Media does not start from its files, in order: {plan}"
+        );
+        assert!(
+            !plan.contains("TEMP B-TREE"),
+            "{shape}: Media sorts every file to hand back one page: {plan}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn media_links_start_from_the_links() {
+    let (_dir, db) = grown_server().await;
+    let (_, query, _) = media_queries().remove(0);
+    let plan = plan(&db.read, &media::link_sql(&query)).await;
+    assert!(
+        plan.contains("SCAN l2 USING COVERING INDEX idx_message_links_message"),
+        "the links page does not start from the links: {plan}"
+    );
+    assert!(
+        !plan.contains("SCAN m"),
+        "the links page reads every message: {plan}"
     );
 }
