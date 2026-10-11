@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Attachment } from "../../../generated/Attachment";
-import { fileSize, inlineBox, renderAs } from "../../../lib/media";
+import { fileNameToShow, fileSize, inlineBox, renderAs } from "../../../lib/media";
 import { Button, Icon, TextField } from "../../kit";
 import { isVoiceMessage } from "../../core/chat/voiceMessage";
 import { AudioCard } from "./AudioCard";
@@ -48,18 +48,19 @@ function One({
   onDownload: (file: Attachment) => Promise<void>;
 }) {
   const box = inlineBox(file.width, file.height);
+  const name = fileNameToShow(file.filename);
   switch (renderAs(file.mime)) {
     case "image":
       return (
-        <button type="button" className="nx-att-image" aria-label={`Open ${file.filename}`} onClick={() => onOpenImage(file)}>
+        <button type="button" className="nx-att-image" aria-label={`Open ${name}`} onClick={() => onOpenImage(file)}>
           {/* The smaller copy, where the server made one (#382): the original opens in the viewer. */}
-          <img src={mediaUrl(file.display_url ?? file.url)} alt={file.filename} width={box?.width} height={box?.height} loading="lazy" decoding="async" />
+          <img src={mediaUrl(file.display_url ?? file.url)} alt={name} width={box?.width} height={box?.height} loading="lazy" decoding="async" />
         </button>
       );
     case "video":
       return (
         <Video
-          name={file.filename}
+          name={name}
           src={mediaUrl(file.url)}
           poster={file.poster_url === null ? undefined : mediaUrl(file.poster_url)}
           box={box}
@@ -68,7 +69,7 @@ function One({
     case "audio":
       return (
         <AudioCard
-          name={file.filename}
+          name={name}
           src={mediaUrl(file.url)}
           durationMs={file.duration_ms === null ? null : Number(file.duration_ms)}
           voice={isVoiceMessage(file.filename, file.mime)}
@@ -164,6 +165,7 @@ function Video({
  * this window.
  */
 function FileCard({ file, url, onDownload }: { file: Attachment; url: string; onDownload: (file: Attachment) => Promise<void> }) {
+  const name = fileNameToShow(file.filename);
   const [phase, setPhase] = useState<"idle" | "opening" | "handed" | "failed">("idle");
   const download = async () => {
     setPhase("opening");
@@ -178,7 +180,7 @@ function FileCard({ file, url, onDownload }: { file: Attachment; url: string; on
   return (
     <div className="nx-att-card" data-download={phase === "idle" ? undefined : phase}>
       <Icon name="file" size="md" />
-      <span className="nx-att-name">{file.filename}</span>
+      <span className="nx-att-name">{name}</span>
       <span className="nx-att-meta">{fileSize(Number(file.size_bytes))}</span>
       <Button size="sm" variant="secondary" icon="download" busy={phase === "opening"} onClick={() => void download()}>
         {phase === "failed" ? "Try again" : "Download"}
@@ -190,7 +192,7 @@ function FileCard({ file, url, onDownload }: { file: Attachment; url: string; on
               ? "Couldn't open your browser. Try again, or copy this address into it."
               : "Your browser has it: look in its downloads. If nothing opened, copy this address into it."}
           </p>
-          <TextField label={`Address of ${file.filename}`} hideLabel value={url} onChange={() => undefined} readOnly mono literal size="sm" />
+          <TextField label={`Address of ${name}`} hideLabel value={url} onChange={() => undefined} readOnly mono literal size="sm" />
         </div>
       ) : null}
     </div>

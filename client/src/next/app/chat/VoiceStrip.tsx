@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
 import { startProblemWords, type StartProblem } from "../../../lib/voice";
@@ -14,6 +14,14 @@ import "./VoiceStrip.css";
  * In a bigger room you're in, they're you and whoever just talked (#197).
  */
 const MAX_CHIPS = 4;
+
+/**
+ * How long after Join or Leave a click on the strip doesn't count (#510).
+ * Each redraws the buttons under the pointer, Deafen where Join was and
+ * Join where Leave was, so a quick second click would press a button that
+ * wasn't there when it began: in voice deafened, or straight back in.
+ */
+const SWAP_MS = 400;
 
 /**
  * A conversation's voice, in one line under its header (docs/design/
@@ -88,6 +96,16 @@ export const VoiceStrip = memo(function VoiceStrip({
       </p>
     ) : null;
   const [why, setWhy] = useState<DOMRect | null>(null);
+  // A double-click on the strip is one click, and for a moment after Join
+  // or Leave redraws the buttons a click doesn't count (#510): it was meant
+  // for the button that was there. Whoever double-clicks everything joins
+  // once, unmuted and undeafened, and Mute pressed that way mutes.
+  const swappedAt = useRef(Number.NEGATIVE_INFINITY);
+  const press = (act: () => void, swaps: boolean) => (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 1 || event.timeStamp - swappedAt.current < SWAP_MS) return;
+    if (swaps) swappedAt.current = event.timeStamp;
+    act();
+  };
   // A room too big for its chips, that you're in (#197): you first, then
   // whoever just talked, kept still (core/seats.ts). Who's talking is known
   // only in the room you're in; elsewhere the pane's order stands, with the
@@ -131,7 +149,7 @@ export const VoiceStrip = memo(function VoiceStrip({
         <VoiceGlyph speaking={false} />
         {problem ?? takenOutWords ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
         {fix}
-        <Button size="sm" variant="secondary" icon="mic" onClick={onJoin}>
+        <Button size="sm" variant="secondary" icon="mic" onClick={press(onJoin, true)}>
           {strip.action === "move" ? QUIET_MOVE_WORDS : VOICE_ACTION_WORDS[strip.action]}
         </Button>
       </div>
@@ -173,21 +191,21 @@ export const VoiceStrip = memo(function VoiceStrip({
             label={controls.muted ? "Muted" : "Mute"}
             size="sm"
             pressed={controls.muted}
-            onClick={() => controls.onMute(!controls.muted)}
+            onClick={press(() => controls.onMute(!controls.muted), false)}
           />
           <IconButton
             icon={controls.deafened ? "headOff" : "head"}
             label={controls.deafened ? "Deafened" : "Deafen"}
             size="sm"
             pressed={controls.deafened}
-            onClick={() => controls.onDeafen(!controls.deafened)}
+            onClick={press(() => controls.onDeafen(!controls.deafened), false)}
           />
-          <IconButton icon="leave" label="Leave voice" size="sm" onClick={controls.onLeave} />
+          <IconButton icon="leave" label="Leave voice" size="sm" onClick={press(controls.onLeave, true)} />
         </div>
       ) : strip.kind === "mine" ? (
         <span className="nx-strip-here">You're in voice here</span>
       ) : (
-        <Button size="sm" variant={strip.action === "join" ? "primary" : "secondary"} icon="mic" onClick={onJoin}>
+        <Button size="sm" variant={strip.action === "join" ? "primary" : "secondary"} icon="mic" onClick={press(onJoin, true)}>
           {VOICE_ACTION_WORDS[strip.action]}
         </Button>
       )}

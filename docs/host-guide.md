@@ -191,6 +191,8 @@ newer one is out, with a link to [updating the server](#updating-the-server).
 Only you see it.
 
 An invite link is the only way to get an account. There is no public sign-up.
+Inviting a big group at once? Read [A big group joining at once](#a-big-group-joining-at-once)
+first.
 Text chat is ready, and so is voice once UDP 3479 is open ([Voice](#voice)). For
 friends on networks that block voice (some offices, some public wifi), also set
 up [the voice relay](#the-voice-relay) below.
@@ -244,7 +246,8 @@ lets you add `cdn.` in front of a free name.
 Almost everything is done inside the app, not in a config file. The host
 controls are in Settings, under **Hosting**:
 
-- **Rooms**: create, rename, set a topic, reorder, archive.
+- **Rooms**: create, rename, set a topic, reorder, archive, and turn
+  reactions off or on (below).
 - **Invites**: make a link, and see or **Revoke** the ones still open.
 - **People**: remove someone (it asks first; they lose access, and their
   messages stay), and let them back in. Removals are reversible; that is the
@@ -256,6 +259,20 @@ controls are in Settings, under **Hosting**:
 Newcomers start on the name color the fewest people on the server wear, so a
 big group isn't a list of gray names. Anyone can change theirs in **Settings →
 Profile**.
+
+**Reactions in a room.** People can react to a message with any emoji, your
+server's own included ([how they work](user-guide.md#saying-things)). They
+never notify anybody. To turn them off in one room, open **Hosting → Rooms**,
+press **Edit** beside the room, switch off **Reactions**, and **Save**. The
+room then shows no reactions to anybody, and offers no way to add one. Nothing
+is deleted: switch them back on and they're all there again. A DM has no host,
+so it always has reactions. Anybody can also hide reactions just for
+themselves, in **Settings → Appearance**; that changes nothing for anyone else.
+
+A server on 0.4.10 or older can't take reactions, so the app offers none
+there, and the switch has nothing to turn off: [update the
+server](#updating-the-server) first. Friends whose app is 0.4.10 or older see
+no reactions until they update it.
 
 **Going away? Make somebody a co-host.** Open their card (click their name),
 then **···** and **Make Jules a co-host**. A co-host gets the same **Hosting**
@@ -285,7 +302,7 @@ emoji. In the app: **Settings → Emoji**, under Hosting (you or a co-host).
 - **Rename** one in place. Names are 2 to 32 lowercase letters, digits or
   underscores.
 - **Remove** asks first. Messages that used it show its `:name:` as words from
-  then on.
+  then on, and reactions made with it are gone.
 
 They're in everyone's picker straight away, under your server's name. The
 pictures are kept with your server's files and never expire; a backup of
@@ -311,9 +328,12 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps everything forever. Starred files never expire. | `365` |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
-| `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. See [Voice](#voice). | the address your name points at |
+| `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. The relay carries voice there and nowhere else. See [Voice](#voice). | the address your name points at |
 | `LINGER_TURN_SECRET` | Shared key for Linger and the relay; you must also start the relay below. | unset — no relay |
 | `LINGER_TURN_URLS` | Where the relay is, if not `turn:<your address>:3478`. Comma-separated `turn:`/`stun:` addresses. | derived from your address |
+| `LINGER_SIGNUPS_PER_HOUR` | How many people may sign up from one network in an hour, all at once if need be. Raise it, or set `off`, when a big group is joining together from one place. See [A big group joining at once](#a-big-group-joining-at-once). | `60` |
+| `LINGER_PASSWORD_CHECKS_AT_ONCE` | How many passwords the server checks at the same time, from 1 to 256. Each check holds about 19 MB of memory and a CPU core for a moment, so N at once can take N × 19 MB (4 is 76 MB, 16 is about 300 MB). Raise it only if people are told the server is busy and the machine has the cores and memory. | `4` |
+| `LINGER_TRUSTED_PROXIES` | Which proxies the server believes about who's connecting, for the limits on signing in and signing up. Only needed for a proxy that isn't on this machine or a private network, such as Caddy on another machine reaching this one over Tailscale: `private,100.64.0.0/10`. Comma-separated addresses and ranges; `private` is this machine and private networks, and leaving it out stops trusting them. See [Other problems](#other-problems). | `private` |
 
 One file can be up to 500 MB.
 
@@ -322,6 +342,40 @@ and fill in the five `LINGER_S3_*` lines already written in `.env` as
 comments. Cloudflare R2 is the one to pick, because it does not charge for data
 going out. The server refuses to start if any of them are missing, so you will
 know straight away.
+
+### A big group joining at once
+
+If you send one invite to a big group, a few limits decide how fast they get in.
+Anyone who meets one is told what's happening and when to try again, so nobody is
+left with an error and no explanation.
+
+- **Sign-ups from one network: 60 an hour.** Sixty people can join from one place
+  in one go; after that the server takes one more a minute from there. People at
+  home each have their own address, so this only matters when many people share
+  one: a school, an office, a LAN party, or a phone network that puts lots of
+  customers behind one address. The person who meets it sees *"Lots of people have
+  joined from your network in the last hour, so this server is pausing new sign-ups
+  from it. Try again in about a minute. If your group is joining together, the host
+  can raise this limit."* Linger's log says it happened, without anybody's address,
+  at most once every 5 minutes. **To let more in, set `LINGER_SIGNUPS_PER_HOUR` in
+  `.env`**, to 500 say, or `off` for no limit per network, then run
+  `docker compose up -d`. The invite still decides who can join: an invite for 50
+  people lets in 50, whatever this says. The setting exists so that somebody with
+  an invite can't make the server do unlimited work, so put it back afterwards if
+  your invite is good for a lot of people or never runs out.
+- **Password checks at once: 4.** Checking a password is slow and memory-hungry on
+  purpose, which is what makes guessing passwords slow. The server does four at
+  once and the rest wait their turn, up to 5 seconds. Four gets through several
+  sign-ins a second even on a small machine, so this rarely matters. If people are
+  told *"The server is busy letting other people in. Try again in a moment."*,
+  and your machine has more cores and memory than Linger is using, **raise
+  `LINGER_PASSWORD_CHECKS_AT_ONCE`**: each one can take about 19 MB, so 8 can take
+  about 150 MB and 16 about 300 MB. More than the machine's number of cores makes
+  nobody faster.
+- **Sign-in tries from one network: 5 a minute.** This one isn't a setting: it's
+  what stops somebody guessing passwords. It only counts sign-ins, so people who
+  joined stay signed in and don't meet it. Somebody who does is told *"Too many
+  sign-in tries from your network in the last minute. Try again in 12 seconds."*
 
 ## Voice
 
@@ -376,6 +430,21 @@ any home router. Some networks block it: some offices, some public wifi. The
 container in `compose.yaml`. It is yours, on your machine; what passes through
 it is scrambled sound it cannot listen to.
 
+**It only carries voice to your server.** A relay passes on whatever it's
+asked to, and it sits on your machine's network, so an open one would let any
+member reach things only your machine should: your home network's router page
+or printer, your cloud provider's private settings service, or the internet
+looking like your machine. `compose.yaml` stops that (#501). The relay refuses
+every address except your server's voice address, the same one the server
+uses: `LINGER_VOICE_ADDRESS` if you set it, or else the address your name
+points at, looked up when the relay starts. It also caps each member at ten
+relay ports and each port at 3 Mbit/s, which is three times what the busiest
+call needs. If it has no address to go on (`LINGER_VOICE_ADDRESS=off`, or a
+name that doesn't point at a public address), it carries nothing at all and
+says so in `docker compose --profile voice logs coturn`. If DNS doesn't answer
+at all for a minute (at boot, say), the relay stops and Docker starts it again
+to ask again.
+
 Said yes to the relay in the setup script? It's set up and running: skip to
 step 4 to check it. Otherwise, run these steps **on the server**, inside the
 `linger` folder containing `compose.yaml`.
@@ -414,7 +483,10 @@ step 4 to check it. Otherwise, run these steps **on the server**, inside the
 
    If coturn is missing or not staying Up, use [the relay checks below](#voice-cannot-connect).
    Then check `docker compose logs --tail=30 linger`: the latest startup
-   should no longer warn that `LINGER_TURN_SECRET` is missing.
+   should no longer warn that `LINGER_TURN_SECRET` is missing. And check
+   `docker compose --profile voice logs coturn | head -n 5`: it should say
+   `the relay carries voice to` your server's public address `and nowhere
+   else`.
 
 Finally, have two people on different networks leave and rejoin voice and
 check that each can hear the other. **Up only proves the relay process is
@@ -546,6 +618,13 @@ of either file can replace the old one as it is:
 `curl -fLO https://raw.githubusercontent.com/itsMattGuenther/Linger/main/deploy/compose.yaml`
 (and the same for `Caddyfile`), then `./update.sh`.
 
+`update.sh` never replaces either file itself, since `compose.yaml` can hold a
+version you chose. But when you run the relay with a `compose.yaml` from before
+the relay was kept to voice (#501), it says so at the end and prints the
+command that gets the one from the release your server now runs. If you had
+changed the `image:` line to stay on a version, change the new file's line the
+same way.
+
 **Moving an older server's settings into `.env`.** A server set up before
 0.4.9 has its settings written into `compose.yaml` and its name into the
 `Caddyfile`. That keeps working, and nothing makes you move. To move, so
@@ -619,11 +698,20 @@ For people on a network that blocks voice, the relay has to be running. Run
   `compose.yaml` produces `unrecognized option '--no-dtls'`, remove only the
   `--no-dtls` line from that file. Current coturn leaves DTLS listeners off
   by default. Run `docker compose --profile voice up -d` after either fix
-  and check that coturn stays Up.
+  and check that coturn stays Up. `DNS gave no answer` means the server
+  can't look your name up: the relay keeps trying, a minute at a time, and
+  `LINGER_VOICE_ADDRESS` in `.env` with your public IP saves it the lookup.
 - **Stays Up, but voice says `can't reach`:** check inbound TCP/UDP 3478 and
   UDP 49160–49200 in both firewalls (and router forwarding at home). After
   changing `.env`, run `docker compose --profile voice up -d` to apply the
   same secret to both containers; restarting only coturn is not enough.
+- **coturn's log says `the relay carries nothing`:** it couldn't work out
+  your server's voice address, usually because your name didn't point at a
+  public address when it started (`docker compose logs linger` will say the
+  same about voice). Fix where the name points and run
+  `docker compose --profile voice restart coturn`, or put your server's public
+  IP after `LINGER_VOICE_ADDRESS=` in `.env` and run
+  `docker compose --profile voice up -d`.
 
 Do not share your `.env` or setup token when asking for help.
 
@@ -648,6 +736,23 @@ Do not share your `.env` or setup token when asking for help.
   account, it is gone for good — that is deliberate. If no account was made
   but the link was exposed or lost, `docker compose restart linger` prints a
   new one and invalidates the old one.
+- **People are told to wait when they've barely tried.** Each address gets 5
+  sign-in tries a minute and 60 sign-ups an hour (`LINGER_SIGNUPS_PER_HOUR`; see
+  [A big group joining at once](#a-big-group-joining-at-once)). The server takes the
+  address from the connection. It believes the `X-Forwarded-For` header only
+  when the connection comes from a proxy it trusts, and then only the header's
+  last entry, the one that proxy wrote. By default it trusts this machine and
+  private networks, which is how Caddy from `compose.yaml` connects, so the
+  shipped setup needs nothing more. A proxy anywhere else, such as Caddy on a
+  VPS reaching a home server over Tailscale, has to be listed in
+  `LINGER_TRUSTED_PROXIES` in `.env` (`private,100.64.0.0/10` for
+  Tailscale), or everybody counts as the proxy and shares one allowance:
+  Linger's log says so once, with the proxy's address, the first time it
+  happens. A proxy of your own instead of Caddy has to set that header too
+  (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+  Behind a second proxy in front of Caddy, such as Cloudflare's, the address
+  the server sees is that proxy's, so people who come through the same one
+  share an allowance.
 - **The startup log warns that `LINGER_DOMAIN` is not set.** Then your friends
   cannot connect, whatever else looks fine. The app only talks to `https`
   addresses. Go back to [Before you start](#before-you-start).
