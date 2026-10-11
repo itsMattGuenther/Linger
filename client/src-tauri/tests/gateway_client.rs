@@ -138,6 +138,7 @@ fn ready_frame(session_id: &str) -> Value {
         status: None,
         entrance_sound: None,
         last_seen_at: None,
+        time_zone: None,
     };
     let data = ReadyData {
         session_id: session_id.to_string(),

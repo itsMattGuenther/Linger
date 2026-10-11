@@ -114,6 +114,98 @@ async fn server_rejects_every_off_list_key() {
     }
 }
 
+/// "Show my local time" (#604, PROTOCOL §5): a zone name turns it on, `""`
+/// turns it off, and a save that doesn't mention it (an older app saving a
+/// status) leaves it alone. Friends read it on the person; a name that isn't
+/// a zone is refused, and nothing else in that save goes through.
+#[tokio::test]
+async fn time_zone_turns_on_moves_stays_and_turns_off() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let jules = common::join_member(&server, &host.access_token, "jules").await;
+    let client = reqwest::Client::new();
+    let patch = |body: serde_json::Value| {
+        client
+            .patch(server.url("/me"))
+            .bearer_auth(&jules.access_token)
+            .json(&body)
+            .send()
+    };
+    let raw_me = || async {
+        client
+            .get(server.url("/me"))
+            .bearer_auth(&jules.access_token)
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()
+    };
+
+    // Off to start, and said by leaving the field out.
+    assert!(raw_me().await.get("time_zone").is_none());
+
+    let on: User = patch(serde_json::json!({ "time_zone": "America/Chicago" }))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(on.time_zone.as_deref(), Some("America/Chicago"));
+
+    // The host sees it on Jules.
+    let users: Vec<User> = client
+        .get(server.url("/users"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let seen = users.iter().find(|u| u.username == "jules").unwrap();
+    assert_eq!(seen.time_zone.as_deref(), Some("America/Chicago"));
+
+    // An older app saving a status, and a null, change nothing.
+    for body in [
+        serde_json::json!({ "status": { "line": "on the porch" } }),
+        serde_json::json!({ "time_zone": null }),
+    ] {
+        let kept: User = patch(body).await.unwrap().json().await.unwrap();
+        assert_eq!(kept.time_zone.as_deref(), Some("America/Chicago"));
+    }
+
+    // Moving: the computer's clock went somewhere else.
+    let moved: User = patch(serde_json::json!({ "time_zone": "Europe/Lisbon" }))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(moved.time_zone.as_deref(), Some("Europe/Lisbon"));
+
+    // Not a zone: refused whole, the name with it.
+    let refused =
+        patch(serde_json::json!({ "display_name": "Jules B", "time_zone": "<b>noon</b>" }))
+            .await
+            .unwrap();
+    assert_eq!(refused.status(), 422);
+    let after = raw_me().await;
+    assert_eq!(after["time_zone"], "Europe/Lisbon");
+    assert_ne!(after["display_name"], "Jules B");
+
+    // Off again, and gone from the wire.
+    let off: User = patch(serde_json::json!({ "time_zone": "" }))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(off.time_zone.is_none());
+    assert!(raw_me().await.get("time_zone").is_none());
+}
+
 #[tokio::test]
 async fn away_message_stamps_away_since_server_side() {
     let server = common::spawn_server().await;

@@ -395,7 +395,8 @@ to sign in again.
 Click the **gear** at the top of the list, or press **Ctrl+,** in any window.
 Settings opens in its own window:
 
-- **Profile**: your display name, your status, and how your name looks
+- **Profile**: your display name, your status, your local time, and how
+  your name looks
 - **Appearance**: interface size, plain names, reactions, and one line per
   person (below)
 - **Windows**: tabs or a window per conversation, and what closing the list does
@@ -936,6 +937,19 @@ To see what friends see, click your own name, at the top of the list or on one
 of your messages. It opens your card exactly as it opens for them: where you
 are, your status or away message, and your fields. **Edit profile** on it
 opens Settings → Profile.
+
+### Your local time
+
+**Settings → Profile → Your Local Time → Show my local time** puts the time
+where you are on your card: "3:12 AM for Jules". It's on the **Knock** button
+on your row too, so a friend can see it's 3 AM for you before they knock. It
+never stops a knock. When your day isn't theirs, it says so: "the next day" or
+"the day before".
+
+It's off until you turn it on, because a time zone tells people roughly where
+you live. It follows the clock of the computer or phone you last opened Linger
+on, so if you travel, your card follows you. Turning it off takes it off your
+card for everybody at once. Friends on an older version of Linger don't see it.
 
 There's also an **away message**: **Away** at the top of the list. Pick a
 recent one or write your own; setting one is what makes you away, and it shows

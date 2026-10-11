@@ -4,13 +4,16 @@ import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
 import { displayNameProblem, displayNameReady, MAX_DISPLAY_NAME_CHARS, type NameSaid } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
+import { deviceTimeZone } from "../../../lib/localTime";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_FIELD_CHARS, MAX_LABEL_CHARS, MAX_LINE_CHARS, SUGGESTED_LABELS } from "../../../lib/status";
+import { onPhone } from "../../core/phone";
 import { HEADINGS, leftOf } from "../../core/settings";
 import { draftOf, type FieldRow, isDirty, type LabelChoice, labelOf, OWN, problemOf, type StatusDraft, statusOf, type SuggestedLabel } from "../../core/status";
-import { Button, IconButton, Name, Select, Swatch, TextField } from "../../kit";
-import { Actions, Block, ChoiceRow, Fields, Note, useFollowSaved, useSave } from "./parts";
+import { Button, IconButton, Name, Select, SettingRow, Swatch, Switch, TextField } from "../../kit";
+import { useTheirTime } from "../useTheirTime";
+import { Actions, Block, ChoiceRow, Fields, Note, Plain, useFollowSaved, useSave } from "./parts";
 
 /** What Profile saves. Each resolves to the problem in words, or null once saved. */
 export interface ProfileActions {
@@ -20,6 +23,8 @@ export interface ProfileActions {
   saveStatus: (status: UserStatus) => Promise<string | null>;
   /** Your name's style, whole. */
   saveStyle: (style: Style) => Promise<string | null>;
+  /** "Show my local time" (#604): a zone name turns it on, "" turns it off. */
+  saveTimeZone: (zone: string) => Promise<string | null>;
 }
 
 export interface ProfileProps {
@@ -35,6 +40,7 @@ export function ProfileSection({ me, plainNames, actions }: ProfileProps) {
     <>
       <WhoYouAre me={me} saveName={actions.saveName} />
       <YourStatus me={me} saveStatus={actions.saveStatus} />
+      <YourClock me={me} saveTimeZone={actions.saveTimeZone} />
       <YourLook me={me} plainNames={plainNames} saveStyle={actions.saveStyle} />
     </>
   );
@@ -159,6 +165,49 @@ function YourStatus({ me, saveStatus }: { me: User; saveStatus: ProfileActions["
         </Button>
       </Actions>
     </Block>
+  );
+}
+
+const SHOW_TIME = "Show my local time";
+
+/**
+ * "Show my local time" (#604, SPEC §4.6): your card says what time it is
+ * where you are. Off to start, because a time zone says roughly where
+ * somebody lives. It takes effect at once, like every switch (SPEC §5.6),
+ * and follows this computer's clock.
+ */
+function YourClock({ me, saveTimeZone }: { me: User; saveTimeZone: ProfileActions["saveTimeZone"] }) {
+  const here = deviceTimeZone();
+  const on = (me.time_zone ?? null) !== null;
+  const shown = useTheirTime(me);
+  const [changing, setChanging] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const set = (next: boolean) => {
+    const zone = next ? here : "";
+    if (zone === null) return;
+    setChanging(true);
+    setProblem(null);
+    void saveTimeZone(zone).then((said) => {
+      setChanging(false);
+      setProblem(said);
+    });
+  };
+  const device = onPhone() ? "phone" : "computer";
+  const description = on
+    ? `Friends see ${shown === null ? "your time" : `“${shown}”`} on your card. It follows this ${device}'s clock.`
+    : here === null
+      ? `This ${device} doesn't say which time zone it's in, so there's no time to show.`
+      : "Your card says what time it is where you are, so nobody knocks at 3 AM by mistake. It tells friends roughly where you are, so it's off until you turn it on.";
+  return (
+    <Plain>
+      <h3 className="nx-set-heading">{HEADINGS.clock}</h3>
+      <SettingRow
+        title={SHOW_TIME}
+        description={description}
+        control={<Switch label={SHOW_TIME} checked={on} disabled={changing || (!on && here === null)} onChange={set} />}
+      />
+      {problem ? <Note tone="problem">{problem}</Note> : null}
+    </Plain>
   );
 }
 

@@ -80,7 +80,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   amber as well, with a desktop banner saying who it's from. Never a badge.
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
-  and away messages.
+  away messages; and, if you turn it on, your local time on your card.
 - **Files and media.** 500 MB uploads, EXIF always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The

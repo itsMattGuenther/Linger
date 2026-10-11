@@ -253,6 +253,41 @@ test.describe("profile", () => {
   });
 });
 
+// "Show my local time" (#604): off to start, saying why; on, it says what
+// friends see, from this computer's clock; refused, it stays as it was and
+// says so.
+test.describe("your local time (#604)", () => {
+  test.use({ timezoneId: "America/Chicago" });
+
+  test("turns on with this computer's zone, says what friends see, and turns off again", async ({ page }) => {
+    // 8:58 PM on a Friday in Chicago.
+    await page.clock.install({ time: new Date("2026-10-10T01:58:30Z") });
+    await open(page);
+    const show = page.getByRole("switch", { name: "Show my local time" });
+    await expect(show).toHaveAttribute("aria-checked", "false");
+    const row = page.locator(".k-setting").filter({ has: show });
+    await expect(row).toContainText("It tells friends roughly where you are, so it's off until you turn it on.");
+
+    await show.click();
+    await expect(show).toHaveAttribute("aria-checked", "true");
+    expect(await did(page)).toContain("clock:America/Chicago");
+    await expect(row).toContainText("Friends see “8:58 PM for Matt” on your card. It follows this computer's clock.");
+
+    await show.click();
+    await expect(show).toHaveAttribute("aria-checked", "false");
+    expect(await did(page)).toContain("clock:");
+  });
+
+  test("a refused change leaves it as it was and says why", async ({ page }) => {
+    await open(page, "?fail");
+    const show = page.getByRole("switch", { name: "Show my local time" });
+    await show.click();
+    await expect(page.locator(".nx-set-note[data-tone='problem']")).toHaveText("The server is busy. Try again in a moment.");
+    await expect(show).toHaveAttribute("aria-checked", "false");
+    await expect(show).toBeEnabled();
+  });
+});
+
 test.describe("this app", () => {
   test("appearance choices take effect at once", async ({ page }) => {
     await open(page, "?section=appearance");

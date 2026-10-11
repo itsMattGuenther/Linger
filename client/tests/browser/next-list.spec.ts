@@ -376,6 +376,52 @@ test("opens a room, a group DM and a person by click and by keyboard (#351)", as
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
+// "Show my local time" (#604): somebody who shows theirs has it on their
+// card and on their row's Knock, and it moves on with the minute. Jules is
+// in Tokyo and you're in Chicago (`?clock`), on a Friday evening in Chicago
+// that's already Saturday morning in Tokyo.
+test.describe("local time on a card (#604)", () => {
+  test.use({ timezoneId: "America/Chicago" });
+
+  test.beforeEach(async ({ page }) => {
+    // 8:58:30 PM Friday in Chicago, 10:58 AM Saturday in Tokyo.
+    await page.clock.install({ time: new Date("2026-10-10T01:58:30Z") });
+    await page.goto("/tests/fixtures/next-list.html?clock");
+    await page.evaluate(() => document.fonts.ready);
+  });
+
+  test("their card and their Knock say what time it is for them, and it moves on with the minute", async ({ page }) => {
+    await openCard(page, "People here", "Jules");
+    const card = page.getByRole("dialog", { name: "Jules" });
+    await expect(card.locator(".nx-person-clock")).toHaveText("10:58 AM for Jules, the next day");
+    await page.clock.runFor(60_000);
+    await expect(card.locator(".nx-person-clock")).toHaveText("10:59 AM for Jules, the next day");
+    // It's a fact about them, never a reason a knock can't go.
+    await expect(card.getByRole("button", { name: "Knock" })).toBeEnabled();
+    await page.keyboard.press("Escape");
+
+    const row = rows(page, "People here").filter({ hasText: "Jules" });
+    await row.hover();
+    const knock = row.getByRole("button", { name: /^Knock on Jules's door/ });
+    await expect(knock).toHaveAccessibleName("Knock on Jules's door, 10:59 AM for Jules, the next day");
+    await expect(knock).toBeEnabled();
+    await expectWholeTooltip(page, knock, "Knock on Jules's door, 10:59 AM for Jules, the next day");
+  });
+
+  test("somebody who doesn't show it has no time on their card, and your own card shows yours", async ({ page }) => {
+    await openCard(page, "People here", "Eli");
+    const eli = page.getByRole("dialog", { name: "Eli" });
+    await expect(eli).toBeVisible();
+    await expect(eli.locator(".nx-person-clock")).toHaveCount(0);
+    await expect(eli).not.toContainText(" for Eli");
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Matt" }).click();
+    const mine = page.getByRole("dialog", { name: "Matt" });
+    await expect(mine.locator(".nx-person-clock")).toHaveText("8:58 PM for Matt");
+  });
+});
+
 test.describe("a person's card", () => {
   test("opens from their row with their status, and focus goes in and comes back", async ({ page }) => {
     const row = rows(page, "Away").first().getByRole("button").first();
