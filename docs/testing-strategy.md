@@ -87,8 +87,12 @@ to the updater's signing key (#491).
 `scripts/action-pins.test.mjs` fails on one that isn't pinned. To move to a
 newer version, look up the commit its tag points at
 (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and change the SHA and
-the comment together. `dtolnay/rust-toolchain` has no version tags: pin a
-commit from its `master` branch and pass `toolchain: stable`.
+the comment together. Dependabot does that once a month
+(`.github/dependabot.yml`): one pull request moves every action that has a
+release at least a week old, and it is merged like any other.
+`dtolnay/rust-toolchain` has no version tags, so Dependabot leaves it alone:
+move it by hand to a commit from its `master` branch, and pass
+`toolchain: stable`.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
