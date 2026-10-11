@@ -138,6 +138,8 @@ declare global {
       open: (room: string, server?: string, message?: string) => void;
       /** Somebody says something in a room, arriving as a frame. */
       say: (room: string, author: string, body: string) => string;
+      /** With `?holdpreviews`: the server answers the link cards it was asked for. */
+      releasePreviews: () => void;
       /** What the page's server holds for a room, newest last. */
       held: (room: string) => Message[];
       /** Settings changed how conversations open, as the owner tells every window. */
@@ -167,6 +169,7 @@ window.owner = {
     return message.id;
   },
   held: desktop.held,
+  releasePreviews: desktop.releasePreviews,
   mode: (mode) => desktop.deliver("next:mode", { v: 1, mode }),
   wake: desktop.wake,
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { ServerHealth } from "../../generated/ServerHealth";
 import type { GatewayStatus } from "../../lib/gateway";
-import { type Connection, connectionNote, listNotes, TROUBLE_GRACE_MS, troubleSince, waitingNote } from "./notes";
+import { type Connection, connectionNote, hostNotes, listNotes, TROUBLE_GRACE_MS, troubleSince, waitingNote } from "./notes";
 
 const at = 1_000_000;
 const pine = (status: GatewayStatus, since: number | null = at): Connection => ({ server: "https://pine", name: "Pinecone", status, troubleSince: since });
@@ -78,5 +79,35 @@ describe("a saved server not reached yet (T-907)", () => {
   it("sits with the connections, before the keyring", () => {
     const notes = listNotes([], "no keyring", null, 0, [{ server: "https://a.example", name: "a.example", why: "down" }]);
     expect(notes.map((note) => note.kind)).toEqual(["waiting", "keyring"]);
+  });
+});
+
+describe("a server you host, when it needs you (#582)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const fine: ServerHealth = { backups: true, last_backup_at: at - DAY, backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+  const pinecone = (health: Partial<ServerHealth>) => ({ server: "https://pine", name: "Pinecone", health: { ...fine, ...health } });
+
+  it("says nothing while all's well", () => {
+    expect(hostNotes(pinecone({}), at)).toEqual([]);
+  });
+
+  it("says a nearly full disk and nearly used-up file space in words, never a figure", () => {
+    const notes = hostNotes(pinecone({ disk_nearly_full: true, file_space_nearly_full: true }), at);
+    expect(notes.map((note) => note.words)).toEqual(["The disk Pinecone runs on is nearly full.", "Pinecone is nearly out of room for files."]);
+    for (const note of notes) expect(note.words).not.toMatch(/\d/);
+  });
+
+  it("says how long it's gone without a backup, or that none has worked yet", () => {
+    expect(hostNotes(pinecone({ backup_overdue: true, last_backup_at: at - 4 * DAY - 60_000 }), at)[0]?.words).toBe("Pinecone hasn't been backed up for 4 days.");
+    expect(hostNotes(pinecone({ backup_overdue: true, last_backup_at: null }), at)[0]?.words).toBe("Pinecone hasn't been backed up yet.");
+  });
+
+  it("says nothing about backups a host turned off", () => {
+    expect(hostNotes(pinecone({ backups: false, backup_overdue: true }), at)).toEqual([]);
+  });
+
+  it("comes after the keyring and before an update, one line for each thing", () => {
+    const notes = listNotes([], "no keyring", { kind: "ready", version: "0.4.1", notes: null }, at, [], "this computer", [pinecone({ disk_nearly_full: true, backup_overdue: true })]);
+    expect(notes.map((note) => note.kind)).toEqual(["keyring", "host", "host", "update"]);
   });
 });

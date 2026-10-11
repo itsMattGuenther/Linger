@@ -1194,6 +1194,11 @@ holds. The values are tokens (`system.md`, "Scales"); the geometry tests measure
 - **Connection trouble** is said in words at the foot of the list, only while it is
   true and only after a few seconds: "Can't reach Pinecone. Still trying." Never
   protocol text, never a permanent status bar.
+- **A server you host needing you** is said the same way, to the host alone, only
+  while it is true (#582): "The disk Pinecone runs on is nearly full.", "Pinecone is
+  nearly out of room for files.", "Pinecone hasn't been backed up for 3 days." Each
+  opens Settings → Hosting → Server, which says when the server last copied its
+  database. Words, never a disk figure.
 - **Motion:** short and ease-out, no spring or bounce. Reduced motion stops anything
   that moves or loops, without hiding a state or a confirmation.
 - **Reader controls:** interface scale 100–200%, in Settings → Appearance, applied

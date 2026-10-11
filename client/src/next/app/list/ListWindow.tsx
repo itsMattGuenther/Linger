@@ -929,6 +929,11 @@ function Servers({
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
     thisDevice(onPhone()),
+    // Only the host's own servers say how their machine is (#582).
+    ordered.flatMap((session) => {
+      const info = infos[session.baseUrl];
+      return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health }] : [];
+    }),
   );
   // The same lines as last time are the same list, so they aren't drawn again for nothing (#533).
   const notesHeld = useRef(notesNow);
@@ -1070,7 +1075,7 @@ function Servers({
               onSearch={openSearch}
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
-              notes={<ListNotes notes={notes} onUpdate={openAccount} onRetry={onRetry} />}
+              notes={<ListNotes notes={notes} onUpdate={openAccount} onRetry={onRetry} onHost={openServerSettings} />}
               onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? unfoldAgain : undefined}
               onClose={unfolded ? undefined : closeList}
             />
@@ -1366,6 +1371,10 @@ function openSettings(): void {
 }
 function openAccount(): void {
   shell.settings("account");
+}
+/** A server you host needs you (#582): Hosting → Server. */
+function openServerSettings(): void {
+  shell.settings("server");
 }
 function openMedia(): void {
   shell.tool("media");

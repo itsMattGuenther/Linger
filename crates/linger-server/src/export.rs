@@ -326,7 +326,7 @@ async fn check_room(state: &AppState, media: &[MediaRow], freed: u64) -> Result<
     } else {
         state.config.data_dir.clone()
     };
-    let Some(free) = free_bytes(at).await else {
+    let Some(free) = crate::disk::free_bytes(at).await else {
         return Ok(());
     };
     if free.saturating_add(freed) >= needed {
@@ -338,29 +338,6 @@ async fn check_room(state: &AppState, media: &[MediaRow], freed: u64) -> Result<
          some up.",
         human_size(i64::try_from(needed).unwrap_or(i64::MAX))
     )))
-}
-
-/// Free bytes on the disk under `path` that this process may use, or `None`
-/// where the platform can't say. Asked on a blocking thread, since it is a
-/// filesystem call.
-async fn free_bytes(path: PathBuf) -> Option<u64> {
-    tokio::task::spawn_blocking(move || available_bytes(&path))
-        .await
-        .ok()
-        .flatten()
-}
-
-#[cfg(unix)]
-fn available_bytes(path: &Path) -> Option<u64> {
-    let disk = rustix::fs::statvfs(path).ok()?;
-    Some(disk.f_bavail.saturating_mul(disk.f_frsize))
-}
-
-/// The published server is Linux only; elsewhere it builds for development
-/// and does without the check.
-#[cfg(not(unix))]
-fn available_bytes(_path: &Path) -> Option<u64> {
-    None
 }
 
 /// One member's view of one job. `None` covers both "no such job" and

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_WAIT};
+use crate::backup::Backups;
 use crate::config::{Config, Storage};
 use crate::db::Db;
 use crate::gateway::Gateway;
@@ -36,6 +37,10 @@ pub struct AppState {
     /// The per-address limits bound one stranger; this bounds everybody at
     /// once, so the memory passwords take has a ceiling.
     pub passwords: Arc<PasswordWork>,
+    /// How the nightly copies of the database stand (`crate::backup`, #582):
+    /// read from `data/backups/` at startup, kept up to date by the task
+    /// that makes them.
+    pub backups: Arc<Backups>,
 }
 
 impl AppState {
@@ -81,6 +86,10 @@ impl AppState {
             tracing::info!(%address, "voice forwarding is on: clients send voice to this address");
         }
 
+        let backups = Arc::new(Backups::new(
+            crate::backup::newest(&config.data_dir).await,
+            crate::db::now_ms(),
+        ));
         let passwords = Arc::new(PasswordWork::new(
             config.password_checks_at_once,
             PASSWORD_WORK_WAIT,
@@ -96,6 +105,7 @@ impl AppState {
             local,
             exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
             passwords,
+            backups,
         })
     }
 }

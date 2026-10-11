@@ -84,6 +84,52 @@ test("marks the newest message read through the list window, once", async ({ pag
   });
 });
 
+/** The read positions the window has given the list window, oldest first. */
+async function reads(page: Page): Promise<unknown[]> {
+  return intents(await did(page))
+    .filter((intent) => intent.kind === "read")
+    .map((intent) => intent.messageId);
+}
+
+test("a message arriving while you rest a few pixels short of the end is followed and read (#625)", async ({ page }) => {
+  await open(page);
+  await expect.poll(() => reads(page)).toEqual(["m000016"]);
+  // Inside the conversation's margin for the end, outside the virtualizer's
+  // own pixel: the end is still where you are.
+  await log(page).evaluate(
+    (element) =>
+      new Promise((done) => {
+        element.addEventListener("scroll", done, { once: true });
+        element.scrollTop -= 20;
+      }),
+  );
+  const id = await page.evaluate(() => window.owner?.say("r-general", "u-eli", "one more thing"));
+  await expect(page.getByText("one more thing")).toBeInViewport();
+  await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
+});
+
+test("a message arriving just after a link card above it lands is followed and read (#625)", async ({ page }) => {
+  await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&holdpreviews");
+  await expect.poll(() => reads(page)).toEqual(["m000016"]);
+  // The card makes Jules's row shorter, and the message comes a task later,
+  // before the virtualizer has caught up with the change (seen on CI).
+  const id = await log(page).evaluate(
+    (element) =>
+      new Promise<string>((done) => {
+        const watch = new MutationObserver(() => {
+          if (!element.textContent?.includes("Millrace River Trail")) return;
+          watch.disconnect();
+          setTimeout(() => done(window.owner?.say("r-general", "u-eli", "one more thing") ?? ""), 0);
+        });
+        watch.observe(element, { subtree: true, childList: true, characterData: true });
+        window.owner?.releasePreviews();
+      }),
+  );
+  await expect(page.getByText("one more thing")).toBeInViewport();
+  await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
+});
+
 test("opens on where you left off when something arrived since", async ({ page }) => {
   await open(page, "room=r-listening");
   await expect(page.getByText("you left off here")).toBeVisible();

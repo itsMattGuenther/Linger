@@ -29,6 +29,9 @@
  * - `?server=behind`: Hosting → Server says the server runs an older release
  *   than the newest (#314); `?server=looking` is still asking, and
  *   `?server=unknown` couldn't ask. Otherwise it runs the newest.
+ * - `?backups=ok`: Hosting → Server says when the server last copied its
+ *   database (#582); `overdue` is three days without one, `off` is a host who
+ *   turned them off, and `full` adds a nearly full disk and file space.
  *
  * What the page was asked to do is written to `body[data-did]`, `|`-separated.
  */
@@ -38,6 +41,7 @@ import type { CustomEmoji } from "../../src/generated/CustomEmoji";
 import type { Invite } from "../../src/generated/Invite";
 import type { NotifyRule } from "../../src/generated/NotifyRule";
 import type { Room } from "../../src/generated/Room";
+import type { ServerHealth } from "../../src/generated/ServerHealth";
 import type { User } from "../../src/generated/User";
 import type { TalkKeyReach } from "../../src/lib/ipc";
 import { emojiPicture } from "../../src/lib/emoji/picture";
@@ -53,6 +57,26 @@ import "../../src/next/styles/app.css";
 import { customEmoji, NOW, SERVER, SERVER_NAME, ownFields, people, rooms as eveningRooms, withFields } from "./next/evening";
 
 const query = new URLSearchParams(location.search);
+
+/** What the server tells its host about the machine, from `?backups=` (#582). */
+function healthOf(option: string | null): ServerHealth | null {
+  const lastNight = new Date(NOW);
+  lastNight.setHours(3, 12, 0, 0);
+  const ok: ServerHealth = { backups: true, last_backup_at: lastNight.getTime(), backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
+  switch (option) {
+    case "ok":
+      return ok;
+    case "overdue":
+      return { ...ok, last_backup_at: NOW - 4 * 86_400_000, backup_overdue: true };
+    case "off":
+      return { ...ok, backups: false, last_backup_at: null };
+    case "full":
+      return { ...ok, last_backup_at: NOW - 4 * 86_400_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: true };
+    default:
+      return null;
+  }
+}
+const health = healthOf(query.get("backups"));
 
 /** What Hosting → Server knows of the server's release, from `?server=` (#314). */
 function serverVersionOf(option: string | null): ServerVersion {
@@ -442,6 +466,7 @@ function Fixture() {
                   openNotes: (version) => note(`notes:${version}`),
                   openGuide: () => note("host-guide"),
                 },
+                health: health ? { health, now: NOW, openGuide: () => note("backup-guide") } : undefined,
                 name: server.name,
                 accent: server.accent,
                 save: async (change) => {

@@ -73,6 +73,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
     }
 }
 
@@ -98,6 +99,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
     };
     spawn_with(dir, config).await
 }
@@ -148,6 +150,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+        backups: true,
     };
     Some(spawn_with(dir, config).await)
 }

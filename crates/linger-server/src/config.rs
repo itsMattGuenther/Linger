@@ -116,6 +116,10 @@ pub struct Config {
     /// hashes or checks at the same time (#495). Default
     /// [`DEFAULT_PASSWORD_CHECKS_AT_ONCE`]; each one holds about 19 MB.
     pub password_checks_at_once: usize,
+    /// `LINGER_BACKUPS`: whether the server copies its database into
+    /// `data/backups/` once a day (`crate::backup`, #582). On unless set to
+    /// `off`.
+    pub backups: bool,
 }
 
 /// Where the voice forwarding server listens, and where clients are told to
@@ -266,6 +270,11 @@ pub enum ConfigError {
          19 MB of memory and a CPU core while it runs, so 16 at once can take about 300 MB."
     )]
     PasswordChecksAtOnce(String),
+    #[error(
+        "LINGER_BACKUPS is {0:?}. Leave it out (or write `on`) for the server's nightly \
+         copy of its database in data/backups, or write `off` if you back it up another way."
+    )]
+    Backups(String),
 }
 
 impl Config {
@@ -326,6 +335,7 @@ impl Config {
             password_checks_at_once: password_checks_at_once(
                 std::env::var("LINGER_PASSWORD_CHECKS_AT_ONCE").ok(),
             )?,
+            backups: backups(std::env::var("LINGER_BACKUPS").ok())?,
         })
     }
 
@@ -527,6 +537,21 @@ fn file_expiry_days(configured: Option<String>) -> Result<Option<u32>, ConfigErr
         Ok(0) => Ok(None),
         Ok(days) => Ok(Some(days)),
         Err(_) => Err(ConfigError::FileExpiryDays(text.to_string())),
+    }
+}
+
+/// Read `LINGER_BACKUPS`: on unless it says `off` (#582).
+fn backups(configured: Option<String>) -> Result<bool, ConfigError> {
+    let Some(raw) = configured.filter(|value| !value.trim().is_empty()) else {
+        return Ok(true);
+    };
+    let text = raw.trim();
+    if text.eq_ignore_ascii_case("off") {
+        Ok(false)
+    } else if text.eq_ignore_ascii_case("on") {
+        Ok(true)
+    } else {
+        Err(ConfigError::Backups(text.to_string()))
     }
 }
 
@@ -999,6 +1024,7 @@ mod tests {
             trusted_proxies: TrustedProxies::default(),
             signups_per_hour: Some(DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: DEFAULT_PASSWORD_CHECKS_AT_ONCE,
+            backups: true,
         }
     }
 
@@ -1225,6 +1251,18 @@ mod tests {
         assert!(matches!(
             pool_bytes(Some("100MB".to_string())),
             Err(ConfigError::PoolTooSmall(_))
+        ));
+    }
+
+    #[test]
+    fn backups_are_on_unless_turned_off() {
+        assert!(backups(None).unwrap());
+        assert!(backups(Some(" ".to_string())).unwrap());
+        assert!(backups(Some("on".to_string())).unwrap());
+        assert!(!backups(Some("OFF".to_string())).unwrap());
+        assert!(matches!(
+            backups(Some("nightly".to_string())),
+            Err(ConfigError::Backups(_))
         ));
     }
 

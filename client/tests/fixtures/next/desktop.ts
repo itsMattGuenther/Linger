@@ -60,6 +60,8 @@ export interface Desktop {
   wake: () => void;
   /** The list window signs in to another server, and says so. */
   signIn: (server: string, state: GatewayState) => void;
+  /** With `?holdpreviews`: the server answers the link cards it was asked for, from now on. */
+  releasePreviews: () => void;
 }
 
 export function json(body: unknown, status = 200): Response {
@@ -261,6 +263,15 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     return upTo.slice(-limit);
   };
 
+  // `?holdpreviews`: the server sits on link cards until `releasePreviews`, so
+  // a spec can land one when it chooses (#625).
+  let releasePreviews = () => {};
+  const previewsHeld = query.has("holdpreviews")
+    ? new Promise<void>((release) => {
+        releasePreviews = release;
+      })
+    : null;
+
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -364,6 +375,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       return query.has("limit") ? refuse(429, "RATE_LIMITED", "Slow down a little.", 1_150_000) : new Response(null, { status: 204 });
     }
     if (path === "/links/preview") {
+      if (previewsHeld) await previewsHeld;
       const urls = Array.isArray(body.urls) ? body.urls.map(String) : [];
       return json(urls.flatMap((wanted): LinkPreview[] => (previews[wanted] ? [previews[wanted]] : [])));
     }
@@ -387,5 +399,6 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
       shared[server] = { ...state, sessionId: `${EPOCH}-${new URL(server).hostname}` };
       deliver("next:signedin", { v: 1, server });
     },
+    releasePreviews: () => releasePreviews(),
   };
 }

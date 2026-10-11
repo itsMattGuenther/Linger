@@ -274,7 +274,8 @@ controls are in Settings, under **Hosting**:
   sent, are deleted when they're removed, and don't come back with them.
 - **Server**: its name and color. The name is what everybody's list shows and
   what an invite link tells a stranger; the color is the server's stripe in
-  everybody's list.
+  everybody's list. You also see which version it runs, when it last backed
+  itself up, and whether its disk is nearly full ([Backups](#backups)).
 
 Newcomers start on the name color the fewest people on the server wear, so a
 big group isn't a list of gray names. Anyone can change theirs in **Settings →
@@ -346,6 +347,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 |---|---|---|
 | `LINGER_POOL_BYTES` | Total storage the server will use. Write `250GB`, `500MB`, or a plain number. | `50GB` |
 | `LINGER_FILE_EXPIRY_DAYS` | How long a file stays before it is deleted. `off` keeps every sent file forever. Starred files never expire. | `365` |
+| `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
 | `LINGER_VOICE_ADDRESS` | Where voice goes: the server's public IP address, or `off` for no voice. The relay carries voice there and nowhere else. See [Voice](#voice). | the address your name points at |
@@ -547,6 +549,36 @@ The whole server is the `data` folder next to your `compose.yaml`. It holds
 `linger.db` (every message) and `objects/` (every uploaded file). Keep a copy
 of `.env` somewhere safe too: it holds your settings and the relay's secret.
 
+### What the server does by itself
+
+Every night the server copies its database into `data/backups/` while it keeps
+running, so nobody notices, and checks that the copy opens cleanly. It keeps a
+week of nightly copies (`linger-daily-2026-10-11.db`) and a month of weekly
+ones (`linger-weekly-…`), and deletes older ones itself. The first copy is made
+a couple of minutes after the server starts, then one every 24 hours. Each is
+about the size of your database. The uploaded files aren't in them.
+
+**These copies are on the same disk as the server.** They save you from a bad
+update, a mistaken command or a damaged database file. They don't survive the
+disk dying, the machine being deleted, or your hosting account closing. For
+that, keep a copy somewhere else too ([below](#a-copy-somewhere-else)).
+
+In the app, **Settings → Hosting → Server** says when the last copy was made.
+If the server goes three days without making one, a quiet line at the foot of
+your list says so ("Pinecone hasn't been backed up for 3 days."), and the
+server's log (`docker compose logs linger`) says why. A full disk is the usual
+reason. Only you see that line, not co-hosts or anybody else.
+
+The same place tells you when the disk is nearly full (less than a tenth
+free), or when uploaded files have nearly used up `LINGER_POOL_BYTES`. A full
+disk stops the server for everybody, so don't wait for it: free some space,
+lower `LINGER_POOL_BYTES`, or [move to a bigger machine](#moving-to-a-new-machine).
+
+Already back up the `data` folder another way and don't want the copies? Put
+`LINGER_BACKUPS=off` in `.env`, then `docker compose up -d`.
+
+### A copy somewhere else
+
 Only the server and root can open the `data` folder, so nobody else with an
 account on this machine can read it. So the copy is made by a throwaway
 Linger container, which can open it; any account that runs `docker` can do
@@ -560,16 +592,45 @@ docker compose start linger
 ```
 
 `umask 077` makes the copy readable by you alone, like the folder. That is a
-few seconds of downtime. Put it in a scheduled job and keep the copies
-somewhere that is not this machine.
+few seconds of downtime. Then move the file to another machine, or to cloud
+storage you trust.
 
-`update.sh` also saves the database into `backups/` whenever it updates the
-server, readable by you alone. That copy is for going back after an update: it
-has the messages but not the uploaded files, and it's on the same machine. It
-doesn't replace this.
+Without stopping anything, you can copy the nightly copies and the uploaded
+files off the machine instead. An uploaded file never changes once it's up,
+so each run only sends what's new. With `rsync` to another machine you can
+SSH into:
 
-To restore, unpack a copy into the `data` folder the same way, with the server
-stopped (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
+```bash
+sudo rsync -a data/backups data/objects you@other-machine:linger-backup/
+```
+
+or with [`rclone`](https://rclone.org/), to cloud storage you've set up for
+root as `remote:` (`sudo rclone config`), the same two folders:
+`sudo rclone copy data/backups remote:linger-backup/backups` and
+`sudo rclone copy data/objects remote:linger-backup/objects`. Either is a line
+to put in a scheduled job (`sudo crontab -e`).
+
+`update.sh` also saves the database into `backups/` (next to `compose.yaml`,
+not inside `data`) whenever it updates the server. That copy is for going back
+after an update, and it doesn't replace the others.
+
+### Restoring
+
+From one of the nightly copies, with the server stopped (put the copy's name
+in place of `linger-daily-2026-10-10.db`):
+
+```bash
+docker compose stop linger
+docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'cd /data && rm -f linger.db-wal linger.db-shm && cp backups/linger-daily-2026-10-10.db linger.db && chmod 600 linger.db'
+docker compose start linger
+```
+
+Everything written after that copy was made is gone: messages, people who
+joined, rooms you made. Uploaded files sent since then stay on the disk but
+nothing points at them anymore.
+
+From a full copy you made yourself, unpack it into the `data` folder the same
+way (put your copy's name in place of `linger-backup-2026-10-10.tar.gz`):
 
 ```bash
 docker compose stop linger
@@ -577,11 +638,43 @@ docker compose run --rm --no-deps -T --user root --entrypoint sh linger -c 'rm -
 docker compose start linger
 ```
 
-It clears the database's two journal files first: left over from another
+Both clear the database's two journal files first: left over from another
 copy, they would be applied to this one.
 
 (If you moved files to a cloud bucket, `data/objects/` is empty and the bucket
 is the other half of your backup.)
+
+## Moving to a new machine
+
+Everything the server is lives in the `linger` folder: `compose.yaml`, the
+`Caddyfile`, `.env` and `data`. Moving it is copying that folder and pointing
+your names at the new machine. Friends' apps follow the name: they reconnect
+once the names point at the new machine, and stay signed in.
+
+1. On the new machine, [install Docker](#1-install-docker-on-the-server) and
+   open the same firewall ports as before.
+2. On the old machine, stop everything and pack the folder up, keeping who
+   owns what:
+
+   ```bash
+   cd linger
+   docker compose down
+   cd ..
+   sudo tar --numeric-owner -czpf linger-move.tar.gz linger
+   ```
+
+3. Copy `linger-move.tar.gz` to the new machine (with `scp`, say) and unpack
+   it there: `sudo tar --numeric-owner -xzpf linger-move.tar.gz`.
+4. Point both names (`linger.` and `cdn.linger.`) at the new machine's
+   address, as in [step 2](#2-point-two-names-at-the-server). If `.env` has
+   `LINGER_VOICE_ADDRESS` or `LINGER_RELAY_EXTERNAL_IP` set to the old
+   machine's address, change it to the new one.
+5. On the new machine, `cd linger` and `docker compose up -d`. Caddy gets new
+   certificates by itself once the names point here.
+6. Check the app connects, then delete the old machine.
+
+With `LINGER_STORAGE=s3` the files stay in the bucket and the new machine
+reads them there; only the folder moves.
 
 ## Exports (and what they do to your disk)
 
@@ -663,7 +756,8 @@ docker compose pull
 docker compose up -d
 ```
 
-Without `update.sh` nothing makes a backup first; see [Backups](#backups).
+Without `update.sh` nothing makes a backup first, apart from the server's own
+nightly copy; see [Backups](#backups).
 These commands use the image name already in your `compose.yaml`. If that line
 still says `ghcr.io/matthewguenther/linger`, change it to
 `ghcr.io/itsmattguenther/linger:latest` (all lowercase) before pulling.
