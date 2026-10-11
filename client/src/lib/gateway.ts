@@ -669,7 +669,9 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         knocks: [],
         // A fresh `ready` is a fresh session, and a voice seat belongs to a
         // session (PROTOCOL §8): the old one is gone at the server, so it
-        // goes here too. Seed visible rooms without opening our microphone.
+        // goes here too, and the listener that folds this frame tells the
+        // core to let go of the devices (#589). Seed visible rooms without
+        // opening our microphone.
         sessionId: frame.d.session_id,
         voice: Object.fromEntries((frame.d.voice ?? []).map((room) => [room.room_id, room.peers])),
         emoji: frame.d.emoji ?? [],
@@ -1173,20 +1175,19 @@ async function attachListeners(): Promise<void> {
       // page's (ARCHITECTURE §2, #197): it is handed straight over, and the
       // core answers it.
       if (frame.op === "voice.offer") void voiceFrame(server, frame);
-      if (frame.op === "voice.removed" && seated && next.myVoice === null) {
-        // Taken out by the host (#423): let go of the devices, as when the
-        // room's list stops having us.
-        void voiceLeave(server);
+      if (seated && next.myVoice === null) {
+        // The fold above ended our seat: the host took us out (#423), the
+        // room's list no longer has us, or a fresh `ready` means the server
+        // ended the old session, its seat with it (the resume window lapsed
+        // or the server restarted, #589). The core still holds the devices,
+        // so tell it to let go — a microphone left open after the server has
+        // said you are gone is exactly the thing SPEC §4.14 is careful about.
+        // Once: the next frame finds no seat to end.
+        void letGoOfVoice(server);
       }
       if (frame.op === "voice.state") {
         applySavedVoiceVolumes(server);
-        if (seated && next.myVoice === null) {
-          // The fold above drops our seat if the server's list no longer has
-          // us in it. The core still holds the devices, so tell it to let go —
-          // a microphone left open after the server has said you are gone is
-          // exactly the thing SPEC §4.14 is careful about.
-          void voiceLeave(server);
-        } else if (next.myVoice !== null && onTheOldWay(frame.d.room_id, frame.d.peers, next)) {
+        if (next.myVoice !== null && onTheOldWay(frame.d.room_id, frame.d.peers, next)) {
           // A server from before the mesh was taken out (#306) sends a room
           // the old way when it doesn't forward, or when an older app is in
           // it. This app has no old way, so there's nothing to hear: leave,
@@ -1303,10 +1304,16 @@ export function disconnect(server: string): Promise<void> {
 
 async function close(server: string): Promise<void> {
   const link = links.get(server);
+  const seated = stateOf(server).myVoice !== null;
   links.delete(server);
   positions.delete(server);
   if (link) clearTimers(link);
   forget(server);
+  // Signed out of, or removed, while in voice there (#589): forgetting the
+  // seat isn't letting go of the devices, so the core is told. Before the
+  // connection closes, which carries its leave, so the room stops showing
+  // us now rather than when the server gives up on the session.
+  if (seated) await voiceLeave(server).catch(() => undefined);
   if (isTauri()) await invoke("gateway_disconnect", { baseUrl: server });
 }
 
@@ -2221,8 +2228,10 @@ export async function joinVoice(
   pushToTalk: boolean,
 ): Promise<void> {
   const server = api.baseUrl;
-  // A queued deafen must take effect before its choice is carried to another room.
-  await Promise.all([...controlQueues.values()].map((pending) => pending.catch(() => undefined)));
+  // A queued deafen must take effect before its choice is carried to another
+  // room, and a seat that just ended must be let go of before the core is
+  // given a new one, or the leave could land after the join and end it (#589).
+  await Promise.all([...controlQueues.values(), ...lettingGo.values()].map((pending) => pending.catch(() => undefined)));
   const current = stateOf(server);
   if (current.sessionId === null) throw new Error("Not connected yet.");
   const previous = Object.values(states).find((state) => state.myVoice !== null)?.myVoice;
@@ -2267,6 +2276,15 @@ export async function joinVoice(
       .then((answer) => answer.servers)
       .catch(() => []);
     await voiceJoin(server, current.sessionId, roomId, devices, ice);
+    // The seat can end while the join is on its way to the core: Leave
+    // pressed, voice moved to another server, or the connection starting
+    // over, which takes the seat with it (#589). The core joined all the
+    // same, and holds the devices, so it lets go now. Not when another join
+    // here has taken a seat meanwhile: the core is about to be given that one.
+    if (stateOf(server).myVoice === null) {
+      await letGoOfVoice(server);
+      return;
+    }
     applySavedVoiceVolumes(server);
   } catch (error) {
     const problem = error instanceof Error ? error.message : String(error);
@@ -2336,6 +2354,26 @@ export async function leaveVoice(server: string, chime = true): Promise<SoundCue
 }
 
 const controlQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * The core letting go of a seat that ended without Leave being pressed, by
+ * server (#589). A join waits for it, so it can't land after the join.
+ */
+const lettingGo = new Map<string, Promise<void>>();
+
+/**
+ * Tell the core to let go of the devices for a seat the store has already
+ * ended: no chime, since nobody pressed anything, and no error, since there
+ * is nobody to show one to. Resolves once the core has.
+ */
+function letGoOfVoice(server: string): Promise<void> {
+  const leaving = voiceLeave(server).catch(() => undefined);
+  lettingGo.set(server, leaving);
+  void leaving.then(() => {
+    if (lettingGo.get(server) === leaving) lettingGo.delete(server);
+  });
+  return leaving;
+}
 
 /**
  * Whether push-to-talk has the microphone closed: it's on and its key isn't

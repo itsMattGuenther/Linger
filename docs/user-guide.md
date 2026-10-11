@@ -615,7 +615,10 @@ window, so you don't need the list in front to mute:
   the symbol for the word. An unmuted microphone is not a guarantee somebody
   is listening.
 - **Leave voice** (the arrow) turns the microphone off. Quitting Linger does
-  too; closing the list doesn't, since Linger keeps running in the tray.
+  too, and so does signing out of the server; closing the list doesn't, since
+  Linger keeps running in the tray. If your computer sleeps for more than two
+  minutes, or the server restarts, you're out of voice when Linger reconnects,
+  with the microphone off. Press **Join** to carry on.
 - Click someone's name in the voice bar to set **how loud they are for you**,
   from silent to twice as loud. Linger remembers it for that person on this
   server, on this computer only; nobody else hears or sees the change.

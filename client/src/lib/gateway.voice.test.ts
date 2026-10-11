@@ -16,11 +16,17 @@ import type { AuthedApi } from "./api";
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
 /** Commands that should reject, to see what the store does with a refusal. */
 const failing = new Set<string>();
+/** Commands the core takes its time over, until the promise settles. */
+const holding = new Map<string, Promise<void>>();
+/** Commands in the order the core finished them. */
+const finished: string[] = [];
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
   invoke: async (cmd: string, args: Record<string, unknown>): Promise<boolean> => {
     invoked.push({ cmd, args });
+    await holding.get(cmd);
+    finished.push(cmd);
     if (failing.has(cmd)) throw new Error(`no ${cmd} today`);
     return true;
   },
@@ -141,9 +147,11 @@ async function seated(server: string): Promise<void> {
 
 describe("voice in the store", () => {
   beforeEach(async () => {
+    holding.clear();
     await Promise.all([disconnect(HOME), disconnect(WORK)]);
     invoked.length = 0;
     failing.clear();
+    finished.length = 0;
     played.length = 0;
     const saved = new Map<string, string>();
     vi.stubGlobal("localStorage", {
@@ -698,5 +706,88 @@ describe("voice in the store", () => {
     expect(serverState(HOME).sessionId).toBe("s-me-2");
     expect(serverState(HOME).myVoice).toBeNull();
     expect(serverState(HOME).voice).toEqual({});
+  });
+
+  // Away past the resume window (a laptop asleep, a server restarting), the
+  // app comes back on a fresh session with no seat. The core must hear about
+  // it, or the microphone stays open with the app saying you're out (#589).
+  it("a fresh ready lets go of the microphone, once (#589)", async () => {
+    await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"]]));
+    invoked.length = 0;
+
+    arrive(HOME, ready({ session_id: "s-me-2" }));
+    expect(serverState(HOME).myVoice).toBeNull();
+    expect(invoked.filter((call) => call.cmd === "voice_leave")).toEqual([{ cmd: "voice_leave", args: { baseUrl: HOME } }]);
+
+    // The room's list without us, and another fresh session after that,
+    // find no seat to lose and let go of nothing twice.
+    arrive(HOME, voiceState("r-garage", [["s-1", "u-amy"]]));
+    arrive(HOME, ready({ session_id: "s-me-3" }));
+    expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
+    expect(played).not.toContain("voice-leave");
+  });
+
+  it("signing out of a server you're in voice on lets go of the microphone before the connection closes (#589)", async () => {
+    await seated(HOME);
+    await connect(fakeApi(WORK));
+    arrive(WORK, ready());
+    invoked.length = 0;
+
+    // Not in voice there: the core's voice is left alone. The phone has no
+    // voice to ask, so it must never be asked.
+    await disconnect(WORK);
+    expect(invoked.map((call) => call.cmd)).toEqual(["gateway_disconnect"]);
+
+    invoked.length = 0;
+    await disconnect(HOME);
+    // Leave first, so its frame goes out on the connection still open and
+    // the room stops showing you at once.
+    expect(invoked.map((call) => call.cmd)).toEqual(["voice_leave", "gateway_disconnect"]);
+  });
+
+  it("joining again right after a drop waits for the core to let go first (#589)", async () => {
+    await seated(HOME);
+    invoked.length = 0;
+    finished.length = 0;
+    let letGo = () => {};
+    holding.set("voice_leave", new Promise((resolve) => { letGo = resolve; }));
+
+    arrive(HOME, ready({ session_id: "s-me-2" }));
+    const joining = joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The core is still letting go, so nothing of the new join has reached it.
+    expect(invoked.map((call) => call.cmd)).toEqual(["voice_leave"]);
+
+    letGo();
+    await joining;
+    expect(finished.filter((cmd) => cmd !== "voice_volume")).toEqual(["voice_leave", "voice_controls", "voice_push_to_talk", "voice_join"]);
+    expect(invoked.find((call) => call.cmd === "voice_join")?.args.sessionId).toBe("s-me-2");
+    expect(serverState(HOME).myVoice?.roomId).toBe("r-garage");
+  });
+
+  it("a join the session drops under lets go once the core has joined (#589)", async () => {
+    let answer = (_servers: unknown) => {};
+    const relay = new Promise((resolve) => { answer = resolve; });
+    let asked = false;
+    const api = fakeApi(HOME, (path) => {
+      if (path !== "/voice/ice") throw new Error(`unexpected GET ${path}`);
+      asked = true;
+      return relay;
+    });
+    await connect(api);
+    arrive(HOME, ready());
+    invoked.length = 0;
+
+    const joining = joinVoice(api, "r-garage", DEFAULTS, false);
+    await vi.waitFor(() => expect(asked).toBe(true));
+    // The connection starts over while the join is on its way to the core.
+    arrive(HOME, ready({ session_id: "s-me-2" }));
+    answer({ servers: [], ttl_secs: 0 });
+    await joining;
+
+    expect(serverState(HOME).myVoice).toBeNull();
+    const calls = invoked.map((call) => call.cmd).filter((cmd) => cmd.startsWith("voice_"));
+    expect(calls.lastIndexOf("voice_leave")).toBeGreaterThan(calls.indexOf("voice_join"));
   });
 });

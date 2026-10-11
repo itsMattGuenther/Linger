@@ -1223,7 +1223,11 @@ missing one is not, which is why it is a snapshot.
 it was in and the others are told — as are the others of a session whose resume
 window lapses, which is what stops a dead client sitting in the list looking connected.
 A session that *resumes* keeps its seat: it is the same client, and it replays whatever
-it missed, the server's latest offer included.
+it missed, the server's latest offer included. A client that gets a fresh `ready`
+instead has no seat, whatever it had before, and no `voice.state` without it is coming:
+the new session was never in the list. It closes its microphone on the `ready` itself,
+and doesn't take a seat again on its own (#589). A client signing out sends
+`voice.leave` before it closes the socket, so the room isn't left waiting out the window.
 
 ### Voice forwarding (#197)
 
