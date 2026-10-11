@@ -591,6 +591,15 @@ files, in one archive. No gatekeeping, no host approval, one export per hour.
 This is a trust feature and an anti-lock-in guarantee. It costs a weekend and it is the
 most credible thing in the product.
 
+An archive is something you download, not something the server keeps (#504). Each
+member has one at a time, and the server deletes it **a week** after it's ready, or
+when the host removes that member, whichever comes first. Most people download theirs
+within minutes; a week covers a weekend away or a download that has to be resumed, and
+anybody who misses it asks again. The app says when the link stops working. An export
+the server's disk can't hold is refused before it starts, in words, because a full disk
+stops the whole server. An export cut off by a restart shows as failed, and the person
+can ask again straight away.
+
 ### 4.12 Search
 
 Search exists because principle 3 — keep the artifact — is a promise that a thing said

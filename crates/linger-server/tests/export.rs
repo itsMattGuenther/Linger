@@ -653,3 +653,260 @@ async fn an_export_replaced_while_it_waited_is_never_built() {
         "the replaced export was built and stored anyway"
     );
 }
+
+// ---------------------------------------------------------------------------
+// How long an archive lasts, and what it leaves on the disk (#504)
+// ---------------------------------------------------------------------------
+
+/// Is this archive still being handed out? What a person holding the link
+/// would see.
+async fn link_status(server: &TestServer, url: &str) -> u16 {
+    client()
+        .get(format!("{}{url}", server.base))
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .as_u16()
+}
+
+/// Are the archive's bytes still in the store? The link going dead is what a
+/// person sees; the bytes going is what the host's disk sees.
+async fn stored(server: &TestServer, id: linger_core::ExportId) -> bool {
+    use linger_server::storage::{ObjectStore, ServeAs};
+    let serve = ServeAs::for_object("application/zip", "archive.zip");
+    let store: &dyn ObjectStore = server.state.storage.as_ref();
+    store
+        .read_object(&linger_server::export::object_key(id), &serve)
+        .await
+        .unwrap()
+        .is_some()
+}
+
+#[tokio::test]
+async fn an_archive_lasts_a_week_and_then_the_sweeper_takes_it() {
+    // An export is something you download, not something the server keeps.
+    // Before #504 every member who ever exported left a copy of the whole
+    // server on the host's disk, for good.
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    say(&server, &host.access_token, &room, "hello").await;
+
+    let before = linger_server::db::now_ms();
+    let job = export_now(&server, &host.access_token).await;
+    let url = job.url.clone().expect("a finished export has a url");
+
+    // The answer says when the link stops working, so the app can say it.
+    let week = linger_server::export::KEPT_FOR_MS;
+    let expires_at = job.expires_at.expect("a finished export says when it goes");
+    assert!(
+        expires_at >= before + week && expires_at <= linger_server::db::now_ms() + week,
+        "the archive should last a week from when it finished, got {expires_at}"
+    );
+
+    // Inside its week, a sweep leaves it alone.
+    linger_server::expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(link_status(&server, &url).await, 200);
+
+    // A week and a minute later, it goes: bytes, row and link.
+    sqlx::query("UPDATE exports SET finished_at = finished_at - ?")
+        .bind(week + 60_000)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let swept = linger_server::expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(swept.archives, 1);
+    assert_eq!(
+        link_status(&server, &url).await,
+        404,
+        "an old archive is still served"
+    );
+    assert!(
+        !stored(&server, job.job_id).await,
+        "an old archive's bytes are still on disk"
+    );
+    let asked = client()
+        .get(server.url(&format!("/export/{}", job.job_id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(asked.status(), 404);
+}
+
+#[tokio::test]
+async fn removing_a_member_takes_their_archive_with_them() {
+    // A removed member can't sign in, and before #504 their archive's link
+    // still worked: the whole server, for anybody holding a URL.
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let sam = join_member(&server, &host.access_token, "sam").await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    say(&server, &host.access_token, &room, "hello").await;
+
+    let job = export_now(&server, &sam.access_token).await;
+    let url = job.url.expect("a finished export has a url");
+    assert_eq!(link_status(&server, &url).await, 200);
+
+    let removed = client()
+        .post(server.url(&format!("/users/{}/remove", sam.user.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), 204);
+
+    assert_eq!(
+        link_status(&server, &url).await,
+        404,
+        "a removed member's archive is still served"
+    );
+    assert!(
+        !stored(&server, job.job_id).await,
+        "a removed member's archive is still on disk"
+    );
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM exports WHERE user_id = ?")
+        .bind(sam.user.id.to_vec())
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0, "a removed member's job is still on record");
+}
+
+#[tokio::test]
+async fn a_job_cut_off_by_a_restart_is_failed_and_the_next_one_builds() {
+    // A job's worker lives in the server process. Stop the process mid-zip
+    // and, before #504, the row said `running` forever and its scratch stayed
+    // in `staging/` for good.
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    say(&server, &host.access_token, &room, "hello").await;
+
+    // What the last run of the server left: a job half built, and its
+    // scratch, plus an S3 upload's that was being gathered.
+    let cut_off = linger_core::ExportId::new();
+    sqlx::query(
+        "INSERT INTO exports (id, user_id, state, progress, created_at)
+         VALUES (?, ?, 'running', 0.4, ?)",
+    )
+    .bind(cut_off.to_vec())
+    .bind(host.user.id.to_vec())
+    .bind(linger_server::db::now_ms())
+    .execute(&server.state.db.write)
+    .await
+    .unwrap();
+    let staging = server.state.config.staging_dir();
+    std::fs::create_dir_all(staging.join(".tmpHalfBuilt/media")).unwrap();
+    std::fs::write(staging.join(".tmpHalfBuilt/archive.zip"), b"half a zip").unwrap();
+    std::fs::create_dir_all(staging.join("0192aaaa-upload")).unwrap();
+    std::fs::write(staging.join("0192aaaa-upload/assembled"), b"half a file").unwrap();
+
+    // What `main` does before it answers anybody.
+    let recovered = linger_server::export::recover(&server.state).await.unwrap();
+    assert_eq!(recovered.jobs, 1);
+
+    let job: ExportJob = client()
+        .get(server.url(&format!("/export/{cut_off}")))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        job.state,
+        ExportState::Failed,
+        "a job nobody is building still says it is"
+    );
+    assert!(job.url.is_none());
+    let left: Vec<_> = std::fs::read_dir(&staging)
+        .map(|entries| entries.map(|entry| entry.unwrap().file_name()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "scratch survived a restart: {left:?}");
+
+    // And the person can simply ask again.
+    let fresh = export_now(&server, &host.access_token).await;
+    assert_ne!(fresh.job_id, cut_off);
+    assert_eq!(link_status(&server, &fresh.url.expect("a url")).await, 200);
+}
+
+#[tokio::test]
+async fn an_export_the_disk_cannot_hold_is_refused_in_words() {
+    // Building an archive needs about its own size in free space (twice that
+    // on S3). Running the disk out stops SQLite writing, and the server with
+    // it, so a server that can't hold one says so instead of trying.
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    share(&server, &host.access_token, &room, "huge.png", "a big one").await;
+    // An exbibyte: no disk this test runs on has that free.
+    sqlx::query("UPDATE attachments SET size_bytes = ?")
+        .bind(1_i64 << 60)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+
+    let refused = client()
+        .post(server.url("/export"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 507);
+    let body: serde_json::Value = refused.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "QUOTA_EXCEEDED");
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("doesn't have room") && message.contains("free"),
+        "the refusal should say why in words: {message}"
+    );
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM exports")
+        .fetch_one(&server.state.db.read)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0, "a refused export left a job behind");
+}
+
+#[tokio::test]
+async fn an_export_that_waited_is_checked_for_room_again_when_its_turn_comes() {
+    // Ten members asking in the same minute all pass the check at the door,
+    // since nothing is built yet. What protects the disk is checking again
+    // when each one's turn comes.
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let room = make_room(&server, &host.access_token, "general", None).await;
+    share(&server, &host.access_token, &room, "photo.png", "a photo").await;
+
+    let turn = server.state.exports.clone().acquire_owned().await.unwrap();
+    let waiting = linger_server::export::start(&server.state, host.user.id)
+        .await
+        .unwrap();
+    // While it waited, the disk filled up, as far as this export can tell.
+    sqlx::query("UPDATE attachments SET size_bytes = ?")
+        .bind(1_i64 << 60)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    drop(turn);
+
+    for _ in 0..200 {
+        let job = linger_server::export::job(&server.state, waiting, host.user.id)
+            .await
+            .unwrap()
+            .expect("the job exists");
+        match job.state {
+            ExportState::Failed => {
+                assert!(!stored(&server, waiting).await);
+                return;
+            }
+            ExportState::Complete => panic!("an export the disk can't hold was built"),
+            ExportState::Queued | ExportState::Running => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+    }
+    panic!("the export never finished");
+}

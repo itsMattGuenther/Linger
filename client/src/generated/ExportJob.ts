@@ -14,4 +14,11 @@ export type ExportJob = { job_id: ExportId, state: ExportState,
 /**
  * 0.0–1.0.
  */
-progress: number, url: string | null, };
+progress: number, url: string | null, 
+/**
+ * When the server deletes the archive and `url` stops working (unix
+ * ms). Set alongside `url`: an archive is something to download, not
+ * something the server keeps (SPEC §4.11, #504). A server from before
+ * archives expired leaves it out.
+ */
+expires_at?: number, };

@@ -66,7 +66,8 @@ async fn list_removed(
 /// being in the room*, and there are three other doors: their refresh families
 /// keep minting access tokens for 30 days, their live gateway socket keeps
 /// receiving fan-out forever, and the invites they made are a way back in. All
-/// four are shut here, the first three in one transaction.
+/// four are shut here, the first three in one transaction. Their export
+/// archive, if they have one, is deleted too (#504).
 ///
 /// Their messages are untouched. Removing a person is not deleting what they
 /// wrote (SPEC principle 3).
@@ -130,6 +131,11 @@ async fn remove_user(
     state
         .gateway
         .publish(ServerEvent::UserRemove { user_id: id });
+    // Their export goes too (#504). An archive is a copy of the whole server
+    // behind a link that needs no sign-in, and somebody who can no longer
+    // sign in must not keep one that works. Removing somebody twice is
+    // harmless, so a failure here is put right by removing them again.
+    crate::export::forget(&state, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

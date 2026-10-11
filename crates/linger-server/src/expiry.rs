@@ -31,6 +31,12 @@
 //! rule 3 leaves alone: it is in use for as long as the emoji is, whatever its
 //! age, and removing the emoji removes it.
 //!
+//! Each pass also takes **export archives** a week after they finished
+//! (`export::sweep`, #504). They are not uploads and not in the pool, but they
+//! are on the same disk or in the same bucket, and without this each member who
+//! ever exported kept a copy of the whole server there for good. That rule is
+//! not `LINGER_FILE_EXPIRY_DAYS`, and turning file expiry off does not stop it.
+//!
 //! Deleting is bytes first, row second. The other order can lose an object with
 //! nothing left pointing at it — a file nobody can see and nobody can remove.
 //! Doing it this way, a crash in between leaves a row whose bytes are gone,
@@ -65,8 +71,11 @@ type Expired = (Vec<u8>, String, Option<String>, Option<String>, i64);
 /// What a pass took, for the log line and for the tests.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Swept {
+    /// Uploads, and the bytes they held.
     pub files: u64,
     pub bytes: u64,
+    /// Export archives past their week (`export::sweep`).
+    pub archives: u64,
 }
 
 /// Run the sweeper for as long as the process lives.
@@ -92,11 +101,12 @@ pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
 async fn drain(state: &AppState) {
     loop {
         match sweep(state).await {
-            Ok(swept) if swept.files == 0 => return,
+            Ok(swept) if swept.files == 0 && swept.archives == 0 => return,
             Ok(swept) => {
                 tracing::info!(
                     files = swept.files,
                     bytes = swept.bytes,
+                    archives = swept.archives,
                     "swept expired files"
                 );
                 #[allow(clippy::cast_sign_loss)]
@@ -176,5 +186,7 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
             swept.bytes += size_bytes.max(0) as u64;
         }
     }
+
+    swept.archives = crate::export::sweep(state).await?;
     Ok(swept)
 }

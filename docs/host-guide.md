@@ -450,15 +450,29 @@ every file. This is deliberate and you cannot turn it off: it is the promise
 that nobody is locked in, including when the person locking them in would be
 you.
 
-Two things keep it from being a problem. A member can only ask **once an hour**,
-and each member has **one** archive at a time — asking again deletes the
-previous one. So the most it can cost you is one extra copy of your server per
-member, and in practice far less. And only **one archive is built at a time**
-across the whole server. If several people ask at once, the others wait their
-turn, so building never needs room for more than one archive at once.
+A few things keep it from being a problem:
+
+- A member can only ask **once an hour**, and each member has **one** archive
+  at a time. Asking again deletes the previous one.
+- **An archive is deleted a week after it's ready**, and straight away when you
+  remove that member. It's something to download, not something the server
+  keeps. The app tells the member when their link stops working.
+- Only **one archive is built at a time** across the whole server. If several
+  people ask at once, the others wait their turn, so building never needs room
+  for more than one archive at once.
+- **The server won't start an export your disk can't hold.** It checks the free
+  space first, and again when a waiting export gets its turn, and tells the
+  member in plain words that there isn't room. A full disk would stop the whole
+  server, not just the export.
+
+So the most exports can cost you is one copy of your server for each member who
+asked in the past week, and in practice far less.
 
 Those archives live alongside your uploaded files and are not counted in the
-storage figure members see. If disk space is tight, that is worth knowing.
+storage figure members see. If disk space is tight, that is worth knowing. If
+the server restarts in the middle of building one, the member sees that it
+failed and can ask again, and the half-built scratch in `data/staging` is
+cleared out when the server starts.
 
 Where the space goes depends on your storage backend:
 

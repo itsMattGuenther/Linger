@@ -55,6 +55,11 @@ unicode-properties = "0.1"
 uuid = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
+# How much free disk there is, before building an export that needs it (#504).
+# Already in the tree under `tempfile`; this only names it.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
 [dev-dependencies]
 # The raid-sized voice load test (examples/voice_load.rs) stands in for the
 # app's WebRTC with the same library the server forwards with.

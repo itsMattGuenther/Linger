@@ -642,6 +642,25 @@ async fn an_export_pulls_the_files_back_out_of_the_bucket() {
     }
     assert!(found, "the file never came back out of the bucket");
     assert_eq!(&image[1..4], b"PNG", "and the bytes are the real file");
+
+    // A week after it finished, the sweeper takes it out of the bucket too
+    // (#504): on S3 an archive nobody downloads is billed every month.
+    let key = linger_server::export::object_key(started.job_id);
+    assert!(
+        bucket_has(&key).await,
+        "the archive was never in the bucket"
+    );
+    sqlx::query("UPDATE exports SET finished_at = finished_at - ?")
+        .bind(linger_server::export::KEPT_FOR_MS + 60_000)
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+    let swept = linger_server::expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(swept.archives, 1);
+    assert!(
+        !bucket_has(&key).await,
+        "an old archive is still in the bucket"
+    );
 }
 
 /// A large image's display copy (#382) lives in the bucket next to it, is
