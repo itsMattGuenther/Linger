@@ -469,7 +469,11 @@ an emoji. Each emoji left on a message is a small **pill** under its words,
 with how many people left it (👍 3). Yours are blue with an outline; other
 people's are grey. Click a pill to add yours to it, and click one of yours to
 take it back. Point at a pill to see who left it: *"Jules and Dave reacted"*.
-For one of the server's own emoji, it says the emoji's name too.
+For one of the server's own emoji, it says the emoji's name too. On the phone,
+where there's nothing to point with, hold the pill for half a second instead:
+a small card over it lists everybody who left that emoji, by name. Holding
+doesn't add yours, and a quick tap still does. Tap anywhere else, or go
+**Back**, to close it.
 
 Any emoji works, the server's own included, from the same picker as the
 message box. On a computer, point at a message (or Tab to it) and click the
