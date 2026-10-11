@@ -485,7 +485,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     note(`signin ${JSON.stringify(body)}`);
     if (body.password === "wrong") return refuse(401, "UNAUTHENTICATED", "That username and password don't match.");
     // Joining as somebody already here, in other capitals: the server's look-alike refusal (#574).
-    if (path === "/auth/register" && typeof body.display_name === "string" && body.display_name.toLowerCase() === state.me.display_name.toLowerCase()) {
+    if (path === "/auth/register" && typeof body.display_name === "string" && body.display_name.toLowerCase() === state.me?.display_name.toLowerCase()) {
       return refuse(409, "DISPLAY_NAME_TAKEN", "Someone here already goes by a name that looks like that. Try something a little different.");
     }
     return signedIn();
