@@ -344,31 +344,30 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
 });
 
 test("Mute, Deafen and Leave on the voice strip sound in this window, once the list window has made the change (#241)", async ({ page }) => {
+  // The list window takes a moment over each change (`?hold`), and writes
+  // down how many sounds had started when it finished: none of that change's.
   await open(page, "room=r-general&talking&hold");
   const yours = page.getByRole("group", { name: "Your voice" });
-  // Pressed: the list window is asked, and nothing sounds while it's still making the change.
+  const held = async () => (await did(page)).filter((line) => line.startsWith("held:")).map((line) => Number(line.slice("held:".length)));
+  // Pressed: the list window is asked. Made: the button shows it, and its sound plays here, after.
   await yours.getByRole("button", { name: "Mute" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }]);
-  await page.waitForTimeout(150);
-  expect(sounds(await did(page))).toEqual([]);
-  await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
-  // Made: the button shows it, and its sound plays here.
-  await page.evaluate(() => window.owner?.finish());
   await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute"]);
+  expect(await held()).toEqual([0]);
 
   // Past the player's guard against a burst: one sound of a kind per 100 ms.
   await page.waitForTimeout(150);
   await yours.getByRole("button", { name: "Deafen" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toHaveLength(2);
-  await page.evaluate(() => window.owner?.finish());
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen"]);
+  expect(await held()).toEqual([0, 1]);
 
   await yours.getByRole("button", { name: "Leave voice" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toHaveLength(3);
-  await page.evaluate(() => window.owner?.finish());
   await expect(page.getByRole("group", { name: "Your voice" })).toHaveCount(0);
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);
+  expect(await held()).toEqual([0, 1, 2]);
   // Once each.
   await page.waitForTimeout(300);
   expect(sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);
