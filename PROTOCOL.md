@@ -528,7 +528,7 @@ type UserStatus = {
   fields: StatusField[] | null;       // <= 3, in order; absent from servers before #270
   image_id: string | null;            // always null; accepted and ignored (#269)
   image_url: string | null;           // always null; server-owned
-  away_message: string | null;        // supersedes `line` when set
+  away_message: string | null;        // <= 240 chars; supersedes `line` when set
   away_since: number | null;
 }
 
@@ -1119,13 +1119,31 @@ Beyond that, the client must re-identify and refetch.
 
 | op | payload | notes |
 |---|---|---|
-| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). |
+| `presence.update` | `{ state, away_message? }` | Where you are, and nothing about what you are doing (SPEC §4.3). `away_message` is held to `PATCH /me`'s rule, 240 characters; told at most `RATE_PRESENCE` times (below) |
 | `room.focus` | `{ room_id \| null }` | fires on focus; `null` = left the room |
-| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room |
+| `typing.start` | `{ room_id }` | server rate-limits to 1 per 4s per room; ignored in an archived room, which takes no messages |
 | `voice.join` | `{ room_id, controls?: { muted, deafened }, forwarding: true }` | join or update your own controls; moving leaves the old room. `forwarding` says this client takes voice through the server (#197); a join without it is refused (#306) |
 | `voice.leave` | `{}` | no room id: you are in at most one |
 | `voice.answer` | `{ sdp }` | the answer to the server's latest `voice.offer` |
 | `voice.restart` | `{}` | start this session's connection to the server afresh; the server sends a new `voice.offer` |
+
+The gateway has no way to answer a client frame, so a frame that breaks a rule is
+**ignored, whole**, and nothing it says is told to anybody. The rules are the ones REST
+keeps for the same thing: a room the sender can't see, an away message over its cap,
+typing where no message can go (#497).
+
+**`presence.update`** goes to everybody connected, and the state it sets is in every
+`ready` until it changes, so the server keeps two rules for it (#497):
+
+- **The away message is held to the rule `PATCH /me` holds it to**: at most 240
+  characters (`MAX_STATUS_LINE_CHARS`). A frame with a longer one is ignored whole: its
+  `state` doesn't change either, and nobody is told anything.
+- **A burst is told as a few, then the newest.** One that changes nothing is told to
+  nobody. Changes are told at most `RATE_PRESENCE` times per person: five, and then one
+  every two seconds. Past that, a change is held back, not dropped: when the person's
+  turn comes, the server tells whatever is newest then, once, however many changes came
+  in between. The server has the newest from the start, so a `ready` in between already
+  carries it. An app sends a handful an hour, and never sees the limit.
 
 ### Server → client
 

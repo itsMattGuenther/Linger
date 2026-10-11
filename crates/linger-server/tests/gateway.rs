@@ -4,9 +4,10 @@
 
 mod common;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
+use linger_core::limits::{MAX_STATUS_LINE_CHARS, RATE_PRESENCE};
 use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
@@ -61,6 +62,16 @@ async fn send_json(ws: &mut Ws, value: Value) {
 
 /// Full handshake: hello → identify → ready. Returns the socket + session id.
 async fn connect_ready(server: &common::TestServer, token: &str) -> (Ws, String) {
+    let (ws, ready) = connect_with_ready(server, token).await;
+    let session_id = ready["d"]["session_id"]
+        .as_str()
+        .expect("session id")
+        .to_string();
+    (ws, session_id)
+}
+
+/// The same handshake, handing back the `ready` frame itself.
+async fn connect_with_ready(server: &common::TestServer, token: &str) -> (Ws, Value) {
     let (mut ws, _) = connect_async(server.gateway_url())
         .await
         .expect("ws connect");
@@ -76,11 +87,29 @@ async fn connect_ready(server: &common::TestServer, token: &str) -> (Ws, String)
     .await;
     let (ready, _) = wait_for(&mut ws, "ready").await;
     assert_eq!(ready["s"], 0, "ready carries sequence 0");
-    let session_id = ready["d"]["session_id"]
-        .as_str()
-        .expect("session id")
-        .to_string();
-    (ws, session_id)
+    (ws, ready)
+}
+
+/// Read a watcher's frames until it hears this person's presence in `state`.
+/// Returns that frame and everything before it.
+async fn wait_for_presence(ws: &mut Ws, user_id: &str, state: &str) -> (Value, Vec<Value>) {
+    let mut skipped = Vec::new();
+    loop {
+        let (frame, before) = wait_for(ws, "presence.update").await;
+        skipped.extend(before);
+        if frame["d"]["user_id"] == user_id && frame["d"]["state"] == state {
+            return (frame, skipped);
+        }
+        skipped.push(frame);
+    }
+}
+
+/// The `presence.update`s about one person among some frames.
+fn presence_of<'a>(frames: &'a [Value], user_id: &str) -> Vec<&'a Value> {
+    frames
+        .iter()
+        .filter(|frame| frame["op"] == "presence.update" && frame["d"]["user_id"] == user_id)
+        .collect()
 }
 
 async fn rest_send(server: &common::TestServer, token: &str, room: &str, body: &str) {
@@ -529,4 +558,168 @@ async fn a_new_member_shows_up_without_anybody_restarting() {
             break;
         }
     }
+}
+
+// --- #497: the gateway holds a client to the rules REST does ---------------
+
+/// #497. An away message is held to the same 240 characters over the gateway
+/// as `PATCH /me` holds it to. One over the cap is told to nobody, now or in
+/// the `ready` of anybody who connects later; one at the cap is told as usual.
+#[tokio::test]
+async fn an_away_message_over_the_cap_is_told_to_nobody() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    let over = "x".repeat(MAX_STATUS_LINE_CHARS + 1);
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": over } }),
+    )
+    .await;
+    // One socket's frames are handled in order, so once the watcher hears
+    // this, it has heard anything the frame before it was told as.
+    send_json(
+        &mut theirs,
+        json!({ "op": "typing.start", "d": { "room_id": room.id.to_string() } }),
+    )
+    .await;
+    let (_, before) = wait_for(&mut watcher, "typing").await;
+    assert!(
+        presence_of(&before, &member_id).is_empty(),
+        "an away message over the cap was told to everybody"
+    );
+
+    // Nor is it in the snapshot somebody connecting now is handed.
+    let (_fresh, ready) = connect_with_ready(&server, &host.access_token).await;
+    let held = ready["d"]["presence"]
+        .as_array()
+        .expect("ready carries presence")
+        .iter()
+        .find(|entry| entry["user_id"] == member_id.as_str())
+        .expect("their presence is in ready")
+        .clone();
+    assert_eq!(
+        held["state"], "around",
+        "the refused frame changed their state"
+    );
+    assert!(held["away_message"].is_null(), "ready carried {held}");
+
+    // At the cap, it's an away message like any other.
+    let at_cap = "x".repeat(MAX_STATUS_LINE_CHARS);
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": at_cap } }),
+    )
+    .await;
+    let (told, _) = wait_for_presence(&mut watcher, &member_id, "away").await;
+    assert_eq!(told["d"]["away_message"], at_cap.as_str());
+}
+
+/// #497. A burst of presence changes is told to everybody as a few, then the
+/// newest once the limit allows. One person can't make the server send
+/// thousands of frames to everybody, and nobody is left looking at a state
+/// that isn't the newest.
+#[tokio::test]
+async fn a_burst_of_presence_changes_is_told_as_a_few_then_the_newest() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+    // Their arrival is the server's to tell, and not part of the burst.
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    let started = Instant::now();
+    for n in 0..200 {
+        let state = if n % 2 == 0 { "idle" } else { "around" };
+        send_json(
+            &mut theirs,
+            json!({ "op": "presence.update", "d": { "state": state, "away_message": null } }),
+        )
+        .await;
+    }
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": "back at nine" } }),
+    )
+    .await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "typing.start", "d": { "room_id": room.id.to_string() } }),
+    )
+    .await;
+    let (_, before) = wait_for(&mut watcher, "typing").await;
+    let told = presence_of(&before, &member_id);
+
+    // The most the limit lets out in the time the burst took: the whole
+    // bucket, and one more for each token that has come back since. Measured
+    // rather than assumed, so a slow machine can't fail it.
+    let (burst, per_seconds) = RATE_PRESENCE;
+    #[allow(clippy::cast_precision_loss)]
+    let refilled = started.elapsed().as_secs_f64() * f64::from(burst) / per_seconds as f64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let allowed = burst as usize + refilled.ceil() as usize;
+    assert!(
+        told.len() <= allowed,
+        "201 changes were told as {}, more than the {allowed} the limit lets out",
+        told.len()
+    );
+
+    // The newest is told when its turn comes, not lost.
+    let newest = match told.last() {
+        Some(frame) if frame["d"]["state"] == "away" => (*frame).clone(),
+        _ => wait_for_presence(&mut watcher, &member_id, "away").await.0,
+    };
+    assert_eq!(newest["d"]["away_message"], "back at nine");
+}
+
+/// #497's audit. `typing.start` keeps the rule a message keeps: an archived
+/// room takes no new messages, so nobody can be shown typing one there.
+#[tokio::test]
+async fn nobody_is_shown_typing_in_an_archived_room() {
+    let (server, host, attic) = common::server_with_room("attic").await;
+    let client = reqwest::Client::new();
+    let garage: Value = client
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&json!({ "slug": "garage", "name": "#garage" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let archived: Value = client
+        .post(server.url(&format!("/rooms/{}/archive", attic.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(archived["archived_at"].is_number());
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+
+    send_json(
+        &mut theirs,
+        json!({ "op": "typing.start", "d": { "room_id": attic.id.to_string() } }),
+    )
+    .await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "typing.start", "d": { "room_id": garage["id"] } }),
+    )
+    .await;
+    let (typing, _) = wait_for(&mut watcher, "typing").await;
+    assert_eq!(
+        typing["d"]["room_id"], garage["id"],
+        "somebody was shown typing in an archived room"
+    );
 }

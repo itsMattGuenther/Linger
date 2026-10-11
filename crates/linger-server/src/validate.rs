@@ -474,11 +474,9 @@ pub fn status(status: &UserStatus) -> Result<(), ApiError> {
     cap(&status.reading, MAX_STATUS_FIELD_CHARS, "Reading")?;
     cap(&status.listening, MAX_STATUS_FIELD_CHARS, "Listening")?;
     cap(&status.working_on, MAX_STATUS_FIELD_CHARS, "Working on")?;
-    cap(
-        &status.away_message,
-        MAX_STATUS_LINE_CHARS,
-        "The away message",
-    )?;
+    if let Some(message) = &status.away_message {
+        away_message(message)?;
+    }
     // The three keys become fields (`status_fields::apply_classic`), so they
     // are held to what a field's value may hold.
     for (value, what) in [
@@ -492,6 +490,19 @@ pub fn status(status: &UserStatus) -> Result<(), ApiError> {
     }
     if let Some(fields) = &status.fields {
         status_fields(fields)?;
+    }
+    Ok(())
+}
+
+/// An away message, capped like the status line it stands in for (SPEC
+/// §4.6). One rule for both ways one arrives: saved on the status by `PATCH
+/// /me`, and sent with a `presence.update` over the gateway, which goes to
+/// everybody connected and into every `ready` (#497).
+pub fn away_message(message: &str) -> Result<(), ApiError> {
+    if message.chars().count() > MAX_STATUS_LINE_CHARS {
+        return Err(ApiError::validation(format!(
+            "The away message is capped at {MAX_STATUS_LINE_CHARS} characters."
+        )));
     }
     Ok(())
 }
@@ -832,6 +843,20 @@ mod tests {
         assert_eq!(caption("   ").unwrap(), "");
         assert_eq!(caption(" hello ").unwrap(), "hello");
         assert!(caption(&"x".repeat(MAX_MESSAGE_CHARS + 1)).is_err());
+    }
+
+    #[test]
+    fn an_away_message_is_capped_in_characters_on_the_status_and_alone() {
+        // Characters, not bytes: 240 of a two-byte letter is still 240.
+        assert!(away_message(&"é".repeat(MAX_STATUS_LINE_CHARS)).is_ok());
+        assert!(away_message(&"x".repeat(MAX_STATUS_LINE_CHARS + 1)).is_err());
+        // The status a `PATCH /me` saves keeps the same rule (#497).
+        let saved = |message: String| UserStatus {
+            away_message: Some(message),
+            ..UserStatus::default()
+        };
+        assert!(status(&saved("x".repeat(MAX_STATUS_LINE_CHARS + 1))).is_err());
+        assert!(status(&saved("x".repeat(MAX_STATUS_LINE_CHARS))).is_ok());
     }
 
     #[test]

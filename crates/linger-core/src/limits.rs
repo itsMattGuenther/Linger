@@ -206,6 +206,11 @@ pub const RATE_SEARCH: (u32, u64) = (30, 60);
 /// Link previews are cached server-side, so this only bounds the misses.
 pub const RATE_LINK_PREVIEW: (u32, u64) = (60, 60);
 pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
+/// Presence changes from `presence.update` told to everybody, per person
+/// (PROTOCOL §8, #497). Each one goes to everybody connected, so a burst is
+/// told as these few, then as the newest once the limit allows. An app sends
+/// a handful an hour: idle, back, away.
+pub const RATE_PRESENCE: (u32, u64) = (5, 10);
 /// Voice answers and restarts, per session (PROTOCOL §8). Loose, because a
 /// busy room re-offers everybody each time somebody comes or goes, and each
 /// offer wants an answer; a limit tight enough to be interesting would break
