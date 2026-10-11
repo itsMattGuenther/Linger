@@ -199,8 +199,8 @@ async fn the_grid_filters_by_person_by_type_and_by_date() {
         b"just some notes".to_vec(),
     )
     .await;
-    let their_message = post(&server, &friend.access_token, &room, "", &[&theirs]).await;
-    post(
+    post(&server, &friend.access_token, &room, "", &[&theirs]).await;
+    let their_link = post(
         &server,
         &friend.access_token,
         &room,
@@ -230,9 +230,11 @@ async fn the_grid_filters_by_person_by_type_and_by_date() {
         .all(|item| item.author_id == friend.user.id));
 
     // By date range. `mid` is a moment with things on both sides of it, so the
-    // two halves have to add back up to the whole.
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    let mid = their_message.created_at + 10;
+    // two halves have to add back up to the whole. It's halfway between the
+    // times the server gave the third thing shared and the fourth, rather than
+    // a guess at how soon after one post the next lands, which on a busy
+    // machine can be any time at all (#525). The pause keeps the two from
+    // landing in the same millisecond.
     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     let latest = post(
         &server,
@@ -242,6 +244,13 @@ async fn the_grid_filters_by_person_by_type_and_by_date() {
         &[],
     )
     .await;
+    assert!(
+        latest.created_at - their_link.created_at >= 2,
+        "no moment between the third thing shared ({}) and the fourth ({})",
+        their_link.created_at,
+        latest.created_at
+    );
+    let mid = their_link.created_at + (latest.created_at - their_link.created_at) / 2;
 
     let newer = media(&server, &host.access_token, &format!("?since={mid}")).await;
     assert_eq!(newer.len(), 1, "only what was shared after mid");
