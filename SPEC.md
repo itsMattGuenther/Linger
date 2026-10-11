@@ -890,9 +890,12 @@ in front, and never keeps the key from that app.
   heard); and the desktop says when it goes down and up, so Linger never sees
   a key at all. The desktop names apps by their desktop file, so it works for
   an installed Linger (a package or the AppImage), not a development build.
-- **Elsewhere** (macOS for now, #587; a desktop without the portal, which is
-  most X11 desktops; a development build): the key works while a Linger window
-  is in front, as it always has, and switching away lets go of it.
+- **macOS** (#587): as on Windows, Linger asks macOS whether that one key or
+  mouse button is down, 50 times a second. A key a Mac has no code for (Pause,
+  Scroll Lock, F21 and up) works only while a Linger window is in front.
+- **Elsewhere** (a desktop without the portal, which is most X11 desktops; a
+  development build on Linux): the key works while a Linger window is in
+  front, as it always has, and switching away lets go of it.
 
 Settings → Talk key says which applies. A Linger window in front hears the key
 too, and a press heard twice counts once. Whatever watches the key, its

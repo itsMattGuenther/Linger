@@ -22,23 +22,31 @@
 //!   gives it a key in their desktop, and the desktop says when it goes down
 //!   and up. Linger never sees a key at all. Without the portal (X11 on most
 //!   desktops, or a development build the desktop can't name), nothing runs.
-//! - **macOS:** nothing yet (#587): the key works while a Linger
-//!   window is in front, as it always has.
+//! - **macOS:** as on Windows, a thread asks macOS whether that one key (or
+//!   mouse button) is down, 50 times a second (`CGEventSourceKeyState`,
+//!   `CGEventSourceButtonState`, #587). Asking about one key takes nothing
+//!   from the app in front and never sees another key. A key a Mac has no
+//!   code for (Pause, Scroll Lock, F21 and up) works only while a Linger
+//!   window is in front. Not yet tried on a Mac: whether macOS asks for the
+//!   Input Monitoring permission first.
 //!
 //! Whatever watches, a key it reported down is reported up when it stops, for
 //! any reason, a panic included: the microphone fails closed.
 
-// Each platform builds the parts it uses: macOS, which watches nothing yet,
-// none of the watching, and only Windows says it reaches anywhere.
-#![cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
+// Each platform builds the parts it uses: the phone builds none of the
+// watching, and only Windows and macOS say they reach anywhere.
+#![cfg_attr(
+    not(any(windows, target_os = "linux", target_os = "macos")),
+    allow(dead_code)
+)]
 
 #[cfg(target_os = "linux")]
 mod portal;
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 use std::sync::mpsc;
 use std::sync::Mutex;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 use std::time::Duration;
 
 use serde::Serialize;
@@ -47,10 +55,10 @@ use tauri::{AppHandle, Emitter, WebviewWindow};
 /// What the list window hears from the watcher: `"down"` or `"up"`.
 pub const TALK_KEY_EVENT: &str = "next:talkkey";
 
-/// How often the Windows watcher asks about the key: 50 times a second, the
-/// rate the voice sender already runs at while you're in a call, so a press is
-/// heard within one 20 ms frame of audio.
-#[cfg(any(windows, test))]
+/// How often the Windows and macOS watchers ask about the key: 50 times a
+/// second, the rate the voice sender already runs at while you're in a call,
+/// so a press is heard within one 20 ms frame of audio.
+#[cfg(any(windows, target_os = "macos", test))]
 const POLL: Duration = Duration::from_millis(20);
 
 /// The key went down or came up.
@@ -145,9 +153,9 @@ impl<F: Fn(Edge)> Drop for Reporter<F> {
 }
 
 /// Ask `down` about the key every `every` until `stop` says so (or its sender
-/// is dropped), reporting each change. Windows' watcher, with the question
-/// passed in so a test can answer it.
-#[cfg(any(windows, test))]
+/// is dropped), reporting each change. Windows' and macOS's watcher, with the
+/// question passed in so a test can answer it.
+#[cfg(any(windows, target_os = "macos", test))]
 fn poll(down: impl Fn() -> bool, every: Duration, stop: &mpsc::Receiver<()>, tell: impl Fn(Edge)) {
     let mut reporter = Reporter::new(down(), tell);
     while let Err(mpsc::RecvTimeoutError::Timeout) = stop.recv_timeout(every) {
@@ -210,6 +218,51 @@ pub fn talk_key(code: &str) -> Option<TalkKey> {
     }
 }
 
+/// One talk key as macOS asks about it: a key code (Carbon's `kVK_…`, the
+/// same on every keyboard layout) or a mouse button's number.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacKey {
+    Key(u16),
+    Button(u32),
+}
+
+/// The macOS key for a saved code, or none for one a Mac has no code for:
+/// Pause and Scroll Lock, and F21 to F24. Those work only while a Linger
+/// window is in front. Left and right are different keys here too.
+#[cfg(any(target_os = "macos", test))]
+#[must_use]
+pub fn mac_key(code: &str) -> Option<MacKey> {
+    /// `kVK_F1` to `kVK_F20`, which aren't in order.
+    const F: [u16; 20] = [
+        0x7A, 0x78, 0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F, 0x69, 0x6B, 0x71,
+        0x6A, 0x40, 0x4F, 0x50, 0x5A,
+    ];
+    let key = match code {
+        "ControlLeft" => MacKey::Key(0x3B),  // kVK_Control
+        "ControlRight" => MacKey::Key(0x3E), // kVK_RightControl
+        "AltLeft" => MacKey::Key(0x3A),      // kVK_Option
+        "AltRight" => MacKey::Key(0x3D),     // kVK_RightOption
+        "ShiftLeft" => MacKey::Key(0x38),    // kVK_Shift
+        "ShiftRight" => MacKey::Key(0x3C),   // kVK_RightShift
+        // A PC keyboard's Insert is Help on a Mac.
+        "Insert" => MacKey::Key(0x72),      // kVK_Help
+        "ContextMenu" => MacKey::Key(0x6E), // kVK_ContextualMenu
+        // Middle, back and forward: buttons 2, 3 and 4 (0 is the left).
+        "MouseMiddle" => MacKey::Button(2),
+        "MouseBack" => MacKey::Button(3),
+        "MouseForward" => MacKey::Button(4),
+        _ => {
+            let number: usize = code.strip_prefix('F')?.parse().ok()?;
+            if code != format!("F{number}") {
+                return None;
+            }
+            MacKey::Key(*F.get(number.checked_sub(1)?)?)
+        }
+    };
+    Some(key)
+}
+
 /// How far the talk key reaches on this computer, for Settings (Talk key) to
 /// say. Mirrored by hand in `client/src/lib/ipc.ts` (`TalkKeyReach`): it never
 /// leaves the computer, so it isn't a wire type (AGENTS.md rule 7), and a test
@@ -217,8 +270,8 @@ pub fn talk_key(code: &str) -> Option<TalkKey> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Reach {
-    /// Whatever app is in front (Windows).
-    #[cfg_attr(not(windows), allow(dead_code))]
+    /// Whatever app is in front (Windows, and macOS for a key a Mac has).
+    #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
     Anywhere,
     /// Whatever app is in front, once the desktop has given Linger's shortcut
     /// a key: `shortcut` is its name there, as Hyprland's `global` takes it.
@@ -230,9 +283,10 @@ pub enum Reach {
         hyprland: Option<&'static str>,
         bind: Option<String>,
     },
-    /// Only while a Linger window is in front, and why: `"mac"`, `"desktop"`
-    /// (this desktop has no global shortcuts for apps), or `"installed"` (a
-    /// copy the desktop can't name, a development build).
+    /// Only while a Linger window is in front, and why: `"mac"` (a key a Mac
+    /// has no code for), `"desktop"` (this desktop has no global shortcuts
+    /// for apps), or `"installed"` (a copy the desktop can't name, a
+    /// development build).
     #[cfg_attr(windows, allow(dead_code))]
     Window { why: &'static str },
 }
@@ -245,11 +299,12 @@ pub const SHORTCUT_ID: &str = "push-to-talk";
 pub struct TalkKeyWatch(Mutex<Option<Watching>>);
 
 struct Watching {
-    /// The saved code it watches for (Windows), or was started with (Linux,
-    /// where the desktop holds the key and a new one changes nothing here).
-    #[cfg_attr(not(windows), allow(dead_code))]
+    /// The saved code it watches for (Windows, macOS), or was started with
+    /// (Linux, where the desktop holds the key and a new one changes nothing
+    /// here).
+    #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
     key: String,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     _stop: mpsc::Sender<()>,
     #[cfg(target_os = "linux")]
     _stop: portal::Stop,
@@ -285,8 +340,9 @@ pub fn voice_talk_key(
     };
     if let Some(running) = held.as_ref() {
         // The portal watches the desktop's shortcut, whatever key Linger
-        // picked; Windows watches the key itself, so a new one restarts it.
-        if cfg!(not(windows)) || running.key == code {
+        // picked; Windows and macOS watch the key itself, so a new one
+        // restarts it.
+        if cfg!(not(any(windows, target_os = "macos"))) || running.key == code {
             return Ok(());
         }
     }
@@ -323,7 +379,25 @@ fn start(app: &AppHandle, code: String) -> Option<Watching> {
     })
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(target_os = "macos")]
+fn start(app: &AppHandle, code: String) -> Option<Watching> {
+    let key = mac_key(&code)?;
+    let (stop, stopped) = mpsc::channel();
+    let tell = tell(app);
+    let spawned = std::thread::Builder::new()
+        .name("linger-talk-key".into())
+        .spawn(move || poll(move || mac_keys::down(key), POLL, &stopped, tell));
+    if let Err(error) = spawned {
+        eprintln!("linger: couldn't watch for the talk key: {error}");
+        return None;
+    }
+    Some(Watching {
+        key: code,
+        _stop: stop,
+    })
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn start(_app: &AppHandle, _code: String) -> Option<Watching> {
     None
 }
@@ -345,7 +419,16 @@ async fn reach(key: &str) -> Reach {
     portal::reach(talk_key(key).map(|key| key.bind)).await
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(target_os = "macos")]
+async fn reach(key: &str) -> Reach {
+    if mac_key(key).is_some() {
+        Reach::Anywhere
+    } else {
+        Reach::Window { why: "mac" }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 async fn reach(_key: &str) -> Reach {
     Reach::Window { why: "mac" }
 }
@@ -362,6 +445,33 @@ mod windows_key {
         // of ours; any value is allowed and an unknown one answers "up".
         let state = unsafe { GetAsyncKeyState(i32::from(vk)) };
         state < 0
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod mac_keys {
+    use super::MacKey;
+
+    /// CoreGraphics' combined session state: the keys and buttons as the
+    /// whole login session sees them, whatever app is in front.
+    const COMBINED_SESSION_STATE: i32 = 0;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGEventSourceKeyState(state_id: i32, key: u16) -> bool;
+        fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+    }
+
+    /// Whether the one key or button is down now, whatever app is in front.
+    pub fn down(key: MacKey) -> bool {
+        // SAFETY: both take plain integers and read no memory of ours; an
+        // unknown key or button answers "up".
+        unsafe {
+            match key {
+                MacKey::Key(code) => CGEventSourceKeyState(COMBINED_SESSION_STATE, code),
+                MacKey::Button(button) => CGEventSourceButtonState(COMBINED_SESSION_STATE, button),
+            }
+        }
     }
 }
 
@@ -522,6 +632,42 @@ mod tests {
         assert_eq!(at("MouseForward").vk, 0x06);
         assert_eq!(at("MouseMiddle").bind, "mouse:274");
         assert!(!at("Pause").mouse);
+    }
+
+    #[test]
+    fn mac_keys_are_one_key_each_and_left_is_never_right() {
+        let mut seen = std::collections::BTreeSet::new();
+        for code in offered() {
+            let Some(key) = mac_key(&code) else {
+                assert!(
+                    matches!(
+                        code.as_str(),
+                        "Pause" | "ScrollLock" | "F21" | "F22" | "F23" | "F24"
+                    ),
+                    "{code} has a Mac key"
+                );
+                continue;
+            };
+            assert!(seen.insert(format!("{key:?}")), "{code} shares a Mac key");
+        }
+        assert_eq!(mac_key("ControlRight"), Some(MacKey::Key(0x3E)));
+        assert_eq!(mac_key("ControlLeft"), Some(MacKey::Key(0x3B)));
+        assert_eq!(mac_key("F1"), Some(MacKey::Key(0x7A)));
+        assert_eq!(mac_key("F13"), Some(MacKey::Key(0x69)));
+        assert_eq!(mac_key("F20"), Some(MacKey::Key(0x5A)));
+        assert_eq!(mac_key("MouseBack"), Some(MacKey::Button(3)));
+        for code in [
+            "KeyA",
+            "Space",
+            "F0",
+            "F01",
+            "F25",
+            "MouseLeft",
+            "MouseRight",
+            "",
+        ] {
+            assert_eq!(mac_key(code), None, "{code}");
+        }
     }
 
     #[test]

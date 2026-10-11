@@ -389,7 +389,16 @@ test.describe("this app", () => {
     await expect(page.locator("kbd")).toHaveText("Right Ctrl");
     await page.keyboard.press("Escape");
     await open(page, "?section=sound&reach=mac");
-    await expect(panel(page)).toContainText("On a Mac, Linger can't hear it with another app in front yet.");
+    await expect(panel(page)).toContainText("a Mac has no code for this key, so Linger can't hear it with another app in front.");
+  });
+
+  test("on a Mac the talk key reaches past Linger too, without Windows' administrator caveat (#587)", async ({ browser }) => {
+    const mac = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko)" });
+    const page = await mac.newPage();
+    await open(page, "?section=sound&reach=anywhere");
+    await expect(panel(page)).toContainText("Works with a game or any other app in front");
+    await expect(panel(page)).not.toContainText("administrator");
+    await mac.close();
   });
 
   test("on Hyprland, Settings gives the line that hands the talk key to Linger, ready to copy; KDE and GNOME ask themselves (#500)", async ({ page }) => {

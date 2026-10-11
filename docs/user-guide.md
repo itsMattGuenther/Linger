@@ -715,7 +715,9 @@ your computer:
   or the AppImage; a copy you built yourself works only with a Linger window
   in front. On X11, most desktops don't offer this, and it works with a
   Linger window in front.
-- **macOS:** only while a Linger window is in front, for now.
+- **macOS:** as on Windows, Linger asks macOS about that one key, or a
+  mouse's middle or side button. Pause, Scroll Lock and F21 and up aren't on a
+  Mac keyboard, so those work only with a Linger window in front.
 
 Where it can't reach, the key works while a Linger window is in front, and
 switching away from Linger lets go of it; press it again to speak.
