@@ -158,7 +158,7 @@ check "an update exits 0" test "$code" -eq 0
 check "it says both versions" has "Linger is on 0.4.4 (was 0.4.3)."
 check "it pulls while the old server is up" before "docker compose pull" "docker compose stop linger"
 check "it backs up before starting the new server" before "docker compose stop linger" "docker compose up -d"
-backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' 2>/dev/null | head -1 || true)"
+backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' | head -1)"
 check "the backup is named for the old version" test -n "$backup"
 check "the backup holds the database and its journal" \
   bash -c "tar tzf '$dir/$backup' | sort | tr '\n' ' ' | grep -qx 'linger.db linger.db-wal '"
@@ -210,9 +210,9 @@ if ((EUID != 0)); then
   chmod 700 "$dir/data"
   check "a data folder this account can't open still updates" test "$code" -eq 0
   check "it says both versions there too" has "Linger is on 0.4.4 (was 0.4.3)."
-  backup="$(cd "$dir" && find backups -name 'linger-0.4.3-*.tar.gz' 2>/dev/null | head -1 || true)"
+  backup="$(find "$dir/backups" -name 'linger-0.4.3-*.tar.gz' 2>/dev/null | head -1 || true)"
   check "the backup holds the database all the same" \
-    bash -c "tar tzf '$dir/$backup' | grep -qx linger.db"
+    bash -c "tar tzf '$backup' | grep -qx linger.db"
   check "nothing asks for sudo" lacks "sudo"
 fi
 
