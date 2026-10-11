@@ -65,19 +65,28 @@ That first runs every CI check on the tagged commit, whatever it changed
 (`ci.yml`, called from `release.yml`); nothing is built unless it passes. Then
 it builds Linux and Windows, signs the updater artifacts, checks the packaged
 audio, that the Buddy list starts in the Linux packages, and the Windows
-upgrade path, and opens a **draft** release carrying `latest.json`. The same
+upgrade path, and opens a **draft** release carrying `latest.json`. Once both
+desktop builds are on the draft, the `updater-json` job points `latest.json`'s
+links at the normal download addresses (tauri-action 1.0 writes GitHub API
+links, which GitHub limits to 60 an hour per address, #597) and checks the
+files are named as before; it goes red if a platform is missing. The same
 tag, after its own full CI run, publishes the server image to
 `ghcr.io/itsmattguenther/linger` as `0.3.6`, `0.3` and `latest`, for x86-64
 only (ARM64 went after 0.4.4, `docs/decisions.md`). Nothing about the image is
 signed and nothing auto-updates; a host chooses when to `docker compose pull`.
+A pre-release tag (`v0.4.11-1`, a practice run of the release build) publishes
+no image, so it can't move `latest` (#597).
 
 **3. Check the draft.** All ten files are there (the `.exe`, `.msi`, AppImage,
 `.deb` and `.rpm`, each with its `.sig`), plus
 `Linger_<version>_android-arm64.apk`, and `latest.json` lists the new version
 with a signature for all seven platform entries, signed by the key in
-`tauri.conf.json`. Replace the draft's text with the release notes, swapping
-their short install section for the fuller download table and update steps the
-previous release used.
+`tauri.conf.json`, each linking to `https://github.com/<repo>/releases/download/<tag>/…`
+and none to `api.github.com`. Wait for every job to finish before replacing the
+draft's text with the release notes: each desktop job sets the text again
+(tauri-action 1.0), so an edit made while one is still running, or before
+re-running one, is lost. Swap their short install section for the fuller
+download table and update steps the previous release used.
 
 **4. Publish it.** Publishing is what makes installed copies see the update, and
 it is a person's click on purpose. It also starts the Arch package job (below),

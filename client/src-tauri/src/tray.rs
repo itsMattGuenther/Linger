@@ -7,18 +7,102 @@
 //! whatever the setting says: a hidden list nobody can bring back would be
 //! worse than quitting. Launching Linger again also brings a hidden list back
 //! (the single-instance plugin, `lib.rs`).
+//!
+//! The icon itself says whether you're in voice and whether your microphone
+//! is live (#601): voice goes on with the list hidden, and without a mark
+//! somebody could forget they're still in a room with their microphone on.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Emitter, Manager, WebviewWindow, Wry};
 
+/// The tray icon's id, to find it again when voice changes.
+const TRAY_ID: &str = "linger";
+
 /// The tray menu's voice items (decision 5): with the list hidden, they are
 /// the only Mute and Leave in reach. Greyed out while you're not in voice.
+/// Beside them, what the icon shows now, so it's only redrawn on a change.
 #[derive(Default)]
-pub struct VoiceItems(Mutex<Option<(MenuItem<Wry>, MenuItem<Wry>)>>);
+pub struct VoiceItems(
+    Mutex<Option<(MenuItem<Wry>, MenuItem<Wry>)>>,
+    Mutex<Option<(Look, String)>>,
+);
+
+/// What the tray icon shows about voice (#601). A state, never a number of
+/// people (hard rule 3), and nothing that leaves the computer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Look {
+    /// Not in voice: the door as it always was.
+    Idle,
+    /// In voice with the microphone on: the door with a lamp badge, the lamp
+    /// being "your voice" (docs/design/system.md). Push-to-talk shows this
+    /// too, whether or not the key is held, so the icon doesn't flicker with
+    /// every word; the tooltip says push-to-talk.
+    Live,
+    /// In voice, muted or deafened: a grey badge, never the lamp.
+    Muted,
+}
+
+impl Look {
+    /// What the icon shows for this voice state.
+    pub fn of(in_voice: bool, muted: bool) -> Self {
+        match (in_voice, muted) {
+            (false, _) => Self::Idle,
+            (true, false) => Self::Live,
+            (true, true) => Self::Muted,
+        }
+    }
+
+    /// The small mark for this look (assets/logo/linger-door*.svg at 64px).
+    fn icon(self) -> Image<'static> {
+        match self {
+            Self::Idle => tauri::include_image!("icons/tray.png"),
+            Self::Live => tauri::include_image!("icons/tray-voice.png"),
+            Self::Muted => tauri::include_image!("icons/tray-muted.png"),
+        }
+    }
+}
+
+/// The longest place name the tooltip carries. Windows cuts a tray tooltip
+/// at 127 characters; a group DM's names can run longer than that.
+const PLACE_MAX: usize = 60;
+
+/// The tooltip, the icon's words for anybody who doesn't know the marks or
+/// can't see them: "Linger · in voice in #general, muted". `place` is where,
+/// as the list words it ("in #general", "with Jules").
+pub fn tooltip(
+    in_voice: bool,
+    muted: bool,
+    deafened: bool,
+    push_to_talk: bool,
+    place: Option<&str>,
+) -> String {
+    if !in_voice {
+        return "Linger".into();
+    }
+    let mut words = String::from("Linger · in voice");
+    if let Some(place) = place.map(str::trim).filter(|place| !place.is_empty()) {
+        words.push(' ');
+        if place.chars().count() > PLACE_MAX {
+            words.extend(place.chars().take(PLACE_MAX - 1));
+            words.push('…');
+        } else {
+            words.push_str(place);
+        }
+    }
+    if deafened {
+        words.push_str(", deafened");
+    } else if muted {
+        words.push_str(", muted");
+    } else if push_to_talk {
+        words.push_str(", push-to-talk");
+    }
+    words
+}
 
 /// Whether closing the list hides it into the tray. On by default; the list
 /// window tells it the setting (`next_close_to_tray`) when it starts and when
@@ -76,7 +160,7 @@ fn build(app: &App) -> tauri::Result<()> {
     if let Ok(mut held) = app.state::<VoiceItems>().0.lock() {
         *held = Some((mute, leave));
     }
-    let mut tray = TrayIconBuilder::with_id("linger")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Linger")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -101,7 +185,7 @@ fn build(app: &App) -> tauri::Result<()> {
         });
     // The small mark (assets/logo/linger-door.svg), not the app icon: the
     // porch picture turns to mush at a tray's 16 to 24 pixels.
-    tray = tray.icon(tauri::include_image!("icons/tray.png"));
+    tray = tray.icon(Look::Idle.icon());
     tray.build(app)?;
     Ok(())
 }
@@ -147,32 +231,159 @@ pub fn next_close_to_tray(
     Ok(closing.hides())
 }
 
-/// The list window's voice, for the tray menu: in voice or not, and muted or
-/// not. Only the list window may say.
+/// The list window's voice, for the tray: in voice or not, muted or not, and
+/// where. It enables the menu's Mute and Leave, and sets the icon and its
+/// tooltip (#601). Every way out of voice (Leave, being taken out, dropping
+/// out after a sleep) comes here as `in_voice: false` and puts the plain door
+/// back; quitting takes the icon with it. Only the list window may say.
 #[tauri::command]
 pub fn next_tray_voice(
     window: WebviewWindow,
     items: tauri::State<'_, VoiceItems>,
     in_voice: bool,
     muted: bool,
+    deafened: Option<bool>,
+    push_to_talk: Option<bool>,
+    place: Option<String>,
 ) -> Result<(), String> {
     if window.label() != "main" {
         return Err("only the list window says where voice is".into());
     }
-    let held = items.0.lock().map_err(|e| e.to_string())?;
-    if let Some((mute, leave)) = held.as_ref() {
-        mute.set_text(if muted { "Unmute" } else { "Mute" })
-            .map_err(|e| e.to_string())?;
-        mute.set_enabled(in_voice).map_err(|e| e.to_string())?;
-        leave.set_enabled(in_voice).map_err(|e| e.to_string())?;
+    let deafened = deafened.unwrap_or(false);
+    {
+        let held = items.0.lock().map_err(|e| e.to_string())?;
+        if let Some((mute, leave)) = held.as_ref() {
+            mute.set_text(if muted { "Unmute" } else { "Mute" })
+                .map_err(|e| e.to_string())?;
+            mute.set_enabled(in_voice).map_err(|e| e.to_string())?;
+            leave.set_enabled(in_voice).map_err(|e| e.to_string())?;
+        }
     }
+    let look = Look::of(in_voice, muted || deafened);
+    let words = tooltip(
+        in_voice,
+        muted,
+        deafened,
+        push_to_talk.unwrap_or(false),
+        place.as_deref(),
+    );
+    let mut showing = items.1.lock().map_err(|e| e.to_string())?;
+    let was = showing
+        .as_ref()
+        .map_or((Look::Idle, "Linger"), |(look, words)| {
+            (*look, words.as_str())
+        });
+    if was == (look, words.as_str()) {
+        return Ok(());
+    }
+    // No tray on this desktop: nothing to draw, and nothing wrong.
+    let Some(tray) = window.app_handle().tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+    if was.0 != look {
+        tray.set_icon(Some(look.icon()))
+            .map_err(|e| e.to_string())?;
+    }
+    // Windows and macOS show it; Linux's tray (appindicator) has no tooltips,
+    // and there the menu's Unmute and an enabled Leave voice say it in words.
+    tray.set_tooltip(Some(&words)).map_err(|e| e.to_string())?;
+    *showing = Some((look, words));
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Closing;
+    use super::{tooltip, Closing, Look};
     use std::sync::atomic::Ordering;
+
+    #[test]
+    fn the_icon_follows_voice_and_the_microphone() {
+        assert_eq!(
+            Look::of(false, false),
+            Look::Idle,
+            "not in voice: the plain door"
+        );
+        assert_eq!(
+            Look::of(false, true),
+            Look::Idle,
+            "a mute left over after leaving shows nothing"
+        );
+        assert_eq!(Look::of(true, false), Look::Live, "in voice, microphone on");
+        assert_eq!(
+            Look::of(true, true),
+            Look::Muted,
+            "in voice, muted or deafened"
+        );
+    }
+
+    #[test]
+    fn the_three_looks_are_three_different_pictures() {
+        let rgba = |look: Look| look.icon().rgba().to_vec();
+        assert_ne!(rgba(Look::Idle), rgba(Look::Live));
+        assert_ne!(rgba(Look::Idle), rgba(Look::Muted));
+        assert_ne!(rgba(Look::Live), rgba(Look::Muted));
+        for look in [Look::Idle, Look::Live, Look::Muted] {
+            let icon = look.icon();
+            assert_eq!(
+                (icon.width(), icon.height()),
+                (64, 64),
+                "{look:?} is drawn at the tray's 64px"
+            );
+        }
+    }
+
+    #[test]
+    fn the_tooltip_says_it_in_words() {
+        assert_eq!(tooltip(false, false, false, false, None), "Linger");
+        assert_eq!(
+            tooltip(false, true, true, true, Some("in #general")),
+            "Linger",
+            "out of voice, nothing about voice"
+        );
+        assert_eq!(
+            tooltip(true, false, false, false, Some("in #general")),
+            "Linger · in voice in #general"
+        );
+        assert_eq!(
+            tooltip(true, true, false, false, Some("in #general")),
+            "Linger · in voice in #general, muted"
+        );
+        assert_eq!(
+            tooltip(true, true, true, false, Some("with Jules")),
+            "Linger · in voice with Jules, deafened"
+        );
+        assert_eq!(
+            tooltip(true, false, false, true, Some("in #general")),
+            "Linger · in voice in #general, push-to-talk"
+        );
+        assert_eq!(
+            tooltip(true, true, false, true, None),
+            "Linger · in voice, muted",
+            "a mute says muted, push-to-talk or not"
+        );
+        assert_eq!(
+            tooltip(true, false, false, false, Some("  ")),
+            "Linger · in voice"
+        );
+    }
+
+    #[test]
+    fn a_long_place_is_cut_to_fit_a_windows_tooltip() {
+        let place = format!("with {}", "Jules, Sam, Eli, ".repeat(10));
+        let words = tooltip(true, true, true, false, Some(&place));
+        assert!(words.chars().count() < 127, "{words}");
+        assert!(
+            words.contains('…') && words.ends_with(", deafened"),
+            "{words}"
+        );
+        let wide = "in #".to_owned() + &"﷽".repeat(100);
+        assert!(
+            tooltip(true, false, false, false, Some(&wide))
+                .chars()
+                .count()
+                < 127
+        );
+    }
 
     #[test]
     fn closing_hides_only_with_a_tray_and_the_setting_on() {

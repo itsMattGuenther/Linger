@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { desktopOf, firstTimeInTray, loadCloseList, saveCloseList, trayNotice } from "./closing";
+import { desktopOf, firstTimeInTray, loadCloseList, placeWords, saveCloseList, trayNotice } from "./closing";
 
 function memory() {
   const held = new Map<string, string>();
@@ -68,5 +68,12 @@ describe("the first time the list goes to the tray (#400)", () => {
     expect(desktopOf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")).toBe("windows");
     expect(desktopOf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)")).toBe("mac");
     expect(desktopOf("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)")).toBe("other");
+  });
+});
+
+describe("placeWords", () => {
+  it("says a room by its name and a DM by its people, for the tray's tooltip (#601)", () => {
+    expect(placeWords({ where: "#general", room: true })).toBe("in #general");
+    expect(placeWords({ where: "Jules, Sam", room: false })).toBe("with Jules, Sam");
   });
 });

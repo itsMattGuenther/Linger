@@ -696,7 +696,12 @@ window, so you don't need the list in front to mute:
 - The arrow beside the room's name opens its conversation.
 
 With the list tucked away in the tray, the tray icon's menu has **Mute** and
-**Leave voice**.
+**Leave voice**. The icon itself shows you're still in voice: the door gets
+an amber microphone while your microphone is on, and a grey crossed-out one
+while you're muted or deafened. With push-to-talk on, it shows the amber one
+the whole time you're in voice, held key or not. On Windows and macOS,
+pointing at it says where you are ("Linger · in voice in #general, muted").
+Leave voice and the plain door comes back.
 
 **Push to talk** is in **Settings → Sound & Voice**. With it on, your
 microphone is open only while you hold the **talk key**: **Right Ctrl** unless
@@ -729,7 +734,9 @@ your computer:
   or the AppImage; a copy you built yourself works only with a Linger window
   in front. On X11, most desktops don't offer this, and it works with a
   Linger window in front.
-- **macOS:** only while a Linger window is in front, for now.
+- **macOS:** as on Windows, Linger asks macOS about that one key, or a
+  mouse's middle or side button. Pause, Scroll Lock and F21 and up aren't on a
+  Mac keyboard, so those work only with a Linger window in front.
 
 Where it can't reach, the key works while a Linger window is in front, and
 switching away from Linger lets go of it; press it again to speak.

@@ -542,7 +542,8 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   after 0.4.3 (#306).
 - **Closing the list** hides it and keeps the connections, sounds and voice
   running; the tray icon (`src-tauri/src/tray.rs`) brings it back, mutes,
-  leaves voice or quits. Settings → Windows turns that off
+  leaves voice or quits. The list tells it where voice is
+  (`next_tray_voice`), and its icon and tooltip follow (#601). Settings → Windows turns that off
   (`core/closing.ts`), and so does a desktop with no tray. A second launch
   shows the running copy's list (`tauri-plugin-single-instance`). Hiding it
   tells the list (`next:hidden`), which the first time ever on that computer

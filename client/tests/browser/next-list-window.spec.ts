@@ -499,7 +499,7 @@ test("the list tells the desktop what closing it does: the tray by default, and 
   );
 });
 
-test("the tray menu's Mute and Leave follow voice, and do what they say while the list is hidden", async ({ page }) => {
+test("the tray menu's Mute and Leave, and the tray icon, follow voice, and do what they say while the list is hidden", async ({ page }) => {
   await open(page, "?one");
   const trayLines = async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice"));
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
@@ -514,10 +514,12 @@ test("the tray menu's Mute and Leave follow voice, and do what they say while th
       { timeout: 10_000 },
     )
     .toBe(1);
-  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`);
+  // Where, and whether the microphone is live, for the icon and its tooltip (#601).
+  const inGeneral = { deafened: false, pushToTalk: false, place: "in #general" };
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: false, ...inGeneral })}`);
   await page.evaluate(() => window.core?.tray("mute"));
   await expect(bar.getByRole("button", { name: "Muted" })).toBeVisible();
-  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`);
+  await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: true, muted: true, ...inGeneral })}`);
   await page.evaluate(() => window.core?.tray("leave"));
   await expect(bar).toHaveCount(0);
   await expect.poll(async () => (await trayLines()).at(-1)).toBe(`next_tray_voice:${JSON.stringify({ inVoice: false, muted: false })}`);
@@ -811,9 +813,10 @@ test("push-to-talk with the key up shows no mute, to you or to anyone else; a mu
   await expect(bar.getByRole("status")).toHaveText("hold Right Ctrl to talk");
   await expect(yours.locator(".k-chip-state")).toHaveCount(0);
   await expect(bar.getByRole("button", { name: "Mute", exact: true })).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1)).toBe(
-    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: false })}`,
-  );
+  // The tray icon shows you in voice with push-to-talk, held key or not (#601).
+  const trayNow = async () => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1);
+  const trayPushToTalk = `next_tray_voice:${JSON.stringify({ inVoice: true, muted: false, deafened: false, pushToTalk: true, place: "in #general" })}`;
+  await expect.poll(trayNow).toBe(trayPushToTalk);
   // The microphone is closed by the key's own gate; the room is told it's on.
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
   expect(await reported(page)).toEqual({ muted: false, deafened: false });
@@ -821,6 +824,7 @@ test("push-to-talk with the key up shows no mute, to you or to anyone else; a mu
   // Holding the key opens it and letting go closes it, still without a mute.
   await page.keyboard.down("ControlRight");
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: false });
+  expect(await trayNow(), "the tray doesn't flicker with the key").toBe(trayPushToTalk);
   await expect(bar.getByRole("status")).toHaveCount(0);
   await page.keyboard.up("ControlRight");
   await expect.poll(() => lastCall(page, "voice_push_to_talk")).toMatchObject({ closed: true });
@@ -903,7 +907,7 @@ test("Settings turning push-to-talk off and on, or picking its key, applies to t
   await expect(line).toHaveCount(0);
   expect(await reported(page)).toEqual({ muted: true, deafened: false });
   await expect.poll(async () => (await did(page)).filter((one) => one.startsWith("next_tray_voice")).at(-1)).toBe(
-    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true })}`,
+    `next_tray_voice:${JSON.stringify({ inVoice: true, muted: true, deafened: false, pushToTalk: false, place: "in #general" })}`,
   );
   // All in the one call.
   expect(await joins()).toBe(joined);

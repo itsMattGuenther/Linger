@@ -21,8 +21,3 @@ updates:
       # Pinned to a commit on its master branch, not a release: it has no
       # version tags to move to. Move it by hand (docs/testing-strategy.md).
       - dependency-name: dtolnay/rust-toolchain
-      # It builds the release and writes latest.json, and no pull request
-      # runs it. 1.0 changes both, so that move is made by hand and tried on
-      # a draft release first (#597). Its 0.x updates still come.
-      - dependency-name: tauri-apps/tauri-action
-        update-types: ["version-update:semver-major"]
