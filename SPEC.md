@@ -565,7 +565,8 @@ carry sender feedback to a different person.
 - The pool is everybody's, so nobody can fill it alone, by accident or on purpose
   (#503). One person can have 1 GB of uploads going up at once; past that, they're
   told it's their uploads, not that the server is full. An upload that has received
-  nothing for an hour gives its space back. A file somebody uploads and never sends is deleted after a
+  nothing for an hour gives its space back, and so does one taken out of the box
+  while it's going up. A file somebody uploads and never sends is deleted after a
   week (sooner if the host's window is shorter, and even with expiry off). Removing
   a member deletes their uploads in progress and the files they never sent; what
   they sent stays.

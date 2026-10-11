@@ -550,7 +550,8 @@ private, especially for DM files.
   chose differently. **Starring a file keeps it forever.**
 - You can have up to 1 GB of files uploading at once, so nobody fills the
   server's storage by themselves. A file you add to the box and never send is
-  deleted after a week.
+  deleted after a week. Taking a file out of the box while it's still going up
+  stops it.
 
 ### Voice messages
 
