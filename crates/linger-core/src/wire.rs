@@ -343,10 +343,20 @@ pub struct ServerInfo {
     /// The ceiling those bytes are measured against (`LINGER_POOL_BYTES`).
     #[ts(type = "number")]
     pub storage_limit_bytes: u64,
-    /// How many days a file stands before the server sweeps it, or `null` when
-    /// this host turned expiry off. Starred and pinned files never expire, so
-    /// this is the answer for everything else (SPEC §4.10).
+    /// How many days a file stands before the server sweeps it, or `null`
+    /// when no age rule takes files: expiry off, or `when-full` (below).
+    /// Starred and pinned files never expire, so this is the answer for
+    /// everything else (SPEC §4.10).
     pub file_expiry_days: Option<u32>,
+    /// `true` when old files go only once the server needs the room
+    /// (`LINGER_FILE_EXPIRY_DAYS=when-full`, the default, #583): nothing goes
+    /// while there is room, and past 90% of `storage_limit_bytes` the oldest
+    /// nobody starred or pinned go first. `file_expiry_days` is then `null`,
+    /// which an app from before reads as "kept for good", the nearest thing it
+    /// knows. Always sent; a server from before leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub file_expiry_when_full: Option<bool>,
     /// Whether this server carries voice: its host set `LINGER_VOICE_ADDRESS`
     /// and voice goes through the server (#197). Without it nobody can join
     /// voice here, and the app says so before anybody tries (#306). Always
@@ -355,6 +365,55 @@ pub struct ServerInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub voice: Option<bool>,
+    /// What the host alone is told about the machine the server runs on
+    /// (#582): its backups and how full its disk is. Left out for everybody
+    /// else, co-hosts included, and by a server from before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub health: Option<ServerHealth>,
+}
+
+/// The host's view of the machine (#582): only what needs them, said only
+/// while it's true. The app turns each into a quiet line at the list's foot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ServerHealth {
+    /// Whether the server makes its nightly copy of the database
+    /// (`LINGER_BACKUPS`).
+    pub backups: bool,
+    /// When the newest copy that checked out was made, or `null` before the
+    /// first.
+    #[ts(type = "number | null")]
+    pub last_backup_at: Option<i64>,
+    /// The server has run for three days without making a copy that checked
+    /// out. Always `false` with backups off.
+    pub backup_overdue: bool,
+    /// Less than a tenth of the disk under the server's data folder is free.
+    pub disk_nearly_full: bool,
+    /// Uploads take 90% or more of `storage_limit_bytes`.
+    pub file_space_nearly_full: bool,
+    /// The bucket the nightly copies also go to (#614,
+    /// `LINGER_BACKUP_S3_*`). Left out when the host hasn't named one, and
+    /// by a server from before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub bucket: Option<BackupBucketHealth>,
+}
+
+/// How the copies sent to the host's bucket stand (#614).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BackupBucketHealth {
+    /// The bucket's name, as the host set it, so Settings can say where.
+    pub name: String,
+    /// When the newest copy in the bucket got there, as the bucket says, or
+    /// `null` before the server has looked (a few minutes after it starts)
+    /// or when no copy has reached it.
+    #[ts(type = "number | null")]
+    pub last_sent_at: Option<i64>,
+    /// The server has run for three days without a copy reaching the
+    /// bucket.
+    pub overdue: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

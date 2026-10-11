@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import "./SectionLabel.css";
 
@@ -25,7 +25,7 @@ export interface SectionLabelProps {
  * sits in the rows' lead column, so carets line up with the markers under
  * them, and it says "show" while folded and "hide" on hover while open.
  */
-export function SectionLabel({ label, level = "section", open, onToggle, controls, action, lit = false }: SectionLabelProps) {
+export const SectionLabel = memo(function SectionLabel({ label, level = "section", open, onToggle, controls, action, lit = false }: SectionLabelProps) {
   const foldable = onToggle !== undefined && open !== undefined;
   const inner = (
     <>
@@ -57,4 +57,4 @@ export function SectionLabel({ label, level = "section", open, onToggle, control
       {action ? <span className="k-section-action">{action}</span> : null}
     </div>
   );
-}
+});

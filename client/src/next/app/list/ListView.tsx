@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import type { ListModel } from "../../core/list";
 import { minimizer } from "../../core/windowControls";
 import { Button, IconButton, TitleBar } from "../../kit";
@@ -91,6 +91,28 @@ interface ListShared {
   folded?: readonly string[];
 }
 
+/** The logo at the head of the list: one element, drawn once. */
+const LOGO = <LogoMark />;
+
+/** The foot of the list: Media and Search, each in a window of its own (decision 15). */
+const Foot = memo(function Foot({ onMedia, onSearch }: { onMedia?: () => void; onSearch?: () => void }) {
+  if (!onMedia && !onSearch) return null;
+  return (
+    <nav className="nx-list-foot" aria-label="Media and search">
+      {onMedia ? (
+        <Button variant="quiet" icon="media" fill onClick={onMedia}>
+          Media
+        </Button>
+      ) : null}
+      {onSearch ? (
+        <Button variant="quiet" icon="search" fill onClick={onSearch}>
+          Search
+        </Button>
+      ) : null}
+    </nav>
+  );
+});
+
 /**
  * The buddy list (docs/design/buddy-list.md): you, then the rooms with who's
  * in them, your DMs, and everyone else, for each of your servers. Drawn only
@@ -101,33 +123,26 @@ export function ListView(props: ListViewProps) {
   const { onClose, onSettings, notices, notes, voice, you, nudge, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock, onUnfold } = props;
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
-  const gear =
-    onSettings || onUnfold ? (
-      <>
-        {onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : null}
-        {/* Neutral, not the lamp: amber is for something new (a lit DM), and this is only a way back. */}
-        {onUnfold ? <IconButton icon="unfold" tone="filled" label="Show your conversations" onClick={onUnfold} /> : null}
-      </>
-    ) : undefined;
+  // Made again only when what's in them changes, so an event on a server
+  // doesn't draw the title bar and the foot again with its section (#533).
+  const gear = useMemo(
+    () =>
+      onSettings || onUnfold ? (
+        <>
+          {onSettings ? <IconButton icon="gear" label="Settings" onClick={onSettings} /> : null}
+          {/* Neutral, not the lamp: amber is for something new (a lit DM), and this is only a way back. */}
+          {onUnfold ? <IconButton icon="unfold" tone="filled" label="Show your conversations" onClick={onUnfold} /> : null}
+        </>
+      ) : undefined,
+    [onSettings, onUnfold],
+  );
+  const minimize = onClose && minimizer();
   const bottom = (
     <>
       <div className="nx-list-notices">{notices}</div>
       {notes}
       {voice ? <VoiceDock {...voice} /> : null}
-      {onMedia || onSearch ? (
-        <nav className="nx-list-foot" aria-label="Media and search">
-          {onMedia ? (
-            <Button variant="quiet" icon="media" fill onClick={onMedia}>
-              Media
-            </Button>
-          ) : null}
-          {onSearch ? (
-            <Button variant="quiet" icon="search" fill onClick={onSearch}>
-              Search
-            </Button>
-          ) : null}
-        </nav>
-      ) : null}
+      <Foot onMedia={onMedia} onSearch={onSearch} />
     </>
   );
   const servers = props.servers;
@@ -136,13 +151,17 @@ export function ListView(props: ListViewProps) {
   // decided as each server appears, since they arrive one by one.
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
   const isFolded = (id: string, index: number) => chosen.get(id) ?? (folded ? folded.includes(id) : index > 0);
+  const toggle = useCallback(
+    (id: string, index: number) => setChosen((held) => new Map(held).set(id, !(held.get(id) ?? (folded ? folded.includes(id) : index > 0)))),
+    [folded],
+  );
 
   if (servers === undefined || servers.length <= 1) {
     const only: (OneServer | ServerListing) | undefined = servers === undefined ? props : servers[0];
     const name = only === undefined ? "Linger" : "serverName" in only ? only.serverName : only.name;
     return (
       <div className="nx-list" data-screen="list" data-rock={rocking}>
-        <TitleBar leading={<LogoMark />} actions={gear} onMinimize={onClose && minimizer()} onClose={onClose}>
+        <TitleBar leading={LOGO} actions={gear} onMinimize={minimize} onClose={onClose}>
           {name}
         </TitleBar>
 
@@ -176,12 +195,10 @@ export function ListView(props: ListViewProps) {
   // Who you are, for the top card: you on your first server. The card only
   // says what's true everywhere; each server's section says who you are there.
   const me = servers.find((server) => server.model.me !== null)?.model.me?.user ?? null;
-  const toggle = (id: string, index: number) =>
-    setChosen((held) => new Map(held).set(id, !(held.get(id) ?? (folded ? folded.includes(id) : index > 0))));
 
   return (
     <div className="nx-list" data-screen="list" data-servers="several" data-rock={rocking}>
-      <TitleBar leading={<LogoMark />} actions={gear} onMinimize={onClose && minimizer()} onClose={onClose}>
+      <TitleBar leading={LOGO} actions={gear} onMinimize={minimize} onClose={onClose}>
         Linger
       </TitleBar>
 
@@ -196,9 +213,9 @@ export function ListView(props: ListViewProps) {
             folded={isFolded(listing.id, index)}
             first={index === 0}
             last={index === servers.length - 1}
-            onToggle={() => toggle(listing.id, index)}
-            onQuiet={onQuiet ? (quiet) => onQuiet(listing.id, quiet) : undefined}
-            onMove={onMove ? (by) => onMove(listing.id, by) : undefined}
+            onToggle={toggle}
+            onQuiet={onQuiet}
+            onMove={onMove}
           />
         ))}
       </div>

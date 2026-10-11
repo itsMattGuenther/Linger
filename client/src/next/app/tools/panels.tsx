@@ -29,7 +29,7 @@ export function MediaPanel({ apis, onOpen }: { apis: ReadonlyMap<string, AuthedA
       const api = apis.get(server);
       if (!api) return "You're not signed in to that server any more.";
       try {
-        return await api.media({ kind: ask.kind, author: ask.author, since: ask.since, until: ask.until, before: ask.before, limit: ask.limit });
+        return await api.media({ kind: ask.kind, author: ask.author, since: ask.since, until: ask.until, before: ask.before, leaving: ask.leaving, limit: ask.limit });
       } catch (error: unknown) {
         return inWords(error);
       }

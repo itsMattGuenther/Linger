@@ -100,10 +100,10 @@ async fn copy(
         Some(ObjectBody::File(path, _)) => {
             tokio::fs::read(&path).await.map_err(anyhow::Error::from)?
         }
-        Some(ObjectBody::Redirect(url)) => reqwest::get(&url)
-            .await
-            .and_then(reqwest::Response::error_for_status)
-            .map_err(anyhow::Error::from)?
+        Some(ObjectBody::Redirect(url)) => state
+            .storage
+            .download(&url)
+            .await?
             .bytes()
             .await
             .map_err(anyhow::Error::from)?

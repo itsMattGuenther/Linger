@@ -6,7 +6,7 @@
 //! [`crate::repo::media`]; this file is the door and the argument checking.
 //!
 //! Stars are on uploads only, because a star is what stops a file being swept
-//! at 365 days (SPEC §4.4, T-505). A link or a pinned message has no object to
+//! (SPEC §4.4, T-505, #583). A link or a pinned message has no object to
 //! keep alive — a pin is already the thing that keeps a message.
 
 use axum::extract::{Path, Query as AxumQuery, State};
@@ -38,6 +38,8 @@ struct MediaQuery {
     /// Unix ms, inclusive on both ends — the date range in SPEC §4.4.
     since: Option<i64>,
     until: Option<i64>,
+    /// `true`: only what would go next, "Leaving soon" (#583).
+    leaving: Option<bool>,
     limit: Option<u32>,
 }
 
@@ -55,6 +57,16 @@ async fn page(
             ));
         }
     }
+    // What would go next (#583). Nothing is leaving soon on a server with
+    // expiry off, or with room to spare under `when-full`.
+    let leaving_before = if query.leaving == Some(true) {
+        match crate::expiry::leaving_cutoff(&state, now_ms()).await? {
+            Some(at) => Some(at),
+            None => return Ok(Json(Vec::new())),
+        }
+    } else {
+        None
+    };
     let request = Query {
         viewer: auth.id,
         kind: query.kind,
@@ -62,6 +74,7 @@ async fn page(
         before: query.before.as_deref().map(Cursor::parse).transpose()?,
         since: query.since,
         until: query.until,
+        leaving_before,
         limit: query.limit.unwrap_or(50).clamp(1, MAX_MEDIA_PAGE),
     };
     crate::repo::media::page(&state.db.read, &state.config, &request)

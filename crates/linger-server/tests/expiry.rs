@@ -12,7 +12,7 @@ mod common;
 use common::spawn_server;
 use common::{bootstrap_host, spawn_tuned, TestServer};
 use linger_core::wire::{Attachment, Message, RefreshResponse, Room, ServerInfo, UploadSlot};
-use linger_server::config::Config;
+use linger_server::config::{Config, FileExpiry};
 use linger_server::db::now_ms;
 use linger_server::expiry;
 use sha2::{Digest, Sha256};
@@ -192,7 +192,7 @@ async fn token_rows(server: &TestServer) -> Vec<String> {
 /// The rule in SPEC §4.10, and both of its exceptions, in one pass.
 #[tokio::test]
 async fn an_old_file_goes_unless_it_is_starred_or_pinned() {
-    let (server, token, room) = fixture(|_| {}).await;
+    let (server, token, room) = fixture(|config| config.file_expiry = FileExpiry::After(365)).await;
 
     let (_, plain) = share(&server, &token, &room, "plain.txt", filler(4000)).await;
     let (_, starred) = share(&server, &token, &room, "starred.txt", filler(3000)).await;
@@ -253,7 +253,7 @@ async fn an_old_file_goes_unless_it_is_starred_or_pinned() {
 /// everything, however old it gets.
 #[tokio::test]
 async fn a_host_can_turn_expiry_off_entirely() {
-    let (server, token, room) = fixture(|config| config.file_expiry_days = None).await;
+    let (server, token, room) = fixture(|config| config.file_expiry = FileExpiry::Off).await;
     let (_, file) = share(&server, &token, &room, "ancient.txt", filler(2000)).await;
     age_everything(&server, 4000).await;
 
@@ -265,7 +265,7 @@ async fn a_host_can_turn_expiry_off_entirely() {
 /// the host's.
 #[tokio::test]
 async fn a_host_can_ask_for_a_shorter_window() {
-    let (server, token, room) = fixture(|config| config.file_expiry_days = Some(30)).await;
+    let (server, token, room) = fixture(|config| config.file_expiry = FileExpiry::After(30)).await;
     let (_, old) = share(&server, &token, &room, "old.txt", filler(2000)).await;
     let (_, recent) = share(&server, &token, &room, "recent.txt", filler(2000)).await;
     age_everything(&server, 31).await;
@@ -362,7 +362,7 @@ async fn a_file_a_status_still_names_ages_out_all_the_same() {
 async fn the_server_reports_what_storage_is_used() {
     let (server, token, room) = fixture(|config| {
         config.pool_bytes = 4 * 1024 * 1024 * 1024;
-        config.file_expiry_days = Some(90);
+        config.file_expiry = FileExpiry::After(90);
     })
     .await;
 
@@ -370,6 +370,7 @@ async fn the_server_reports_what_storage_is_used() {
     assert_eq!(empty.storage_used_bytes, 0);
     assert_eq!(empty.storage_limit_bytes, 4 * 1024 * 1024 * 1024);
     assert_eq!(empty.file_expiry_days, Some(90));
+    assert_eq!(empty.file_expiry_when_full, Some(false));
 
     let (_, file) = share(&server, &token, &room, "notes.txt", filler(7000)).await;
     let used = info(&server, &token).await;
@@ -383,8 +384,10 @@ async fn the_server_reports_what_storage_is_used() {
 /// Turning expiry off is visible to everybody, not only to the host who set it.
 #[tokio::test]
 async fn expiry_being_off_is_reported_as_off() {
-    let (server, token, _room) = fixture(|config| config.file_expiry_days = None).await;
-    assert_eq!(info(&server, &token).await.file_expiry_days, None);
+    let (server, token, _room) = fixture(|config| config.file_expiry = FileExpiry::Off).await;
+    let said = info(&server, &token).await;
+    assert_eq!(said.file_expiry_days, None);
+    assert_eq!(said.file_expiry_when_full, Some(false));
 }
 
 /// Used sign-in tokens are deleted once their 30 days are up (#520). An app
@@ -434,4 +437,254 @@ async fn used_sign_in_tokens_go_once_their_thirty_days_are_up() {
         "reusing a used token still ends the sign-in"
     );
     assert_eq!(expiry::sweep(&server.state).await.unwrap().tokens, 0);
+}
+
+// ---------------------------------------------------------------------------
+// `when-full`, the default (#583)
+// ---------------------------------------------------------------------------
+
+/// A tiny pool, so a few small files fill it: 90% is 90,000 bytes and 80%
+/// is 80,000.
+const POOL: u64 = 100_000;
+
+fn when_full(config: &mut Config) {
+    config.pool_bytes = POOL;
+    config.file_expiry = FileExpiry::WhenFull;
+}
+
+/// Put a file's date back by `days`, so files can be told apart by age.
+async fn age(server: &TestServer, attachment: &Attachment, days: i64) {
+    sqlx::query("UPDATE attachments SET created_at = ? WHERE id = ?")
+        .bind(linger_server::db::now_ms() - days * DAY_MS)
+        .bind(attachment.id.to_vec())
+        .execute(&server.state.db.write)
+        .await
+        .unwrap();
+}
+
+/// Wait for a pass an upload started in the background to finish.
+async fn settle(server: &TestServer) {
+    drop(server.state.making_room.lock().await);
+}
+
+async fn leaving_ids(server: &TestServer, token: &str) -> Vec<String> {
+    let items: Vec<serde_json::Value> = client()
+        .get(server.url("/media?leaving=true"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    items
+        .iter()
+        .map(|item| {
+            item["attachment"]["id"]
+                .as_str()
+                .expect("only files leave")
+                .to_string()
+        })
+        .collect()
+}
+
+/// The point of #583: a year-old photo on a half-empty server stays.
+#[tokio::test]
+async fn a_year_old_file_stays_while_the_server_has_room() {
+    let (server, token, room) = fixture(|_| {}).await;
+    let said = info(&server, &token).await;
+    assert_eq!(said.file_expiry_days, None);
+    assert_eq!(
+        said.file_expiry_when_full,
+        Some(true),
+        "when-full is the default"
+    );
+
+    let (_, photo) = share(&server, &token, &room, "lake.txt", filler(4000)).await;
+    age_everything(&server, 4000).await;
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
+    assert_eq!(object_status(&server, &photo).await, 200);
+    assert!(
+        leaving_ids(&server, &token).await.is_empty(),
+        "nothing is leaving soon with room to spare"
+    );
+}
+
+/// Somebody else's upload still going up, `bytes` big: it counts against the
+/// pool like a stored file does, without a message to sweep.
+async fn going_up(server: &TestServer, bytes: i64) {
+    sqlx::query(
+        "INSERT INTO attachments (id, uploader_id, object_key, filename, mime, size_bytes, state, created_at)
+         SELECT randomblob(16), id, 'objects/going-up', 'going-up.bin', 'application/octet-stream', ?, 'pending', ?
+           FROM users LIMIT 1",
+    )
+    .bind(bytes)
+    .bind(linger_server::db::now_ms())
+    .execute(&server.state.db.write)
+    .await
+    .unwrap();
+}
+
+/// Past 90% the oldest file nobody starred or pinned goes first, and only
+/// until the pool is back under 80%.
+#[tokio::test]
+async fn past_ninety_percent_the_oldest_go_until_it_is_under_eighty() {
+    let (server, token, room) = fixture(when_full).await;
+    // Eight files of 10,000 bytes: 80%, so nothing goes yet.
+    let mut files = Vec::new();
+    for n in 0..8 {
+        files.push(share(&server, &token, &room, &format!("f{n}.txt"), filler(10_000)).await);
+    }
+    for (n, (_, file)) in files.iter().enumerate() {
+        age(&server, file, 100 - n as i64).await;
+    }
+    let star = client()
+        .put(server.url(&format!("/media/{}/star", files[0].1.id)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(star.status(), 204);
+    let pin = client()
+        .post(server.url(&format!("/messages/{}/pin", files[1].0.id)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pin.status(), 200);
+    assert_eq!(
+        expiry::sweep(&server.state).await.unwrap().files,
+        0,
+        "80% has room"
+    );
+
+    // Another 10,000 going up takes it to 90%.
+    going_up(&server, 10_000).await;
+    let swept = expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(swept.files, 1, "one file brings it back to 80%");
+    assert_eq!(info(&server, &token).await.storage_used_bytes, 80_000);
+    // The oldest one nobody starred or pinned: never a starred file or one on
+    // a pinned message, however old.
+    assert_eq!(object_status(&server, &files[2].1).await, 404);
+    for kept in [&files[0].1, &files[1].1, &files[3].1, &files[7].1] {
+        assert_eq!(
+            object_status(&server, kept).await,
+            200,
+            "{} should still be served",
+            kept.filename
+        );
+    }
+}
+
+/// An upload that wouldn't fit makes the room it needs before it's refused.
+#[tokio::test]
+async fn an_upload_that_would_not_fit_makes_room_first() {
+    let (server, token, room) = fixture(when_full).await;
+    let (_, oldest) = share(&server, &token, &room, "oldest.txt", filler(40_000)).await;
+    let (_, newer) = share(&server, &token, &room, "newer.txt", filler(40_000)).await;
+    age(&server, &oldest, 30).await;
+    age(&server, &newer, 10).await;
+
+    // 80,000 used and 30,000 more is over the ceiling: the oldest goes.
+    let big = upload(&server, &token, "big.txt", filler(30_000)).await;
+    settle(&server).await;
+    assert_eq!(object_status(&server, &oldest).await, 404);
+    assert_eq!(object_status(&server, &newer).await, 200);
+    assert_eq!(big.size_bytes, 30_000);
+}
+
+/// With every file starred there's nothing to take, and the host hears the
+/// file space is nearly used up. While something could still go, they don't:
+/// that's the setting working.
+#[tokio::test]
+async fn the_host_hears_the_file_space_is_full_only_when_nothing_can_go() {
+    let (server, token, room) = fixture(when_full).await;
+    let (_, file) = share(&server, &token, &room, "keep.txt", filler(85_000)).await;
+    let star = client()
+        .put(server.url(&format!("/media/{}/star", file.id)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(star.status(), 204);
+    going_up(&server, 10_000).await;
+    expiry::sweep(&server.state).await.unwrap();
+    assert_eq!(object_status(&server, &file).await, 200, "a star keeps it");
+    assert!(
+        info(&server, &token)
+            .await
+            .health
+            .unwrap()
+            .file_space_nearly_full
+    );
+
+    // Without the star it could go, so the host isn't told.
+    let unstar = client()
+        .delete(server.url(&format!("/media/{}/star", file.id)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unstar.status(), 204);
+    assert!(
+        !info(&server, &token)
+            .await
+            .health
+            .unwrap()
+            .file_space_nearly_full
+    );
+}
+
+/// "Leaving soon" under an age rule: what's within a month of its date, never
+/// a starred or pinned file, and never a link or a pin.
+#[tokio::test]
+async fn leaving_soon_is_a_month_ahead_under_an_age_rule() {
+    let (server, token, room) = fixture(|config| config.file_expiry = FileExpiry::After(365)).await;
+    let (_, soon) = share(&server, &token, &room, "soon.txt", filler(1000)).await;
+    let (_, later) = share(&server, &token, &room, "later.txt", filler(1000)).await;
+    let (_, starred) = share(&server, &token, &room, "starred.txt", filler(1000)).await;
+    age(&server, &soon, 340).await;
+    age(&server, &later, 100).await;
+    age(&server, &starred, 340).await;
+    let star = client()
+        .put(server.url(&format!("/media/{}/star", starred.id)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(star.status(), 204);
+
+    assert_eq!(
+        leaving_ids(&server, &token).await,
+        vec![soon.id.to_string()]
+    );
+}
+
+/// "Leaving soon" under `when-full`: past 80%, the oldest that add up to a
+/// tenth of the pool, which is what one pass at 90% takes.
+#[tokio::test]
+async fn leaving_soon_is_the_next_tenth_under_when_full() {
+    let (server, token, room) = fixture(when_full).await;
+    let mut files = Vec::new();
+    for n in 0..4 {
+        let (_, file) = share(&server, &token, &room, &format!("f{n}.txt"), filler(21_000)).await;
+        files.push(file);
+    }
+    for (n, file) in files.iter().enumerate() {
+        age(&server, file, 10 - n as i64).await;
+    }
+    // 84,000 used: past 80%, so the oldest 10,000 bytes' worth is next, which
+    // is the oldest file.
+    assert_eq!(
+        leaving_ids(&server, &token).await,
+        vec![files[0].id.to_string()]
+    );
+}
+
+#[tokio::test]
+async fn nothing_is_leaving_soon_with_expiry_off() {
+    let (server, token, room) = fixture(|config| config.file_expiry = FileExpiry::Off).await;
+    share(&server, &token, &room, "forever.txt", filler(1000)).await;
+    age_everything(&server, 4000).await;
+    assert!(leaving_ids(&server, &token).await.is_empty());
 }

@@ -26,7 +26,7 @@
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useSyncExternalStore } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 
 import type { ClientFrame } from "../generated/ClientFrame";
 import type { Attachment } from "../generated/Attachment";
@@ -240,10 +240,12 @@ export interface GatewayState {
    * server is holding: a knock is not stored at either end, so this list is
    * the only place it exists, and it is empty again a few seconds later.
    *
-   * It is a list rather than a set of user ids because two knocks from the same
-   * person are two knocks. Nothing counts them, nothing keeps them, and nothing
-   * shows them after they have gone — SPEC §4.9 is emphatic that a knock which
-   * leaves something sitting there has become a message.
+   * A second knock from the same person takes the first one's place as a
+   * fresh card, with a new id, so it is seen again rather than stacked
+   * (#512); at most `MAX_KNOCK_CARDS` are held, the newest. Nothing counts
+   * them, nothing keeps them, and nothing shows them after they have gone —
+   * SPEC §4.9 is emphatic that a knock which leaves something sitting there
+   * has become a message.
    */
   knocks: Knock[];
   /**
@@ -358,6 +360,13 @@ export interface Knock {
  */
 export const KNOCK_TTL_MS = 8_000;
 
+/**
+ * The most knock cards over the list at once, the newest (#512). Forty
+ * people knocking at once stacked forty cards over the whole list for eight
+ * seconds; a card is a tap on the shoulder, not a queue to work through.
+ */
+export const MAX_KNOCK_CARDS = 3;
+
 /** Ids for knock cards that arrive without a sequence number, which a
  *  knock never should: the ones that do are named by it (see `apply`). */
 let knockSeq = 0;
@@ -440,6 +449,34 @@ export function useGateway(server: string): GatewayState {
  *  components; this is the same read for anything that is not one. */
 export function serverState(server: string): GatewayState {
   return stateOf(server);
+}
+
+/**
+ * Subscribe to a few servers only, the ones a component shows: it's drawn
+ * again when one of them changes, not when any server does (#533). The
+ * same record comes back for as long as none of them has changed, and a
+ * server not connected to yet isn't in it.
+ */
+export function useServersAmong(servers: readonly string[]): Readonly<Record<string, GatewayState>> {
+  const held = useRef<Readonly<Record<string, GatewayState>>>({});
+  const pick = useCallback(() => {
+    const last = held.current;
+    const wanted = servers.filter((server) => server in states);
+    const same = wanted.length === Object.keys(last).length && wanted.every((server) => last[server] === states[server]);
+    if (!same) held.current = Object.fromEntries(wanted.map((server) => [server, stateOf(server)]));
+    return held.current;
+  }, [servers]);
+  return useSyncExternalStore(subscribe, pick);
+}
+
+/**
+ * One value worked out from every server's state, for a component that needs
+ * only that: drawn again when the value changes, not at every change on every
+ * server (#533). React compares it with `Object.is`, so it's a string or a
+ * number, or an object kept as it was.
+ */
+export function useServersPick<T>(pick: (servers: Readonly<Record<string, GatewayState>>) => T): T {
+  return useSyncExternalStore(subscribe, () => pick(states));
 }
 
 /** Subscribe to every server at once. The rail is the only caller: it draws a
@@ -894,7 +931,10 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // timer was lost — a window backgrounded so long the timers were
       // throttled, a card unmounted by a re-render — must not come back later
       // as a knock from the past.
-      const fresh = current.knocks.filter((held) => Date.now() - held.at < KNOCK_TTL_MS);
+      //
+      // The same person again replaces their card rather than adding one
+      // (#512), and only the newest few are held.
+      const fresh = current.knocks.filter((held) => Date.now() - held.at < KNOCK_TTL_MS && held.from !== frame.d.from_user_id);
       // Named by the frame's sequence number, which is unique within a
       // connection (a fresh `ready` clears knocks anyway), so every window
       // that folds this frame names it the same: the Buddy list client's
@@ -904,7 +944,7 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       const id = frame.s === undefined ? `knock-local-${knockSeq}` : `knock-${frame.s}`;
       return {
         ...current,
-        knocks: [...fresh, { id, from: frame.d.from_user_id, at: Date.now() }],
+        knocks: [...fresh, { id, from: frame.d.from_user_id, at: Date.now() }].slice(-MAX_KNOCK_CARDS),
       };
     }
     case "typing": {
@@ -1058,13 +1098,20 @@ export function positionOf(server: string): Position {
  */
 export type SharedLocal = Pick<GatewayState, "myVoice" | "voiceFailed" | "read" | "readLoaded" | "notifyRules" | "blocked" | "reports">;
 
+/** Every field of `SharedLocal`, for going through them one at a time. */
+export const SHARED_FIELDS = ["myVoice", "voiceFailed", "read", "readLoaded", "notifyRules", "blocked", "reports"] as const satisfies readonly (keyof SharedLocal)[];
+
 export function sharedLocalOf(server: string): SharedLocal {
   const { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports } = stateOf(server);
   return { myVoice, voiceFailed, read, readLoaded, notifyRules, blocked, reports };
 }
 
-/** A viewer takes the owner's copy of those fields. */
-export function adoptShared(server: string, shared: SharedLocal): void {
+/**
+ * A viewer takes the owner's copy of those fields: the ones the owner says
+ * changed, each kept as it was otherwise, so what didn't change isn't drawn
+ * again (#533).
+ */
+export function adoptShared(server: string, shared: Partial<SharedLocal>): void {
   if (!links.has(server)) return;
   publish(server, { ...stateOf(server), ...shared });
 }

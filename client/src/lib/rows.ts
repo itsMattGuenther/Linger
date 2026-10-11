@@ -51,7 +51,10 @@ export function buildRows(messages: readonly Message[], options: BuildOptions): 
   let boundaryLoaded = options.atStart;
 
   for (const message of messages) {
-    const gap = previous === null ? Number.POSITIVE_INFINITY : message.created_at - previous.created_at;
+    // Either way: a server clock that jumped back put a later message hours
+    // before the one above it, and it joined that one's session under that
+    // one's heading (#512).
+    const gap = previous === null ? Number.POSITIVE_INFINITY : Math.abs(message.created_at - previous.created_at);
     const opensSession = previous === null ? options.atStart : gap > SESSION_BREAK_MS;
     const opensLeftOff = !placed && boundaryLoaded && leftOff !== null && message.id > leftOff;
 

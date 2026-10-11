@@ -42,6 +42,23 @@ function sounds(asked: string[]): string[] {
 const box = (page: Page) => page.getByRole("combobox", { name: /^Message/ });
 const log = (page: Page) => page.getByRole("log");
 
+test("the message box keeps room to type in a window narrower than it was made for, its buttons going under it (#512)", async ({ page }) => {
+  // At 150% interface size, a list window at its smallest was 200 of the page's pixels wide, and the box 8 px.
+  await page.setViewportSize({ width: 200, height: 500 });
+  await open(page);
+  const input = await page.getByRole("combobox", { name: "Message in #general" }).boundingBox();
+  const send = await page.getByRole("button", { name: "Send" }).boundingBox();
+  if (!input || !send) throw new Error("message box not drawn");
+  expect(input.width).toBeGreaterThanOrEqual(96);
+  // The buttons went under the typing area, together, and all still fit.
+  expect(send.y).toBeGreaterThanOrEqual(input.y + input.height - 1);
+  expect(send.x + send.width).toBeLessThanOrEqual(200);
+  for (const name of ["Add a file", "Emoji"]) {
+    const button = await page.getByRole("button", { name, exact: true }).boundingBox();
+    expect(button?.y).toBe(send.y);
+  }
+});
+
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("region", { name: "#general" })).toBeVisible();
@@ -65,6 +82,52 @@ test("marks the newest message read through the list window, once", async ({ pag
     roomId: "r-general",
     messageId: id,
   });
+});
+
+/** The read positions the window has given the list window, oldest first. */
+async function reads(page: Page): Promise<unknown[]> {
+  return intents(await did(page))
+    .filter((intent) => intent.kind === "read")
+    .map((intent) => intent.messageId);
+}
+
+test("a message arriving while you rest a few pixels short of the end is followed and read (#625)", async ({ page }) => {
+  await open(page);
+  await expect.poll(() => reads(page)).toEqual(["m000016"]);
+  // Inside the conversation's margin for the end, outside the virtualizer's
+  // own pixel: the end is still where you are.
+  await log(page).evaluate(
+    (element) =>
+      new Promise((done) => {
+        element.addEventListener("scroll", done, { once: true });
+        element.scrollTop -= 20;
+      }),
+  );
+  const id = await page.evaluate(() => window.owner?.say("r-general", "u-eli", "one more thing"));
+  await expect(page.getByText("one more thing")).toBeInViewport();
+  await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
+});
+
+test("a message arriving just after a link card above it lands is followed and read (#625)", async ({ page }) => {
+  await page.route(`${SERVER}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
+  await page.goto("/tests/fixtures/next-chat-window.html?room=r-general&holdpreviews");
+  await expect.poll(() => reads(page)).toEqual(["m000016"]);
+  // The card makes Jules's row shorter, and the message comes a task later,
+  // before the virtualizer has caught up with the change (seen on CI).
+  const id = await log(page).evaluate(
+    (element) =>
+      new Promise<string>((done) => {
+        const watch = new MutationObserver(() => {
+          if (!element.textContent?.includes("Millrace River Trail")) return;
+          watch.disconnect();
+          setTimeout(() => done(window.owner?.say("r-general", "u-eli", "one more thing") ?? ""), 0);
+        });
+        watch.observe(element, { subtree: true, childList: true, characterData: true });
+        window.owner?.releasePreviews();
+      }),
+  );
+  await expect(page.getByText("one more thing")).toBeInViewport();
+  await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
 });
 
 test("opens on where you left off when something arrived since", async ({ page }) => {
@@ -259,7 +322,11 @@ for (const scale of [1, 2]) {
 
 test("from a name's card, Message asks the list window to show the DM and Knock knocks", async ({ page }) => {
   await open(page);
-  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  // Once nothing above is moving it: a click aimed where it was lands beside
+  // it, and opens nothing (#361, #572).
+  await still(name);
+  await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await card.getByRole("button", { name: "Knock" }).click();
   await expect(card.getByRole("button", { name: "Knocked" })).toBeVisible();
@@ -275,7 +342,9 @@ test("a knock the server refuses for the hour says, on the card, when you can kn
   // The fake server refuses as the real one does: 429, RATE_LIMITED, and
   // retry_after_ms of 19 minutes 10 seconds, read by the real REST client.
   await open(page, "room=r-general&limit");
-  await page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last().click();
+  const name = page.locator(".nx-msg[data-head='yes'] .nx-msg-person", { hasText: "Eli" }).last();
+  await still(name);
+  await name.click();
   const card = page.getByRole("dialog", { name: "Eli" });
   await card.getByRole("button", { name: "Knock" }).click();
   await expect(card.getByRole("status")).toHaveText("Three knocks this hour. You can knock again in 20 minutes.");
@@ -344,31 +413,30 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
 });
 
 test("Mute, Deafen and Leave on the voice strip sound in this window, once the list window has made the change (#241)", async ({ page }) => {
+  // The list window takes a moment over each change (`?hold`), and writes
+  // down how many sounds had started when it finished: none of that change's.
   await open(page, "room=r-general&talking&hold");
   const yours = page.getByRole("group", { name: "Your voice" });
-  // Pressed: the list window is asked, and nothing sounds while it's still making the change.
+  const held = async () => (await did(page)).filter((line) => line.startsWith("held:")).map((line) => Number(line.slice("held:".length)));
+  // Pressed: the list window is asked. Made: the button shows it, and its sound plays here, after.
   await yours.getByRole("button", { name: "Mute" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }]);
-  await page.waitForTimeout(150);
-  expect(sounds(await did(page))).toEqual([]);
-  await expect(yours.getByRole("button", { name: "Mute" })).toBeVisible();
-  // Made: the button shows it, and its sound plays here.
-  await page.evaluate(() => window.owner?.finish());
   await expect(yours.getByRole("button", { name: "Muted" })).toBeVisible();
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute"]);
+  expect(await held()).toEqual([0]);
 
   // Past the player's guard against a burst: one sound of a kind per 100 ms.
   await page.waitForTimeout(150);
   await yours.getByRole("button", { name: "Deafen" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toHaveLength(2);
-  await page.evaluate(() => window.owner?.finish());
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen"]);
+  expect(await held()).toEqual([0, 1]);
 
   await yours.getByRole("button", { name: "Leave voice" }).click();
   await expect.poll(async () => voiceControls(await did(page))).toHaveLength(3);
-  await page.evaluate(() => window.owner?.finish());
   await expect(page.getByRole("group", { name: "Your voice" })).toHaveCount(0);
   await expect.poll(async () => sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);
+  expect(await held()).toEqual([0, 1, 2]);
   // Once each.
   await page.waitForTimeout(300);
   expect(sounds(await did(page))).toEqual(["mute", "deafen", "voice-leave"]);

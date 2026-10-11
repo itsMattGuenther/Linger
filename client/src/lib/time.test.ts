@@ -74,9 +74,18 @@ describe("sessionLabel", () => {
     expect(sessionLabel(at(2026, 8, 19, 23, 30), at(2026, 8, 20, 0, 30))).toBe("last night");
   });
 
-  it("does not label a clock-skewed future message as days away", () => {
+  it("names a message dated after today by its date, never as today or as days away (#512)", () => {
+    // A server whose clock ran ahead: it was headed "this morning".
     const ahead = at(2026, 8, 21, 9, 0);
-    expect(sessionLabel(ahead, now)).toBe("this morning");
+    const label = sessionLabel(ahead, now);
+    expect(label.startsWith(`${weekdayOf(ahead)} morning, `)).toBe(true);
+    expect(label).not.toContain("this");
+    const nextYear = at(2027, 1, 2, 19, 0);
+    expect(sessionLabel(nextYear, now)).toContain("2027");
+    // The small hours after midnight are still tonight's, so a clock a few minutes behind changes nothing.
+    expect(sessionLabel(at(2026, 8, 21, 0, 5), at(2026, 8, 20, 23, 58))).toBe(`late ${weekdayOf(now)} night`);
+    // Later today is just today.
+    expect(sessionLabel(at(2026, 8, 20, 18, 0), now)).toBe("this evening");
   });
 });
 

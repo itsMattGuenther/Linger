@@ -71,7 +71,7 @@ unicode-properties = "0.1"
 unicode-normalization = "0.1"
 unicode-security = "0.1"
 uuid = { workspace = true }
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # The JPEG decoder `image` uses, named directly to read whether a JPEG is
 # progressive before decoding it: one of those holds about three times the
 # memory (#487). Already built for `image`.

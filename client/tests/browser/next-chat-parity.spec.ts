@@ -213,6 +213,35 @@ test.describe("what a message says", () => {
     await expect(honest.locator(".nx-text-link-real")).toHaveCount(0);
   });
 
+  test.describe("a time written with a zone, read in your clock (#584)", () => {
+    // Somewhere with no summer time, so the answer doesn't move with the date.
+    test.use({ timezoneId: "Asia/Kolkata", locale: "en-US" });
+
+    test("is underlined, and pointing at it or tapping it says it in your clock", async ({ page }) => {
+      await open(page);
+      const text = row(page, await post(page, "Raid starts 20:00 UTC, dungeon at 1:00 PM UTC. Not at 8 PT, and `9pm UTC` is code.")).locator(".nx-text");
+      const times = text.locator("time.nx-text-time");
+      // The two clock times with a zone; a bare number and code are words.
+      await expect(times).toHaveCount(2);
+      await expect(times.first()).toContainText("20:00 UTC");
+      // A screen reader hears it after the words, drawn by the stylesheet
+      // so it isn't part of the words: copying the message copies only them.
+      await expect(times.first()).toHaveText("20:00 UTC");
+      expect(await times.first().evaluate((node) => getComputedStyle(node, "::after").content)).toBe('" (1:30 AM for you, the next day)"');
+      const tip = page.locator(".k-tooltip");
+      await times.first().hover();
+      await expect(tip).toHaveText("1:30 AM for you, the next day");
+      await page.mouse.move(0, 0);
+      await expect(tip).toHaveCount(0);
+      // A click keeps it open after the pointer leaves, as a tap does on a phone.
+      await times.nth(1).click();
+      await page.mouse.move(0, 0);
+      await expect(tip).toHaveText("6:30 PM for you");
+      await page.keyboard.press("Escape");
+      await expect(tip).toHaveCount(0);
+    });
+  });
+
   test("the lines and indentation someone typed are drawn as typed (#289)", async ({ page }) => {
     await open(page);
     // Typed as the report did: a line, Shift+Enter, the next line, Enter.
@@ -893,6 +922,47 @@ test.describe("files in the conversation", () => {
       .toBe(true);
     expect(await sizes()).toEqual(before);
     expect(await rowHeight()).toBe(heightBefore);
+  });
+
+  test("a picture that can't be loaded says so in a card with Load again, never the broken-picture icon (#512)", async ({ page }) => {
+    await open(page);
+    let gone = true;
+    await page.route(`${SERVER}/media/pic-gone`, (route) =>
+      gone
+        ? route.fulfill({ status: 404, body: "" })
+        : route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#445"/></svg>` }),
+    );
+    const id = await post(page, "the lake", "u-eli", { attachments: [attachment("pic-gone", "lake.jpg", "image/jpeg", { width: 320, height: 180 })] });
+    const card = row(page, id).locator(".nx-att-card[data-picture='failed']");
+    await expect(card).toBeVisible();
+    await expect(card.locator(".nx-att-failed-note")).toHaveText("Couldn't load this picture.");
+    // Not announced: with the server out of reach, every picture in view would interrupt at once.
+    await expect(card.getByRole("alert")).toHaveCount(0);
+    await expect(card).toContainText("lake.jpg");
+    await expect(row(page, id).locator("img")).toHaveCount(0);
+
+    // It's back: one more go, right here, and the keyboard lands on the picture.
+    gone = false;
+    await card.getByRole("button", { name: "Load again" }).click();
+    const picture = row(page, id).getByRole("button", { name: "Open lake.jpg" });
+    await expect(picture).toBeFocused();
+    await expect.poll(() => picture.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(320);
+  });
+
+  test("the viewer says so when the original can't be loaded, rather than a broken-picture icon (#512)", async ({ page }) => {
+    await open(page);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#445"/></svg>`;
+    await page.route(`${SERVER}/media/pic-copy`, (route) => route.fulfill({ contentType: "image/svg+xml", body: svg }));
+    await page.route(`${SERVER}/media/pic-original`, (route) => route.fulfill({ status: 404, body: "" }));
+    const id = await post(page, "the lake", "u-eli", {
+      attachments: [attachment("pic-original", "lake.jpg", "image/jpeg", { width: 320, height: 180, display_url: "/media/pic-copy" })],
+    });
+    await row(page, id).getByRole("button", { name: "Open lake.jpg" }).click();
+    const viewer = page.getByRole("dialog", { name: "lake.jpg" });
+    await expect(viewer.getByRole("alert")).toHaveText("Couldn't load this picture.");
+    await expect(viewer.locator("img")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
   });
 
   test("video gets its poster and its player, audio Linger's player, anything else one line and a download button (FILE-5)", async ({ page }) => {

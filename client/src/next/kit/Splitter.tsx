@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
+import { type KeyboardEvent, memo, type PointerEvent, useRef, useState } from "react";
 import "./Splitter.css";
 
 /**
@@ -12,7 +12,7 @@ import "./Splitter.css";
  * it back to `reset`. `value` is the width of what's before it, in the page's
  * pixels; `onChange` fires on every step of a drag.
  */
-export function Splitter({
+export const Splitter = memo(function Splitter({
   label,
   value,
   min,
@@ -93,4 +93,4 @@ export function Splitter({
       onKeyDown={onKeyDown}
     />
   );
-}
+});
