@@ -48,12 +48,52 @@ pub async fn init(db_path: &Path) -> anyhow::Result<Db> {
 
     sqlx::migrate!("./migrations").run(&write).await?;
 
+    // Before the read pool opens: a connection reads the planner's statistics
+    // when it opens, so this is what lets the first reads after an upgrade use
+    // them. A failure costs speed, not correctness, so it does not stop the
+    // server from starting.
+    if let Err(err) = optimize(&write).await {
+        tracing::warn!(error = %err, "could not update the query planner's statistics");
+    }
+
     let read = SqlitePoolOptions::new()
         .max_connections(4)
         .connect_with(base.read_only(true).create_if_missing(false))
         .await?;
 
     Ok(Db { write, read })
+}
+
+/// The upkeep SQLite asks of a program that keeps its database open (#518).
+///
+/// The query planner picks indexes using measurements of each table — how
+/// many rows, how many share a value — kept in `sqlite_stat1`. Nothing takes
+/// them unless asked, and without them the planner guesses; on a grown server
+/// some of its guesses read a whole table to find a handful of rows. This
+/// takes them for any table that has never been measured or has grown or
+/// shrunk tenfold since it was, and does nothing otherwise. Most runs take
+/// microseconds. The first one on a server from before #518 measures
+/// everything: a few hundred milliseconds on a year of messages, once.
+///
+/// `0x10012` is the mask SQLite's documentation gives a long-lived connection
+/// at open (`0x10002`: check every table's size, not just the ones this
+/// connection has queried), plus the `0x10` bit plain `PRAGMA optimize`
+/// carries, which caps how much of each index a measurement reads. Checking
+/// every table matters more here than usual: this is the writer, almost every
+/// read goes through the other pool, and "the tables this connection has
+/// queried" would leave out most of the database.
+///
+/// It runs on the writer because measuring writes `sqlite_stat1`. A connection
+/// reads the measurements when it opens, so [`init`] runs this before the read
+/// pool exists, and after a later run each read connection picks the new
+/// numbers up when the pool replaces it (sqlx retires a connection after 30
+/// minutes). Like every query here, the work happens on the connection's own
+/// thread, not the async runtime's.
+pub async fn optimize(write: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query("PRAGMA optimize=0x10012")
+        .execute(write)
+        .await?;
+    Ok(())
 }
 
 /// Current wall-clock time as Unix milliseconds — the only timestamp format on
@@ -120,6 +160,58 @@ mod tests {
             .execute(&db.read)
             .await;
         assert!(denied.is_err(), "read pool must reject writes");
+    }
+
+    /// A room, a person and messages `from..=to` in it, written straight to
+    /// the table: what the planner's statistics count, without the routes.
+    async fn add_messages(pool: &SqlitePool, from: i64, to: i64) {
+        sqlx::raw_sql(&format!(
+            "INSERT OR IGNORE INTO users (id, username, display_name, password_hash, created_at)
+             VALUES (X'01', 'pat', 'Pat', 'x', 0);
+             INSERT OR IGNORE INTO rooms (id, slug, name, position, created_at)
+             VALUES (X'02', 'porch', 'Porch', 0, 0);
+             WITH RECURSIVE n(i) AS (SELECT {from} UNION ALL SELECT i + 1 FROM n WHERE i < {to})
+             INSERT INTO messages (id, room_id, author_id, body, created_at)
+             SELECT unhex(printf('%032X', i)), X'02', X'01', 'message ' || i, i FROM n;"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    /// How many messages the planner's statistics say there are.
+    async fn messages_measured(pool: &SqlitePool) -> Option<i64> {
+        let stat: Option<(String,)> =
+            sqlx::query_as("SELECT stat FROM sqlite_stat1 WHERE idx = 'idx_messages_room'")
+                .fetch_optional(pool)
+                .await
+                .unwrap();
+        stat.and_then(|(stat,)| stat.split(' ').next()?.parse().ok())
+    }
+
+    #[tokio::test]
+    async fn startup_measures_the_tables_and_a_later_run_notices_growth() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("linger.db");
+        let db = init(&path).await.unwrap();
+        add_messages(&db.write, 1, 200).await;
+        db.read.close().await;
+        db.write.close().await;
+
+        // A restart measures what is there.
+        let db = init(&path).await.unwrap();
+        assert_eq!(messages_measured(&db.read).await, Some(200));
+
+        // Tenfold growth later is noticed by the writer, although it never
+        // reads the messages table through an index itself.
+        add_messages(&db.write, 201, 5000).await;
+        optimize(&db.write).await.unwrap();
+        assert_eq!(messages_measured(&db.read).await, Some(5000));
+
+        // And with nothing new, a run leaves the measurements alone.
+        add_messages(&db.write, 5001, 5100).await;
+        optimize(&db.write).await.unwrap();
+        assert_eq!(messages_measured(&db.read).await, Some(5000));
     }
 
     #[tokio::test]

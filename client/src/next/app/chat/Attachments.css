@@ -116,3 +116,9 @@
 .nx-att-card[data-download="failed"] .nx-att-download-note {
   color: var(--text-danger);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-att-name {
+  unicode-bidi: isolate;
+}

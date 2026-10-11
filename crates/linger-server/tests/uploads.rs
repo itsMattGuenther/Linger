@@ -353,6 +353,39 @@ async fn a_plain_file_is_handed_over_as_a_download() {
         .starts_with("attachment;"));
 }
 
+/// A program can't come in dressed as a document (#488). `invoice`, U+202E
+/// and `fdp.exe` would read "invoiceexe.pdf" on its card, in Media and in
+/// Search, and in the browser's downloads. The name is stored, shown and
+/// downloaded without it.
+#[tokio::test]
+async fn a_file_name_cannot_turn_itself_around() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "invoice\u{202E}fdp.exe",
+        "text/plain",
+        b"not a document\n".to_vec(),
+    )
+    .await;
+    assert_eq!(attachment.filename, "invoicefdp.exe");
+
+    let served = client()
+        .get(absolute(&server, &attachment.url))
+        .send()
+        .await
+        .unwrap();
+    let disposition = served.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        disposition.ends_with("UTF-8''invoicefdp.exe"),
+        "{disposition}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Serving part of a file (#222)
 // ---------------------------------------------------------------------------
@@ -488,9 +521,11 @@ async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
         part.headers()["content-security-policy"],
         "default-src 'none'; sandbox"
     );
+    // The app's own cache keeps a file; one shared by everybody behind a
+    // proxy must not, or it outlives a delete (#502).
     assert_eq!(
         part.headers()["cache-control"],
-        "public, max-age=31536000, immutable"
+        "private, max-age=31536000, immutable"
     );
 
     let part = fetch(&download_url, Some("bytes=10-19")).await;

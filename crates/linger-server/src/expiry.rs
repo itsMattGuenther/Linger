@@ -1,4 +1,5 @@
-//! The file sweeper: what SPEC §4.10 means by "files expire after 365 days".
+//! The sweeper: what SPEC §4.10 means by "files expire after 365 days", and
+//! the used sign-in tokens nothing else ever deleted (#520).
 //!
 //! A shared server fills up. Left alone it fills up forever, because nobody
 //! goes back and tidies a year of screenshots, and the day it is full is the
@@ -11,11 +12,15 @@
 //! 1. **Old files** — complete, unstarred, not on a pinned message, older than
 //!    `LINGER_FILE_EXPIRY_DAYS`. This is the rule in the spec.
 //! 2. **Files on deleted messages** — a deleted message is a tombstone with an
-//!    empty body (`routes::messages::delete`), and neither the stream nor the
-//!    media collection will ever draw what it was carrying again. The bytes are
-//!    unreachable and still counted against the pool, so they go at once rather
-//!    than in a year. A star does not save one of these: a star means "do not
-//!    let this age out", and somebody deleting the message is not age.
+//!    empty body (`routes::messages::delete`), and what it carried is deleted
+//!    with it. The delete itself takes them, through [`take_from_message`],
+//!    the moment it happens (#502); this rule is the retry, for a store that
+//!    could not delete right then and for a message deleted on a server from
+//!    before that. Until it runs nothing serves, shows, lists or exports the
+//!    file: `routes::objects`, `repo::attachments::hydrate`, `repo::media`
+//!    and `export` all pass over a file whose message is deleted. A star does
+//!    not save one of these: a star means "do not let this age out", and
+//!    somebody deleting the message is not age.
 //! 3. **Finished uploads that never became a message** — somebody picked a file
 //!    and then closed the composer. `routes::uploads` sweeps *unfinished* ones
 //!    after 48 hours; a finished orphan has nothing to wait for either, but it
@@ -41,10 +46,19 @@
 //! nothing left pointing at it — a file nobody can see and nobody can remove.
 //! Doing it this way, a crash in between leaves a row whose bytes are gone,
 //! which the next pass tries again and finishes.
+//!
+//! A pass takes **sign-in tokens** as well. Renewing a sign-in
+//! (`auth::rotate_refresh`) marks the refresh token it used up and makes a new
+//! one, and an app left open renews all day: about a hundred rows a day for
+//! every device, which nothing deleted. A pass deletes each token once its own
+//! 30 days are up. It is refused by then anyway, and a used one inside its 30
+//! days stays, so presenting it again still ends the sign-in it came from
+//! (PROTOCOL §2). This is not about files, so turning file expiry off leaves
+//! it running.
 
 use std::time::Duration;
 
-use linger_core::AttachmentId;
+use linger_core::{AttachmentId, MessageId};
 
 use crate::db::now_ms;
 use crate::error::ApiError;
@@ -74,6 +88,8 @@ pub struct Swept {
     /// Uploads, and the bytes they held.
     pub files: u64,
     pub bytes: u64,
+    /// Sign-in tokens past their 30 days (#520).
+    pub tokens: u64,
     /// Export archives past their week (`export::sweep`).
     pub archives: u64,
 }
@@ -82,13 +98,19 @@ pub struct Swept {
 ///
 /// It runs a pass at startup and then on the interval, which matters for a
 /// server that is only up for an hour a day: waiting six hours to do the first
-/// pass would mean never doing one.
+/// pass would mean never doing one. Each pass ends with [`crate::db::optimize`].
 pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
         loop {
             ticker.tick().await;
             drain(&state).await;
+            // The sweep is the server's one regular chore and it has just
+            // changed the files table, so the planner's statistics are kept
+            // up to date alongside it (#518).
+            if let Err(err) = crate::db::optimize(&state.db.write).await {
+                tracing::warn!(error = %err, "could not update the query planner's statistics");
+            }
         }
     })
 }
@@ -101,16 +123,20 @@ pub fn spawn(state: AppState) -> tokio::task::JoinHandle<()> {
 async fn drain(state: &AppState) {
     loop {
         match sweep(state).await {
-            Ok(swept) if swept.files == 0 && swept.archives == 0 => return,
             Ok(swept) => {
-                tracing::info!(
-                    files = swept.files,
-                    bytes = swept.bytes,
-                    archives = swept.archives,
-                    "swept expired files"
-                );
+                if swept.files > 0 || swept.archives > 0 {
+                    tracing::info!(
+                        files = swept.files,
+                        bytes = swept.bytes,
+                        archives = swept.archives,
+                        "swept expired files"
+                    );
+                }
+                if swept.tokens > 0 {
+                    tracing::info!(tokens = swept.tokens, "swept expired sign-in tokens");
+                }
                 #[allow(clippy::cast_sign_loss)]
-                if swept.files < SWEEP_BATCH as u64 {
+                if swept.files < SWEEP_BATCH as u64 && swept.tokens < SWEEP_BATCH as u64 {
                     return;
                 }
                 tokio::time::sleep(BATCH_PAUSE).await;
@@ -163,23 +189,17 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
         let Ok(id) = AttachmentId::from_slice(&id) else {
             continue;
         };
-        // A backend that cannot delete right now must not lose the row that
-        // remembers what to delete, so a failure here leaves both in place for
-        // the next pass.
-        if let Err(err) = state.storage.delete_object(&object_key).await {
-            tracing::warn!(error = %err, key = object_key, "could not delete an expired object");
+        if !take(
+            state,
+            id,
+            &object_key,
+            poster_key.as_deref(),
+            display_key.as_deref(),
+        )
+        .await?
+        {
             continue;
         }
-        if let Some(key) = &poster_key {
-            let _ = state.storage.delete_object(key).await;
-        }
-        if let Some(key) = display_key.as_ref().filter(|key| **key != object_key) {
-            let _ = state.storage.delete_object(key).await;
-        }
-        sqlx::query("DELETE FROM attachments WHERE id = ?")
-            .bind(id.to_vec())
-            .execute(&state.db.write)
-            .await?;
         swept.files += 1;
         #[allow(clippy::cast_sign_loss)]
         {
@@ -187,6 +207,91 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
         }
     }
 
+    // Sign-in tokens past their 30 days (#520), a batch at a time like the
+    // files: a server that has never swept them has a row for every renewal
+    // since it started. `rotate_refresh` refuses one at `expires_at <= now`,
+    // so that is the line here too.
+    swept.tokens = sqlx::query(
+        "DELETE FROM refresh_tokens WHERE id IN (
+           SELECT id FROM refresh_tokens WHERE expires_at <= ? LIMIT ?)",
+    )
+    .bind(now_ms())
+    .bind(SWEEP_BATCH)
+    .execute(&state.db.write)
+    .await?
+    .rows_affected();
+
     swept.archives = crate::export::sweep(state).await?;
     Ok(swept)
+}
+
+// ---------------------------------------------------------------------------
+// Taking a file. Everything a pass does belongs in `sweep` above; these two
+// are the per-file step, shared with the message delete.
+// ---------------------------------------------------------------------------
+
+/// Take the files a message carried, now: what deleting the message means
+/// for them (#502). How many went.
+///
+/// Called by the delete straight after the tombstone, so a deleted message's
+/// photo is gone when the delete answers rather than at the next pass, up to
+/// six hours later. A file the store refuses stays for that pass, which is
+/// the retry, and is unreachable meanwhile (rule 2 in the module doc).
+pub async fn take_from_message(state: &AppState, message_id: MessageId) -> Result<u64, ApiError> {
+    let rows: Vec<Expired> = sqlx::query_as(
+        "SELECT id, object_key, poster_key, display_key, size_bytes
+           FROM attachments
+          WHERE message_id = ? AND state = 'complete'",
+    )
+    .bind(message_id.to_vec())
+    .fetch_all(&state.db.read)
+    .await?;
+    let mut taken = 0;
+    for (id, object_key, poster_key, display_key, _) in rows {
+        let Ok(id) = AttachmentId::from_slice(&id) else {
+            continue;
+        };
+        if take(
+            state,
+            id,
+            &object_key,
+            poster_key.as_deref(),
+            display_key.as_deref(),
+        )
+        .await?
+        {
+            taken += 1;
+        }
+    }
+    Ok(taken)
+}
+
+/// Delete one file, bytes first and row second (see the module doc): the
+/// original, its poster frame and its display copy (#382), then the row.
+/// `false` when the store refused the original, which leaves both for the
+/// next pass.
+async fn take(
+    state: &AppState,
+    id: AttachmentId,
+    object_key: &str,
+    poster_key: Option<&str>,
+    display_key: Option<&str>,
+) -> Result<bool, ApiError> {
+    // A backend that cannot delete right now must not lose the row that
+    // remembers what to delete.
+    if let Err(err) = state.storage.delete_object(object_key).await {
+        tracing::warn!(error = %err, key = object_key, "could not delete a file's object; the next sweep tries again");
+        return Ok(false);
+    }
+    if let Some(key) = poster_key {
+        let _ = state.storage.delete_object(key).await;
+    }
+    if let Some(key) = display_key.filter(|key| *key != object_key) {
+        let _ = state.storage.delete_object(key).await;
+    }
+    sqlx::query("DELETE FROM attachments WHERE id = ?")
+        .bind(id.to_vec())
+        .execute(&state.db.write)
+        .await?;
+    Ok(true)
 }

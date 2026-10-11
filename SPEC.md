@@ -563,6 +563,8 @@ carry sender feedback to a different person.
 - 500 MB per file
 - 50 GB per server pool (host-configurable)
 - Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- Deleting a message deletes its files with it, at once and starred or not: nothing
+  serves, shows, lists or exports them after (#502)
 - Resumable uploads
 - **EXIF stripped from all images on upload, always, no toggle.** Camera photos carry
   GPS coordinates; silently sharing your home address in a privacy-focused app would be
@@ -790,8 +792,9 @@ end-to-end encryption. A layer that would stop even the host is #200.
 voice address, which works from behind almost any home router; a strict office network
 that blocks UDP goes through the relay (TURN) instead. The host runs one beside the
 server, and it is the host's, not a third party's. What it carries is the encrypted
-stream, which it cannot read, and the server's only part is handing a member a
-short-lived password for it at the moment they join. A host who runs no relay has voice
+stream, which it cannot read, to the server's voice address and nowhere else (#501),
+and the server's only part is handing a member a short-lived password for it at the
+moment they join. A host who runs no relay has voice
 that works for everybody whose network lets UDP through, and is told so at startup.
 
 **Your microphone is yours.** Nobody can mute anybody else or turn anybody's

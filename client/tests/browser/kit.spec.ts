@@ -533,6 +533,33 @@ test("a name inside a sentence sits on the sentence's own lines (inline names)",
   expect(names).toEqual(["inline", "inline", "inline"]);
 });
 
+test("a name that turns text around can't turn the words after it, and a row keeps somebody's words to themselves (#488)", async ({ page }) => {
+  const sentence = page.getByTestId("turned-name").locator("span").first();
+  const drawn = await sentence.evaluate((span) => {
+    // The words after the name, letter by letter, left to right as drawn.
+    const after = [...span.childNodes].find((node): node is Text => node instanceof Text && node.data.includes("is typing"));
+    if (!after) return "";
+    const range = document.createRange();
+    const letters: { letter: string; line: number; left: number }[] = [];
+    for (let at = 0; at < after.length; at += 1) {
+      range.setStart(after, at);
+      range.setEnd(after, at + 1);
+      const box = range.getBoundingClientRect();
+      if (box.width > 0) letters.push({ letter: after.data[at] ?? "", line: Math.round(box.top + box.height / 2), left: box.left });
+    }
+    return letters
+      .sort((a, b) => a.line - b.line || a.left - b.left)
+      .map(({ letter }) => letter)
+      .join("");
+  });
+  expect(drawn.trim()).toBe("is typing, the right way round.");
+  // Every part of a row that holds somebody's words, block or inline.
+  const row = page.locator(".k-row").filter({ hasText: "side two" }).first();
+  for (const part of [".k-row-title", ".k-row-detail", ".k-row-note", ".k-name"]) {
+    expect(await row.locator(part).first().evaluate((node) => getComputedStyle(node).unicodeBidi), part).toBe("isolate");
+  }
+});
+
 test("tabs lead with a room's # or a person's marker, and a server stripe in a palette color", async ({ page }) => {
   const strip = page.getByRole("tablist", { name: "Conversations" });
   await expect(strip.getByRole("tab", { name: "#general" }).locator(".k-tab-hash")).toHaveText("#");

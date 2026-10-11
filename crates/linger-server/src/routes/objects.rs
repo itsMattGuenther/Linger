@@ -149,10 +149,15 @@ async fn get_object(
     request: HeaderMap,
 ) -> Result<Response, ApiError> {
     // An image's display copy (#382) has its original's type, so it is served
-    // exactly as the original is.
+    // exactly as the original is. A file on a deleted message is not served
+    // at all, and answers as if it had never been (#502): the delete takes
+    // its bytes, and this covers one the store couldn't delete right then,
+    // until the sweeper does.
     let row = sqlx::query(
-        "SELECT filename, mime, poster_key FROM attachments
-         WHERE state = 'complete' AND (object_key = ? OR poster_key = ? OR display_key = ?)",
+        "SELECT a.filename, a.mime, a.poster_key FROM attachments a
+         LEFT JOIN messages m ON m.id = a.message_id
+         WHERE a.state = 'complete' AND m.deleted_at IS NULL
+           AND (a.object_key = ? OR a.poster_key = ? OR a.display_key = ?)",
     )
     .bind(&key)
     .bind(&key)
@@ -193,11 +198,14 @@ async fn get_object(
 
     let mut headers = served_as(&serve);
     // Objects are immutable: the key contains the id, and re-encoding happens
-    // once, before the key is ever handed out.
+    // once, before the key is ever handed out. `private` because a file can
+    // still be deleted (#502): the app's own cache keeps it as long as
+    // `public` did, but a shared cache in front of the media host (a CDN
+    // proxy, say) must not go on handing it out after the server stops.
     insert(
         &mut headers,
         header::CACHE_CONTROL,
-        "public, max-age=31536000, immutable",
+        "private, max-age=31536000, immutable",
     );
     send_file(&path, length, headers, &request).await
 }
