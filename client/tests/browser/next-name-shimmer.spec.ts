@@ -143,8 +143,17 @@ for (const scale of [1, 2]) {
       await section.scrollIntoViewIfNeeded();
       const names = section.locator(".name[data-name-effect='shimmer']:not([data-dim])");
       // Every face in a row, the display, body, control and meta sizes, a
-      // long name cut short with "…", and three names inside a sentence.
-      await expect(names).toHaveCount(12 + 5 + 3);
+      // long name cut short with "…", three names inside a sentence, and
+      // one with a character that turns text around (#488).
+      await expect(names).toHaveCount(12 + 5 + 3 + 1);
+      // That one turned at its start too, so all its letters are drawn
+      // backwards: the band still has to lie on them.
+      await page.getByTestId("turned-name").locator("[data-kit='Name']").evaluate((node) => {
+        const turned = `\u202E${(node.textContent ?? "").replace(/\u202E/g, "")}`;
+        const letters = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+        if (letters) letters.textContent = turned;
+        node.querySelector(".k-name-band")?.setAttribute("data-letters", turned);
+      });
       const area = await section.boundingBox();
       if (!area) throw new Error("no names to shoot");
       const boxes: Box[] = await names.evaluateAll((nodes) =>

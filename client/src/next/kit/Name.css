@@ -351,7 +351,10 @@
 }
 
 /* Words somebody wrote keep their direction to themselves (#488): one that
-   turns text around can't reach past them. */
-.k-name {
+   turns text around can't reach past them. Inside a shimmering name, its
+   letters do too, so the band's place after them (above) stays at their
+   end however they're turned (#532). */
+.k-name,
+.k-name-letters {
   unicode-bidi: isolate;
 }
