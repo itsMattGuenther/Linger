@@ -679,6 +679,22 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a server's name or color saved in Settings has the list ask that server again, one it's signed in to only (#536)", async () => {
+    const { owner, viewer, core } = await windows("settings");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    const asked: string[] = [];
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
+      list: { addServer: () => undefined, setPrefs: () => undefined, serverInfo: (server) => asked.push(server) },
+    });
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "serverinfo", server: "https://elsewhere.example" });
+    await follower.intend({ kind: "serverinfo", server: HOME });
+    await vi.waitFor(() => expect(asked).toEqual([HOME]));
+    follower.stop();
+  });
+
   it("a window asking to show a conversation gets it where conversations open, even a DM this window hasn't heard of", async () => {
     const { owner, viewer, core } = await windows("chat-5f1e");
     const api = fakeOwnerApi(["token-1"]);

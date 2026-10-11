@@ -239,7 +239,10 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
   keeps every other server connected meanwhile;
 - `serverprefs`: your servers' order and which are Quiet, from Settings →
   Servers. The list window keeps them, and tells every window whenever they
-  change (`next:serverprefs`), so Settings shows the same order as the list.
+  change (`next:serverprefs`), so Settings shows the same order as the list;
+- `serverinfo`: Settings saved a server's name or color. The list asks that
+  server for them again at once, rather than at its next hourly ask: it asks
+  when a connection comes up or comes back, then once an hour (#536).
 
 **Signing out reaches every window.** The server doesn't cancel access tokens
 when you sign out, so a window still holding one could go on working as you
