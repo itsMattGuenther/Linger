@@ -36,6 +36,51 @@ fn silent_banner(title: &str, body: &str) -> notify_rust::Notification {
     notification
 }
 
+/// A message's words as a freedesktop daemon must be sent them to show them
+/// as typed (#489). A daemon that advertises `body-markup` (mako, dunst,
+/// GNOME, KDE) reads the body as Pango or HTML markup, so `<b>` in a message
+/// would restyle the banner and, on KDE, `<a href>` would become a link.
+/// Escaping the three characters markup is made of shows the words as they
+/// are. Quotes and apostrophes mean nothing outside a tag, so they're left
+/// alone. A daemon without the capability shows the body as it comes, and
+/// gets it untouched.
+///
+/// Only the body: the spec gives the summary no markup, and GNOME, KDE, mako
+/// and dunst all show it as plain text, so escaping a title would print
+/// `&amp;` in somebody's name. Windows' toast library escapes on its own, and
+/// macOS takes plain text.
+#[cfg(target_os = "linux")]
+fn body_as_typed(body: &str, daemon_reads_markup: bool) -> String {
+    if !daemon_reads_markup {
+        return body.to_owned();
+    }
+    let mut escaped = String::with_capacity(body.len());
+    for character in body.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+/// Whether the running daemon reads a banner's body as markup. Asked for
+/// every banner, which is one more message on the session bus: mako only
+/// says so while its `markup` setting is on, and the person may change that,
+/// or their daemon, while Linger runs. A daemon that can't be asked is
+/// treated as reading markup, since a stray `&amp;` is better than a message
+/// that can restyle the banner.
+#[cfg(target_os = "linux")]
+fn daemon_reads_markup() -> bool {
+    notify_rust::get_capabilities().map_or(true, |capabilities| {
+        capabilities
+            .iter()
+            .any(|capability| capability == "body-markup")
+    })
+}
+
 /// A freedesktop notification only reports a click on its body when it offers
 /// the `default` action. Daemons don't draw it as a button.
 #[cfg(target_os = "linux")]
@@ -73,6 +118,8 @@ pub async fn show_notification(
         let waits = cfg!(any(target_os = "linux", target_os = "windows"))
             && open.is_some()
             && WAITING.load(Ordering::Relaxed) < MAX_WAITING;
+        #[cfg(target_os = "linux")]
+        let body = body_as_typed(&body, daemon_reads_markup());
         #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
         let mut notification = silent_banner(&title, &body);
         #[cfg(target_os = "linux")]
@@ -124,6 +171,37 @@ mod tests {
         assert!(banner
             .hints
             .contains(&notify_rust::Hint::SuppressSound(true)));
+    }
+
+    #[test]
+    fn a_markup_daemon_shows_the_words_as_typed() {
+        // mako, dunst, GNOME and KDE read the body as markup: unescaped, the
+        // first would turn bold, the second huge, and on KDE the third would
+        // become a link to wherever it points (#489).
+        let typed = r#"<b>loud</b> & <span size="xx-large">big</span> <a href="file:///home">look</a> &amp;"#;
+        assert_eq!(
+            body_as_typed(typed, true),
+            r#"&lt;b&gt;loud&lt;/b&gt; &amp; &lt;span size="xx-large"&gt;big&lt;/span&gt; &lt;a href="file:///home"&gt;look&lt;/a&gt; &amp;amp;"#
+        );
+        // Apostrophes and quotes mean nothing outside a tag, so "don't"
+        // reaches every daemon as it is.
+        assert_eq!(body_as_typed(r#"don't "go""#, true), r#"don't "go""#);
+    }
+
+    #[test]
+    fn a_daemon_without_markup_gets_the_words_untouched() {
+        // It shows the body as it comes, so escaping would print `&amp;`.
+        let typed = "<b>loud</b> & clear";
+        assert_eq!(body_as_typed(typed, false), typed);
+    }
+
+    #[test]
+    fn the_title_goes_as_it_is() {
+        // The spec gives the summary no markup, and GNOME, KDE, mako and
+        // dunst all show it as plain text, so escaping it would print
+        // `&amp;` in a name like this one.
+        let banner = silent_banner("Tom & Jerry in #general", "hello");
+        assert_eq!(banner.summary, "Tom & Jerry in #general");
     }
 
     #[test]
