@@ -252,3 +252,9 @@
 .nx-srv-body {
   padding-bottom: var(--space-2);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-srv-name {
+  unicode-bidi: isolate;
+}

@@ -261,6 +261,45 @@ async fn labels_and_values_are_capped_and_checked() {
     .await;
 }
 
+/// A status can't turn itself, or the words beside it on a card, around
+/// (#488): the characters that change the direction of text are taken out of
+/// every part of it, the line, the fields and the away message, and the
+/// rest is saved as written.
+#[tokio::test]
+async fn a_status_loses_the_characters_that_turn_text_around() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let jo = join_member(&server, &host.access_token, "jo").await;
+    let mut body = with_fields(
+        "fixing the \u{202E}thgil hcrop",
+        &[
+            ("Play\u{2067}ing", "Outer Wilds\u{2069}"),
+            ("Reading", "\u{202B}שלום"),
+        ],
+    );
+    body["status"]["away_message"] = json!("\u{200F}back after work");
+    save(&server, &host.access_token, body).await;
+
+    let status = seen(&server, &jo.access_token, host.user.id).await;
+    assert_eq!(status.line.as_deref(), Some("fixing the thgil hcrop"));
+    assert_eq!(
+        fields_of(&status),
+        vec![field("Playing", "Outer Wilds"), field("Reading", "שלום")]
+    );
+    assert_eq!(status.reading.as_deref(), Some("שלום"));
+    assert_eq!(status.away_message.as_deref(), Some("back after work"));
+
+    // An app from before fields sends the three old keys: the same.
+    save(
+        &server,
+        &host.access_token,
+        the_old_way("x", Some("\u{202D}Low"), None, None, None),
+    )
+    .await;
+    let status = seen(&server, &jo.access_token, host.user.id).await;
+    assert_eq!(status.listening.as_deref(), Some("Low"));
+}
+
 /// A status is a small card, not a bio: a fourth field is refused.
 #[tokio::test]
 async fn a_fourth_field_is_refused() {

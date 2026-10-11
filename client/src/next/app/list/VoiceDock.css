@@ -118,3 +118,9 @@
 .nx-voice-crowd {
   margin: 0 calc(var(--space-1-5) * -1);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-voice-server-name {
+  unicode-bidi: isolate;
+}

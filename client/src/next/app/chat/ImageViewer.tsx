@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Attachment } from "../../../generated/Attachment";
+import { fileNameToShow } from "../../../lib/media";
 import { IconButton } from "../../kit";
 import "./ImageViewer.css";
 import { useBackButton } from "../useBackButton";
@@ -12,6 +13,7 @@ import { useBackButton } from "../useBackButton";
  */
 export function ImageViewer({ file, url, onClose }: { file: Attachment; url: string; onClose: () => void }) {
   const close = useRef<HTMLDivElement | null>(null);
+  const name = fileNameToShow(file.filename);
   // Android's Back closes the picture first (SPEC §4.15).
   useBackButton(true, onClose);
   useEffect(() => {
@@ -27,7 +29,7 @@ export function ImageViewer({ file, url, onClose }: { file: Attachment; url: str
       className="nx-viewer"
       role="dialog"
       aria-modal="true"
-      aria-label={file.filename}
+      aria-label={name}
       onClick={onClose}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -44,8 +46,8 @@ export function ImageViewer({ file, url, onClose }: { file: Attachment; url: str
       <div className="nx-viewer-close" ref={close}>
         <IconButton icon="close" label="Close the picture" shortcut="Esc" tone="filled" onClick={onClose} />
       </div>
-      <img className="nx-viewer-image" src={url} alt={file.filename} />
-      <p className="nx-viewer-name">{file.filename}</p>
+      <img className="nx-viewer-image" src={url} alt={name} />
+      <p className="nx-viewer-name">{name}</p>
     </div>,
     document.body,
   );

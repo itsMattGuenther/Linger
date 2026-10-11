@@ -7,6 +7,7 @@
  */
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
+import { withoutDirectionControls } from "./direction";
 
 /** An image renders at true aspect ratio, capped at this height (SPEC §5.6). */
 export const MAX_INLINE_HEIGHT = 400;
@@ -149,9 +150,20 @@ function parseDay(value: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
+/**
+ * A file's name as the app shows it: without the characters that change the
+ * direction of text (#488). The server takes them out of every name it stores
+ * now, but a name saved before that, or one from a server that doesn't, may
+ * still hold one, and one is enough to make a program read as a document:
+ * `invoice` + U+202E + `fdp.exe` shows as "invoiceexe.pdf".
+ */
+export function fileNameToShow(name: string): string {
+  return withoutDirectionControls(name);
+}
+
 /** What a tile says under it when the item has no other words of its own. */
 export function itemLabel(item: MediaItem): string {
-  if (item.attachment) return item.attachment.filename;
+  if (item.attachment) return fileNameToShow(item.attachment.filename);
   if (item.link) return item.link.title ?? item.link.domain;
   return item.excerpt ?? "a pinned message";
 }

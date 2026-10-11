@@ -248,9 +248,9 @@ async fn patch_me(
     // A status has no picture any more (#269). An older app still sends
     // `image_id`, so it is accepted and ignored: nothing is checked or stored
     // for it, and saving the rest of the status is never refused over it.
-    if let Some(status) = &req.status {
-        validate::status(status)?;
-    }
+    // What comes back is the status to save, without the characters that
+    // change the direction of text (#488).
+    let status = req.status.as_ref().map(validate::status).transpose()?;
     if let Some(sound) = &req.entrance_sound {
         if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {
             return Err(ApiError::validation(
@@ -302,7 +302,7 @@ async fn patch_me(
         .await?;
     }
 
-    if let Some(status) = &req.status {
+    if let Some(status) = &status {
         // `away_since` is server-owned: stamped when an away message appears or
         // changes, cleared with it.
         let prev_away: Option<(Option<String>, Option<i64>)> =

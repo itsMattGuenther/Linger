@@ -8,6 +8,7 @@
  */
 import type { ChangePasswordRequest } from "../generated/ChangePasswordRequest";
 import type { UpdateMeRequest } from "../generated/UpdateMeRequest";
+import { CHANGES_DIRECTION } from "./direction";
 
 /**
  * `linger-core::limits::MAX_DISPLAY_NAME_CHARS`. ts-rs exports types, not
@@ -23,7 +24,6 @@ export const MAX_MARKS_PER_LETTER = 4;
 // The display-name rules (#296), one character at a time. Copied from
 // `validate::display_name` on the server, which says why each is there.
 const BREAKS_THE_LINE = /[\p{Cc}\u{2028}\u{2029}]/u;
-const CHANGES_DIRECTION = /[\u{061C}\u{200E}\u{200F}\u{202A}-\u{202E}\u{2066}-\u{2069}]/u;
 const INVISIBLE = /[\p{Cf}\u{034F}\u{17B4}\u{17B5}]/u;
 const EMOJI = /\p{Emoji}/u;
 // The server's JOINING_SCRIPTS: Arabic, Syriac, N'Ko, Mandaic, Indic, Myanmar, Khmer, Mongolian, Adlam.

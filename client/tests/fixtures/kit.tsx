@@ -120,6 +120,8 @@ const dave = person("Dave", "jetbrains-mono", solid("cyan"), { line: "side two. 
 const callie = person("Callie", "newsreader", blend("violet", "orchid"), { italic: true, weight: 700 });
 const sam = person("Sam", "silkscreen", solid("rose"), { away: "back after work" });
 const longName = person("Bartholomew-Maximilian the Considerably Long", "inter", solid("sky"));
+/** A name saved before #296, ending in U+202E, which turns the text after it around (#488). */
+const turned = person("Ezra\u{202E}", "inter", solid("lime"));
 
 /** Two panes and the line between them, which drags (the list beside the conversations, #337). */
 function SplitPanes() {
@@ -521,6 +523,11 @@ function Gallery() {
               <span>
                 Replying to <Name person={jules} size="inline" />: <Name person={eli} size="inline" /> and{" "}
                 <Name person={sam} size="inline" /> are typing, inside a sentence, in its own size and line.
+              </span>
+            </p>
+            <p className="g-row g-sentence" data-testid="turned-name">
+              <span>
+                <Name person={turned} size="inline" /> is typing, the right way round.
               </span>
             </p>
           </div>

@@ -53,6 +53,26 @@ pub fn room_slug(s: &str) -> Result<(), ApiError> {
     }
 }
 
+/// A room's name, trimmed: 1–48 characters, without the characters that
+/// change the direction of text (#488).
+pub fn room_name(s: &str) -> Result<String, ApiError> {
+    name_of_a_place(s, "Room names are 1–48 characters.")
+}
+
+/// The server's name, held to what a room's name is.
+pub fn server_name(s: &str) -> Result<String, ApiError> {
+    name_of_a_place(s, "Server names are 1–48 characters.")
+}
+
+fn name_of_a_place(s: &str, refusal: &'static str) -> Result<String, ApiError> {
+    let straight = without_direction_controls(s);
+    let name = straight.trim();
+    if name.is_empty() || name.chars().count() > 48 {
+        return Err(ApiError::validation(refusal));
+    }
+    Ok(name.to_string())
+}
+
 /// A display name (PROTOCOL §2, #296): 1–32 characters after trimming, in any
 /// script, with emoji, accents, spaces and punctuation, and nothing that hides,
 /// breaks the line, turns the text around, or paints over its neighbours.
@@ -116,6 +136,25 @@ fn changes_direction(c: char) -> bool {
         c,
         '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
     )
+}
+
+/// The text without the characters that change the direction of text
+/// ([`changes_direction`], #488), for the short text the app draws beside its
+/// own words and other people's: a file's name, a status, a room's name and
+/// topic, its message of the day, a poll, the server's name. One override can
+/// make `invoice` + U+202E + `fdp.exe` read as "invoiceexe.pdf", or turn the
+/// words after it around.
+///
+/// Taken out, not refused as they are in a display name. They can't be seen,
+/// so a refusal would ask somebody to find and delete a character they have
+/// no way to find, and they mostly arrive by pasting (a song title, a file
+/// from somebody's disk). Nobody loses anything they could read: Arabic and
+/// Hebrew letters carry their own direction. A display name is still refused
+/// (#296), so people see exactly what their name is. A message's words keep
+/// them: somebody writing a paragraph in Hebrew or Arabic may want them, and
+/// the app keeps each message to itself.
+pub fn without_direction_controls(s: &str) -> String {
+    s.chars().filter(|&c| !changes_direction(c)).collect()
 }
 
 /// Characters that draw nothing: every format character (Unicode category Cf:
@@ -400,9 +439,11 @@ pub fn caption(s: &str) -> Result<String, ApiError> {
 }
 
 /// A room's message of the day, trimmed (PROTOCOL §3, #464). Empty is allowed:
-/// it's how one is cleared.
+/// it's how one is cleared. It's drawn over the room as well as in it, so it
+/// loses the characters that change the direction of text (#488).
 pub fn motd(s: &str) -> Result<String, ApiError> {
-    let trimmed = s.trim();
+    let straight = without_direction_controls(s);
+    let trimmed = straight.trim();
     if trimmed.chars().count() > MAX_MOTD_CHARS {
         return Err(ApiError::validation(format!(
             "A message of the day is at most {MAX_MOTD_CHARS} characters."
@@ -413,12 +454,14 @@ pub fn motd(s: &str) -> Result<String, ApiError> {
 
 /// A filename is stored and echoed back in a download header, so it is stripped
 /// of anything that could steer a filesystem or forge a header line: directory
-/// components, control characters, quotes.
+/// components, control characters, quotes. And of the characters that change
+/// the direction of text, which can make a program look like a document:
+/// `invoice` + U+202E + `fdp.exe` reads as "invoiceexe.pdf" (#488).
 pub fn filename(s: &str) -> Result<String, ApiError> {
     let base = s.rsplit(['/', '\\']).next().unwrap_or(s).trim();
     let cleaned: String = base
         .chars()
-        .filter(|c| !c.is_control() && !matches!(c, '"' | '\\'))
+        .filter(|&c| !c.is_control() && !changes_direction(c) && !matches!(c, '"' | '\\'))
         .collect();
     let cleaned = cleaned.trim_matches('.').trim().to_string();
     if cleaned.is_empty() || cleaned.chars().count() > MAX_FILENAME_CHARS {
@@ -461,7 +504,24 @@ pub fn style(style: &Style) -> Result<(), ApiError> {
 /// A status (SPEC §4.6, PROTOCOL §5): every text in it capped, and the short
 /// fields free of control characters, whether they arrive labelled in
 /// `fields` (#270) or under the three keys older apps send.
-pub fn status(status: &UserStatus) -> Result<(), ApiError> {
+///
+/// What comes back is the status to save: every text in it without the
+/// characters that change the direction of text (#488), which are taken out
+/// before anything is counted.
+pub fn status(status: &UserStatus) -> Result<UserStatus, ApiError> {
+    let straight = |text: &Option<String>| text.as_deref().map(without_direction_controls);
+    let status = UserStatus {
+        line: straight(&status.line),
+        reading: straight(&status.reading),
+        listening: straight(&status.listening),
+        working_on: straight(&status.working_on),
+        fields: status
+            .fields
+            .as_ref()
+            .map(|fields| fields.iter().map(straight_field).collect()),
+        away_message: straight(&status.away_message),
+        ..status.clone()
+    };
     let cap = |field: &Option<String>, max: usize, what: &str| -> Result<(), ApiError> {
         match field {
             Some(v) if v.chars().count() > max => Err(ApiError::validation(format!(
@@ -493,7 +553,15 @@ pub fn status(status: &UserStatus) -> Result<(), ApiError> {
     if let Some(fields) = &status.fields {
         status_fields(fields)?;
     }
-    Ok(())
+    Ok(status)
+}
+
+/// A field without the characters that change the direction of text (#488).
+fn straight_field(field: &StatusField) -> StatusField {
+    StatusField {
+        label: without_direction_controls(&field.label),
+        value: without_direction_controls(&field.value),
+    }
 }
 
 /// The labelled fields a status is saved with (#270), trimmed.
@@ -501,16 +569,17 @@ pub fn status(status: &UserStatus) -> Result<(), ApiError> {
 /// At most three. A label is 1–24 characters and a value 1–80, counted after
 /// trimming, and neither may hold a control character: both are drawn on one
 /// line of a card, and a tab or a line break there is a way to push text
-/// somewhere it was not written. No two fields share a label, ignoring case,
-/// so each of the three classic labels names at most one field. An empty
-/// value is refused rather than dropped: an app leaves out a field nobody
-/// filled in.
+/// somewhere it was not written. The characters that change the direction of
+/// text are taken out first, for the same reason (#488). No two fields share
+/// a label, ignoring case, so each of the three classic labels names at most
+/// one field. An empty value is refused rather than dropped: an app leaves
+/// out a field nobody filled in.
 pub fn status_fields(fields: &[StatusField]) -> Result<Vec<StatusField>, ApiError> {
     if fields.len() > MAX_STATUS_FIELDS {
         return Err(ApiError::validation("A status has three fields at most."));
     }
     let mut out: Vec<StatusField> = Vec::with_capacity(fields.len());
-    for field in fields {
+    for field in fields.iter().map(straight_field) {
         let label = field.label.trim();
         let value = field.value.trim();
         if label.is_empty() {
@@ -824,6 +893,75 @@ mod tests {
         assert!(filename("   ").is_err());
         assert!(filename("...").is_err());
         assert!(filename(&"x".repeat(300)).is_err());
+    }
+
+    /// Every character `changes_direction` names, one at a time.
+    const DIRECTION_CONTROLS: [char; 12] = [
+        '\u{061C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}',
+        '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+    ];
+
+    /// A program can't dress up as a document (#488): `invoice` + U+202E +
+    /// `fdp.exe` would read "invoiceexe.pdf".
+    #[test]
+    fn filenames_lose_the_characters_that_change_the_direction_of_text() {
+        assert_eq!(
+            filename("invoice\u{202E}fdp.exe").unwrap(),
+            "invoicefdp.exe"
+        );
+        for c in DIRECTION_CONTROLS {
+            assert_eq!(filename(&format!("a{c}b.pdf")).unwrap(), "ab.pdf", "{c:?}");
+        }
+        // Nothing but them is no name at all.
+        assert!(filename("\u{202E}\u{2066}").is_err());
+        // Words in Hebrew and Arabic carry their own direction, and stay.
+        assert_eq!(filename("שלום.pdf").unwrap(), "שלום.pdf");
+        assert_eq!(filename("ملف.txt").unwrap(), "ملف.txt");
+    }
+
+    /// The short text drawn beside other words loses them too, before it is
+    /// trimmed and counted (#488); a message's words keep them.
+    #[test]
+    fn short_text_loses_the_characters_that_change_the_direction_of_text() {
+        for c in DIRECTION_CONTROLS {
+            assert_eq!(without_direction_controls(&format!("a{c}b")), "ab", "{c:?}");
+        }
+        assert_eq!(without_direction_controls("محمد שרה"), "محمد שרה");
+
+        assert_eq!(motd(" \u{202E}back at 8 ").unwrap(), "back at 8");
+        assert!(motd(&format!("{}\u{202E}", "x".repeat(MAX_MOTD_CHARS))).is_ok());
+        assert_eq!(room_name(" \u{2067}garage\u{2069} ").unwrap(), "garage");
+        assert!(room_name("\u{202E}").is_err());
+        assert_eq!(server_name("\u{202D}porch").unwrap(), "porch");
+
+        // A message keeps what was written.
+        assert_eq!(caption("שלום\u{200F}!").unwrap(), "שלום\u{200F}!");
+    }
+
+    #[test]
+    fn a_status_loses_the_characters_that_change_the_direction_of_text() {
+        let held = status(&UserStatus {
+            line: Some("reading \u{202E}koob".into()),
+            reading: Some("\u{2066}Piranesi\u{2069}".into()),
+            fields: Some(vec![field("Play\u{202E}ing", "Outer \u{202B}Wilds")]),
+            away_message: Some("\u{200F}back soon".into()),
+            ..UserStatus::default()
+        })
+        .unwrap();
+        assert_eq!(held.line.as_deref(), Some("reading koob"));
+        assert_eq!(held.reading.as_deref(), Some("Piranesi"));
+        assert_eq!(held.fields, Some(vec![field("Playing", "Outer Wilds")]));
+        assert_eq!(held.away_message.as_deref(), Some("back soon"));
+
+        assert_eq!(
+            status_fields(&[field("\u{202E}Reading", "Piranesi\u{202C}")]).unwrap(),
+            vec![field("Reading", "Piranesi")]
+        );
+        // Taken out before counting: 80 letters and an override fit.
+        let long = format!("{}\u{202E}", "x".repeat(MAX_STATUS_FIELD_CHARS));
+        assert!(status_fields(&[field("Reading", &long)]).is_ok());
+        // A value of nothing but them is a field nobody filled in.
+        assert!(status_fields(&[field("Reading", "\u{202E}")]).is_err());
     }
 
     #[test]

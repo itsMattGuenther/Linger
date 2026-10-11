@@ -955,6 +955,36 @@ test.describe("a file to download", () => {
     await expect(card(page)).not.toContainText("saved");
   });
 
+  // #488: a name saved before the server took them out, or from a server
+  // that doesn't, would read "invoiceexe.pdf". Read left to right as drawn.
+  test("a name with a character that turns text around shows what the file really is", async ({ page }) => {
+    await open(page, "?file&turned");
+    const name = page.locator(".nx-att-card .nx-att-name", { hasText: "invoice" });
+    const drawn = await name.evaluate((span) => {
+      const range = document.createRange();
+      const letters: { letter: string; left: number }[] = [];
+      for (const node of span.childNodes) {
+        if (!(node instanceof Text)) continue;
+        for (let at = 0; at < node.length; at += 1) {
+          range.setStart(node, at);
+          range.setEnd(node, at + 1);
+          const box = range.getBoundingClientRect();
+          if (box.width > 0) letters.push({ letter: node.data[at] ?? "", left: box.left });
+        }
+      }
+      return {
+        shown: letters
+          .sort((a, b) => a.left - b.left)
+          .map(({ letter }) => letter)
+          .join(""),
+        isolated: getComputedStyle(span).unicodeBidi,
+      };
+    });
+    expect(drawn.shown).toBe("invoicefdp.exe");
+    expect(drawn.isolated).toBe("isolate");
+    await expect(page.locator(".nx-att-card", { hasText: "invoice" }).getByRole("button", { name: "Download" })).toBeVisible();
+  });
+
   test("a browser that won't open says so, offers another go, and the address", async ({ page }) => {
     await open(page, "?file&downloadfail");
     await card(page).getByRole("button", { name: "Download" }).click();

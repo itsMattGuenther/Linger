@@ -30,7 +30,7 @@ export const PollClosedLine = memo(function PollClosedLine({
           <Icon name="check" size="sm" />
         </span>
         <span className="nx-quiet-text">
-          Poll closed: “{closed.question}” {resultWords(closed.winners)}{" "}
+          Poll closed: “<span className="nx-quiet-said">{closed.question}</span>” {resultWords(closed.winners)}{" "}
           <button type="button" className="nx-quiet-link" onClick={() => onJump(closed.poll_id)}>
             See results
           </button>
