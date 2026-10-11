@@ -6,7 +6,7 @@
 use linger_core::limits::{
     MAX_ACCENT_MARKS_PER_LETTER, MAX_DISPLAY_NAME_CHARS, MAX_FILENAME_CHARS, MAX_MARKS_PER_LETTER,
     MAX_MESSAGE_CHARS, MAX_MOTD_CHARS, MAX_NONCE_CHARS, MAX_STATUS_FIELDS, MAX_STATUS_FIELD_CHARS,
-    MAX_STATUS_LABEL_CHARS, MAX_STATUS_LINE_CHARS, MIN_PASSWORD_CHARS,
+    MAX_STATUS_LABEL_CHARS, MAX_STATUS_LINE_CHARS, MAX_TIME_ZONE_CHARS, MIN_PASSWORD_CHARS,
 };
 use linger_core::wire::{Fill, StatusField, Style, UserStatus};
 use unicode_properties::{GeneralCategory, UnicodeEmoji, UnicodeGeneralCategory};
@@ -474,6 +474,35 @@ pub fn nonce(s: &str) -> Result<&str, ApiError> {
     }
 }
 
+/// A time-zone name for "Show my local time" (#604, PROTOCOL §5), like
+/// `America/Chicago`, `Etc/GMT+5` or `UTC`: one to three parts split by `/`,
+/// each of ASCII letters, digits, `_`, `-` or `+`, starting with a letter,
+/// at most [`MAX_TIME_ZONE_CHARS`] in all.
+///
+/// The server keeps no zone database, so it checks the shape, not that the
+/// place exists. That's enough: the name is only ever handed to an app's own
+/// clock, and an app that doesn't know it shows nothing. Everything else
+/// (spaces, markup, other scripts) is refused, since it's drawn on a card.
+pub fn time_zone(s: &str) -> Result<(), ApiError> {
+    let parts: Vec<&str> = s.split('/').collect();
+    let ok = (1..=MAX_TIME_ZONE_CHARS).contains(&s.len())
+        && s.starts_with(|c: char| c.is_ascii_alphabetic())
+        && (1..=3).contains(&parts.len())
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'+'))
+        });
+    if ok {
+        Ok(())
+    } else {
+        Err(ApiError::validation(
+            "That isn't a time-zone name, like America/Chicago.",
+        ))
+    }
+}
+
 /// A room's message of the day, trimmed (PROTOCOL §3, #464). Empty is allowed:
 /// it's how one is cleared. It's drawn over the room as well as in it, so it
 /// loses the characters that turn text around (#488).
@@ -680,6 +709,42 @@ mod tests {
     use linger_core::wire::ColorKey;
 
     use super::*;
+
+    /// Real zone names pass, including the long, the signed and the bare;
+    /// anything that isn't one is refused (#604).
+    #[test]
+    fn a_time_zone_is_a_zone_name() {
+        for good in [
+            "America/Chicago",
+            "UTC",
+            "Etc/GMT+5",
+            "Etc/GMT-14",
+            "America/Argentina/Buenos_Aires",
+            "America/Port-au-Prince",
+            "EST5EDT",
+            "Asia/Kolkata",
+        ] {
+            assert!(time_zone(good).is_ok(), "{good} should pass");
+        }
+        let long = format!("A/{}", "b".repeat(MAX_TIME_ZONE_CHARS));
+        for bad in [
+            "",
+            "/",
+            "America/",
+            "/Chicago",
+            "America//Chicago",
+            "a/b/c/d",
+            "5America/Chicago",
+            "America/Chicago ",
+            "America/Chi cago",
+            "<b>UTC</b>",
+            "Europe/Zürich",
+            "America\\Chicago",
+            long.as_str(),
+        ] {
+            assert!(time_zone(bad).is_err(), "{bad:?} should be refused");
+        }
+    }
 
     /// Every shape an emoji takes is one reaction; words, two emoji and stray
     /// parts aren't (#485).

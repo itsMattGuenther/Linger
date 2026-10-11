@@ -8,6 +8,7 @@ import { onPhone } from "../../core/phone";
 import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useOneLine } from "../useOneLine";
+import { useTheirTime } from "../useTheirTime";
 import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
 import { knockOfflineLine, type KnockResult } from "../../core/knock";
@@ -397,6 +398,10 @@ const PersonItem = memo(function PersonItem({
   knocked: boolean;
   hands: PersonHands;
 }) {
+  // Their clock, when they show it (#604): said on Knock, so you know it's
+  // 3 AM for them before you knock. It never stops one.
+  const clock = useTheirTime(row.user);
+  const knockLabel = knocked ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`;
   return (
     <Row
       lead={{ kind: "person", person: markerFor(row.user, row.state) }}
@@ -429,7 +434,7 @@ const PersonItem = memo(function PersonItem({
           key="knock"
           icon="knock"
           size="sm"
-          label={knocked ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`}
+          label={clock && !knocked ? `${knockLabel}, ${clock}` : knockLabel}
           disabled={knocked}
           // Offline, it stays greyed out and says why, on hover, on focus
           // and to a screen reader (#288).

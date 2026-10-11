@@ -134,6 +134,7 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
 export const HEADINGS = {
   who: "Who You Are",
   status: "Your Status",
+  clock: "Your Local Time",
   look: "Make Yourself at Home",
   theme: "Color Theme",
   size: "Interface Size",

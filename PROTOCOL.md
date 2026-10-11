@@ -639,7 +639,7 @@ and its network soon after (SPEC §4.15).
 GET   /users              → User[]              # all members of this server
 GET   /users/:id          → User
 GET   /me                 → User
-PATCH /me                 { display_name?, style?, status?, entrance_sound? } → User
+PATCH /me                 { display_name?, style?, status?, entrance_sound?, time_zone? } → User
 PATCH /me/password        { current_password, new_password }
                        →  { access_token, refresh_token, expires_in, user }
 
@@ -759,6 +759,14 @@ them" (§8).
 whole object when present. `entrance_sound: ""` clears the sound (bundled keys are
 validated against `linger-core::ENTRANCE_SOUNDS` until custom uploads land in M4).
 
+`time_zone` is "Show my local time" (#604, SPEC §4.6): a time-zone name turns it on or
+moves it, and `""` turns it off. Absent or `null` leaves it as it is, so an app from
+before it never turns it off by saving a status. The server checks the name's shape
+(1–3 parts split by `/`, each of ASCII letters, digits, `_`, `-` or `+`, starting with a
+letter, at most `MAX_TIME_ZONE_CHARS` = 64; `VALIDATION_FAILED` otherwise) and keeps no
+zone database: an app that doesn't know a zone shows no time. The app sends this
+computer's zone, and moves it when the computer's clock says somewhere else.
+
 ```ts
 type User = {
   id: string; username: string; display_name: string;
@@ -768,6 +776,7 @@ type User = {
   status: UserStatus | null;
   entrance_sound: string | null;      // bundled key or object key
   last_seen_at: number | null;
+  time_zone?: string;                 // "America/Chicago" when they show their local time (#604); absent when off
 }
 
 // One of the 16 named palette keys defined in linger-core::PALETTE. See SPEC §5.4.

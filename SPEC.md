@@ -432,6 +432,15 @@ A user's **status** is a small card, not a bio field:
   same rules and safety as a link in a message; nothing else in a value is a
   link. No icons or emoji per label: three at most, a small card, not a bio.
 - Optional: an away message that supersedes the status when set
+- Optional: your local time (#604). A switch in Profile, **Show my local time**,
+  off to start. On, your card says what time it is where you are ("3:12 AM for
+  Jules", with "the next day" or "the day before" when your day isn't the
+  reader's), and so does the Knock on your row. It's there so nobody knocks at 3 AM
+  by mistake, and it never stops a knock. A time zone says roughly where somebody
+  lives, which is why it's off until you turn it on. It follows the clock of the
+  computer or phone you last opened Linger on. The folded server header doesn't
+  get a "4:52 AM there" back from it: a server's people can be spread over many
+  zones, and the time belongs to a person, not a server.
 
 Being away is easy to forget once you're back, and friends see you away the
 whole time (#392). So your own card looks different while you're away, in the
