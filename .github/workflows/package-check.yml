@@ -162,4 +162,5 @@ jobs:
             package-check/audio-*/*.json
             package-check/audio-*/*.f32
             package-check/updates/*.log
+            package-check/updates/*.png
           retention-days: 7

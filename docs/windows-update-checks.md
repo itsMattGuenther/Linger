@@ -55,7 +55,8 @@ checks. It downloads the published 0.3.0 installers, installs each format,
 then upgrades to the newly built package with the updater's installer mode
 (without app relaunch). Cases cover untouched, renamed, moved between personal
 and public desktops, and deleted shortcuts, plus a fresh install of the new
-package. It verifies shortcut identity, the installed executable's version,
+package, and an NSIS update and uninstall that meet a program something else
+has open ([#568](#a-busy-program-during-an-update-568-2026-10-11)). It verifies shortcut identity, the installed executable's version,
 MSI uninstall-link validity and uninstall cleanup. Installer logs are uploaded
 with the workflow evidence. This isolates installer behavior; it does not
 repeat signature download verification or a real user's update session.
@@ -64,7 +65,83 @@ Each install, update and uninstall gets five minutes (they take seconds), and
 each scenario is named as it starts. Once an NSIS update sat for 29 minutes
 until the job was cancelled, with nothing in the log to say where (#414); now
 a stuck installer is stopped and the check fails naming the package and its
-arguments, in its scenario.
+arguments, in its scenario. Before stopping it, the check saves what it was
+waiting on (#568): `stuck-N.log` lists the installer's processes and threads
+and its windows with their text, so a dialog's message and buttons are in the
+log, and `stuck-N.png` is the runner's screen. Both are uploaded with the
+installer logs. It looks at the installer's own processes only.
+
+## A busy program during an update (#568, 2026-10-11)
+
+The NSIS update stuck in #414 and #568 was waiting on NSIS's own dialog:
+"Error opening file for writing … Abort, Retry, Ignore". Windows opens a
+program for a fraction of a second now and then. Explorer reads it for a
+desktop shortcut's icon about 0.5–0.8 s after an install, and again just
+after an update changes it; the compatibility scanner (`CompatTelRunner`)
+reads new programs too, seen at 0.6 s and at 3.1 s. NSIS's `File` opens the
+program for writing, sharing it only with readers that allow that; if one of
+those reads holds it at that moment, the open fails and NSIS asks. In passive
+mode, the updater's, the dialog waits for a click, and on a runner nobody
+makes one.
+
+The check met it on a runner's first NSIS update. That update starts slowly
+and reaches the program 0.6–0.9 s after it starts, against about 0.25 s on
+later ones, which is the moment Explorer looks at the program the 0.3.0
+install has just put there. Both stuck runs were that update ("original"):
+#414 on 2026-10-04, and #568 once in about 108 package checks since #418.
+
+Measured on disposable runners, on a throwaway branch
+([runs](https://github.com/itsMattGuenther/Linger/actions/runs/38151645628),
+[2](https://github.com/itsMattGuenther/Linger/actions/runs/38152664834),
+[3](https://github.com/itsMattGuenther/Linger/actions/runs/38154062962),
+[4](https://github.com/itsMattGuenther/Linger/actions/runs/38155539522),
+[5](https://github.com/itsMattGuenther/Linger/actions/runs/38156325861)):
+
+- Holding the installed program open, as Explorer does for an icon, makes a
+  passive update stop on that dialog every time (screenshot and window text
+  in the run's evidence).
+- Something held the program shortly after 5 of 30 installs; Restart Manager
+  named Explorer when it could see the holder.
+- Starting the update so that it reaches the program about when Explorer
+  looks hung 3 of 317 updates, each on "Error opening file for writing" for
+  the program; in two of them Restart Manager saw Explorer holding it just
+  before. The same timing hung 0 of 723 updates with the fix below.
+- Waiting three seconds after the install, in the check, still hung once in
+  320: `CompatTelRunner` held the program at 3.1 s. A wait in the check can't
+  outlast Windows' own readers, so the fix is in the installer.
+- With the fix, an update started while the program was held for 3 s
+  finished as soon as it was let go; held for 15 s, it fell back to the
+  dialog after its ten seconds. An uninstall started while the program was
+  held for 3 s removed it and its folder. The in-app updater's own order (app
+  open, installer started, app quits at once) passed 20 of 20, as it passed 60
+  of 60 before.
+
+The fix is a set of Tauri NSIS hooks, `client/src-tauri/windows/installer-hooks.nsh`
+(`bundle > windows > nsis > installerHooks`). In an update (`/UPDATE`, which
+the in-app updater always passes), the installer writes the program itself,
+before the template's own `File`, with `SetOverwrite try`, and tries again
+every 100 ms for up to ten seconds. A busy file is then an error to act on,
+not a dialog. The template's `File` is built with `SetOverwrite ifdiff`, so
+it skips the program the hook wrote (same date as this build) and writes it
+as before otherwise, dialog included if it is still busy after ten seconds.
+The hook runs before the template checks for a running app, so an update
+also lets the app finish quitting by itself; the template stops it and
+waits half a second only if it is still running after that. The uninstaller tries its `Delete` of the program
+again for up to ten seconds as well: on a busy program it gives up quietly,
+and an uninstall straight after an update left the program behind once in
+317. Neither changes the installer's size; NSIS stores the program once.
+
+The update check now proves it on every package build: after the shortcut
+scenarios it holds the installed program open for two seconds, the way an
+icon is read, as an NSIS update starts, and again as an uninstall starts.
+Without the hooks the update stops on the dialog, and the uninstall leaves
+the program behind; with them, both pass
+([run](https://github.com/itsMattGuenther/Linger/actions/runs/38156978377)).
+
+People can meet the same dialog, but rarely: an update runs long after the
+install, when nothing usually reads the program, and a person can press
+Retry where a runner can't. With the hooks, the update waits instead of
+asking.
 
 ## Fixed-package results, 2026-09-22
 
