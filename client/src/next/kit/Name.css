@@ -224,3 +224,9 @@
     color: GrayText;
   }
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.k-name {
+  unicode-bidi: isolate;
+}

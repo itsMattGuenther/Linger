@@ -1,9 +1,10 @@
-//! Making and finding DMs (SPEC §4.13, PROTOCOL §3.1, T-1301).
+//! Making, finding and leaving DMs (SPEC §4.13, PROTOCOL §3.1, T-1301, #565).
 //!
-//! One function does the work, and the thing it has to get right is that asking
+//! One function makes them, and the thing it has to get right is that asking
 //! twice for a DM with the same people gives you the same DM. Otherwise a group
 //! of three ends up with four conversations, none of which has all of what was
-//! said.
+//! said. The other takes somebody out of a group, which is the one change a
+//! DM's people ever take (#565).
 //!
 //! **The uniqueness is the database's, not this module's.** `member_key` is a
 //! `UNIQUE` column (migration `0005_dms.sql`), so two people asking for the same
@@ -12,7 +13,7 @@
 //! rare is one nobody would ever reproduce from a bug report.
 
 use linger_core::wire::{Room, RoomKind};
-use linger_core::{RoomId, UserId};
+use linger_core::{MessageId, RoomId, UserId};
 use sqlx::SqlitePool;
 
 use crate::db::now_ms;
@@ -108,6 +109,153 @@ pub async fn create_or_find(
     tx.commit().await.map_err(ApiError::from)?;
 
     Ok((repo::rooms::expect(read, id).await?, true))
+}
+
+/// What the line says to an app that doesn't know `Message::left` (#565),
+/// which shows it as whoever left saying so.
+pub const LEFT_BODY: &str = "left";
+
+/// What leaving a group DM came to (#565).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Left {
+    /// The others are still in it, and this is the line telling them.
+    Stays { line: MessageId },
+    /// That was the last person who could read it, so it's deleted: every
+    /// message the way a deleted message is. Its files are the sweeper's.
+    Emptied,
+}
+
+/// Take somebody out of a group DM (SPEC §4.13, PROTOCOL §3.1, #565).
+///
+/// **One transaction, so nothing is half done.** Their membership goes, which
+/// is the whole of losing access: every surface asks `room_members` whose a
+/// DM is (`repo::rooms::visible_to`, `visible_rooms`, `dms_for`). The DM's
+/// `member_key` is cleared, so create-or-find never matches it again and
+/// nobody asking for the same people is put back into a conversation they
+/// left; the cleared key is also what marks it as a group from now on,
+/// whatever its size. Their read position and notification rules for it go,
+/// since nothing may name it to them any more. And the people still in it get
+/// a line saying so, the way somebody joining voice does (#473).
+///
+/// When nobody who could read it is left, it is deleted instead of keeping
+/// bytes nobody can reach: the messages become tombstones, as `DELETE
+/// /messages/:id` makes them, their reactions and link cards go, and so do
+/// the memberships of anybody removed from the server, who would otherwise
+/// be put back into an empty shell by a restore (T-413).
+///
+/// # Errors
+///
+/// `NOT_FOUND` when this isn't a DM they're in, as for any room they can't
+/// see; `VALIDATION_FAILED` for a one-to-one DM, which is their friend's row
+/// in the list and can't be left. Otherwise the database's.
+pub async fn leave(write: &SqlitePool, room_id: RoomId, user_id: UserId) -> Result<Left, ApiError> {
+    let mut tx = write.begin().await?;
+
+    // Asked inside the transaction, on the one writer, so two of somebody's
+    // devices leaving at once can't both get past it.
+    let found: Option<(Option<String>, i64)> = sqlx::query_as(
+        "SELECT r.member_key,
+                (SELECT COUNT(*) FROM room_members a WHERE a.room_id = r.id)
+           FROM rooms r
+           JOIN room_members me ON me.room_id = r.id AND me.user_id = ?
+          WHERE r.id = ? AND r.kind = 'dm'",
+    )
+    .bind(user_id.to_vec())
+    .bind(room_id.to_vec())
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((key, made_for)) = found else {
+        return Err(ApiError::not_found("No such room on this server."));
+    };
+    // A key still in place means nobody has left yet, so its rows are the
+    // people it was made for: two of them is a one-to-one DM. Removal from
+    // the server keeps rows (T-413), so a removed friend still counts here.
+    if key.is_some() && made_for <= 2 {
+        return Err(ApiError::validation(
+            "A DM with one person can't be left. It's their row in your list.",
+        ));
+    }
+
+    for statement in [
+        "DELETE FROM room_members WHERE room_id = ? AND user_id = ?",
+        "DELETE FROM read_markers WHERE room_id = ? AND user_id = ?",
+        "DELETE FROM notify_rules WHERE room_id = ? AND user_id = ?",
+    ] {
+        sqlx::query(statement)
+            .bind(room_id.to_vec())
+            .bind(user_id.to_vec())
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query("UPDATE rooms SET member_key = NULL WHERE id = ?")
+        .bind(room_id.to_vec())
+        .execute(&mut *tx)
+        .await?;
+
+    // Who can still read it: `repo::rooms::members`' rule, asked of this
+    // transaction rather than of a reader that can't see it yet.
+    let staying: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM room_members rm
+           JOIN users u ON u.id = rm.user_id AND u.deactivated_at IS NULL
+          WHERE rm.room_id = ?",
+    )
+    .bind(room_id.to_vec())
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let left = if staying > 0 {
+        let line = MessageId::new();
+        sqlx::query(
+            "INSERT INTO messages (id, room_id, author_id, body, created_at, dm_left)
+             VALUES (?, ?, ?, ?, ?, 1)",
+        )
+        .bind(line.to_vec())
+        .bind(room_id.to_vec())
+        .bind(user_id.to_vec())
+        .bind(LEFT_BODY)
+        .bind(now_ms())
+        .execute(&mut *tx)
+        .await?;
+        Left::Stays { line }
+    } else {
+        empty(&mut tx, room_id).await?;
+        Left::Emptied
+    };
+
+    tx.commit().await?;
+    Ok(left)
+}
+
+/// Delete a DM nobody can read any more (`leave`): its messages become
+/// tombstones, as a deleted message is (`routes::messages::delete`), and what
+/// hung off them goes. The sweeper takes their files, which is what it does
+/// for any deleted message's (`expiry`, rule 2).
+///
+/// The room's own row stays, as `kind = 'dm'` with nobody in it. That is what
+/// keeps it private: the gateway treats a room it has no DM entry for as
+/// public (`Gateway::can_see_room`), so a DM must never stop being one.
+async fn empty(tx: &mut sqlx::SqliteConnection, room_id: RoomId) -> Result<(), ApiError> {
+    for statement in [
+        "DELETE FROM room_members WHERE room_id = ?",
+        "DELETE FROM read_markers WHERE room_id = ?",
+        "DELETE FROM notify_rules WHERE room_id = ?",
+        "DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE room_id = ?)",
+        "DELETE FROM message_links WHERE message_id IN (SELECT id FROM messages WHERE room_id = ?)",
+    ] {
+        sqlx::query(statement)
+            .bind(room_id.to_vec())
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query(
+        "UPDATE messages SET body = '', deleted_at = ?, pinned_at = NULL
+          WHERE room_id = ? AND deleted_at IS NULL",
+    )
+    .bind(now_ms())
+    .bind(room_id.to_vec())
+    .execute(&mut *tx)
+    .await?;
+    Ok(())
 }
 
 async fn by_key(db: &SqlitePool, key: &str) -> Result<Option<Room>, ApiError> {

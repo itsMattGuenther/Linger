@@ -152,7 +152,29 @@ test("/poll says what it does, opens the panel with the question, and Post poll 
     choices: ["Tuesday", "Thursday", "Sunday"],
     multi: true,
     closes_in_days: 14,
+    nonce: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
+});
+
+// #524: a poll that was asked, whose answer was lost on the way back, must
+// not be asked twice when Post poll is pressed again. The server tells a
+// retry by its one-time key.
+test("Post poll pressed again after a failure asks with the first press's key", async ({ page }) => {
+  await open(page, "?polls&pollfail");
+  await box(page).click();
+  await box(page).pressSequentially("/poll Which night?");
+  await page.keyboard.press("Enter");
+  const panel = page.getByRole("group", { name: "New poll in #general" });
+  await page.keyboard.type("Tuesday");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Thursday");
+  await panel.getByRole("button", { name: "Post poll" }).click();
+  await expect(panel.getByRole("alert")).toHaveText("Couldn't post the poll. Couldn't reach the server.");
+  await panel.getByRole("button", { name: "Post poll" }).click();
+  await expect(panel).toBeHidden();
+  const [first, again] = (await did(page)).filter((line) => line.startsWith("poll:")).map((line) => JSON.parse(line.slice("poll:".length)));
+  expect(first.nonce).toMatch(/^[0-9a-f-]{36}$/);
+  expect(again).toEqual(first);
 });
 
 test("Escape puts the panel away", async ({ page }) => {

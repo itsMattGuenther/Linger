@@ -12,7 +12,7 @@ export interface NewDmPickerProps {
   people: PersonRow[];
   meId: string | null;
   /** Your DMs, by who's in them. */
-  dms: { id: string; member_ids: string[] | null }[];
+  dms: { id: string; member_ids: string[] | null; someone_left?: boolean }[];
   /** The + on the Rooms heading, in window coordinates: the picker opens under it (#351). */
   anchor: { bottom: number };
   /** Open the DM; resolves to what went wrong, in words, or null once it's open. */

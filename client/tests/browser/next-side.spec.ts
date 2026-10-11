@@ -77,6 +77,52 @@ test("a room clicked in the list opens beside it, in the same window, with the c
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
 });
 
+/**
+ * When the page's clock starts. The idle tests install Playwright's clock
+ * before the page loads, so they decide which seconds pass (#511).
+ */
+const START = Date.parse("2026-10-10T20:00:00Z");
+/** Longer than the two-second clock the window once kept for nothing (#511). */
+const IDLE_MS = 3_000;
+
+/**
+ * How many times the window draws in three seconds of its own time, once it
+ * has stopped drawing for a whole second (#511; tests/fixtures/next/
+ * commits.tsx counts). The page's clock is held still and those three
+ * seconds are run through, every timer due in them fired, so they're the
+ * same three seconds on a loaded machine as on an idle one. The once-a-minute
+ * clocks first fire a minute after the page opened, after the span watched.
+ */
+async function drawsWhileIdle(page: Page): Promise<number> {
+  const commits = () => page.evaluate(() => window.commits ?? 0);
+  let last = await commits();
+  for (;;) {
+    await page.waitForTimeout(1_000);
+    const now = await commits();
+    if (now === last) break;
+    last = now;
+  }
+  const held = (await page.evaluate(() => Date.now())) + 1_000;
+  await page.clock.pauseAt(held);
+  expect(held + IDLE_MS - START, "the span watched ends before the minute clocks first fire").toBeLessThan(60_000);
+  // Settling the clock may have fired a timer: counted from here.
+  await page.waitForTimeout(250);
+  const before = await commits();
+  await page.clock.runFor(IDLE_MS);
+  // Whatever those seconds asked React to draw, it has drawn.
+  await page.waitForTimeout(250);
+  return (await commits()) - before;
+}
+
+test("with a room beside the list and nobody typing, the window draws nothing while it sits there (#511)", async ({ page }) => {
+  await page.clock.install({ time: START });
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+  expect(await drawsWhileIdle(page)).toBe(0);
+});
+
 test("while a room shows beside the list you're in it; folded away, you're around again", async ({ page }) => {
   await open(page);
   await room(page, "general").click();
@@ -586,3 +632,212 @@ test("a list dragged wide is squeezed, not lost, when the window gets narrower",
   await expect(line(page)).toHaveAttribute("aria-valuenow", "540");
 });
 
+
+// Something from a server that can't be drawn (#509). One throw while
+// drawing used to take the whole list window down with it: every server's
+// connection, voice, and the conversations beside the list.
+
+/** Past the furthest time a date can hold (8.64e15 ms either side of 1970). */
+const NO_DATE = 9e15;
+
+/** A line in #general from Eli, as the server sends it. */
+function said(id: string, extra: Record<string, unknown> = {}) {
+  return { id, room_id: "r-general", author_id: "u-eli", body: "", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: Date.now(), ...extra };
+}
+
+/** A gateway frame from The Good Company. */
+async function send(page: Page, op: string, d: unknown) {
+  await page.evaluate(([server, op_, d_]) => window.core?.frame(server, { op: op_, d: d_ } as never), [HOME, op, d] as const);
+}
+
+test("a message, a voice line, a poll's line and a message of the day from a time no date can hold draw with no time, and the window stays up (#509)", async ({ page }) => {
+  await open(page);
+  await grown(page);
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+
+  await send(page, "message.create", said("m900200", { body: "Sent from the far future.", created_at: NO_DATE }));
+  await send(page, "message.create", said("m900201", { author_id: "u-jules", body: "joined voice", voice_join: true, created_at: NO_DATE }));
+  await send(page, "message.create", said("m900202", { body: "Poll closed", created_at: NO_DATE, poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: ["Tacos"] } }));
+  const motd = { text: "Raid night Friday at 8.", set_by: "u-eli", set_at: NO_DATE };
+  await send(page, "room.update", { id: "r-general", slug: "general", name: "general", topic: "Good company. No hurry.", kind: "room", member_ids: null, position: 0, archived_at: null, last_message_id: "m000016", motd });
+
+  // The list and the conversation are both still there, everything drawn.
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await expect(room(page, "weekend-plans")).toBeVisible();
+  const log = page.getByRole("log");
+  await expect(log).toContainText("Sent from the far future.");
+  await expect(log).toContainText("joined voice");
+  await expect(log).toContainText("Poll closed: “Pizza or tacos?” Tacos won.");
+  await expect(page.getByRole("note", { name: "Message of the day" })).toContainText("Raid night Friday at 8.");
+  await expect(page.getByText("couldn't be shown")).toHaveCount(0);
+
+  // Each says nothing about when, rather than something wrong.
+  await expect(log.locator("[data-message='m900200'] .nx-msg-time")).toHaveText("");
+  await expect(log.locator("[data-message='m900200'] .nx-msg-time")).not.toHaveAttribute("datetime");
+  await expect(log.locator(".nx-quiet[data-join] .nx-msg-time")).toHaveText("");
+  await expect(log.locator(".nx-quiet[data-poll-closed] .nx-msg-time")).toHaveText("");
+  await expect(page.locator(".nx-motd-by")).toHaveText("Message of the day, set by Eli");
+});
+
+test("a conversation that can't be drawn says so in its place; the list, the tabs and the other conversations carry on, and Try again draws it once it can (#509)", async ({ page }) => {
+  await open(page);
+  await grown(page);
+  await room(page, "listening-room").click();
+  await expect(page.getByRole("log")).toContainText("Nobody talk to me.");
+  await room(page, "general").click();
+  await expect(page.getByRole("log")).toContainText("Putting it on now.");
+
+  // A poll's closing line with no winners at all: never what Linger's server
+  // sends, but what a server running other code, or a damaged database,
+  // might. Drawing it throws, as any drawing bug would.
+  const broken = said("m900300", { body: "Poll closed", poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: null } });
+  await send(page, "message.create", broken);
+
+  const general = page.getByRole("tabpanel", { name: "#general" });
+  await expect(general.getByText("This conversation couldn't be shown.")).toBeVisible();
+  await expect(general.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByRole("log")).toHaveCount(0);
+
+  // The list, the tabs and the other conversation are still there, and work.
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await expect(room(page, "weekend-plans")).toBeVisible();
+  await page.getByRole("tab", { name: "#listening-room" }).click();
+  await expect(page.getByRole("log")).toContainText("Nobody talk to me.");
+  await expect(page.getByText("This conversation couldn't be shown.")).toHaveCount(0);
+
+  // Back on #general it still can't be drawn, so it still says so.
+  await page.getByRole("tab", { name: "#general" }).click();
+  await expect(general.getByText("This conversation couldn't be shown.")).toBeVisible();
+
+  // Mended, Try again draws it.
+  await send(page, "message.update", { ...broken, poll_closed: { poll_id: "m000016", question: "Pizza or tacos?", winners: ["Tacos"] } });
+  await general.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("log")).toContainText("Poll closed: “Pizza or tacos?” Tacos won.");
+  await expect(page.getByText("This conversation couldn't be shown.")).toHaveCount(0);
+});
+
+// Leaving a group DM (#565): its ⋯ menu on its row in the list and in its
+// header, one calm question, and then it's gone from the list and its tab
+// with it. The fake server answers as a real one does: `dm.remove`.
+const group = (page: Page) => page.getByRole("list", { name: "Rooms" }).locator(":scope > li").filter({ hasText: "Eli and Sam" });
+const leaving = (page: Page) => page.getByRole("dialog", { name: "Leave Eli and Sam" });
+
+test("a group's ⋯ in the list leaves it after one question, and its row and tab go (#565)", async ({ page }) => {
+  await open(page);
+  await group(page).getByRole("button", { name: /^Eli and Sam/ }).click();
+  await grown(page);
+  await expect(showing(page)).toHaveAccessibleName(/Eli and Sam/);
+
+  await group(page).hover();
+  await group(page).getByRole("button", { name: "More for Eli and Sam" }).click();
+  await expect(page.getByRole("menu").locator("[data-kit='MenuItem']")).toHaveText(["Leave this group…"]);
+  // Its menu open, the ⋯ stays where it was opened from.
+  await page.mouse.move(900, 600);
+  await expect(group(page).getByRole("button", { name: "More for Eli and Sam" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+
+  const ask = leaving(page);
+  await expect(ask.getByRole("heading")).toHaveText("Leave this group?");
+  await expect(ask.getByRole("listitem")).toHaveText([
+    "It goes from your list, on every device you use.",
+    "Nobody can add you back, but anyone in it can start a new one with you.",
+    "The others see that you left, and keep what you said.",
+  ]);
+  // It opens on Stay, so a stray Enter doesn't leave.
+  await expect(ask.getByRole("button", { name: "Stay" })).toBeFocused();
+  await ask.getByRole("button", { name: "Leave", exact: true }).click();
+
+  await expect(group(page)).toHaveCount(0);
+  await expect(ask).toHaveCount(0);
+  // Its tab was the only one, so the conversations fold back to the list.
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual(["leave d-eli-sam"]);
+});
+
+test("a group's header has the same ⋯, Stay changes nothing, and a one-to-one DM has none (#565)", async ({ page }) => {
+  await open(page);
+  await room(page, "general").click();
+  await grown(page);
+  await group(page).getByRole("button", { name: /^Eli and Sam/ }).click();
+  const head = page.locator(".nx-pane-head[data-kind='dm']");
+  const more = head.getByRole("button", { name: "More for Eli and Sam" });
+
+  await more.click();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+  await leaving(page).getByRole("button", { name: "Stay" }).click();
+  await expect(leaving(page)).toHaveCount(0);
+  await expect(more).toBeFocused();
+  expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual([]);
+
+  await more.click();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+  await leaving(page).getByRole("button", { name: "Leave", exact: true }).click();
+  // Its tab closes and #general's shows; the list loses its row.
+  await expect(page.getByRole("tab")).toHaveText([/general/]);
+  await expect(showing(page)).toHaveAccessibleName("#general");
+  await expect(group(page)).toHaveCount(0);
+
+  // A one-to-one DM is that friend's row, and isn't left.
+  await dm(page, "Jules").click();
+  await expect(page.locator(".nx-pane-head[data-person='yes']")).toBeVisible();
+  await expect(page.locator(".nx-pane-head").getByRole("button", { name: /^More for/ })).toHaveCount(0);
+});
+
+test("a leave the server refuses says why, and the group stays (#565)", async ({ page }) => {
+  await open(page, "?one&leavefails");
+  await group(page).hover();
+  await group(page).getByRole("button", { name: "More for Eli and Sam" }).click();
+  await page.getByRole("menuitem", { name: "Leave this group…" }).click();
+  await leaving(page).getByRole("button", { name: "Leave", exact: true }).click();
+  await expect(leaving(page).getByRole("alert")).toHaveText("The server couldn't do that just now. Try again in a moment.");
+  await expect(group(page)).toHaveCount(1);
+  await leaving(page).getByRole("button", { name: "Stay" }).click();
+  await expect(leaving(page)).toHaveCount(0);
+});
+
+test("somebody else leaving is a quiet grey line, nothing new, and the group stays a group with the two of you (#565)", async ({ page }) => {
+  await open(page);
+  await group(page).getByRole("button", { name: /^Eli and Sam/ }).click();
+  await grown(page);
+  await expect(page.getByRole("log")).toContainText("deal");
+  // Sam leaves, as the server tells the people still in it: the DM as it is
+  // now, then the line.
+  await page.evaluate(() => {
+    const server = "https://good-company.example";
+    window.core?.frame(server, {
+      op: "room.update",
+      d: { id: "d-eli-sam", slug: "d-eli-sam", name: "d-eli-sam", topic: null, kind: "dm", member_ids: ["u-matt", "u-eli"], position: 0, archived_at: null, last_message_id: "m000030", someone_left: true },
+    } as never);
+    window.core?.frame(server, {
+      op: "message.create",
+      d: { id: "m000030z", room_id: "d-eli-sam", author_id: "u-sam", body: "left", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: Date.now(), left: true },
+    } as never);
+  });
+
+  const line = page.locator("[data-left]");
+  await expect(line).toHaveText(/^Sam left/);
+  await expect(line.locator(".nx-quiet-words")).toHaveCSS("color", await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--text-muted)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }));
+  await expect(line.locator("time")).toBeVisible();
+  // Nothing to press on it, and it isn't something new.
+  await expect(line.getByRole("button")).toHaveCount(0);
+  const row = page.getByRole("list", { name: "Rooms" }).locator(":scope > li").filter({ hasText: /^Eli$/ });
+  await expect(row).toHaveCount(1);
+  await expect(row).not.toHaveAttribute("data-fresh", "yes");
+  // Down to Eli and you, it's still a group: with the rooms, never Eli's
+  // row; its header and tab a group's, not Eli's card or Knock; and it can
+  // still be left.
+  await expect(page.getByRole("list", { name: "People here" }).locator(":scope > li").filter({ hasText: "Eli" })).not.toHaveAttribute("data-selected", "yes");
+  const head = page.locator(".nx-pane-head[data-kind='dm']");
+  await expect(head).not.toHaveAttribute("data-person", "yes");
+  await expect(head.getByRole("button", { name: "Knock" })).toHaveCount(0);
+  await expect(showing(page).locator("[data-kit='Marker']")).toHaveCount(0);
+  await expect(head.getByRole("button", { name: "More for Eli" })).toBeVisible();
+});

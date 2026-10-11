@@ -244,3 +244,11 @@
   margin-left: var(--space-1-5);
   color: var(--text-muted);
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.nx-hit-where,
+.nx-hit-server,
+.nx-hit-file-name {
+  unicode-bidi: isolate;
+}

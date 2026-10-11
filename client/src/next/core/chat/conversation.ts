@@ -58,11 +58,13 @@ export function tabModel(tab: TabKey, state: GatewayState, showing: boolean, tal
   const others = dm ? dmPeople(state, room) : [];
   const [only] = others;
   const title = dm ? dmLabel(room, state.users, state.me?.id ?? null) : room.name;
+  // A group somebody left is a group however few are left in it (#565): no lead.
+  const single = others.length === 1 && only && room.someone_left !== true ? only : null;
   return {
     id: keyOf(tab),
     title,
     label: dm ? `DM with ${title}` : `#${room.name}`,
-    lead: !dm ? { kind: "room" } : others.length === 1 && only ? { kind: "person", user: only.user, state: only.state } : null,
+    lead: !dm ? { kind: "room" } : single ? { kind: "person", user: single.user, state: single.state } : null,
     fresh: !showing && hasNewActivity(state, room.id),
     lit: dm && !showing && hasNewActivity(state, room.id),
     voice: mine ? "mine" : inVoice.length > 0 ? "others" : null,

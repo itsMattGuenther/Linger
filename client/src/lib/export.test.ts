@@ -75,9 +75,17 @@ describe("problemPhase", () => {
 });
 
 describe("phaseOf", () => {
-  it("reads a finished job as somewhere to download from", () => {
+  it("reads a finished job as somewhere to download from, until when the server says", () => {
+    expect(phaseOf(job({
+      state: "complete", url: "https://cdn.example/objects/exports/x.zip", expires_at: 1_800_000_000_000,
+    }))).toEqual({
+      kind: "ready", url: "https://cdn.example/objects/exports/x.zip", expiresAt: 1_800_000_000_000,
+    });
+  });
+
+  it("reads a server from before archives expired as keeping it", () => {
     expect(phaseOf(job({ state: "complete", url: "https://cdn.example/objects/exports/x.zip" })))
-      .toEqual({ kind: "ready", url: "https://cdn.example/objects/exports/x.zip" });
+      .toEqual({ kind: "ready", url: "https://cdn.example/objects/exports/x.zip", expiresAt: null });
   });
 
   it("does not call a job ready when there is nowhere to get it", () => {
@@ -100,6 +108,18 @@ describe("exportLine", () => {
       "Building your archive… 42%",
     );
   });
+
+  it("says when a ready archive's link stops working (#504)", () => {
+    const now = new Date(2026, 9, 10, 21, 0).getTime();
+    const week = new Date(2026, 9, 17, 21, 0).getTime();
+    const url = "https://cdn.example/o/x.zip";
+    const day = new Date(week).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    expect(exportLine({ kind: "ready", url, expiresAt: week }, now)).toBe(
+      `Your archive is ready. The link stops working on ${day}.`,
+    );
+    // A server that keeps archives says nothing about when they go.
+    expect(exportLine({ kind: "ready", url, expiresAt: null }, now)).toBe("Your archive is ready.");
+  });
 });
 
 describe("runExport", () => {
@@ -118,7 +138,7 @@ describe("runExport", () => {
       const seen: ExportPhase[] = [];
       await runExport(api, (phase) => seen.push(phase), new AbortController().signal, nowait);
       expect(seen.at(-1)).toEqual({
-        kind: "ready", url: "http://127.0.0.1:8420/objects/exports/porch.zip",
+        kind: "ready", url: "http://127.0.0.1:8420/objects/exports/porch.zip", expiresAt: null,
       });
     } finally {
       vi.unstubAllGlobals();
@@ -142,7 +162,7 @@ describe("runExport", () => {
     await runExport(api, (phase) => seen.push(phase), new AbortController().signal, nowait);
 
     expect(exportJob).toHaveBeenCalledTimes(3);
-    expect(seen.at(-1)).toEqual({ kind: "ready", url: "https://cdn.example/o/x.zip" });
+    expect(seen.at(-1)).toEqual({ kind: "ready", url: "https://cdn.example/o/x.zip", expiresAt: null });
   });
 
   it("never starts polling when the server refuses", async () => {

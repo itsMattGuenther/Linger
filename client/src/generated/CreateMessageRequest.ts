@@ -2,4 +2,17 @@
 import type { AttachmentId } from "./AttachmentId";
 import type { MessageId } from "./MessageId";
 
-export type CreateMessageRequest = { body: string, reply_to: MessageId | null, attachment_ids: Array<AttachmentId> | null, };
+export type CreateMessageRequest = { body: string, reply_to: MessageId | null, attachment_ids: Array<AttachmentId> | null, 
+/**
+ * A one-time key the app makes up for this send, and sends again,
+ * unchanged, with every retry of it (#524). When the same person already
+ * posted with this key in the last week (`limits::NONCE_KEPT_MS`), the
+ * answer is the message saved then, as it is now, and nothing is posted:
+ * a retry of a post whose answer was lost on the way back can't post it
+ * twice. 1–64 letters, digits, `-` or `_` (`limits::MAX_NONCE_CHARS`);
+ * the app sends a UUID.
+ *
+ * Left out, every post is a new message, as before the field. A server
+ * from before it ignores it.
+ */
+nonce?: string, };

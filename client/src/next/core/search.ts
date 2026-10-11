@@ -16,8 +16,9 @@ import type { SearchSnippetPart } from "../../generated/SearchSnippetPart";
 import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { conversationLabel } from "../../lib/dm";
+import { fileNameToShow } from "../../lib/media";
 import { snippetText } from "../../lib/search";
-import { hitTime } from "../../lib/time";
+import { dateFormat, hitTime, validTime } from "../../lib/time";
 import type { ViewServer } from "./scope";
 
 /** Who and where on one server, looked up by id. Built once per server, not per hit. */
@@ -74,18 +75,21 @@ export function personChoices(place: Pick<ViewServer, "me" | "users">): { value:
 
 /**
  * Which files a hit matched on, by name, for a hit whose words didn't match.
- * Past two it stops listing and says "and others", in words.
+ * Past two it stops listing and says "and others", in words. Each name is as
+ * the app shows it (#488): one that could turn itself around would turn the
+ * rest of the line with it.
  */
 export function filesNamed(names: readonly string[]): string | null {
-  const [first, second, third] = names;
+  const [first, second, third] = names.map(fileNameToShow);
   if (first === undefined) return null;
   if (second === undefined) return first;
   if (third === undefined) return `${first} and ${second}`;
   return `${first}, ${second} and others`;
 }
 
-const SHORT_THIS_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-const SHORT_OTHER_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+// Built the first time a hit's time is shown, not when the file loads (#535).
+const SHORT_THIS_YEAR = dateFormat({ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const SHORT_OTHER_YEAR = dateFormat({ month: "short", day: "numeric", year: "numeric" });
 
 /**
  * When, short enough for the end of a hit's first line in a narrow window:
@@ -93,7 +97,9 @@ const SHORT_OTHER_YEAR = new Intl.DateTimeFormat(undefined, { month: "short", da
  * time is in the hit's sentence for a screen reader.
  */
 export function hitWhen(at: number, now: number): string {
-  return new Date(at).getFullYear() === new Date(now).getFullYear() ? SHORT_THIS_YEAR.format(at) : SHORT_OTHER_YEAR.format(at);
+  // Nothing, for a time that can't be drawn (#509).
+  if (!validTime(at)) return "";
+  return new Date(at).getFullYear() === new Date(now).getFullYear() ? SHORT_THIS_YEAR().format(at) : SHORT_OTHER_YEAR().format(at);
 }
 
 /**
@@ -171,7 +177,7 @@ export function hitLine(hit: SearchHit, names: Directory, serverName: string | n
     words: file === null ? hitWords(hit.snippet) : null,
     file,
     also: file === null ? "" : text,
-    label: `${whoName}${place}, ${when}: ${said}`,
+    label: `${whoName}${place}${when === "" ? "" : `, ${when}`}: ${said}`,
   };
 }
 

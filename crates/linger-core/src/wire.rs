@@ -443,6 +443,14 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reactions_off: Option<bool>,
+    /// `true` on a DM somebody has left (#565, PROTOCOL §3.1). It is a group
+    /// whatever its size now, and `POST /dms` never finds it by its people
+    /// again, so an app doesn't offer it as "the DM with these people" either.
+    /// Left out on every other room and DM, and by a server from before
+    /// leaving, which an app reads the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub someone_left: Option<bool>,
 }
 
 /// A room's message of the day (SPEC §4.1, #464): what's happening now, set by
@@ -541,6 +549,16 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub poll_closed: Option<PollClosed>,
+    /// `true` on the line the server writes when somebody leaves a group DM
+    /// (#565): its author is who left, its body "left". Left out on every
+    /// other message, so an app that doesn't know the field shows it as that
+    /// person saying "left".
+    ///
+    /// Like the line saying somebody joined voice it never makes a DM look
+    /// new, never notifies, and can't be edited or reacted to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub left: Option<bool>,
 }
 
 /// A poll (SPEC §4.18, #474): a question the host or a co-host asks a room,
@@ -597,6 +615,12 @@ pub struct CreatePollRequest {
     pub multi: bool,
     /// How long until it closes on its own: one of `POLL_DAYS`.
     pub closes_in_days: u32,
+    /// The ask's one-time key, as `CreateMessageRequest::nonce` (#524): the
+    /// same rules, and the same week. Sent again with the same key, a poll
+    /// that was asked is answered with that poll, and nothing is asked twice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -613,6 +637,19 @@ pub struct CreateMessageRequest {
     pub body: String,
     pub reply_to: Option<MessageId>,
     pub attachment_ids: Option<Vec<AttachmentId>>,
+    /// A one-time key the app makes up for this send, and sends again,
+    /// unchanged, with every retry of it (#524). When the same person already
+    /// posted with this key in the last week (`limits::NONCE_KEPT_MS`), the
+    /// answer is the message saved then, as it is now, and nothing is posted:
+    /// a retry of a post whose answer was lost on the way back can't post it
+    /// twice. 1–64 letters, digits, `-` or `_` (`limits::MAX_NONCE_CHARS`);
+    /// the app sends a UUID.
+    ///
+    /// Left out, every post is a new message, as before the field. A server
+    /// from before it ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -1044,6 +1081,13 @@ pub struct ExportJob {
     /// 0.0–1.0.
     pub progress: f32,
     pub url: Option<String>,
+    /// When the server deletes the archive and `url` stops working (unix
+    /// ms). Set alongside `url`: an archive is something to download, not
+    /// something the server keeps (SPEC §4.11, #504). A server from before
+    /// archives expired leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub expires_at: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1089,7 +1133,8 @@ pub struct IceServer {
 #[ts(export)]
 pub struct IceServers {
     pub servers: Vec<IceServer>,
-    /// How long the TURN credentials in `servers` stay valid, in seconds.
+    /// How long the TURN credentials in `servers` stay valid from now, in
+    /// seconds: a day or a little more, since they hold for the hour (#501).
     /// Zero when there are none. A client asks again on every join, so this
     /// only has to cover one call.
     pub ttl_secs: u64,

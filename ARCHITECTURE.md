@@ -74,7 +74,16 @@ Consequences:
    WebView can't choose an output (WebKitGTK has no `setSinkId`; WebView2's
    device names don't match CPAL's), and its audio could start late in a
    window that isn't in front (#241). Web Audio playback in the WebView is
-   the fallback, and what plays outside the app. For it, Linux AppImages must
+   the fallback, and what plays outside the app. A window's one
+   `AudioContext` is open only around its sounds (#531): a running context
+   holds an output stream open and plays silence into it, 2–5% of a core per
+   window. In the app it is made for a sound the shell couldn't play (the
+   webview needs no click: wry allows autoplay); outside the app, on the
+   window's first click or key, as browsers require. It is closed 10 s after
+   the last sound (the shell speaker's `KEEP_OPEN`), and the next sound makes
+   a new one. Closed rather than suspended, because the packaged WebKitGTK
+   plays nothing after a suspended context is resumed.
+   For the fallback, Linux AppImages must
    bundle GStreamer and its playback plugins; DEB/RPM packages must require
    those plugins through the system package manager. Windows installers ensure
    WebView2 is installed. Package checks exercise that fallback's real WebView
@@ -194,7 +203,9 @@ use UUIDv4 (destroys index locality).
 
 ## 5. Schema
 
-SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`.
+SQLite, WAL mode, `foreign_keys=ON`, `synchronous=NORMAL`. The server runs `PRAGMA
+optimize` on the writer at startup and after each file sweep, so the query planner has
+current measurements of every table to choose indexes by (`db::optimize`, #518).
 
 ```sql
 CREATE TABLE users (
@@ -206,7 +217,8 @@ CREATE TABLE users (
   is_cohost       INTEGER NOT NULL DEFAULT 0,  -- set by the host only (#424, 0010)
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
-  deactivated_at  INTEGER
+  deactivated_at  INTEGER,
+  token_generation INTEGER NOT NULL DEFAULT 0  -- +1 ends every sign-in (#496, 0016)
 );
 
 -- name and message styling; see SPEC §4.5
@@ -256,7 +268,8 @@ CREATE TABLE rooms (
   name            TEXT NOT NULL,
   topic           TEXT,
   kind            TEXT NOT NULL DEFAULT 'room',-- room | dm (M11)
-  member_key      TEXT UNIQUE,                 -- DMs: sorted member ids, canonical
+  member_key      TEXT UNIQUE,                 -- DMs: sorted member ids, canonical;
+                                               -- NULL once somebody has left (#565)
   position        INTEGER NOT NULL,
   archived_at     INTEGER,
   created_at      INTEGER NOT NULL,
@@ -271,6 +284,8 @@ CREATE TABLE rooms (
 -- stale the moment somebody joins. `member_key` is what makes create-or-find
 -- work — the ids sorted and joined, so the same set of people always produces
 -- the same string, and UNIQUE is what settles two people asking at once.
+-- Leaving a group DM (#565) deletes the leaver's row and clears the key, so the
+-- group never matches its people again.
 CREATE TABLE room_members (
   room_id         BLOB NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -292,8 +307,10 @@ CREATE TABLE messages (
                                                -- day was set; never last_message_id
   voice_join      INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying somebody joined
                                                -- voice (#473); never last_message_id
-  poll_closed     BLOB REFERENCES messages(id) -- on the line a closing poll leaves (#474):
+  poll_closed     BLOB REFERENCES messages(id),-- on the line a closing poll leaves (#474):
                                                -- which poll; never last_message_id
+  dm_left         INTEGER NOT NULL DEFAULT 0   -- 1: the line saying somebody left a
+                                               -- group DM (#565); never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;
@@ -314,10 +331,13 @@ CREATE TABLE attachments (
   poster_key      TEXT,                        -- video poster frame
   display_key     TEXT,                        -- an image as drawn small: its copy, or itself (#382)
   starred_at      INTEGER,                     -- starred => never expires
-  state           TEXT NOT NULL,               -- pending | complete | failed
+  state           TEXT NOT NULL,               -- pending | complete | failed | released (§8)
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='complete';
+CREATE INDEX idx_attachments_message ON attachments(message_id);   -- a message's files (#518)
+CREATE INDEX idx_attachments_media_order                           -- Media's order (#518)
+  ON attachments((starred_at IS NOT NULL), created_at, id) WHERE state = 'complete';
 
 -- One row per URL in a message body, re-extracted on every edit. This is what
 -- the media grid pages over for `kind=link`; the stream re-extracts client-side
@@ -400,6 +420,20 @@ CREATE TABLE read_markers (
   PRIMARY KEY (user_id, room_id)
 );
 
+-- A post's one-time key (PROTOCOL §4, #524), a message's or a poll's: a retry
+-- whose key is here is answered with the message it posted rather than
+-- posting it twice. Written
+-- in the post's own transaction; kept a week (`limits::NONCE_KEPT_MS`), and
+-- each keyed post first clears out the older ones.
+CREATE TABLE message_nonces (
+  author_id       BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nonce           TEXT NOT NULL,
+  message_id      BLOB NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL,
+  PRIMARY KEY (author_id, nonce)
+) WITHOUT ROWID;
+CREATE INDEX idx_message_nonces_created ON message_nonces(created_at);
+
 CREATE TABLE notify_rules (
   user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   target_user_id  BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -448,10 +482,13 @@ CREATE TABLE refresh_tokens (
                                                -- reuse of a rotated token revokes it
   token_hash      TEXT NOT NULL,               -- sha256 of the token
   device_label    TEXT,
-  expires_at      INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,            -- 30 days on; then the sweeper deletes it
   revoked_at      INTEGER,
   created_at      INTEGER NOT NULL
 );
+CREATE INDEX idx_refresh_hash ON refresh_tokens(token_hash);
+CREATE INDEX idx_refresh_family ON refresh_tokens(family_id);   -- logout, reuse (#520)
+CREATE INDEX idx_refresh_user ON refresh_tokens(user_id);       -- revoke everything a person holds
 
 CREATE TABLE server_config (
   key             TEXT PRIMARY KEY,
@@ -509,9 +546,25 @@ E2EE launders a false promise, which is worse than an honest limitation.
 
 ### Baseline requirements
 
-1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt.
+1. **Passwords:** argon2id, `m=19456, t=2, p=1` minimum. Never SHA/bcrypt. Each hash
+   or check holds about 19 MB and a core while it runs, so the server runs at most four
+   at once by default (`DEFAULT_PASSWORD_CHECKS_AT_ONCE`, `auth.rs`): about 76 MB,
+   whatever arrives. A host with cores and memory to spare raises it with
+   `LINGER_PASSWORD_CHECKS_AT_ONCE` (1 to 256; N at once is N × 19 MB at peak). There
+   is no `off`: no ceiling is what let strangers fill the memory. A request that can't
+   get a turn within 5 seconds is refused with `RATE_LIMITED`, saying the server is
+   busy. Sign-up checks the invite before it hashes anything, so a request without a
+   good invite costs one read (#495).
 2. **Tokens:** access JWT, 15 min TTL, `EdDSA`. Refresh token, 30 days, rotating, stored
-   hashed. Reuse of a rotated refresh token revokes the whole family.
+   hashed. Reuse of a rotated refresh token revokes the whole family. A token's row
+   is deleted by the sweeper once its 30 days are up (#520), so reuse is caught for
+   those 30 days; after them the token is refused as expired. A password change
+   (and a reset, and removal) ends every sign-in the account has, at once: refresh
+   families are revoked, and every access token minted before it is refused, because
+   each carries the account's `token_generation` and ending sign-ins adds one to it
+   (#496, PROTOCOL §2). Open gateway sessions are closed. A count, not a time: token
+   times are whole seconds and could not order a token against a change in the same
+   second. The device that changed the password gets a fresh pair in the answer.
 3. **Client token storage:** OS keyring via `tauri-plugin-stronghold` or the `keyring`
    crate. **Test the headless / no-wallet fallback path explicitly** — a Linux box with
    no KWallet or gnome-keyring unlocked must degrade to a clear prompt, not a crash.
@@ -523,8 +576,22 @@ E2EE launders a false promise, which is worse than an honest limitation.
    iPhone yet.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
-5. **Rate limits:** login 5/min/IP, message send 10/10s/user, upload slot 20/hour/user,
-   invite creation 10/day/user, knock 3/hour/target, search 30/min/user.
+5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,
+   then one a minute), message send 10/10s/user, upload slot 20/hour/user, invite
+   creation 10/day/user, knock 3/hour/target, search 30/min/user, relay passwords
+   20/min/user. The sign-up figure is the host's: `LINGER_SIGNUPS_PER_HOUR` raises it
+   for a crowd that arrives from one address (a school, a phone network), or `off`
+   removes it, since the invite still decides who gets in and the password-check
+   ceiling still bounds what sign-ups cost.
+   When it turns somebody away the server logs one line naming the setting, at most
+   every 5 minutes and never with the address (#538). The login figure is the brake on
+   guessing passwords and isn't a setting. Each limit's refusal says what is happening
+   and when to try again (PROTOCOL §2). The IP is the connection's
+   own. `X-Forwarded-For` is believed only from a peer `LINGER_TRUSTED_PROXIES` lists,
+   by default loopback and private networks (the Caddy container, over Docker's
+   network), and then only its last entry, the one that proxy wrote; earlier entries
+   are whatever the client sent (`auth::client_ip`). The first header from any other
+   peer is logged once per start, so a host behind a proxy elsewhere sees what to set.
 6. **CORS is an allowlist, not a wildcard.** The client is a webview page, so it is
    a cross-origin caller and the server must grant it permission explicitly. The
    allowed origins are the Tauri app's (`tauri://localhost`, and
@@ -534,7 +601,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
 7. **Tauri capabilities:** the WebView gets the minimum permission set. Every
    native capability it has is one narrow command in `client/src-tauri/src/`, and
    it has no others — not the updater plugin's own commands, not the keyring, not
-   the socket.
+   the socket. Of the notification plugin, the list window may only ask whether
+   it may notify (`is_permission_granted`, `request_permission`); every banner
+   goes through the app's own `show_notification`, never the plugin's `notify`,
+   which would let a page show any banner it liked (#548, `src/acl.rs`).
 8. **Signed auto-updates.** Tauri's updater, with one minisign key whose public half
    is committed in `client/src-tauri/tauri.conf.json` and whose private half is
    **generated once by `scripts/updater-key.sh` and backed up offline** (T-701).
@@ -562,7 +632,8 @@ E2EE launders a false promise, which is worse than an honest limitation.
 - Force `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` on
   anything not on the image/video/audio allowlist.
 - Re-encode images server-side. This strips EXIF (spec §4.10) and neutralizes polyglot
-  files in one step.
+  files in one step. The picture is first turned the way its EXIF Orientation says
+  (#569): rotation applied, then stripped.
 - CSP on the app origin: no remote scripts or remote fonts. The shipped policy
   permits HTTPS and WSS origins generally, so members can connect to multiple
   self-hosted servers and fetch their media. It is not an allowlist of the
@@ -633,9 +704,13 @@ door.
 this server sits on a home LAN next to a router admin page. `links.rs` fetches them, and
 the rules are: `http(s)` on default ports only; the hostname is resolved by the server and
 the whole name refused if **any** address it answers with is private, loopback,
-link-local (which is where cloud metadata services live), CGNAT or reserved; the
-connection is then pinned to the address that was checked, so the name cannot resolve to
-something else in between; redirects are followed by hand, three at most, every hop
+link-local (which is where cloud metadata services live), CGNAT or reserved, however
+the address is written. An IPv6 address that carries an IPv4 one in a fixed place
+(v4-mapped `::ffff:a.b.c.d`, v4-compatible `::a.b.c.d`, NAT64 `64:ff9b::/96`, 6to4
+`2002::/16`) is judged by the IPv4 address inside; Teredo `2001::/32`, local-use NAT64
+`64:ff9b:1::/48`, site-local `fec0::/10` and anything else outside global unicast
+`2000::/3` are refused outright. The connection is then pinned to the address that was
+checked, so the name cannot resolve to something else in between; redirects are followed by hand, three at most, every hop
 re-checked; time and bytes are both capped and the body is read in chunks. Nothing the
 response says is trusted either — the HTML is scanned for a title and an icon href by a
 small tag reader and never rendered, and an icon is kept only if its *bytes* sniff as a
@@ -647,6 +722,20 @@ its own preview, every site anybody linked would collect the IP of every person 
 scrolled past the message, and a remote favicon would do it without a click. The host's
 IP does it once for everybody, and the icon reaches the client as a small `data:` URI.
 
+**The voice relay is the other forwarding machine** (#501). coturn runs on the host's
+own network and sends whatever a member with a relay password asks it to, so left to its
+defaults it would reach the home network, a cloud's metadata service, the Docker networks
+and the internet as the host. Voice only ever needs the server's voice address, so
+`deploy/compose.yaml` refuses every peer address (`--denied-peer-ip`, IPv4 and IPv6) and
+lets through only that one (`--allowed-peer-ip`, which coturn checks first): the IP in
+`LINGER_VOICE_ADDRESS`, or with it unset the public addresses `LINGER_DOMAIN` points at,
+looked up when the relay starts, as the server does. No address, or `off`, and it relays
+nothing; a name DNS doesn't answer for within a minute stops it, so Docker restarts it to
+ask again rather than leaving it relaying nothing. It relays UDP only (`--no-tcp-relay`), holds one password to ten relay ports
+(`--user-quota`) and one port to 3 Mbit/s (`--max-bps`). The server gives a member the
+same password all hour (`turn.rs`), so the quota counts a person, and hands out at most
+20 a minute per member.
+
 ---
 
 ## 8. File pipeline
@@ -655,11 +744,13 @@ Never proxy bytes through the app server.
 
 ```
 1. Client  → POST /uploads          { filename, size, mime }
-2. Server  → validates quota, creates attachment(state=pending),
-             returns { upload_id, url, method, headers, part_size }
+2. Server  → validates the member's cap and the pool, creates
+             attachment(state=pending), returns { upload_id, url, method,
+             headers, part_size }
 3. Client  → PUT direct to object store (multipart if > 8 MB, resumable)
 4. Client  → POST /uploads/{id}/complete
-5. Server  → verifies size, sniffs real MIME, re-encodes image (strips EXIF),
+5. Server  → verifies size, sniffs real MIME, re-encodes image (turns it as its EXIF
+             says, then strips EXIF),
              generates blurhash + poster frame + an image's display copy,
              sets state=complete
 6. Server  → attaches to message, fans out over gateway
@@ -670,9 +761,11 @@ Never proxy bytes through the app server.
 - `s3` — any S3-compatible endpoint.
 
 Both sit behind one `ObjectStore` trait (`crates/linger-server/src/storage/`). It has
-four jobs: hand out a slot, gather an upload's parts into one local file the server can
-inspect, store/read/delete a finished object, and throw away the parts of an upload that
-died. Everything that decides *whether* bytes are acceptable is in `media`, not storage.
+five jobs: hand out a slot, gather an upload's parts into one local file the server can
+inspect, store/read/delete a finished object, throw away the parts of an upload that
+died, and say when an upload last received anything (the newest part's time on disk or
+in the bucket, which is how an idle reservation is told from a slow one; see below).
+Everything that decides *whether* bytes are acceptable is in `media`, not storage.
 
 **The S3 backend does not use S3's own multipart upload.** Each part is presigned to its
 own key, `uploads/{upload_id}/{part}`, and `assemble` streams those down into one local
@@ -682,6 +775,24 @@ the bytes on local disk — so the file would cross the wire three times. It wou
 introduce an upload id of S3's own, handed out by a network call, which is exactly the
 per-upload state this design does not want to store. The finished object goes up as one
 PUT; files are capped at 500 MB, well under S3's 5 GB single-PUT limit.
+
+**Each part URL is signed for its exact length** (#505). A presigned URL signs only the
+host unless told otherwise, and then the bucket takes up to 5 GB on it whatever the
+upload declared. So every part URL also signs `content-length`: 8 MB for a full part,
+the remainder for the last one, the declared size for a one-part upload. The bucket
+refuses a body of any other length as a signature mismatch (`403`), before storing any
+of it. Nothing changes for the client: a browser always sets `Content-Length` itself
+from the body, and the client sends each part as a slice of exactly the planned length.
+`Content-Length` is a header the browser owns rather than one the page adds, so it is
+not in the CORS preflight either. `assemble` still counts every part's bytes as it
+streams them to local disk and stops at the first one longer than planned, which is
+final like any other wrong size: a part that reached the bucket some other way (a URL
+signed by a server from before this, anybody else with access to the bucket) cannot
+fill the server's disk. Part URLs still last 24 hours, because the client is handed
+every part's URL at once and uses them for the whole upload. One that is written to
+after its upload finished or was cancelled holds at most that part's length and is never
+read; the host guide's bucket lifecycle rule, deleting `uploads/` after two days,
+clears it.
 
 Serving from S3 is a redirect to a presigned GET, so bytes never cross the app process on
 the way out either. The `Content-Type` and `Content-Disposition` that force a download for
@@ -714,6 +825,82 @@ dropped connection: the slot stays pending and the client sends what is missing.
 else — wrong size, a file that is not the type it claimed, an image that will not decode
 — is final, and the parts go.
 
+**An image is decoded inside a fixed budget** (#487). Re-encoding is where a small file
+can cost a great deal: a GIF of a few hundred bytes can claim a 65535 × 65535 canvas, 17
+GB as pixels, and a failed allocation stops the whole server. So the server reads an
+image's header first, works out what decoding it will take, and refuses it as unreadable
+(`UNSUPPORTED_MEDIA`, "That image can't be read.") when that passes 512 MB, before any
+of the memory is asked for. Neither side of a picture or a GIF's canvas may pass 16 384
+px either.
+
+- **A still picture** counts the file, the decoded picture, the decoder's own working
+  memory, the one full-size copy re-encoding makes (none when it already decodes as RGB
+  for a JPEG, or RGBA for anything else), and the working memory of resizing it for its
+  display copy. A photo whose EXIF says to turn it a quarter (#569) is turned into a new
+  picture, so that counts as one more copy, and everything after is measured at the
+  turned size. `image` limits what the PNG decoder allocates but gives the JPEG and
+  WebP decoders no limit, so what those hold was measured and is counted per pixel: a
+  copy of the file for both; for a progressive JPEG, its coefficients, two bytes a pixel
+  for each channel (a baseline JPEG, what cameras and phones write, needs none); for
+  WebP, seven bytes a pixel. So the biggest progressive JPEG taken is about 40
+  megapixels, and the biggest WebP about 35, against about 100 for a baseline JPEG.
+- **A GIF** comes out of its decoder one whole canvas per frame, however small each
+  frame was in the file, and a frame bigger than the canvas is decoded whole before the
+  canvas clips it. Its frames are counted first, without decoding them, each as the
+  bigger of the canvas and itself, and together as RGBA they may not pass the same 512
+  MB. Each frame is then encoded as soon as it is decoded, so only one is held at a time.
+  The ceiling also bounds the time a GIF costs. The encoder chooses a frame's colours at
+  speed 10 of 30: measured on a desktop core, a GIF at the limit takes about 8 seconds,
+  where speed 1 took nearly two minutes.
+
+The clean picture is written to a new file beside the upload as it is encoded, a PNG
+included (`image`'s own PNG writer would hold all of it in memory first), and put in the
+upload's place by a rename once it is whole: one that fails part-way leaves the upload
+as it was. Only two images are worked on at once, uploads, video posters and the
+display-copy pass together (`media::ImageLane`), and the file is read only once its
+turn has come, so pictures cost the server about 1 GB at most, inside the 2 GB droplet
+`docs/vps-setup.md` starts from. A `complete` waits up to 10 seconds for its turn, well
+inside the app's 30, then answers `RATE_LIMITED` and leaves the upload alive to be
+completed again (PROTOCOL §6); a video in the same wait is stored without a blurhash. One
+whose request is dropped keeps its place until its work ends, because the memory is
+still in use until then.
+
+**What's on its way into a message** (`unsent.rs`, #503). A slot reserves its declared
+size against the pool at step 2, before a byte moves, and a finished upload that never
+reaches step 6 is on no message: neither is in the media collection or the host's to
+delete. One member asking for slot after slot without sending anything could hold the
+whole pool. So they keep rules of their own:
+
+- **A cap per member.** One member's pending slots can add up to 1 GB
+  (`MAX_GOING_UP_BYTES`, a little over two of the biggest files). Past it the slot is
+  refused with `QUOTA_EXCEEDED`, worded as *your* uploads. It is a fixed figure, not a
+  share of the pool: a share small enough to matter on a small pool would leave no
+  room for one 500 MB file. The cap and the pool are counted and the slot inserted in
+  one transaction on the single writer, so twenty requests at once are checked one
+  after another.
+- **An hour of silence releases a slot.** A pending upload whose newest part (or, with
+  none, whose slot) is over an hour old is released. On disk that is the newest file
+  time in its part directory, where a part still streaming in is a file whose time
+  moves with every write; on S3 it is the newest part's `LastModified`. This runs on
+  every `POST /uploads`, before the cap is counted, and every fifteen minutes on a clock
+  of its own in the sweeper's task (`expiry::spawn`, below).
+- **A week for a finished upload nobody posts**, the sweeper's third rule below.
+- **A removed member's go with them**: their pending slots are released and their
+  unposted files deleted, but not an emoji's picture, which is the server's.
+
+**Released is not forgotten.** Releasing a slot (after an hour of silence, on
+`DELETE /uploads/:id`, or on removing its member) gives its space back at once and
+discards the parts that arrived, but keeps the row, as state `released`, until the slot
+is two days old. On S3 the client PUTs straight at the bucket with links signed for a
+day, and the bucket takes a part from anybody holding one whatever the server has
+decided since: a laptop that wakes after an hour, or somebody doing it on purpose, can
+still land bytes. Forgetting the row at once would leave those in the bucket forever,
+counted nowhere. At two days every link has expired, so the parts are discarded once
+more and only then does the row go; a failed upload's row goes the same way. A
+`released` row counts against nothing (the pool and the cap count `pending` and
+`complete` only), the local part listener refuses it, and `complete` on it is
+`NOT_FOUND`.
+
 **ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
 `ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
 simply has no poster. The published image installs them. The file they read is an
@@ -739,22 +926,43 @@ not by `AppState`, so building the state in a test never starts a loop nobody as
 The other closes polls whose time is up (`polls.rs`, #474): at startup, for any that ran
 out while the server was down, then every thirty seconds, each in one transaction with the
 line it leaves in the room.
-It runs at startup and every six hours, in batches, and takes three kinds of object:
+It runs at startup and every six hours, in batches, and takes three kinds of file, and
+used sign-in tokens:
 
 - files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
   pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
-- files on a **deleted** message, at once. A delete is a tombstone with an empty body,
-  and neither the stream nor the media collection will ever draw what it carried again,
-  so the bytes are unreachable and still counted against the pool. A star does not hold
+- files on a **deleted** message, whatever their age, as the retry. The delete itself
+  takes them there and then (#502, below); this rule finishes any the store refused at
+  that moment, and any a server from before #502 left behind. A star does not hold
   one of these: a star stops a file ageing out, and this is not ageing out.
-- **finished uploads that never became a message**, once they are past the same window.
-  The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
+- **finished uploads that never became a message**, once they are a week old
+  (`unsent::UNPOSTED_DAYS`), or past the file window if that is shorter. Like the
+  deleted-message rule, this is not ageing out and `off` does not stop it: nothing will
+  ever show such a file. Uploads that never *completed* are released after an hour of
+  silence (above).
+- **refresh tokens past their 30 days** (#520). Every renewal marks the token it used
+  up and makes a new one, so an app left open adds about a hundred rows a day, and
+  nothing else deletes them. A used one inside its 30 days stays, for reuse detection
+  (§7). File expiry being off doesn't stop this one.
 
 A file a status picture pointed at used to be kept at any age. Status pictures are
 gone (#269), so such a file is now an upload that never became a message, and the
 third rule takes it. Deletion is bytes first, row second — the other order can lose
 an object with nothing left pointing at it, and a crash between the two leaves a row the
-next pass finishes.
+next pass finishes. Each pass also takes export archives a week old (below).
+
+**Deleting a message takes its files there and then** (#502), in the sweeper's own
+per-file step (`expiry::take_from_message`): the original, its poster frame and its
+display copy, then the rows. The delete waits at most five seconds for the store, so a
+bucket that stops answering cannot hold the answer up, and whatever did not finish is
+the second rule's. Either way the file is out of reach from the moment of the delete:
+`/objects` answers it `404` as if it had never been, history carries no attachments on
+a tombstone (`repo::attachments::hydrate`), and the media collection, search and
+exports all pass over it. A file the server sends itself goes out with
+`Cache-Control: private`, so the app's own cache keeps it for as long as it likes but a
+shared cache in front of the media host (a CDN proxy) keeps no copy that would outlive a
+delete. On S3 the bucket sends the bytes, from a link that is signed for a day and dead
+once the object is.
 
 **Exports are the one path that brings bytes back to the app host.** An archive
 (`export.rs`, SPEC §4.11) is built in scratch under `{data_dir}/staging` and then stored
@@ -766,6 +974,34 @@ member's visible data on local disk while it builds, and costs a full download o
 data in egress (free on R2, billed on plain S3). The scratch is deleted when the job ends
 and the finished zip lives in the bucket, but a host sizing an S3-backed box should size
 the staging disk for the largest export, not only for the uploads in flight.
+
+**An archive lasts a week** (#504, SPEC §4.11). Before, nothing removed one but the same
+member exporting again, so each member who had ever exported kept a copy of the whole
+server on the disk, or in the bucket, for good. Now:
+
+- The sweeper takes an archive `export::KEPT_FOR_MS` (seven days) after `finished_at`,
+  bytes first, on either backend, and failed jobs as old with it. This is not
+  `LINGER_FILE_EXPIRY_DAYS` and is not turned off with it. `GET /export/:job_id` says
+  when (`expires_at`), and the app shows it.
+- Removing a member deletes their archive and its job.
+- `POST /export` is refused with `QUOTA_EXCEEDED` (507) when the disk under `staging/`
+  has less free than the archive needs: the files it carries, twice that on `s3`, plus
+  256 MB of headroom for the transcripts and for SQLite. On `local`, the member's own
+  archive, which a new one replaces, counts as free. The check runs again when a queued
+  job gets its turn, because members asking at once all pass it at the door. A server
+  that can't measure free space (anything but Unix) skips it. The route takes the
+  hour's token before it starts and gives it back when the export is refused
+  (`RateLimiter::refund`), so the limit stays race-free and a refusal for room doesn't
+  spend the member's hour.
+- At startup, before anything is served, `main` runs `export::recover`: jobs left
+  `queued` or `running` are marked failed, and everything in `staging/` is deleted.
+  Nothing can be using it yet, and an export killed mid-zip otherwise left up to a whole
+  archive's worth of scratch there. A job writes its `object_key` when it starts
+  building, so a process stopped between storing an archive and marking it complete
+  leaves a row that says where the bytes are; the sweeper and the member's next export
+  delete by that column.
+- A job whose row was deleted while it built (the member asked again, or was removed)
+  deletes the archive it stored instead of leaving it with nothing pointing at it.
 
 **The pool and the expiry window are environment variables** (`LINGER_POOL_BYTES`,
 `LINGER_FILE_EXPIRY_DAYS`), read once at startup like every other deployment setting, not
@@ -821,6 +1057,16 @@ name, checks the DNS, makes the secret, opens `ufw`) and starts everything; doin
 hand is copying `.env.example`. An older compose file with its settings written inline
 keeps working.
 
+**The files come from a release** (#507). `setup.sh` fetches `compose.yaml`, the Caddyfile,
+`update.sh` and `.env.example` from the newest release's tag (GitHub's `releases/latest`,
+which never names a pre-release such as the `arch` one, and the script refuses anything
+but a `vX.Y.Z` tag besides), not from `main`, which can be ahead of every released image.
+The image line stays `latest`: `update.sh` reads a version there as the host's choice to
+stay on it. A release is published after its tag's image is pushed, so `latest` is that
+release's image or a newer one, and older files with a newer image is how every server
+runs after `update.sh` anyway. `setup.sh` itself is fetched from `main`, so it has to work
+with the newest release's files. `LINGER_SETUP_REF` names another release or a branch.
+
 Voice goes through the `linger` container itself (#197): with UDP 3479 open, each client
 sends its voice there once and the server passes it on. Where clients send it is
 `LINGER_VOICE_ADDRESS` if set; unset, the server looks `LINGER_DOMAIN` up once at startup
@@ -829,7 +1075,23 @@ machine. `off`, or no domain to look up, and the server carries no voice (#306).
 
 The image starts as root only to give the data folder to its `linger` user, then runs the
 server as `linger` (`deploy/entrypoint.sh`, #440): Docker makes a missing `./data` for
-root, which used to need a `chown` before the first start.
+root, which used to need a `chown` before the first start. It also makes the folder 0700
+and runs the server with umask 077, so what the server writes is 0600 (#506): on a
+machine with more than one account, the others can't read the database or the files.
+Nothing on the host reads inside it: `update.sh` copies the database out through a
+one-off container of the image and writes the backup 0600, so a host needs Docker and
+not root.
+
+The image sets `MALLOC_MMAP_THRESHOLD_=1048576` (#523), so memory a password hash used goes
+back to the system. Each argon2 hash borrows about 19 MB at once (§7). glibc, the C
+library under the image's Debian base, gives the first such block back, then raises its
+own threshold for a big block to match and keeps every later one in its pools, spread
+over the blocking threads hashing runs on, so memory only ever grew: 220 sign-ups left the
+server holding 225 MB one at a time, 815 MB four at a time. A fixed 1 MB threshold makes
+every larger block a mapping of its own, unmapped the moment it is freed, and the same
+sign-ups leave 16–17 MB. `MALLOC_ARENA_MAX=2`, the usual advice for this, held 168 MB and
+946 MB. Only glibc reads the variable. While hashes run, they still take 19 MB each; how
+many may run at once is a separate limit.
 
 The third container is the voice relay (SPEC §4.14), for people on networks that block
 UDP. It is optional and behind a compose profile, so a plain `docker compose up -d`
@@ -837,7 +1099,11 @@ needs no secret and runs no relay. Its one secret lives in `.env`, never in the 
 with `linger` so the server can sign the short-lived relay passwords it hands
 members (`PROTOCOL.md` §7, `GET /voice/ice`). It runs on the host's own network
 because a relay's job is being reachable at its real address on a range of UDP
-ports, and container NAT would get in the way of exactly that.
+ports, and container NAT would get in the way of exactly that. Being on the host's
+network is also why it relays to the server's voice address and nowhere else (§7, #501).
+A relayed client sends to that address like everybody else, the public one in the
+offer, and the host hands it to the `linger` container through the published UDP port,
+so the relay never needs Docker's own addresses.
 
 Caddy is bundled specifically so TLS certificates are automatic. A self-hoster should
 never have to think about certbot. Its Caddyfile has two blocks and the deployment needs
@@ -881,7 +1147,8 @@ passes its check.
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
 (2026-08-29 and 2026-08-31). **M12 is built:** signalling, audio path,
 controls, relay and device recovery, with voice in daily use across separate
-networks. M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
+networks. M13 ambient voice was never started as a milestone, but later voice
+work built part of it (its row below; `TASKS.md` M13 has what's left). The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
 on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
@@ -896,7 +1163,7 @@ is gone (#306).
 | **M10** | Search | Type a word, get the messages containing it, click one, land on it in its room | 3–4 days — **built: index and endpoint 2026-08-30, surface 2026-08-31. Its check passed in a running app** |
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
-| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
+| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days — **part built by later voice work: silence isn't sent (#430, 0.4.9), being in a room's voice is being in the room (#420, 0.4.8), and joining leaves a quiet line (#473). Left: no join step, the controls that make it safe (T-1502), and a working day's CPU and battery measured on a real computer** |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 

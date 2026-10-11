@@ -51,3 +51,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Words somebody wrote keep their direction to themselves (#488): one that
+   turns text around can't reach past them. */
+.k-titlebar-text {
+  unicode-bidi: isolate;
+}

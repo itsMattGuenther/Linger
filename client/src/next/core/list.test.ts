@@ -180,6 +180,41 @@ describe("the buddy list for one server", () => {
     expect([...people.here, ...people.away, ...people.offline].map((row) => row.dm).filter(Boolean)).toEqual(["d-jules"]);
   });
 
+  it("keeps a group somebody left with the rooms, even down to two, and off that person's row (#565)", () => {
+    const held: GatewayState = {
+      ...evening(),
+      dms: [room("d-left", "d-left", 0, { kind: "dm", member_ids: ["u-matt", "u-jules"], someone_left: true }), ...evening().dms],
+    };
+    const model = listModel(held, NOW);
+    // Listed first, it would have taken Jules's row before #565.
+    expect(model.groups.map((row) => row.id).sort()).toEqual(["d-eli-sam", "d-left"]);
+    expect(model.people.here.find((row) => row.user.id === "u-jules")?.dm).toBe("d-jules");
+    // A group can be left; nobody else in it means leaving deletes it.
+    const left = model.groups.find((row) => row.id === "d-left");
+    expect([left?.leavable, left?.last]).toEqual([true, false]);
+    const full = model.groups.find((row) => row.id === "d-eli-sam");
+    expect([full?.leavable, full?.last]).toEqual([true, false]);
+    // The picker is told, so it never offers it as the DM with Jules.
+    expect(model.dmMembers.find((dm) => dm.id === "d-left")?.someone_left).toBe(true);
+  });
+
+  it("offers Leave on a group only, and says when you're the last one in it (#565)", () => {
+    const held: GatewayState = {
+      ...evening(),
+      dms: [
+        ...evening().dms,
+        room("d-alone", "d-alone", 0, { kind: "dm", member_ids: ["u-matt"], someone_left: true }),
+        room("d-gone", "d-gone", 0, { kind: "dm", member_ids: ["u-matt"] }),
+      ],
+    };
+    const { groups } = listModel(held, NOW);
+    const alone = groups.find((row) => row.id === "d-alone");
+    expect([alone?.leavable, alone?.last]).toEqual([true, true]);
+    // A one-to-one DM whose person the host removed is still a one-to-one
+    // DM: the server won't let anybody leave it, so it isn't offered.
+    expect(groups.find((row) => row.id === "d-gone")?.leavable).toBe(false);
+  });
+
   // `ready` says where each DM's conversation had got to when the app
   // connected, and never again; the order has to follow what arrives after.
   it("moves a group DM to the top when somebody writes in it, and keeps it there once read (#248)", () => {
