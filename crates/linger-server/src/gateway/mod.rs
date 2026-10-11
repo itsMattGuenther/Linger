@@ -688,10 +688,17 @@ impl Gateway {
     /// comes, as the newest of everything that arrived meanwhile (#497). When
     /// they have gone offline in between there is nothing to tell:
     /// `connection_closed` already said so.
+    ///
+    /// **Published while the entry is still held.** Copying it and letting go
+    /// first leaves a gap in which their last connection can close (or a
+    /// `room.focus` tell something newer), and this older copy would then go
+    /// out after it: somebody who just left looking online again. Holding the
+    /// read guard makes that remove or insert wait until this is on the bus.
+    /// It can't deadlock: `publish` only works out the room and sends, and
+    /// nothing on that path reads `presence`.
     fn tell_presence(&self, user_id: UserId) {
-        let entry = self.presence.get(&user_id).map(|e| e.value().clone());
-        if let Some(entry) = entry {
-            self.publish(ServerEvent::PresenceUpdate(entry));
+        if let Some(entry) = self.presence.get(&user_id) {
+            self.publish(ServerEvent::PresenceUpdate(entry.value().clone()));
         }
     }
 
