@@ -881,7 +881,8 @@ passes its check.
 **V2 starts here.** Planned 2026-08-28. **M9, M10 and M11 are built**
 (2026-08-29 and 2026-08-31). **M12 is built:** signalling, audio path,
 controls, relay and device recovery, with voice in daily use across separate
-networks. M13 ambient voice is not started. The order below is not SPEC §6's listing order: knock and search
+networks. M13 ambient voice was never started as a milestone, but later voice
+work built part of it (its row below; `TASKS.md` M13 has what's left). The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
 on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
@@ -896,7 +897,7 @@ is gone (#306).
 | **M10** | Search | Type a word, get the messages containing it, click one, land on it in its room | 3–4 days — **built: index and endpoint 2026-08-30, surface 2026-08-31. Its check passed in a running app** |
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
-| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days |
+| **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | 3–5 days — **part built by later voice work: silence isn't sent (#430, 0.4.9), being in a room's voice is being in the room (#420, 0.4.8), and joining leaves a quiet line (#473). Left: no join step, the controls that make it safe (T-1502), and a working day's CPU and battery measured on a real computer** |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
