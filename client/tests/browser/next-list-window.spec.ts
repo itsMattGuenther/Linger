@@ -985,6 +985,13 @@ test("a server you host says when its disk is nearly full or it hasn't been back
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
 });
 
+test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
+  await open(page, "?one&hostbucket");
+  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
+  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+});
+
 test("a server somebody else hosts says nothing about its machine (#582)", async ({ page }) => {
   await page.clock.install();
   await open(page, "?one&hostissues&guest");

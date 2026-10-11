@@ -343,7 +343,14 @@ of the database (`LINGER_BACKUPS`), when the newest copy that checked out was ma
 with backups off), whether less than a tenth of the disk under its data folder is free,
 and whether uploads take 90% or more of `storage_limit_bytes`. The app says each of the
 last three in words at the foot of the host's list while it is true, and never as a
-figure. Nothing in it is a count of anything, and nothing leaves the machine.
+figure. Nothing in it is a count of anything.
+
+`health.bucket` is there only when the host set `LINGER_BACKUP_S3_*` (#614), and left out
+by a server from before it: `{ name, last_sent_at, overdue }`, the bucket's name, when
+the newest copy in it got there by the bucket's own clock (`null` before the server has
+looked, a few minutes after it starts, or when none has), and whether the server has run
+three days without a copy reaching it. The app says the last in words at the foot of the
+host's list too, unless the copy itself is overdue, which says it already.
 
 **`voice`** says whether this server carries voice: it has a voice address, set or worked
 out from its domain (§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so

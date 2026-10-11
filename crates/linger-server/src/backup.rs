@@ -23,6 +23,16 @@
 //! Whether it's working is the host's to know without reading logs: `GET
 //! /server` tells the host when the newest good copy was made, and whether the
 //! server has gone three days running without one (`ServerHealth`).
+//!
+//! **Off the machine, if the host names a bucket** (#614,
+//! `LINGER_BACKUP_S3_*`). After each copy checks out, the newest daily and
+//! the newest weekly go to the bucket, each once, and the bucket keeps the
+//! same week and month the folder does. Only names this module made are
+//! ever touched there. A bucket that can't be reached never costs the copy
+//! on disk: the copy is made first and counts on its own, and the send is
+//! tried again every hour until it goes or the next copy is due. The host is
+//! told when the newest copy in the bucket is three days old, as with the
+//! folder.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -33,6 +43,7 @@ use sqlx::{ConnectOptions, Connection};
 
 use crate::db::now_ms;
 use crate::state::AppState;
+use crate::storage::BackupBucket;
 
 /// Where the copies go, inside the data folder.
 pub const BACKUPS_DIR: &str = "backups";
@@ -64,11 +75,24 @@ pub const OVERDUE_AFTER_MS: i64 = 3 * 24 * 60 * 60 * 1000;
 const HEADROOM_BYTES: u64 = 256 * 1024 * 1024;
 
 /// How the nightly copies stand, kept in memory: when the newest good one was
-/// made, and when this run of the server started trying.
-#[derive(Debug)]
+/// made, when the newest one reached the bucket (#614), and when this run of
+/// the server started trying.
 pub struct Backups {
     last: Mutex<Option<i64>>,
     since: i64,
+    bucket: Option<BackupBucket>,
+    sent: Mutex<Option<i64>>,
+}
+
+impl std::fmt::Debug for Backups {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Backups")
+            .field("last", &self.last())
+            .field("since", &self.since)
+            .field("bucket", &self.bucket.as_ref().map(|bucket| &bucket.name))
+            .field("sent", &self.sent())
+            .finish()
+    }
 }
 
 impl Backups {
@@ -79,7 +103,16 @@ impl Backups {
         Self {
             last: Mutex::new(last),
             since,
+            bucket: None,
+            sent: Mutex::new(None),
         }
+    }
+
+    /// Send each copy to `bucket` as well (`LINGER_BACKUP_S3_*`).
+    #[must_use]
+    pub fn with_bucket(mut self, bucket: Option<BackupBucket>) -> Self {
+        self.bucket = bucket;
+        self
     }
 
     /// When the newest copy that checked out was made.
@@ -99,7 +132,35 @@ impl Backups {
     /// one that has been trying, and failing, for three days is.
     #[must_use]
     pub fn overdue(&self, now: i64) -> bool {
-        let from = self.last().map_or(self.since, |last| last.max(self.since));
+        Self::three_days_from(self.last(), self.since, now)
+    }
+
+    /// The bucket copies go to, by name, when there is one.
+    pub fn bucket_name(&self) -> Option<&str> {
+        self.bucket.as_ref().map(|bucket| bucket.name.as_str())
+    }
+
+    /// When the newest copy in the bucket got there, as the bucket says, or
+    /// `None` before this run of the server has looked.
+    pub fn sent(&self) -> Option<i64> {
+        self.sent.lock().map_or(None, |held| *held)
+    }
+
+    fn reached(&self, at: Option<i64>) {
+        if let Ok(mut held) = self.sent.lock() {
+            *held = at.max(*held);
+        }
+    }
+
+    /// Three days of running without a copy reaching the bucket, counted the
+    /// way [`Backups::overdue`] is. Always `false` with no bucket.
+    #[must_use]
+    pub fn bucket_overdue(&self, now: i64) -> bool {
+        self.bucket.is_some() && Self::three_days_from(self.sent(), self.since, now)
+    }
+
+    fn three_days_from(last: Option<i64>, since: i64, now: i64) -> bool {
+        let from = last.map_or(since, |last| last.max(since));
         now - from >= OVERDUE_AFTER_MS
     }
 }
@@ -134,9 +195,18 @@ pub fn spawn(state: AppState) -> Option<tokio::task::JoinHandle<()>> {
     }
     Some(tokio::spawn(async move {
         let mut wait = first_wait(state.backups.last(), now_ms());
+        // With a bucket, look at it soon after starting rather than up to a
+        // day later at the next copy: that's when the host's Settings learns
+        // when the bucket last had one, and a copy the last run made but
+        // never got there goes now.
+        if state.backups.bucket.is_some() {
+            tokio::time::sleep(FIRST_AFTER).await;
+            send_logged(&state).await;
+            wait = wait.saturating_sub(FIRST_AFTER);
+        }
         loop {
             tokio::time::sleep(wait).await;
-            wait = match make(&state).await {
+            let mut until_next = match make(&state).await {
                 Ok(made) => {
                     tracing::info!(path = %made.path.display(), weekly = made.weekly, "backed up the database");
                     EVERY
@@ -146,8 +216,76 @@ pub fn spawn(state: AppState) -> Option<tokio::task::JoinHandle<()>> {
                     RETRY_AFTER
                 }
             };
+            // A failed send is tried again each hour until it goes or the
+            // next copy is due, which tries again anyway.
+            if state.backups.bucket.is_some() {
+                while !send_logged(&state).await && until_next > RETRY_AFTER {
+                    tokio::time::sleep(RETRY_AFTER).await;
+                    until_next -= RETRY_AFTER;
+                }
+            }
+            wait = until_next;
         }
     }))
+}
+
+/// [`send`], with what happened in the log. Whether it went.
+async fn send_logged(state: &AppState) -> bool {
+    match send(state).await {
+        Ok(sent) => {
+            if !sent.is_empty() {
+                tracing::info!(copies = ?sent, "sent the database's backup to the bucket");
+            }
+            true
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "could not send the database's backup to the bucket");
+            false
+        }
+    }
+}
+
+/// Make sure the newest daily copy and the newest weekly one in
+/// `data/backups/` are in the bucket, then drop the bucket's copies past a
+/// week of dailies and a month of weeklies, the folder's rule. Sends only
+/// what the bucket doesn't already have under that name, so running it again
+/// is cheap. Answers the names it sent; nothing with no bucket. Public so a
+/// test can drive it.
+pub async fn send(state: &AppState) -> anyhow::Result<Vec<String>> {
+    let Some(bucket) = &state.backups.bucket else {
+        return Ok(Vec::new());
+    };
+    let dir = state.config.data_dir.join(BACKUPS_DIR);
+    let here = match names(&dir).await {
+        Ok(names) => names,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(err) => return Err(err.into()),
+    };
+
+    let there = bucket.sent().await?;
+    let mut newest_there = there
+        .iter()
+        .filter(|copy| kind_of(&copy.name).is_some())
+        .filter_map(|copy| copy.at)
+        .max();
+    let mut names_there: Vec<String> = there.into_iter().map(|copy| copy.name).collect();
+
+    let mut sent = Vec::new();
+    for name in newest_of_each(&here) {
+        if names_there.iter().any(|there| there == name) {
+            continue;
+        }
+        bucket.send(name, &dir.join(name)).await?;
+        newest_there = newest_there.max(Some(now_ms()));
+        names_there.push(name.to_string());
+        sent.push(name.to_string());
+    }
+    state.backups.reached(newest_there);
+
+    for name in past_keeping(&names_there) {
+        bucket.drop_copy(&name).await?;
+    }
+    Ok(sent)
 }
 
 /// How long until the next copy is due: a day after the newest, or a couple
@@ -321,28 +459,57 @@ async fn weekly_due(dir: &Path, today: &str) -> Result<bool, BackupError> {
 /// weeklies, newest kept, and any half-written copy a crash left behind
 /// (not `current`, which has just been renamed anyway).
 async fn prune(dir: &Path, current: &Path) -> Result<(), BackupError> {
-    let mut daily = Vec::new();
-    let mut weekly = Vec::new();
-    for name in names(dir).await? {
-        match kind_of(&name) {
-            Some((Kind::Daily, date)) => daily.push((date.to_string(), name)),
-            Some((Kind::Weekly, date)) => weekly.push((date.to_string(), name)),
-            None => {
-                let stale = name.starts_with(".linger-daily-") && name.ends_with(".db.partial");
-                if stale && dir.join(&name) != current {
-                    let _ = tokio::fs::remove_file(dir.join(&name)).await;
-                }
-            }
+    let names = names(dir).await?;
+    for name in &names {
+        let stale = name.starts_with(".linger-daily-") && name.ends_with(".db.partial");
+        if stale && dir.join(name) != *current {
+            let _ = tokio::fs::remove_file(dir.join(name)).await;
         }
     }
+    for name in past_keeping(&names) {
+        tokio::fs::remove_file(dir.join(name)).await?;
+    }
+    Ok(())
+}
+
+/// Of a folder's or a bucket's names, the copies past [`DAILY_KEPT`]
+/// dailies and [`WEEKLY_KEPT`] weeklies, oldest first. Anything not named
+/// like a copy is never among them.
+fn past_keeping(names: &[String]) -> Vec<String> {
+    let mut daily = Vec::new();
+    let mut weekly = Vec::new();
+    for name in names {
+        match kind_of(name) {
+            Some((Kind::Daily, date)) => daily.push((date, name)),
+            Some((Kind::Weekly, date)) => weekly.push((date, name)),
+            None => {}
+        }
+    }
+    let mut past = Vec::new();
     for (mut copies, keep) in [(daily, DAILY_KEPT), (weekly, WEEKLY_KEPT)] {
         copies.sort();
         let extra = copies.len().saturating_sub(keep);
-        for (_, name) in copies.into_iter().take(extra) {
-            tokio::fs::remove_file(dir.join(name)).await?;
-        }
+        past.extend(copies.into_iter().take(extra).map(|(_, name)| name.clone()));
     }
-    Ok(())
+    past
+}
+
+/// The newest daily copy and the newest weekly one among `names`, when
+/// there are any: what the bucket should have.
+fn newest_of_each(names: &[String]) -> Vec<&str> {
+    [Kind::Daily, Kind::Weekly]
+        .into_iter()
+        .filter_map(|wanted| {
+            names
+                .iter()
+                .filter_map(|name| match kind_of(name) {
+                    Some((kind, date)) if kind == wanted => Some((date, name.as_str())),
+                    _ => None,
+                })
+                .max()
+                .map(|(_, name)| name)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -438,6 +605,99 @@ mod tests {
         // A copy dated in the future (the clock was moved) waits no longer
         // than a fresh start does.
         assert_eq!(first_wait(Some(now + DAY), now), FIRST_AFTER);
+    }
+
+    fn owned(names: &[&str]) -> Vec<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn a_week_of_dailies_and_a_month_of_weeklies_are_kept() {
+        let mut names: Vec<String> = (1..=10)
+            .map(|day| format!("linger-daily-2026-10-{day:02}.db"))
+            .collect();
+        names.extend((0..6).map(|week| format!("linger-weekly-2026-0{}-01.db", week + 4)));
+        names.push("notes.txt".to_string());
+        names.push("linger-daily-someday.db".to_string());
+
+        let mut past = past_keeping(&names);
+        past.sort();
+        assert_eq!(
+            past,
+            owned(&[
+                "linger-daily-2026-10-01.db",
+                "linger-daily-2026-10-02.db",
+                "linger-daily-2026-10-03.db",
+                "linger-weekly-2026-04-01.db",
+                "linger-weekly-2026-05-01.db",
+            ])
+        );
+    }
+
+    #[test]
+    fn nothing_goes_while_there_are_fewer_than_kept() {
+        let names = owned(&[
+            "linger-daily-2026-10-10.db",
+            "linger-daily-2026-10-11.db",
+            "linger-weekly-2026-10-04.db",
+        ]);
+        assert!(past_keeping(&names).is_empty());
+    }
+
+    #[test]
+    fn a_bucket_gets_the_newest_daily_and_the_newest_weekly() {
+        let names = owned(&[
+            "linger-daily-2026-10-09.db",
+            "linger-daily-2026-10-11.db",
+            "linger-daily-2026-10-10.db",
+            "linger-weekly-2026-09-27.db",
+            "linger-weekly-2026-10-04.db",
+            ".linger-daily-2026-10-12.db.partial",
+            "linger-0.4.9-2026-10-07.tar.gz",
+        ]);
+        assert_eq!(
+            newest_of_each(&names),
+            ["linger-daily-2026-10-11.db", "linger-weekly-2026-10-04.db"]
+        );
+        assert!(newest_of_each(&owned(&["notes.txt"])).is_empty());
+        assert_eq!(
+            newest_of_each(&owned(&["linger-daily-2026-10-11.db"])),
+            ["linger-daily-2026-10-11.db"]
+        );
+    }
+
+    #[test]
+    fn the_bucket_is_overdue_after_three_days_without_a_copy_getting_there() {
+        let start = 100 * DAY;
+        // No bucket, never overdue.
+        let none = Backups::new(Some(start), start);
+        assert!(!none.bucket_overdue(start + 30 * DAY));
+
+        // A bucket that never got a copy: three days in.
+        let bucket = BackupBucket::open(&crate::config::BackupBucketConfig {
+            s3: crate::config::S3Config {
+                bucket: "linger-backups".to_string(),
+                region: "us-east-1".to_string(),
+                endpoint: "https://objects.example".to_string(),
+                path_style: true,
+                access_key_id: "key".to_string(),
+                secret_access_key: "secret".to_string(),
+            },
+            prefix: "backups/".to_string(),
+        })
+        .unwrap();
+        let with = Backups::new(Some(start), start).with_bucket(Some(bucket));
+        assert_eq!(with.bucket_name(), Some("linger-backups"));
+        assert!(!with.bucket_overdue(start + 2 * DAY));
+        assert!(with.bucket_overdue(start + 3 * DAY));
+
+        // A copy reaching it resets the clock, and an older answer from the
+        // bucket never moves it back.
+        with.reached(Some(start + 2 * DAY));
+        with.reached(Some(start + DAY));
+        assert_eq!(with.sent(), Some(start + 2 * DAY));
+        assert!(!with.bucket_overdue(start + 4 * DAY));
+        assert!(with.bucket_overdue(start + 5 * DAY));
     }
 
     #[test]

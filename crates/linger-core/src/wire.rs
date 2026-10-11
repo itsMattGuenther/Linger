@@ -382,6 +382,28 @@ pub struct ServerHealth {
     pub disk_nearly_full: bool,
     /// Uploads take 90% or more of `storage_limit_bytes`.
     pub file_space_nearly_full: bool,
+    /// The bucket the nightly copies also go to (#614,
+    /// `LINGER_BACKUP_S3_*`). Left out when the host hasn't named one, and
+    /// by a server from before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub bucket: Option<BackupBucketHealth>,
+}
+
+/// How the copies sent to the host's bucket stand (#614).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BackupBucketHealth {
+    /// The bucket's name, as the host set it, so Settings can say where.
+    pub name: String,
+    /// When the newest copy in the bucket got there, as the bucket says, or
+    /// `null` before the server has looked (a few minutes after it starts)
+    /// or when no copy has reached it.
+    #[ts(type = "number | null")]
+    pub last_sent_at: Option<i64>,
+    /// The server has run for three days without a copy reaching the
+    /// bucket.
+    pub overdue: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

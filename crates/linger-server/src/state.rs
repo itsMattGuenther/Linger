@@ -86,10 +86,21 @@ impl AppState {
             tracing::info!(%address, "voice forwarding is on: clients send voice to this address");
         }
 
-        let backups = Arc::new(Backups::new(
-            crate::backup::newest(&config.data_dir).await,
-            crate::db::now_ms(),
-        ));
+        // The bucket the nightly copies also go to (#614). Opening it makes
+        // no network call; a malformed endpoint stops the server here, as a
+        // malformed LINGER_S3_ENDPOINT does.
+        let bucket = config
+            .backup_bucket
+            .as_ref()
+            .map(crate::storage::BackupBucket::open)
+            .transpose()?;
+        let backups = Arc::new(
+            Backups::new(
+                crate::backup::newest(&config.data_dir).await,
+                crate::db::now_ms(),
+            )
+            .with_bucket(bucket),
+        );
         let passwords = Arc::new(PasswordWork::new(
             config.password_checks_at_once,
             PASSWORD_WORK_WAIT,

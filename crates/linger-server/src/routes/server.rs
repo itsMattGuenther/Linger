@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
-use linger_core::wire::{ColorKey, ServerHealth, ServerInfo, UpdateServerRequest};
+use linger_core::wire::{
+    BackupBucketHealth, ColorKey, ServerHealth, ServerInfo, UpdateServerRequest,
+};
 use linger_core::UserId;
 
 use crate::auth::{AuthedUser, HostOrCohost, Standing};
@@ -74,6 +76,11 @@ async fn health(
         backup_overdue: backups && state.backups.overdue(now_ms()),
         disk_nearly_full: disk.is_some_and(crate::disk::Room::nearly_full),
         file_space_nearly_full: nearly_used_up(used, state.config.pool_bytes),
+        bucket: state.backups.bucket_name().map(|name| BackupBucketHealth {
+            name: name.to_string(),
+            last_sent_at: state.backups.sent(),
+            overdue: state.backups.bucket_overdue(now_ms()),
+        }),
     }))
 }
 

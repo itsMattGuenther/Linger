@@ -746,6 +746,20 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       ...(query.has("hostissues") && server === SERVER && state.me?.is_host
         ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
         : {}),
+      // `?hostbucket`: last night's copy is fine, but none has reached the
+      // host's bucket for four days (#614).
+      ...(query.has("hostbucket") && server === SERVER && state.me?.is_host
+        ? {
+            health: {
+              backups: true,
+              last_backup_at: Date.now() - 6 * 60 * 60 * 1000,
+              backup_overdue: false,
+              disk_nearly_full: false,
+              file_space_nearly_full: false,
+              bucket: { name: "good-company-backups", last_sent_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, overdue: true },
+            },
+          }
+        : {}),
     });
   }
   if (path === "/me" && method === "GET") return json(state.me);

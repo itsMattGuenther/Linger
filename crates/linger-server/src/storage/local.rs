@@ -382,6 +382,7 @@ mod tests {
             signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
             backups: true,
+            backup_bucket: None,
         }))
         .unwrap()
     }
