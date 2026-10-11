@@ -269,7 +269,7 @@ pub async fn reaction_group(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ReactionGroup {
         key: key.to_string(),
-        count: user_ids.len() as u32,
+        count: u32::try_from(user_ids.len()).unwrap_or(u32::MAX),
         user_ids,
     })
 }

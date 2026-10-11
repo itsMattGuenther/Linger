@@ -246,7 +246,7 @@ impl ObjectStore for LocalStore {
         // written (`write_part`), so the plan is needed only for the count.
         let (expected_parts, _) = super::part_plan(declared_bytes);
         if let Some(parts) = parts {
-            if parts.len() as u32 != expected_parts {
+            if u32::try_from(parts.len()) != Ok(expected_parts) {
                 anyhow::bail!("expected {expected_parts} parts, got {}", parts.len());
             }
         }
