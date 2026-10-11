@@ -114,6 +114,17 @@ a window built from a synchronous command deadlocks WebView2 (#205), so every
 window-building command in `src-tauri/src/window.rs` is `async`. No test code
 is shipped in the app. See [the testing strategy](testing-strategy.md).
 
+## How fast it opens
+
+`scripts/startup-time.mjs` opens a release build of the app again and
+again, signed in to two filled throwaway servers, and times it from the
+process starting to the list on screen, from outside: it photographs a
+screen of its own with `grim`, so it needs Hyprland. It also adds up the
+memory of the app and its WebKit processes, and their idle processor use.
+Give it two builds and they take turns, which is the only fair way to
+compare them on a machine doing other work. The build it needs, what it
+measures and what it found are in [performance.md](performance.md).
+
 ## Voice at raid size (#197)
 
 `crates/linger-sfu/tests/load.rs` puts 50 stand-in people in one voice room on

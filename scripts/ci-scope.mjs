@@ -13,6 +13,9 @@ export function classify(paths) {
   if (!paths.length) add(...domains);
   for (const path of paths) {
     if (path.startsWith("docs/") || path.endsWith(".md") || path === "LICENSE") continue;
+    // Run by hand on a desktop (docs/performance.md): nothing ships it, and the
+    // rules job runs its own tests on every change.
+    if (/^scripts\/startup-time(\.test)?\.mjs$/.test(path)) continue;
     if (path.startsWith("crates/linger-core/") || path.startsWith("client/src/generated/")) add(...domains);
     else if (path.startsWith("crates/linger-server/")) add("rust", "s3");
     else if (path.startsWith("client/src-tauri/")) add("shell", "packages");

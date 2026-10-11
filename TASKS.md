@@ -328,7 +328,7 @@ one where it still makes sense, and is otherwise closed with a note.
   notes before touching history or visibility. **Decided 2026-09-26 (parity
   decision 21):** build it in the Buddy list client, as Pin in the message menu.
 
-- ⬜ **T-910 · Measure the release's size and running cost** — effort: **medium**
+- 🟡 **T-910 · Measure the release's size and running cost** — effort: **medium**
   Record installer size, cold launch time, total process memory and idle CPU
   on Windows and Linux; include WebView processes. Repeat after an extended
   session with several rooms and during four-person voice. Check how retained
@@ -336,6 +336,12 @@ one where it still makes sense, and is otherwise closed with a note.
   *Accept:* versioned measurements with hardware and method, explicit future
   regression budgets, and any observed growth recorded as a focused follow-up.
   Do not change history storage without first reading M10's notes.
+  **Started 2026-10-11:** Linux, on one fast desktop, in
+  `docs/performance.md`, with budgets: opening (after a restart, cold and
+  warm), memory, idle processor use and sizes, for 0.4.10 and the night
+  audit's combined branch. `scripts/startup-time.mjs` measures it again. It
+  opens in about a second, not SPEC §7's 400 ms. Left: Windows (the page has
+  the steps for a friend), a long session, four-person voice, history growth.
 
 - ✅ **T-921 · Show a private room's occupants as around to outsiders** — effort:
   **medium**

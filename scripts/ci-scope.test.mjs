@@ -23,6 +23,10 @@ test("the packaged audio and video checks' own files rebuild only the packages",
     "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.sh"])
     assert.deepEqual(active([path]), ["packages"], path);
 });
+test("the startup measurement is run by hand, and only its own tests run for it", () => {
+  assert.deepEqual(active(["scripts/startup-time.mjs", "scripts/startup-time.test.mjs"]), []);
+  assert.equal(active(["scripts/startup-time.sh"]).length, 6);
+});
 test("server changes include real storage tests", () => {
   assert.deepEqual(active(["crates/linger-server/src/storage.rs"]), ["rust", "s3"]);
 });

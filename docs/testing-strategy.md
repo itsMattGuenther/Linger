@@ -59,6 +59,7 @@ only changes documentation.
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
 | The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages |
 | `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
+| The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
 | Shared types (`crates/linger-core/`, `client/src/generated/`), CI, `scripts/`, anything else | Everything | Everything |
 
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
@@ -66,7 +67,7 @@ AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
-`scripts/issue-label.test.mjs`,
+`scripts/issue-label.test.mjs`, `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, and `scripts/tidy-branches-test.sh`).
 
