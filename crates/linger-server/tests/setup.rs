@@ -97,3 +97,48 @@ async fn fresh_server_completes_setup_exactly_once() {
     assert_eq!(info.name, "the garage");
     assert_eq!(info.member_count, 1);
 }
+
+/// Hashing can be refused while the server is busy with other people's
+/// passwords (#495). The setup link is the host's only way in, so a refusal
+/// must leave it working; and a wrong token must not get as far as hashing.
+#[tokio::test]
+async fn a_busy_server_does_not_burn_the_setup_link() {
+    let server = common::spawn_server().await;
+    let token = server
+        .state
+        .setup
+        .peek()
+        .expect("a fresh server has a token");
+    let setup = |token: String| {
+        reqwest::Client::new()
+            .post(server.url("/setup"))
+            .json(&serde_json::json!({
+                "token": token, "server_name": "the garage", "username": "matt",
+                "display_name": "Matt", "password": "correct horse battery",
+            }))
+            .send()
+    };
+
+    let wrong = setup("not-the-token".into()).await.unwrap();
+    assert_eq!(wrong.status(), 403);
+    assert_eq!(server.state.passwords.started(), 0, "a wrong token hashed");
+
+    // Somebody else's hashing has every turn, for longer than setup waits.
+    let turns = u32::try_from(linger_server::auth::PASSWORD_WORK_AT_ONCE).unwrap();
+    let taken = server
+        .state
+        .passwords
+        .turns
+        .clone()
+        .acquire_many_owned(turns)
+        .await
+        .unwrap();
+    let busy = setup(token.clone()).await.unwrap();
+    assert_eq!(busy.status(), 429);
+    assert_eq!(server.state.setup.peek().as_deref(), Some(token.as_str()));
+
+    drop(taken);
+    let done = setup(token).await.unwrap();
+    assert_eq!(done.status(), 200);
+    assert!(server.state.setup.peek().is_none());
+}

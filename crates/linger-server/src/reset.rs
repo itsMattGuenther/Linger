@@ -62,7 +62,12 @@ pub async fn reset_password(
     };
     let user_id = UserId::from_slice(&id)?;
 
-    let password_hash = auth::hash_password(new_password.to_string()).await?;
+    // One hash from a command run by hand, with the server stopped: there is
+    // nothing to share turns with, so no `PasswordWork` (#495). Still off the
+    // reactor.
+    let password = new_password.to_string();
+    let password_hash =
+        tokio::task::spawn_blocking(move || auth::hash_password_sync(&password)).await??;
     sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
         .bind(password_hash)
         .bind(&id)

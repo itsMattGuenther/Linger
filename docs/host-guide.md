@@ -626,6 +626,17 @@ Do not share your `.env` or setup token when asking for help.
   account, it is gone for good — that is deliberate. If no account was made
   but the link was exposed or lost, `docker compose restart linger` prints a
   new one and invalidates the old one.
+- **People are told to slow down when they've barely tried.** Each address
+  gets 5 sign-in tries a minute and 60 sign-ups an hour. The server takes the
+  address from the connection. It believes the `X-Forwarded-For` header only
+  when the connection comes from this machine or a private network, as Caddy's
+  does, and then only the header's last entry, the one that proxy wrote. The
+  shipped `Caddyfile` needs nothing more. A proxy of your own instead of Caddy
+  has to set that header (nginx: `proxy_set_header X-Forwarded-For
+  $proxy_add_x_forwarded_for;`), or everybody counts as the proxy and shares
+  one allowance. Behind a second proxy in front of Caddy, such as Cloudflare's,
+  the address the server sees is that proxy's, so people who come through the
+  same one share an allowance.
 - **The startup log warns that `LINGER_DOMAIN` is not set.** Then your friends
   cannot connect, whatever else looks fine. The app only talks to `https`
   addresses. Go back to [Before you start](#before-you-start).

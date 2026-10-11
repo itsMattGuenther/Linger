@@ -10,7 +10,7 @@ use linger_core::UserId;
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
-use crate::{auth, validate};
+use crate::validate;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -46,12 +46,18 @@ async fn complete(
     }
 
     // Validate everything above *before* burning the one-shot token, so a typo
-    // in the form doesn't brick first-run.
+    // in the form doesn't brick first-run. The hash goes before it too: it can
+    // be refused while the server is busy hashing (#495), and that must not
+    // cost the host their only link. Nobody without the token gets that far,
+    // so a stranger still can't make this hash anything.
+    if !state.setup.matches(&req.token) {
+        return Err(ApiError::forbidden("That setup link isn't valid."));
+    }
+    let password_hash = state.passwords.hash(req.password).await?;
     if !state.setup.consume(&req.token) {
         return Err(ApiError::forbidden("That setup link isn't valid."));
     }
 
-    let password_hash = auth::hash_password(req.password).await?;
     let host_id = UserId::new();
     let now = now_ms();
 

@@ -1,6 +1,7 @@
 //! Authentication (ARCHITECTURE §7, PROTOCOL §2).
 //!
-//! - Passwords: argon2id `m=19456, t=2, p=1` — hashing runs on the blocking pool.
+//! - Passwords: argon2id `m=19456, t=2, p=1` — hashing runs on the blocking pool,
+//!   [`PASSWORD_WORK_AT_ONCE`] at a time across the whole server ([`PasswordWork`]).
 //! - Access tokens: EdDSA JWTs, 15 min. The Ed25519 key is generated at first
 //!   boot into the data dir; losing it only invalidates outstanding access
 //!   tokens (15 min of pain), unlike the update-signing key.
@@ -8,8 +9,11 @@
 //!   starts a *family*; rotation keeps the family; presenting an
 //!   already-rotated token revokes the entire family (stolen-token detector).
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -18,14 +22,17 @@ use axum::extract::connect_info::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
+use axum::http::{HeaderMap, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
 use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, REFRESH_TOKEN_TTL_DAYS};
+use linger_core::wire::ErrorCode;
 use linger_core::UserId;
 use rand::RngCore;
 use ring::signature::KeyPair;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use crate::db::now_ms;
@@ -43,7 +50,8 @@ fn argon2() -> Argon2<'static> {
 }
 
 /// Synchronous hash — only for callers already off the reactor (or one-time
-/// initialization like the login timing dummy). Handlers use [`hash_password`].
+/// initialization like the login timing dummy). Handlers use
+/// [`PasswordWork::hash`], which takes a turn first.
 pub fn hash_password_sync(password: &str) -> anyhow::Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     argon2()
@@ -52,20 +60,145 @@ pub fn hash_password_sync(password: &str) -> anyhow::Result<String> {
         .map_err(|e| anyhow::anyhow!("argon2 hash: {e}"))
 }
 
-/// Hash a password on the blocking pool (argon2id is deliberately expensive).
-pub async fn hash_password(password: String) -> anyhow::Result<String> {
-    tokio::task::spawn_blocking(move || hash_password_sync(&password)).await?
+/// Constant-work verification. Same rule as [`hash_password_sync`]: handlers
+/// go through [`PasswordWork::verify`].
+fn verify_password_sync(password: &str, hash: &str) -> anyhow::Result<bool> {
+    let parsed = PasswordHash::new(hash).map_err(|e| anyhow::anyhow!("bad hash: {e}"))?;
+    Ok(argon2()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok())
 }
 
-/// Constant-work verification on the blocking pool.
-pub async fn verify_password(password: String, hash: String) -> anyhow::Result<bool> {
-    tokio::task::spawn_blocking(move || {
-        let parsed = PasswordHash::new(&hash).map_err(|e| anyhow::anyhow!("bad hash: {e}"))?;
-        Ok(argon2()
-            .verify_password(password.as_bytes(), &parsed)
-            .is_ok())
-    })
-    .await?
+/// How many argon2id hashes and checks run at the same time, across the
+/// whole server (#495).
+///
+/// Each one holds about 19 MB (`m=19456`) and one core (`p=1`) for as long as
+/// it runs, and they run on tokio's blocking pool, which would start hundreds
+/// of threads for hundreds of requests. Four caps what passwords can cost the
+/// host at about 76 MB, whatever arrives. It is also about the core count of
+/// the small machines Linger runs on, where more at once would finish no
+/// sooner and only hold more memory; on a bigger machine four still get
+/// through dozens of sign-ins a second, more than a server of friends sends.
+pub const PASSWORD_WORK_AT_ONCE: usize = 4;
+
+/// How long a sign-in or sign-up waits for a turn before it is refused with
+/// `RATE_LIMITED`. Waiting rather than refusing straight away means a real
+/// person who signs in at the same moment as a few others only waits a
+/// moment. A flood is turned away instead of piling up. Well inside the
+/// client's 30-second request timeout, so the person sees the refusal's
+/// words rather than a dropped connection.
+pub const PASSWORD_WORK_WAIT: Duration = Duration::from_secs(5);
+
+/// The turns password work takes (#495). Every argon2id hash and check a
+/// request makes goes through here: sign-in, sign-up, first-run setup and
+/// changing a password. A stranger hammering sign-in can make the server
+/// queue, never make it hold more than [`PASSWORD_WORK_AT_ONCE`] hashes'
+/// worth of memory.
+pub struct PasswordWork {
+    /// One permit per hash or check running. Public so a test can take them
+    /// all, the way tests take `AppState::exports`.
+    pub turns: Arc<Semaphore>,
+    wait: Duration,
+    waiting: AtomicUsize,
+    started: AtomicU64,
+}
+
+impl PasswordWork {
+    #[must_use]
+    pub fn new(at_once: usize, wait: Duration) -> Self {
+        Self {
+            turns: Arc::new(Semaphore::new(at_once)),
+            wait,
+            waiting: AtomicUsize::new(0),
+            started: AtomicU64::new(0),
+        }
+    }
+
+    /// Hash a new password, once a turn is free.
+    pub async fn hash(&self, password: String) -> Result<String, ApiError> {
+        Ok(self.run(move || hash_password_sync(&password)).await??)
+    }
+
+    /// Check a password against its stored hash, once a turn is free.
+    pub async fn verify(&self, password: String, hash: String) -> Result<bool, ApiError> {
+        Ok(self
+            .run(move || verify_password_sync(&password, &hash))
+            .await??)
+    }
+
+    /// How many hashes and checks have been given a turn since the server
+    /// started. Tests count with it: a request that should cost nothing
+    /// must leave it where it was.
+    #[must_use]
+    pub fn started(&self) -> u64 {
+        self.started.load(Ordering::SeqCst)
+    }
+
+    /// How many requests are waiting for a turn right now.
+    #[must_use]
+    pub fn waiting(&self) -> usize {
+        self.waiting.load(Ordering::SeqCst)
+    }
+
+    /// Run `work` on the blocking pool once a turn is free, or refuse after
+    /// [`PASSWORD_WORK_WAIT`].
+    ///
+    /// The turn moves into the blocking task and is given back when the work
+    /// is done, not when the request is. A request whose client hangs up is
+    /// dropped mid-await, but its hash runs to the end on its thread anyway;
+    /// if the turn went back with the request, opening and closing
+    /// connections would walk straight past the cap.
+    async fn run<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, ApiError> {
+        let turn = {
+            let _waiting = Waiting::start(&self.waiting);
+            tokio::time::timeout(self.wait, self.turns.clone().acquire_owned()).await
+        };
+        let turn = match turn {
+            Ok(Ok(turn)) => turn,
+            // The semaphore is never closed.
+            Ok(Err(closed)) => return Err(anyhow::Error::from(closed).into()),
+            Err(_) => return Err(busy(self.wait)),
+        };
+        self.started.fetch_add(1, Ordering::SeqCst);
+        tokio::task::spawn_blocking(move || {
+            let _turn = turn;
+            work()
+        })
+        .await
+        .map_err(|joined| anyhow::Error::from(joined).into())
+    }
+}
+
+/// Counts a request as waiting for as long as it is, including when it is
+/// dropped while it waits.
+struct Waiting<'a>(&'a AtomicUsize);
+
+impl<'a> Waiting<'a> {
+    fn start(count: &'a AtomicUsize) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(count)
+    }
+}
+
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// No turn came free in time. Honest about why, unlike the per-address limits'
+/// "Slow down a little.": this person may have done nothing but arrive at a
+/// busy moment.
+fn busy(wait: Duration) -> ApiError {
+    ApiError {
+        status: StatusCode::TOO_MANY_REQUESTS,
+        code: ErrorCode::RateLimited,
+        message: "The server is busy. Try again in a moment.".into(),
+        retry_after_ms: Some(u64::try_from(wait.as_millis()).unwrap_or(u64::MAX)),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -454,22 +587,270 @@ impl FromRequestParts<AppState> for HostOrCohost {
     }
 }
 
-/// Best client-IP guess for per-IP limits: first `X-Forwarded-For` entry when a
-/// reverse proxy set one, else the socket peer.
+/// The address the per-address limits (sign-in, sign-up) are kept against.
+///
+/// The connection's own peer, unless that peer is a proxy we can believe: one
+/// on this machine or on a private network, which is how the shipped Caddy
+/// container reaches the server over Docker's network. Only then is
+/// `X-Forwarded-For` read, and only its **last** entry, the one the nearest
+/// proxy wrote. Every entry before it is whatever the client sent. This used
+/// to take the first, so each request could claim a new address and walk past
+/// the limits, from anywhere (#495).
+///
+/// Caddy replaces the header for a client it doesn't trust, so behind it the
+/// last entry is the person's own address. A proxy that appends instead
+/// (nginx's `$proxy_add_x_forwarded_for`) puts the address it saw last, which
+/// is still the right one. A header with nothing usable at the end counts as
+/// the proxy itself: everybody behind it then shares one allowance, which is
+/// the safe way to be wrong.
 #[must_use]
 pub fn client_ip(parts: &Parts) -> String {
-    if let Some(xff) = parts
-        .headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        return xff.to_string();
-    }
-    parts
+    let Some(peer) = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
-        .map_or_else(|| "unknown".to_string(), |c| c.0.ip().to_string())
+        .map(|c| c.0.ip().to_canonical())
+    else {
+        return "unknown".to_string();
+    };
+    if !is_trusted_proxy(peer) {
+        return peer.to_string();
+    }
+    last_forwarded(&parts.headers).unwrap_or(peer).to_string()
+}
+
+/// Loopback, or a private network (IPv4 private ranges, IPv6 unique local).
+/// Not CGNAT or link-local: those are where people arrive from on Tailscale
+/// and on a LAN with no router, not where a proxy sits.
+fn is_trusted_proxy(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+        IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
+    }
+}
+
+/// The last `X-Forwarded-For` entry, if it is an address. Several header
+/// lines read as one list, in order.
+fn last_forwarded(headers: &HeaderMap) -> Option<IpAddr> {
+    let line = headers.get_all("x-forwarded-for").iter().next_back()?;
+    let entry = line.to_str().ok()?.rsplit(',').next()?.trim();
+    entry.parse::<IpAddr>().ok().map(|ip| ip.to_canonical())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Condvar, Mutex};
+
+    use super::*;
+
+    /// A request as the router hands it over: from `peer`, with these
+    /// `X-Forwarded-For` lines.
+    fn request_from(peer: &str, forwarded: &[&str]) -> Parts {
+        let mut request = axum::http::Request::builder();
+        for line in forwarded {
+            request = request.header("x-forwarded-for", *line);
+        }
+        let (mut parts, ()) = request.body(()).unwrap().into_parts();
+        parts
+            .extensions
+            .insert(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        parts
+    }
+
+    #[test]
+    fn a_public_peer_is_its_own_address_whatever_it_claims() {
+        // Somebody reaching the server directly writes whatever they like.
+        let parts = request_from("203.0.113.7:51000", &["198.51.100.1"]);
+        assert_eq!(client_ip(&parts), "203.0.113.7");
+        let parts = request_from("[2001:db8::7]:51000", &["198.51.100.1"]);
+        assert_eq!(client_ip(&parts), "2001:db8::7");
+    }
+
+    #[test]
+    fn behind_a_proxy_the_last_entry_counts_not_the_first() {
+        // The client wrote the first entry; the proxy appended the last.
+        let parts = request_from("172.18.0.3:40000", &["10.9.8.7, 203.0.113.7"]);
+        assert_eq!(client_ip(&parts), "203.0.113.7");
+        // The same thing split over two header lines.
+        let parts = request_from("172.18.0.3:40000", &["10.9.8.7", "203.0.113.7"]);
+        assert_eq!(client_ip(&parts), "203.0.113.7");
+        // Caddy's own: one entry, the person's address.
+        let parts = request_from("172.18.0.3:40000", &["203.0.113.7"]);
+        assert_eq!(client_ip(&parts), "203.0.113.7");
+    }
+
+    #[test]
+    fn loopback_and_private_peers_are_proxies_and_others_are_not() {
+        for proxy in [
+            "127.0.0.1:1",
+            "10.0.0.2:1",
+            "172.16.0.2:1",
+            "192.168.1.2:1",
+            "[::1]:1",
+            "[fd00::2]:1",
+            "[::ffff:172.18.0.3]:1",
+        ] {
+            let parts = request_from(proxy, &["203.0.113.7"]);
+            assert_eq!(client_ip(&parts), "203.0.113.7", "{proxy} is a proxy");
+        }
+        for stranger in ["100.64.0.2:1", "169.254.1.2:1", "[fe80::2]:1", "8.8.8.8:1"] {
+            let parts = request_from(stranger, &["203.0.113.7"]);
+            assert_ne!(client_ip(&parts), "203.0.113.7", "{stranger} is not");
+        }
+    }
+
+    #[test]
+    fn a_proxy_with_nothing_usable_in_the_header_is_its_own_address() {
+        for line in ["", "not an address", "203.0.113.7, ", "203.0.113.7:443"] {
+            let parts = request_from("172.18.0.3:40000", &[line]);
+            assert_eq!(client_ip(&parts), "172.18.0.3", "{line:?}");
+        }
+        let parts = request_from("[::ffff:172.18.0.3]:40000", &[]);
+        assert_eq!(client_ip(&parts), "172.18.0.3");
+    }
+
+    /// Work that stays running until the test lets it finish, and says when
+    /// it starts and how many ran at once.
+    #[derive(Default)]
+    struct Held {
+        open: Mutex<bool>,
+        opened: Condvar,
+        running: AtomicUsize,
+        most: AtomicUsize,
+    }
+
+    impl Held {
+        fn work(self: &Arc<Self>) -> impl FnOnce() + Send + 'static {
+            let held = self.clone();
+            move || {
+                let now = held.running.fetch_add(1, Ordering::SeqCst) + 1;
+                held.most.fetch_max(now, Ordering::SeqCst);
+                let mut open = held.open.lock().unwrap();
+                while !*open {
+                    open = held.opened.wait(open).unwrap();
+                }
+                held.running.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+
+        fn release(&self) {
+            *self
+                .open
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+            self.opened.notify_all();
+        }
+    }
+
+    /// Lets held work finish when a test ends, however it ends. A failed
+    /// assertion has to fail the test, not leave threads blocked that the
+    /// runtime then waits on forever as it shuts down.
+    struct ReleaseOnDrop(Arc<Held>);
+
+    impl Drop for ReleaseOnDrop {
+        fn drop(&mut self) {
+            self.0.release();
+        }
+    }
+
+    /// Polls until `ready`, which must come true on its own. Waits for the
+    /// thing itself, never a fixed time (docs/testing-strategy.md); the bound
+    /// only turns a hang into a failure.
+    async fn until(what: &str, ready: impl Fn() -> bool) {
+        for _ in 0..2_000 {
+            if ready() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("never happened: {what}");
+    }
+
+    #[tokio::test]
+    async fn no_more_than_the_turns_run_at_once_and_the_rest_wait() {
+        let work = Arc::new(PasswordWork::new(2, Duration::from_secs(600)));
+        let held = Arc::new(Held::default());
+        let _release = ReleaseOnDrop(held.clone());
+        let mut tasks = Vec::new();
+        for _ in 0..6 {
+            let (work, job) = (work.clone(), held.work());
+            tasks.push(tokio::spawn(async move { work.run(job).await }));
+        }
+
+        // Everybody has arrived, and everybody given a turn has got as far
+        // as running: a turn is taken a moment before its thread starts.
+        until("six requests at the door, the turns' work running", || {
+            let started = work.started();
+            started + work.waiting() as u64 == 6
+                && held.running.load(Ordering::SeqCst) as u64 == started
+        })
+        .await;
+        assert_eq!(work.started(), 2);
+        assert_eq!(work.waiting(), 4);
+        assert_eq!(held.running.load(Ordering::SeqCst), 2);
+
+        held.release();
+        for task in tasks {
+            assert!(task.await.unwrap().is_ok(), "a waiting request was refused");
+        }
+        assert_eq!(work.started(), 6);
+        assert_eq!(held.most.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn a_request_that_cannot_get_a_turn_in_time_is_told_the_server_is_busy() {
+        let work = PasswordWork::new(1, Duration::from_millis(50));
+        let _taken = work.turns.clone().acquire_owned().await.unwrap();
+
+        let refused = work.run(|| ()).await.unwrap_err();
+        assert_eq!(refused.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(refused.code, ErrorCode::RateLimited);
+        assert_eq!(refused.retry_after_ms, Some(50));
+        assert_eq!(work.started(), 0, "it hashed without a turn");
+        assert_eq!(work.waiting(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_turn_is_held_until_the_work_ends_even_when_the_request_is_gone() {
+        let work = Arc::new(PasswordWork::new(1, Duration::from_secs(600)));
+        let held = Arc::new(Held::default());
+        let _release = ReleaseOnDrop(held.clone());
+        let request = {
+            let (work, job) = (work.clone(), held.work());
+            tokio::spawn(async move { work.run(job).await })
+        };
+        until("the work to start", || {
+            held.running.load(Ordering::SeqCst) == 1
+        })
+        .await;
+
+        // The client hangs up: the request is dropped, the hash is not.
+        request.abort();
+        assert!(request.await.unwrap_err().is_cancelled());
+        assert_eq!(
+            work.turns.available_permits(),
+            0,
+            "the turn left with the request"
+        );
+
+        held.release();
+        until("the turn to come back", || {
+            work.turns.available_permits() == 1
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn hashes_and_checks_agree() {
+        let work = PasswordWork::new(1, Duration::from_secs(600));
+        let hash = work.hash("correct horse battery".into()).await.unwrap();
+        assert!(work
+            .verify("correct horse battery".into(), hash.clone())
+            .await
+            .unwrap());
+        assert!(!work
+            .verify("wrong horse battery".into(), hash)
+            .await
+            .unwrap());
+        assert_eq!(work.started(), 3);
+    }
 }

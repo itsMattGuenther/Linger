@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::Semaphore;
 
-use crate::auth::JwtKeys;
+use crate::auth::{JwtKeys, PasswordWork, PASSWORD_WORK_AT_ONCE, PASSWORD_WORK_WAIT};
 use crate::config::{Config, Storage};
 use crate::db::Db;
 use crate::gateway::Gateway;
@@ -32,6 +32,10 @@ pub struct AppState {
     /// The per-member limits bound what one person can ask for; this bounds
     /// what everybody asking at once costs the host's disk (`export.rs`).
     pub exports: Arc<Semaphore>,
+    /// Turns for argon2id hashing and checking, server-wide (`auth.rs`, #495).
+    /// The per-address limits bound one stranger; this bounds everybody at
+    /// once, so the memory passwords take has a ceiling.
+    pub passwords: Arc<PasswordWork>,
 }
 
 impl AppState {
@@ -87,6 +91,7 @@ impl AppState {
             storage,
             local,
             exports: Arc::new(Semaphore::new(crate::export::BUILDING_AT_ONCE)),
+            passwords: Arc::new(PasswordWork::new(PASSWORD_WORK_AT_ONCE, PASSWORD_WORK_WAIT)),
         })
     }
 }
