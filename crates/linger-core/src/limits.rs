@@ -242,6 +242,19 @@ pub const RATE_TYPING_PER_ROOM: (u32, u64) = (1, 4);
 /// told as these few, then as the newest once the limit allows. An app sends
 /// a handful an hour: idle, back, away.
 pub const RATE_PRESENCE: (u32, u64) = (5, 10);
+/// Moves told to everybody, per person (`room.focus`, PROTOCOL §8, #527).
+/// Each can send a `room.leave`, a `room.enter`, two `room.occupancy` and a
+/// `presence.update` to everybody connected. Past it the move still happens
+/// at once, and everybody is told where the person is by their next turn:
+/// somebody clicking through rooms faster than this is told a moment late,
+/// never wrong.
+pub const RATE_ROOM_FOCUS: (u32, u64) = (10, 10);
+/// `voice.join` and `voice.leave` per session (PROTOCOL §8, #527). Each seat
+/// taken or left makes the forwarding server offer everybody in that voice
+/// room a fresh connection, and a mute or deafen tells the whole room. An
+/// evening's joining, moving and muting stays well inside it; past it, the
+/// newest request is taken at the session's next turn.
+pub const RATE_VOICE_SEAT: (u32, u64) = (10, 10);
 /// Voice answers and restarts, per session (PROTOCOL §8). Loose, because a
 /// busy room re-offers everybody each time somebody comes or goes, and each
 /// offer wants an answer; a limit tight enough to be interesting would break

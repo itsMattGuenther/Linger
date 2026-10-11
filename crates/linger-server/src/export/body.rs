@@ -537,6 +537,197 @@ fn trim_address(found: &str) -> &str {
     raw
 }
 
+// ---------------------------------------------------------------------------
+// A link whose words name another site (#580)
+// ---------------------------------------------------------------------------
+
+/// The host a link really goes to, when its `words` name a different one, or
+/// `None` when there's nothing to say: the words aren't an address, the link
+/// isn't to a web page, or the words name the same site.
+///
+/// The app's rule (`client/src/lib/linkHost.ts`), so a page in the archive
+/// says what the app said. `[www.paypal.com](https://evil.example)` reads as
+/// paypal.com, and pointing at it shows the truth, but a phone can't point,
+/// so the real site is drawn beside the words. Ordinary words ("the menu")
+/// make no claim about where they go and are left alone. Hosts are compared
+/// as the URL parser reads them, never by how they look: a Cyrillic `а` in
+/// `pаypal.com` doesn't match the Latin name, and the real site is shown as
+/// the computer reads it (`xn--pypal-4ve.com`).
+///
+/// The same site is the same host once a leading `www.` is dropped, or one
+/// host inside the other at a dot (`login.paypal.com` and `paypal.com`), so
+/// `paypal.com.evil.example` is not paypal.com.
+#[must_use]
+pub fn disguised_host(words: &str, href: &str) -> Option<String> {
+    let real = web_host(href)?;
+    let said = words_host(words)?;
+    // `user@host` is a classic disguise: the words show the part before the
+    // `@`, and the browser goes to the part after it.
+    if said.userinfo {
+        return Some(real);
+    }
+    // Letters the computer doesn't read as they look: whatever they look
+    // like, the real name is the `xn--` one, so it is shown.
+    if !said.typed.chars().all(|c| (' '..='~').contains(&c)) {
+        return Some(real);
+    }
+    (!same_site(&said.host, &real)).then_some(real)
+}
+
+/// The host of a web link, as the URL parser reads it.
+fn web_host(href: &str) -> Option<String> {
+    let url = Url::parse(href).ok()?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return None;
+    }
+    url.host_str()
+        .filter(|host| !host.is_empty())
+        .map(str::to_string)
+}
+
+/// What a link's words name, when they read as an address or a domain.
+struct WordsHost {
+    /// The parser's reading of it.
+    host: String,
+    /// The letters as typed, lowercased, without a port.
+    typed: String,
+    /// Whether a `user@` came before it.
+    userinfo: bool,
+}
+
+fn words_host(words: &str) -> Option<WordsHost> {
+    // Full stops from other alphabets (`paypal。com`) are read as dots by the
+    // URL parser, so they are here too.
+    let text: String = trim_address(words.trim())
+        .chars()
+        .map(|c| match c {
+            '\u{3002}' | '\u{ff0e}' | '\u{ff61}' => '.',
+            other => other,
+        })
+        .collect();
+    if text.is_empty() || text.chars().any(char::is_whitespace) {
+        return None;
+    }
+
+    let (url, authority) = if has_scheme(&text) {
+        let url = Url::parse(&text).ok()?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return None;
+        }
+        let after = &text[text.find("//")? + 2..];
+        let authority = after
+            .split(['/', '?', '#', '\\'])
+            .next()
+            .unwrap_or_default();
+        (url, authority)
+    } else if bare_domain(&text) {
+        let url = Url::parse(&format!("https://{text}")).ok()?;
+        let authority = text.split(['/', '?', '#']).next().unwrap_or_default();
+        (url, authority)
+    } else {
+        return None;
+    };
+
+    let at = authority.rfind('@');
+    let host_part = at.map_or(authority, |at| &authority[at + 1..]);
+    let typed = strip_port(host_part).to_lowercase();
+    // A name with a dot and a real-looking last part, or an IPv4 address
+    // written out: `3.14` and `v1.2` are numbers, not places.
+    let labels: Vec<&str> = typed
+        .strip_suffix('.')
+        .unwrap_or(&typed)
+        .split('.')
+        .collect();
+    let top = labels.last().copied().unwrap_or_default();
+    if labels.len() < 2 || !(dotted_quad(&typed) || top_label(top)) {
+        return None;
+    }
+    let host = url.host_str().filter(|h| !h.is_empty())?.to_string();
+    Some(WordsHost {
+        host,
+        typed,
+        userinfo: at.is_some(),
+    })
+}
+
+/// `scheme://` at the start: a letter, then letters, digits, `+`, `.`, `-`.
+fn has_scheme(text: &str) -> bool {
+    let Some(end) = text.find("://") else {
+        return false;
+    };
+    let scheme = &text[..end];
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
+}
+
+/// Words that read as a bare domain, maybe with a port and a path:
+/// `paypal.com`, `www.paypal.com:8443/login`. At least one dot, no spaces.
+fn bare_domain(text: &str) -> bool {
+    let end = text.find(['/', '?', '#']).unwrap_or(text.len());
+    let host_port = &text[..end];
+    let host = match host_port.split_once(':') {
+        Some((host, port)) => {
+            let digits = (1..=5).contains(&port.len()) && port.chars().all(|c| c.is_ascii_digit());
+            if !digits {
+                return false;
+            }
+            host
+        }
+        None => host_port,
+    };
+    if host
+        .chars()
+        .any(|c| matches!(c, '@' | ':' | '\\') || c.is_whitespace())
+    {
+        return false;
+    }
+    // Something, a dot, and a last part with no dot in it.
+    host.rfind('.')
+        .is_some_and(|dot| dot >= 1 && dot + 1 < host.len())
+}
+
+/// A host without its `:port`.
+fn strip_port(host: &str) -> &str {
+    match host.rsplit_once(':') {
+        Some((name, port)) if port.chars().all(|c| c.is_ascii_digit()) => name,
+        _ => host,
+    }
+}
+
+/// Four numbers with dots, as people write an IPv4 address.
+fn dotted_quad(text: &str) -> bool {
+    let parts: Vec<&str> = text.split('.').collect();
+    parts.len() == 4
+        && parts
+            .iter()
+            .all(|p| (1..=3).contains(&p.len()) && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// The last label of a name: two or more letters in any alphabet, or an
+/// `xn--` name.
+fn top_label(label: &str) -> bool {
+    let lower = label.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("xn--") {
+        return !rest.is_empty()
+            && rest
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    }
+    label.chars().count() >= 2 && label.chars().all(char::is_alphabetic)
+}
+
+fn same_site(a: &str, b: &str) -> bool {
+    let (left, right) = (bare_host(a), bare_host(b));
+    left == right || left.ends_with(&format!(".{right}")) || right.ends_with(&format!(".{left}"))
+}
+
+/// A host without a trailing dot or a leading `www.`.
+fn bare_host(host: &str) -> &str {
+    let host = host.strip_suffix('.').unwrap_or(host);
+    host.strip_prefix("www.").unwrap_or(host)
+}
+
 fn match_emphasis(
     source: &[char],
     at: usize,
@@ -649,12 +840,22 @@ fn render_inline(nodes: &[Inline], out: &mut String) {
             Inline::Link { href, children } => {
                 // The address shows when pointed at, and it is always the
                 // real one: `href` is what `safe_href` made of the target.
-                let href = escape(href);
+                let shown = escape(href);
                 out.push_str(&format!(
-                    "<a href=\"{href}\" title=\"{href}\" rel=\"noreferrer\">"
+                    "<a href=\"{shown}\" title=\"{shown}\" rel=\"noreferrer\">"
                 ));
                 render_inline(children, out);
                 out.push_str("</a>");
+                // Words that name another site get the real one beside them
+                // (#580), outside the link, so it reads without pointing.
+                let mut words = String::new();
+                flatten_inline(children, &mut words);
+                if let Some(real) = disguised_host(&words, href) {
+                    let real = escape(&real);
+                    out.push_str(&format!(
+                        "<span class=\"real\" title=\"This link goes to {real}\"> ({real})</span>"
+                    ));
+                }
             }
         }
     }
@@ -749,6 +950,149 @@ mod tests {
         assert_eq!(to_html("xhttps://a.example"), "<p>xhttps://a.example</p>");
         let nested = to_html("[https://a.example](https://b.example)");
         assert_eq!(nested.matches("<a ").count(), 1, "{nested}");
+    }
+
+    // The client's cases for the same rule (`client/src/lib/linkHost.test.ts`,
+    // #580), one for one, so the archive says what the app said.
+
+    fn real(words: &str, href: &str) -> Option<String> {
+        disguised_host(words, href)
+    }
+
+    #[test]
+    fn a_link_names_the_real_site_when_its_words_are_another_domain() {
+        let evil = Some("evil.example".to_string());
+        assert_eq!(real("www.paypal.com", "https://evil.example/"), evil);
+        assert_eq!(real("paypal.com", "https://evil.example/steal"), evil);
+        assert_eq!(
+            real("https://paypal.com/login", "https://evil.example/"),
+            evil
+        );
+        assert_eq!(real("http://paypal.com", "http://evil.example/"), evil);
+        assert_eq!(
+            real("paypal.com:8443/login?next=1", "https://evil.example/"),
+            evil
+        );
+        assert_eq!(real("192.168.1.1", "https://evil.example/"), evil);
+        assert_eq!(
+            real("paypal.com", "https://203.0.113.5/"),
+            Some("203.0.113.5".to_string())
+        );
+    }
+
+    #[test]
+    fn a_link_with_ordinary_words_is_left_alone() {
+        for words in [
+            "the menu",
+            "click here",
+            "this",
+            "v1.2",
+            "3.14",
+            "e.g.",
+            "Saturday night",
+            "paypal",
+            "",
+        ] {
+            assert_eq!(real(words, "https://evil.example/"), None, "{words:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_to_the_site_its_words_name_says_nothing_more() {
+        assert_eq!(real("paypal.com", "https://paypal.com/"), None);
+        assert_eq!(real("www.paypal.com", "https://paypal.com/"), None);
+        assert_eq!(real("paypal.com", "https://www.paypal.com/x"), None);
+        assert_eq!(real("PayPal.com", "https://paypal.com/"), None);
+        // A different part of the same site.
+        assert_eq!(real("paypal.com", "https://login.paypal.com/"), None);
+        assert_eq!(real("login.paypal.com", "https://paypal.com/"), None);
+        // A typed-out address draws as its own link.
+        assert_eq!(
+            real(
+                "https://linger.example/porch",
+                "https://linger.example/porch"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn the_same_site_only_counts_at_a_dot() {
+        assert_eq!(
+            real("paypal.com", "https://paypal.com.evil.example/"),
+            Some("paypal.com.evil.example".to_string())
+        );
+        assert_eq!(
+            real("paypal.com", "https://notpaypal.com/"),
+            Some("notpaypal.com".to_string())
+        );
+    }
+
+    #[test]
+    fn look_alike_letters_are_read_the_way_the_computer_does() {
+        // A Cyrillic а in the words: whatever it looks like, it isn't paypal.com.
+        assert_eq!(
+            real("p\u{430}ypal.com", "https://paypal.com/"),
+            Some("paypal.com".to_string())
+        );
+        assert_eq!(
+            real("https://p\u{430}ypal.com", "https://p\u{430}ypal.com/"),
+            Some("xn--pypal-4ve.com".to_string())
+        );
+        // Full stops from other alphabets are read as dots.
+        assert_eq!(
+            real("paypal\u{3002}com", "https://evil.example/"),
+            Some("evil.example".to_string())
+        );
+    }
+
+    #[test]
+    fn a_user_name_in_front_of_the_host_is_seen_through() {
+        assert_eq!(
+            real(
+                "https://paypal.com@evil.example",
+                "https://paypal.com@evil.example/"
+            ),
+            Some("evil.example".to_string())
+        );
+    }
+
+    #[test]
+    fn the_real_site_is_only_said_for_web_pages() {
+        assert_eq!(real("paypal.com", "mailto:someone@evil.example"), None);
+        assert_eq!(
+            real("mailto:someone@paypal.com", "https://evil.example/"),
+            None
+        );
+    }
+
+    #[test]
+    fn sentence_punctuation_comes_off_a_links_words() {
+        assert_eq!(real("paypal.com.", "https://paypal.com/"), None);
+        assert_eq!(
+            real("paypal.com!", "https://evil.example/"),
+            Some("evil.example".to_string())
+        );
+    }
+
+    #[test]
+    fn a_disguised_link_shows_where_it_goes_on_the_page() {
+        assert_eq!(
+            to_html("[www.paypal.com](https://evil.example/login)"),
+            "<p><a href=\"https://evil.example/login\" title=\"https://evil.example/login\" \
+             rel=\"noreferrer\">www.paypal.com</a><span class=\"real\" \
+             title=\"This link goes to evil.example\"> (evil.example)</span></p>"
+        );
+        // The words are flattened first, so formatting can't hide them.
+        assert!(to_html("[**paypal.com**](https://evil.example)").contains("(evil.example)"));
+        // Ordinary words and honest links draw as before.
+        assert!(!to_html("[the menu](https://evil.example)").contains("class=\"real\""));
+        assert!(!to_html("see https://paypal.com/a").contains("class=\"real\""));
+        // A look-alike's real name is the one the computer reads.
+        assert!(
+            to_html("[https://p\u{430}ypal.com](https://p\u{430}ypal.com)")
+                .contains("(xn--pypal-4ve.com)")
+        );
     }
 
     #[test]

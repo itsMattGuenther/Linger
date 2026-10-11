@@ -101,6 +101,7 @@ time,.meta{flex:none;font:12.5px/20px var(--font-mono);color:var(--text-muted);w
 .words code{padding:0 4px;border-radius:4px;background:var(--surface-sunken);font-family:var(--font-mono);font-size:12.5px}
 .words pre code{padding:0;background:none}
 .words ul,.words ol{padding-left:20px}
+.words .real{color:var(--text-secondary);unicode-bidi:isolate}
 .nowords{margin-left:16px;color:var(--text-muted)}
 .quote{display:flex;gap:6px;max-width:100%;margin:0 0 2px;padding-left:8px;border-left:2px solid var(--hairline-strong);color:var(--text-muted);font-size:12.5px;text-decoration:none;white-space:nowrap;overflow:hidden}
 .quote:hover{color:var(--text-secondary)}
