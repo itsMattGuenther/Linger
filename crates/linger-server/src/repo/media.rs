@@ -54,9 +54,9 @@ pub struct Query {
 #[derive(Debug, Clone)]
 pub struct Cursor {
     pub created_at: i64,
-    /// Uppercase, because that is what SQLite's `hex()` returns and the
-    /// comparison happens in SQL.
-    pub id_hex: String,
+    /// The id's 16 bytes, as stored, so SQL can compare and look it up as
+    /// the column it is.
+    pub id: [u8; 16],
 }
 
 impl Cursor {
@@ -68,14 +68,17 @@ impl Cursor {
             .next()
             .and_then(|value| value.parse::<i64>().ok())
             .ok_or_else(|| ApiError::validation("That's not a media cursor."))?;
-        let id_hex = parts
+        let mut id = [0u8; 16];
+        parts
             .next()
-            .filter(|value| value.len() == 32 && value.chars().all(|c| c.is_ascii_hexdigit()))
+            .and_then(|value| hex::decode_to_slice(value, &mut id).ok())
             .ok_or_else(|| ApiError::validation("That's not a media cursor."))?;
-        Ok(Self {
-            created_at,
-            id_hex: id_hex.to_ascii_uppercase(),
-        })
+        Ok(Self { created_at, id })
+    }
+
+    /// Uppercase hex, which is what SQLite's `hex()` returns.
+    fn id_hex(&self) -> String {
+        hex::encode_upper(self.id)
     }
 }
 
@@ -145,13 +148,16 @@ fn wants_attachments(kind: Option<MediaKind>) -> bool {
 /// Whether the item a cursor points at is a starred upload. Anything that is
 /// not an upload cannot be starred, so a miss is simply "no".
 async fn is_starred(db: &SqlitePool, cursor: &Cursor) -> Result<bool, ApiError> {
-    let found: Option<(Option<i64>,)> =
-        sqlx::query_as("SELECT starred_at FROM attachments WHERE hex(id) = ?")
-            .bind(&cursor.id_hex)
-            .fetch_optional(db)
-            .await?;
+    let found: Option<(Option<i64>,)> = sqlx::query_as(IS_STARRED_SQL)
+        .bind(cursor.id.to_vec())
+        .fetch_optional(db)
+        .await?;
     Ok(matches!(found, Some((Some(_),))))
 }
+
+/// The id is bound as the 16 bytes it is stored as. Comparing `hex(id)` to a
+/// string instead gives the same answer by reading every file's row (#518).
+pub(crate) const IS_STARRED_SQL: &str = "SELECT starred_at FROM attachments WHERE id = ?";
 
 /// `created_at`/`id` comparison against the cursor, as SQL. Two binds.
 fn cursor_sql(table: &str) -> String {
@@ -253,7 +259,7 @@ async fn attachment_groups(
         request = request
             .bind(cursor.created_at)
             .bind(cursor.created_at)
-            .bind(&cursor.id_hex);
+            .bind(cursor.id_hex());
     }
     request = request.bind(i64::from(query.limit));
 
@@ -354,7 +360,7 @@ async fn link_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiEr
             request = request
                 .bind(cursor.created_at)
                 .bind(cursor.created_at)
-                .bind(&cursor.id_hex);
+                .bind(cursor.id_hex());
         }
     }
     request = request.bind(i64::from(query.limit));
@@ -463,7 +469,7 @@ async fn pin_groups(db: &SqlitePool, query: &Query) -> Result<Vec<Group>, ApiErr
         request = request
             .bind(cursor.created_at)
             .bind(cursor.created_at)
-            .bind(&cursor.id_hex);
+            .bind(cursor.id_hex());
     }
     request = request.bind(i64::from(query.limit));
 
@@ -539,7 +545,7 @@ mod tests {
         let raw = cursor_of(1_724_000_000_000, &id.to_string());
         let parsed = Cursor::parse(&raw).unwrap();
         assert_eq!(parsed.created_at, 1_724_000_000_000);
-        assert_eq!(parsed.id_hex, hex::encode_upper(id.as_bytes()));
+        assert_eq!(&parsed.id, id.as_bytes());
     }
 
     #[test]
@@ -548,7 +554,7 @@ mod tests {
         let raw = format!("{}:2", cursor_of(17, &id.to_string()));
         let parsed = Cursor::parse(&raw).unwrap();
         assert_eq!(parsed.created_at, 17);
-        assert_eq!(parsed.id_hex, hex::encode_upper(id.as_bytes()));
+        assert_eq!(&parsed.id, id.as_bytes());
     }
 
     #[test]

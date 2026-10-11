@@ -91,3 +91,13 @@ async fn a_page_of_messages_finds_its_files_by_index() {
         "hydrate reads every file ever uploaded: {plan}"
     );
 }
+
+#[tokio::test]
+async fn a_media_cursor_finds_its_file_by_its_id() {
+    let (_dir, db) = grown_server().await;
+    let plan = plan(&db.read, crate::repo::media::IS_STARRED_SQL).await;
+    assert!(
+        plan.starts_with("SEARCH attachments USING INDEX") && plan.contains("(id=?)"),
+        "the starred check reads every file to find one: {plan}"
+    );
+}
