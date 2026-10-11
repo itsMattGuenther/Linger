@@ -743,12 +743,24 @@ It runs at startup and every six hours, in batches, and takes three kinds of obj
 
 - files past `LINGER_FILE_EXPIRY_DAYS` (default 365) that are neither starred nor on a
   pinned message — the rule in SPEC §4.10. `LINGER_FILE_EXPIRY_DAYS=off` turns it off.
-- files on a **deleted** message, at once. A delete is a tombstone with an empty body,
-  and neither the stream nor the media collection will ever draw what it carried again,
-  so the bytes are unreachable and still counted against the pool. A star does not hold
-  one of these: a star stops a file ageing out, and this is not ageing out.
+- files on a **deleted** message, whatever their age — as the retry. A delete is a
+  tombstone with an empty body, and the delete itself takes what it carried, there and
+  then (#502): the original, its poster frame and its display copy, then the rows, in
+  the sweeper's own code (`expiry::take_from_message`). What is left for this rule is a
+  file the store refused at that moment (a bucket that was down), and a file deleted on
+  a server from before #502. A star does not hold one of these: a star stops a file
+  ageing out, and this is not ageing out.
 - **finished uploads that never became a message**, once they are past the same window.
   The 48-hour sweep in `routes::uploads` only takes uploads that never *completed*.
+
+**A file on a deleted message is out of reach from the moment of the delete,** whether
+or not its bytes are gone yet. `/objects` answers it `404` as if it had never been,
+history carries no attachments on a tombstone (`repo::attachments::hydrate`), and the
+media collection, search and exports all pass over it. A file the server sends itself
+goes out with `Cache-Control: private`, so the app's own cache keeps it for as long as it
+likes but a shared cache in front of the media host (a CDN proxy) keeps no copy that
+would outlive a delete. On S3 the bucket sends the bytes, from a link that is signed
+for a day and dead once the object is.
 
 A file a status picture pointed at used to be kept at any age. Status pictures are
 gone (#269), so such a file is now an upload that never became a message, and the

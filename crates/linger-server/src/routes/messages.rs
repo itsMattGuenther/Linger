@@ -1,8 +1,8 @@
 //! Messages, reactions, and read markers (PROTOCOL §4).
 //!
-//! Deletes are tombstones — the row stays so reply chains survive. And per the
-//! AGENTS.md hard rule: nothing here computes or returns an unread count, and
-//! nothing ever will.
+//! Deletes are tombstones — the row stays so reply chains survive, but the
+//! files on it go with the delete (#502). And per the AGENTS.md hard rule:
+//! nothing here computes or returns an unread count, and nothing ever will.
 //!
 //! Files are uploaded first and attached second (PROTOCOL §6): by the time an
 //! `attachment_id` reaches this module the bytes are already stored, checked
@@ -327,6 +327,15 @@ async fn delete(
         id,
         room_id: message.room_id,
     });
+
+    // What it carried goes too, now rather than at the sweeper's next pass
+    // (#502): bytes, poster and display copy, then the rows. The delete has
+    // already happened, so a store that can't delete right now is the
+    // sweeper's to retry, not a failure to report; nothing serves or lists a
+    // file whose message is deleted in the meantime.
+    if let Err(err) = crate::expiry::take_from_message(&state, id).await {
+        tracing::warn!(error = ?err, "could not take a deleted message's files; the sweeper will");
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -563,6 +563,8 @@ carry sender feedback to a different person.
 - 500 MB per file
 - 50 GB per server pool (host-configurable)
 - Non-starred, non-pinned files expire after 365 days (host-configurable, can be off)
+- Deleting a message deletes its files with it, at once and starred or not: nothing
+  serves, shows, lists or exports them after (#502)
 - Resumable uploads
 - **EXIF stripped from all images on upload, always, no toggle.** Camera photos carry
   GPS coordinates; silently sharing your home address in a privacy-focused app would be

@@ -305,7 +305,7 @@ async fn a_copy_goes_with_its_file() {
         404
     );
 
-    // On a message that was deleted, and swept.
+    // On a message that was deleted: with the delete, not the sweep (#502).
     let posted = upload(
         &server,
         &token,
@@ -322,11 +322,11 @@ async fn a_copy_goes_with_its_file() {
         .await
         .unwrap();
     assert_eq!(deleted.status(), 204);
-    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 1);
     assert_eq!(
         fetch(&server, &posted.display_url.unwrap()).await.status(),
         404
     );
+    assert_eq!(expiry::sweep(&server.state).await.unwrap().files, 0);
 }
 
 #[tokio::test]

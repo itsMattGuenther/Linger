@@ -730,3 +730,64 @@ async fn an_earlier_image_gets_its_display_copy_from_the_bucket() {
             .unwrap();
     assert_eq!((copy.width(), copy.height()), (960, 576));
 }
+
+/// Deleting a message takes its file and the file's display copy out of the
+/// bucket as the delete answers, not at the next sweep (#502).
+#[tokio::test]
+async fn a_deleted_messages_file_leaves_the_bucket_at_once() {
+    let server = s3_server!("a_deleted_messages_file_leaves_the_bucket_at_once");
+    let host = bootstrap_host(&server).await;
+
+    let room: linger_core::wire::Room = client()
+        .post(server.url("/rooms"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "slug": "general", "name": "general" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "regret.png",
+        "image/png",
+        png(1500, 900),
+    )
+    .await;
+    let display = attachment.display_url.clone().unwrap();
+    let posted: linger_core::wire::Message = client()
+        .post(server.url(&format!("/rooms/{}/messages", room.id)))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({ "body": "oops", "attachment_ids": [attachment.id] }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(bucket_has(&key_of(&attachment.url)).await);
+    assert!(bucket_has(&key_of(&display)).await);
+
+    let resp = client()
+        .delete(server.url(&format!("/messages/{}", posted.id)))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+
+    // Asked of the bucket itself: an old presigned link to either is dead too.
+    assert!(
+        !bucket_has(&key_of(&attachment.url)).await,
+        "the file stayed"
+    );
+    assert!(!bucket_has(&key_of(&display)).await, "its copy stayed");
+    let resp = client()
+        .get(format!("{}{}", server.base, attachment.url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+}

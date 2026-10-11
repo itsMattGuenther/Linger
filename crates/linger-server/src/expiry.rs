@@ -11,11 +11,15 @@
 //! 1. **Old files** — complete, unstarred, not on a pinned message, older than
 //!    `LINGER_FILE_EXPIRY_DAYS`. This is the rule in the spec.
 //! 2. **Files on deleted messages** — a deleted message is a tombstone with an
-//!    empty body (`routes::messages::delete`), and neither the stream nor the
-//!    media collection will ever draw what it was carrying again. The bytes are
-//!    unreachable and still counted against the pool, so they go at once rather
-//!    than in a year. A star does not save one of these: a star means "do not
-//!    let this age out", and somebody deleting the message is not age.
+//!    empty body (`routes::messages::delete`), and what it carried is deleted
+//!    with it. The delete itself takes them, through [`take_from_message`],
+//!    the moment it happens (#502); this rule is the retry, for a store that
+//!    could not delete right then and for a message deleted on a server from
+//!    before that. Until it runs nothing serves, shows, lists or exports the
+//!    file: `routes::objects`, `repo::attachments::hydrate`, `repo::media`
+//!    and `export` all pass over a file whose message is deleted. A star does
+//!    not save one of these: a star means "do not let this age out", and
+//!    somebody deleting the message is not age.
 //! 3. **Finished uploads that never became a message** — somebody picked a file
 //!    and then closed the composer. `routes::uploads` sweeps *unfinished* ones
 //!    after 48 hours; a finished orphan has nothing to wait for either, but it
@@ -38,7 +42,7 @@
 
 use std::time::Duration;
 
-use linger_core::AttachmentId;
+use linger_core::{AttachmentId, MessageId};
 
 use crate::db::now_ms;
 use crate::error::ApiError;
@@ -147,7 +151,31 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     .bind(SWEEP_BATCH)
     .fetch_all(&state.db.read)
     .await?;
+    take(state, rows).await
+}
 
+/// Take the files a message carried, now: what deleting the message means
+/// for them (#502).
+///
+/// Called by the delete straight after the tombstone, so a deleted message's
+/// photo is gone when the delete answers rather than at the next pass, up to
+/// six hours later. A file the store refuses stays for that pass, which is
+/// the retry, and is unreachable meanwhile (rule 2 in the module doc).
+pub async fn take_from_message(state: &AppState, message_id: MessageId) -> Result<Swept, ApiError> {
+    let rows: Vec<Expired> = sqlx::query_as(
+        "SELECT id, object_key, poster_key, display_key, size_bytes
+           FROM attachments
+          WHERE message_id = ? AND state = 'complete'",
+    )
+    .bind(message_id.to_vec())
+    .fetch_all(&state.db.read)
+    .await?;
+    take(state, rows).await
+}
+
+/// Delete each file, bytes first and row second (see the module doc): the
+/// original, its poster frame and its display copy (#382), then the row.
+async fn take(state: &AppState, rows: Vec<Expired>) -> Result<Swept, ApiError> {
     let mut swept = Swept::default();
     for (id, object_key, poster_key, display_key, size_bytes) in rows {
         let Ok(id) = AttachmentId::from_slice(&id) else {
@@ -157,7 +185,7 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
         // remembers what to delete, so a failure here leaves both in place for
         // the next pass.
         if let Err(err) = state.storage.delete_object(&object_key).await {
-            tracing::warn!(error = %err, key = object_key, "could not delete an expired object");
+            tracing::warn!(error = %err, key = object_key, "could not delete a file's object; the next sweep tries again");
             continue;
         }
         if let Some(key) = &poster_key {

@@ -488,9 +488,11 @@ async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
         part.headers()["content-security-policy"],
         "default-src 'none'; sandbox"
     );
+    // The app's own cache keeps a file; one shared by everybody behind a
+    // proxy must not, or it outlives a delete (#502).
     assert_eq!(
         part.headers()["cache-control"],
-        "public, max-age=31536000, immutable"
+        "private, max-age=31536000, immutable"
     );
 
     let part = fetch(&download_url, Some("bytes=10-19")).await;
