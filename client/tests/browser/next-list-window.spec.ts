@@ -490,6 +490,23 @@ test("a clicked desktop banner opens its conversation at the message; one from a
   await expect(page.locator('[data-message="m000005"]')).toHaveAttribute("data-flash", "yes");
 });
 
+test("a banner clicked with the list in the tray asks the shell to bring it back, so its page is told it's seen again (#594)", async ({ page }) => {
+  // In the tray, the list doesn't have the focus.
+  await page.addInitScript(() => {
+    document.hasFocus = () => false;
+  });
+  await open(page, "?one");
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => window.core?.banner({ server: "https://good-company.example", room: "r-general", message: "m000005" }));
+      return page.getByRole("tab", { name: "#general", selected: true }).count();
+    })
+    .toBe(1);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_show_list")).length).toBeGreaterThan(0);
+  // Not the page showing its own window: Windows wouldn't tell its page.
+  expect((await did(page)).filter((line) => line === "show")).toEqual([]);
+});
+
 test("the list tells the desktop what closing it does: the tray by default, and what Settings changes it to", async ({ page }) => {
   await open(page, "?one");
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("next_close_to_tray")).at(0)).toBe(

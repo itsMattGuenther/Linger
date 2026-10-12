@@ -27,6 +27,11 @@ test("the startup measurement is run by hand, and only its own tests run for it"
   assert.deepEqual(active(["scripts/startup-time.mjs", "scripts/startup-time.test.mjs"]), []);
   assert.equal(active(["scripts/startup-time.sh"]).length, 6);
 });
+test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
+  for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
+    "client/scripts/windows-hidden-check.mjs", "client/scripts/windows-window.ps1"])
+    assert(active([path]).includes("packages"), path);
+});
 test("server changes include real storage tests", () => {
   assert.deepEqual(active(["crates/linger-server/src/storage.rs"]), ["rust", "s3"]);
 });

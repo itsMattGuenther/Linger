@@ -558,6 +558,44 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   nothing is signed in, otherwise the sign-in for another server. It waits
   while the sign-ins are restored. Nothing is contacted until Continue.
 
+## A page nobody can see
+
+On Windows a window's page is drawn by WebView2, which sits in the window as a
+child window and is never told when its window is minimized or hidden. Left
+alone it draws every animation at full speed for nobody. So the shell tells it
+(#594, `window.rs` `page_seen`): a window minimized, or the list hidden in the
+tray, sets the WebView's `IsVisible` false; restored, focused while shown, or
+brought back from the tray sets it true again. Bringing the list back always
+goes through the shell (the tray's Show Linger, a second launch, and a banner
+clicked while it was hidden, via `next_show_list`), because the page showing
+its own window would leave WebView2 switched off. Focus only counts while the
+window is shown: on Windows Tauri's focus event is WebView2's, and switching
+off the WebView of a window that has the focus hands the focus to the window,
+which wry hands straight back to WebView2. Counted as "seen", that switched the
+list in the tray back on at once. Linux's and macOS's engines hear about a
+hidden window from the desktop themselves, so the shell does nothing there.
+
+What `IsVisible` false does, measured on a Windows runner
+(`client/scripts/windows-hidden-check.mjs`, in the package check): WebView2
+switches its own windows off, and the page draws no frames and does no work
+for them (`requestAnimationFrame` stops; its main thread's busy time drops to
+nothing). It does **not** change `document.visibilityState`, which stays
+`"visible"` with no `visibilitychange`, and it doesn't slow the page's timers.
+So for the list window:
+
+- **Everything keeps time:** the gateway connections, voice and its talk key,
+  and sounds run in the shell; every event from it reaches the page at once
+  (the check times it); and the page's own timers (banners' 1.2 s batching in
+  `lib/notify.ts`, idle and away in `lib/watchPresence.ts`, sign-in retries,
+  card expiry) run as they do when shown.
+- **Waits for the window to come back:** whatever waits on a frame. A
+  conversation landing on its place, or following a new message to the
+  bottom and marking it read (`Conversation.tsx`), finishes once the window is
+  shown again, which is right: nobody was reading it.
+- **Not "looking" either way:** `lib/looking.ts` and `core/report.ts` ask for
+  focus as well as visibility, so a minimized window isn't looking whatever
+  `visibilityState` says.
+
 ## When something can't be drawn
 
 A throw while React draws takes the whole page down unless something
