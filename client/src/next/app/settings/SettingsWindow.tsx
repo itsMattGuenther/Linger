@@ -17,6 +17,7 @@ import { openExternal } from "../../../lib/external";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, saveTimeZone, setBlocked, useServers } from "../../../lib/gateway";
 import { hostsHere, inviteUrl, moveRoom, signInLinkProblem, signInLinkWords, signInUrl } from "../../../lib/host";
 import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
+import { localTimeProblem } from "../../../lib/localTime";
 import { loadNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
 import {
@@ -482,8 +483,16 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             return problem;
           },
           saveStyle: (style) => said(saveStyle(api, { display_name: null, style, status: null, entrance_sound: null }), "Couldn't save your look."),
-          saveTimeZone: (zone) => said(saveTimeZone(api, zone), zone === "" ? "Couldn't turn off your local time." : "Couldn't show your local time."),
+          // A server too old to keep the zone answers without it (#640), and that's said too.
+          saveTimeZone: async (zone) => {
+            try {
+              return localTimeProblem(zone, await saveTimeZone(api, zone));
+            } catch (error: unknown) {
+              return inWords(error, zone === "" ? "Couldn't turn off your local time." : "Couldn't show your local time.");
+            }
+          },
         },
+        openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
       }}
       appearance={{
         // A phone sizes things with its own display and text size (SPEC §4.15).

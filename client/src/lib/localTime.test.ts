@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timeFor, zoneToMove } from "./localTime";
+import { LOCAL_TIME_NEEDS_UPDATE, localTimeProblem, timeFor, zoneToMove } from "./localTime";
 
 describe("timeFor (#604)", () => {
   // Saturday 2026-10-10, 03:12 in Chicago (CDT, UTC−5): 08:12 UTC.
@@ -49,5 +49,17 @@ describe("zoneToMove (#604)", () => {
     expect(zoneToMove(null, "Europe/Lisbon", undefined)).toBeNull();
     expect(zoneToMove("Europe/Lisbon", "Europe/Lisbon", undefined)).toBeNull();
     expect(zoneToMove("America/Chicago", null, undefined)).toBeNull();
+  });
+});
+
+describe("localTimeProblem (#640)", () => {
+  it("says the server needs updating when it answers turning it on without a zone", () => {
+    expect(localTimeProblem("America/Chicago", {})).toBe("This server needs updating before it can show your time.");
+    expect(localTimeProblem("America/Chicago", { time_zone: "" })).toBe(LOCAL_TIME_NEEDS_UPDATE);
+  });
+
+  it("says nothing when the zone was kept, or when it was being turned off", () => {
+    expect(localTimeProblem("America/Chicago", { time_zone: "America/Chicago" })).toBeNull();
+    expect(localTimeProblem("", {})).toBeNull();
   });
 });

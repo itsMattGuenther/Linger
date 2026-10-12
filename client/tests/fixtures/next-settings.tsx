@@ -35,6 +35,8 @@
  *
  * - `?clock=America/Chicago` (any zone): "Show my local time" is on already,
  *   with that zone (#604). Unset, it's off.
+ * - `?oldserver`: the server is from before servers had emoji of their own
+ *   (#359) or kept your time zone (#604, #640).
  *
  * What the page was asked to do is written to `body[data-did]`, `|`-separated.
  */
@@ -50,6 +52,7 @@ import type { TalkKeyReach } from "../../src/lib/ipc";
 import { emojiPicture } from "../../src/lib/emoji/picture";
 import { type ExportPhase } from "../../src/lib/export";
 import { inviteUrl } from "../../src/lib/host";
+import { localTimeProblem } from "../../src/lib/localTime";
 import { DEFAULT_SOUND_PREFS, type SoundPrefs } from "../../src/lib/sound";
 import { DEFAULT_VOICE_PREFS, type VoicePrefs } from "../../src/lib/voice";
 import { serverVersionLine, type ServerVersion, type UpdateCheck } from "../../src/lib/updates";
@@ -93,6 +96,7 @@ function serverVersionOf(option: string | null): ServerVersion {
   return { kind: "known", version: option === "behind" ? "0.4.3" : "0.4.4" };
 }
 const FAIL = query.has("fail");
+const OLD_SERVER = query.has("oldserver");
 const LONG = query.has("long");
 const HOUR = 3_600_000;
 
@@ -224,11 +228,16 @@ function Fixture() {
           },
           saveTimeZone: async (zone) => {
             const problem = await saving(`clock:${zone}`);
-            if (problem === null)
-              setMe(({ time_zone: _, ...held }) => (zone === "" ? held : { ...held, time_zone: zone }));
-            return problem;
+            if (problem !== null) return problem;
+            // The server's answer, folded in and read the way the app does: a
+            // server from before #604 (`?oldserver`) keeps no zone (#640).
+            const { time_zone: _, ...without } = me;
+            const answer: User = zone === "" || OLD_SERVER ? without : { ...without, time_zone: zone };
+            setMe(answer);
+            return localTimeProblem(zone, answer);
           },
         },
+        openGuide: query.has("member") ? undefined : () => note("open-update-guide"),
       }}
       appearance={{
         scale: { value: scale, onChange: (value) => (note(`scale:${value}`), setScale(value)) },
@@ -450,7 +459,7 @@ function Fixture() {
                   if (problem === null) setEmoji((held) => held.filter((one) => one.id !== id));
                   return problem;
                 },
-                supported: !query.has("oldserver"),
+                supported: !OLD_SERVER,
                 openGuide: () => note("open-update-guide"),
               },
               people: {
