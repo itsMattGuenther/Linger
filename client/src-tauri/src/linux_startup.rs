@@ -379,7 +379,13 @@ fn install_appimage_menu_entry(chosen: &Chosen) -> io::Result<()> {
     };
     let appimage = PathBuf::from(appimage);
     let appdir = std::env::var_os("APPDIR").map(PathBuf::from);
-    write_menu_entry(&data_home()?, &appimage, appdir.as_deref(), chosen)
+    write_menu_entry(
+        &data_home()?,
+        &appimage,
+        appdir.as_deref(),
+        chosen,
+        refresh_link_handlers,
+    )
 }
 
 fn data_home() -> io::Result<PathBuf> {
@@ -397,11 +403,17 @@ fn data_home() -> io::Result<PathBuf> {
     Ok(PathBuf::from(home).join(".local/share"))
 }
 
+/// Writes the AppImage's menu entry under `data_home`, then calls `refresh`
+/// with its folder when the entry changed. The app passes
+/// [`refresh_link_handlers`]; tests pass a recorder, because starting a
+/// program from a test lets the lock test beside it fail (#637, see
+/// `the_running_lock_goes_with_the_copy_that_held_it`).
 fn write_menu_entry(
     data_home: &Path,
     appimage: &Path,
     appdir: Option<&Path>,
     chosen: &Chosen,
+    refresh: impl FnOnce(&Path),
 ) -> io::Result<()> {
     let Some(exec) = exec_line(appimage, |key| chosen.lookup(key)) else {
         return Ok(());
@@ -421,7 +433,7 @@ fn write_menu_entry(
         file.sync_all()?;
     }
     fs::rename(&tmp, &dest)?;
-    refresh_link_handlers(&applications);
+    refresh(&applications);
     Ok(())
 }
 
@@ -737,6 +749,14 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    // No test in this file may start a program (#637). Starting one copies
+    // every open file into the new process until it runs the program, this
+    // lock's file included, and the lock goes with the file, not with one copy
+    // of it. A program started on another test thread between `held` being
+    // taken and dropped kept the lock a moment past `drop(held)`, and the last
+    // check failed (1 run in 1,600, squeezed onto two cores). The app is not
+    // affected: it takes this lock once, at startup, and keeps it until it
+    // exits. Hence the recorder passed to `write_menu_entry` below.
     #[test]
     fn the_running_lock_goes_with_the_copy_that_held_it() {
         let root = scratch("running-lock");
@@ -765,6 +785,9 @@ mod tests {
         }
     }
 
+    /// Stands in for [`refresh_link_handlers`]: tests start no program (#637).
+    fn no_refresh(_: &Path) {}
+
     #[test]
     fn writes_a_stable_menu_file_for_an_appimage() {
         let root = scratch("launcher");
@@ -774,13 +797,17 @@ mod tests {
         let icon = root.join("squash/.DirIcon");
         fs::write(&icon, b"png-bytes").unwrap();
 
+        let mut refreshed = Vec::new();
         write_menu_entry(
             &root.join("data"),
             &appimage,
             Some(&root.join("squash")),
             &nothing_chosen(),
+            |folder: &Path| refreshed.push(folder.to_path_buf()),
         )
         .unwrap();
+        // The link handlers are refreshed for the folder the entry went in.
+        assert_eq!(refreshed, [root.join("data/applications")]);
 
         let entry =
             fs::read_to_string(root.join("data/applications/com.linger.desktop.desktop")).unwrap();
@@ -795,6 +822,17 @@ mod tests {
             fs::read(root.join("data/icons/hicolor/256x256/apps/com.linger.desktop.png")).unwrap(),
             b"png-bytes"
         );
+
+        // The next launch finds the same entry and leaves the index alone.
+        write_menu_entry(
+            &root.join("data"),
+            &appimage,
+            Some(&root.join("squash")),
+            &nothing_chosen(),
+            |folder: &Path| refreshed.push(folder.to_path_buf()),
+        )
+        .unwrap();
+        assert_eq!(refreshed.len(), 1);
 
         fs::remove_dir_all(&root).unwrap();
     }
@@ -812,7 +850,7 @@ mod tests {
             gdk_gl: None,
         };
 
-        write_menu_entry(&root.join("data"), &appimage, None, &chosen).unwrap();
+        write_menu_entry(&root.join("data"), &appimage, None, &chosen, no_refresh).unwrap();
 
         let entry =
             fs::read_to_string(root.join("data/applications/com.linger.desktop.desktop")).unwrap();
@@ -836,6 +874,7 @@ mod tests {
             &appimage,
             Some(&root.join("squash")),
             &nothing_chosen(),
+            no_refresh,
         )
         .unwrap();
         let entry = root.join("data/applications/com.linger.desktop.desktop");

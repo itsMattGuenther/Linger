@@ -68,6 +68,11 @@ export interface VoicePlace {
   room: boolean;
 }
 
+/** Where you're in voice, in words: "in #general", or "with Jules, Sam". */
+export function placeWords(voice: VoicePlace): string {
+  return `${voice.room ? "in" : "with"} ${voice.where}`;
+}
+
 /**
  * What Linger says the first time the list goes to the tray (#400). Windows 11
  * puts a new app's tray icon under the ^ by the clock, and only the person can
@@ -77,6 +82,6 @@ export interface VoicePlace {
  */
 export function trayNotice(desktop: Desktop, voice: VoicePlace | null): { title: string; body: string } {
   const lines = [TRAY_AT[desktop], "Quit Linger from there."];
-  if (voice) lines.push(`You're still in voice ${voice.room ? "in" : "with"} ${voice.where}.`);
+  if (voice) lines.push(`You're still in voice ${placeWords(voice)}.`);
   return { title: "Linger is still running", body: lines.join(" ") };
 }

@@ -157,7 +157,9 @@ takes the window, and ◧ goes back to the list. A tab can be popped out into a 
 of its own and put back, and Settings → Windows can open every conversation in a
 window of its own instead.
 Closing the list keeps Linger running in the tray, with its sounds and voice; a
-setting makes closing it quit instead. The first time the list is closed on a
+setting makes closing it quit instead. The tray icon shows whether you're in voice
+and whether your microphone is live, and its tooltip says so in words (#601), so a
+hidden list can't leave a microphone open unnoticed. The first time the list is closed on a
 computer, and never again, a notification says where Linger went and how to quit
 it, and that you're still in voice if you are (#400): Windows 11 hides a new
 tray icon under the ^ by the clock. Another starts Linger when you sign in to
@@ -936,9 +938,12 @@ in front, and never keeps the key from that app.
   heard); and the desktop says when it goes down and up, so Linger never sees
   a key at all. The desktop names apps by their desktop file, so it works for
   an installed Linger (a package or the AppImage), not a development build.
-- **Elsewhere** (macOS for now, #587; a desktop without the portal, which is
-  most X11 desktops; a development build): the key works while a Linger window
-  is in front, as it always has, and switching away lets go of it.
+- **macOS** (#587): as on Windows, Linger asks macOS whether that one key or
+  mouse button is down, 50 times a second. A key a Mac has no code for (Pause,
+  Scroll Lock, F21 and up) works only while a Linger window is in front.
+- **Elsewhere** (a desktop without the portal, which is most X11 desktops; a
+  development build on Linux): the key works while a Linger window is in
+  front, as it always has, and switching away lets go of it.
 
 Settings → Talk key says which applies. A Linger window in front hears the key
 too, and a press heard twice counts once. Whatever watches the key, its

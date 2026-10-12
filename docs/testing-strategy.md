@@ -27,7 +27,7 @@ what CI adds on top.
 | --- | --- | --- |
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
-| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, nothing the shipped CSP refuses | Signed-in use, every distro, physical speakers, real-network voice |
+| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses | Signed-in use, every distro, physical speakers, real-network voice, a real GPU |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
 The package audio harness injects a test-only bundle of the real sound player
@@ -35,8 +35,14 @@ into the installed app, signed in nowhere, and records what reaches a private
 virtual speaker. Until 0.4.3 it also measured the previous client's layout in
 the package; that part went with the previous client (#306). The Buddy list's
 own start-up and layout in the package are `scripts/linux-next-check.mjs` and
-`client/scripts/windows-next-check.mjs`. None of these is a live-server test;
-a signed-in desktop check is T-1820.
+`client/scripts/windows-next-check.mjs`. What a minimized or tray-hidden
+window does on Windows is `client/scripts/windows-hidden-check.mjs` (#594,
+`docs/windows-update-checks.md`), which drives the installed list window with
+Win32 calls (`client/scripts/windows-window.ps1`) and reads its page over
+WebView2's debugging port. Nobody building Linger has a Windows computer, so
+Windows behavior is checked like this, on GitHub's Windows runners, not by
+hand. None of these is a live-server test; a signed-in desktop check is
+T-1820.
 
 Run the existing `scripts/linux-audio-check.py` and Windows package scripts as
 documented in [packaged audio checks](packaged-audio-checks.md). They require a
@@ -94,10 +100,12 @@ the comment together. Dependabot does that once a month
 release at least a week old, and it is merged like any other.
 `dtolnay/rust-toolchain` has no version tags, so Dependabot leaves it alone:
 move it by hand to a commit from its `master` branch, and pass
-`toolchain: stable`. `tauri-apps/tauri-action` gets only its 0.x updates: it
-builds the release and writes `latest.json`, no pull request runs it, and 1.0
-changes both, so that move is its own pull request, tried on a draft release
-first (#597).
+`toolchain: stable`. `tauri-apps/tauri-action` builds the release and writes
+`latest.json`, and no pull request runs it, so a major version of it is worth
+a practice draft release before it's merged, as 1.0 got (#597). Its 1.0 writes
+`latest.json`'s links as GitHub API links; `release.yml`'s `updater-json` job
+puts the normal download links back (`scripts/updater-urls.mjs`, tested in the
+rules job).
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against

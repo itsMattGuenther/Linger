@@ -8,6 +8,9 @@
 //! bar: GNOME, for one, draws nothing, and without it the window could not be
 //! moved or closed with the mouse.
 
+use std::collections::BTreeSet;
+use std::sync::Mutex;
+
 use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
@@ -307,6 +310,73 @@ fn tool_window(which: &str) -> Result<(&'static str, &'static str, f64, f64), St
     }
 }
 
+/// Pages nobody can see right now, by window label (#594): minimized, or the
+/// list hidden in the tray. Kept so a page is told only when that changes.
+static UNSEEN: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+
+/// What a window event says about whether anybody can see the window's page:
+/// seen, unseen, or nothing new. `minimized` and `visible` are the window's
+/// state as the event arrives. Windows sends a size change when a window is
+/// minimized and when it's restored; focus means it's on screen, however it
+/// got there, but only while it is shown and not minimized. On Windows
+/// Tauri's focus event is WebView2's: hiding the page of a window that has
+/// the focus hands the focus to the window, wry hands it straight back to
+/// WebView2, and that "focus" must not show the page again. Without this
+/// rule the list closed to the tray kept drawing (#594, caught by
+/// client/scripts/windows-hidden-check.mjs).
+fn seen_by(event: &tauri::WindowEvent, minimized: bool, visible: bool) -> Option<bool> {
+    match event {
+        tauri::WindowEvent::Resized(_) if minimized => Some(false),
+        tauri::WindowEvent::Resized(_) if visible => Some(true),
+        tauri::WindowEvent::Focused(true) if visible && !minimized => Some(true),
+        _ => None,
+    }
+}
+
+/// Whether `seen` changes what's known about `label`'s page, noting it.
+fn note_seen(unseen: &mut BTreeSet<String>, label: &str, seen: bool) -> bool {
+    if seen {
+        unseen.remove(label)
+    } else {
+        unseen.insert(label.to_owned())
+    }
+}
+
+/// Tell a window's page whether anybody can see it (#594).
+///
+/// On Windows the page is drawn by WebView2, which sits in Linger's window as
+/// a child window, and a child window is never told that its window was
+/// minimized or hidden. Left alone, the page keeps drawing every animation
+/// (a Shimmer name, the talking bars, the typing dots) at full speed for
+/// nobody, and `document.visibilityState` stays `"visible"`. Microsoft's
+/// guidance is for the app to set the controller's `IsVisible`, and neither
+/// wry nor Tauri does it for a minimized or hidden window. Hidden, Chromium
+/// stops drawing, runs the page's timers at most about once a second, and
+/// frees some caches; the gateway, voice and sounds run in this shell and
+/// don't wait on the page's timers (docs/design/architecture.md, "A page
+/// nobody can see"). Linux's and macOS's engines hear it from the desktop
+/// themselves, so there this does nothing.
+pub fn page_seen(app: &AppHandle, label: &str, seen: bool) {
+    // A poisoned lock tells the page anyway: telling it twice is harmless.
+    let changed = UNSEEN
+        .lock()
+        .map_or(true, |mut unseen| note_seen(&mut unseen, label, seen));
+    if !changed {
+        return;
+    }
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.with_webview(move |webview| {
+            // SAFETY: `with_webview` runs this on the window's own thread,
+            // which is where WebView2 wants its controller used, and
+            // `SetIsVisible` takes a plain flag.
+            let _ = unsafe { webview.controller().SetIsVisible(seen) };
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// Tell the owner a Buddy list window has gone, however it went: its own close
 /// button, the desktop's, or a crash. A window that closes cleanly says so
 /// itself first; this covers the ones that can't, so the owner never keeps
@@ -321,6 +391,7 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             if app.state::<crate::tray::Closing>().hides() {
                 api.prevent_close();
                 let _ = window.hide();
+                page_seen(app, OWNER, false);
                 // The list says where Linger went, the first time ever
                 // (#400): Windows 11 hides a new tray icon under the ^.
                 let _ = app.emit_to(OWNER, "next:hidden", ());
@@ -329,9 +400,29 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             }
         }
     }
+    // Minimized or restored, the page is told whether anybody can see it
+    // (#594). Only Windows needs telling.
+    if cfg!(windows) {
+        let state = || {
+            let minimized = window.is_minimized().unwrap_or(false);
+            (minimized, window.is_visible().unwrap_or(true))
+        };
+        if matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(true)
+        ) {
+            let (minimized, visible) = state();
+            if let Some(seen) = seen_by(event, minimized, visible) {
+                page_seen(window.app_handle(), window.label(), seen);
+            }
+        }
+    }
     // A voice message being recorded in a window that's gone goes with it (#401).
     if matches!(event, tauri::WindowEvent::Destroyed) {
         crate::clip::forget(window.app_handle(), window.label());
+        if let Ok(mut unseen) = UNSEEN.lock() {
+            unseen.remove(window.label());
+        }
     }
     if matches!(event, tauri::WindowEvent::Destroyed) && is_viewer(window.label()) {
         let app = window.app_handle();
@@ -428,6 +519,56 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
+    use super::{note_seen, seen_by};
+    use std::collections::BTreeSet;
+    use tauri::{PhysicalSize, WindowEvent};
+
+    #[test]
+    fn minimizing_hides_the_page_and_restoring_or_focus_shows_it() {
+        let size = || WindowEvent::Resized(PhysicalSize::new(0, 0));
+        assert_eq!(seen_by(&size(), true, true), Some(false), "minimized");
+        assert_eq!(seen_by(&size(), false, true), Some(true), "restored");
+        assert_eq!(
+            seen_by(&size(), false, false),
+            None,
+            "a hidden window's size says nothing"
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(true), false, true),
+            Some(true)
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(true), false, false),
+            None,
+            "focus handed back to a window in the tray isn't seeing it"
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(true), true, true),
+            None,
+            "nor to a minimized one"
+        );
+        assert_eq!(
+            seen_by(&WindowEvent::Focused(false), false, true),
+            None,
+            "losing focus isn't hiding"
+        );
+        assert_eq!(seen_by(&WindowEvent::Destroyed, false, true), None);
+    }
+
+    #[test]
+    fn a_page_is_told_only_when_that_changes() {
+        let mut unseen = BTreeSet::new();
+        assert!(!note_seen(&mut unseen, "main", true), "seen from the start");
+        assert!(note_seen(&mut unseen, "main", false));
+        assert!(!note_seen(&mut unseen, "main", false), "already told");
+        assert!(
+            note_seen(&mut unseen, "chat-1", false),
+            "each window on its own"
+        );
+        assert!(note_seen(&mut unseen, "main", true));
+        assert!(!note_seen(&mut unseen, "main", true));
+        assert_eq!(unseen.into_iter().collect::<Vec<_>>(), ["chat-1"]);
+    }
 
     /// Tauri's own drop handling keeps dropped files from the page on
     /// Windows (COMP-11), so every window turns it off and the page refuses

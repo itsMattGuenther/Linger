@@ -391,6 +391,10 @@ jobs:
         run: python3 scripts/linux-audio-check.test.py -q
       - name: the browser jobs' Playwright image is the client's Playwright
         run: node --test scripts/playwright-image.test.mjs
+      - name: the release's latest.json links to the downloads, not the API
+        # Only a tag runs release.yml, so this is where the rewrite that keeps
+        # installed copies off GitHub's 60-an-hour API limit is checked (#597).
+        run: node --test scripts/updater-urls.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.

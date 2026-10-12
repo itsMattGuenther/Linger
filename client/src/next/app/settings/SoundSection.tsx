@@ -3,6 +3,7 @@ import { inQuietHours, MAX_SOUND_VOLUME, type SoundCategory, type SoundPrefs } f
 import { clockTime } from "../../../lib/time";
 import { useEffect, useState } from "react";
 import { type VoicePrefs, volumeLabel } from "../../../lib/voice";
+import { desktopOf } from "../../core/closing";
 import { copyText } from "../../core/copy";
 import { canBeTalkKey, hyprlandBind, talkButton, talkKeyName } from "../../core/talkKey";
 import { CHIMES, deviceOptions, HEADINGS, quietChoices, SYSTEM_DEFAULT } from "../../core/settings";
@@ -226,7 +227,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
 
 /** Why the talk key works only with a Linger window in front (#500). */
 const WINDOW_ONLY: Readonly<Record<Extract<TalkKeyReach, { kind: "window" }>["why"], string>> = {
-  mac: "Works while a Linger window is in front. On a Mac, Linger can't hear it with another app in front yet.",
+  mac: "Works while a Linger window is in front: a Mac has no code for this key, so Linger can't hear it with another app in front. Any other key can be.",
   desktop: "Works while a Linger window is in front: this desktop doesn't give apps shortcuts that work everywhere.",
   installed: "Works while a Linger window is in front: this copy of Linger isn't installed, so your desktop can't give it a shortcut. An installed Linger can.",
 };
@@ -239,10 +240,12 @@ const WINDOW_ONLY: Readonly<Record<Extract<TalkKeyReach, { kind: "window" }>["wh
 function TalkReach({ reach }: { reach: TalkKeyReach }) {
   const [copied, setCopied] = useState<"yes" | "no" | null>(null);
   if (reach.kind === "anywhere") {
+    // Windows hides an administrator's keys; a Mac has no such thing (#587).
+    const onWindows = desktopOf(navigator.userAgent) === "windows";
     return (
       <Note>
-        Works with a game or any other app in front: Linger listens for this one key, only while you're in voice, and the game still gets it. A game run as
-        administrator hides its keys from Linger, as it does from Discord.
+        Works with a game or any other app in front: Linger listens for this one key, only while you're in voice, and the game still gets it.
+        {onWindows ? " A game run as administrator hides its keys from Linger, as it does from Discord." : null}
       </Note>
     );
   }
