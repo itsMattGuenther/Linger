@@ -12,6 +12,7 @@ test.use({ viewport: { width: 340, height: 820 } });
 const HOME = "https://good-company.example";
 const GUILD = "https://ashen-lanterns.example";
 const LISBON = "https://casa-da-ribeira.example";
+const PHOTO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5"><rect width="8" height="5" fill="#3a2d3f"/></svg>`;
 
 async function open(page: Page, query = "") {
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
@@ -254,6 +255,24 @@ test("opening a room shows it beside the list, on that server (#337)", async ({ 
   await expect(page.getByRole("tab", { name: /, Casa da Ribeira$/, selected: true })).toBeVisible();
   // In this window: the shell is asked for no other.
   expect((await did(page)).filter((line) => line.startsWith("next_open_"))).toEqual([]);
+});
+
+// The website's and the hype kit's screenshots are taken from this page, so
+// #general's photo has to load in it. Its smaller copy was left a `data:`
+// address, the window put the server's in front of it, and every shot showed
+// "Couldn't load this picture." where the photo should be (#643).
+test("#general's pictures all load from the server, the smaller copy too (#643)", async ({ page }) => {
+  await page.route(`${HOME}/media/**`, (route) => route.fulfill({ contentType: "image/svg+xml", body: PHOTO }));
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await open(page, "?one");
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  const conversation = page.getByRole("tabpanel", { name: "#general" });
+  const pictures = conversation.locator(".nx-att-image img");
+  await expect(pictures).toHaveCount(1);
+  // They load only once they're near the view.
+  await pictures.first().scrollIntoViewIfNeeded();
+  await expect.poll(() => pictures.evaluateAll((all) => all.map((img) => (img as HTMLImageElement).naturalWidth > 0))).toEqual([true]);
+  await expect(conversation.locator("[data-picture='failed']")).toHaveCount(0);
 });
 
 test("a session that starts over asks where you'd read to again, so what you read elsewhere stops looking new (#453)", async ({ page }) => {

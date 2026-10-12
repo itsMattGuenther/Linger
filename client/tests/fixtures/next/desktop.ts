@@ -79,6 +79,19 @@ export function refuse(status: number, code: string, message: string, retryAfter
  */
 export const PHOTO_PATH = "/media/speakers.svg";
 
+/**
+ * A message as this server hands it out: the evening's photo at `PHOTO_PATH`,
+ * and its smaller copy (#382) there too, as a real server's is for a picture
+ * under 960 px (PROTOCOL §6). Left inline, the copy got the server's address
+ * put in front of it, so the picture never loaded (#643).
+ */
+export function served(message: Message): Message {
+  return {
+    ...message,
+    attachments: message.attachments.map((file) => (file.url.startsWith("data:") ? { ...file, url: PHOTO_PATH, display_url: PHOTO_PATH } : file)),
+  };
+}
+
 export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query, asks = {}, routes, commands = {} }: DesktopOptions): Desktop {
   const did: string[] = [];
   const note = (what: string) => {
@@ -201,13 +214,7 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
 
   // --- the server --------------------------------------------------------
   const store: Record<string, Message[]> = Object.fromEntries(
-    Object.entries(structuredClone(messages)).map(([room, list]) => [
-      room,
-      list.map((message) => ({
-        ...message,
-        attachments: message.attachments.map((file) => (file.url.startsWith("data:") ? { ...file, url: PHOTO_PATH } : file)),
-      })),
-    ]),
+    Object.entries(structuredClone(messages)).map(([room, list]) => [room, list.map(served)]),
   );
   let serial = 900_000;
   const newMessage = (room: string, author: string, body: string, extra: Partial<Message> = {}): Message => {

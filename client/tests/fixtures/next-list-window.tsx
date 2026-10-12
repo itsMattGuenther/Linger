@@ -36,7 +36,9 @@
  * own size is faked too (`?many=600` puts that many older messages before
  * the evening in #general): it starts 340 wide at x=100 on a 1920-wide screen
  * (`?maximized` has it maximized), and every resize and move is written down
- * as `size <w>x<h>` and `position <x>,<y>`.
+ * as `size <w>x<h>` and `position <x>,<y>`. Jules's photo in #general loads
+ * only where something serves `PHOTO_PATH` on the server (`next/desktop.ts`):
+ * a spec does with `page.route`, and so must anything taking pictures of it.
  *
  * Report and block (T-1605), on The Good Company: `?guest` has Eli host it
  * instead of you, so there's somebody to report to; `?cohost` has Eli host it
@@ -83,7 +85,7 @@ import { Counted } from "./next/commits";
 import type { Message } from "../../src/generated/Message";
 import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
-import { json, PHOTO_PATH } from "./next/desktop";
+import { json, served } from "./next/desktop";
 import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
@@ -440,10 +442,7 @@ const held = new Promise<void>((settle) => {
 
 /** The Good Company's history, room by room, as its server holds it. */
 const history: Record<string, Message[]> = Object.fromEntries(
-  Object.entries(structuredClone(messages)).map(([room, list]) => [
-    room,
-    list.map((message) => ({ ...message, attachments: message.attachments.map((file) => (file.url.startsWith("data:") ? { ...file, url: PHOTO_PATH } : file)) })),
-  ]),
+  Object.entries(structuredClone(messages)).map(([room, list]) => [room, list.map(served)]),
 );
 // `?many=600`: that many older messages before the evening in #general, an
 // hour apart, for reading back and letting go.
