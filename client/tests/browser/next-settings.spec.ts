@@ -711,6 +711,8 @@ test.describe("hosting", () => {
   });
 
   test("a sign-in link asks first, then shows the link, copied, and how long it works (#581)", async ({ page }) => {
+    // The host's view. Only the host gets the block: next-settings-window.spec.ts
+    // checks that a co-host doesn't.
     await open(page, "?section=people");
     const block = page.getByRole("region", { name: "Sign-in Links" });
     const who = block.getByRole("combobox", { name: "For" });

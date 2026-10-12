@@ -1,6 +1,6 @@
-//! Sign-in links (#581, PROTOCOL §5): the host or a co-host makes a one-time
-//! link for a member who forgot their password; it sets a new one and ends
-//! every other sign-in. Never for the host.
+//! Sign-in links (#581, PROTOCOL §5): the host, and only the host, makes a
+//! one-time link for a member who forgot their password; it sets a new one
+//! and ends every other sign-in. Never for the host.
 
 mod common;
 
@@ -151,45 +151,70 @@ async fn a_new_link_cancels_the_last() {
     );
 }
 
-#[tokio::test]
-async fn never_for_the_host_never_for_yourself_and_never_by_a_member() {
-    let server = common::spawn_server().await;
-    let host = common::bootstrap_host(&server).await;
-    let cohost = common::join_member(&server, &host.access_token, "callie").await;
-    let member = common::join_member(&server, &host.access_token, "dave").await;
+async fn make_cohost(server: &common::TestServer, host_token: &str, user_id: linger_core::UserId) {
     let resp = reqwest::Client::new()
-        .put(server.url(&format!("/users/{}/cohost", cohost.user.id)))
-        .bearer_auth(&host.access_token)
+        .put(server.url(&format!("/users/{user_id}/cohost")))
+        .bearer_auth(host_token)
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), 200);
+}
 
-    // A co-host can make one for a member.
-    made(&server, &cohost.access_token, member.user.id).await;
+async fn links_for(server: &common::TestServer, token: &str) -> Vec<SignInLinkMade> {
+    reqwest::Client::new()
+        .get(server.url("/me/sign-in-links"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_cohost_is_refused_as_a_member_is() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let cohost = common::join_member(&server, &host.access_token, "callie").await;
+    let member = common::join_member(&server, &host.access_token, "dave").await;
+    make_cohost(&server, &host.access_token, cohost.user.id).await;
+
+    // Only the host makes sign-in links (`docs/decisions.md`): a co-host gets
+    // exactly what a member gets, for a member and for themselves alike.
+    let by_member = make_link(&server, &member.access_token, cohost.user.id).await;
+    assert_eq!(by_member.status(), 403);
+    let refusal = message_of(by_member).await;
+    for target in [member.user.id, cohost.user.id] {
+        let by_cohost = make_link(&server, &cohost.access_token, target).await;
+        assert_eq!(by_cohost.status(), 403);
+        assert_eq!(message_of(by_cohost).await, refusal);
+    }
+    // And nothing was made.
+    assert!(links_for(&server, &member.access_token).await.is_empty());
+    assert!(links_for(&server, &cohost.access_token).await.is_empty());
+
+    // The host can make one for either, a co-host included.
+    made(&server, &host.access_token, member.user.id).await;
+    made(&server, &host.access_token, cohost.user.id).await;
+}
+
+#[tokio::test]
+async fn never_for_the_host_and_never_for_nobody() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let cohost = common::join_member(&server, &host.access_token, "callie").await;
+    make_cohost(&server, &host.access_token, cohost.user.id).await;
+
     // Nobody can for the host, the host included.
+    let resp = make_link(&server, &host.access_token, host.user.id).await;
+    assert_eq!(resp.status(), 403);
+    assert!(message_of(resp)
+        .await
+        .contains("resets their password on the server"));
     assert_eq!(
         make_link(&server, &cohost.access_token, host.user.id)
-            .await
-            .status(),
-        403
-    );
-    assert_eq!(
-        make_link(&server, &host.access_token, host.user.id)
-            .await
-            .status(),
-        403
-    );
-    // Nor for themselves.
-    assert_eq!(
-        make_link(&server, &cohost.access_token, cohost.user.id)
-            .await
-            .status(),
-        403
-    );
-    // A member can't make one at all.
-    assert_eq!(
-        make_link(&server, &member.access_token, cohost.user.id)
             .await
             .status(),
         403
@@ -227,32 +252,20 @@ async fn an_expired_link_is_refused() {
 }
 
 #[tokio::test]
-async fn removal_cancels_links_for_the_person_and_made_by_them() {
+async fn removal_cancels_a_link_for_the_person() {
     let server = common::spawn_server().await;
     let host = common::bootstrap_host(&server).await;
-    let cohost = common::join_member(&server, &host.access_token, "callie").await;
     let sam = common::join_member(&server, &host.access_token, "sam").await;
-    let dave = common::join_member(&server, &host.access_token, "dave").await;
-    reqwest::Client::new()
-        .put(server.url(&format!("/users/{}/cohost", cohost.user.id)))
+
+    let for_sam = made(&server, &host.access_token, sam.user.id).await;
+    let resp = reqwest::Client::new()
+        .post(server.url(&format!("/users/{}/remove", sam.user.id)))
         .bearer_auth(&host.access_token)
         .send()
         .await
         .unwrap();
-
-    let for_sam = made(&server, &host.access_token, sam.user.id).await;
-    let by_callie = made(&server, &cohost.access_token, dave.user.id).await;
-    for id in [sam.user.id, cohost.user.id] {
-        let resp = reqwest::Client::new()
-            .post(server.url(&format!("/users/{id}/remove")))
-            .bearer_auth(&host.access_token)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), 204);
-    }
+    assert_eq!(resp.status(), 204);
     assert!(!preview(&server, &for_sam.code).await.valid);
-    assert!(!preview(&server, &by_callie.code).await.valid);
     assert_eq!(
         use_link(&server, &for_sam.code, "a brand new password")
             .await

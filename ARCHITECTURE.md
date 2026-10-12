@@ -1145,7 +1145,7 @@ the `rsync` and `rclone` lines. No restore button. The host alone hears, on `GET
 disk is nearly full.
 
 **Locked out:** no reset email. A member who forgot their password gets a sign-in link
-from the host or a co-host (#581, PROTOCOL §5): one use, one day, and it ends every
+from the host, never a co-host (#581, PROTOCOL §5): one use, one day, and it ends every
 other sign-in. Nobody can make one for the host. The setup token only exists while the
 server has no users, so the only proof of ownership left for a locked-out host is access
 to the box: `linger-server reset-password <username>` sets a new password and revokes

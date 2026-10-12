@@ -1378,3 +1378,21 @@ deleted for nothing.
 - **On S3 the pool is the limit too.** The bucket has none of its own, so a host on S3
   pays for a fuller bucket, up to `LINGER_POOL_BYTES`.
 
+## Decided — the host makes sign-in links, and co-hosts don't
+
+**Matt, 2026-10-11 (#581).** A member who forgot their password used to need the
+host to stop the server and run `reset-password` for them. Now the host makes them a
+sign-in link in the app instead (PROTOCOL §5).
+
+- **This reverses "no reset link, on purpose"** (`reset.rs`, T-414), for members
+  only. The host's own way back in is still `reset-password` on the machine: nobody
+  can make the host a link, the host included.
+- **The host's alone, not a co-host's.** Whoever holds a link can sign in as that
+  person, so making one stays with the person who runs the server. This is a third
+  thing a co-host can't do, beside making co-hosts and acting on the host (SPEC
+  §4.16). A co-host asking gets the same refusal a member does, and the app doesn't
+  show them the block.
+- **The rules:** 24 hours, used once, a new link cancels the last, and never for the
+  host. Using one ends every other sign-in, and the person's own Settings says who
+  made them one and when.
+

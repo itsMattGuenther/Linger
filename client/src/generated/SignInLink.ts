@@ -2,8 +2,8 @@
 import type { UserId } from "./UserId";
 
 /**
- * A sign-in link a host or co-host made for somebody who forgot their
- * password (`POST /users/:id/sign-in-link`, #581). The code is shown this
- * once: the server keeps only its hash.
+ * A sign-in link the host made for somebody who forgot their password
+ * (`POST /users/:id/sign-in-link`, #581). The code is shown this once: the
+ * server keeps only its hash.
  */
 export type SignInLink = { code: string, user_id: UserId, expires_at: number, };

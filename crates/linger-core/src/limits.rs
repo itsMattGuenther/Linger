@@ -240,7 +240,7 @@ pub const DEFAULT_SIGNUPS_PER_HOUR: u32 = 60;
 pub const RATE_MESSAGE_SEND: (u32, u64) = (10, 10);
 pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);
-/// Sign-in links one host or co-host may make in an hour (#581).
+/// Sign-in links the host may make in an hour (#581).
 pub const RATE_SIGN_IN_LINK_CREATE: (u32, u64) = (10, 3_600);
 pub const RATE_KNOCK_PER_TARGET: (u32, u64) = (3, 3_600);
 /// Reports one person may send in an hour (PROTOCOL §5, "Report and block"):

@@ -300,7 +300,8 @@ no reactions until they update it.
 **Going away? Make somebody a co-host.** Open their card (click their name),
 then **···** and **Make Jules a co-host**. A co-host gets the same **Hosting**
 sections and can do everything above, handle reports, and take somebody out
-of voice. They can't make other co-hosts, and they can't act on you: remove
+of voice. They can't make other co-hosts or [sign-in
+links](#somebody-forgot-their-password), and they can't act on you: remove
 you, take you out of voice, delete your messages or revoke your invites. Their
 card says "co-host". To stop it, choose **Jules stops being a co-host** on the
 same menu. Only you see the server's version, since updating the server is
@@ -893,7 +894,8 @@ In the app: **Settings → Hosting → People**, under **Sign-in Links**, choose
 press **Make a sign-in link**. It asks first, then copies a link like
 `https://linger.example.com/sign-in/…`. Send it to
 them the way you'd send an invite. They paste it into **Server or link**, choose a new
-password, and they're in. A co-host can do this too.
+password, and they're in. Only you can do this: a co-host doesn't get Sign-in Links,
+because whoever holds a link can sign in as that person.
 
 - It works **once**, and for **one day**. Making another cancels the last.
 - Using it **signs them out everywhere else**, the same as changing their password.
@@ -901,7 +903,7 @@ password, and they're in. A co-host can do this too.
   a link they didn't ask for doesn't go unnoticed.
 - Whoever holds the link can sign in as them. Send it only to them, and only over
   something you trust is them.
-- Removing somebody cancels any link made for them, or by them.
+- Removing somebody cancels any link made for them.
 
 Nobody can make one for **the host**. If that's you and you're locked out, the server
 has one maintenance command. Stop it first — the database allows one writer at a time.

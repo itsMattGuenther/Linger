@@ -702,7 +702,7 @@ POST /users/:id/remove    → 204                     # host or co-host
 POST /users/:id/restore   → 204                     # host or co-host
 PUT    /users/:id/cohost  → User                    # the host only: make a co-host
 DELETE /users/:id/cohost  → User                    # the host only: not a co-host
-POST /users/:id/sign-in-link → { code, user_id, expires_at }  # host or co-host, 10/hour
+POST /users/:id/sign-in-link → { code, user_id, expires_at }  # the host only, 10/hour
 GET  /me/sign-in-links    → SignInLinkMade[]        # the links made for you, newest first
 
 GET    /me/blocks           → UserId[]                         # who you've blocked
@@ -746,16 +746,19 @@ along with it.
 ### Sign-in links (#581)
 
 The way back in for a member who forgot their password, without the host stopping the
-server to run `reset-password`. `POST /users/:id/sign-in-link` (host or co-host) answers
+server to run `reset-password`. `POST /users/:id/sign-in-link` (the host only) answers
 a `SignInLink`: a 26-character code of the invite alphabet, the account it is for, and
 when it stops working, 24 hours on (`SIGN_IN_LINK_TTL_HOURS`). The app turns it into
 `https://<server>/sign-in/<code>` (§2.2) and the host sends it however they send
 invites. The code is in that answer and nowhere else: the server keeps only its sha256.
 
-- **Never for the host** (`FORBIDDEN`), whoever asks, the host included: a locked-out
+- **Only the host makes one.** Whoever holds a link can sign in as that person, so it
+  stays with the person who runs the server. A co-host asking gets the same `FORBIDDEN`
+  a member does ("Only the host can do that."). The host can make one for anybody else,
+  a co-host included.
+- **Never for the host** (`FORBIDDEN`), the host's own asking included: a locked-out
   host uses `reset-password` on the machine, which is the proof of owning it. Nor for
-  yourself (`FORBIDDEN`: change your password instead), nor for somebody who isn't a
-  member now (`NOT_FOUND`). A member asking is `FORBIDDEN`. Ten an hour per maker
+  somebody who isn't a member now (`NOT_FOUND`). Ten an hour
   (`RATE_SIGN_IN_LINK_CREATE`).
 - **One works at a time.** Making a link cancels any unused one for the same person.
 - **Once.** `POST /auth/sign-in-link { code, new_password }` checks the link before the
@@ -775,7 +778,7 @@ invites. The code is in that answer and nowhere else: the server keeps only its 
   you, newest first: `{ made_by, made_at, expires_at, used_at, cancelled_at }`, never
   the code. Settings shows the newest under your password, so a link you didn't ask for
   doesn't go unnoticed.
-- **Removal** cancels every unused link made for the person, and every one they made.
+- **Removal** cancels every unused link made for the person.
 
 A server from before #581 answers `NOT_FOUND` to all four. The app then says the server
 needs updating when a host asks for a link, and shows nothing under your password.
@@ -783,7 +786,7 @@ needs updating when a host asks for a link, and shows nothing under your passwor
 ### Co-host (SPEC §4.16, #424)
 
 One switch per person, `is_cohost` on `User`. A co-host can call every endpoint marked
-"host or co-host", and gets `reports.changed` and `GET /reports` like the host. Two
+"host or co-host", and gets `reports.changed` and `GET /reports` like the host. Three
 things stay the host's alone, and nothing else is split off:
 
 - **Making and clearing co-hosts.** `PUT /users/:id/cohost` turns it on and
@@ -793,6 +796,8 @@ things stay the host's alone, and nothing else is split off:
   changes nothing and answers the same. Anybody but the host gets `FORBIDDEN`, co-hosts
   included. The host naming themselves is `VALIDATION_FAILED`, and somebody who isn't a
   member now (never was, or removed) is `NOT_FOUND`.
+- **Making sign-in links** (§5, "Sign-in links", #581). A co-host gets the same
+  `FORBIDDEN` a member does.
 - **Acting on the host.** A co-host can't remove the host, take them out of voice,
   delete their messages or revoke their invites: each is `FORBIDDEN`.
 

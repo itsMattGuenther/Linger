@@ -43,6 +43,18 @@ test("a member gets no Hosting, and asks nothing of a host's lists", async ({ pa
   expect((await did(page)).some((line) => line.startsWith("GET /invites"))).toBe(false);
 });
 
+test("only the host is offered sign-in links: a co-host's People has no such block (#581)", async ({ page }) => {
+  const signInLinks = page.getByRole("region", { name: "Sign-in Links" });
+  await open(page, "?section=people");
+  await expect(page.getByRole("region", { name: "Members" })).toBeVisible();
+  await expect(signInLinks.getByRole("button", { name: "Make a sign-in link" })).toBeVisible();
+
+  // Eli hosts and you're a co-host: the same People, without the block.
+  await open(page, "?section=people&cohost");
+  await expect(page.getByRole("region", { name: "Members" })).toBeVisible();
+  await expect(signInLinks).toHaveCount(0);
+});
+
 test("your name saves straight to the server, with the borrowed sign-in", async ({ page }) => {
   await open(page);
   await page.getByRole("textbox", { name: "Display name" }).fill("Matthew");

@@ -2,13 +2,14 @@
 //! their password, without the host stopping the server to run
 //! `reset-password`.
 //!
-//! A host or co-host makes one for a member. It works once, for a day, and
-//! lets whoever holds it set that account's password. That is the whole risk,
-//! so everything else leans the other way: only the code's hash is stored, a
-//! new link cancels the last, it can never be made for the host, using it ends
-//! every other sign-in the account has, and the person's own Settings says who
-//! made them one and when (`GET /me/sign-in-links`), so a link they didn't ask
-//! for doesn't go unnoticed.
+//! The host makes one for a member. It works once, for a day, and lets
+//! whoever holds it set that account's password. That is the whole risk, so
+//! everything else leans the other way: only the host can make one, not a
+//! co-host (`docs/decisions.md`, 2026-10-11), only the code's hash is
+//! stored, a new link cancels the last, it can never be made for the host,
+//! using it ends every other sign-in the account has, and the person's own
+//! Settings says who made them one and when (`GET /me/sign-in-links`), so a
+//! link they didn't ask for doesn't go unnoticed.
 //!
 //! The host's own way back in stays `reset-password` on the machine
 //! (`crate::reset`): being able to run that is the proof of owning the server,
@@ -29,7 +30,7 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
-use crate::auth::{self, AuthedUser, HostOrCohost, Standing};
+use crate::auth::{self, AuthedUser, HostUser, Standing};
 use crate::db::now_ms;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -58,18 +59,17 @@ fn code_hash(code: &str) -> String {
     hex::encode(Sha256::digest(code.trim().to_lowercase().as_bytes()))
 }
 
-/// `POST /users/:id/sign-in-link`: the host or a co-host makes a link for a
-/// member. A new one cancels any that still works.
+/// `POST /users/:id/sign-in-link`: the host makes a link for a member. A new
+/// one cancels any that still works. A co-host is refused as a member is
+/// ([`HostUser`]): whoever holds a link can sign in as that person, so making
+/// one stays with the person who runs the server.
 async fn make(
     State(state): State<AppState>,
-    maker: HostOrCohost,
+    maker: HostUser,
     Path(id): Path<UserId>,
 ) -> Result<Json<SignInLink>, ApiError> {
-    if id == maker.id {
-        return Err(ApiError::forbidden(
-            "You're signed in already. Change your password in Settings, under Account & App.",
-        ));
-    }
+    // The host asking for themselves lands here too: only the host makes
+    // links, and none is ever for the host.
     match auth::standing(&state.db.read, id).await? {
         None => return Err(ApiError::not_found("No such member.")),
         Some(Standing::Host) => {
@@ -320,17 +320,16 @@ async fn use_link(
     super::auth::auth_response(&state, user_id).await.map(Json)
 }
 
-/// Cancel every link that still works for `user_id`, or made by them: on
-/// removal, so a removed member can't come back through one, and a removed
-/// co-host's links die with their standing.
+/// Cancel every link that still works for `user_id`: on removal, so a
+/// removed member can't come back through one.
 pub async fn cancel_for(
     conn: &mut sqlx::SqliteConnection,
     user_id: UserId,
     now: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE sign_in_links SET cancelled_at = ?1
-         WHERE (user_id = ?2 OR made_by = ?2) AND used_at IS NULL AND cancelled_at IS NULL",
+        "UPDATE sign_in_links SET cancelled_at = ?
+         WHERE user_id = ? AND used_at IS NULL AND cancelled_at IS NULL",
     )
     .bind(now)
     .bind(user_id.to_vec())

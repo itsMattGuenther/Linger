@@ -617,9 +617,10 @@ pub async fn standing(db: &SqlitePool, id: UserId) -> Result<Option<Standing>, A
     }))
 }
 
-/// The host and nobody else. Only one thing needs it: making and clearing
-/// co-hosts (#424). Everything else the host does, a co-host does too, and
-/// takes [`HostOrCohost`].
+/// The host and nobody else. Two things need it: making and clearing
+/// co-hosts (#424), and making sign-in links (#581), since whoever holds one
+/// can sign in as somebody. Everything else the host does, a co-host does
+/// too, and takes [`HostOrCohost`].
 #[derive(Debug, Clone, Copy)]
 pub struct HostUser {
     pub id: UserId,
@@ -639,14 +640,15 @@ impl FromRequestParts<AppState> for HostUser {
 }
 
 /// The host, or a co-host the host named (#424): whoever has the host's
-/// powers in the app. Every host endpoint takes this, except the one that
-/// makes co-hosts.
+/// powers in the app. Every host endpoint takes this, except the ones that
+/// make co-hosts and sign-in links, which take [`HostUser`].
 ///
 /// A co-host can do all of it but one more thing besides: act on the host.
 /// An endpoint that acts on a person asks [`HostOrCohost::not_on_the_host`]
 /// before it does, so a co-host can't remove the host, take them out of
-/// voice, delete their messages or revoke their invites. Those two
-/// exceptions are the whole difference, and there will be no third.
+/// voice, delete their messages or revoke their invites. That and the
+/// [`HostUser`] endpoints are the whole difference (SPEC §4.16 lists them),
+/// and another one is a change to the spec first.
 #[derive(Debug, Clone, Copy)]
 pub struct HostOrCohost {
     pub id: UserId,

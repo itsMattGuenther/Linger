@@ -751,17 +751,22 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   if (problem === null) readHostLists();
                   return problem;
                 },
-                // A way back in for somebody who forgot their password (#581).
-                makeSignInLink: async (userId) => {
-                  try {
-                    const made = await api.makeSignInLink(userId);
-                    const link = signInUrl(server, made.code);
-                    return { link, code: made.code, expiresAt: made.expires_at, copied: await copyText(link) };
-                  } catch (error: unknown) {
-                    if (error instanceof ApiError) return { problem: signInLinkProblem(error.status, error.message) };
-                    return { problem: inWords(error, "Couldn't make a sign-in link.") };
-                  }
-                },
+                // A way back in for somebody who forgot their password
+                // (#581). The host's alone: whoever holds a link can sign in
+                // as that person, so a co-host isn't offered it, and the
+                // server refuses one who asks anyway.
+                makeSignInLink: host
+                  ? async (userId) => {
+                      try {
+                        const made = await api.makeSignInLink(userId);
+                        const link = signInUrl(server, made.code);
+                        return { link, code: made.code, expiresAt: made.expires_at, copied: await copyText(link) };
+                      } catch (error: unknown) {
+                        if (error instanceof ApiError) return { problem: signInLinkProblem(error.status, error.message) };
+                        return { problem: inWords(error, "Couldn't make a sign-in link.") };
+                      }
+                    }
+                  : undefined,
                 copyLink: (link) => copyText(link),
                 now,
                 // What was reported to the host (T-1605).

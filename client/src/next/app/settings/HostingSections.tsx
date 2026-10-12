@@ -667,7 +667,8 @@ export interface HostPeopleProps {
   /**
    * Make a one-time sign-in link for somebody who forgot their password
    * (#581). The wiring puts it on the clipboard and says whether that worked.
-   * Left out, the row doesn't offer it.
+   * The host's alone: left out, as it is for a co-host, the Sign-in Links
+   * block doesn't show.
    */
   makeSignInLink?: (userId: string) => Promise<{ link: string; code: string; expiresAt: number; copied: boolean } | { problem: string }>;
   /** Put a link on the clipboard. False when the clipboard refused. */

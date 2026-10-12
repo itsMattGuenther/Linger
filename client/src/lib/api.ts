@@ -829,8 +829,9 @@ export class AuthedApi {
     );
   }
 
-  /** The host or a co-host makes a one-time sign-in link for somebody who
-   *  forgot their password (#581). A new one cancels the last. */
+  /** The host makes a one-time sign-in link for somebody who forgot their
+   *  password (#581). A new one cancels the last. The server refuses
+   *  anybody but the host, co-hosts included. */
   makeSignInLink(id: UserId): Promise<SignInLink> {
     const path = `/users/${encodeURIComponent(id)}/sign-in-link`;
     return this.#withAuth((accessToken) => requestJson<SignInLink>(this.baseUrl, "POST", path, { accessToken }));

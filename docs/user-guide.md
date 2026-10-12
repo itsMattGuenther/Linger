@@ -1124,8 +1124,8 @@ their note. From there you can delete the message, remove the person, or
 
 **Co-hosts.** The host can make somebody a co-host for when they're away, from
 that person's card. A co-host has the host's **Hosting** sections in Settings
-and can do what the host does in the app, except make co-hosts or act on the
-host. Their card says "co-host". The [host guide](host-guide.md#running-it-day-to-day)
+and can do what the host does in the app, except make co-hosts, make sign-in links
+or act on the host. Their card says "co-host". The [host guide](host-guide.md#running-it-day-to-day)
 has the details.
 
 ## Taking everything with you
@@ -1242,10 +1242,11 @@ To change your password, use **Settings → Account & App → Password**. Changi
 you out of that server everywhere else at once, including any computer you forgot to sign
 out of; the one you change it on stays signed in.
 
-**Forgot your password?** Ask whoever runs the server for a **sign-in link**. Paste it
-into **Server or link**, choose a new password, and you're in. It works once, within a
-day, and signs you out everywhere else. **Settings → Account & App** says who made you
-one and whether it was used; if you didn't ask for one, tell the host.
+**Forgot your password?** Ask the host, whoever runs the server, for a **sign-in
+link**. Only the host can make one, not a co-host. Paste it into **Server or link**,
+choose a new password, and you're in. It works once, within a day, and signs you out
+everywhere else. **Settings → Account & App** says who made you one and whether it was
+used; if you didn't ask for one, tell the host.
 
 ---
 

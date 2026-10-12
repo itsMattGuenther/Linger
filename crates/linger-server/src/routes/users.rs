@@ -118,7 +118,7 @@ async fn remove_user(
         .bind(id.to_vec())
         .execute(&mut *tx)
         .await?;
-    // A sign-in link for them, or made by them, stops working too (#581).
+    // A sign-in link made for them stops working too (#581).
     super::sign_in_links::cancel_for(&mut tx, id, now).await?;
     tx.commit().await.map_err(ApiError::from)?;
 
