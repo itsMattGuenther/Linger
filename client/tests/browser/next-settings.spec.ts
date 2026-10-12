@@ -285,6 +285,27 @@ test.describe("your local time (#604)", () => {
     await expect(page.locator(".nx-set-note[data-tone='problem']")).toHaveText("The server is busy. Try again in a moment.");
     await expect(show).toHaveAttribute("aria-checked", "false");
     await expect(show).toBeEnabled();
+    await expect(panel(page).getByRole("button", { name: "How to update" })).toHaveCount(0);
+  });
+
+  // #640: a server from before #604 answers without the zone, so it can't
+  // stay on. It says why instead of flipping back without a word, and the
+  // host gets the way to update it.
+  test("on a server too old to keep it, it stays off and says the server needs updating", async ({ page }) => {
+    await open(page, "?oldserver");
+    const show = page.getByRole("switch", { name: "Show my local time" });
+    const problem = page.locator(".nx-set-note[data-tone='problem']");
+    await show.click();
+    await expect(problem).toHaveText("This server needs updating before it can show your time.");
+    await expect(show).toHaveAttribute("aria-checked", "false");
+    await expect(show).toBeEnabled();
+    await panel(page).getByRole("button", { name: "How to update" }).click();
+    expect(await did(page)).toContain("open-update-guide");
+
+    await open(page, "?oldserver&member");
+    await show.click();
+    await expect(problem).toHaveText("This server needs updating before it can show your time.");
+    await expect(panel(page).getByRole("button", { name: "How to update" })).toHaveCount(0);
   });
 });
 

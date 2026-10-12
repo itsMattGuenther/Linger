@@ -4,7 +4,7 @@ import type { User } from "../../../generated/User";
 import type { UserStatus } from "../../../generated/UserStatus";
 import { displayNameProblem, displayNameReady, MAX_DISPLAY_NAME_CHARS, type NameSaid } from "../../../lib/account";
 import { FONT_KEYS, FONT_LABELS, fontVar, MESSAGE_FONT_KEYS, messageFontVar } from "../../../lib/fonts";
-import { deviceTimeZone } from "../../../lib/localTime";
+import { deviceTimeZone, LOCAL_TIME_NEEDS_UPDATE } from "../../../lib/localTime";
 import { draftOf as lookOf, EFFECTS, isDirty as lookChanged, previewUser, type Slot, styleOf, type StyleDraft, WEIGHTS, withColor } from "../../../lib/nameStyle";
 import { PALETTE_KEYS } from "../../../lib/palette";
 import { MAX_FIELD_CHARS, MAX_LABEL_CHARS, MAX_LINE_CHARS, SUGGESTED_LABELS } from "../../../lib/status";
@@ -32,15 +32,17 @@ export interface ProfileProps {
   /** "Use plain names" is on: the preview says it still shows your style. */
   plainNames: boolean;
   actions: ProfileActions;
+  /** The host's guide to updating the server, for a server too old for something here (#640). Nobody else has it. */
+  openGuide?: () => void;
 }
 
 /** Profile: who you are, what you're up to, and how your name looks (SET-1, PPL-7, NAME-1). */
-export function ProfileSection({ me, plainNames, actions }: ProfileProps) {
+export function ProfileSection({ me, plainNames, actions, openGuide }: ProfileProps) {
   return (
     <>
       <WhoYouAre me={me} saveName={actions.saveName} />
       <YourStatus me={me} saveStatus={actions.saveStatus} />
-      <YourClock me={me} saveTimeZone={actions.saveTimeZone} />
+      <YourClock me={me} saveTimeZone={actions.saveTimeZone} openGuide={openGuide} />
       <YourLook me={me} plainNames={plainNames} saveStyle={actions.saveStyle} />
     </>
   );
@@ -174,9 +176,10 @@ const SHOW_TIME = "Show my local time";
  * "Show my local time" (#604, SPEC §4.6): your card says what time it is
  * where you are. Off to start, because a time zone says roughly where
  * somebody lives. It takes effect at once, like every switch (SPEC §5.6),
- * and follows this computer's clock.
+ * and follows this computer's clock. On a server too old to keep it (#640),
+ * it stays off and says so, with the host's way to update it.
  */
-function YourClock({ me, saveTimeZone }: { me: User; saveTimeZone: ProfileActions["saveTimeZone"] }) {
+function YourClock({ me, saveTimeZone, openGuide }: { me: User; saveTimeZone: ProfileActions["saveTimeZone"]; openGuide: (() => void) | undefined }) {
   const here = deviceTimeZone();
   const on = (me.time_zone ?? null) !== null;
   const shown = useTheirTime(me);
@@ -207,6 +210,13 @@ function YourClock({ me, saveTimeZone }: { me: User; saveTimeZone: ProfileAction
         control={<Switch label={SHOW_TIME} checked={on} disabled={changing || (!on && here === null)} onChange={set} />}
       />
       {problem ? <Note tone="problem">{problem}</Note> : null}
+      {problem === LOCAL_TIME_NEEDS_UPDATE && openGuide ? (
+        <Actions start>
+          <Button icon="go" onClick={openGuide}>
+            How to update
+          </Button>
+        </Actions>
+      ) : null}
     </Plain>
   );
 }

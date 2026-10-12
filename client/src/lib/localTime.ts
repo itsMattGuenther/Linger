@@ -7,6 +7,8 @@
  * and every reader works the time out with their own engine's zone data.
  */
 
+import type { User } from "../generated/User";
+
 /** This computer's time-zone name, like "America/Chicago", or null when the engine won't say. */
 export function deviceTimeZone(): string | null {
   try {
@@ -26,6 +28,19 @@ export function deviceTimeZone(): string | null {
 export function zoneToMove(held: string | undefined | null, here: string | null, asked: string | undefined): string | null {
   if (held === undefined || held === null || here === null || held === here || asked === here) return null;
   return here;
+}
+
+/** What "Show my local time" says on a server too old to keep your time zone (#640). */
+export const LOCAL_TIME_NEEDS_UPDATE = "This server needs updating before it can show your time.";
+
+/**
+ * Whether the server kept the time zone it was sent (#640). One from before
+ * #604 doesn't know the field: it keeps nothing and answers with your profile
+ * as it was, so the switch would flip on and quietly back off. Turned on and
+ * answered without a zone, it says why; turned off, or kept, it's null.
+ */
+export function localTimeProblem(zone: string, saved: Pick<User, "time_zone">): string | null {
+  return zone !== "" && (saved.time_zone ?? "") === "" ? LOCAL_TIME_NEEDS_UPDATE : null;
 }
 
 /**
