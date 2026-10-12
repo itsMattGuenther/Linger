@@ -26,7 +26,21 @@ default.
 
 ## How to run a task
 
-**0.4.10 release — 2026-10-08, a quick one.** Voice no longer crackles when
+**0.5.0 release — 2026-10-11, the audit and a big batch.** Reactions are back,
+pills with any emoji, six a message (#485, #573); polls with `/poll` (#474); a
+quiet "joined voice" line (#473); leaving a group DM (#565); push-to-talk with a
+game in front on Windows and Linux (#500, #587) and the tray icon showing voice
+(#601); the crackle at the start of a sentence really fixed (#470) and the mic let
+go when voice drops (#589). Hosting: sign-in links for a forgotten password
+(#581), the invite page and Open in Linger (#578, #607), nightly backups, also to
+a bucket (#582, #614), files kept until the server needs the room (#583), local
+time on a card (#604), times with a zone in your own clock (#584), exports that
+open in a browser (#585). The 2026-10-10 pre-release audit's safety, speed and
+memory fixes (#487–#536, #546, #548, #569, #574, #580). Ten database changes
+(0013–0024), and relay hosts need the new `compose.yaml` and UDP 49160–49359
+open first (#501, #197); notes in `docs/releases/0.5.0.md`.
+
+**0.4.10 release — ✅ published 2026-10-08, a quick one.** Voice no longer crackles when
 somebody starts talking after a pause (#462, in the app that's listening), every
 room can have a message of the day beside its topic, set with `/motd` by the host
 or a co-host (#464, a database change), and the phone app says which version it is
