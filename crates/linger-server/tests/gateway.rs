@@ -1073,3 +1073,71 @@ async fn everybody_gets_one_event_under_their_own_numbers_live_and_on_resume() {
         }
     }
 }
+
+/// Answers with the message, where `rest_send` doesn't.
+async fn rest_post(server: &common::TestServer, token: &str, room: &str, body: &str) -> Value {
+    let resp = reqwest::Client::new()
+        .post(server.url(&format!("/rooms/{room}/messages")))
+        .bearer_auth(token)
+        .json(&json!({ "body": body }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    resp.json().await.unwrap()
+}
+
+async fn put_read(server: &common::TestServer, token: &str, room: &str, id: &Value) {
+    let resp = reqwest::Client::new()
+        .put(server.url(&format!("/rooms/{room}/read")))
+        .bearer_auth(token)
+        .json(&json!({ "last_read_id": id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+}
+
+/// #647: reading on your phone left a computer that stayed open showing it
+/// all as new, because saving your place told nobody. Now every one of your
+/// sessions hears it moved, and nobody else does: where somebody has read to
+/// is theirs alone. A place that didn't move tells nobody either.
+#[tokio::test]
+async fn your_place_reaches_your_own_sessions_and_nobody_elses() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+    let first = rest_post(&server, &member.access_token, &room_id, "you around?").await;
+    let second = rest_post(&server, &member.access_token, &room_id, "porch at 8").await;
+
+    let (mut phone, _) = connect_ready(&server, &host.access_token).await;
+    let (mut computer, _) = connect_ready(&server, &host.access_token).await;
+    let (mut author, _) = connect_ready(&server, &member.access_token).await;
+
+    put_read(&server, &host.access_token, &room_id, &second["id"]).await;
+    for ws in [&mut phone, &mut computer] {
+        let (frame, _) = wait_for(ws, "read.update").await;
+        // A position and nothing else: never a count (AGENTS rule 3).
+        assert_eq!(
+            frame["d"],
+            json!({ "room_id": room_id, "last_read_id": second["id"] })
+        );
+    }
+
+    // Back to an older place, and the same one again: neither moves it.
+    put_read(&server, &host.access_token, &room_id, &first["id"]).await;
+    put_read(&server, &host.access_token, &room_id, &second["id"]).await;
+    let window = Duration::from_millis(400);
+    let (computer_frames, author_frames) = tokio::join!(
+        drain_for(&mut computer, window),
+        drain_for(&mut author, window)
+    );
+    assert!(
+        !computer_frames.iter().any(|f| f["op"] == "read.update"),
+        "a place that didn't move told nobody, got {computer_frames:?}"
+    );
+    assert!(
+        !author_frames.iter().any(|f| f["op"] == "read.update"),
+        "nobody else learns where you've read to, got {author_frames:?}"
+    );
+}

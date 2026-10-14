@@ -272,6 +272,12 @@ fn room_of(event: &ServerEvent) -> Option<RoomId> {
         // drop it: it goes by address (`publish_to`) instead.
         ServerEvent::DmRemove { .. } => None,
 
+        // Addressed to the reader's own sessions (#647). It names a room they
+        // can see, but the room's other members must never learn where
+        // somebody has read to, so it goes by address (`publish_to`), never
+        // to the room.
+        ServerEvent::ReadUpdate { .. } => None,
+
         // Session control. These never reach the bus — they are written
         // straight to one socket — but they are variants of the same enum, so
         // the match has to name them.

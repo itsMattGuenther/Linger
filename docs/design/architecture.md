@@ -174,9 +174,10 @@ counts what React draws for one event and holds these to it.
   and the conversation on screen loads again. A first page that fails is
   asked for again a few times, and a conversation still empty after that
   loads again when it is next opened (#468).
-- **Local-only state.** Some fields change without a frame. The server has no
-  frame for read positions, for example, and your own voice seat is set the
-  moment you join. For these, **the owner is the single keeper**:
+- **Local-only state.** Some fields change without a frame. A read position
+  moves the moment you read in a window, before the server hears of it, for
+  example, and your own voice seat is set the moment you join. For these,
+  **the owner is the single keeper**:
   - a viewer that changes one sends the change to the owner as an intent;
   - the owner applies it and broadcasts the field's new value to every viewer.
 
@@ -186,7 +187,7 @@ counts what React draws for one event and holds these to it.
 | Field | Who changes it | How the other windows learn it |
 |---|---|---|
 | `myVoice` (your seat, mute, deafen, device health) | the owner: joining and controls; the Rust voice events for health and levels, which already reach every window | owner broadcast |
-| `read`, `readLoaded` | the owner loads markers, again on every fresh `ready` (#453); whichever window you read in marks them | intent to the owner, then owner broadcast |
+| `read`, `readLoaded` | the owner loads markers, again on every fresh `ready` (#453); whichever window you read in marks them; `read.update` and your own `message.create` move them, from another device (#647) | intent to the owner, then owner broadcast; the frames, in every window |
 | `notifyRules` | Settings | intent to the owner, then owner broadcast |
 | `leftOff` | the window showing the conversation | none: it matters only where the conversation is open |
 | `knocks` | frames; the fade timer runs where the card is shown (the list window) | frames |

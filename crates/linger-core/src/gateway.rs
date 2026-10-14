@@ -324,6 +324,17 @@ pub enum ServerEvent {
         user_id: UserId,
         blocked: bool,
     },
+    /// This person's place in a room moved forward, to `last_read_id`
+    /// (PROTOCOL §4, #647). Sent to every session of the person who read and
+    /// nobody else's, so what they read on a phone stops looking new on a
+    /// computer that stayed open. Where somebody has read to is theirs alone:
+    /// this is not a read receipt and must never become one. A position,
+    /// never a count (AGENTS rule 3).
+    #[serde(rename = "read.update")]
+    ReadUpdate {
+        room_id: RoomId,
+        last_read_id: MessageId,
+    },
     /// The open reports changed: ask `GET /reports` again. Sent to the host's
     /// sessions and nobody else's, and with nothing in it: never a count
     /// (AGENTS rule 3).

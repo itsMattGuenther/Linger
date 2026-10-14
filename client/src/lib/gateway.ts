@@ -963,6 +963,16 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       const without = current.blocked.filter((id) => id !== user_id);
       return { ...current, blocked: blocked ? [...without, user_id] : without };
     }
+    case "read.update": {
+      // You read this far on another of your devices, or in another window
+      // here (#647). Forward only, like every read position: one behind what
+      // this copy holds changes nothing. "You left off here" stays where
+      // this visit pinned it.
+      const { room_id, last_read_id } = frame.d;
+      const held = current.read[room_id];
+      if (held !== undefined && held >= last_read_id) return current;
+      return { ...current, read: { ...current.read, [room_id]: last_read_id } };
+    }
     case "emoji.update":
       // The whole set, every time (#359), from a server that has them.
       return { ...current, emoji: frame.d.emoji, ownEmoji: true };

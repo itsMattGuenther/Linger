@@ -611,12 +611,25 @@ async fn put_read_marker(
     if message.room_id != room_id {
         return Err(ApiError::validation("That message isn't in that room."));
     }
-    advance_read_marker(&state.db.write, auth.id, room_id, req.last_read_id).await?;
+    let moved = advance_read_marker(&state.db.write, auth.id, room_id, req.last_read_id).await?;
+    // Every one of your sessions, so what you read on your phone stops
+    // looking new on a computer that stayed open (#647). Nobody else's: where
+    // you've read to is yours alone. Only when it moved, so however often an
+    // app asks, the frames are bounded by the messages there are to read.
+    if moved {
+        state.gateway.publish_to(
+            auth.id,
+            ServerEvent::ReadUpdate {
+                room_id,
+                last_read_id: req.last_read_id,
+            },
+        );
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Move a read marker to `message_id`, or leave it where it is if it is
-/// already there or later (PROTOCOL §4).
+/// already there or later (PROTOCOL §4). True when it moved.
 ///
 /// Forward only, because one person has several devices: a phone that comes
 /// back with an older position must not pull back what the desktop has
@@ -624,14 +637,16 @@ async fn put_read_marker(
 /// byte by byte, so `>` on the column is "posted later".
 ///
 /// Takes the write pool, or the transaction a post is written in, so a
-/// message and its sender's marker are saved together (#524).
+/// message and its sender's marker are saved together (#524). A post doesn't
+/// send `read.update`: its `message.create` reaches the author's sessions
+/// already, and an app moves its own place to a message of its own.
 pub(crate) async fn advance_read_marker<'e>(
     db: impl sqlx::SqliteExecutor<'e>,
     user_id: UserId,
     room_id: RoomId,
     message_id: MessageId,
-) -> Result<(), ApiError> {
-    sqlx::query(
+) -> Result<bool, ApiError> {
+    let done = sqlx::query(
         "INSERT INTO read_markers (user_id, room_id, last_read_id, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, room_id) DO UPDATE SET
@@ -644,7 +659,8 @@ pub(crate) async fn advance_read_marker<'e>(
     .bind(now_ms())
     .execute(db)
     .await?;
-    Ok(())
+    // An upsert whose `WHERE` turns the update down changes no row.
+    Ok(done.rows_affected() > 0)
 }
 
 async fn read_map(

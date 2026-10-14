@@ -285,6 +285,24 @@ describe("read positions (#453, #454)", () => {
     expect(serverState(HOME).read["r-porch"]).toBe(id(5));
   });
 
+  // #647: read on the phone, and a computer that stayed connected never
+  // asked again, so it went on showing it all as new.
+  it("a place moved on another device stops it looking new here, and never moves back", async () => {
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready({ user: matt, rooms: [room("r-garage", "garage", id(9))], dms: [dm("d1", ["u-matt", "u-callie"], id(6))] }));
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(true);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(true);
+
+    arrive(HOME, { s: 2, op: "read.update", d: { room_id: "r-garage", last_read_id: id(9) } });
+    arrive(HOME, { s: 3, op: "read.update", d: { room_id: "d1", last_read_id: id(6) } });
+    expect(hasNewActivity(serverState(HOME), "r-garage")).toBe(false);
+    expect(hasNewActivity(serverState(HOME), "d1")).toBe(false);
+
+    // Behind what this copy holds, it changes nothing.
+    arrive(HOME, { s: 4, op: "read.update", d: { room_id: "r-garage", last_read_id: id(4) } });
+    expect(serverState(HOME).read["r-garage"]).toBe(id(9));
+  });
+
   it("asks again when the answer doesn't come, rather than leaving every room looking new", async () => {
     vi.useFakeTimers();
     const api = readApi([new Error("network blocked"), { "r-garage": id(9) }]);

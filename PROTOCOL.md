@@ -681,6 +681,18 @@ Where the two disagree, the later position wins. The phone app sends a marker st
 waiting out its 5 seconds the moment it leaves the screen, since Android stops its timers
 and its network soon after (SPEC §4.15).
 
+**A marker that moves is told to its owner's open sessions** (#647), so a device that
+stays connected, and so never sees a fresh `ready`, still stops showing what you read
+elsewhere as new. A `PUT` that moves it sends `read.update` `{ room_id, last_read_id }`
+(§8) to every session that person has open, the one that asked included, and to nobody
+else. A `PUT` that changes nothing sends nothing, so however often an app asks, the
+frames are bounded by the messages there are to read. A post sends no `read.update`:
+its `message.create` already reaches the author's sessions, and a client moves its own
+place to a message of its own. **Where somebody has read to is theirs alone.** No frame
+or endpoint tells anybody else, and this is not read receipts and must not become them.
+A server from before it never sends the frame, and a client catches up on its next fresh
+`ready` as before.
+
 ---
 
 ## 5. Users, styling, statuses
@@ -1637,6 +1649,7 @@ newest, never dropped.
 | `typing` | `{ room_id, user_id }` |
 | `knock` | `{ from_user_id }` — **sent to that one person's sessions and nobody else's** (SPEC §4.9) |
 | `block.update` | `{ user_id, blocked }` — **sent to the blocker's own sessions and nobody else's** (§5, "Report and block") |
+| `read.update` | `{ room_id, last_read_id }` — **sent to the reader's own sessions and nobody else's** (§4, #647): your place in that room moved forward, on this device or another. A client moves its copy forward only. A position, never a count |
 | `reports.changed` | `{}` — **sent to the host's and the co-hosts' sessions and nobody else's**: the open reports changed, so ask `GET /reports` again |
 | `emoji.update` | `{ emoji: CustomEmoji[] }` — the server's emoji changed (one added, renamed or removed, §5): the whole set every time, to everybody |
 | `voice.state` | `{ room_id, peers: [{ session_id, user_id, controls?, forwarded? }] }` — who is in voice in that room, whole every time |
@@ -1831,6 +1844,9 @@ told the thing.
   sessions of the person who blocked or unblocked, the second to the host's and
   every co-host's.
   Neither names a room.
+- `read.update` is addressed to the sessions of the person whose place moved (§4,
+  #647). It names a room they can see, but it goes by address, never to the room:
+  nobody else learns where somebody has read to.
 - `dm.remove` is addressed to the sessions of whoever left that group DM (§3.1). It
   names a room, but a room they are no longer in, so a membership check would drop it;
   it is published to them by address instead, after they are out of the DM's audience,

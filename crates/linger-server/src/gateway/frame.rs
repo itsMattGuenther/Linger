@@ -247,6 +247,10 @@ mod tests {
                 user_id,
                 blocked: true,
             },
+            ServerEvent::ReadUpdate {
+                room_id,
+                last_read_id: MessageId::new(),
+            },
             ServerEvent::ReportsChanged {},
             ServerEvent::EmojiUpdate {
                 emoji: vec![CustomEmoji {
@@ -292,9 +296,10 @@ mod tests {
             ServerEvent::BlockUpdate { .. } => 23,
             ServerEvent::ReportsChanged {} => 24,
             ServerEvent::EmojiUpdate { .. } => 25,
+            ServerEvent::ReadUpdate { .. } => 26,
         }
     }
-    const KINDS: usize = 26;
+    const KINDS: usize = 27;
 
     #[test]
     fn every_kind_is_covered() {
