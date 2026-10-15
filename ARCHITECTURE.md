@@ -138,6 +138,19 @@ turns hardware acceleration off too and paints on the CPU, so there is no GBM
 probe on those launches. The driver version comes from
 `/sys/module/nvidia/version`; the 610 driver keeps the GPU.
 
+The window's requests go through WebKit's network process, which uses libsoup,
+and startup sets `SOUP_FORCE_HTTP1=1` so it speaks HTTP/1.1 only (#646;
+libsoup reads any value as on). Over HTTP/2 libsoup sends every request to a
+server down one shared connection, and a request that times out leaves that
+connection in use. After a long sleep the server had forgotten it while the
+computer hadn't, so the token refresh and every retry went down a dead
+connection, with "Signing you back in…" on screen until the kernel gave up on
+the socket about 15 minutes later. Over HTTP/1.1 the request that times out
+takes its connection with it, and the next try opens a new one. It costs a few
+connections per server instead of one. `scripts/linux-next-check.mjs` checks
+the packaged network process has the switch and that its libsoup still reads
+it.
+
 The same startup path ignores `SIGHUP` so closing the launching terminal does
 not kill the window, and an AppImage writes a user menu entry
 (`com.linger.desktop`) so the next open does not need a terminal. Packaged

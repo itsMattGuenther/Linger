@@ -3,14 +3,15 @@
 //
 // Runs the unchanged package on a private virtual display with an empty profile
 // and no account, injects client/scripts/next-smoke-probe.js through the same
-// test-only GTK module the audio check uses, and waits for its verdict. Requires
-// cc, pkg-config, WebKitGTK/GStreamer headers, Xvfb and D-Bus. The Windows
+// test-only GTK module the audio check uses, and waits for its verdict. Then it
+// checks WebKit's network process speaks HTTP/1.1 only (#646). Requires cc,
+// pkg-config, WebKitGTK/GStreamer headers, Xvfb and D-Bus. The Windows
 // version of this check is client/scripts/windows-next-check.mjs.
 //
 // Usage: node scripts/linux-next-check.mjs PROGRAM --output DIR [--appimage]
 
 import { execFileSync, spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -41,7 +42,7 @@ try {
 
 const env = { ...process.env };
 for (const key of Object.keys(env)) {
-  if (["GST_", "PULSE_", "APPIMAGE", "APPDIR", "GTK3_MODULES", "LINGER_"].some((prefix) => key.startsWith(prefix))) delete env[key];
+  if (["GST_", "PULSE_", "APPIMAGE", "APPDIR", "GTK3_MODULES", "LINGER_", "SOUP_"].some((prefix) => key.startsWith(prefix))) delete env[key];
 }
 for (const key of ["DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DBUS_SESSION_BUS_ADDRESS", "LD_LIBRARY_PATH"]) delete env[key];
 for (const kind of ["config", "data", "cache", "state", "runtime"]) {
@@ -102,6 +103,69 @@ async function stop() {
   }
 }
 
+/** Every process started under `root`, however deep, by each one's parent. */
+function descendants(root) {
+  const children = new Map();
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    let stat;
+    try {
+      stat = readFileSync(`/proc/${entry}/stat`, "utf8");
+    } catch {
+      continue; // Gone already.
+    }
+    // The name sits in brackets and may hold spaces; the parent is the
+    // second field after it.
+    const parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+    children.set(parent, [...(children.get(parent) ?? []), Number(entry)]);
+  }
+  const found = [];
+  const queue = [root];
+  while (queue.length > 0) {
+    for (const child of children.get(queue.shift()) ?? []) {
+      found.push(child);
+      queue.push(child);
+    }
+  }
+  return found;
+}
+
+/**
+ * The window's requests go through WebKit's network process. Its libsoup must
+ * speak HTTP/1.1 only: over HTTP/2 every request shares one connection, and
+ * one that died while the computer slept swallowed the token refresh for
+ * about 15 minutes (#646). So the process must have `SOUP_FORCE_HTTP1`, and
+ * the libsoup it loaded (the bundled copy, in the AppImage) must still read it.
+ */
+async function checkHttp1() {
+  let network = [];
+  for (let attempt = 0; attempt < 50 && network.length === 0; attempt++) {
+    if (attempt > 0) await sleep(100);
+    network = descendants(app.pid).filter((pid) => {
+      try {
+        return readFileSync(`/proc/${pid}/comm`, "utf8").trim() === "WebKitNetworkPr";
+      } catch {
+        return false;
+      }
+    });
+  }
+  if (network.length === 0) throw new Error("No WebKit network process under the app");
+  const libraries = new Set();
+  for (const pid of network) {
+    const environ = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0");
+    if (!environ.some((entry) => entry.startsWith("SOUP_FORCE_HTTP1="))) {
+      throw new Error(`WebKit's network process (${pid}) can use HTTP/2: it has no SOUP_FORCE_HTTP1 (#646)`);
+    }
+    const library = readFileSync(`/proc/${pid}/maps`, "utf8").match(/\/\S*libsoup-3\.0\.so\S*/)?.[0];
+    if (library === undefined) throw new Error(`WebKit's network process (${pid}) has no libsoup 3 loaded`);
+    if (!readFileSync(library).includes("SOUP_FORCE_HTTP1")) {
+      throw new Error(`${library} no longer reads SOUP_FORCE_HTTP1, so Linger's window can use HTTP/2 (#646)`);
+    }
+    libraries.add(library);
+  }
+  return [...libraries].map((library) => basename(library));
+}
+
 let failure = null;
 try {
   let result = null;
@@ -120,6 +184,8 @@ try {
   }
   if (result?.status !== "passed") throw new Error(`The Buddy list didn't start: ${JSON.stringify(result)}; see ${output}`);
   console.log(`PASS ${basename(program)}: the Buddy list starts in the packaged WebView: ${JSON.stringify(result.checks)}`);
+  const libraries = await checkHttp1();
+  console.log(`PASS ${basename(program)}: WebKit's network process speaks HTTP/1.1 only (${libraries.join(", ")})`);
 } catch (error) {
   failure = error;
 } finally {

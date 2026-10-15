@@ -110,7 +110,8 @@ client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe
 bundles the current sound player before running it inside each package.
 `scripts/linux-next-check.mjs` and `client/scripts/windows-next-check.mjs` check
 the Buddy list client itself starts in the packaged app, signed in nowhere,
-and the Windows one keeps a screenshot of it. The Windows check also opens
+and the Windows one keeps a screenshot of it. The Linux one also checks WebKit's
+network process speaks HTTP/1.1 only (#646). The Windows check also opens
 Settings and a conversation's own window the way the list does and waits for each to draw:
 a window built from a synchronous command deadlocks WebView2 (#205), so every
 window-building command in `src-tauri/src/window.rs` is `async`. No test code
@@ -193,8 +194,10 @@ there unless it is set: frames go to the window in ordinary memory. On
 NVIDIA's legacy driver (the 580 branch and older), startup also sets
 `GDK_GL=disable`, because GTK's GL drawing crashed there when a Linger window
 was resized with another open (#229); WebKit then paints on the CPU. An
-explicit `GDK_GL` always wins. These choices happen before GTK and change no
-desktop settings.
+explicit `GDK_GL` always wins. Startup also sets `SOUP_FORCE_HTTP1=1`, so the
+window's requests use HTTP/1.1: over HTTP/2 a connection that died during a
+long sleep swallowed the token refresh for about 15 minutes (#646). These
+choices happen before GTK and change no desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
 ## The Buddy list client

@@ -1,7 +1,8 @@
 //! Linux launch plumbing that has to run before GTK.
 //!
-//! Graphics workarounds GTK and WebKitGTK need on some GPUs, then three jobs about
-//! the AppImage-from-a-terminal path: the backend override that survives
+//! Graphics workarounds GTK and WebKitGTK need on some GPUs, the HTTP version
+//! WebKit's network process speaks, then three jobs about the
+//! AppImage-from-a-terminal path: the backend override that survives
 //! linuxdeploy's X11 fallback, ignoring the hang-up that would otherwise kill
 //! the window when the terminal closes, and writing a user menu entry so the
 //! next open does not need a terminal.
@@ -28,6 +29,10 @@ const DRM_CLASS: &str = "/sys/class/drm";
 /// memory rather than as GPU buffers. Set by [`configure`] on some computers
 /// (#433) unless somebody set it.
 const FORCE_SHM: &str = "WEBKIT_DMABUF_RENDERER_FORCE_SHM";
+/// libsoup's switch for speaking HTTP/1.1 only. WebKit's network process,
+/// which makes the window's requests, inherits it from here. libsoup reads
+/// any value as on, `0` included. Set by [`configure`] (#646).
+const FORCE_HTTP1: &str = "SOUP_FORCE_HTTP1";
 
 fn backend(
     value: Option<&OsStr>,
@@ -300,6 +305,17 @@ pub fn configure() -> Result<(), &'static str> {
                 );
             }
         }
+    }
+    // Over HTTP/2, libsoup sends every request to a server down one shared
+    // connection, and a request that times out leaves that connection in
+    // use. One the server forgot while the computer slept then swallowed the
+    // token refresh and every retry of it, with "Signing you back in…" on
+    // screen, until the kernel gave up on the socket about 15 minutes later
+    // (#646). Over HTTP/1.1 the timed-out request takes its connection with
+    // it, and the next try opens a new one. `linux-next-check.mjs` checks the
+    // network process got it.
+    if std::env::var_os(FORCE_HTTP1).is_none() {
+        std::env::set_var(FORCE_HTTP1, "1");
     }
     ignore_terminal_hangup();
     if let Err(err) = install_appimage_menu_entry(&chosen) {
