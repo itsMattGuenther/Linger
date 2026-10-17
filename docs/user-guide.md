@@ -1268,7 +1268,8 @@ password.
   [Taking everything with you](#taking-everything-with-you).
 - **What stays:** your username, so nobody new can take it and pass as you. Reports
   you made, or that were made about you, stay with the host. Group DMs say you left.
-  A one-to-one DM stays your friend's, as "Deleted account".
+  A one-to-one DM stays your friend's, as "Deleted account". The server's own nightly
+  backups still hold a copy until they're replaced, within about a month.
 
 **The host can't delete their own account.** The server would have nobody in charge;
 whoever runs the server can shut it down and delete its data instead.

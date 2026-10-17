@@ -1184,7 +1184,9 @@ that keeps the account so the host can let them back in.
   zone, sign-ins, read positions, notification rules, the people you blocked, and your
   export. Group DMs get the quiet line saying you left (§4.13).
 - **What stays, and why:** a report you made or one about you stays with the host, so
-  deleting an account is never a way to erase the reports about it. Somebody who blocked
+  deleting an account is never a way to erase the reports about it. The server's own
+  nightly backups of its database keep a copy until they're replaced, within about a
+  month, and the website says so. Somebody who blocked
   you still doesn't see what you wrote. And **your username stays taken**: a mention is
   the text `@username`, so somebody new who took the name would inherit every old
   mention of you.
