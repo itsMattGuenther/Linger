@@ -953,6 +953,12 @@ tools the video equivalent of the image decoder's limits: the copy gets 20 secon
 killed. A killed copy refuses the upload; a killed probe or poster counts as no probe data
 or no poster.
 
+A video's dimensions are as it plays (#658), as a photo's are as it is seen (#569).
+ffprobe gives a stream's width and height as stored, and a phone stores a portrait video
+on its side, so a quarter turn in its display matrix (`rotation` in the stream's side
+data, ±90 or ±270; checked on ffmpeg 5.1 and 9.0) swaps them. They then match the poster,
+which ffmpeg turns upright. Videos stored before #658 keep the size they were stored with.
+
 **Display copies** (#382). An engine that decodes a whole picture holds all of it in
 memory however small it is drawn: about 80 MB a phone photo in WebKit, measured. So
 when the server re-encodes an image over 960 px on its longest side, it also stores a

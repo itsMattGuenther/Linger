@@ -1447,6 +1447,128 @@ async fn a_video_keeps_no_trace_of_where_it_was_filmed() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The way up a video plays (#658)
+// ---------------------------------------------------------------------------
+
+/// A phone held upright the other way up: a quarter turn the other way from
+/// [`upright`], then moved back into view by the picture's width (160 here).
+fn upright_the_other_way() -> Vec<u8> {
+    packed([
+        0,
+        0xFFFF_0000,
+        0,
+        0x0001_0000,
+        0,
+        0,
+        0,
+        160 << 16,
+        0x4000_0000,
+    ])
+}
+
+/// A phone held on its side the other way round: a half turn, then moved
+/// back into view by both sides.
+fn half_turn() -> Vec<u8> {
+    packed([
+        0xFFFF_0000,
+        0,
+        0,
+        0,
+        0xFFFF_0000,
+        0,
+        160 << 16,
+        120 << 16,
+        0x4000_0000,
+    ])
+}
+
+/// A phone held on its side the way its camera faces: no turn at all.
+fn unturned() -> Vec<u8> {
+    packed([0x0001_0000, 0, 0, 0, 0x0001_0000, 0, 0, 0, 0x4000_0000])
+}
+
+fn packed(matrix: [u32; 9]) -> Vec<u8> {
+    matrix.iter().flat_map(|n| n.to_be_bytes()).collect()
+}
+
+/// `bytes` with its video's display matrix replaced by `matrix`.
+fn with_matrix(mut bytes: Vec<u8>, matrix: &[u8]) -> Vec<u8> {
+    let at = video_matrix(&bytes);
+    bytes[at..at + 36].copy_from_slice(matrix);
+    bytes
+}
+
+/// A phone stores a video filmed upright on its side, with a matrix saying
+/// how to turn it (#658). The app sizes the player from `width` and `height`
+/// before the poster loads, so they are the size the video plays at, as a
+/// photo's are (#569): taller than wide, and the same as the poster, which
+/// ffmpeg turns upright. A half turn, or none, leaves a video as wide as it
+/// is stored. Skipped without ffmpeg.
+#[tokio::test]
+async fn a_video_is_described_the_way_up_it_plays() {
+    let phone = |ext: &str, matrix: Vec<u8>| phone_video(ext, &[]).map(|b| with_matrix(b, &matrix));
+    let cases = [
+        (
+            "IMG_0001.mov",
+            "video/quicktime",
+            phone("mov", upright()),
+            (120, 160),
+        ),
+        (
+            "VID_0001.mp4",
+            "video/mp4",
+            phone("mp4", upright()),
+            (120, 160),
+        ),
+        (
+            "VID_0002.mp4",
+            "video/mp4",
+            phone("mp4", upright_the_other_way()),
+            (120, 160),
+        ),
+        (
+            "VID_0003.mp4",
+            "video/mp4",
+            phone("mp4", half_turn()),
+            (160, 120),
+        ),
+        (
+            "VID_0004.mp4",
+            "video/mp4",
+            phone("mp4", unturned()),
+            (160, 120),
+        ),
+    ];
+    if cases.iter().any(|(.., bytes, _)| bytes.is_none()) {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    }
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+
+    for (name, mime, bytes, (width, height)) in cases {
+        let attachment = upload(&server, &host.access_token, name, mime, bytes.unwrap()).await;
+        assert_eq!(
+            (attachment.width, attachment.height),
+            (Some(width), Some(height)),
+            "{name}: not the size it plays at"
+        );
+        let poster = attachment.poster_url.expect("videos get a poster frame");
+        let poster = fetch(&absolute(&server, &poster), None)
+            .await
+            .bytes()
+            .await
+            .unwrap();
+        let poster = image::load_from_memory(&poster).unwrap();
+        assert_eq!(
+            (poster.width(), poster.height()),
+            (width, height),
+            "{name}: the poster isn't the size the video is described as"
+        );
+    }
+}
+
 /// A sound file's tags can say anything: a voice memo app may name a
 /// recording after the street it was made on. They go the way a video's do,
 /// and the sound stays. Skipped without ffmpeg.

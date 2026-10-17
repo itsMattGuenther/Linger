@@ -1239,9 +1239,12 @@ type Attachment = {
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
 A photo is turned the way its EXIF Orientation says before that, so `width` and `height`
-are as it is seen, and a client draws the stored picture as it is (#569). Video and sound
-files are copied without their tags (#651), in the same container, so their `size_bytes`
-is usually a little smaller than what was sent.
+are as it is seen, and a client draws the stored picture as it is (#569). A video's
+`width` and `height` are as it plays, the same size as its poster: a phone stores a
+portrait video on its side with a quarter turn to play it at, and the server swaps them
+for it (#658). A video stored before that keeps the size it was stored with. Video and
+sound files are copied without their tags (#651), in the same container, so their
+`size_bytes` is usually a little smaller than what was sent.
 The stored `filename` has no folders in it, and no control characters, double quotes,
 backslashes or direction controls (§2).
 

@@ -938,12 +938,42 @@ async fn ffprobe(path: &Path) -> Option<Probe> {
 
     #[allow(clippy::cast_possible_truncation)]
     let dimension = |value: &serde_json::Value| value.as_u64().map(|v| v as u32).filter(|v| *v > 0);
+    let width = video.as_ref().and_then(|v| dimension(&v["width"]));
+    let height = video.as_ref().and_then(|v| dimension(&v["height"]));
+    let (width, height) = if video.as_ref().is_some_and(quarter_turned) {
+        (height, width)
+    } else {
+        (width, height)
+    };
 
     Some(Probe {
         duration_ms,
-        width: video.as_ref().and_then(|v| dimension(&v["width"])),
-        height: video.as_ref().and_then(|v| dimension(&v["height"])),
+        width,
+        height,
     })
+}
+
+/// Whether a video plays a quarter turn from the way it is stored, so its
+/// width and height swap (#658), as a photo's do (#569).
+///
+/// A phone films upright onto a sensor that lies on its side, stores the
+/// picture as it came, and writes a display matrix saying how to turn it.
+/// ffprobe gives a stream's width and height as stored, and the matrix's turn
+/// in degrees as `rotation` in its side data: -90 for a phone held upright, 90
+/// for one upside down (checked on ffmpeg 5.1, the published image's, and on
+/// 9.0). The poster frame is already upright, because ffmpeg turns what it
+/// decodes.
+fn quarter_turned(video: &serde_json::Value) -> bool {
+    video["side_data_list"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find_map(|side_data| side_data["rotation"].as_f64())
+        .is_some_and(|degrees| {
+            #[allow(clippy::cast_possible_truncation)]
+            let turn = (degrees.round() as i64).rem_euclid(360);
+            turn == 90 || turn == 270
+        })
 }
 
 /// One frame, as JPEG. `None` whenever the file has no frame to give, or it
@@ -1564,5 +1594,42 @@ mod tests {
         for mime in media::VIDEO_MIME.iter().chain(&media::AUDIO_MIME) {
             assert!(container_of(mime).is_some(), "{mime}");
         }
+    }
+
+    /// A video stored a quarter turn from the way it plays swaps its width
+    /// and height (#658), whichever way the turn goes and however many whole
+    /// turns are added. A half turn, no turn, and no rotation at all leave
+    /// them alone. The stream is shaped the way ffprobe prints one.
+    #[test]
+    fn only_a_quarter_turn_swaps_a_videos_sides() {
+        let stream = |rotation: serde_json::Value| {
+            serde_json::json!({
+                "codec_type": "video",
+                "width": 1920,
+                "height": 1080,
+                "side_data_list": [{
+                    "side_data_type": "Display Matrix",
+                    "displaymatrix": "\n00000000: 0 65536 0\n",
+                    "rotation": rotation,
+                }],
+            })
+        };
+        for degrees in [90, -90, 270, -270, 450, -450] {
+            assert!(quarter_turned(&stream(degrees.into())), "{degrees}");
+        }
+        for degrees in [0, 180, -180, 360, 540] {
+            assert!(!quarter_turned(&stream(degrees.into())), "{degrees}");
+        }
+        assert!(quarter_turned(&stream((-90.0).into())), "-90.0");
+
+        // No side data, side data with no rotation, and a rotation that
+        // isn't a number.
+        assert!(!quarter_turned(&serde_json::json!({
+            "codec_type": "video", "width": 1920, "height": 1080,
+        })));
+        assert!(!quarter_turned(&serde_json::json!({
+            "side_data_list": [{ "side_data_type": "Stereo 3D" }],
+        })));
+        assert!(!quarter_turned(&stream("-90".into())));
     }
 }
