@@ -134,8 +134,12 @@ pub async fn delete(state: &AppState, id: UserId, everything: bool) -> Result<()
     // the commit could identify again into an account that still worked.
     state.gateway.close_sessions_for(id).await;
     // Out of every DM's audience, the ones whose rows stay included: the row
-    // of a deactivated account doesn't count (`repo::rooms::members`).
-    state.gateway.reload_dms(&state.db.read).await?;
+    // of a deactivated account doesn't count (`repo::rooms::members`). Their
+    // sessions are closed already and can't open again, so a reload that
+    // fails leaves nothing reachable; the next one puts the map right.
+    if let Err(err) = state.gateway.reload_dms(&state.db.read).await {
+        tracing::warn!(error = ?err, "couldn't reload DM audiences after deleting an account");
+    }
     state.gateway.publish(ServerEvent::UserRemove {
         user_id: id,
         deleted: Some(true),

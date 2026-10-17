@@ -354,6 +354,29 @@ test("signing out of the last server tells every window, and the list goes back 
   expect((await did(page)).filter((line) => line.startsWith("emit next:signedout"))).toEqual([`emit next:signedout:${JSON.stringify({ v: 1, server: HOME })}`]);
 });
 
+test("a sign-in refused after signing out on purpose says nothing about it (#650)", async ({ page }) => {
+  // Deleting your account signs the app out of that server, and the server
+  // has already ended every sign-in: the token the connection asks for on
+  // its way out is refused. That isn't news to whoever just deleted it.
+  await open(page, "?one");
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  const refreshes = async () => (await did(page)).filter((line) => line.endsWith("/auth/refresh")).length;
+  const before = await refreshes();
+  await page.evaluate(() => window.core?.refuseNext());
+  // The first ask hands over the token the app holds; asked again, the
+  // connection wants a fresh one, and that refresh is the one refused.
+  await page.evaluate(() => window.core?.status("https://good-company.example", { kind: "needs_token" }));
+  await page.waitForTimeout(100);
+  await page.evaluate(() => window.core?.status("https://good-company.example", { kind: "needs_token" }));
+  await expect.poll(refreshes).toBeGreaterThan(before);
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "signout", server: "https://good-company.example" }));
+  await expect(page.locator("[data-screen='signin']")).toBeVisible();
+  await page.evaluate(() => window.core?.unstall());
+  // The refusal lands a moment later, and nothing is waiting on it to show.
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='signin']")).not.toContainText("sign-in expired");
+});
+
 test.describe("adding a server", () => {
   test("Settings asks, and the list window shows the sign-in with a way back, keeping every server connected", async ({ page }) => {
     await open(page, "?one");

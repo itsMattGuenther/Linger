@@ -289,7 +289,9 @@ export function useSessions(): Sessions {
           );
         },
         onSignedOut: (reason) => {
-          if (!mounted.current) return;
+          // Signed out on purpose already, as straight after deleting the
+          // account (#650): a token refused on its way out isn't news.
+          if (!mounted.current || forgotten.has(baseUrl)) return;
           // Only this server. A token going stale on one machine's account
           // says nothing about the others.
           void forgetSession(baseUrl);

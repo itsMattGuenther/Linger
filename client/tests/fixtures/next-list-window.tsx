@@ -27,7 +27,9 @@
  * hands out the next, and one presented twice is refused and written down
  * as `reuse`. `?down` has Ashen Lanterns unreachable (`?down=<hostname>`,
  * another) until `window.core.up()`; `?stall` has its first refresh wait until
- * `window.core.unstall()`.
+ * `window.core.unstall()`. `window.core.refuseNext()` has the next refresh
+ * of any server wait for `unstall()` too, and then be refused, as for an
+ * account deleted meanwhile (#650).
  * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
  * version waiting (0.4.1); otherwise this is the newest.
  *
@@ -372,6 +374,8 @@ declare global {
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
       unstall: () => void;
+      /** The next refresh waits for `unstall()`, then is refused (#650). */
+      refuseNext: () => void;
       /** The voice engine hears somebody start or stop talking (`peer` null for you). */
       speaking: (server: string, peer: string | null, speaking: boolean) => void;
       /**
@@ -411,6 +415,9 @@ window.core = {
     down = null;
   },
   unstall: () => unstall(),
+  refuseNext: () => {
+    refusing = true;
+  },
   speaking: (server, peer, speaking) => deliver("voice:speaking", { server, peer, speaking }),
   restart: (server, read) => {
     const state = states[server];
@@ -432,6 +439,7 @@ const stalled = new Promise<void>((settle) => {
   unstall = settle;
 });
 let stalling = query.has("stall");
+let refusing = false;
 /** What each server will take next, and what the keyring holds: they part only when a token is lost on the way. */
 const issued: Record<string, string> = Object.fromEntries(saved.map((server) => [server, `refresh-1-${server}`]));
 const keyring: Record<string, string | undefined> = { ...issued };
@@ -528,6 +536,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return json({ access_token: `token-${server}`, refresh_token: issued[server], expires_in: 600, user: state.me });
   };
   if (path === "/auth/refresh") {
+    if (refusing) {
+      refusing = false;
+      await stalled;
+      return refuse(401, "UNAUTHENTICATED", "That sign-in has ended.");
+    }
     if (stalling && server === GUILD) {
       stalling = false;
       await stalled;
