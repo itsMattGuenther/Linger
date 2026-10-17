@@ -146,7 +146,7 @@ async fn leave(
 
 /// The people still in a DM somebody left: the DM as it is now, with its new
 /// `member_ids`, then the line saying so.
-async fn tell_the_others(
+pub(crate) async fn tell_the_others(
     state: &AppState,
     room_id: RoomId,
     line: linger_core::MessageId,

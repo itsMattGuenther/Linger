@@ -24,9 +24,10 @@ const USER_SELECT: &str = "
 
 /// Removed members are absent from everything a member can ask for (T-413), so
 /// every query here says which side of that line it wants rather than
-/// inheriting a default.
+/// inheriting a default. A deleted account (#650) is deactivated too, so it is
+/// never active, and it is not removed either: nobody can restore it.
 const ACTIVE: &str = " WHERE u.deactivated_at IS NULL";
-const REMOVED: &str = " WHERE u.deactivated_at IS NOT NULL";
+const REMOVED: &str = " WHERE u.deactivated_at IS NOT NULL AND u.deleted_at IS NULL";
 
 fn row_to_user(row: &SqliteRow) -> Result<User, ApiError> {
     let id = UserId::from_slice(&row.get::<Vec<u8>, _>("id")).map_err(anyhow::Error::from)?;
@@ -192,6 +193,22 @@ pub async fn removed(db: &SqlitePool) -> Result<Vec<User>, ApiError> {
         .fetch_all(db)
         .await?;
     users_of(db, &rows).await
+}
+
+/// Every deleted account's id (#650), for `ready`: the app labels what they
+/// left behind "Deleted account". Nothing else about them is left to send.
+pub async fn deleted_ids(db: &SqlitePool) -> Result<Vec<UserId>, ApiError> {
+    let rows: Vec<Vec<u8>> =
+        sqlx::query_scalar("SELECT id FROM users WHERE deleted_at IS NOT NULL ORDER BY id")
+            .fetch_all(db)
+            .await?;
+    rows.iter()
+        .map(|bytes| {
+            UserId::from_slice(bytes)
+                .map_err(anyhow::Error::from)
+                .map_err(ApiError::from)
+        })
+        .collect()
 }
 
 pub async fn by_id(db: &SqlitePool, id: UserId) -> Result<Option<User>, ApiError> {

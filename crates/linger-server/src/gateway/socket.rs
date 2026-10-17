@@ -275,6 +275,8 @@ async fn handshake(
             // The server's own emoji (#359): the whole set, kept current
             // afterwards by `emoji.update`.
             let emoji = repo::emoji::all(&state.db.read, &state.config).await.ok()?;
+            // Deleted accounts (#650), so what they left says so.
+            let deleted_users = repo::users::deleted_ids(&state.db.read).await.ok()?;
             let ready = ReadyData {
                 session_id: session_id.clone(),
                 user,
@@ -285,6 +287,7 @@ async fn handshake(
                 voice: Some(state.gateway.voice_snapshot(user_id)),
                 emoji: Some(emoji),
                 reactions: Some(true),
+                deleted_users: Some(deleted_users),
             };
             let frame = ServerFrame::sequenced(ServerEvent::Ready(ready), 0);
             sink.send(serde_json::to_string(&frame).ok()?).await.ok()?;

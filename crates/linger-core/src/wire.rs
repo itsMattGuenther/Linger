@@ -295,6 +295,31 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+/// `POST /me/delete` (#650, PROTOCOL §5): delete your own account on this
+/// server. The password is asked for so that a borrowed, unlocked phone can't
+/// do it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DeleteAccountRequest {
+    pub password: String,
+    /// "Also delete everything I wrote": messages and the files on them,
+    /// reactions, and votes in polls still open. Off, all of that stays and
+    /// loses its name. Absent is off.
+    #[serde(default)]
+    pub everything: bool,
+}
+
+/// `POST /users/:id/delete` (#650, PROTOCOL §5): the host deletes the account
+/// of somebody they removed, who can't sign in to do it themselves.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DeleteRemovedRequest {
+    /// The same choice as [`DeleteAccountRequest::everything`], made on the
+    /// person's behalf. Absent is off.
+    #[serde(default)]
+    pub everything: bool,
+}
+
 /// `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects;
 /// `entrance_sound: ""` clears the sound (PROTOCOL §5).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]

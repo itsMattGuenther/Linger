@@ -1081,9 +1081,10 @@ somebody out of voice or remove somebody who shouldn't be there.
 - **A co-host can do everything the host does in the app:** rooms, the server's name
   and color, invites, reports, removing and restoring members, deleting messages and
   taking somebody out of voice. They see the same Hosting sections in Settings.
-- **Except three things:** a co-host can't make or clear co-hosts, can't make a
+- **Except four things:** a co-host can't make or clear co-hosts, can't make a
   sign-in link for somebody who forgot their password (#581: whoever holds one can
-  sign in as them, so only the host makes them, and nobody can make the host one), and
+  sign in as them, so only the host makes them, and nobody can make the host one),
+  can't delete a removed person's account (#650, §4.19: it can't be undone), and
   can't act on the host (remove them, take them out of voice, delete their messages or
   revoke their invites).
 - **Reports go to the host and every co-host.**
@@ -1155,6 +1156,48 @@ their minds two screens later; a poll is one place that shows where the room lan
   line doesn't either.
 - **No editing**, since votes would end up pointing at different words; deleting is as for
   any message. The phone app has the same card; tap to vote.
+
+### 4.19 Deleting your account
+
+**Anybody can delete their own account on a server, from inside the app** (Matt,
+2026-10-17, #650). Both app stores require it: Apple (guideline 5.1.1(v)) wants an
+account made in the app to be deletable there, with the personal data that came with it,
+and Google Play wants the same plus a web page for asking. A host's Remove isn't it:
+that keeps the account so the host can let them back in.
+
+- **Where:** Settings → Account & App, "Delete my account on <server>", in the computer
+  app and the phone app alike. An account lives on one server, so it is per server, and
+  the screen says which one. Deleting signs the app out of that server.
+- **Confirming:** your password, so a borrowed, unlocked phone can't do it. It happens
+  at once: no waiting period, and nothing to cancel. The confirm screen offers "Download
+  your copy first" (the export, §4.11).
+- **What you wrote is your choice** (Matt, 2026-10-17): one box, "Also delete
+  everything I wrote", off by default, with DMs under the same rule as rooms.
+  - **Off,** your messages, files, reactions and poll votes stay, and lose your name:
+    they show as **"Deleted account"**, with no name, color, status or card.
+    Conversations still make sense, and nobody else loses their half.
+  - **On,** your messages go the way a deleted message does (§4.7), and the files on
+    them with them; so do your reactions, your votes in polls still open, and a message
+    of the day you set. A closed poll keeps how it came out (§4.18), so a vote in one
+    stays, nameless.
+- **Everything else about you goes:** your name, password, style, status, sound, time
+  zone, sign-ins, read positions, notification rules, the people you blocked, and your
+  export. Group DMs get the quiet line saying you left (§4.13).
+- **What stays, and why:** a report you made or one about you stays with the host, so
+  deleting an account is never a way to erase the reports about it. Somebody who blocked
+  you still doesn't see what you wrote. And **your username stays taken**: a mention is
+  the text `@username`, so somebody new who took the name would inherit every old
+  mention of you.
+- **The host can't delete their own account.** The server would have nobody in charge;
+  the host runs the machine and can wipe the whole server instead. The app says so.
+- **Somebody the host removed** can't sign in to delete theirs, so **the host** (not a
+  co-host) can delete it for them, from the Removed list, with the same box. Only a
+  removed account, so it's always two deliberate steps.
+- **Everybody else's app** drops the person at once, without a restart, and from then
+  on labels what they left "Deleted account".
+- **For people without the app:** the website has a page saying how (Google's
+  requirement): delete it in the app, or ask your server's host, who removes the account
+  and then deletes it. The project itself holds nobody's data.
 
 ---
 

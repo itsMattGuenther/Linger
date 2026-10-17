@@ -704,6 +704,7 @@ GET   /me                 → User
 PATCH /me                 { display_name?, style?, status?, entrance_sound?, time_zone? } → User
 PATCH /me/password        { current_password, new_password }
                        →  { access_token, refresh_token, expires_in, user }
+POST  /me/delete          { password, everything? }  → 204   # never the host
 
 GET  /me/notify-rules     → NotifyRule[]
 PUT  /me/notify-rules     { target_user_id, room_id | null }   → 204
@@ -712,6 +713,7 @@ DELETE /me/notify-rules   { target_user_id, room_id | null }   → 204
 GET  /users/removed       → User[]                  # host or co-host
 POST /users/:id/remove    → 204                     # host or co-host
 POST /users/:id/restore   → 204                     # host or co-host
+POST /users/:id/delete    { everything? } → 204     # the host only, removed people only
 PUT    /users/:id/cohost  → User                    # the host only: make a co-host
 DELETE /users/:id/cohost  → User                    # the host only: not a co-host
 POST /users/:id/sign-in-link → { code, user_id, expires_at }  # the host only, 10/hour
@@ -754,6 +756,74 @@ new password. The server closes that connection too, on purpose. The only thing 
 could pick it out is the access token it identified with, which is usually older than
 the one the change was made with, and a thief holding that same token would be spared
 along with it.
+
+### Deleting an account (#650, SPEC §4.19)
+
+Both app stores require that somebody who made an account in the app can delete it
+there. An account lives on one server, so the server does the deleting and the app asks
+it to; an app signed in to several servers deletes from one at a time.
+
+`POST /me/delete` deletes your own. `password` is checked first (`FORBIDDEN`, "That
+password doesn't match.", when it doesn't), so a borrowed, unlocked phone can't. **The
+host can't** (`FORBIDDEN`): the server would have nobody in charge, and the host runs the
+machine and can wipe the whole server instead. A co-host can, and stops being one.
+
+`POST /users/:id/delete` is the host deleting the account of **somebody they removed**,
+who can't sign in to do it (the host only, not a co-host, as for sign-in links; it can't
+be undone). Somebody still on the server is `VALIDATION_FAILED`: they delete their own,
+or the host removes them first. A deleted account, or no such account, is `NOT_FOUND`.
+
+`everything` is the person's choice, "Also delete everything I wrote", and absent is
+off:
+
+- **Off**, what they wrote stays and loses its name: messages and the files on them,
+  reactions, poll votes. It still points at their id, which the app draws as "Deleted
+  account" (`ready.deleted_users`, `user.remove`'s `deleted`).
+- **On**, every message they wrote becomes a tombstone, as `DELETE /messages/:id`
+  makes one, and the files on them go with it (the sweep after the delete takes them).
+  So do their reactions, their votes in polls still open, and a message of the day they
+  set. A closed poll keeps how it came out (SPEC §4.18), so a vote in one stays,
+  nameless. The quiet lines saying they joined voice or left a DM stay: they carry no
+  words of theirs.
+
+**The `users` row stays, emptied, and keeps the name taken.** Everything else that
+points at an account (messages, files, invites, emoji, polls, reports) would stop the
+row's delete, and the links that cascade would take the reports about the person with
+them. So it is kept as a stand-in: display name, password, style, status and its fields,
+entrance sound and time zone are cleared, `deactivated_at` and `deleted_at` are set, and
+the username stays. A mention is stored as the text `@username`, and a newcomer who took
+the name would inherit every old mention of the person who left, so it is never free
+again. Each deleted person keeps their own stand-in, so two people's messages never run
+together.
+
+In the same transaction, what was theirs alone goes: sign-ins (every refresh token row,
+and every access token through `token_generation`, §2), sign-in links made for them,
+read positions, notification rules they set and those set about them, the blocks they
+made, their send keys (`message_nonces`). Their invites are revoked. **Two things stay
+on purpose.** Blocks *of* them: whoever blocked them chose not to see what they wrote,
+and that doesn't change because they left. Reports, both ways, for the host: deleting an
+account must not be a way to erase the reports about it. Server emoji they added stay,
+as on removal: they're the server's.
+
+DMs: a **group DM** is left as `POST /dms/:id/leave` leaves one (§3.1), with the line
+saying so, or deleted when nobody who could read it is left. A **one-to-one DM** stays
+the friend's, with what was said in it, as it does when somebody is removed; when nobody
+who could read it is left (the friend removed or deleted too), it is deleted the same
+way.
+
+Then, after the commit: their gateway sessions are closed with `invalid_session {
+reason: "unauthenticated" }`, their uploads in progress and unsent files go, their
+export goes, and `user.remove { user_id, deleted: true }` goes to everybody. With
+`everything`, everybody also gets `message.delete` for each message, `reaction.update`
+for each reaction that came off, `message.update` for each open poll, and `room.update`
+for a room whose message of the day went. Those can number thousands, so they go out
+paced, about a thousand a second, rather than at once: the gateway's bus holds 1024
+frames, and a burst bigger than that would cut every session off (§8, "Resume"). An app
+that missed one has it at its next fresh `ready` or the next time it loads the room.
+
+A deleted account can't sign in (`UNAUTHENTICATED`, as a wrong password), is in no list
+(`GET /users`, `GET /users/removed`, the roster), and is `NOT_FOUND` to
+`GET /users/:id`, remove, restore and delete.
 
 ### Sign-in links (#581)
 
@@ -1546,9 +1616,15 @@ S→C  { "op": "ready",  "d": { "session_id", "user", "users": User[],
                               "presence": PresenceEntry[],
                               "voice"?: VoiceRoomState[],
                               "emoji"?: CustomEmoji[],
-                              "reactions"?: true },
+                              "reactions"?: true,
+                              "deleted_users"?: UserId[] },
                               "s": 0 }
 ```
+
+`ready.deleted_users` is every account deleted on this server (§5, #650). None of them
+is in `users`; a client draws what they left as "Deleted account" rather than the
+"someone" a removed member's messages get. A server from before leaves it out, which a
+client reads as none.
 
 `ready.emoji` is the server's own emoji, the whole set (§5, "Custom emoji"); a server
 from before them leaves it out, which a client reads as none.
@@ -1702,7 +1778,7 @@ that tells everybody nothing new is told to nobody.
 | `room.enter` | `{ room_id, user_id, entrance_sound }` — triggers the sound |
 | `room.leave` | `{ room_id, user_id }` |
 | `user.update` | `User` — the current state of this person, **whether or not the client already had them**. A display name, style or status change, and equally somebody who was not on the roster a moment ago: the client's fold appends when the id is unknown |
-| `user.remove` | `{ user_id }` — this person is off the server. The mirror of `user.update`, and it names an id rather than carrying a `User` because there is no state left to describe: `User` has no `deactivated_at` field and is not going to grow one to carry a tombstone |
+| `user.remove` | `{ user_id, deleted? }` — this person is off the server. The mirror of `user.update`, and it names an id rather than carrying a `User` because there is no state left to describe: `User` has no `deactivated_at` field and is not going to grow one to carry a tombstone. `deleted: true` when the account was deleted rather than removed (§5, #650), so the client labels what they left "Deleted account"; left out for a removal and by servers from before |
 | `room.create` / `room.update` | `Room` — a DM's `room.create` reaches its members and nobody else, which is how the other members find out it exists |
 | `dm.remove` | `{ room_id }` — **sent to the sessions of the person who left that group DM and nobody else's** (§3.1, #565): it's gone from their list. Nothing about the DM reaches them after it |
 | `typing` | `{ room_id, user_id }` |

@@ -176,6 +176,60 @@ pub async fn leave(write: &SqlitePool, room_id: RoomId, user_id: UserId) -> Resu
         ));
     }
 
+    let left = go(&mut tx, room_id, user_id).await?;
+    tx.commit().await?;
+    Ok(left)
+}
+
+/// The DMs a deleted account leaves (#650), on the deletion's transaction.
+///
+/// Every group DM, as [`leave`] leaves one: the others get the line saying
+/// so, or the DM is deleted when nobody who could read it is left. A
+/// one-to-one DM stays as it is while the friend can still read it, as it
+/// does when somebody is removed: it is that friend's row in their list, and
+/// what was said in it is half theirs. Once nobody who could read it is left
+/// it is deleted too.
+///
+/// The account must already be deactivated in `tx`, so that it doesn't count
+/// as somebody still able to read.
+pub async fn leave_all(
+    tx: &mut sqlx::SqliteConnection,
+    user_id: UserId,
+) -> Result<Vec<(RoomId, Left)>, ApiError> {
+    let theirs: Vec<(Vec<u8>, Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT r.id, r.member_key,
+                (SELECT COUNT(*) FROM room_members a WHERE a.room_id = r.id),
+                (SELECT COUNT(*) FROM room_members a
+                   JOIN users u ON u.id = a.user_id AND u.deactivated_at IS NULL
+                  WHERE a.room_id = r.id AND a.user_id != ?)
+           FROM rooms r
+           JOIN room_members me ON me.room_id = r.id AND me.user_id = ?
+          WHERE r.kind = 'dm'",
+    )
+    .bind(user_id.to_vec())
+    .bind(user_id.to_vec())
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut left = Vec::new();
+    for (id, key, made_for, readers) in theirs {
+        let one_to_one = key.is_some() && made_for <= 2;
+        if one_to_one && readers > 0 {
+            continue;
+        }
+        let room_id = RoomId::from_slice(&id).map_err(anyhow::Error::from)?;
+        left.push((room_id, go(tx, room_id, user_id).await?));
+    }
+    Ok(left)
+}
+
+/// Take `user_id` out of the DM, on the caller's transaction: what [`leave`]
+/// does once it has checked they may.
+async fn go(
+    tx: &mut sqlx::SqliteConnection,
+    room_id: RoomId,
+    user_id: UserId,
+) -> Result<Left, ApiError> {
     for statement in [
         "DELETE FROM room_members WHERE room_id = ? AND user_id = ?",
         "DELETE FROM read_markers WHERE room_id = ? AND user_id = ?",
@@ -218,11 +272,9 @@ pub async fn leave(write: &SqlitePool, room_id: RoomId, user_id: UserId) -> Resu
         .await?;
         Left::Stays { line }
     } else {
-        empty(&mut tx, room_id).await?;
+        empty(tx, room_id).await?;
         Left::Emptied
     };
-
-    tx.commit().await?;
     Ok(left)
 }
 

@@ -179,6 +179,13 @@ pub struct ReadyData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reactions: Option<bool>,
+    /// Every account deleted on this server (#650), so what they left behind
+    /// says "Deleted account" rather than the "someone" a removed member's
+    /// messages get. They are never in `users`. Servers from before omit it,
+    /// which an app reads as none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub deleted_users: Option<Vec<UserId>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -248,9 +255,17 @@ pub enum ServerEvent {
     /// it names an id rather than carrying a `User`, because there is no state
     /// left to describe: the wire `User` has no `deactivated_at` field and is
     /// not going to grow one to carry a tombstone.
+    ///
+    /// `deleted` is `true` when the account was deleted rather than removed
+    /// (#650), so the app can label what they left behind "Deleted account".
+    /// Left out for a removal, and by servers from before; an app from before
+    /// drops them from the list either way.
     #[serde(rename = "user.remove")]
     UserRemove {
         user_id: UserId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        deleted: Option<bool>,
     },
     #[serde(rename = "room.create")]
     RoomCreate(Room),

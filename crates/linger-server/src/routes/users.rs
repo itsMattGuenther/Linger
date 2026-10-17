@@ -6,7 +6,8 @@ use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
 use linger_core::wire::{
-    AuthResponse, ChangePasswordRequest, Fill, NotifyRule, UpdateMeRequest, User,
+    AuthResponse, ChangePasswordRequest, DeleteAccountRequest, DeleteRemovedRequest, Fill,
+    NotifyRule, UpdateMeRequest, User,
 };
 use linger_core::UserId;
 
@@ -26,9 +27,11 @@ pub fn router() -> Router<AppState> {
         .route("/users/{id}", get(get_user))
         .route("/users/{id}/remove", post(remove_user))
         .route("/users/{id}/restore", post(restore_user))
+        .route("/users/{id}/delete", post(delete_removed))
         .route("/users/{id}/cohost", put(make_cohost).delete(clear_cohost))
         .route("/me", get(me).patch(patch_me))
         .route("/me/password", patch(change_password))
+        .route("/me/delete", post(delete_me))
         .route(
             "/me/notify-rules",
             get(list_notify_rules)
@@ -131,9 +134,10 @@ async fn remove_user(
     // deactivation that ends it, and the gateway's audience index has to be
     // told, because it is a snapshot rather than a query.
     state.gateway.reload_dms(&state.db.read).await?;
-    state
-        .gateway
-        .publish(ServerEvent::UserRemove { user_id: id });
+    state.gateway.publish(ServerEvent::UserRemove {
+        user_id: id,
+        deleted: None,
+    });
     // After the door is shut, so nothing new can be reserved behind it. The
     // removal has happened whatever this says: a file that will not go now
     // is the sweeper's within a week.
@@ -225,13 +229,44 @@ async fn set_cohost(
     Ok(user)
 }
 
+/// `POST /users/:id/delete` — the host deletes the account of somebody they
+/// removed (#650), who can't sign in to delete it themselves. The host only,
+/// not a co-host, as for sign-in links (#581): it can't be undone. Only a
+/// removed account, so it is always two deliberate steps, and somebody still
+/// on the server deletes their own.
+async fn delete_removed(
+    State(state): State<AppState>,
+    _host: HostUser,
+    Path(id): Path<UserId>,
+    Json(req): Json<DeleteRemovedRequest>,
+) -> Result<StatusCode, ApiError> {
+    let found: Option<(Option<i64>, Option<i64>)> =
+        sqlx::query_as("SELECT deactivated_at, deleted_at FROM users WHERE id = ?")
+            .bind(id.to_vec())
+            .fetch_optional(&state.db.read)
+            .await?;
+    match found {
+        Some((Some(_), None)) => {}
+        Some((None, None)) => {
+            return Err(ApiError::validation(
+                "Only somebody who has been removed can have their account deleted by the host. Remove them first.",
+            ));
+        }
+        _ => return Err(ApiError::not_found("No such person on this server.")),
+    }
+    crate::accounts::delete(&state, id, req.everything).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// An account row, removed or not. `repo::users` only ever sees active members,
-/// which is right everywhere except the two endpoints that act on removed ones.
+/// which is right everywhere except the endpoints that act on removed ones. A
+/// deleted account (#650) is no longer one: nobody can remove or restore it.
 async fn expect_account(state: &AppState, id: UserId) -> Result<(), ApiError> {
-    let found: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM users WHERE id = ?")
-        .bind(id.to_vec())
-        .fetch_optional(&state.db.read)
-        .await?;
+    let found: Option<(i64,)> =
+        sqlx::query_as("SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL")
+            .bind(id.to_vec())
+            .fetch_optional(&state.db.read)
+            .await?;
     found
         .map(|_| ())
         .ok_or_else(|| ApiError::not_found("No such person on this server."))
@@ -471,6 +506,36 @@ async fn change_password(
     // the commit could identify again with a token that still worked.
     state.gateway.close_sessions_for(auth.id).await;
     super::auth::auth_response(&state, auth.id).await.map(Json)
+}
+
+/// `POST /me/delete` — delete your own account on this server (#650, SPEC
+/// §4.19). Your password first, so that a borrowed, unlocked phone can't.
+/// Never the host's: the server would have nobody in charge, and the host
+/// runs the machine and can wipe the whole server instead.
+async fn delete_me(
+    State(state): State<AppState>,
+    auth: AuthedUser,
+    Json(req): Json<DeleteAccountRequest>,
+) -> Result<StatusCode, ApiError> {
+    let found: Option<(String, bool)> = sqlx::query_as(
+        "SELECT password_hash, is_host FROM users WHERE id = ? AND deactivated_at IS NULL",
+    )
+    .bind(auth.id.to_vec())
+    .fetch_optional(&state.db.read)
+    .await?;
+    let Some((hash, is_host)) = found else {
+        return Err(ApiError::unauthenticated());
+    };
+    if is_host {
+        return Err(ApiError::forbidden(
+            "You're the host, so your account can't be deleted: the server would have nobody in charge. To close the server, shut it down and delete its data.",
+        ));
+    }
+    if !state.passwords.verify(req.password, hash).await? {
+        return Err(ApiError::forbidden("That password doesn't match."));
+    }
+    crate::accounts::delete(&state, auth.id, req.everything).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_notify_rules(

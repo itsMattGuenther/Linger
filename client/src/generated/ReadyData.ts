@@ -3,6 +3,7 @@ import type { CustomEmoji } from "./CustomEmoji";
 import type { PresenceEntry } from "./PresenceEntry";
 import type { Room } from "./Room";
 import type { User } from "./User";
+import type { UserId } from "./UserId";
 import type { VoiceRoomState } from "./VoiceRoomState";
 
 /**
@@ -34,4 +35,11 @@ emoji?: Array<CustomEmoji>,
  * Servers from before omit it, and an app offers no reactions there:
  * they'd refuse anything but the twelve names reactions used to have.
  */
-reactions?: boolean, };
+reactions?: boolean, 
+/**
+ * Every account deleted on this server (#650), so what they left behind
+ * says "Deleted account" rather than the "someone" a removed member's
+ * messages get. They are never in `users`. Servers from before omit it,
+ * which an app reads as none.
+ */
+deleted_users?: Array<UserId>, };

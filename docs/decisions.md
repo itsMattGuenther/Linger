@@ -1481,3 +1481,32 @@ to be resumed. Voice already told the two apart.
 - **Not built:** letting `identify` and `resume` carry where the app thinks you are, so
   a fresh connection is told once rather than as around and then a correction. It is a
   protocol addition, and deserves its own decision.
+
+## Decided — deleting your own account
+
+**Matt, 2026-10-17 (#650).** Both app stores require that an account made in the app can
+be deleted there. The issue listed eight questions; Matt answered four and the rest
+followed the issue's suggestions. SPEC §4.19 is the feature, PROTOCOL §5 "Deleting an
+account" the wire.
+
+- **What they wrote is their choice** (option C of three). One box on the confirm
+  screen, "Also delete everything I wrote", off by default. Off, it stays and loses its
+  name; on, it goes the way a deleted message does. Anonymizing alone (A) leaves no way to
+  take back what you said; deleting alone (B) punches holes in everybody else's
+  conversations whether or not the person wanted that. DMs follow the same rule.
+- **It says "Deleted account"**, not the "someone" a removed member's messages get.
+  The app learns who is deleted from `ready` and `user.remove`; an older app says
+  "someone".
+- **The host can delete a removed person's account**, because somebody removed can't
+  sign in to do it, and "ask your host" on the website has to mean something. The host
+  only, not a co-host (it can't be undone, as for sign-in links), and only somebody
+  already removed.
+- **At once.** The password confirms it; no waiting period, so nothing has to explain a
+  pending deletion on the sign-in screen.
+- **Taken from the issue:** the host can't delete their own account; the account row
+  stays as an emptied stand-in, which keeps the username taken (a newcomer would inherit
+  every old `@name` mention) and keeps reports; group DMs get the "left" line; the
+  confirm screen offers the export.
+- **One change from the issue:** it suggested removing blocks both ways. Blocks the
+  person made go; blocks *of* them stay, because whoever blocked them chose not to see
+  what they wrote, and with the box off what they wrote is still there.

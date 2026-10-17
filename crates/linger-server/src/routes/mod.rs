@@ -18,7 +18,7 @@
 
 mod auth;
 mod blocks;
-mod dms;
+pub(crate) mod dms;
 mod emoji;
 mod export;
 mod health;

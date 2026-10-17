@@ -1,0 +1,17 @@
+-- Deleting your own account (#650, SPEC §4.19, PROTOCOL §5).
+--
+-- A deleted account keeps its `users` row, emptied, rather than losing it.
+-- Messages, files, invites, server emoji, polls and reports all point at the
+-- row without `ON DELETE CASCADE`, so deleting it would fail for anybody who
+-- had used the server, and the links that do cascade would take the reports
+-- about them with it. So the row stays as a stand-in: no name, no password, no
+-- style, status or sound, and `deleted_at` set. Its `username` stays too,
+-- which keeps the name taken: a mention is stored as the text `@username`,
+-- and somebody new who took the name would inherit every old mention of the
+-- person who left.
+--
+-- `deactivated_at` is set as well, so every query that leaves out a removed
+-- member (the roster, sign-in, the bearer check, DM audiences) leaves out a
+-- deleted one without being told. `deleted_at` is what tells the two apart: a
+-- deleted account is never in the host's Removed list and can't be restored.
+ALTER TABLE users ADD COLUMN deleted_at INTEGER;

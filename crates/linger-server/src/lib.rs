@@ -4,6 +4,7 @@
 //! router against a temp SQLite file (AGENTS.md testing rules). `main.rs` is a
 //! thin shell around [`config`] + [`db`] + [`app`].
 
+pub mod accounts;
 pub mod auth;
 pub mod backup;
 pub mod config;
