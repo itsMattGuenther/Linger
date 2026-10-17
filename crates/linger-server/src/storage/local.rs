@@ -378,6 +378,9 @@ mod tests {
             voice_line_after: std::time::Duration::from_millis(
                 linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
             ),
+            presence_grace: std::time::Duration::from_millis(
+                linger_core::limits::PRESENCE_GRACE_MS,
+            ),
             trusted_proxies: crate::config::TrustedProxies::default(),
             signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,

@@ -339,6 +339,14 @@ opening a room doesn't undo the away set on the computer, and the computer going
 idle doesn't hide the room open on the phone. Away ends on the device that set it,
 or when that device goes, or with I'm back on any of them (PROTOCOL §8).
 
+**A short drop shows nothing** (#654). When a device's connection drops, a phone
+switching networks say, everybody goes on seeing what it said for a few seconds. If
+it's back in that time, nobody sees anything happen: no going offline, no leaving the
+room and coming back in, and the away message stays. If it isn't, they see it go then.
+An app that says goodbye as it closes its connection, as signing out of a server
+does, is offline at once. Quitting Linger doesn't say one, so a quit shows a few
+seconds later.
+
 **Activity detection was cut on 2026-08-28** (Matt — `docs/decisions.md`). This
 section used to specify a feature that watched which application you had in front
 of you, resolved it against a bundled registry, and showed it to the room. It is

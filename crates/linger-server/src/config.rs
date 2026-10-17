@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use linger_core::limits::{
-    DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, VOICE_JOIN_LINE_AFTER_MS,
+    DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, PRESENCE_GRACE_MS,
+    VOICE_JOIN_LINE_AFTER_MS,
 };
 
 use crate::auth::{DEFAULT_PASSWORD_CHECKS_AT_ONCE, MAX_PASSWORD_CHECKS_AT_ONCE};
@@ -121,6 +122,11 @@ pub struct Config {
     /// environment variable; there is nothing for a host to tune. Tests
     /// shorten it rather than wait.
     pub voice_line_after: Duration,
+    /// How long a session's presence outlasts a socket that dropped without
+    /// a goodbye, waiting for its app to resume (#654): `PRESENCE_GRACE_MS`.
+    /// Not an environment variable, like `voice_line_after`. Tests shorten it
+    /// rather than wait.
+    pub presence_grace: Duration,
     /// `LINGER_TRUSTED_PROXIES`: whose `X-Forwarded-For` the per-address
     /// limits believe (#495). Default: loopback and private networks.
     pub trusted_proxies: TrustedProxies,
@@ -393,6 +399,7 @@ impl Config {
             voice_forwarding,
             voice_from_domain,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
             trusted_proxies: trusted_proxies(std::env::var("LINGER_TRUSTED_PROXIES").ok())?,
             signups_per_hour: signups_per_hour(std::env::var("LINGER_SIGNUPS_PER_HOUR").ok())?,
             password_checks_at_once: password_checks_at_once(
@@ -1159,6 +1166,7 @@ mod tests {
             voice_forwarding: None,
             voice_from_domain: None,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
             trusted_proxies: TrustedProxies::default(),
             signups_per_hour: Some(DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: DEFAULT_PASSWORD_CHECKS_AT_ONCE,

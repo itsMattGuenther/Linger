@@ -1402,3 +1402,344 @@ async fn coming_back_on_one_device_is_told_once() {
     assert_eq!(told.len(), 1, "coming back was told as {told:?}");
     assert_eq!(told[0]["d"]["state"], "around");
 }
+
+// --- a short drop (#654) -----------------------------------------------------
+
+/// The grace period the resume tests run with: long enough that a resume a
+/// few hundred milliseconds after the drop is well inside it on a busy
+/// machine, short enough to wait out.
+const RESUME_IN: Duration = Duration::from_secs(2);
+
+/// The newest sequence number a socket has had so far: what its app resumes
+/// from.
+async fn last_seq(ws: &mut Ws) -> u64 {
+    drain_for(ws, Duration::from_millis(200))
+        .await
+        .iter()
+        .filter_map(|frame| frame["s"].as_u64())
+        .max()
+        .unwrap_or(0)
+}
+
+/// Resume a session on a fresh socket, as an app does after its connection
+/// drops.
+async fn resume(server: &common::TestServer, token: &str, session_id: &str, s: u64) -> Ws {
+    let (mut ws, _) = connect_async(server.gateway_url())
+        .await
+        .expect("reconnect");
+    assert_eq!(recv_json(&mut ws).await["op"], "hello");
+    send_json(
+        &mut ws,
+        json!({ "op": "resume", "d": { "session_id": session_id, "token": token, "s": s } }),
+    )
+    .await;
+    wait_for(&mut ws, "resumed").await;
+    ws
+}
+
+/// Sleep until `after` has passed since `since`.
+async fn sleep_past(since: Instant, after: Duration) {
+    let left = (since + after).saturating_duration_since(Instant::now());
+    tokio::time::sleep(left).await;
+}
+
+/// The frames among these that tell anybody where somebody is.
+fn where_told(frames: &[Value]) -> Vec<&Value> {
+    frames
+        .iter()
+        .filter(|frame| {
+            matches!(
+                frame["op"].as_str(),
+                Some("presence.update" | "room.enter" | "room.leave" | "room.occupancy")
+            )
+        })
+        .collect()
+}
+
+/// A watcher standing in the room, so it would hear somebody come in, and a
+/// member in it too, on a socket of their own. Returns the watcher, the
+/// member's socket and their session id.
+async fn both_in_the_room(
+    server: &common::TestServer,
+    host: &str,
+    member: &linger_core::wire::AuthResponse,
+    room_id: &str,
+) -> (Ws, Ws, String) {
+    let member_id = member.user.id.to_string();
+    let (mut watcher, _) = connect_ready(server, host).await;
+    send_json(
+        &mut watcher,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    wait_for(&mut watcher, "room.enter").await;
+    let (mut theirs, session_id) = connect_ready(server, &member.access_token).await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    wait_for_presence(&mut watcher, &member_id, "in_room").await;
+    (watcher, theirs, session_id)
+}
+
+/// #654. A phone switching networks: its connection drops without a goodbye
+/// and the app resumes a moment later. Everybody saw them go offline, leave
+/// the room, come back around and walk in again. A resume inside the grace
+/// period tells nobody anything, before it or after.
+#[tokio::test]
+async fn a_short_drop_in_a_room_tells_nobody_anything() {
+    let (server, host, room) =
+        common::server_with_room_tuned("garage", |config| config.presence_grace = RESUME_IN).await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, mut theirs, session_id) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+    let s = last_seq(&mut theirs).await;
+
+    // Gone: no close frame, the socket just ends.
+    drop(theirs);
+    let dropped_at = Instant::now();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut theirs = resume(&server, &member.access_token, &session_id, s).await;
+    // The app says where it is again, as it does after every resume.
+    send_json(
+        &mut theirs,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    handled(&mut theirs).await;
+    sleep_past(dropped_at, RESUME_IN + Duration::from_millis(500)).await;
+
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let told = where_told(&before);
+    assert!(
+        told.is_empty(),
+        "a drop the app came back from was told to everybody: {told:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "in_room", "ready carried {held}");
+    assert_eq!(held["room_id"], room_id.as_str(), "ready carried {held}");
+}
+
+/// #654. The same drop with an away message set: it was cleared, and the
+/// app's own `away` after the resume told everybody it again. It survives,
+/// and nobody hears a thing.
+#[tokio::test]
+async fn a_short_drop_keeps_the_away_message() {
+    let (server, host, room) =
+        common::server_with_room_tuned("garage", |config| config.presence_grace = RESUME_IN).await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, session_id) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+    let away = json!({ "op": "presence.update", "d": { "state": "away", "away_message": "out for a walk" } });
+    send_json(&mut theirs, away.clone()).await;
+    wait_for_presence(&mut watcher, &member_id, "away").await;
+    let s = last_seq(&mut theirs).await;
+
+    drop(theirs);
+    let dropped_at = Instant::now();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut theirs = resume(&server, &member.access_token, &session_id, s).await;
+    // The app says it's away again, as it does after every resume.
+    send_json(&mut theirs, away).await;
+    handled(&mut theirs).await;
+    sleep_past(dropped_at, RESUME_IN + Duration::from_millis(500)).await;
+
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let told = where_told(&before);
+    assert!(
+        told.is_empty(),
+        "a drop the app came back from was told to everybody: {told:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "away", "ready carried {held}");
+    assert_eq!(
+        held["away_message"], "out for a walk",
+        "ready carried {held}"
+    );
+}
+
+/// #654. A drop the app never comes back from is offline, out of the room,
+/// once the grace period ends, and not before.
+#[tokio::test]
+async fn a_drop_with_no_resume_is_offline_once_the_grace_period_ends() {
+    const GONE_AFTER: Duration = Duration::from_secs(1);
+    let (server, host, room) =
+        common::server_with_room_tuned("garage", |config| config.presence_grace = GONE_AFTER).await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, theirs, _) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+
+    drop(theirs);
+    let dropped_at = Instant::now();
+    let early = drain_for(&mut watcher, GONE_AFTER - Duration::from_millis(300)).await;
+    let told = where_told(&early);
+    assert!(
+        told.is_empty(),
+        "the drop was told before the grace period ended: {told:?}"
+    );
+
+    let (offline, before) = wait_for_presence(&mut watcher, &member_id, "offline").await;
+    assert!(
+        dropped_at.elapsed() >= GONE_AFTER,
+        "offline came {:?} after the drop, inside the grace period",
+        dropped_at.elapsed()
+    );
+    assert!(offline["d"]["room_id"].is_null());
+    assert!(
+        before
+            .iter()
+            .any(|f| f["op"] == "room.leave" && f["d"]["user_id"] == member_id.as_str()),
+        "the room never heard them leave: {before:?}"
+    );
+}
+
+/// #654. Closing the app says goodbye, and that is offline at once, grace
+/// period or not.
+#[tokio::test]
+async fn a_goodbye_is_offline_at_once() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, mut theirs, _) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+
+    theirs.close(None).await.expect("the app closes");
+    let closed_at = Instant::now();
+    let (_, before) = wait_for_presence(&mut watcher, &member_id, "offline").await;
+    let grace = Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS);
+    assert!(
+        closed_at.elapsed() < grace / 2,
+        "a goodbye waited {:?} to be told",
+        closed_at.elapsed()
+    );
+    assert!(
+        before
+            .iter()
+            .any(|f| f["op"] == "room.leave" && f["d"]["user_id"] == member_id.as_str()),
+        "the room never heard them leave: {before:?}"
+    );
+}
+
+/// #654. The other way a connection fails: it goes quiet, the server still
+/// holds it open, and the app gives up and resumes on a new one. The old
+/// socket closes after the session moved on (#451), and its closing must
+/// neither end the session's presence nor wait out a grace period to.
+#[tokio::test]
+async fn a_quiet_socket_replaced_by_a_resume_tells_nobody_anything() {
+    let (server, host, room) =
+        common::server_with_room_tuned("garage", |config| config.presence_grace = RESUME_IN).await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, mut old, session_id) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+    let s = last_seq(&mut old).await;
+
+    let replaced_at = Instant::now();
+    let mut new = resume(&server, &member.access_token, &session_id, s).await;
+    assert!(hung_up(&mut old).await, "the replaced socket was left open");
+    send_json(
+        &mut new,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    handled(&mut new).await;
+    sleep_past(replaced_at, RESUME_IN + Duration::from_millis(500)).await;
+
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let told = where_told(&before);
+    assert!(
+        told.is_empty(),
+        "a socket replaced by a resume was told to everybody: {told:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "in_room", "ready carried {held}");
+    assert_eq!(held["room_id"], room_id.as_str(), "ready carried {held}");
+}
+
+/// #654. An app starts again from around in no room after a resume, and
+/// says only how it differs (`client/src/lib/watchPresence.ts`). One that
+/// closed its room while the connection was down says nothing at all. What
+/// it said before the drop stands until it speaks, or until the grace period
+/// ends: then everybody hears it left the room, and never that it went
+/// offline.
+#[tokio::test]
+async fn an_app_that_says_nothing_after_a_resume_is_around_when_the_grace_period_ends() {
+    let (server, host, room) =
+        common::server_with_room_tuned("garage", |config| config.presence_grace = RESUME_IN).await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, mut theirs, session_id) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+    let s = last_seq(&mut theirs).await;
+
+    drop(theirs);
+    let dropped_at = Instant::now();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let _theirs = resume(&server, &member.access_token, &session_id, s).await;
+    let early = drain_for(
+        &mut watcher,
+        (dropped_at + RESUME_IN - Duration::from_millis(300))
+            .saturating_duration_since(Instant::now()),
+    )
+    .await;
+    let told = where_told(&early);
+    assert!(
+        told.is_empty(),
+        "the resume was told before the grace period ended: {told:?}"
+    );
+
+    let (around, before) = wait_for_presence(&mut watcher, &member_id, "around").await;
+    assert!(around["d"]["room_id"].is_null());
+    assert!(
+        before
+            .iter()
+            .any(|f| f["op"] == "room.leave" && f["d"]["user_id"] == member_id.as_str()),
+        "the room never heard them leave: {before:?}"
+    );
+    assert!(
+        presence_of(&before, &member_id).is_empty(),
+        "told more than the move: {before:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "around", "ready carried {held}");
+}
+
+/// #654. The server hanging up on a session on purpose isn't a drop: the
+/// member was removed, and nothing can resume it. Offline at once, with no
+/// grace period in which they still look connected.
+#[tokio::test]
+async fn a_removed_member_is_offline_at_once() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _theirs, _) =
+        both_in_the_room(&server, &host.access_token, &member, &room_id).await;
+
+    let removed_at = Instant::now();
+    let resp = reqwest::Client::new()
+        .post(server.url(&format!("/users/{member_id}/remove")))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+    wait_for_presence(&mut watcher, &member_id, "offline").await;
+    let grace = Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS);
+    assert!(
+        removed_at.elapsed() < grace / 2,
+        "a removed member stayed connected for {:?}",
+        removed_at.elapsed()
+    );
+}

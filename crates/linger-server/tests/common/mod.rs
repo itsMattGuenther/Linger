@@ -70,6 +70,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
@@ -97,6 +98,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
@@ -135,6 +137,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
         signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
@@ -325,6 +328,15 @@ pub async fn sign_in(server: &TestServer, username: &str) -> AuthResponse {
 /// Host + one room, the most common fixture.
 pub async fn server_with_room(slug: &str) -> (TestServer, AuthResponse, linger_core::wire::Room) {
     room_on(spawn_server().await, slug).await
+}
+
+/// The same, with the configuration turned: presence's grace period after a
+/// dropped socket shortened, say (#654).
+pub async fn server_with_room_tuned(
+    slug: &str,
+    tune: impl FnOnce(&mut Config),
+) -> (TestServer, AuthResponse, linger_core::wire::Room) {
+    room_on(spawn_tuned(tune).await, slug).await
 }
 
 /// A server that carries voice, through its forwarding server on this

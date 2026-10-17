@@ -57,6 +57,9 @@ pub struct Gateway {
     /// Numbers moves and aways as they happen, so `merge` can tell which
     /// session moved, or went away, most recently.
     presence_order: AtomicU64,
+    /// Numbers each drop of a session's last socket as it happens (#654), so
+    /// the end of one drop's grace period can't act on a later one.
+    drops: AtomicU64,
     /// People whose newest `presence.update` is held back by `RATE_PRESENCE`
     /// until their turn (#497). One waiting task each, however many changes
     /// pile up behind it: the turn tells whatever is newest by then.
@@ -130,8 +133,20 @@ struct SessionPresence {
     away_at: u64,
     /// How many sockets it has open: one, but for the moment a resume takes
     /// it over while the server still holds the socket it replaces (#451).
-    /// The record goes when the last of them closes.
+    /// The record goes when the last of them closes with a goodbye, or when
+    /// the grace period after it drops without one ends (#654).
     sockets: u32,
+    /// Which drop's grace period it is in (#654), from `Gateway::drops`:
+    /// its last socket went without a goodbye, and the record stays, counted
+    /// as it was, until `grace_over` with this number. A resume in the
+    /// meantime keeps it; only a later drop replaces it.
+    dropped: Option<u64>,
+    /// It resumed inside its grace period, and its app hasn't spoken since
+    /// (#654). An app starts again from around in no room on every `resumed`
+    /// and sends only where it differs (`client/src/lib/watchPresence.ts`),
+    /// so what it said before the drop stands until it speaks
+    /// (`speaks_again`) or the grace period ends, whichever is first.
+    held_over: bool,
 }
 
 impl SessionPresence {
@@ -145,7 +160,24 @@ impl SessionPresence {
             moved_at: 0,
             away_at: 0,
             sockets: 0,
+            dropped: None,
+            held_over: false,
         }
+    }
+
+    /// Its app speaks for it again after a resume (#654): from here it is
+    /// what the app says, starting where the app starts, around and in no
+    /// room. Answers whether it was held over until now.
+    fn speaks_again(&mut self) -> bool {
+        if !self.held_over {
+            return false;
+        }
+        *self = Self {
+            sockets: self.sockets,
+            dropped: self.dropped,
+            ..Self::arrived()
+        };
+        true
     }
 }
 
@@ -458,6 +490,7 @@ impl Gateway {
             presence: DashMap::new(),
             session_presence: DashMap::new(),
             presence_order: AtomicU64::new(0),
+            drops: AtomicU64::new(0),
             presence_held: DashSet::new(),
             focus_told: DashMap::new(),
             focus_held: DashSet::new(),
@@ -964,7 +997,8 @@ impl Gateway {
         let Some(own) = sessions.get_mut(session_id) else {
             return Merged::Same;
         };
-        if own.state == state && own.away_message == away_message {
+        let restarted = own.speaks_again();
+        if !restarted && own.state == state && own.away_message == away_message {
             return Merged::Same;
         }
         if state == PresenceState::Away {
@@ -1012,7 +1046,8 @@ impl Gateway {
         let Some(own) = sessions.get_mut(session_id) else {
             return Merged::Same;
         };
-        if own.room_id == room_id {
+        let restarted = own.speaks_again();
+        if !restarted && own.room_id == room_id {
             return Merged::Same;
         }
         own.room_id = room_id;
@@ -1104,7 +1139,9 @@ impl Gateway {
 
     /// A socket came up on this session. A session's first socket gives it
     /// a record of its own, around and in no room (#653); a person's first
-    /// session makes them visible.
+    /// session makes them visible. A resume inside the grace period after a
+    /// drop finds the record it left, and keeps it, held over until its app
+    /// speaks again (#654): nothing anybody is told changes.
     ///
     /// Told at once when it changes what everybody is told, as a first
     /// connection always was. It can only be their state, never their room:
@@ -1112,10 +1149,13 @@ impl Gateway {
     /// else about them can go out between the change and the telling.
     fn connection_opened(&self, user_id: UserId, session_id: &str) {
         let mut sessions = self.session_presence.entry(user_id).or_default();
-        sessions
+        let own = sessions
             .entry(session_id.to_string())
-            .or_insert_with(SessionPresence::arrived)
-            .sockets += 1;
+            .or_insert_with(SessionPresence::arrived);
+        if own.sockets == 0 && own.dropped.is_some() {
+            own.held_over = true;
+        }
+        own.sockets += 1;
         if self.remerge(user_id, &sessions) != Merged::Same {
             if let Some(entry) = self.presence.get(&user_id) {
                 self.publish(ServerEvent::PresenceUpdate(entry.value().clone()));
@@ -1123,9 +1163,10 @@ impl Gateway {
         }
     }
 
-    /// A socket went away, answering what that changed of what everybody is
-    /// told for the caller to tell. When it was its session's last socket,
-    /// the session's record goes (`session_gone`).
+    /// A socket went away with a goodbye, or its session hung up on it,
+    /// answering what that changed of what everybody is told for the caller
+    /// to tell. When it was its session's last socket, the session's record
+    /// goes at once (`session_gone`).
     fn connection_closed(&self, user_id: UserId, session_id: &str) -> Merged {
         let Entry::Occupied(mut person) = self.session_presence.entry(user_id) else {
             return Merged::Same;
@@ -1140,14 +1181,62 @@ impl Gateway {
         self.session_gone(user_id, session_id, person)
     }
 
+    /// A socket went without a goodbye: the network, not the person (#654).
+    /// When it was its session's last, the record stays as it was, still
+    /// counted, and nobody is told anything. The answer is then the drop's
+    /// number, for the caller to hand `grace_over` once the grace period
+    /// ends. A socket a resume has already replaced (#451) wasn't the last,
+    /// and starts no grace period.
+    fn connection_dropped(&self, user_id: UserId, session_id: &str) -> Option<u64> {
+        let mut sessions = self.session_presence.get_mut(&user_id)?;
+        let own = sessions.get_mut(session_id)?;
+        own.sockets = own.sockets.saturating_sub(1);
+        if own.sockets > 0 {
+            return None;
+        }
+        let number = self.drops.fetch_add(1, Ordering::Relaxed) + 1;
+        own.dropped = Some(number);
+        Some(number)
+    }
+
+    /// The grace period after drop `number` is over (#654), answering what
+    /// that changed of what everybody is told for the caller to tell.
+    ///
+    /// A session that never came back goes now (`session_gone`), and is told
+    /// as one closed with a goodbye is. One that resumed and whose app has
+    /// said nothing since is what its app starts from, around in no room:
+    /// the app had nothing to say because that is where it is. One that
+    /// resumed and has spoken changes nothing. After a later drop, or once
+    /// the record is gone, this drop's turn has passed and nothing happens.
+    fn grace_over(&self, user_id: UserId, session_id: &str, number: u64) -> Merged {
+        let Entry::Occupied(mut person) = self.session_presence.entry(user_id) else {
+            return Merged::Same;
+        };
+        let Some(own) = person.get_mut().get_mut(session_id) else {
+            return Merged::Same;
+        };
+        if own.dropped != Some(number) {
+            return Merged::Same;
+        }
+        own.dropped = None;
+        if own.sockets == 0 {
+            return self.session_gone(user_id, session_id, person);
+        }
+        if !own.speaks_again() {
+            return Merged::Same;
+        }
+        self.remerge(user_id, person.get())
+    }
+
     /// A session has no socket left, so what it said goes with it (#653):
     /// its room, its idle, its away. Somebody with other sessions is worked
     /// out again from those, for the caller to tell. Their last session
     /// going takes them offline, out of any room, and that is told here and
     /// now, whatever their turn.
     ///
-    /// The one place a session's record ends, so that a session kept for a
-    /// while after its socket drops (#654) has one place to change.
+    /// The one place a session's record ends: at once after a goodbye, and
+    /// at the end of the grace period after a drop it didn't come back from
+    /// (#654).
     fn session_gone(
         &self,
         user_id: UserId,
@@ -1739,6 +1828,168 @@ mod tests {
         assert_eq!(
             gateway.update_presence(user, "computer", PresenceState::Around, None),
             Merged::Same
+        );
+    }
+
+    // --- a short drop (#654) ------------------------------------------------
+
+    /// A socket dropping without a goodbye leaves its session's record, still
+    /// counted, until the grace period ends; then the person is offline.
+    #[test]
+    fn a_drop_keeps_the_record_until_its_grace_period_ends() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "phone");
+        gateway.move_to(user, "phone", Some(room));
+        let number = gateway
+            .connection_dropped(user, "phone")
+            .expect("it was the session's last socket");
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+        assert_eq!(gateway.grace_over(user, "phone", number), Merged::Same);
+        assert_eq!(told(&gateway, user), None, "offline once it's over");
+        assert!(gateway.session_presence.get(&user).is_none());
+    }
+
+    /// Resumed inside the grace period: the app saying where it was again
+    /// changes nothing, and nor does the grace period ending.
+    #[test]
+    fn a_resume_inside_the_grace_period_changes_nothing() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let away = Some("lunch".to_string());
+        gateway.connection_opened(user, "phone");
+        gateway.update_presence(user, "phone", PresenceState::Away, away.clone());
+        let number = gateway.connection_dropped(user, "phone").expect("last");
+        gateway.connection_opened(user, "phone");
+        assert_eq!(
+            gateway.update_presence(user, "phone", PresenceState::Away, away.clone()),
+            Merged::Same
+        );
+        assert_eq!(gateway.grace_over(user, "phone", number), Merged::Same);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Away, None, away))
+        );
+    }
+
+    /// The app starts again from around in no room on a resume, and says
+    /// only where it differs. Idle before the drop and back at the keyboard
+    /// by the resume, it says nothing, so the end of the grace period is
+    /// what makes it around.
+    #[test]
+    fn an_app_that_says_nothing_after_a_resume_is_around_when_its_grace_period_ends() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.update_presence(user, "computer", PresenceState::Idle, None);
+        let number = gateway.connection_dropped(user, "computer").expect("last");
+        gateway.connection_opened(user, "computer");
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Idle, None, None)),
+            "what it said stands until it speaks"
+        );
+        assert_eq!(
+            gateway.grace_over(user, "computer", number),
+            Merged::Changed
+        );
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Around, None, None))
+        );
+    }
+
+    /// The first thing the app says after a resume starts its record again
+    /// from where the app starts: idle before the drop, and opening the same
+    /// room again, it is around in that room, not idle in it.
+    #[test]
+    fn the_first_frame_after_a_resume_starts_the_record_again() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.move_to(user, "computer", Some(room));
+        gateway.update_presence(user, "computer", PresenceState::Idle, None);
+        let number = gateway.connection_dropped(user, "computer").expect("last");
+        gateway.connection_opened(user, "computer");
+        assert_eq!(gateway.move_to(user, "computer", Some(room)), Merged::Same);
+        let state = gateway
+            .session_presence
+            .get(&user)
+            .and_then(|sessions| sessions.get("computer").map(|own| own.state));
+        assert_eq!(state, Some(PresenceState::Around));
+        assert_eq!(gateway.grace_over(user, "computer", number), Merged::Same);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+    }
+
+    /// Dropped, resumed and dropped again: the second drop's grace period is
+    /// the one that counts, and the first one's end does nothing.
+    #[test]
+    fn only_the_newest_drop_ends_the_record() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        gateway.connection_opened(user, "phone");
+        let first = gateway.connection_dropped(user, "phone").expect("last");
+        gateway.connection_opened(user, "phone");
+        let second = gateway.connection_dropped(user, "phone").expect("last");
+        assert_ne!(first, second);
+        assert_eq!(gateway.grace_over(user, "phone", first), Merged::Same);
+        assert!(
+            told(&gateway, user).is_some(),
+            "the first drop's end took them offline"
+        );
+        assert_eq!(gateway.grace_over(user, "phone", second), Merged::Same);
+        assert_eq!(told(&gateway, user), None);
+    }
+
+    /// A socket a resume already replaced (#451) closing without a goodbye
+    /// wasn't its session's last, and starts no grace period.
+    #[test]
+    fn a_replaced_socket_dropping_starts_no_grace_period() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "phone");
+        gateway.move_to(user, "phone", Some(room));
+        gateway.connection_opened(user, "phone");
+        assert_eq!(gateway.connection_dropped(user, "phone"), None);
+        let dropped = gateway
+            .session_presence
+            .get(&user)
+            .and_then(|sessions| sessions.get("phone").map(|own| own.dropped));
+        assert_eq!(dropped, Some(None));
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+    }
+
+    /// A device that drops and never comes back leaves the person's other
+    /// device saying where they are, once the grace period ends.
+    #[test]
+    fn a_device_that_never_comes_back_leaves_the_other() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.connection_opened(user, "phone");
+        gateway.move_to(user, "phone", Some(room));
+        let number = gateway.connection_dropped(user, "phone").expect("last");
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+        assert_eq!(gateway.grace_over(user, "phone", number), Merged::Moved);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Around, None, None))
         );
     }
 }

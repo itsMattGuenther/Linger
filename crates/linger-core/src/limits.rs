@@ -182,6 +182,13 @@ pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
 pub const RESUME_BUFFER_FRAMES: usize = 500;
 pub const RESUME_WINDOW_MS: u64 = 120_000;
 
+/// How long a session's presence outlasts a socket that drops without a
+/// goodbye (PROTOCOL §8, #654). Nobody is told anything meanwhile, and an app
+/// that resumes in time changes nothing anybody sees: a phone switching
+/// networks doesn't show its person going offline and coming back. A socket
+/// closed with a goodbye (a WebSocket close frame) is offline at once.
+pub const PRESENCE_GRACE_MS: u64 = 5_000;
+
 /// The biggest frame a client may send the gateway, in bytes of JSON (PROTOCOL
 /// §8, #517). The server takes in a frame whole before it can look inside, so
 /// without a cap of its own a socket that never identifies could make it hold

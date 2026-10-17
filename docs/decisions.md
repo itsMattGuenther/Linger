@@ -1449,3 +1449,33 @@ wrote over it.
   reconnect, as it already did before this. And a device doesn't learn that you went
   away on another one. Both are a client follow-up. A short network drop showing you
   offline is #654, built on this.
+
+## Decided — a short network drop isn't offline
+
+**Decided for Matt during the overnight bug hunt, 2026-10-16 (#654).** When somebody's
+connection dropped and came straight back (a phone switching networks, say),
+everybody saw them go offline, leave the room, come back around and walk in again,
+and their away message was cleared. The server took a session's presence away the
+moment its socket closed, goodbye or not, though the session itself waits two minutes
+to be resumed. Voice already told the two apart.
+
+- **A drop waits a few seconds before anybody is told** (`PRESENCE_GRACE_MS`, 5
+  seconds). Meanwhile the session's presence counts as it was. If the app resumes in
+  that time, nobody is told anything: the room and the away message are kept. If it
+  doesn't, its presence goes then, told as a close is now.
+- **A goodbye is offline at once**, as before. The app sends one when it closes its
+  connection, as on signing out of a server. So is the server ending a session itself
+  (somebody removed, or every sign-in ended), since nothing can resume it.
+- **Quitting Linger doesn't say goodbye.** The app exits without closing its
+  connections, so the server can't tell a quit from a drop, and a quit is now told
+  after the grace period, about five seconds late. The app saying goodbye as it quits
+  is a client follow-up, and would end a voice seat at once on quitting too.
+- **After a resume, the session's old presence stands until the app speaks.** The app
+  starts again from around in no room on every resume, and says only where it
+  differs. So its first frame starts the session's presence again from there, and an
+  app that says nothing by the end of the grace period is around in no room. Keeping
+  the old presence for good could leave somebody shown idle, or in a room they've
+  left, with no frame coming to put it right.
+- **Not built:** letting `identify` and `resume` carry where the app thinks you are, so
+  a fresh connection is told once rather than as around and then a correction. It is a
+  protocol addition, and deserves its own decision.

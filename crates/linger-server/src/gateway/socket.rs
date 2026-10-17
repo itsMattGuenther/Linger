@@ -105,10 +105,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // difference between leaving a call and dropping out of one — see the
     // `voice_part` below.
     let mut said_goodbye = false;
+    // Whether the session hung up on this socket on purpose (`Ctl::Close`):
+    // its person was removed, or every sign-in they had ended. Nothing can
+    // resume it, so its presence ends at once, as after a goodbye (#654). A
+    // socket replaced by a resume is let go instead, and isn't this.
+    let mut hung_up = false;
     loop {
         let received = tokio::select! {
             biased;
-            _ = &mut close_rx => break,
+            closed = &mut close_rx => {
+                hung_up = closed.is_ok();
+                break;
+            }
             received = tokio::time::timeout(LIVENESS_TIMEOUT, ws_rx.next()) => received,
         };
         let frame = match received {
@@ -159,9 +167,15 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         let _ = ctl.send(Ctl::Detach { from: sink.clone() }).await;
     }
     // What this session said goes with it (#653): somebody still on another
-    // device is told what that one says.
-    let merged = state.gateway.connection_closed(user_id, &session_id);
-    tell_merged(&state, user_id, merged).await;
+    // device is told what that one says. At once after a goodbye. After a
+    // drop, presence is like voice: the app gets a moment to resume, and
+    // nobody is told anything meanwhile (#654).
+    if said_goodbye || hung_up {
+        let merged = state.gateway.connection_closed(user_id, &session_id);
+        tell_merged(&state, user_id, merged).await;
+    } else if let Some(number) = state.gateway.connection_dropped(user_id, &session_id) {
+        wait_for_resume(&state, user_id, &session_id, number);
+    }
     let _ = sqlx::query("UPDATE users SET last_seen_at = ? WHERE id = ?")
         .bind(now_ms())
         .bind(user_id.to_vec())
@@ -494,6 +508,24 @@ async fn tell_merged(state: &AppState, user_id: UserId, merged: Merged) {
         Merged::Changed => tell_presence(state, user_id),
         Merged::Moved => tell_focus(state, user_id).await,
     }
+}
+
+/// A session's last socket dropped without a goodbye (#654): give its app
+/// `Config::presence_grace` to resume before anybody is told, then tell what
+/// the end of the grace period changed (`Gateway::grace_over`).
+///
+/// One short wait per drop, and only the newest drop's counts: once the
+/// session drops again, an earlier wait's end does nothing. A drop needs a
+/// socket that was let in first, so there are never more of these waiting
+/// than connections made in one grace period.
+fn wait_for_resume(state: &AppState, user_id: UserId, session_id: &str, number: u64) {
+    let state = state.clone();
+    let session_id = session_id.to_string();
+    tokio::spawn(async move {
+        tokio::time::sleep(state.config.presence_grace).await;
+        let merged = state.gateway.grace_over(user_id, &session_id, number);
+        tell_merged(&state, user_id, merged).await;
+    });
 }
 
 /// Somebody cleared the away saved on their status (#653): end it on every

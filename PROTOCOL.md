@@ -1659,10 +1659,26 @@ the away set on the computer. Away ends when the session that set it sends anoth
 state, or closes, or when a `PATCH /me` clears the away saved on the person's status
 (§5): that ends it on every session, so I'm back on the phone ends an away the computer
 set. The app saves the status before it sends its own frame, so with one device the
-frame that follows changes nothing and nobody is told twice. A session's part goes when its socket closes, and a resume starts it
-again as `around` in no room; the app says where it is again on every `ready` and
-`resumed`. A `presence.update` saying `in_room` or `offline` counts as `around`: where
-somebody is comes from `room.focus`, and offline from their last session closing.
+frame that follows changes nothing and nobody is told twice. A `presence.update` saying
+`in_room` or `offline` counts as `around`: where somebody is comes from `room.focus`,
+and offline from their last session's part going.
+
+**A short drop tells nobody anything** (#654). A session's part goes at once when its
+socket closes with a goodbye (a WebSocket close frame, which the app sends when it
+closes its connection, as on signing out of a server), or when the server ends the
+session (`invalid_session`, above). A socket that drops without a
+goodbye leaves its part in place for `PRESENCE_GRACE_MS` (5 seconds), counted as it
+was, and nobody is told anything meanwhile, the way a voice seat waits out a drop
+(SPEC §4.14). If the session isn't resumed by then, its part goes, and everybody is told
+what that changed: `offline`, out of their room, if it was their last. If it is resumed
+in time, nothing anybody is told changes. The app says where it is again on every
+`ready` and `resumed`, counting from `around` in no room and sending only where it
+differs, so what the session said before the drop stands until its first
+`presence.update` or `room.focus`. That frame starts its part again from `around` in no
+room, and saying the same as before tells nobody anything. A session that says nothing
+by the end of the grace period is `around` in no room from then. A socket a resume has
+already replaced (#451) isn't the session's last, and its closing changes nothing.
+`identify` and `resume` carry no presence of their own.
 
 The frames are the same as with one session; only what goes in them is worked out
 differently. A change that moves somebody is told as a move (`room.leave`, `room.enter`,
